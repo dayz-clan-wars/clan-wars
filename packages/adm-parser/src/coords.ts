@@ -6,9 +6,6 @@ const PLAYER_POS_RE = /pos=<\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 /** Flagpole position: `on TerritoryFlag at <x, altitude, z>` — altitude is in the MIDDLE. */
 const POLE_AT_RE = /on TerritoryFlag at <\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 
-/** Off-map sentinel; DayZ writes -3.4e38 for an unresolved position. */
-const SENTINEL_RE = /<\s*-?\d*\.?\d+e/iu;
-
 const MAP_MIN = -1000.0;
 const MAP_MAX = 16360.0;
 
@@ -17,7 +14,6 @@ export function inMapBounds(x: number, z: number): boolean {
 }
 
 export function parsePlayerPos(raw: string): Vec3 | null {
-  if (SENTINEL_RE.test(raw)) return null;
   const m = PLAYER_POS_RE.exec(raw);
   if (!m) return null;
   const x = parseFloat(m[1]!);
@@ -28,7 +24,6 @@ export function parsePlayerPos(raw: string): Vec3 | null {
 }
 
 export function parsePoleAt(raw: string): Vec3 | null {
-  if (SENTINEL_RE.test(raw)) return null;
   const m = POLE_AT_RE.exec(raw);
   if (!m) return null;
   const x = parseFloat(m[1]!);

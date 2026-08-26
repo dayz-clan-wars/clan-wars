@@ -53,4 +53,14 @@ describe("parseFlagChange", () => {
   it("returns null when the pole coords are missing", () => {
     expect(parseFlagChange('Player "A" (id=D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1 pos=<1.0, 2.0, 3.0>) has raised Flag_DayZ on TerritoryFlag')).toBeNull();
   });
+
+  it("recovers a flag change when player is off-map but pole coords are valid", () => {
+    const raw = 'Player "A" (id=D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1 pos=<-3.4e38, -3.4e38, 0>) has lowered Flag_Livonia on TerritoryFlag at <2991.569092, 447.946503, 1138.587646>';
+    const result = parseFlagChange(raw);
+    expect(result).not.toBeNull();
+    expect(result?.player).toBeNull();
+    expect(result?.action).toBe("lowered");
+    expect(result?.texture).toBe("Flag_Livonia");
+    expect(result?.pole).toEqual({ x: 2991.569092, y: 447.946503, z: 1138.587646 });
+  });
 });
