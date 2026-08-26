@@ -17,7 +17,15 @@ describe("parsePlayerPos", () => {
     expect(parsePlayerPos('11:00:00 | Player "A" (id=AB) is connected')).toBeNull();
   });
 
-  it("rejects the off-map sentinel in exponent notation", () => {
+  it("rejects the off-map sentinel in full decimal expansion", () => {
+    // This is exactly how DayZ writes it — 134 such lines in the production
+    // export, no e-notation anywhere. inMapBounds is the only thing that
+    // rejects it, because the value falls far below MAP_MIN.
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    expect(parsePlayerPos(`pos=<${sentinel}, ${sentinel}, 0>`)).toBeNull();
+  });
+
+  it("also rejects the sentinel written in exponent notation", () => {
     expect(parsePlayerPos("pos=<-3.4e38, -3.4e38, 0>")).toBeNull();
   });
 
@@ -48,5 +56,8 @@ describe("inMapBounds", () => {
   });
   it("rejects out-of-range horizontals", () => {
     expect(inMapBounds(-5000, 1138.5)).toBe(false);
+  });
+  it("accepts the far edge of the largest supported terrain (16384m)", () => {
+    expect(inMapBounds(16384, 16384)).toBe(true);
   });
 });

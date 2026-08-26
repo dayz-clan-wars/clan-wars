@@ -7,14 +7,31 @@ import { and, eq } from "drizzle-orm";
 
 export type IngestOptions = {
   serverId: number;
-  map: string;
   filename: string;
   bootAt: Date;
   lines: string[];
   clockOffsetMs: number;
 };
 
-export type IngestResult = { linesCaptured: number; eventsAppended: number };
+export type IngestResult = {
+  linesCaptured: number;
+  eventsAppended: number;
+  /**
+   * Raw lines that mention `TerritoryFlag` or `Flag Pole` but produced no event.
+   *
+   * ⚠️ This is the canary for parser false negatives. ADM logs contain zero
+   * base-destruction events, so the flag-lower is the ONLY raid signal this
+   * product will ever have — and `parseLine` returns `[]` (and
+   * `parseFlagChange` returns `null`) for anything it cannot interpret. A
+   * regression that stops matching lowers yields zero events, zero errors and
+   * a green backfill. A non-zero value here means the parser saw flag-shaped
+   * text it could not interpret; investigate before trusting any count.
+   */
+  unparsedFlagLines: number;
+};
+
+/** Text that makes a raw line "flag-shaped" for the false-negative canary. */
+const FLAG_SHAPED_RE = /TerritoryFlag|Flag Pole/u;
 
 export async function ingestFile(db: Database, opts: IngestOptions): Promise<IngestResult> {
   const [file] = await db.insert(admFiles)
@@ -29,6 +46,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
   const cursor = new TimelineCursor(opts.bootAt, opts.clockOffsetMs);
   let eventsAppended = 0;
   let linesCaptured = 0;
+  let unparsedFlagLines = 0;
 
   for (let lineIndex = 0; lineIndex < opts.lines.length; lineIndex++) {
     const raw = opts.lines[lineIndex]!;
@@ -40,9 +58,14 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
     if (stored) linesCaptured++;
 
     const occurredAt = cursor.advance(raw);
-    if (!occurredAt) continue;
+    if (!occurredAt) {
+      if (FLAG_SHAPED_RE.test(raw)) unparsedFlagLines++;
+      continue;
+    }
 
     const parsed = parseLine(raw);
+    if (parsed.length === 0 && FLAG_SHAPED_RE.test(raw)) unparsedFlagLines++;
+
     for (let subIndex = 0; subIndex < parsed.length; subIndex++) {
       const line = parsed[subIndex]!;
       const type = eventTypeFor(line);
@@ -66,7 +89,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
     .set({ linesIngested: opts.lines.length, complete: true })
     .where(eq(admFiles.id, admFileId));
 
-  return { linesCaptured, eventsAppended };
+  return { linesCaptured, eventsAppended, unparsedFlagLines };
 }
 
 /** Flatten a ParsedLine into the jsonb payload shape the projector reads. */

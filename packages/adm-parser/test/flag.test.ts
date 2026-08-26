@@ -54,6 +54,18 @@ describe("parseFlagChange", () => {
     expect(parseFlagChange('Player "A" (id=D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1 pos=<1.0, 2.0, 3.0>) has raised Flag_DayZ on TerritoryFlag')).toBeNull();
   });
 
+  it("returns null when the identity is malformed, even though the flag clause matches", () => {
+    // FLAG_CHANGE_RE matches here, but the id is 39 hex chars, so parseIdentity
+    // fails and the event is dropped. This is a silent-drop path on the ONLY
+    // raid signal the ADM log provides — it is tested so a change to the
+    // identity pattern cannot quietly widen or narrow it unobserved.
+    const raw =
+      '05:17:25 | Player "XxBE4zyxX" (id=D34AD4C2D9A2D1068C2B4971CAA01177C20B24C ' +
+      'pos=<2992.5, 1137.4, 448.1>) has raised Flag_Livonia on TerritoryFlag ' +
+      'at <2991.569092, 447.946503, 1138.587646>';
+    expect(parseFlagChange(raw)).toBeNull();
+  });
+
   it("recovers a flag change when player is off-map but pole coords are valid", () => {
     const raw = 'Player "A" (id=D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1 pos=<-3.4e38, -3.4e38, 0>) has lowered Flag_Livonia on TerritoryFlag at <2991.569092, 447.946503, 1138.587646>';
     const result = parseFlagChange(raw);

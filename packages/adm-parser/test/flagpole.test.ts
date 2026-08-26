@@ -40,6 +40,19 @@ describe("parseFlagPole", () => {
     expect(r?.tool).toBe("Sledgehammer");
   });
 
+  it("parses a fold with no parseable position as player: null", () => {
+    // Off-map sentinel position: the fold still happened and must still be
+    // recorded, but there is no position to bind it to a pole with. This null
+    // is the exact input to the projector's unbound-fold path.
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    const raw = `09:18:49 | Player "Popin 0ps" (id=${ID} pos=<${sentinel}, ${sentinel}, 0.0>) folded Flag Pole`;
+    const r = parseFlagPole(raw);
+    expect(r).not.toBeNull();
+    expect(r?.action).toBe("folded");
+    expect(r?.player).toBeNull();
+    expect(r?.dayzId).toBe(ID);
+  });
+
   it("returns null for a raise, which is a flag change not a pole change", () => {
     const raw = `05:17:25 | Player "A" (id=${ID} pos=<1.0, 2.0, 3.0>) has raised Flag_Livonia on TerritoryFlag at <1.0, 3.0, 2.0>`;
     expect(parseFlagPole(raw)).toBeNull();
