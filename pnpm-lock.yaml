@@ -21,6 +21,34 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)
 
+  apps/ingest-worker:
+    dependencies:
+      '@factions/adm-parser':
+        specifier: workspace:*
+        version: link:../../packages/adm-parser
+      '@factions/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@factions/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@factions/event-log':
+        specifier: workspace:*
+        version: link:../../packages/event-log
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(postgres@3.4.9)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
   packages/adm-parser:
     dependencies:
       '@factions/domain':
