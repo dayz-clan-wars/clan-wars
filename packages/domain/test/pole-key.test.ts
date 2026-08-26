@@ -21,4 +21,11 @@ describe("poleKey", () => {
   it("always emits two decimal places", () => {
     expect(poleKey({ x: 100, y: 0, z: -5.1 })).toBe("100.00:0.00:-5.10");
   });
+
+  it("normalizes negative zero across the zero boundary", () => {
+    const a = poleKey({ x: 0.001, y: 0, z: 0 });
+    const b = poleKey({ x: -0.001, y: 0, z: 0 });
+    expect(a).toBe(b);
+    expect(a).toBe("0.00:0.00:0.00");
+  });
 });
