@@ -14,23 +14,18 @@ export DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
 psql "$DATABASE_URL" -c 'truncate table flag_changes, poles, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade;'
 
 gzcat /path/to/adm-raw-20260826.log.gz > /tmp/adm-export.log
-pnpm --filter @factions/ingest-worker exec node --experimental-strip-types \
-  src/replay-main.ts /tmp/adm-export.log
-pnpm --filter @factions/projector start
-```
-
-**Note:** on Node 24, `--experimental-strip-types` does not rewrite a relative `.js`
-import specifier to the sibling `.ts` file it actually resolves to (this project's
-source uses `.js` specifiers throughout per its ES module convention), so the
-commands above as literally written fail with `ERR_MODULE_NOT_FOUND` for
-`@factions/db`'s internal imports. Both `apps/ingest-worker` and `apps/projector`
-run their entry points through `tsx` (a workspace-root devDependency) instead,
-which resolves `.js` specifiers to their `.ts` files correctly:
-
-```bash
 pnpm --filter @factions/ingest-worker exec tsx src/replay-main.ts /tmp/adm-export.log
 pnpm --filter @factions/projector start   # "start" is "tsx src/main.ts"
 ```
+
+**Why `tsx` and not `node --experimental-strip-types`:** on Node 24,
+`--experimental-strip-types` does not rewrite a relative `.js` import specifier to
+the sibling `.ts` file it actually resolves to (this project's source uses `.js`
+specifiers throughout per its ES module convention), so plain `node` fails with
+`ERR_MODULE_NOT_FOUND` on `@factions/db`'s internal imports. Both
+`apps/ingest-worker` and `apps/projector` run their entry points through `tsx` (a
+workspace-root devDependency), which resolves `.js` specifiers to their `.ts`
+files correctly.
 
 `tsx` was chosen over `vite-node` (an earlier workaround) deliberately: `vite-node`
 is a transitive dependency of `vitest`, and depending on someone else's transitive
@@ -70,9 +65,9 @@ select pole_key, current_texture, flag_raised from poles; -- 2991.57:447.95:1138
 Counts alone cannot detect a wrong per-server clock offset: DayZ ADM logs record
 server-local wall-clock time, not UTC, and each of the three maps in this export
 runs on a different clock (`chernarus` +4h, `livonia` +7h, `sakhal` +7h — see the
-`CLOCK_OFFSET_MS_BY_MAP` constant in `apps/ingest-worker/src/replay-main.ts`). A
-backfill run with the offsets left at the default `0` would still report all the
-counts above as flawless, while every stored timestamp was 4-7 hours wrong.
+`CLOCK_OFFSET_MS_BY_MAP` constant in `apps/ingest-worker/src/clock-offsets.ts`). A
+backfill run with the offsets all set to `0` would still report every count above
+as flawless, while every stored timestamp was 4-7 hours wrong.
 
 Ground truth line from the export (Livonia, +7h):
 
@@ -94,4 +89,4 @@ where action = 'raised'
 
 If this query returns zero rows (or the row exists but at a different, shifted
 timestamp), the clock offset is wrong — go check `CLOCK_OFFSET_MS_BY_MAP` in
-`replay-main.ts` before trusting any of the counts above.
+`clock-offsets.ts` before trusting any of the counts above.

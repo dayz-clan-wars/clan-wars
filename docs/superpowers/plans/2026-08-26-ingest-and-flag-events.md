@@ -208,8 +208,9 @@ describe("parsePlayerPos", () => {
     expect(parsePlayerPos('11:00:00 | Player "A" (id=AB) is connected')).toBeNull();
   });
 
-  it("rejects the off-map sentinel in exponent notation", () => {
-    expect(parsePlayerPos("pos=<-3.4e38, -3.4e38, 0>")).toBeNull();
+  it("rejects the off-map sentinel in full decimal expansion", () => {
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    expect(parsePlayerPos(`pos=<${sentinel}, ${sentinel}, 0>`)).toBeNull();
   });
 
   it("rejects coordinates outside map bounds", () => {
@@ -276,7 +277,11 @@ const PLAYER_POS_RE = /pos=<\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 /** Flagpole position: `on TerritoryFlag at <x, altitude, z>` — altitude is in the MIDDLE. */
 const POLE_AT_RE = /on TerritoryFlag at <\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 
-/** Off-map sentinel; DayZ writes -3.4e38 for an unresolved position. */
+/**
+ * Off-map sentinel. DayZ writes an unresolved position in FULL DECIMAL
+ * EXPANSION (-340282346638528859811704183484516925440.0), never in e-notation
+ * — a pattern written against `-3.4e38` matches nothing. See spec §13.
+ */
 const SENTINEL_RE = /<\s*-?\d*\.?\d+e/iu;
 
 const MAP_MIN = -1000.0;
@@ -320,7 +325,7 @@ export * from "./coords.js";
 pnpm --filter @factions/adm-parser test
 pnpm turbo run typecheck
 ```
-Expected: PASS, 8 tests. Typecheck clean.
+Expected: PASS, 9 tests. Typecheck clean.
 
 - [ ] **Step 8: Commit**
 
@@ -1011,7 +1016,12 @@ Expected: FAIL — exports missing.
 const BOOT_RE = /AdminLog started on (\d{4})-(\d{2})-(\d{2}) at (\d{2}):(\d{2}):(\d{2})/u;
 const LOCAL_TIME_RE = /(?:^|\|)\s*(\d{2}):(\d{2}):(\d{2})\s*\|/u;
 
-/** The ADM header names the file's start. Server clocks are treated as UTC. */
+/**
+ * The ADM header names the file's start, in SERVER-LOCAL wall-clock time (DayZ
+ * never writes UTC). Date.UTC is used only to build a fixed-field instant; the
+ * per-server clockOffsetMs converts it to a real UTC instant downstream.
+ * See spec §13, "Timestamps are server-local, not UTC".
+ */
 export function parseBootHeader(raw: string): Date | null {
   const m = BOOT_RE.exec(raw);
   if (!m) return null;
@@ -1075,7 +1085,7 @@ export * from "./timestamps.js";
 ```bash
 pnpm --filter @factions/adm-parser test
 ```
-Expected: PASS, 9 timestamp tests.
+Expected: PASS, 8 timestamp tests.
 
 - [ ] **Step 5: Commit**
 
