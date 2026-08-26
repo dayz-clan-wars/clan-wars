@@ -6,7 +6,7 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "node --experimental-strip-types src/main.ts"
+    "start": "tsx src/main.ts"
   },
   "dependencies": {
     "@factions/adm-parser": "workspace:*",
@@ -15,5 +15,9 @@
     "@factions/event-log": "workspace:*",
     "drizzle-orm": "^0.36.0"
   },
-  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0", "@types/node": "^22.0.0" }
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
 }

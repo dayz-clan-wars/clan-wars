@@ -22,17 +22,25 @@ pnpm --filter @factions/projector start
 **Note:** on Node 24, `--experimental-strip-types` does not rewrite a relative `.js`
 import specifier to the sibling `.ts` file it actually resolves to (this project's
 source uses `.js` specifiers throughout per its ES module convention), so the
-commands above currently fail with `ERR_MODULE_NOT_FOUND` for `@factions/db`'s
-internal imports. Until that's addressed, run both entry points through `vite-node`
-(already present transitively via `vitest`) instead of plain `node`, and use
-`docker exec <postgres-container> psql -U factions -d factions` in place of a local
-`psql` client if one isn't installed on the host:
+commands above as literally written fail with `ERR_MODULE_NOT_FOUND` for
+`@factions/db`'s internal imports. Both `apps/ingest-worker` and `apps/projector`
+run their entry points through `tsx` (a workspace-root devDependency) instead,
+which resolves `.js` specifiers to their `.ts` files correctly:
 
 ```bash
-VITE_NODE=./node_modules/.pnpm/vite-node@2.1.9_@types+node@22.20.1/node_modules/vite-node/vite-node.mjs
-(cd apps/ingest-worker && node "../../$VITE_NODE" src/replay-main.ts /tmp/adm-export.log)
-(cd apps/projector && node "../../$VITE_NODE" src/main.ts)
+pnpm --filter @factions/ingest-worker exec tsx src/replay-main.ts /tmp/adm-export.log
+pnpm --filter @factions/projector start   # "start" is "tsx src/main.ts"
 ```
+
+`tsx` was chosen over `vite-node` (an earlier workaround) deliberately: `vite-node`
+is a transitive dependency of `vitest`, and depending on someone else's transitive
+dependency is fragile — a lockfile bump can move or remove it with no direct
+signal in this project's own `package.json`. A real `tsc` build step emitting
+`dist/*.js` (which plain `node` can run with no loader at all) is the eventual
+production answer; that is out of scope here and left as a follow-up.
+
+If a local `psql` client isn't installed on the host, run SQL through the
+container instead: `docker exec <postgres-container> psql -U factions -d factions -c "..."`.
 
 ## Expected results
 

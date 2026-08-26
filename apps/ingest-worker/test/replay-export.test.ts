@@ -25,16 +25,30 @@ describe("parseExportLine", () => {
 
 describe("groupExportByFile", () => {
   it("groups lines by source file and derives bootAt from the earliest line", () => {
-    const g = groupExportByFile([L1, L2]);
-    expect(g.size).toBe(2);
-    const liv = g.get("DayZServer_X1_x64_2026-07-23_09-01-42.ADM");
+    const { groups } = groupExportByFile([L1, L2]);
+    expect(groups.size).toBe(2);
+    const liv = groups.get("DayZServer_X1_x64_2026-07-23_09-01-42.ADM");
     expect(liv?.map).toBe("livonia");
     expect(liv?.bootAt.toISOString()).toBe("2026-07-23T09:01:42.000Z");
   });
 
   it("derives bootAt from the filename timestamp, not the line time", () => {
-    const g = groupExportByFile([L2]);
-    expect(g.get("DayZServer_X1_x64_2026-08-01_19-01-26.ADM")?.bootAt.toISOString())
+    const { groups } = groupExportByFile([L2]);
+    expect(groups.get("DayZServer_X1_x64_2026-08-01_19-01-26.ADM")?.bootAt.toISOString())
       .toBe("2026-08-01T19:01:26.000Z");
+  });
+
+  it("reports the count of lines that failed parseExportLine", () => {
+    const { skipped } = groupExportByFile([
+      "# DayZ One Life — raw ADM log export",
+      L1,
+      L2,
+    ]);
+    expect(skipped).toBe(1);
+  });
+
+  it("throws when a filename has no derivable boot time, instead of silently dropping the file", () => {
+    const badLine = '[Livonia] 2026-07-23T17:21:40Z  DayZServer_broken.ADM:1  |  something happened';
+    expect(() => groupExportByFile([badLine])).toThrow(/DayZServer_broken\.ADM/);
   });
 });
