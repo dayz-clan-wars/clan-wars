@@ -15,10 +15,15 @@ export const servers = pgTable("servers", {
    * parser's TimelineCursor therefore takes an explicit clockOffsetMs and
    * applies it as UTC = server-local + clockOffsetMs. This column is where
    * the ingest worker reads that value per server, since it is a property of
-   * the server itself. default(0) keeps inserts that omit it (e.g. tests
-   * that only pass { name, map }) working unchanged.
+   * the server itself.
+   *
+   * ⚠️ Deliberately NOT `.default(0)`. A wrong clock offset is invisible to
+   * every count-based check in this system: every row still lands, every
+   * acceptance count still matches, and only the absolute instants are hours
+   * wrong. A default would let any caller that forgets this column silently
+   * inherit that failure. Every insert must state the offset explicitly.
    */
-  clockOffsetMs: integer("clock_offset_ms").notNull().default(0),
+  clockOffsetMs: integer("clock_offset_ms").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   uniqNameMap: uniqueIndex("servers_name_map_uniq").on(t.name, t.map),
@@ -96,6 +101,12 @@ export const flagChanges = pgTable("flag_changes", {
   eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
   serverId: integer("server_id").notNull().references(() => servers.id),
   map: text("map").notNull(),
+  /**
+   * ⚠️ A literal "x:y:z" coordinate string (the 1cm-normalized flagpole
+   * identity), exactly as in `poles.pole_key`. It must never reach a public
+   * read model — publishing it publishes a base's exact world position
+   * (spec §11).
+   */
   poleKey: text("pole_key").notNull(),
   dayzId: text("dayz_id").notNull(),
   gamertag: text("gamertag").notNull(),

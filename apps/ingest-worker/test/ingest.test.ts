@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, servers, events, rawLines, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, events, rawLines, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { ingestFile } from "../src/ingest.js";
 
-const URL = process.env.TEST_DATABASE_URL;
+const URL = requireTestDatabaseUrl();
 const ID = "D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1";
 
 const LINES = [
@@ -16,20 +16,20 @@ const LINES = [
   `14:00:00 | Player "YrJustBad" (id=${ID}) is connected`,
 ];
 
-describe.skipIf(!URL)("ingestFile", () => {
+describe("ingestFile", () => {
   let db: Database;
   let serverId: number;
 
   beforeEach(async () => {
-    db = createClient(URL!);
+    db = createClient(URL);
     await runMigrations(db);
     await db.execute(sql`truncate table flag_changes, poles, events, raw_lines, adm_files, servers, consumer_cursors restart identity cascade`);
-    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia" }).returning();
+    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = srv!.id;
   });
 
   const opts = () => ({
-    serverId, map: "livonia", filename: "a.ADM",
+    serverId, filename: "a.ADM",
     bootAt: new Date("2026-07-22T07:01:37Z"), lines: LINES, clockOffsetMs: 0,
   });
 
@@ -67,6 +67,24 @@ describe.skipIf(!URL)("ingestFile", () => {
     const second = await ingestFile(db, opts());
     expect(second.eventsAppended).toBe(0);
     expect(await db.select().from(events)).toHaveLength(3);
+  });
+
+  it("reports zero unparsed flag-shaped lines for a clean file", async () => {
+    const r = await ingestFile(db, opts());
+    expect(r.unparsedFlagLines).toBe(0);
+  });
+
+  it("counts flag-shaped lines the parser could not interpret", async () => {
+    // Flag-shaped text in a grammar parseLine does not recognise. Without this
+    // canary a parser regression on the only raid signal is a silent no-op.
+    const lines = [
+      "AdminLog started on 2026-07-22 at 07:01:37",
+      `08:00:00 | Player "YrJustBad" (id=${ID} pos=<1.0, 2.0, 3.0>) has hoisted Flag_DayZ on TerritoryFlag at <1.0, 3.0, 2.0>`,
+      `08:00:01 | Player "YrJustBad" (id=${ID} pos=<1.0, 2.0, 3.0>) unfurled Flag Pole`,
+    ];
+    const r = await ingestFile(db, { ...opts(), lines });
+    expect(r.eventsAppended).toBe(0);
+    expect(r.unparsedFlagLines).toBe(2);
   });
 
   it("shifts occurredAt by the server's clock offset", async () => {

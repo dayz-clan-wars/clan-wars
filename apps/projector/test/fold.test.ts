@@ -1,25 +1,25 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, servers, admFiles, events, poles, flagChanges, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, poles, flagChanges, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
 import { runProjector } from "../src/run.js";
 
-const URL = process.env.TEST_DATABASE_URL;
+const URL = requireTestDatabaseUrl();
 const ID = "D34AD4C2D9A2D1068C2B4971CAA01177C20B24C1";
 const POLE = { x: 2991.569092, y: 447.946503, z: 1138.587646 };
 const KEY = "2991.57:447.95:1138.59";
 
-describe.skipIf(!URL)("projector", () => {
+describe("projector", () => {
   let db: Database;
   let serverId: number;
   let admFileId: number;
   let line = 0;
 
   beforeEach(async () => {
-    db = createClient(URL!);
+    db = createClient(URL);
     await runMigrations(db);
     await db.execute(sql`truncate table flag_changes, poles, events, raw_lines, adm_files, servers, consumer_cursors restart identity cascade`);
-    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia" }).returning();
+    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = srv!.id;
     const [f] = await db.insert(admFiles).values({
       serverId, filename: "a.ADM", bootAt: new Date("2026-07-22T00:00:00Z"),
@@ -89,21 +89,62 @@ describe.skipIf(!URL)("projector", () => {
     expect(p?.foldedAt?.toISOString()).toBe("2026-07-24T10:00:00.000Z");
   });
 
-  it("ignores a fold with no pole within 10m", async () => {
+  it("counts a fold with no pole within 10m as unbound", async () => {
     await raise("Flag_Livonia", "2026-07-22T10:00:00Z");
     await emit("flagpole.folded", {
       gamertag: "C", dayzId: ID, action: "folded", part: null, tool: null,
       player: { x: 9000.0, y: 100.0, z: 9000.0 },
     }, "2026-07-24T10:00:00Z");
-    await runProjector(db);
+    const r = await runProjector(db);
     const [p] = await db.select().from(poles);
     expect(p?.foldedAt).toBeNull();
+    expect(r.unboundFolds).toBe(1);
+  });
+
+  it("counts a fold with no player position as unbound", async () => {
+    await raise("Flag_Livonia", "2026-07-22T10:00:00Z");
+    await emit("flagpole.folded", {
+      gamertag: "C", dayzId: ID, action: "folded", part: null, tool: null,
+      player: null,
+    }, "2026-07-24T10:00:00Z");
+    const r = await runProjector(db);
+    expect(r.unboundFolds).toBe(1);
+    expect(r.applied).toBe(2);
+  });
+
+  it("reports no unbound folds when every fold binds", async () => {
+    await raise("Flag_Livonia", "2026-07-22T10:00:00Z");
+    await emit("flagpole.folded", {
+      gamertag: "C", dayzId: ID, action: "folded", part: null, tool: null,
+      player: { x: 2993.0, y: 448.0, z: 1139.0 },
+    }, "2026-07-24T10:00:00Z");
+    const r = await runProjector(db);
+    expect(r.unboundFolds).toBe(0);
+    expect(r.unknownServer).toBe(0);
+  });
+
+  it("clears foldedAt when a folded pole is rebuilt at the same key", async () => {
+    await raise("Flag_Livonia", "2026-07-22T10:00:00Z");
+    await emit("flagpole.folded", {
+      gamertag: "C", dayzId: ID, action: "folded", part: null, tool: null,
+      player: { x: 2993.0, y: 448.0, z: 1139.0 },
+    }, "2026-07-24T10:00:00Z");
+    await runProjector(db);
+    const [folded] = await db.select().from(poles);
+    expect(folded?.foldedAt).not.toBeNull();
+    expect(folded?.flagRaised).toBe(false);
+
+    await raise("Flag_DayZ", "2026-07-25T10:00:00Z");
+    await runProjector(db);
+    const [rebuilt] = await db.select().from(poles);
+    expect(rebuilt?.foldedAt).toBeNull();
+    expect(rebuilt?.flagRaised).toBe(true);
   });
 
   it("advances the cursor so a second run is a no-op", async () => {
     await raise("Flag_Livonia", "2026-07-22T10:00:00Z");
-    expect(await runProjector(db)).toBe(1);
-    expect(await runProjector(db)).toBe(0);
+    expect((await runProjector(db)).applied).toBe(1);
+    expect((await runProjector(db)).applied).toBe(0);
     expect(await db.select().from(flagChanges)).toHaveLength(1);
   });
 });

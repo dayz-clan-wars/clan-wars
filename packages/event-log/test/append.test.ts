@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { createClient, runMigrations, servers, admFiles, events, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { appendEvent, readCursor, writeCursor } from "../src/index.js";
 
-const URL = process.env.TEST_DATABASE_URL;
+const URL = requireTestDatabaseUrl();
 
-describe.skipIf(!URL)("event log", () => {
+describe("event log", () => {
   let db: Database;
   let serverId: number;
   let admFileId: number;
 
   beforeAll(async () => {
-    db = createClient(URL!);
+    db = createClient(URL);
     await runMigrations(db);
     await db.execute(sql`truncate table flag_changes, poles, events, raw_lines, adm_files, servers, consumer_cursors restart identity cascade`);
-    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia" }).returning();
+    const [srv] = await db.insert(servers).values({ name: "T", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = srv!.id;
     const [f] = await db.insert(admFiles).values({
       serverId, filename: "a.ADM", bootAt: new Date("2026-07-22T07:01:37Z"),
