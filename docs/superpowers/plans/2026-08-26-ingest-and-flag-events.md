@@ -1309,7 +1309,7 @@ services:
       POSTGRES_USER: factions
       POSTGRES_PASSWORD: factions
       POSTGRES_DB: factions
-    ports: ["5433:5432"]
+    ports: ["5434:5432"]
     volumes: ["factions-pg:/var/lib/postgresql/data"]
 volumes:
   factions-pg:
@@ -1354,7 +1354,7 @@ export default {
   schema: "./src/schema.ts",
   out: "./migrations",
   dialect: "postgresql",
-  dbCredentials: { url: process.env.DATABASE_URL ?? "postgres://factions:factions@localhost:5433/factions" },
+  dbCredentials: { url: process.env.DATABASE_URL ?? "postgres://factions:factions@localhost:5434/factions" },
 } satisfies Config;
 ```
 
@@ -1409,7 +1409,7 @@ describe.skipIf(!URL)("schema", () => {
 
 ```bash
 docker compose up -d postgres
-export TEST_DATABASE_URL="postgres://factions:factions@localhost:5433/factions"
+export TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
 pnpm --filter @factions/db test
 ```
 Expected: FAIL — cannot resolve `../src/index.js`.
@@ -2574,7 +2574,7 @@ result against known quantities from the log survey.
 
 ```bash
 docker compose up -d postgres
-export DATABASE_URL="postgres://factions:factions@localhost:5433/factions"
+export DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
 gzcat /path/to/adm-raw-20260826.log.gz > /tmp/adm-export.log
 pnpm --filter @factions/ingest-worker exec node --experimental-strip-types \
   src/replay-main.ts /tmp/adm-export.log

@@ -2,6 +2,7 @@ import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
   uniqueIndex, index, numeric, boolean,
 } from "drizzle-orm/pg-core";
+import type { EventType } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -51,7 +52,7 @@ export const events = pgTable("events", {
   admFileId: bigint("adm_file_id", { mode: "number" }).notNull().references(() => admFiles.id),
   lineIndex: integer("line_index").notNull(),
   subIndex: integer("sub_index").notNull().default(0),
-  type: text("type").notNull(),
+  type: text("type").$type<EventType>().notNull(),
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   payload: jsonb("payload").notNull(),
   rawLineId: bigint("raw_line_id", { mode: "number" }).references(() => rawLines.id),
