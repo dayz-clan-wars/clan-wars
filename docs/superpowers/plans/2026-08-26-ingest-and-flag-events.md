@@ -89,7 +89,6 @@ The two coordinate orderings are the single highest-risk detail in the whole sys
   "engines": { "node": ">=20" },
   "packageManager": "pnpm@9.12.0",
   "scripts": {
-    "build": "turbo run build",
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
     "ci": "turbo run typecheck test --concurrency=1"
@@ -115,8 +114,7 @@ packages:
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "typecheck": { "dependsOn": ["^build"] },
+    "typecheck": {},
     "test": {}
   }
 }
