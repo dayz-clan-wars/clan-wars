@@ -7,6 +7,9 @@ if (!DATABASE_URL) {
   process.exit(1);
 }
 
-const applied = await runProjector(createClient(DATABASE_URL));
-console.log(`projected ${applied} events`);
+const { applied, unknownServer, unboundFolds } = await runProjector(createClient(DATABASE_URL));
+console.log(
+  `projected ${applied} events, ${unknownServer} skipped (unknown server), ` +
+  `${unboundFolds} folds not bound to a pole`,
+);
 process.exit(0);

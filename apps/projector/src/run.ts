@@ -6,11 +6,32 @@ import { applyEvent } from "./fold.js";
 
 export const CONSUMER = "pole-projector";
 
-/** Applies all unprocessed events in id order. Returns how many were applied. */
-export async function runProjector(db: Database, opts: { batchSize?: number } = {}): Promise<number> {
+/**
+ * What one projector pass did.
+ *
+ * `applied` counts only events actually handed to applyEvent — an event whose
+ * server has no row in `servers` is skipped, and counting it as applied
+ * overstated the work done. `unknownServer` and `unboundFolds` make both
+ * silent-drop paths visible instead: an unbound fold is a lost pole-loss
+ * signal, and pole loss is one of only two consequential signals the ADM log
+ * provides.
+ */
+export type ProjectorResult = {
+  applied: number;
+  unknownServer: number;
+  unboundFolds: number;
+};
+
+/** Applies all unprocessed events in id order. */
+export async function runProjector(
+  db: Database,
+  opts: { batchSize?: number } = {},
+): Promise<ProjectorResult> {
   const batchSize = opts.batchSize ?? 500;
   let cursor = await readCursor(db, CONSUMER);
   let applied = 0;
+  let unknownServer = 0;
+  let unboundFolds = 0;
 
   // The servers table is tiny and near-static, so its id -> map mapping is
   // loaded once here rather than re-queried per event (an N+1 query that
@@ -25,12 +46,17 @@ export async function runProjector(db: Database, opts: { batchSize?: number } = 
 
     for (const ev of batch) {
       const map = mapByServerId.get(ev.serverId);
-      if (map) await applyEvent(db, map, ev);
+      if (map) {
+        const outcome = await applyEvent(db, map, ev);
+        if (outcome.unboundFold) unboundFolds++;
+        applied++;
+      } else {
+        unknownServer++;
+      }
       cursor = ev.id;
-      applied++;
     }
     await writeCursor(db, CONSUMER, cursor);
   }
 
-  return applied;
+  return { applied, unknownServer, unboundFolds };
 }
