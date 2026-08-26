@@ -22,4 +22,12 @@ describe("parseIdentity", () => {
   it("returns null on a line with no player clause", () => {
     expect(parseIdentity("13:00:07 | ##### PlayerList log: 2 players")).toBeNull();
   });
+
+  it("parses a line with the (DEAD) marker", () => {
+    const raw = 'Player "OneLife1312" (DEAD) (id=D2B68C51C154B57A617E50F46D43FF2D4152E658 pos=<8187.6, 13701.2, -0.6>)';
+    expect(parseIdentity(raw)).toEqual({
+      gamertag: "OneLife1312",
+      dayzId: "D2B68C51C154B57A617E50F46D43FF2D4152E658",
+    });
+  });
 });

@@ -48,4 +48,20 @@ describe("parsePlayerListEntry", () => {
     const raw = `13:00:07 | Player "LowerMarrow774" (id=${ID} pos=<9958.4, 7440.6, 176.4>)   `;
     expect(parsePlayerListEntry(raw)).not.toBeNull();
   });
+
+  it("parses a (DEAD) marked entry from PlayerList", () => {
+    const deadID = "D2B68C51C154B57A617E50F46D43FF2D4152E658";
+    const raw = `18:00:06 | Player "OneLife1312" (DEAD) (id=${deadID} pos=<8187.6, 13701.2, -0.6>)`;
+    expect(parsePlayerListEntry(raw)).toEqual({
+      gamertag: "OneLife1312",
+      dayzId: deadID,
+      pos: { x: 8187.6, y: -0.6, z: 13701.2 },
+    });
+  });
+
+  it("returns null when trailing content follows a (DEAD) marked entry", () => {
+    const deadID = "D2B68C51C154B57A617E50F46D43FF2D4152E658";
+    const raw = `18:00:06 | Player "OneLife1312" (DEAD) (id=${deadID} pos=<8187.6, 13701.2, -0.6>) died. Stats> Water: 50`;
+    expect(parsePlayerListEntry(raw)).toBeNull();
+  });
 });

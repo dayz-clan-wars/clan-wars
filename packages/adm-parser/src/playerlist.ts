@@ -5,7 +5,7 @@ import { parseIdentity } from "./identity.js";
 const HEADER_RE = /#####\s*PlayerList log:\s*(\d+)\s*players?/u;
 const TERMINATOR_RE = /#####\s*$/u;
 /** A dump body line ends at the closing paren — nothing follows it. */
-const ENTRY_RE = /Player "[^"]+"\s*\(id=[0-9A-F]{40}\s+pos=<[^>]*>\)\s*$/u;
+const ENTRY_RE = /Player "[^"]+"\s*(?:\(DEAD\))?\s*\(id=[0-9A-F]{40}\s+pos=<[^>]*>\)\s*$/u;
 
 export function parseRosterHeader(raw: string): { count: number } | null {
   const m = HEADER_RE.exec(raw);
