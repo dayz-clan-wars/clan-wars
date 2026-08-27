@@ -7,8 +7,11 @@ describe("emote dictionary", () => {
     expect(new Set(tokens).size).toBe(tokens.length);
   });
 
-  it("has a unique label for every entry", () => {
-    const labels = EMOTE_DICTIONARY.map((e) => e.label);
+  it("has a unique label for every entry, case-folded", () => {
+    // Case-FOLDED, because emoteToken() lowercases before lookup. Two labels
+    // differing only by case would collide in that Map with the last one
+    // silently winning, and an exact-string check would not catch it.
+    const labels = EMOTE_DICTIONARY.map((e) => e.label.toLowerCase());
     expect(new Set(labels).size).toBe(labels.length);
   });
 
