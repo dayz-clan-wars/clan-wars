@@ -107,7 +107,15 @@ export function guardedRunner(job: () => Promise<void>): {
       // returned promise exists so shutdown can await "is a run still in
       // flight", and forcing every caller to attach a .catch just to avoid an
       // unhandled rejection would be an easy way to reintroduce this bug.
-      running = job().catch(() => {}).finally(() => { running = null; });
+      running = job()
+        .catch((err: unknown) => {
+          // Logged, not merely swallowed. Callers today wrap their own body in
+          // try/catch so this is a dead-letter backstop — but a future caller
+          // that forgets would otherwise fail completely silently, with
+          // verification quietly doing nothing and no line anywhere saying so.
+          console.error("guarded job failed", err);
+        })
+        .finally(() => { running = null; });
     },
     inFlight: () => running,
     skipped: () => skipped,

@@ -125,8 +125,10 @@ describe("discord wiring", () => {
       const job = vi.fn().mockRejectedValue(new Error("boom"));
       const runner = guardedRunner(job);
       runner.fire();
-      await runner.inFlight()?.catch(() => {});
-      // A failed run must not wedge the runner permanently.
+      await runner.inFlight();
+      // A failed run must not wedge the runner permanently: if the in-flight
+      // slot were cleared only on success, verification would stop dead after
+      // the first transient database error and never resume.
       runner.fire();
       expect(job).toHaveBeenCalledTimes(2);
     });
