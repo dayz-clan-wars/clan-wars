@@ -1,0 +1,1 @@
+ALTER TABLE "servers" ALTER COLUMN "clock_offset_ms" DROP DEFAULT;

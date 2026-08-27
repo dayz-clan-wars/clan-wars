@@ -1,0 +1,14 @@
+{
+  "name": "@factions/event-log",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/index.ts",
+  "exports": { ".": "./src/index.ts" },
+  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
+  "dependencies": {
+    "@factions/db": "workspace:*",
+    "@factions/domain": "workspace:*",
+    "drizzle-orm": "^0.36.0"
+  },
+  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0" }
+}

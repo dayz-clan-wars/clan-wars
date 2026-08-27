@@ -604,6 +604,55 @@ Each flag event supplies **who** (stable UID), **what** (raised/lowered), **whic
 byte-identical across all 14 observed events spanning five weeks and six different players —
 which is what makes it usable as a durable primary key.
 
+### Timestamps are server-local, not UTC
+
+**ADM records server-local wall-clock time.** The line prefix `HH:MM:SS` and the
+`AdminLog started on YYYY-MM-DD at HH:MM:SS` boot header are both in whatever timezone the
+host machine is set to — there is no timezone marker anywhere in the file, and DayZ never
+writes UTC.
+
+Measured against the production export's own authoritative ISO timestamps, the three servers
+run **three different clocks**:
+
+| Map | Observed offset | Milliseconds to add to local time to get UTC |
+|---|---|---|
+| Chernarus | UTC+4 | `14400000` |
+| Livonia | UTC+7 | `25200000` |
+| Sakhal | UTC+7 | `25200000` |
+
+Consequences for everything downstream:
+
+- Any absolute timestamp requires a **per-server clock offset**. It is stored on
+  `servers.clock_offset_ms` and applied as `UTC = server-local + clockOffsetMs`.
+- That column deliberately has **no default**. A wrong or missing offset is invisible to every
+  count-based check: every row still lands, every count still matches, and only the instants
+  are hours wrong. Both ingest entry points require the offset explicitly and refuse to start
+  without it.
+- Cross-server comparisons — raid timelines, rankings, ceremony windows, announcement ordering
+  — are only meaningful *after* the offset is applied. Never compare raw ADM times across maps.
+- The offsets above are measurements of these particular hosts, not properties of DayZ. A host
+  move or a server-side timezone change silently invalidates them, and only a ground-truth
+  re-check (see `scripts/backfill.md`) will catch it.
+
+### The off-map sentinel
+
+DayZ writes an unresolved position as a very large negative float, in **full decimal
+expansion**:
+
+```
+pos=<-340282346638528859811704183484516925440.0, -340282346638528859811704183484516925440.0, 0.0>
+```
+
+Not `-3.4e38`, not any other `e`-notation form — 134 such lines appear in the production
+export and every one is spelled out in full.
+
+⚠️ There is **no pattern match for the sentinel anywhere in this system.** It is rejected
+solely because the value falls far below the coordinate parser's lower bound
+(`inMapBounds`, `packages/adm-parser/src/coords.ts`). Anyone adding a sentinel check from a
+half-remembered `e`-notation form would write a regex that never matches a single real line,
+and anyone widening or removing the lower bound would silently admit sentinel coordinates as
+real world positions.
+
 ### Known limitation: no destruction events
 
 **ADM logs no base destruction whatsoever.** Zero lines match `destroy` across the full export,

@@ -1,0 +1,22 @@
+{
+  "name": "@factions/projector",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@factions/db": "workspace:*",
+    "@factions/domain": "workspace:*",
+    "@factions/event-log": "workspace:*",
+    "drizzle-orm": "^0.36.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0"
+  }
+}

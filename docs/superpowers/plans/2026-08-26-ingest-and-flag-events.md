@@ -89,7 +89,6 @@ The two coordinate orderings are the single highest-risk detail in the whole sys
   "engines": { "node": ">=20" },
   "packageManager": "pnpm@9.12.0",
   "scripts": {
-    "build": "turbo run build",
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
     "ci": "turbo run typecheck test --concurrency=1"
@@ -115,8 +114,7 @@ packages:
 {
   "$schema": "https://turbo.build/schema.json",
   "tasks": {
-    "build": { "dependsOn": ["^build"], "outputs": ["dist/**"] },
-    "typecheck": { "dependsOn": ["^build"] },
+    "typecheck": {},
     "test": {}
   }
 }
@@ -208,8 +206,9 @@ describe("parsePlayerPos", () => {
     expect(parsePlayerPos('11:00:00 | Player "A" (id=AB) is connected')).toBeNull();
   });
 
-  it("rejects the off-map sentinel in exponent notation", () => {
-    expect(parsePlayerPos("pos=<-3.4e38, -3.4e38, 0>")).toBeNull();
+  it("rejects the off-map sentinel in full decimal expansion", () => {
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    expect(parsePlayerPos(`pos=<${sentinel}, ${sentinel}, 0>`)).toBeNull();
   });
 
   it("rejects coordinates outside map bounds", () => {
@@ -276,7 +275,11 @@ const PLAYER_POS_RE = /pos=<\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 /** Flagpole position: `on TerritoryFlag at <x, altitude, z>` — altitude is in the MIDDLE. */
 const POLE_AT_RE = /on TerritoryFlag at <\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
 
-/** Off-map sentinel; DayZ writes -3.4e38 for an unresolved position. */
+/**
+ * Off-map sentinel. DayZ writes an unresolved position in FULL DECIMAL
+ * EXPANSION (-340282346638528859811704183484516925440.0), never in e-notation
+ * — a pattern written against `-3.4e38` matches nothing. See spec §13.
+ */
 const SENTINEL_RE = /<\s*-?\d*\.?\d+e/iu;
 
 const MAP_MIN = -1000.0;
@@ -320,7 +323,7 @@ export * from "./coords.js";
 pnpm --filter @factions/adm-parser test
 pnpm turbo run typecheck
 ```
-Expected: PASS, 8 tests. Typecheck clean.
+Expected: PASS, 9 tests. Typecheck clean.
 
 - [ ] **Step 8: Commit**
 
@@ -1011,7 +1014,12 @@ Expected: FAIL — exports missing.
 const BOOT_RE = /AdminLog started on (\d{4})-(\d{2})-(\d{2}) at (\d{2}):(\d{2}):(\d{2})/u;
 const LOCAL_TIME_RE = /(?:^|\|)\s*(\d{2}):(\d{2}):(\d{2})\s*\|/u;
 
-/** The ADM header names the file's start. Server clocks are treated as UTC. */
+/**
+ * The ADM header names the file's start, in SERVER-LOCAL wall-clock time (DayZ
+ * never writes UTC). Date.UTC is used only to build a fixed-field instant; the
+ * per-server clockOffsetMs converts it to a real UTC instant downstream.
+ * See spec §13, "Timestamps are server-local, not UTC".
+ */
 export function parseBootHeader(raw: string): Date | null {
   const m = BOOT_RE.exec(raw);
   if (!m) return null;
@@ -1075,7 +1083,7 @@ export * from "./timestamps.js";
 ```bash
 pnpm --filter @factions/adm-parser test
 ```
-Expected: PASS, 9 timestamp tests.
+Expected: PASS, 8 timestamp tests.
 
 - [ ] **Step 5: Commit**
 
@@ -1309,7 +1317,7 @@ services:
       POSTGRES_USER: factions
       POSTGRES_PASSWORD: factions
       POSTGRES_DB: factions
-    ports: ["5433:5432"]
+    ports: ["5434:5432"]
     volumes: ["factions-pg:/var/lib/postgresql/data"]
 volumes:
   factions-pg:
@@ -1354,7 +1362,7 @@ export default {
   schema: "./src/schema.ts",
   out: "./migrations",
   dialect: "postgresql",
-  dbCredentials: { url: process.env.DATABASE_URL ?? "postgres://factions:factions@localhost:5433/factions" },
+  dbCredentials: { url: process.env.DATABASE_URL ?? "postgres://factions:factions@localhost:5434/factions" },
 } satisfies Config;
 ```
 
@@ -1409,7 +1417,7 @@ describe.skipIf(!URL)("schema", () => {
 
 ```bash
 docker compose up -d postgres
-export TEST_DATABASE_URL="postgres://factions:factions@localhost:5433/factions"
+export TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
 pnpm --filter @factions/db test
 ```
 Expected: FAIL — cannot resolve `../src/index.js`.
@@ -2574,7 +2582,7 @@ result against known quantities from the log survey.
 
 ```bash
 docker compose up -d postgres
-export DATABASE_URL="postgres://factions:factions@localhost:5433/factions"
+export DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
 gzcat /path/to/adm-raw-20260826.log.gz > /tmp/adm-export.log
 pnpm --filter @factions/ingest-worker exec node --experimental-strip-types \
   src/replay-main.ts /tmp/adm-export.log
