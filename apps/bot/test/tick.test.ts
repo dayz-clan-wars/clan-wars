@@ -141,4 +141,37 @@ describe("verificationTick", () => {
     });
     await expect(tick()).resolves.toMatchObject({ verified: 0 });
   });
+
+  it("retries a completion whose first attempt failed, rather than skipping the event", async () => {
+    // Simulates the mid-batch failure: the completing event is processed while
+    // completeChallenge throws, then the same batch is processed again.
+    await issue();
+    for (const t of SEQ) await emote(UID_A, t);
+
+    const failing = Object.create(store) as typeof store;
+    let thrown = false;
+    failing.completeChallenge = async (...args: Parameters<typeof store.completeChallenge>) => {
+      if (!thrown) { thrown = true; throw new Error("transient db error"); }
+      return store.completeChallenge(...args);
+    };
+
+    await expect(verificationTick(db, failing, { batchSize: 100, now })).rejects.toThrow("transient db error");
+    expect(await store.findLinkByDiscord("100")).toBeNull();
+
+    // The cursor was never written, so the batch replays. The completing event
+    // must NOT be skipped by the replay guard.
+    const second = await verificationTick(db, store, { batchSize: 100, now });
+    expect(second.verified).toBe(1);
+    expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: UID_A });
+  });
+
+  it("skips an emote payload with an empty gamertag", async () => {
+    await issue();
+    await appendEvent(db, {
+      serverId, admFileId, lineIndex: line++, subIndex: 0,
+      type: "emote.performed", occurredAt: now,
+      payload: { gamertag: "", dayzId: UID_A, emote: SEQ[0]!, item: null },
+    });
+    expect((await tick()).scanned).toBe(0);
+  });
 });

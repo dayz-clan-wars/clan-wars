@@ -32,12 +32,13 @@ type EmotePayload = { dayzId: string; gamertag: string; emote: string };
 function readEmotePayload(payload: unknown): EmotePayload | null {
   if (typeof payload !== "object" || payload === null) return null;
   const p = payload as Record<string, unknown>;
-  if (typeof p.dayzId !== "string" || typeof p.emote !== "string") return null;
-  return {
-    dayzId: p.dayzId,
-    gamertag: typeof p.gamertag === "string" ? p.gamertag : "",
-    emote: p.emote,
-  };
+  if (typeof p.dayzId !== "string" || p.dayzId === "") return null;
+  if (typeof p.emote !== "string" || p.emote === "") return null;
+  // The ADM parser's identity regex captures at least one character, so an
+  // empty gamertag means a malformed payload rather than a nameless player.
+  // Rejecting it here keeps a blank display name out of identity_links.
+  if (typeof p.gamertag !== "string" || p.gamertag === "") return null;
+  return { dayzId: p.dayzId, gamertag: p.gamertag, emote: p.emote };
 }
 
 /** One pass: advance every live challenge against the unread emote events. */
@@ -76,13 +77,23 @@ export async function verificationTick(
         const { index, complete } = advance(challenge.sequence, progressIndex, payload.emote);
         if (index === progressIndex) continue; // no forward progress
 
+        if (complete) {
+          // ⚠️ Completion is attempted BEFORE the attempt row is updated, and
+          // the order is load-bearing. upsertAttempt writes lastMatchedEventId,
+          // which the replay guard above uses to skip already-seen events. If
+          // that marker were written first and completeChallenge then threw,
+          // the batch would replay, the guard would skip this very event, and
+          // the completion would never be retried — the player performs the
+          // right sequence and can never be verified, silently. Writing the
+          // marker only after the completion succeeds means a throw here
+          // replays the event intact.
+          const bound = await store.completeChallenge(challenge.id, payload.dayzId, payload.gamertag, now);
+          if (bound) out.verified++;
+          else out.alreadyLinked++;
+        }
+
         await store.upsertAttempt(challenge.id, payload.dayzId, index, ev.id);
         out.advanced++;
-        if (!complete) continue;
-
-        const bound = await store.completeChallenge(challenge.id, payload.dayzId, payload.gamertag, now);
-        if (bound) out.verified++;
-        else out.alreadyLinked++;
       }
     }
     await writeCursor(db, CONSUMER, cursor);
