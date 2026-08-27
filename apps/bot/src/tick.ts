@@ -1,7 +1,19 @@
 import type { Database } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { advance } from "@factions/verification";
+import { safeVerificationEmotes } from "@factions/domain";
 import type { VerificationStore } from "./store.js";
+
+const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
+
+/**
+ * How many safe-pool emotes one UID may spend on one challenge.
+ *
+ * A legitimate player needs three plus a few misfires. The sweep in C2 needs
+ * 87. Twelve separates them with room to spare. Raise it if players report
+ * being locked out; do not remove it.
+ */
+export const MAX_POOL_EMOTES_PER_ATTEMPT = 12;
 
 /**
  * ⚠️ Distinct from the projector's "pole-projector". Two consumers sharing a
@@ -25,6 +37,11 @@ export type TickResult = {
    * someone re-linking without unlinking, or two people racing one UID.
    */
   alreadyLinked: number;
+  /**
+   * A UID exhausted its per-challenge emote budget (MAX_POOL_EMOTES_PER_ATTEMPT).
+   * Non-zero means either a fumbling player or a sweep attempt.
+   */
+  lockedOut: number;
 };
 
 type EmotePayload = { dayzId: string; gamertag: string; emote: string };
@@ -50,7 +67,7 @@ export async function verificationTick(
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   let cursor = await readCursor(db, CONSUMER);
-  const out: TickResult = { scanned: 0, advanced: 0, verified: 0, alreadyLinked: 0 };
+  const out: TickResult = { scanned: 0, advanced: 0, verified: 0, alreadyLinked: 0, lockedOut: 0 };
 
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -67,6 +84,14 @@ export async function verificationTick(
       // Re-read live challenges per event: a completion inside this loop must
       // not leave a stale challenge in a cached list.
       for (const challenge of await store.liveChallenges(now)) {
+        // ⚠️ A challenge may only be satisfied by emotes performed AFTER it was
+        // issued. Without this, ingesting a historical log — or simply starting
+        // with a cursor of 0 — replays weeks of past emotes at every live
+        // challenge, and an unrelated player's history can complete it and bind
+        // THEIR UID to this account. Event time, not row id: id order is
+        // ingest order, which is not when the player acted.
+        if (ev.occurredAt < challenge.issuedAt) continue;
+
         const attempt = await store.getAttempt(challenge.id, payload.dayzId);
         const progressIndex = attempt?.progressIndex ?? 0;
         const lastMatchedEventId = attempt?.lastMatchedEventId ?? 0;
@@ -74,8 +99,21 @@ export async function verificationTick(
         // advance it again on a re-read.
         if (ev.id <= lastMatchedEventId) continue;
 
+        // Tokens outside the safe pool can never appear in a sequence, so they
+        // neither advance nor count against the budget. EmoteSitA alone is 77%
+        // of all emote traffic in production; charging for it would exhaust a
+        // legitimate player's budget by sitting down.
+        if (!SAFE_TOKENS.has(payload.emote)) continue;
+
+        const seenCount = attempt?.seenCount ?? 0;
+        if (seenCount >= MAX_POOL_EMOTES_PER_ATTEMPT) {
+          // Locked out per (challenge, UID), NOT per challenge: an attacker
+          // burning their own budget must not deny the real player theirs.
+          out.lockedOut++;
+          continue;
+        }
+
         const { index, complete } = advance(challenge.sequence, progressIndex, payload.emote);
-        if (index === progressIndex) continue; // no forward progress
 
         if (complete) {
           // ⚠️ Completion is attempted BEFORE the attempt row is updated, and
@@ -92,8 +130,10 @@ export async function verificationTick(
           else out.alreadyLinked++;
         }
 
-        await store.upsertAttempt(challenge.id, payload.dayzId, index, ev.id);
-        out.advanced++;
+        // Every safe-pool emote is recorded, whether or not it advanced —
+        // otherwise the budget could never be spent and the sweep would work.
+        await store.upsertAttempt(challenge.id, payload.dayzId, index, ev.id, seenCount + 1);
+        if (index !== progressIndex) out.advanced++;
       }
     }
     await writeCursor(db, CONSUMER, cursor);

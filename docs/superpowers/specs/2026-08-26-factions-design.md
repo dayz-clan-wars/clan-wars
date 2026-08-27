@@ -709,7 +709,7 @@ The mechanism is ported from `one-life`, where it is in production. Three proper
 1. **It proves control of the character, not knowledge of a name.** Anyone can type someone
    else's gamertag into a form; only the person at the keyboard can make that character salute.
 2. **It costs no new pipeline.** ADM logs emotes — verified against the production export:
-   2,093 emote lines covering 24 of the 27 tokens in `one-life`'s dictionary. Factions already
+   2,093 emote lines covering all 35 tokens in the shipped dictionary. Factions already
    ingests ADM, so this is a parser rule and a consumer, not an integration.
 3. **The emote line carries the UID.** `Player "<name>" (id=<40 hex> pos=<…>) performed
    EmoteSalute` — the same identity shape §13 documents for flag lines.
@@ -730,13 +730,14 @@ trust. The gamertag is still captured, as a display label only.
 
 | Rule | Value | Rationale |
 |---|---|---|
-| Sequence length | 3 emotes, distinct, ordered | 24 safe tokens → 12,144 ordered sequences |
+| Sequence length | 3 emotes, distinct, ordered | 29 safe tokens → 21,924 ordered sequences |
 | Challenge expiry | 10 minutes | Long enough to find the emote wheel, short enough to bound guessing |
 | Concurrent-sequence collision | Reject issuance of a sequence already outstanding | Two live challenges sharing a sequence would bind the wrong UID |
 | Matching | In-order subsequence; non-matching emotes are ignored | A player mis-clicking should not have to restart |
 | One UID | One Discord account, and vice versa | Enforced by unique index, not by convention |
 | Re-link | Requires unlinking first | Prevents silently moving a roster identity |
 | Unsafe emotes | Excluded from the pool | `EmoteSitA` is 77% of all emote lines in the export; `EmoteSuicide` carries a gameplay penalty |
+| Emote budget per attempt | 12 safe-pool emotes per (challenge, UID) | Hold-on-mismatch means an exhaustive sweep of the pool completes any sequence; a budget is what makes the issued sequence secret in practice |
 
 **Verification is a prerequisite for every faction command.** An unlinked Discord account cannot
 claim, be invited, or hold a role. This is what makes §6's roster a roster of real players.

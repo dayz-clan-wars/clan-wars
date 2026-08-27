@@ -1,0 +1,2 @@
+ALTER TABLE "challenge_attempts" ADD COLUMN "seen_count" integer DEFAULT 0 NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "verification_challenges_open_account_uniq" ON "verification_challenges" USING btree ("discord_id") WHERE "verification_challenges"."completed_at" IS NULL AND "verification_challenges"."canceled_at" IS NULL;

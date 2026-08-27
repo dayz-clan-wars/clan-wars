@@ -4,9 +4,9 @@ import { and, eq, gte, isNull, isNotNull, lt } from "drizzle-orm";
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
-  sequence: string[]; expiresAt: Date;
+  sequence: string[]; issuedAt: Date; expiresAt: Date;
 };
-export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number };
+export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
 
 export interface VerificationStore {
   findLinkByDiscord(discordId: string): Promise<{ dayzId: string; gamertag: string; verifiedAt: Date } | null>;
@@ -17,7 +17,7 @@ export interface VerificationStore {
   outstandingSequences(now: Date): Promise<string[][]>;
   createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
-  upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number): Promise<void>;
+  upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
   pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>>;
   markNotified(challengeId: number, at: Date): Promise<void>;
@@ -81,15 +81,15 @@ export class PgVerificationStore implements VerificationStore {
   async getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null> {
     const [row] = await this.db.select().from(challengeAttempts)
       .where(and(eq(challengeAttempts.challengeId, challengeId), eq(challengeAttempts.dayzId, dayzId)));
-    return row ? { id: row.id, progressIndex: row.progressIndex, lastMatchedEventId: row.lastMatchedEventId } : null;
+    return row ? { id: row.id, progressIndex: row.progressIndex, lastMatchedEventId: row.lastMatchedEventId, seenCount: row.seenCount } : null;
   }
 
-  async upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number): Promise<void> {
+  async upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void> {
     await this.db.insert(challengeAttempts)
-      .values({ challengeId, dayzId, progressIndex, lastMatchedEventId })
+      .values({ challengeId, dayzId, progressIndex, lastMatchedEventId, seenCount })
       .onConflictDoUpdate({
         target: [challengeAttempts.challengeId, challengeAttempts.dayzId],
-        set: { progressIndex, lastMatchedEventId },
+        set: { progressIndex, lastMatchedEventId, seenCount },
       });
   }
 
@@ -184,6 +184,6 @@ export class PgVerificationStore implements VerificationStore {
 function toLive(row: typeof verificationChallenges.$inferSelect): LiveChallenge {
   return {
     id: row.id, discordId: row.discordId, guildId: row.guildId,
-    channelId: row.channelId, sequence: row.sequence, expiresAt: row.expiresAt,
+    channelId: row.channelId, sequence: row.sequence, issuedAt: row.issuedAt, expiresAt: row.expiresAt,
   };
 }

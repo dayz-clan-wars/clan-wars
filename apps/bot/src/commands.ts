@@ -72,6 +72,13 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
       sequence, issuedAt: now, expiresAt,
     });
     if (challenge) return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt));
+
+    // Null insert may mean the sequence collided (redraw and retry) OR that a
+    // concurrent /link for this same account beat us to it (the new
+    // uniqOpenPerAccount index) — a reason the redraw loop cannot fix. Check
+    // for a now-live challenge on this account and show that instead.
+    const concurrent = await deps.store.findLiveChallenge(ctx.discordId, now);
+    if (concurrent) return ephemeral(challengeMessage(concurrent.sequence, concurrent.expiresAt));
   }
   return ephemeral("Could not issue a unique sequence right now. Try again in a moment.");
 }

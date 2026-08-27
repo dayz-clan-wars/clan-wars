@@ -51,16 +51,16 @@ describe("PgVerificationStore", () => {
 
   it("upserts per-UID attempt progress", async () => {
     const c = await issue();
-    await store.upsertAttempt(c.id, UID_A, 1, 10);
-    expect(await store.getAttempt(c.id, UID_A)).toMatchObject({ progressIndex: 1, lastMatchedEventId: 10 });
-    await store.upsertAttempt(c.id, UID_A, 2, 11);
-    expect(await store.getAttempt(c.id, UID_A)).toMatchObject({ progressIndex: 2, lastMatchedEventId: 11 });
+    await store.upsertAttempt(c.id, UID_A, 1, 10, 1);
+    expect(await store.getAttempt(c.id, UID_A)).toMatchObject({ progressIndex: 1, lastMatchedEventId: 10, seenCount: 1 });
+    await store.upsertAttempt(c.id, UID_A, 2, 11, 2);
+    expect(await store.getAttempt(c.id, UID_A)).toMatchObject({ progressIndex: 2, lastMatchedEventId: 11, seenCount: 2 });
   });
 
   it("keeps two UIDs' progress on one challenge independent", async () => {
     const c = await issue();
-    await store.upsertAttempt(c.id, UID_A, 2, 10);
-    await store.upsertAttempt(c.id, UID_B, 0, 11);
+    await store.upsertAttempt(c.id, UID_A, 2, 10, 2);
+    await store.upsertAttempt(c.id, UID_B, 0, 11, 1);
     expect((await store.getAttempt(c.id, UID_A))?.progressIndex).toBe(2);
     expect((await store.getAttempt(c.id, UID_B))?.progressIndex).toBe(0);
   });

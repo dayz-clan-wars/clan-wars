@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, type Database } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
+import { safeVerificationEmotes } from "@factions/domain";
 import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { verificationTick, CONSUMER } from "../src/tick.js";
@@ -177,5 +178,49 @@ describe("verificationTick", () => {
       payload: { gamertag: "", dayzId: UID_A, emote: SEQ[0]!, item: null },
     });
     expect((await tick()).scanned).toBe(0);
+  });
+
+  it("ignores emotes performed before the challenge was issued", async () => {
+    // The event exists in the log but predates the challenge, so it must not
+    // count toward it — otherwise a historical backfill binds a stranger's UID.
+    const past = new Date(now.getTime() - 60_000);
+    await issue();
+    for (const t of SEQ) {
+      await appendEvent(db, {
+        serverId, admFileId, lineIndex: line++, subIndex: 0,
+        type: "emote.performed", occurredAt: past,
+        payload: { gamertag: "Steve", dayzId: UID_A, emote: t, item: null },
+      });
+    }
+    expect((await tick()).verified).toBe(0);
+    expect(await store.findLinkByDiscord("100")).toBeNull();
+  });
+
+  it("locks out a UID that sweeps the whole safe pool", async () => {
+    // The C2 attack: perform every safe token in a fixed order, three times
+    // over. That contains every ordered triple as a subsequence, so without a
+    // budget it completes any sequence without ever seeing it. The sweep is
+    // done in REVERSE dictionary order so it cannot accidentally line up with
+    // SEQ's own (ascending, dictionary-order) tokens within the budget window
+    // — this must exercise the general attack, not a coincidence of fixture
+    // ordering.
+    await issue();
+    const pool = safeVerificationEmotes().map((e) => e.token).reverse();
+    for (const t of [...pool, ...pool, ...pool]) await emote(UID_A, t);
+    const r = await tick();
+    expect(r.verified).toBe(0);
+    expect(r.lockedOut).toBeGreaterThan(0);
+    expect(await store.findLinkByDiscord("100")).toBeNull();
+  });
+
+  it("still verifies a legitimate player who fumbles a few emotes first", async () => {
+    // The budget must not punish normal play: a few wrong emotes, then the
+    // right three in order. SEQ is EmoteSalute/EmoteClap/EmoteDance, so use
+    // different filler tokens here.
+    await issue();
+    await emote(UID_A, "EmoteShrug");
+    await emote(UID_A, "EmoteHeart");
+    for (const t of SEQ) await emote(UID_A, t);
+    expect((await tick()).verified).toBe(1);
   });
 });

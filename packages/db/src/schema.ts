@@ -196,6 +196,13 @@ export const verificationChallenges = pgTable("verification_challenges", {
   uniqOpenSequence: uniqueIndex("verification_challenges_open_sequence_uniq")
     .on(t.sequence)
     .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // One open challenge per account. Without it, two concurrent /link calls
+  // both miss findLiveChallenge and create two live challenges, each holding a
+  // sequence, and the re-show path then returns an arbitrary one — so the
+  // player can be shown a different sequence than the one they are working on.
+  uniqOpenPerAccount: uniqueIndex("verification_challenges_open_account_uniq")
+    .on(t.discordId)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
 }));
 
 /**
@@ -219,6 +226,17 @@ export const challengeAttempts = pgTable("challenge_attempts", {
   dayzId: text("dayz_id").notNull(),
   progressIndex: integer("progress_index").notNull().default(0),
   lastMatchedEventId: bigint("last_matched_event_id", { mode: "number" }).notNull().default(0),
+  /**
+   * Safe-pool emotes this UID has spent on this challenge.
+   *
+   * ⚠️ This is what stops a brute-force sweep. `advance` deliberately holds
+   * progress on a mismatch, so performing the whole safe pool in order three
+   * times contains every possible ordered triple and completes ANY live
+   * challenge without ever seeing its sequence (verified: 2000/2000). Secrecy
+   * of the issued sequence is not a defence against a search the matcher
+   * permits — a budget is.
+   */
+  seenCount: integer("seen_count").notNull().default(0),
 }, (t) => ({
   uniqAttempt: uniqueIndex("challenge_attempts_challenge_dayz_uniq").on(t.challengeId, t.dayzId),
 }));

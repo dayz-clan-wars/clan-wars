@@ -4,6 +4,13 @@ export type EmotePerformed = {
   gamertag: string;
   dayzId: string;
   emote: string;
+  /**
+   * The "with <item>" suffix, e.g. EmoteSuicide with SteakKnife.
+   *
+   * ⚠️ Captured and persisted, but read by NOTHING today. It is free text from
+   * a log line whose earlier fields are attacker-influenced, so any future
+   * consumer must validate it rather than trust it.
+   */
   item: string | null;
 };
 

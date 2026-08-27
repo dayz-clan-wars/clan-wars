@@ -62,12 +62,33 @@ The Plan 1 projector reports folds it cannot bind to a pole (3 in the historical
 backfill). Dormancy and rebind logic (spec §5, "Pole binding and pole loss")
 has to decide whether those are pole losses, parser gaps, or noise.
 
-## 4. Garbage-collect expired verification challenges
+## 4. Reap canceled and completed verification challenges
 
-Plan 2 leaves them in place. They stop being live via the `liveWhere` predicate
-and are harmless, but the table grows without bound.
+Cancellation of expired challenges already shipped: `cancelExpired` runs, and
+`handleLink` calls it before drawing. It is load-bearing, not optional —
+`verification_challenges_open_sequence_uniq` and
+`verification_challenges_open_account_uniq` are both partial indexes over
+"not completed, not canceled", so an expired challenge that was never
+canceled would sit there forever holding its sequence and its account slot
+hostage. This item was previously written as if that gap still existed; it
+does not.
 
-## 5. Per-map channel resolution
+What remains for Plan 3 is retention only: canceled and completed rows are
+never deleted, so `verification_challenges` and `challenge_attempts` grow
+without bound. Add a reaper that deletes rows past some retention window
+(e.g. completed/canceled more than N days ago) — a cleanup job, not a
+correctness fix.
+
+## 5. `EmotePerformed.item` must be validated before any consumer trusts it
+
+`item` (the "with <item>" suffix on an emote line) is parsed and persisted in
+`events.payload` but read by nothing today. Before any future consumer reads
+it, it must be validated rather than trusted: it is free text taken from a
+log line whose earlier fields (gamertag) are already known to be
+attacker-influenced, so nothing about `item` should be assumed safe or
+well-formed.
+
+## 6. Per-map channel resolution
 
 Plan 2 records `guild_id` on challenges but builds no map scoping, because no
 command needs a map yet. Spec §16 fixes the topology: one guild, per-map
