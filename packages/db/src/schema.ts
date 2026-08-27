@@ -2,7 +2,6 @@ import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
   uniqueIndex, index, numeric, boolean,
 } from "drizzle-orm/pg-core";
-import { sql } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
 
 export const servers = pgTable("servers", {

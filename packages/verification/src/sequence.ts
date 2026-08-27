@@ -12,7 +12,11 @@ export function generateSequence(rng: () => number, length = 3): string[] {
   const avail = safeVerificationEmotes().map((e) => e.token);
   const chosen: string[] = [];
   for (let i = 0; i < length && avail.length > 0; i++) {
-    const j = Math.floor(rng() * avail.length);
+    // Clamped: rng is a PARAMETER, so a caller may supply one that returns
+    // exactly 1.0. Unclamped, splice(avail.length, 1) removes nothing and the
+    // non-null assertion below would hide an undefined token — a challenge
+    // sequence with a hole in it that no player could ever perform.
+    const j = Math.min(Math.floor(rng() * avail.length), avail.length - 1);
     chosen.push(avail.splice(j, 1)[0]!);
   }
   return chosen;

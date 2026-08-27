@@ -19,5 +19,9 @@ export function advance(
     progressIndex < sequence.length && sequence[progressIndex] === emoteToken
       ? progressIndex + 1
       : progressIndex;
-  return { index, complete: index >= sequence.length };
+  // `sequence.length > 0` is load-bearing, not defensive noise. Without it an
+  // EMPTY sequence reports complete on its very first call, and in this system
+  // "complete" means binding a Discord account to a DayZ UID. An empty
+  // challenge must prove nothing, not everything.
+  return { index, complete: sequence.length > 0 && index >= sequence.length };
 }

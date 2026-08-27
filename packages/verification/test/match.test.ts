@@ -26,6 +26,8 @@ describe("advance", () => {
   });
 
   it("never completes an empty sequence by accident", () => {
-    expect(advance([], 0, "EmoteDance")).toEqual({ index: 0, complete: true });
+    // An empty sequence proves nothing, so it must never report complete —
+    // completion is what binds a Discord account to a DayZ UID.
+    expect(advance([], 0, "EmoteDance")).toEqual({ index: 0, complete: false });
   });
 });
