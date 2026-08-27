@@ -38,8 +38,6 @@ function challengeMessage(sequence: string[], expiresAt: Date): string {
   ].join("\n");
 }
 
-const sameSequence = (a: string[], b: string[]) => a.length === b.length && a.every((t, i) => t === b[i]);
-
 export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<Reply> {
   const now = deps.now();
 
@@ -56,23 +54,26 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   const live = await deps.store.findLiveChallenge(ctx.discordId, now);
   if (live) return ephemeral(challengeMessage(live.sequence, live.expiresAt));
 
-  // ⚠️ Two live challenges sharing a sequence would both complete on the same
-  // emotes, binding the wrong UID to one of them. Redraw on collision.
-  const outstanding = await deps.store.outstandingSequences(now);
-  let sequence = generateSequence(deps.rng);
-  for (let attempt = 0; attempt < 20 && outstanding.some((s) => sameSequence(s, sequence)); attempt++) {
-    sequence = generateSequence(Math.random);
-  }
-  if (outstanding.some((s) => sameSequence(s, sequence))) {
-    return ephemeral("Could not issue a unique sequence right now. Try again in a moment.");
-  }
+  // Release sequences held by challenges that expired without completing,
+  // before drawing. Cheap, and it keeps the open-sequence pool from silting up.
+  await deps.store.cancelExpired(now);
 
   const expiresAt = new Date(now.getTime() + deps.challengeTtlMs);
-  const challenge = await deps.store.createChallenge({
-    discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
-    sequence, issuedAt: now, expiresAt,
-  });
-  return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt));
+  // ⚠️ The insert is the uniqueness check. A read-then-check would let two
+  // concurrent /link calls be issued the same sequence, and two live
+  // challenges sharing a sequence bind the wrong account (see the index
+  // comment in schema.ts). The first draw uses deps.rng so tests can pin it;
+  // redraws use Math.random, because a deterministic rng that collided once
+  // would collide forever.
+  for (let attempt = 0; attempt < 20; attempt++) {
+    const sequence = generateSequence(attempt === 0 ? deps.rng : Math.random);
+    const challenge = await deps.store.createChallenge({
+      discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
+      sequence, issuedAt: now, expiresAt,
+    });
+    if (challenge) return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt));
+  }
+  return ephemeral("Could not issue a unique sequence right now. Try again in a moment.");
 }
 
 export async function handleUnlink(deps: CommandDeps, discordId: string): Promise<Reply> {

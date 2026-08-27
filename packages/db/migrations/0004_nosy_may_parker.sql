@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "verification_challenges_open_sequence_uniq" ON "verification_challenges" USING btree ("sequence") WHERE "verification_challenges"."completed_at" IS NULL AND "verification_challenges"."canceled_at" IS NULL;

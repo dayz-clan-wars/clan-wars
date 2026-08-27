@@ -37,9 +37,13 @@ describe("verificationTick", () => {
     payload: { gamertag, dayzId, emote: token, item: null },
   });
 
-  const issue = (discordId = "100") => store.createChallenge({
-    discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
-  });
+  const issue = async (discordId = "100") => {
+    const c = await store.createChallenge({
+      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    expect(c).not.toBeNull();
+    return c!;
+  };
 
   const tick = () => verificationTick(db, store, { batchSize: 100, now });
 

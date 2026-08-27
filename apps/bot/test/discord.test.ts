@@ -74,7 +74,8 @@ describe("discord wiring", () => {
         discordId, guildId: "g", channelId: "c",
         sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
       });
-      await store.completeChallenge(c.id, uid, "Steve", now);
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, uid, "Steve", now);
     };
 
     it("sends one message per newly completed challenge", async () => {

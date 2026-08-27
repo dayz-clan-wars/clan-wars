@@ -54,7 +54,8 @@ describe("commands", () => {
 
     it("refuses when the account is already linked", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
-      await store.completeChallenge(c.id, UID_A, "Steve", now);
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
       const reply = await handleLink(deps, CTX);
       expect(reply.content).toMatch(/already linked/i);
     });
@@ -68,6 +69,31 @@ describe("commands", () => {
       expect(seqs).toHaveLength(2);
       expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
     });
+
+    it("redraws when the drawn sequence is already held, and still issues one", async () => {
+      // Both calls draw identically from the pinned rng; the DB rejects the
+      // second, so handleLink must redraw rather than fail.
+      const fixed: CommandDeps = { ...deps, rng: () => 0 };
+      const a = await handleLink(fixed, CTX);
+      const b = await handleLink(fixed, { ...CTX, discordId: "200" });
+      expect(a.content).not.toBe(b.content);
+
+      const seqs = await store.outstandingSequences(now);
+      expect(seqs).toHaveLength(2);
+      expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
+    });
+
+    it("issues distinct sequences under concurrent /link calls", async () => {
+      const fixed: CommandDeps = { ...deps, rng: () => 0 };
+      await Promise.all([
+        handleLink(fixed, { ...CTX, discordId: "601" }),
+        handleLink(fixed, { ...CTX, discordId: "602" }),
+        handleLink(fixed, { ...CTX, discordId: "603" }),
+      ]);
+      const seqs = (await store.outstandingSequences(now)).map((s) => JSON.stringify(s));
+      // The database, not a pre-read, is what guarantees this.
+      expect(new Set(seqs).size).toBe(seqs.length);
+    });
   });
 
   describe("handleUnlink", () => {
@@ -77,7 +103,8 @@ describe("commands", () => {
 
     it("removes an existing link", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
-      await store.completeChallenge(c.id, UID_A, "Steve", now);
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleUnlink(deps, "100")).content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("100")).toBeNull();
     });
@@ -90,13 +117,15 @@ describe("commands", () => {
 
     it("reports the linked gamertag", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
-      await store.completeChallenge(c.id, UID_A, "Steve", now);
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).toContain("Steve");
     });
 
     it("does not print the full UID", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
-      await store.completeChallenge(c.id, UID_A, "Steve", now);
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).not.toContain(UID_A);
     });
   });

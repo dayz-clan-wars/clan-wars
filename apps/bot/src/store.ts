@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { identityLinks, verificationChallenges, challengeAttempts } from "@factions/db";
-import { and, eq, gte, isNull, isNotNull } from "drizzle-orm";
+import { and, eq, gte, isNull, isNotNull, lt } from "drizzle-orm";
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
@@ -15,12 +15,13 @@ export interface VerificationStore {
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
   outstandingSequences(now: Date): Promise<string[][]>;
-  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date }): Promise<LiveChallenge>;
+  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
   pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>>;
   markNotified(challengeId: number, at: Date): Promise<void>;
+  cancelExpired(now: Date): Promise<number>;
 }
 
 /** A challenge is live when it is neither completed nor canceled and has not expired. */
@@ -63,12 +64,18 @@ export class PgVerificationStore implements VerificationStore {
     return (await this.liveChallenges(now)).map((c) => c.sequence);
   }
 
+  /**
+   * Insert a challenge, or return null when another OPEN challenge already
+   * holds this sequence. Null is an expected outcome — the caller redraws.
+   */
   async createChallenge(input: {
     discordId: string; guildId: string; channelId: string;
     sequence: string[]; issuedAt: Date; expiresAt: Date;
-  }): Promise<LiveChallenge> {
-    const [row] = await this.db.insert(verificationChallenges).values(input).returning();
-    return toLive(row!);
+  }): Promise<LiveChallenge | null> {
+    const [row] = await this.db.insert(verificationChallenges).values(input)
+      .onConflictDoNothing()
+      .returning();
+    return row ? toLive(row) : null;
   }
 
   async getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null> {
@@ -154,6 +161,23 @@ export class PgVerificationStore implements VerificationStore {
     await this.db.update(verificationChallenges)
       .set({ notifiedAt: at })
       .where(eq(verificationChallenges.id, challengeId));
+  }
+
+  /**
+   * Cancel challenges that expired without completing, releasing the sequences
+   * they hold. Without this the open-sequence index would treat a dead
+   * challenge as a live competitor forever and slowly exhaust the pool.
+   */
+  async cancelExpired(now: Date): Promise<number> {
+    const rows = await this.db.update(verificationChallenges)
+      .set({ canceledAt: now })
+      .where(and(
+        isNull(verificationChallenges.completedAt),
+        isNull(verificationChallenges.canceledAt),
+        lt(verificationChallenges.expiresAt, now),
+      ))
+      .returning();
+    return rows.length;
   }
 }
 

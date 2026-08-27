@@ -7,6 +7,7 @@ const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
 const UID_B = "B".repeat(40);
 const SEQ = ["EmoteSalute", "EmoteClap", "EmoteDance"];
+const SEQ_B = ["EmoteWave", "EmoteSitA", "EmoteWave2"];
 
 describe("PgVerificationStore", () => {
   let db: Database;
@@ -21,9 +22,13 @@ describe("PgVerificationStore", () => {
     store = new PgVerificationStore(db);
   });
 
-  const issue = (discordId = "100") => store.createChallenge({
-    discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
-  });
+  const issue = async (discordId = "100") => {
+    const c = await store.createChallenge({
+      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    expect(c).not.toBeNull();
+    return c!;
+  };
 
   it("finds no link for an unknown Discord account", async () => {
     expect(await store.findLinkByDiscord("nobody")).toBeNull();
@@ -73,7 +78,8 @@ describe("PgVerificationStore", () => {
     const second = await store.createChallenge({
       discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
     });
-    expect(await store.completeChallenge(second.id, UID_A, "Steve", later)).toBe(false);
+    expect(second).not.toBeNull();
+    expect(await store.completeChallenge(second!.id, UID_A, "Steve", later)).toBe(false);
     expect(await store.findLinkByDiscord("200")).toBeNull();
   });
 
@@ -95,17 +101,20 @@ describe("PgVerificationStore", () => {
 
   it("never completes a challenge without writing its link, under concurrency", async () => {
     // Two Discord accounts racing for the SAME UID. Exactly one may win, and
-    // the loser must not be left marked complete.
+    // the loser must not be left marked complete. Distinct sequences: the
+    // open-sequence uniqueness index is a separate concern from this race.
     const a = await store.createChallenge({
       discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
     });
     const b = await store.createChallenge({
-      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ_B, issuedAt: now, expiresAt: later,
     });
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
 
     const results = await Promise.all([
-      store.completeChallenge(a.id, UID_A, "Steve", later),
-      store.completeChallenge(b.id, UID_A, "Steve", later),
+      store.completeChallenge(a!.id, UID_A, "Steve", later),
+      store.completeChallenge(b!.id, UID_A, "Steve", later),
     ]);
 
     expect(results.filter(Boolean)).toHaveLength(1);
@@ -128,15 +137,44 @@ describe("PgVerificationStore", () => {
     const first = await store.createChallenge({
       discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
     });
-    expect(await store.completeChallenge(first.id, UID_B, "Steve", later)).toBe(true);
+    expect(first).not.toBeNull();
+    expect(await store.completeChallenge(first!.id, UID_B, "Steve", later)).toBe(true);
 
     const second = await store.createChallenge({
       discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
     });
+    expect(second).not.toBeNull();
     // Same account, same UID — already bound, so this succeeds without a
     // second insert rather than being treated as a loser of the race.
-    expect(await store.completeChallenge(second.id, UID_B, "Steve", later)).toBe(true);
+    expect(await store.completeChallenge(second!.id, UID_B, "Steve", later)).toBe(true);
     const links = await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_B));
     expect(links).toHaveLength(1);
+  });
+
+  it("refuses a second open challenge holding the same sequence", async () => {
+    const first = await issue("100");
+    expect(first).not.toBeNull();
+    const second = await store.createChallenge({
+      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    // Null, not a throw — the caller redraws.
+    expect(second).toBeNull();
+  });
+
+  it("frees a sequence once its challenge is canceled as expired", async () => {
+    await store.createChallenge({
+      discordId: "300", guildId: "g", channelId: "c", sequence: SEQ,
+      issuedAt: now, expiresAt: new Date(now.getTime() - 1),
+    });
+    expect(await store.cancelExpired(now)).toBe(1);
+    const reused = await store.createChallenge({
+      discordId: "400", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    expect(reused).not.toBeNull();
+  });
+
+  it("does not cancel a challenge that is still live", async () => {
+    await issue("500");
+    expect(await store.cancelExpired(now)).toBe(0);
   });
 });

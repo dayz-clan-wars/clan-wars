@@ -186,6 +186,16 @@ export const verificationChallenges = pgTable("verification_challenges", {
     "verification_challenges_single_outcome",
     sql`NOT (${t.completedAt} IS NOT NULL AND ${t.canceledAt} IS NOT NULL)`,
   ),
+  // ⚠️ SECURITY BOUNDARY, not an optimisation. Two live challenges sharing a
+  // sequence means the emotes that satisfy one also satisfy the other, and the
+  // tick binds whichever row comes back first — so the wrong Discord account
+  // gets bound to the performing player's UID. A read-then-check in the
+  // command layer cannot close that race; only this index can.
+  // Partial, because a completed or canceled challenge no longer competes for
+  // its sequence and must not hold it forever.
+  uniqOpenSequence: uniqueIndex("verification_challenges_open_sequence_uniq")
+    .on(t.sequence)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
 }));
 
 /**
