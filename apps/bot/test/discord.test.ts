@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
-import { buildCommands, routeInteraction, notifyCompleted } from "../src/discord.js";
+import { buildCommands, routeInteraction, notifyCompleted, guardedRunner } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
 
 const URL = requireTestDatabaseUrl();
@@ -101,6 +101,44 @@ describe("discord wiring", () => {
       // Still pending, so a later tick retries rather than losing the message.
       const retry = vi.fn().mockResolvedValue(undefined);
       expect(await notifyCompleted(deps, retry)).toBe(1);
+    });
+  });
+
+  describe("guardedRunner", () => {
+    it("skips a firing while the previous run is still in flight", async () => {
+      let resolve!: () => void;
+      const job = vi.fn(() => new Promise<void>((r) => { resolve = r; }));
+      const runner = guardedRunner(job);
+
+      runner.fire();
+      runner.fire();          // must be skipped, not queued
+      expect(job).toHaveBeenCalledTimes(1);
+      expect(runner.skipped()).toBe(1);
+
+      resolve();
+      await runner.inFlight();
+      runner.fire();          // previous finished, so this one runs
+      expect(job).toHaveBeenCalledTimes(2);
+    });
+
+    it("clears the in-flight slot even when the job rejects", async () => {
+      const job = vi.fn().mockRejectedValue(new Error("boom"));
+      const runner = guardedRunner(job);
+      runner.fire();
+      await runner.inFlight()?.catch(() => {});
+      // A failed run must not wedge the runner permanently.
+      runner.fire();
+      expect(job).toHaveBeenCalledTimes(2);
+    });
+
+    it("exposes the in-flight promise for shutdown to await", async () => {
+      let resolve!: () => void;
+      const runner = guardedRunner(() => new Promise<void>((r) => { resolve = r; }));
+      expect(runner.inFlight()).toBeNull();
+      runner.fire();
+      expect(runner.inFlight()).not.toBeNull();
+      resolve();
+      await runner.inFlight();
     });
   });
 });

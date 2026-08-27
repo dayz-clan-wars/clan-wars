@@ -51,6 +51,18 @@ pnpm --filter @factions/bot start
 
 This registers the `/link`, `/unlink`, and `/whoami` commands against the
 configured guild, logs in, and starts the verification tick loop on
-`BOT_TICK_INTERVAL_MS`. Sending `SIGTERM` or `SIGINT` (e.g. `Ctrl-C`, or a
-container stop) stops the tick interval and disconnects the client before the
-process exits, so a running tick isn't cut off mid-transaction.
+`BOT_TICK_INTERVAL_MS`. Each tick is skipped rather than overlapped if the
+previous one is still running — the tick reads and writes a shared cursor,
+and two overlapping runs could otherwise move that cursor backwards.
+
+Sending `SIGTERM` or `SIGINT` (e.g. `Ctrl-C`, or a container stop) stops
+future tick firings immediately and waits (up to a 15-second grace period)
+for a tick already in progress to finish, before disconnecting the client and
+exiting. The grace period exists so a wedged tick cannot block a container
+stop forever — if it expires, shutdown proceeds without waiting further, and
+that in-flight tick's transaction may be interrupted.
+
+This single-process guard is not a distributed lock: if you ever run more
+than one bot instance against the same database, add a Postgres advisory
+lock keyed on the verification consumer name to serialize ticks across
+processes — this codebase does not implement one.

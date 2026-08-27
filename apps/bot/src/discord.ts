@@ -46,6 +46,12 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
 export type Notification = { discordId: string; channelId: string; content: string };
 export type Sender = (n: Notification) => Promise<void>;
 
+// Retrying forever is correct — the binding is real, and the message should
+// land the moment it can — but logging every tick forever for a player who
+// will never be reachable is not. Log each challenge's failure once per
+// process rather than on every retry.
+const loggedNotifyFailures = new Set<number>();
+
 /**
  * Tell each newly verified player, exactly once.
  *
@@ -65,10 +71,47 @@ export async function notifyCompleted(deps: CommandDeps, send: Sender): Promise<
       await deps.store.markNotified(c.id, deps.now());
       sent++;
     } catch (err) {
-      console.error(`notify failed for challenge ${c.id}`, err);
+      if (!loggedNotifyFailures.has(c.id)) {
+        console.error(`notify failed for challenge ${c.id}`, err);
+        loggedNotifyFailures.add(c.id);
+      }
     }
   }
   return sent;
+}
+
+/**
+ * Wraps an async job so a firing is SKIPPED while the previous one is still
+ * running, and exposes the in-flight promise so shutdown can await it.
+ *
+ * ⚠️ Not a nicety. verificationTick reads a consumer cursor at the start and
+ * writes it at the end; two overlapping runs both read the same value, and
+ * whichever finishes LAST wins the write — so a slow run can move the cursor
+ * backwards and cause already-processed events to be replayed.
+ *
+ * This guards a SINGLE process only. Running two bot instances against one
+ * database would need a Postgres advisory lock keyed on the consumer name
+ * instead — see the README.
+ */
+export function guardedRunner(job: () => Promise<void>): {
+  fire: () => void;
+  inFlight: () => Promise<void> | null;
+  skipped: () => number;
+} {
+  let running: Promise<void> | null = null;
+  let skipped = 0;
+  return {
+    fire: () => {
+      if (running) { skipped++; return; }
+      // The rejection is swallowed here, not left for callers to handle: the
+      // returned promise exists so shutdown can await "is a run still in
+      // flight", and forcing every caller to attach a .catch just to avoid an
+      // unhandled rejection would be an easy way to reintroduce this bug.
+      running = job().catch(() => {}).finally(() => { running = null; });
+    },
+    inFlight: () => running,
+    skipped: () => skipped,
+  };
 }
 
 export async function start(cfg: BotConfig): Promise<void> {
@@ -78,23 +121,41 @@ export async function start(cfg: BotConfig): Promise<void> {
     store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
   };
 
-  await new REST().setToken(cfg.token).put(
-    Routes.applicationGuildCommands(cfg.applicationId, cfg.guildId),
-    { body: buildCommands() },
-  );
+  try {
+    await new REST().setToken(cfg.token).put(
+      Routes.applicationGuildCommands(cfg.applicationId, cfg.guildId),
+      { body: buildCommands() },
+    );
+  } catch (err) {
+    console.error(
+      "Failed to register slash commands. Check that DISCORD_TOKEN is valid, " +
+      "DISCORD_APPLICATION_ID and DISCORD_GUILD_ID are correct, and the bot " +
+      "was invited with both the `bot` and `applications.commands` scopes.",
+      err,
+    );
+    process.exit(1);
+  }
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
   client.on("interactionCreate", async (interaction) => {
     if (!interaction.isChatInputCommand()) return;
-    const reply = await routeInteraction(deps, {
-      commandName: interaction.commandName,
-      userId: interaction.user.id,
-      guildId: interaction.guildId,
-      channelId: interaction.channelId,
-    });
-    if (!reply) return;
-    await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+    try {
+      const reply = await routeInteraction(deps, {
+        commandName: interaction.commandName,
+        userId: interaction.user.id,
+        guildId: interaction.guildId,
+        channelId: interaction.channelId,
+      });
+      if (!reply) return;
+      await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+    } catch (err) {
+      // ⚠️ discord.js does not await this listener, so an uncaught throw here
+      // becomes an unhandled rejection and Node terminates the process. An
+      // expired interaction token — which is only a 3-second window — would
+      // take the bot down for every player. Log and drop the one interaction.
+      console.error(`interaction ${interaction.commandName} failed`, err);
+    }
   });
 
   const send: Sender = async (n) => {
@@ -110,36 +171,56 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
   };
 
-  let interval: NodeJS.Timeout | undefined;
+  let timer: NodeJS.Timeout | undefined;
+
+  const runner = guardedRunner(async () => {
+    try {
+      const r = await verificationTick(db, store);
+      if (r.verified > 0 || r.alreadyLinked > 0) {
+        console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
+      }
+      await notifyCompleted(deps, send);
+    } catch (err) {
+      // A thrown tick must not kill the interval and silently stop all verification.
+      console.error("tick failed", err);
+    }
+  });
 
   client.once("clientReady", () => {
     console.log(`bot ready as ${client.user?.tag}`);
-    interval = setInterval(() => {
-      void (async () => {
-        try {
-          const r = await verificationTick(db, store);
-          if (r.verified > 0 || r.alreadyLinked > 0) {
-            console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
-          }
-          await notifyCompleted(deps, send);
-        } catch (err) {
-          // A thrown tick must not kill the interval and silently stop all verification.
-          console.error("tick failed", err);
-        }
-      })();
-    }, cfg.tickIntervalMs);
+    timer = setInterval(() => runner.fire(), cfg.tickIntervalMs);
   });
 
-  // A container stop (SIGTERM) or Ctrl-C (SIGINT) must not leave an in-flight
-  // tick mid-transaction: clear the interval and drop the gateway connection
-  // before the process exits.
-  const shutdown = () => {
-    if (interval) clearInterval(interval);
-    client.destroy();
+  const SHUTDOWN_GRACE_MS = 15_000;
+  let shuttingDown = false;
+
+  const shutdown = async (signal: string): Promise<void> => {
+    if (shuttingDown) return; // a second Ctrl-C must not re-enter
+    shuttingDown = true;
+    console.log(`${signal} received, shutting down`);
+    if (timer) clearInterval(timer);
+
+    // clearInterval only prevents the NEXT firing. Await the run already in
+    // flight so it is not torn down mid-transaction, but bound the wait so a
+    // wedged tick cannot block the container stop forever.
+    const running = runner.inFlight();
+    if (running) {
+      let grace: NodeJS.Timeout | undefined;
+      await Promise.race([
+        running,
+        new Promise<void>((resolve) => {
+          grace = setTimeout(resolve, SHUTDOWN_GRACE_MS);
+          grace.unref(); // must not itself hold the event loop open
+        }),
+      ]);
+      if (grace) clearTimeout(grace);
+    }
+
+    await client.destroy();
     process.exit(0);
   };
-  process.on("SIGTERM", shutdown);
-  process.on("SIGINT", shutdown);
+  process.on("SIGTERM", () => void shutdown("SIGTERM"));
+  process.on("SIGINT", () => void shutdown("SIGINT"));
 
   await client.login(cfg.token);
 }
