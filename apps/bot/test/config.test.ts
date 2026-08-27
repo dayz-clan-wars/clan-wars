@@ -33,6 +33,21 @@ describe("loadConfig", () => {
     expect(() => loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: "0" })).toThrow(/BOT_TICK_INTERVAL_MS/);
   });
 
+  it("throws when a required value is set to the empty string", () => {
+    // ProcessEnv values are string | undefined, and every required value here
+    // is meaningless when empty, so "" must be treated as absent.
+    expect(() => loadConfig({ ...OK, DISCORD_TOKEN: "" })).toThrow(/DISCORD_TOKEN/);
+  });
+
+  it.each(["0x10", "1e3", " 10 ", "9007199254740993"])(
+    "rejects %s rather than silently reinterpreting it", (raw) => {
+      // Number("0x10") is 16 — a typo'd interval would tick 60x/sec while
+      // appearing configured. Number("1e3") and Number(" 10 ") also succeed,
+      // and values past MAX_SAFE_INTEGER round silently.
+      expect(() => loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: raw })).toThrow(/BOT_TICK_INTERVAL_MS/);
+    },
+  );
+
   it("accepts an overridden challenge TTL", () => {
     expect(loadConfig({ ...OK, BOT_CHALLENGE_TTL_MS: "300000" }).challengeTtlMs).toBe(300_000);
   });

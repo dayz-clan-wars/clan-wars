@@ -13,13 +13,25 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
   return v;
 }
 
+/** Plain base-10 digits only. See the comment in positiveInt for why. */
+const DECIMAL_RE = /^\d+$/u;
+
 function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
   const raw = env[key];
   if (raw === undefined || raw === "") return fallback;
-  const n = Number(raw);
-  // A silently-defaulted interval is a bot that looks configured and is not.
-  if (!Number.isInteger(n) || n <= 0) {
-    throw new Error(`${key} must be a positive integer, got ${JSON.stringify(raw)}.`);
+
+  // Matched against digits BEFORE coercion, because bare Number() quietly
+  // accepts forms nobody types into a config on purpose: Number("0x10") is 16,
+  // so a typo'd interval would run this bot's database loop 60 times a second
+  // while looking correctly configured; Number("1e3") and Number(" 10 ")
+  // likewise succeed. A silently-defaulted interval is a bot that looks
+  // configured and is not — and a silently-reinterpreted one is worse, because
+  // the value is visibly present and still wrong.
+  const n = DECIMAL_RE.test(raw) ? Number(raw) : Number.NaN;
+  if (!Number.isSafeInteger(n) || n <= 0) {
+    throw new Error(
+      `${key} must be a positive integer in plain decimal digits, got ${JSON.stringify(raw)}.`,
+    );
   }
   return n;
 }
