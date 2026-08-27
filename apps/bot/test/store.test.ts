@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, type Database } from "@factions/db";
+import { sql, eq, isNotNull } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -91,5 +91,52 @@ describe("PgVerificationStore", () => {
     expect(pending.map((p) => p.id)).toEqual([c.id]);
     await store.markNotified(c.id, later);
     expect(await store.pendingNotifications()).toEqual([]);
+  });
+
+  it("never completes a challenge without writing its link, under concurrency", async () => {
+    // Two Discord accounts racing for the SAME UID. Exactly one may win, and
+    // the loser must not be left marked complete.
+    const a = await store.createChallenge({
+      discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    const b = await store.createChallenge({
+      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+
+    const results = await Promise.all([
+      store.completeChallenge(a.id, UID_A, "Steve", later),
+      store.completeChallenge(b.id, UID_A, "Steve", later),
+    ]);
+
+    expect(results.filter(Boolean)).toHaveLength(1);
+
+    const links = await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A));
+    expect(links).toHaveLength(1);
+
+    // The invariant that actually matters: every completed challenge has a
+    // link row for its Discord account.
+    const completed = await db.select().from(verificationChallenges)
+      .where(isNotNull(verificationChallenges.completedAt));
+    for (const c of completed) {
+      const [link] = await db.select().from(identityLinks)
+        .where(eq(identityLinks.discordId, c.discordId));
+      expect(link, `challenge ${c.id} completed with no link for ${c.discordId}`).toBeDefined();
+    }
+  });
+
+  it("is idempotent when the same account re-completes its own binding", async () => {
+    const first = await store.createChallenge({
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    expect(await store.completeChallenge(first.id, UID_B, "Steve", later)).toBe(true);
+
+    const second = await store.createChallenge({
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+    });
+    // Same account, same UID — already bound, so this succeeds without a
+    // second insert rather than being treated as a loser of the race.
+    expect(await store.completeChallenge(second.id, UID_B, "Steve", later)).toBe(true);
+    const links = await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_B));
+    expect(links).toHaveLength(1);
   });
 });

@@ -96,25 +96,49 @@ export class PgVerificationStore implements VerificationStore {
    */
   async completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      const [taken] = await tx.select().from(identityLinks).where(eq(identityLinks.dayzId, dayzId));
       const [challenge] = await tx.select().from(verificationChallenges)
         .where(eq(verificationChallenges.id, challengeId));
       if (!challenge) return false;
 
-      if (taken && taken.discordId !== challenge.discordId) {
+      const cancel = async () => {
         await tx.update(verificationChallenges)
           .set({ canceledAt: at })
           .where(eq(verificationChallenges.id, challengeId));
         return false;
+      };
+
+      const complete = async () => {
+        // completed_at and bound_dayz_id are set in ONE statement: the schema
+        // forbids a bound row that is not complete.
+        await tx.update(verificationChallenges)
+          .set({ completedAt: at, boundDayzId: dayzId })
+          .where(eq(verificationChallenges.id, challengeId));
+        return true;
+      };
+
+      const [taken] = await tx.select().from(identityLinks)
+        .where(eq(identityLinks.dayzId, dayzId));
+      if (taken) {
+        // Already bound to THIS account: the player re-ran a challenge they had
+        // already satisfied. Idempotent success, no insert needed.
+        if (taken.discordId === challenge.discordId) return complete();
+        return cancel();
       }
 
-      await tx.insert(identityLinks)
+      // ⚠️ .returning() is load-bearing. Between the read above and this insert,
+      // a concurrent transaction may have claimed either this UID or this
+      // Discord account; ON CONFLICT DO NOTHING then affects zero rows and
+      // raises nothing. Reporting completion on the strength of the earlier
+      // read would mark the challenge bound with no link row behind it — the
+      // player is told they are verified and they are not. The insert's own
+      // outcome is the only thing that may decide this.
+      const inserted = await tx.insert(identityLinks)
         .values({ discordId: challenge.discordId, dayzId, gamertag, verifiedAt: at })
-        .onConflictDoNothing();
-      await tx.update(verificationChallenges)
-        .set({ completedAt: at, boundDayzId: dayzId })
-        .where(eq(verificationChallenges.id, challengeId));
-      return true;
+        .onConflictDoNothing()
+        .returning();
+
+      if (inserted.length === 0) return cancel();
+      return complete();
     });
   }
 
