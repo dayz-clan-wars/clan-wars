@@ -22,6 +22,13 @@
       "when": 1787852155473,
       "tag": "0002_lively_la_nuit",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1787852560433,
+      "tag": "0003_jittery_madame_web",
+      "breakpoints": true
     }
   ]
 }

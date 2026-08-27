@@ -63,4 +63,33 @@ describe("identity schema", () => {
     await expect(db.insert(challengeAttempts)
       .values({ challengeId: c!.id, dayzId: UID_A, progressIndex: 0 })).rejects.toThrow();
   });
+
+  describe("challenge state constraints", () => {
+    const base = {
+      discordId: "900", guildId: "g", channelId: "c",
+      sequence: ["EmoteSalute"], issuedAt: new Date(), expiresAt: new Date(Date.now() + 600_000),
+    };
+
+    it("rejects bound_dayz_id without a completion", async () => {
+      await expect(db.insert(verificationChallenges)
+        .values({ ...base, boundDayzId: UID_A })).rejects.toThrow();
+    });
+
+    it("rejects notified_at without a completion", async () => {
+      await expect(db.insert(verificationChallenges)
+        .values({ ...base, notifiedAt: new Date() })).rejects.toThrow();
+    });
+
+    it("rejects a challenge that is both completed and canceled", async () => {
+      await expect(db.insert(verificationChallenges)
+        .values({ ...base, completedAt: new Date(), canceledAt: new Date() })).rejects.toThrow();
+    });
+
+    it("accepts a completed challenge with its bound UID and notification", async () => {
+      const now = new Date();
+      const [row] = await db.insert(verificationChallenges)
+        .values({ ...base, completedAt: now, boundDayzId: UID_B, notifiedAt: now }).returning();
+      expect(row?.boundDayzId).toBe(UID_B);
+    });
+  });
 });

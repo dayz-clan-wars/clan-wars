@@ -1,7 +1,8 @@
 import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
-  uniqueIndex, index, numeric, boolean,
+  uniqueIndex, index, numeric, boolean, check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
 
 export const servers = pgTable("servers", {
@@ -162,7 +163,29 @@ export const verificationChallenges = pgTable("verification_challenges", {
   notifiedAt: timestamp("notified_at", { withTimezone: true }),
 }, (t) => ({
   byDiscord: index("verification_challenges_discord_idx").on(t.discordId),
-  byLive: index("verification_challenges_live_idx").on(t.expiresAt),
+  // Partial index matching the live-challenge query exactly ("not completed,
+  // not canceled, not expired"), so it stays useful as completed/canceled
+  // rows accumulate instead of degrading into a full expires_at range scan.
+  byLive: index("verification_challenges_live_idx")
+    .on(t.expiresAt)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // A challenge has exactly one outcome. bound_dayz_id is the UID that won
+  // it, and notified_at marks that the player was told — neither can exist
+  // without a completion, and completion and cancellation are mutually
+  // exclusive. These constraints make a half-completed challenge state
+  // unrepresentable.
+  boundOnlyWhenComplete: check(
+    "verification_challenges_bound_requires_complete",
+    sql`${t.boundDayzId} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  ),
+  notifiedOnlyWhenComplete: check(
+    "verification_challenges_notified_requires_complete",
+    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  ),
+  notBothOutcomes: check(
+    "verification_challenges_single_outcome",
+    sql`NOT (${t.completedAt} IS NOT NULL AND ${t.canceledAt} IS NOT NULL)`,
+  ),
 }));
 
 /**
@@ -180,7 +203,9 @@ export const verificationChallenges = pgTable("verification_challenges", {
  */
 export const challengeAttempts = pgTable("challenge_attempts", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
-  challengeId: bigint("challenge_id", { mode: "number" }).notNull().references(() => verificationChallenges.id),
+  challengeId: bigint("challenge_id", { mode: "number" })
+    .notNull()
+    .references(() => verificationChallenges.id, { onDelete: "cascade" }),
   dayzId: text("dayz_id").notNull(),
   progressIndex: integer("progress_index").notNull().default(0),
   lastMatchedEventId: bigint("last_matched_event_id", { mode: "number" }).notNull().default(0),
