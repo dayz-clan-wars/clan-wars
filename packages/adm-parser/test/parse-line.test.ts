@@ -41,6 +41,25 @@ describe("parseLine", () => {
   it("yields nothing for an unrelated line", () => {
     expect(parseLine(`10:00:00 | Player "A" (id=${ID}) is connected`)).toEqual([]);
   });
+
+  it("routes an emote line to the emote branch", () => {
+    const raw = `| 15:24:30 | Player "Steve" (id=${"A".repeat(40)} pos=<1.0, 2.0, 3.0>) performed EmoteSalute`;
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("emote");
+    expect(eventTypeFor(out[0]!)).toBe("emote.performed");
+  });
+
+  it("keeps an emote line at subIndex 0", () => {
+    const raw = `| 15:24:30 | Player "Steve" (id=${"A".repeat(40)} pos=<1.0, 2.0, 3.0>) performed EmoteClap`;
+    // subIndex is the array index; a single-element array pins it at 0.
+    expect(parseLine(raw)).toHaveLength(1);
+  });
+
+  it("does not let the PlayerList entry matcher claim an emote line", () => {
+    const raw = `| 15:24:30 | Player "Steve" (id=${"A".repeat(40)} pos=<1.0, 2.0, 3.0>) performed EmoteClap`;
+    expect(parseLine(raw)[0]?.kind).not.toBe("position");
+  });
 });
 
 describe("eventTypeFor", () => {
