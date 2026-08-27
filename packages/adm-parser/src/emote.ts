@@ -10,11 +10,16 @@ export type EmotePerformed = {
 /**
  * `performed EmoteSalute` / `performed EmoteSuicide with SteakKnife`.
  *
- * Anchored at `performed ` rather than reusing the identity prefix, so the
- * `(DEAD)` marker and gamertags containing `)` are handled by parseIdentity
+ * CRITICAL: Anchored to the identity block `(id=...)` rather than searching from
+ * line start. The gamertag is attacker-controlled and can contain the literal text
+ * `performed` and `with` — if unanchored, a malicious name like
+ * `x performed EmoteSalute with y` on the real emote line would match at the wrong
+ * position and inject fabricated events or leak coordinates into the item field.
+ *
+ * The `(DEAD)` marker and gamertags containing `)` are handled by parseIdentity
  * — the one place that logic lives.
  */
-const EMOTE_RE = /\bperformed (Emote[A-Za-z0-9]+)(?: with (.+?))?\s*$/u;
+const EMOTE_RE = /\(id=[0-9A-F]{40}[^)]*\)\s*performed (Emote[A-Za-z0-9]+)(?: with (.+?))?\s*$/u;
 
 export function parseEmote(raw: string): EmotePerformed | null {
   const m = EMOTE_RE.exec(raw);
