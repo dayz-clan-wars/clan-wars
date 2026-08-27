@@ -97,7 +97,12 @@ describe("discord wiring", () => {
     it("leaves the challenge unnotified when sending throws", async () => {
       await complete("100", UID_A);
       const send = vi.fn().mockRejectedValue(new Error("DMs closed"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
       expect(await notifyCompleted(deps, send)).toBe(0);
+      // Reported, not silent — but kept out of the test output so a genuine
+      // error in a CI log stands out instead of blending into expected noise.
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
       // Still pending, so a later tick retries rather than losing the message.
       const retry = vi.fn().mockResolvedValue(undefined);
       expect(await notifyCompleted(deps, retry)).toBe(1);
@@ -123,14 +128,20 @@ describe("discord wiring", () => {
 
     it("clears the in-flight slot even when the job rejects", async () => {
       const job = vi.fn().mockRejectedValue(new Error("boom"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
       const runner = guardedRunner(job);
       runner.fire();
       await runner.inFlight();
+      // The failure must be reported, not silently absorbed — a guarded job
+      // that fails invisibly means verification stops with nothing to show it.
+      expect(logged).toHaveBeenCalled();
       // A failed run must not wedge the runner permanently: if the in-flight
       // slot were cleared only on success, verification would stop dead after
       // the first transient database error and never resume.
       runner.fire();
+      await runner.inFlight();
       expect(job).toHaveBeenCalledTimes(2);
+      logged.mockRestore();
     });
 
     it("exposes the in-flight promise for shutdown to await", async () => {
