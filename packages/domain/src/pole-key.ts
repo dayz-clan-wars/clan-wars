@@ -30,7 +30,15 @@ export function poleKey(at: Vec3): string {
 export function parsePoleKey(key: string): Vec3 | null {
   const parts = key.split(":");
   if (parts.length !== 3) return null;
-  const [x, y, z] = parts.map(Number);
-  if (![x, y, z].every((n) => Number.isFinite(n))) return null;
+  // `Number()` coercion is more permissive than it looks: `Number("")` and
+  // `Number(" ")` are 0, and `Number("0x10")`/`Number("1e5")` parse hex and
+  // scientific notation. None of those are forms `poleKey` ever emits, so
+  // validate the TEXT first — a plain decimal, optionally negative, optional
+  // fractional part — before coercing. Surrounding whitespace is trimmed
+  // first since it is harmless around a real number.
+  const DECIMAL = /^-?\d+(\.\d+)?$/;
+  const trimmed = parts.map((p) => p.trim());
+  if (!trimmed.every((p) => DECIMAL.test(p))) return null;
+  const [x, y, z] = trimmed.map(Number);
   return { x: x!, y: y!, z: z! };
 }

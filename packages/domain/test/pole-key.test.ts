@@ -56,4 +56,42 @@ describe("parsePoleKey", () => {
   it("returns null for an empty string", () => {
     expect(parsePoleKey("")).toBeNull();
   });
+
+  it("parses a real number surrounded by whitespace", () => {
+    // Harmless: whitespace around a genuine numeric token carries no risk of
+    // misreading corruption as a coordinate.
+    expect(parsePoleKey("1: 2 :3")).toEqual({ x: 1, y: 2, z: 3 });
+  });
+
+  it("returns null for three empty parts, rather than treating them as zero", () => {
+    // Number("") is 0, so a naive Number()+isFinite check turns a fully
+    // corrupted key into a plausible-looking origin-point ceremony — worse
+    // than refusing, because it looks like real data.
+    expect(parsePoleKey("::")).toBeNull();
+  });
+
+  it("returns null for three whitespace-only parts", () => {
+    // Same danger as "::" — Number(" ") is also 0.
+    expect(parsePoleKey(" : : ")).toBeNull();
+  });
+
+  it("returns null when one part among otherwise-valid parts is empty", () => {
+    // The dangerous case the earlier malformed-shape tests didn't cover: a
+    // key that is well-formed at the ":"-count level but has a silently
+    // zeroed coordinate hiding inside it.
+    expect(parsePoleKey("1::3")).toBeNull();
+  });
+
+  it("returns null for a hex-formatted part", () => {
+    // poleKey() never emits hex; accepting "0x10" as 16 means accepting a
+    // key this system did not write, silently reinterpreted as a different
+    // number than its digits suggest.
+    expect(parsePoleKey("0x10:2:3")).toBeNull();
+  });
+
+  it("returns null for a scientific-notation part", () => {
+    // poleKey() never emits scientific notation either; accepting it widens
+    // what counts as a valid key beyond what this system can produce.
+    expect(parsePoleKey("1e5:2:3")).toBeNull();
+  });
 });
