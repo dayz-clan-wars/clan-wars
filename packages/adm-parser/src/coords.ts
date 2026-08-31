@@ -1,10 +1,33 @@
 import type { Vec3 } from "@factions/domain";
 
-/** Player position: `pos=<x, z, altitude>` — the two horizontals come FIRST. */
-const PLAYER_POS_RE = /pos=<\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
+const V3 = "<\\s*(-?[\\d.]+),\\s*(-?[\\d.]+),\\s*(-?[\\d.]+)\\s*>";
 
-/** Flagpole position: `on TerritoryFlag at <x, altitude, z>` — altitude is in the MIDDLE. */
-const POLE_AT_RE = /on TerritoryFlag at <\s*(-?[\d.]+),\s*(-?[\d.]+),\s*(-?[\d.]+)\s*>/u;
+/**
+ * Player position: `pos=<x, z, altitude>` — the two horizontals come FIRST.
+ *
+ * CRITICAL: anchored INSIDE the identity parenthetical `(id=<40 hex> ... pos=<...>)`.
+ * The gamertag is attacker-controlled and sits earlier on the line, so an
+ * unanchored pattern took a `pos=<...>` worn in the name instead of the real
+ * one. `[^)]*?` cannot cross the closing paren, which keeps the match within
+ * the identity block. The projector binds a fold to its nearest pole by player
+ * position, so a spoofed pos moves a fold onto someone else's pole.
+ */
+const PLAYER_POS_RE = new RegExp(`\\(id=[0-9A-F]{40}[^)]*?pos=${V3}`, "u");
+
+/**
+ * Flagpole position: `on TerritoryFlag at <x, altitude, z>` — altitude is in the MIDDLE.
+ *
+ * CRITICAL: anchored AFTER the identity parenthetical, for the same reason.
+ * Unanchored, it took the LEFTMOST match, so a crafted gamertag substituted a
+ * fake pole identity on an otherwise genuine line — crediting the wrong faction.
+ * The tail is matched with `.*?` rather than `[^)]*?`: a stray `)` after the
+ * identity block must not silently drop a real flag change, which is the only
+ * raid signal the ADM log provides.
+ */
+const POLE_AT_RE = new RegExp(
+  `\\(id=[0-9A-F]{40}[^)]*\\).*?on TerritoryFlag at ${V3}`,
+  "u",
+);
 
 /**
  * The accepted horizontal window for a world coordinate, in metres.
