@@ -4,6 +4,7 @@ import {
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
 import { createClient } from "@factions/db";
+import { CLAIMABLE_FLAGS } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
 import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
@@ -74,6 +75,61 @@ export async function routeComponent(deps: FactionDeps, i: ComponentLike): Promi
   const ceremonyId = parseClaimCustomId(i.customId);
   if (ceremonyId === null) return null;
   return handleClaimConfirm(deps, i.userId, ceremonyId, i.values);
+}
+
+/** Discord's select-option cap, not our rule — see the "refuse" branch of `planClaimReply`. */
+export const MAX_PRUNE_OPTIONS = 25;
+
+export type PruneOption = { label: string; value: string; default: true };
+export type ClaimRenderPlan =
+  | { kind: "text"; content: string }
+  | { kind: "select"; content: string; customId: string; options: PruneOption[]; maxValues: number }
+  | { kind: "refuse"; content: string };
+
+/**
+ * Decides WHAT to render for a `FactionReply`, as plain data — no discord.js
+ * types touched here so this is directly testable.
+ *
+ * ⚠️ A ceremony can have more participants than a single Discord string-select
+ * can hold (25). The select's values BECOME the founding roster — silently
+ * slicing to 25 would drop the 26th+ participant from the roster with no
+ * error, exactly the loss the ceremony-settling window exists to prevent
+ * (settling rather than firing on the first qualifying raise is what lets a
+ * late founding member still be counted). So an over-cap ceremony is refused
+ * loudly instead: no select is ever rendered, so no confirm can happen and no
+ * faction is ever created from it.
+ */
+export function planClaimReply(reply: FactionReply): ClaimRenderPlan {
+  if (!reply.prompt) return { kind: "text", content: reply.content };
+
+  const { ceremonyId, participants } = reply.prompt;
+  if (participants.length > MAX_PRUNE_OPTIONS) {
+    return {
+      kind: "refuse",
+      content: `This ceremony has ${participants.length} participants, which is more than the ` +
+        `${MAX_PRUNE_OPTIONS} the roster-confirmation menu can hold. Ask an admin to found this ` +
+        "faction manually.",
+    };
+  }
+
+  const options: PruneOption[] = participants.map((p) => ({ label: p.gamertag, value: p.dayzId, default: true }));
+  return {
+    kind: "select",
+    content: reply.content,
+    customId: claimCustomId(ceremonyId),
+    options,
+    maxValues: options.length,
+  };
+}
+
+/**
+ * Filters `CLAIMABLE_FLAGS` for the flag autocomplete, case-insensitively,
+ * capped at Discord's 25-choice limit. Pure so it is directly testable
+ * without a live autocomplete interaction.
+ */
+export function flagSuggestions(query: string): string[] {
+  const q = query.toLowerCase();
+  return CLAIMABLE_FLAGS.filter((f) => f.toLowerCase().includes(q)).slice(0, 25);
 }
 
 export * from "./notify.js";
@@ -185,36 +241,39 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
-  const DISCORD_MAX_SELECT_OPTIONS = 25;
-
   const renderFactionReply = async (
     interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown> },
     reply: FactionReply,
   ): Promise<void> => {
-    if (!reply.prompt) {
-      await interaction.editReply({ content: reply.content });
+    const plan = planClaimReply(reply);
+    if (plan.kind !== "select") {
+      await interaction.editReply({ content: plan.content });
       return;
     }
-    const { ceremonyId, participants } = reply.prompt;
-    // Discord caps a string-select at 25 options. There is no upper bound on
-    // ceremony participant count in the domain layer, so a ceremony larger
-    // than 25 would need this select split into multiple components — not
-    // done here; see the report for this limitation.
-    const options = participants.slice(0, DISCORD_MAX_SELECT_OPTIONS).map((p) => ({
-      label: p.gamertag,
-      value: p.dayzId,
-      default: true,
-    }));
     const select = new StringSelectMenuBuilder()
-      .setCustomId(claimCustomId(ceremonyId))
+      .setCustomId(plan.customId)
       .setMinValues(1)
-      .setMaxValues(options.length)
-      .addOptions(options);
+      .setMaxValues(plan.maxValues)
+      .addOptions(plan.options);
     const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
-    await interaction.editReply({ content: reply.content, components: [row] });
+    await interaction.editReply({ content: plan.content, components: [row] });
   };
 
   client.on("interactionCreate", async (interaction) => {
+    if (interaction.isAutocomplete()) {
+      if (interaction.commandName === "faction" && interaction.options.getFocused(true).name === "flag") {
+        const query = interaction.options.getFocused();
+        try {
+          await interaction.respond(flagSuggestions(query).map((f) => ({ name: f, value: f })));
+        } catch (err) {
+          // The autocomplete window is also short-lived; a dropped response
+          // just means no suggestions this keystroke, not a broken command.
+          console.error("flag autocomplete failed", err);
+        }
+      }
+      return;
+    }
+
     if (interaction.isChatInputCommand()) {
       try {
         if (interaction.commandName === "faction") {

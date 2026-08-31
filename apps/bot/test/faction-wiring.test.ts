@@ -1,5 +1,14 @@
 import { describe, it, expect } from "vitest";
-import { buildCommands, claimCustomId, parseClaimCustomId } from "../src/discord.js";
+import {
+  buildCommands, claimCustomId, parseClaimCustomId,
+  planClaimReply, flagSuggestions, MAX_PRUNE_OPTIONS,
+} from "../src/discord.js";
+import type { FactionReply } from "../src/faction-commands.js";
+import type { Participant } from "../src/ceremony-store.js";
+
+const participant = (n: number): Participant => ({
+  dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
+});
 
 describe("faction wiring", () => {
   it("registers /faction claim with its three options", () => {
@@ -24,5 +33,69 @@ describe("faction wiring", () => {
   it("keeps the custom id inside Discord's 100-character limit", () => {
     // The reason a claim draft is a database row rather than encoded here.
     expect(claimCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("planClaimReply", () => {
+  const draft = { name: "Test", tag: "TST", texture: "Flag_Wolf" };
+
+  it("renders plain text when there is no prompt", () => {
+    const reply: FactionReply = { content: "no ceremony", ephemeral: true };
+    expect(planClaimReply(reply)).toEqual({ kind: "text", content: "no ceremony" });
+  });
+
+  it("renders a select with all options pre-selected when at the cap", () => {
+    const participants = Array.from({ length: MAX_PRUNE_OPTIONS }, (_, i) => participant(i));
+    const reply: FactionReply = {
+      content: "confirm your roster", ephemeral: true,
+      prompt: { kind: "claim-confirm", ceremonyId: 42, participants, draft },
+    };
+    const plan = planClaimReply(reply);
+    expect(plan.kind).toBe("select");
+    if (plan.kind !== "select") throw new Error("expected select");
+    expect(plan.customId).toBe(claimCustomId(42));
+    expect(plan.options).toHaveLength(MAX_PRUNE_OPTIONS);
+    expect(plan.maxValues).toBe(MAX_PRUNE_OPTIONS);
+    expect(plan.options.every((o) => o.default === true)).toBe(true);
+    expect(plan.options[0]).toEqual({ label: "Player0", value: participants[0]!.dayzId, default: true });
+  });
+
+  it("refuses loudly, with no select, one participant over the cap", () => {
+    // The select's values BECOME the founding roster: silently slicing here
+    // would drop a real participant from the faction with no error.
+    const participants = Array.from({ length: MAX_PRUNE_OPTIONS + 1 }, (_, i) => participant(i));
+    const reply: FactionReply = {
+      content: "confirm your roster", ephemeral: true,
+      prompt: { kind: "claim-confirm", ceremonyId: 42, participants, draft },
+    };
+    const plan = planClaimReply(reply);
+    expect(plan.kind).toBe("refuse");
+    expect(plan.content).toMatch(/26/);
+    expect(plan.content).toMatch(new RegExp(String(MAX_PRUNE_OPTIONS)));
+    expect(plan.content.toLowerCase()).toMatch(/admin/);
+    expect("customId" in plan).toBe(false);
+  });
+});
+
+describe("flagSuggestions", () => {
+  it("returns 25 or fewer flags for an empty query", () => {
+    const results = flagSuggestions("");
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(25);
+  });
+
+  it("filters by a partial query", () => {
+    const results = flagSuggestions("wolf");
+    expect(results).toContain("Flag_Wolf");
+    expect(results.every((f) => f.toLowerCase().includes("wolf"))).toBe(true);
+  });
+
+  it("returns nothing for a query that matches no flag", () => {
+    expect(flagSuggestions("not-a-real-flag")).toEqual([]);
+  });
+
+  it("matches case-insensitively", () => {
+    expect(flagSuggestions("ZENIT")).toContain("Flag_Zenit");
+    expect(flagSuggestions("zenit")).toContain("Flag_Zenit");
   });
 });
