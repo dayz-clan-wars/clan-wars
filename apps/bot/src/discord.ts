@@ -1,6 +1,7 @@
 import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags,
-  SlashCommandBuilder, type RESTPostAPIApplicationCommandsJSONBody,
+  SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder,
+  type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
 import { createClient } from "@factions/db";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
@@ -8,6 +9,11 @@ import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
 import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
+import { handleFactionClaim, handleClaimConfirm, type FactionDeps, type FactionReply } from "./faction-commands.js";
+import { PgFactionStore } from "./faction-store.js";
+import { PgCeremonyStore } from "./ceremony-store.js";
+import { ceremonyTick } from "./ceremony-tick.js";
+import { notifyCeremonies } from "./ceremony-notify.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
@@ -17,6 +23,13 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
       .setDescription("Remove the binding between your Discord account and your character"),
     new SlashCommandBuilder().setName("whoami")
       .setDescription("Show which character your Discord account is linked to"),
+    new SlashCommandBuilder().setName("faction")
+      .setDescription("Faction commands")
+      .addSubcommand((s) => s.setName("claim")
+        .setDescription("Found a faction from a ceremony you took part in")
+        .addStringOption((o) => o.setName("name").setDescription("Faction name").setRequired(true).setMaxLength(64))
+        .addStringOption((o) => o.setName("tag").setDescription("Short tag, 2-5 letters or digits").setRequired(true).setMaxLength(5))
+        .addStringOption((o) => o.setName("flag").setDescription("One of the 33 claimable flags").setRequired(true).setAutocomplete(true))),
   ].map((c) => c.toJSON());
 }
 
@@ -42,6 +55,25 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
   if (i.commandName === "link") return handleLink(deps, ctx);
   if (i.commandName === "unlink") return handleUnlink(deps, i.userId);
   return handleWhoami(deps, i.userId);
+}
+
+export const CLAIM_PREFIX = "claim-confirm:";
+
+/** Discord caps a custom id at 100 characters, which is why only the id rides here. */
+export const claimCustomId = (ceremonyId: number): string => `${CLAIM_PREFIX}${ceremonyId}`;
+
+export function parseClaimCustomId(customId: string): number | null {
+  if (!customId.startsWith(CLAIM_PREFIX)) return null;
+  const n = Number(customId.slice(CLAIM_PREFIX.length));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+export type ComponentLike = { customId: string; userId: string; values: string[] };
+
+export async function routeComponent(deps: FactionDeps, i: ComponentLike): Promise<FactionReply | null> {
+  const ceremonyId = parseClaimCustomId(i.customId);
+  if (ceremonyId === null) return null;
+  return handleClaimConfirm(deps, i.userId, ceremonyId, i.values);
 }
 
 export * from "./notify.js";
@@ -130,6 +162,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const deps: CommandDeps = {
     store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
   };
+  const factionStore = new PgFactionStore(db);
+  const factionDeps: FactionDeps = {
+    store: factionStore, now: () => new Date(), reservationTtlMs: cfg.reservationTtlMs,
+  };
+  const ceremonyStore = new PgCeremonyStore(db);
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -148,23 +185,86 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
 
+  const DISCORD_MAX_SELECT_OPTIONS = 25;
+
+  const renderFactionReply = async (
+    interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown> },
+    reply: FactionReply,
+  ): Promise<void> => {
+    if (!reply.prompt) {
+      await interaction.editReply({ content: reply.content });
+      return;
+    }
+    const { ceremonyId, participants } = reply.prompt;
+    // Discord caps a string-select at 25 options. There is no upper bound on
+    // ceremony participant count in the domain layer, so a ceremony larger
+    // than 25 would need this select split into multiple components — not
+    // done here; see the report for this limitation.
+    const options = participants.slice(0, DISCORD_MAX_SELECT_OPTIONS).map((p) => ({
+      label: p.gamertag,
+      value: p.dayzId,
+      default: true,
+    }));
+    const select = new StringSelectMenuBuilder()
+      .setCustomId(claimCustomId(ceremonyId))
+      .setMinValues(1)
+      .setMaxValues(options.length)
+      .addOptions(options);
+    const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(select);
+    await interaction.editReply({ content: reply.content, components: [row] });
+  };
+
   client.on("interactionCreate", async (interaction) => {
-    if (!interaction.isChatInputCommand()) return;
-    try {
-      const reply = await routeInteraction(deps, {
-        commandName: interaction.commandName,
-        userId: interaction.user.id,
-        guildId: interaction.guildId,
-        channelId: interaction.channelId,
-      });
-      if (!reply) return;
-      await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
-    } catch (err) {
-      // ⚠️ discord.js does not await this listener, so an uncaught throw here
-      // becomes an unhandled rejection and Node terminates the process. An
-      // expired interaction token — which is only a 3-second window — would
-      // take the bot down for every player. Log and drop the one interaction.
-      console.error(`interaction ${interaction.commandName} failed`, err);
+    if (interaction.isChatInputCommand()) {
+      try {
+        if (interaction.commandName === "faction") {
+          const sub = interaction.options.getSubcommand();
+          if (sub === "claim") {
+            // ⚠️ handleFactionClaim makes four or more database round trips;
+            // Discord's initial-response window is 3 seconds. Without the
+            // defer the first claim can fail with "The application did not
+            // respond" AFTER the draft row was already written.
+            await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+            const reply = await handleFactionClaim(factionDeps, interaction.user.id, {
+              name: interaction.options.getString("name", true),
+              tag: interaction.options.getString("tag", true),
+              texture: interaction.options.getString("flag", true),
+            });
+            await renderFactionReply(interaction, reply);
+          }
+          return;
+        }
+
+        const reply = await routeInteraction(deps, {
+          commandName: interaction.commandName,
+          userId: interaction.user.id,
+          guildId: interaction.guildId,
+          channelId: interaction.channelId,
+        });
+        if (!reply) return;
+        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        // ⚠️ discord.js does not await this listener, so an uncaught throw here
+        // becomes an unhandled rejection and Node terminates the process. An
+        // expired interaction token — which is only a 3-second window — would
+        // take the bot down for every player. Log and drop the one interaction.
+        console.error(`interaction ${interaction.commandName} failed`, err);
+      }
+      return;
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      try {
+        const reply = await routeComponent(factionDeps, {
+          customId: interaction.customId,
+          userId: interaction.user.id,
+          values: interaction.values,
+        });
+        if (!reply) return;
+        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        console.error(`component ${interaction.customId} failed`, err);
+      }
     }
   });
 
@@ -183,6 +283,7 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   // One log per bot instance, for the life of that instance.
   const notifyFailures = createNotifyFailureLog();
+  const ceremonyFailures = createNotifyFailureLog();
 
   let timer: NodeJS.Timeout | undefined;
 
@@ -196,6 +297,22 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       // A thrown tick must not kill the interval and silently stop all verification.
       console.error("tick failed", err);
+    }
+
+    // Each of the two ceremony steps gets its own try/catch: a failing
+    // detector must not stop ceremony DMs, and vice versa.
+    try {
+      const c = await ceremonyTick(db, ceremonyStore, { now: new Date() });
+      if (c.detected > 0 || c.activated > 0 || c.lapsed > 0) {
+        console.log(`ceremonies detected ${c.detected}, activated ${c.activated}, lapsed ${c.lapsed}`);
+      }
+    } catch (err) {
+      console.error("ceremony tick failed", err);
+    }
+    try {
+      await notifyCeremonies(db, send, () => new Date(), ceremonyFailures);
+    } catch (err) {
+      console.error("ceremony notify failed", err);
     }
   });
 

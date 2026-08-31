@@ -5,6 +5,7 @@ export type BotConfig = {
   databaseUrl: string;
   tickIntervalMs: number;
   challengeTtlMs: number;
+  reservationTtlMs: number;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -45,5 +46,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     databaseUrl: required(env, "DATABASE_URL"),
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
     challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", 600_000),
+    reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", 86_400_000),
   };
 }

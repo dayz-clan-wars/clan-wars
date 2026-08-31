@@ -51,4 +51,8 @@ describe("loadConfig", () => {
   it("accepts an overridden challenge TTL", () => {
     expect(loadConfig({ ...OK, BOT_CHALLENGE_TTL_MS: "300000" }).challengeTtlMs).toBe(300_000);
   });
+
+  it("defaults the reservation window to 24 hours", () => {
+    expect(loadConfig(OK).reservationTtlMs).toBe(86_400_000);
+  });
 });
