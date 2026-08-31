@@ -1,6 +1,14 @@
 # Plan 3 inbox — items carried forward, to fold into the plan when it is written
 
-## 1. Harden `FLAG_CHANGE_RE` against gamertag injection (SECURITY, first task)
+## 1. ~~Harden `FLAG_CHANGE_RE` against gamertag injection~~ — DONE 2026-08-31 (`c58601e`)
+
+Fixed on `feat/bot-and-identity-linking`, and widened: `PLAYER_POS_RE` had the
+same defect, which matters because the projector binds a fold to its nearest
+pole by player position. Acceptance in
+`docs/acceptance/2026-08-31-flag-injection-fix.md`. Original writeup below, kept
+for the reasoning.
+
+### Original writeup
 
 **Where:** `packages/adm-parser/src/flag.ts:16` and `packages/adm-parser/src/coords.ts:7`
 (both merged to `main` via PR #1).
