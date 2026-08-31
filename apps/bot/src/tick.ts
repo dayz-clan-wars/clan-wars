@@ -1,0 +1,155 @@
+import type { Database } from "@factions/db";
+import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
+import { advance } from "@factions/verification";
+import { safeVerificationEmotes } from "@factions/domain";
+import type { VerificationStore } from "./store.js";
+
+const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
+
+/**
+ * How many safe-pool emotes one UID may spend on one challenge.
+ *
+ * ⚠️ Paired with the sequence length; neither is safe to change alone. Because
+ * matching holds on a mismatch, a run of n distinct emotes completes any
+ * challenge whose sequence is an ordered subsequence of it — so one run covers
+ * C(n, length) sequences, against every live challenge simultaneously. This
+ * budget is what keeps n small.
+ *
+ * Stopping the exhaustive 87-emote sweep is not the bar. At length 3, twelve
+ * cleared C(12,3) = 220 of 21,924 sequences — ~1% per challenge, per run, and
+ * a hit binds the ATTACKER's UID to the victim's Discord account while the
+ * victim is DM'd "Verified". At length 4, eight clears C(8,4) = 70 of 570,024:
+ * ~0.01%.
+ *
+ * A legitimate player needs four plus a few misfires. Raise it if players
+ * report being locked out — but raise the sequence length with it, and do not
+ * remove it.
+ */
+export const MAX_POOL_EMOTES_PER_ATTEMPT = 8;
+
+/**
+ * ⚠️ Distinct from the projector's "pole-projector". Two consumers sharing a
+ * cursor name each skip the other's events, and the symptom is "verification
+ * randomly doesn't work" rather than an error.
+ */
+export const CONSUMER = "identity-verifier";
+
+export type TickOpts = { batchSize?: number; now?: Date };
+
+export type TickResult = {
+  /** emote.performed events examined. */
+  scanned: number;
+  /** attempts that moved forward. */
+  advanced: number;
+  /** challenges completed and bound. */
+  verified: number;
+  /**
+   * Completions refused because the UID already belongs to another Discord
+   * account. Counted rather than swallowed: a non-zero value here is either
+   * someone re-linking without unlinking, or two people racing one UID.
+   */
+  alreadyLinked: number;
+  /**
+   * A UID exhausted its per-challenge emote budget (MAX_POOL_EMOTES_PER_ATTEMPT).
+   * Non-zero means either a fumbling player or a sweep attempt.
+   */
+  lockedOut: number;
+};
+
+type EmotePayload = { dayzId: string; gamertag: string; emote: string };
+
+function readEmotePayload(payload: unknown): EmotePayload | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.dayzId !== "string" || p.dayzId === "") return null;
+  if (typeof p.emote !== "string" || p.emote === "") return null;
+  // The ADM parser's identity regex captures at least one character, so an
+  // empty gamertag means a malformed payload rather than a nameless player.
+  // Rejecting it here keeps a blank display name out of identity_links.
+  if (typeof p.gamertag !== "string" || p.gamertag === "") return null;
+  return { dayzId: p.dayzId, gamertag: p.gamertag, emote: p.emote };
+}
+
+/** One pass: advance every live challenge against the unread emote events. */
+export async function verificationTick(
+  db: Database,
+  store: VerificationStore,
+  opts: TickOpts = {},
+): Promise<TickResult> {
+  const batchSize = opts.batchSize ?? 500;
+  const now = opts.now ?? new Date();
+  let cursor = await readCursor(db, CONSUMER);
+  const out: TickResult = { scanned: 0, advanced: 0, verified: 0, alreadyLinked: 0, lockedOut: 0 };
+
+  for (;;) {
+    const batch = await readEventBatch(db, cursor, batchSize);
+    if (batch.length === 0) break;
+
+    for (const ev of batch) {
+      cursor = ev.id;
+      if (ev.type !== "emote.performed") continue;
+      const payload = readEmotePayload(ev.payload);
+      // A malformed payload is a parser bug, not a reason to stall the cursor.
+      if (!payload) continue;
+      out.scanned++;
+
+      // Re-read live challenges per event: a completion inside this loop must
+      // not leave a stale challenge in a cached list.
+      for (const challenge of await store.liveChallenges(now)) {
+        // ⚠️ A challenge may only be satisfied by emotes performed AFTER it was
+        // issued. Without this, ingesting a historical log — or simply starting
+        // with a cursor of 0 — replays weeks of past emotes at every live
+        // challenge, and an unrelated player's history can complete it and bind
+        // THEIR UID to this account. Event time, not row id: id order is
+        // ingest order, which is not when the player acted.
+        if (ev.occurredAt < challenge.issuedAt) continue;
+
+        const attempt = await store.getAttempt(challenge.id, payload.dayzId);
+        const progressIndex = attempt?.progressIndex ?? 0;
+        const lastMatchedEventId = attempt?.lastMatchedEventId ?? 0;
+        // Replay guard: an event that already advanced this attempt must not
+        // advance it again on a re-read.
+        if (ev.id <= lastMatchedEventId) continue;
+
+        // Tokens outside the safe pool can never appear in a sequence, so they
+        // neither advance nor count against the budget. EmoteSitA alone is 77%
+        // of all emote traffic in production; charging for it would exhaust a
+        // legitimate player's budget by sitting down.
+        if (!SAFE_TOKENS.has(payload.emote)) continue;
+
+        const seenCount = attempt?.seenCount ?? 0;
+        if (seenCount >= MAX_POOL_EMOTES_PER_ATTEMPT) {
+          // Locked out per (challenge, UID), NOT per challenge: an attacker
+          // burning their own budget must not deny the real player theirs.
+          out.lockedOut++;
+          continue;
+        }
+
+        const { index, complete } = advance(challenge.sequence, progressIndex, payload.emote);
+
+        if (complete) {
+          // ⚠️ Completion is attempted BEFORE the attempt row is updated, and
+          // the order is load-bearing. upsertAttempt writes lastMatchedEventId,
+          // which the replay guard above uses to skip already-seen events. If
+          // that marker were written first and completeChallenge then threw,
+          // the batch would replay, the guard would skip this very event, and
+          // the completion would never be retried — the player performs the
+          // right sequence and can never be verified, silently. Writing the
+          // marker only after the completion succeeds means a throw here
+          // replays the event intact.
+          const bound = await store.completeChallenge(challenge.id, payload.dayzId, payload.gamertag, now);
+          if (bound) out.verified++;
+          else out.alreadyLinked++;
+        }
+
+        // Every safe-pool emote is recorded, whether or not it advanced —
+        // otherwise the budget could never be spent and the sweep would work.
+        await store.upsertAttempt(challenge.id, payload.dayzId, index, ev.id, seenCount + 1);
+        if (index !== progressIndex) out.advanced++;
+      }
+    }
+    await writeCursor(db, CONSUMER, cursor);
+  }
+
+  return out;
+}

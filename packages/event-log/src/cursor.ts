@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
-import { consumerCursors } from "@factions/db";
-import { eq } from "drizzle-orm";
+import { consumerCursors, events } from "@factions/db";
+import { asc, eq, gt } from "drizzle-orm";
 
 export async function readCursor(db: Database, consumer: string): Promise<number> {
   const [row] = await db.select().from(consumerCursors)
@@ -15,4 +15,11 @@ export async function writeCursor(db: Database, consumer: string, lastEventId: n
       target: consumerCursors.consumerName,
       set: { lastEventId, updatedAt: new Date() },
     });
+}
+
+export type EventRow = typeof events.$inferSelect;
+
+/** Events strictly after `afterId`, in id order. Id order IS causal order here. */
+export async function readEventBatch(db: Database, afterId: number, limit: number): Promise<EventRow[]> {
+  return db.select().from(events).where(gt(events.id, afterId)).orderBy(asc(events.id)).limit(limit);
 }

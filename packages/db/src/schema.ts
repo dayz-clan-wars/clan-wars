@@ -1,7 +1,8 @@
 import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
-  uniqueIndex, index, numeric, boolean,
+  uniqueIndex, index, numeric, boolean, check,
 } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
 
 export const servers = pgTable("servers", {
@@ -117,4 +118,125 @@ export const flagChanges = pgTable("flag_changes", {
   uniqChange: uniqueIndex("flag_changes_event_uniq").on(t.eventId),
   byPole: index("flag_changes_pole_idx").on(t.serverId, t.map, t.poleKey, t.occurredAt),
   byActor: index("flag_changes_actor_idx").on(t.dayzId, t.occurredAt),
+}));
+
+// ── Identity (spec §16). Discord snowflake ↔ DayZ UID. ──
+
+/**
+ * A VERIFIED binding only. There is deliberately no `status` column: an
+ * unverified claim is a live row in `verification_challenges`, not a link.
+ * Modelling "pending" here would put rows in the identity table that every
+ * downstream read has to remember to filter, and the one that forgets grants
+ * a faction role to an unproven account.
+ *
+ * ⚠️ `dayzId` is the identity. `gamertag` is a display label captured at
+ * verification time — players rename, and a roster keyed on names breaks the
+ * moment they do (spec §16, "Divergence from one-life").
+ */
+export const identityLinks = pgTable("identity_links", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  discordId: text("discord_id").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  verifiedAt: timestamp("verified_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  uniqDiscord: uniqueIndex("identity_links_discord_uniq").on(t.discordId),
+  uniqDayz: uniqueIndex("identity_links_dayz_uniq").on(t.dayzId),
+}));
+
+/** One issued emote sequence for one Discord account. */
+export const verificationChallenges = pgTable("verification_challenges", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  discordId: text("discord_id").notNull(),
+  guildId: text("guild_id").notNull(),
+  /** Where `/link` was run — the fallback reply target when a DM is closed. */
+  channelId: text("channel_id").notNull(),
+  sequence: text("sequence").array().notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  completedAt: timestamp("completed_at", { withTimezone: true }),
+  canceledAt: timestamp("canceled_at", { withTimezone: true }),
+  /** Set when the challenge completed; the UID that won it. */
+  boundDayzId: text("bound_dayz_id"),
+  /** Set once the player has been told. Keeps the notifier idempotent. */
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+}, (t) => ({
+  byDiscord: index("verification_challenges_discord_idx").on(t.discordId),
+  // Partial index matching the live-challenge query exactly ("not completed,
+  // not canceled, not expired"), so it stays useful as completed/canceled
+  // rows accumulate instead of degrading into a full expires_at range scan.
+  byLive: index("verification_challenges_live_idx")
+    .on(t.expiresAt)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // A challenge has exactly one outcome. bound_dayz_id is the UID that won
+  // it, and notified_at marks that the player was told — neither can exist
+  // without a completion, and completion and cancellation are mutually
+  // exclusive. These constraints make a half-completed challenge state
+  // unrepresentable.
+  boundOnlyWhenComplete: check(
+    "verification_challenges_bound_requires_complete",
+    sql`${t.boundDayzId} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  ),
+  notifiedOnlyWhenComplete: check(
+    "verification_challenges_notified_requires_complete",
+    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  ),
+  notBothOutcomes: check(
+    "verification_challenges_single_outcome",
+    sql`NOT (${t.completedAt} IS NOT NULL AND ${t.canceledAt} IS NOT NULL)`,
+  ),
+  // ⚠️ SECURITY BOUNDARY, not an optimisation. Two live challenges sharing a
+  // sequence means the emotes that satisfy one also satisfy the other, and the
+  // tick binds whichever row comes back first — so the wrong Discord account
+  // gets bound to the performing player's UID. A read-then-check in the
+  // command layer cannot close that race; only this index can.
+  // Partial, because a completed or canceled challenge no longer competes for
+  // its sequence and must not hold it forever.
+  uniqOpenSequence: uniqueIndex("verification_challenges_open_sequence_uniq")
+    .on(t.sequence)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // One open challenge per account. Without it, two concurrent /link calls
+  // both miss findLiveChallenge and create two live challenges, each holding a
+  // sequence, and the re-show path then returns an arbitrary one — so the
+  // player can be shown a different sequence than the one they are working on.
+  uniqOpenPerAccount: uniqueIndex("verification_challenges_open_account_uniq")
+    .on(t.discordId)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+}));
+
+/**
+ * Per-UID progress through one challenge.
+ *
+ * ⚠️ Progress is keyed on (challenge, dayz_id), NOT stored on the challenge.
+ * Factions does not know the target UID when it issues a sequence — that is
+ * the whole point of §16 — so a single progressIndex on the challenge would
+ * let three different players each contribute one emote and jointly complete
+ * it, binding whichever UID happened to fire last. Any UID may attempt; the
+ * first to complete the full ordered sequence wins.
+ *
+ * `lastMatchedEventId` makes the tick replay-safe: re-reading an event that
+ * already advanced this attempt must not advance it twice.
+ */
+export const challengeAttempts = pgTable("challenge_attempts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  challengeId: bigint("challenge_id", { mode: "number" })
+    .notNull()
+    .references(() => verificationChallenges.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  progressIndex: integer("progress_index").notNull().default(0),
+  lastMatchedEventId: bigint("last_matched_event_id", { mode: "number" }).notNull().default(0),
+  /**
+   * Safe-pool emotes this UID has spent on this challenge.
+   *
+   * ⚠️ This is what stops a brute-force sweep. `advance` deliberately holds
+   * progress on a mismatch, so performing the whole safe pool in order three
+   * times contains every possible ordered triple and completes ANY live
+   * challenge without ever seeing its sequence (verified: 2000/2000). Secrecy
+   * of the issued sequence is not a defence against a search the matcher
+   * permits — a budget is.
+   */
+  seenCount: integer("seen_count").notNull().default(0),
+}, (t) => ({
+  uniqAttempt: uniqueIndex("challenge_attempts_challenge_dayz_uniq").on(t.challengeId, t.dayzId),
 }));

@@ -1,8 +1,8 @@
 # DayZ Faction System — Design
 
 **Date:** 2026-08-26
-**Status:** Approved design, pending implementation plan
-**Project:** New standalone repository (name TBD — candidates: `colors`, `standard`, `hoist`)
+**Status:** Approved design. Plan 1 (ingest + flag events) implemented; §16 added 2026-08-26.
+**Project:** `factions` — standalone private repository at `submtd/factions`
 
 ---
 
@@ -674,7 +674,7 @@ Deliberately unresolved, none blocking:
 3. **`serverDZ.cfg` PlayerList interval** — verify the key name and whether 60s is achievable.
 4. **Raid weekend definition** — day, start, end, timezone. Blocks ranking computation.
 5. **`BASE` point value** — arbitrary until there is a reason to prefer a number.
-6. **Repository name.**
+6. **Repository name.** — RESOLVED: `factions`, private, at `submtd/factions`.
 
 ## 15. Deferred to v2
 
@@ -685,3 +685,72 @@ Designed against, and additive when wanted:
   poles shrugs off losing its capital, which inverts the intended stakes.
 - **Pending-until-seen membership** — invited members confirmed by presence at the capital pole.
 - **Inverse rank scaling on supply packages** — rubber-banding for the bottom half.
+
+---
+
+## 16. Identity linking
+
+Added 2026-08-26, after §§5–6 were found to assume a Discord↔player binding that no section
+defined. §5's claim rule ("the claimant's linked UID must be among the participants") and §6's
+invite rule ("invitee must have a linked gamertag") both rest on this section.
+
+### Decision
+
+**Emote-sequence verification, Discord-only, bound to the UID.**
+
+A player runs `/link`. The bot privately shows a random ordered sequence of four emotes. The
+player performs them in-game, in order. A consumer reading the event log watches for a UID that
+completes a live sequence, and binds that UID to the Discord account the challenge was issued to.
+
+### Why emotes
+
+The mechanism is ported from `one-life`, where it is in production. Three properties matter:
+
+1. **It proves control of the character, not knowledge of a name.** Anyone can type someone
+   else's gamertag into a form; only the person at the keyboard can make that character salute.
+2. **It costs no new pipeline.** ADM logs emotes — verified against the production export:
+   2,093 emote lines covering all 35 tokens in the shipped dictionary. Factions already
+   ingests ADM, so this is a parser rule and a consumer, not an integration.
+3. **The emote line carries the UID.** `Player "<name>" (id=<40 hex> pos=<…>) performed
+   EmoteSalute` — the same identity shape §13 documents for flag lines.
+
+### Divergence from one-life: bind the UID, not the gamertag
+
+`one-life` keys `gamertag_links` on the display name and resolves races with
+first-verify-wins on `lower(gamertag)`. Factions must not copy this. Ceremony detection (§5)
+identifies participants by **UID**, and a faction roster that keys on names breaks the moment a
+player renames. Since the emote line already carries the UID, factions binds
+`discord_id → dayz_id` directly.
+
+This removes the name-collision race rather than resolving it, and it removes the gamertag
+argument from `/link` — there is nothing for the player to type and nothing for the bot to
+trust. The gamertag is still captured, as a display label only.
+
+### Rules
+
+| Rule | Value | Rationale |
+|---|---|---|
+| Sequence length | 4 emotes, distinct, ordered | 29 safe tokens → 570,024 ordered sequences. Length is a security parameter: hold-on-mismatch means one run of n distinct emotes covers C(n, length) sequences at once |
+| Challenge expiry | 10 minutes | Long enough to find the emote wheel, short enough to bound guessing |
+| Concurrent-sequence collision | Reject issuance of a sequence already outstanding | Two live challenges sharing a sequence would bind the wrong UID |
+| Matching | In-order subsequence; non-matching emotes are ignored | A player mis-clicking should not have to restart |
+| One UID | One Discord account, and vice versa | Enforced by unique index, not by convention |
+| Re-link | Requires unlinking first | Prevents silently moving a roster identity |
+| Unsafe emotes | Excluded from the pool | `EmoteSitA` is 77% of all emote lines in the export; `EmoteSuicide` carries a gameplay penalty |
+| Emote budget per attempt | 8 safe-pool emotes per (challenge, UID) | Hold-on-mismatch means an exhaustive sweep of the pool completes any sequence; a budget is what makes the issued sequence secret in practice. Blocking the exhaustive sweep is not the bar — a PARTIAL sweep of n emotes covers C(n, length) sequences against every live challenge at once, so budget and length are one dial: 8-of-4 clears 70 of 570,024 (~0.01%), where 12-of-3 cleared 220 of 21,924 (~1%) |
+
+**Verification is a prerequisite for every faction command.** An unlinked Discord account cannot
+claim, be invited, or hold a role. This is what makes §6's roster a roster of real players.
+
+### Scope boundary
+
+No Better Auth, no web login, no `user`/`session`/`account` tables. The Discord snowflake is the
+identity. The public directory (§11) is read-only and needs no login. Should a members-only web
+surface ever be wanted, it arrives as its own decision, not as a dependency carried in advance.
+
+### Guild topology
+
+**One Discord guild, per-map channels.** Commands resolve their map from the channel they are
+run in. Every faction-scoped query is therefore keyed by `(guild, map)`, matching the
+`(server_id, map)` tenancy §3 already establishes for poles. Identity linking itself is
+guild-wide, not per-map: a player's UID is the same on every map.

@@ -116,6 +116,13 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
       };
     case "position":
       return { gamertag: line.gamertag, dayzId: line.dayzId, pos: line.pos };
+    case "emote":
+      return {
+        gamertag: line.event.gamertag,
+        dayzId: line.event.dayzId,
+        emote: line.event.emote,
+        item: line.event.item,
+      };
     case "roster":
       return { count: line.count };
   }

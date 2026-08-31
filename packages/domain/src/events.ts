@@ -5,4 +5,5 @@ export type EventType =
   | "flagpole.folded"
   | "flagpole.built"
   | "flagpole.dismantled"
-  | "player.position";
+  | "player.position"
+  | "emote.performed";

@@ -1,0 +1,25 @@
+{
+  "name": "@factions/bot",
+  "version": "0.0.0",
+  "type": "module",
+  "main": "src/main.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@factions/db": "workspace:*",
+    "@factions/domain": "workspace:*",
+    "@factions/event-log": "workspace:*",
+    "@factions/verification": "workspace:*",
+    "discord.js": "^14.27.0",
+    "drizzle-orm": "^0.36.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
+}
