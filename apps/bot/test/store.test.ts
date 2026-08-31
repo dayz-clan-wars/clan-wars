@@ -133,6 +133,35 @@ describe("PgVerificationStore", () => {
     }
   });
 
+  it("refuses to complete a challenge that was canceled after it was read as live", async () => {
+    // The tick pins `now` at tick start and re-reads challenges as it goes, so
+    // a challenge can be canceled by a concurrent /link (cancelExpired) between
+    // being listed as live and being completed. Completing it anyway violates
+    // verification_challenges_single_outcome, and the throw aborts the whole
+    // tick — the cursor is never written and the batch is redone forever.
+    const c = await issue("600");
+    await store.cancelExpired(new Date(later.getTime() + 1));
+
+    expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(false);
+
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row?.completedAt, "a canceled challenge must not also be completed").toBeNull();
+    // The loser of the race must not leave a link behind either.
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A))).toHaveLength(0);
+  });
+
+  it("refuses to cancel a challenge that already completed", async () => {
+    const c = await issue("601");
+    expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+
+    await store.cancelExpired(new Date(later.getTime() + 1));
+
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row?.canceledAt, "a completed challenge must not also be canceled").toBeNull();
+  });
+
   it("is idempotent when the same account re-completes its own binding", async () => {
     const first = await store.createChallenge({
       discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,

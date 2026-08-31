@@ -103,24 +103,49 @@ export class PgVerificationStore implements VerificationStore {
    */
   async completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      // ⚠️ FOR UPDATE, and the open-ness check below, are both load-bearing.
+      // A plain read lets a concurrent cancelExpired (every /link fires one)
+      // close this row while we go on to insert the identity link — binding a
+      // UID on the strength of a challenge that no longer exists. Taking the
+      // row lock here makes that cancel wait; when it resumes, its own
+      // `completed_at IS NULL` predicate is re-evaluated against our committed
+      // row and correctly skips it.
       const [challenge] = await tx.select().from(verificationChallenges)
-        .where(eq(verificationChallenges.id, challengeId));
+        .where(eq(verificationChallenges.id, challengeId))
+        .for("update");
       if (!challenge) return false;
+      // Lost the race before we got the lock: not an error, just not ours.
+      if (challenge.completedAt !== null || challenge.canceledAt !== null) return false;
+
+      // ⚠️ Both outcomes are guarded on the challenge still being open, and the
+      // guard is part of the same statement as the write — the SELECT above is
+      // a plain read, so a concurrent cancelExpired (any /link fires one) can
+      // close this row between that read and here. Writing unconditionally then
+      // violates verification_challenges_single_outcome, and the throw escapes
+      // verificationTick: the batch cursor is never written and the whole
+      // batch is redone, forever. Zero affected rows means we lost the race,
+      // which is a false return, not an error.
+      const stillOpen = and(
+        eq(verificationChallenges.id, challengeId),
+        isNull(verificationChallenges.completedAt),
+        isNull(verificationChallenges.canceledAt),
+      );
 
       const cancel = async () => {
         await tx.update(verificationChallenges)
           .set({ canceledAt: at })
-          .where(eq(verificationChallenges.id, challengeId));
+          .where(stillOpen);
         return false;
       };
 
       const complete = async () => {
         // completed_at and bound_dayz_id are set in ONE statement: the schema
         // forbids a bound row that is not complete.
-        await tx.update(verificationChallenges)
+        const done = await tx.update(verificationChallenges)
           .set({ completedAt: at, boundDayzId: dayzId })
-          .where(eq(verificationChallenges.id, challengeId));
-        return true;
+          .where(stillOpen)
+          .returning({ id: verificationChallenges.id });
+        return done.length > 0;
       };
 
       const [taken] = await tx.select().from(identityLinks)
