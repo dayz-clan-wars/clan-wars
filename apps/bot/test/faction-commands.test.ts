@@ -129,6 +129,12 @@ describe("faction claim", () => {
     // The ceremony must not be left claimed with no faction to show for it.
     const [f] = await db.select().from(factions).where(eq(factions.leaderDiscordId, "100"));
     expect(f).toBeUndefined();
+    // ⚠️ And the ceremony must be back to provisional. This is the difference
+    // between "the claimant retries" and "a lost race destroyed the ceremony":
+    // `reserve` marks it claimed BEFORE the insert that collides, so only the
+    // transaction rolling back keeps it claimable.
+    const [c] = await db.select().from(ceremonies).where(eq(ceremonies.id, ceremonyId));
+    expect(c?.status).toBe("provisional");
   });
 
   it("lets a participant in two open ceremonies claim the one their draft names", async () => {
@@ -163,6 +169,16 @@ describe("faction claim", () => {
     const r = await handleClaimConfirm(deps, "999", ceremonyId, UIDS);
     expect(r.content).toMatch(/already been claimed or has expired|no ceremony/i);
     expect(await db.select().from(factions)).toHaveLength(0);
+  });
+
+  it("tells a founder whose flag is already flying to lower it first", async () => {
+    // DayZ emits a raise event only on the raise TRANSITION. A founder who
+    // left their flag up gets no event at all, never activates, and has no way
+    // to work out why — so the reservation reply has to say it.
+    await handleFactionClaim(deps, "100", input);
+    const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
+    expect(r.content).toMatch(/already up|already flying/i);
+    expect(r.content).toMatch(/lower/i);
   });
 
   it("saves a separate draft per participant of one ceremony", async () => {

@@ -95,6 +95,9 @@ export async function handleClaimConfirm(
     `**${draft.name}** [${draft.tag}] is **reserved**.`,
     "",
     `Raise \`${draft.texture}\` at your pole to bring the faction to life. Any member of the roster can do it.`,
+    // DayZ logs a raise only on the raise TRANSITION, so a flag left flying
+    // produces no event and the faction silently never activates.
+    "If a flag is already up on that pole, **lower it first** — only the act of raising is recorded.",
     "If the flag is not up within 24 hours the reservation lapses and the flag returns to the pool.",
   ].join("\n"));
 }
