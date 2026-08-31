@@ -1,0 +1,134 @@
+import type { Database } from "@factions/db";
+import { ceremonies } from "@factions/db";
+import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
+import { settleWindows, qualifies } from "@factions/ceremony";
+import { NEUTRAL_FLAG } from "@factions/domain";
+import { and, eq, lte } from "drizzle-orm";
+import type { CeremonyStore, PoleRef, Participant } from "./ceremony-store.js";
+
+/**
+ * ⚠️ Distinct from `pole-projector` and `identity-verifier`. Two consumers
+ * sharing a cursor name each skip the other's events, and the symptom is
+ * "detection randomly doesn't work" rather than an error. This is the third
+ * consumer of this log; the collision is no longer hypothetical.
+ */
+export const CEREMONY_CONSUMER = "ceremony-detector";
+
+export const PROVISIONAL_TTL_MS = 86_400_000;
+
+export type CeremonyTickResult = {
+  /** flag.raised events examined. */
+  scanned: number;
+  /** qualifying neutral-flag raises recorded. */
+  recorded: number;
+  /** windows consumed, whether or not they produced a ceremony. */
+  settled: number;
+  /** ceremonies created. */
+  detected: number;
+};
+
+type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
+
+function readFlagPayload(payload: unknown): FlagPayload | null {
+  if (typeof payload !== "object" || payload === null) return null;
+  const p = payload as Record<string, unknown>;
+  if (typeof p.dayzId !== "string" || p.dayzId === "") return null;
+  if (typeof p.texture !== "string" || p.texture === "") return null;
+  if (typeof p.poleKey !== "string" || p.poleKey === "") return null;
+  if (typeof p.gamertag !== "string" || p.gamertag === "") return null;
+  return { dayzId: p.dayzId, gamertag: p.gamertag, texture: p.texture, poleKey: p.poleKey };
+}
+
+/** One pass: record qualifying raises, settle what the log has passed, expire what is stale. */
+export async function ceremonyTick(
+  db: Database,
+  store: CeremonyStore,
+  opts: { batchSize?: number; now?: Date; provisionalTtlMs?: number } = {},
+): Promise<CeremonyTickResult> {
+  const batchSize = opts.batchSize ?? 500;
+  const now = opts.now ?? new Date();
+  const ttl = opts.provisionalTtlMs ?? PROVISIONAL_TTL_MS;
+  const out: CeremonyTickResult = { scanned: 0, recorded: 0, settled: 0, detected: 0 };
+
+  // Phase 1 — record. The cursor advances here and only here.
+  let cursor = await readCursor(db, CEREMONY_CONSUMER);
+  for (;;) {
+    const batch = await readEventBatch(db, cursor, batchSize);
+    if (batch.length === 0) break;
+    for (const ev of batch) {
+      cursor = ev.id;
+      if (ev.type !== "flag.raised") continue;
+      const p = readFlagPayload(ev.payload);
+      // A malformed payload is a parser bug, not a reason to stall the cursor.
+      if (!p) continue;
+      out.scanned++;
+      if (p.texture !== NEUTRAL_FLAG) continue;
+
+      const pole: PoleRef = { serverId: ev.serverId, poleKey: p.poleKey };
+      if (await store.isPoleBound(pole)) continue;
+      // Linkage is checked at PROCESSING time, not at raise time: someone who
+      // links shortly after the ceremony still counts. The forgiving reading,
+      // and it costs nothing.
+      if (await store.linkedDiscordId(p.dayzId) === null) continue;
+
+      await store.recordRaise({
+        ...pole, dayzId: p.dayzId, gamertag: p.gamertag,
+        occurredAt: ev.occurredAt, eventId: ev.id,
+      });
+      out.recorded++;
+    }
+    await writeCursor(db, CEREMONY_CONSUMER, cursor);
+  }
+
+  // Phase 2 — settle. Separate from phase 1 on purpose: the raises are already
+  // durable, so a throw here loses nothing and the next pass settles them.
+  for (const pole of await store.polesWithPendingRaises()) {
+    const highWater = await store.highWaterMark(pole.serverId);
+    if (!highWater) continue;
+    const pending = await store.pendingRaises(pole);
+    for (const w of settleWindows(pending, highWater)) {
+      out.settled++;
+      // While a ceremony is outstanding at this pole, windows are consumed but
+      // never create. Otherwise a pole under sustained White raises would try
+      // to insert a ceremony every window and the partial unique index would
+      // surface each as an error rather than the no-op it is.
+      const blocked = await store.hasOpenCeremony(pole);
+      let draft = null;
+      if (!blocked && qualifies(w)) {
+        const participants: Participant[] = [];
+        for (const dayzId of w.participants) {
+          const discordId = await store.linkedDiscordId(dayzId);
+          // Unlinked between recording and settling: skip rather than write a
+          // participant with no Discord account to DM.
+          if (!discordId) continue;
+          const gamertag = w.raises.find((r) => r.dayzId === dayzId)?.gamertag ?? "";
+          participants.push({ dayzId, discordId, gamertag });
+        }
+        if (qualifies({ ...w, participants: participants.map((x) => x.dayzId) })) {
+          draft = { detectedAt: now, expiresAt: new Date(now.getTime() + ttl), participants };
+        }
+      }
+      if (await store.settle(pole, w, draft) !== null) out.detected++;
+    }
+  }
+
+  // Phase 3 — expire. Both clocks must have passed the deadline.
+  //
+  // ⚠️ The log-clock half is not redundant. If ingest stalls, wall-clock-only
+  // expiry retires a ceremony whose claim window we never had the chance to
+  // observe.
+  for (const serverId of await store.openCeremonyServers()) {
+    const highWater = await store.highWaterMark(serverId);
+    if (!highWater) continue;
+    const cutoff = highWater.getTime() < now.getTime() ? highWater : now;
+    await db.update(ceremonies)
+      .set({ status: "expired" })
+      .where(and(
+        eq(ceremonies.serverId, serverId),
+        eq(ceremonies.status, "provisional"),
+        lte(ceremonies.expiresAt, cutoff),
+      ));
+  }
+
+  return out;
+}

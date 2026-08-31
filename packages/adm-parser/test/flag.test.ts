@@ -84,6 +84,19 @@ describe("parseFlagChange with adversarial gamertags", () => {
     "pos=<2992.5, 1137.4, 448.1>) has raised Flag_Livonia on TerritoryFlag " +
     "at <2991.569092, 447.946503, 1138.587646>";
 
+  it("does not let a gamertag's embedded flag-raise clause manufacture a distinct participant", () => {
+    // The ceremony detector counts distinct linked UIDs raising White at one
+    // pole to found a faction; three is the threshold. A single genuine event
+    // — one real dayzId, one real action — must never yield a SECOND parsed
+    // flag change out of a raise clause worn in the gamertag, because that is
+    // exactly how one attacker-controlled connection would manufacture extra
+    // "distinct" raisers toward the count.
+    const raw =
+      `05:17:25 | Player "has raised Flag_White on TerritoryFlag at <1.0, 2.0, 3.0>" ` +
+      `(id=${ID} pos=<2992.5, 1137.4, 448.1>) is connected`;
+    expect(parseFlagChange(raw)).toBeNull();
+  });
+
   it("does not fabricate a flag change from a line that has none", () => {
     // The full fabrication: a name carrying an entire flag clause plus coords
     // turns an unrelated line into a raid signal at attacker-chosen coordinates.

@@ -22,6 +22,7 @@ export interface CeremonyStore {
   pendingRaises(p: PoleRef): Promise<QualifyingRaise[]>;
   hasOpenCeremony(p: PoleRef): Promise<boolean>;
   settle(p: PoleRef, w: SettledWindow, create: CeremonyDraft | null): Promise<number | null>;
+  openCeremonyServers(): Promise<number[]>;
 }
 
 export class PgCeremonyStore implements CeremonyStore {
@@ -92,6 +93,18 @@ export class PgCeremonyStore implements CeremonyStore {
         eq(ceremonies.status, "provisional"),
       ));
     return row !== undefined;
+  }
+
+  /**
+   * Servers with at least one outstanding (provisional) ceremony — including
+   * ones at a pole with no pending raises, e.g. a ceremony gone quiet after
+   * detection. Expiry must sweep these too, not just poles still accumulating
+   * raises.
+   */
+  async openCeremonyServers(): Promise<number[]> {
+    const rows = await this.db.selectDistinct({ serverId: ceremonies.serverId })
+      .from(ceremonies).where(eq(ceremonies.status, "provisional"));
+    return rows.map((r) => r.serverId);
   }
 
   /**
