@@ -240,3 +240,76 @@ export const challengeAttempts = pgTable("challenge_attempts", {
 }, (t) => ({
   uniqAttempt: uniqueIndex("challenge_attempts_challenge_dayz_uniq").on(t.challengeId, t.dayzId),
 }));
+
+/**
+ * Qualifying neutral-flag raises, as the detector sees them.
+ *
+ * ⚠️ This table is why recording and settling are separate phases. The
+ * detector's cursor advances when a raise is RECORDED; settling happens
+ * afterwards from these rows. If settling throws, nothing is lost — the raises
+ * are durable and the next pass settles them. Merging the phases would mean a
+ * settle failure silently discards events the cursor has already passed.
+ */
+export const whiteRaises = pgTable("white_raises", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  poleKey: text("pole_key").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+  /** Null until the window holding this raise has settled. */
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+}, (t) => ({
+  // Replay safety: the detector re-reads events after a crash, and recording
+  // one raise twice would let a single player count as two participants.
+  uniqEvent: uniqueIndex("white_raises_event_uniq").on(t.eventId),
+  // The settling query: unconsumed raises for one pole, in time order.
+  byPolePending: index("white_raises_pending_idx")
+    .on(t.serverId, t.poleKey, t.occurredAt)
+    .where(sql`${t.settledAt} IS NULL`),
+}));
+
+/** A detected founding ritual, awaiting a claim. */
+export const ceremonies = pgTable("ceremonies", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  poleKey: text("pole_key").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+  status: text("status").notNull(),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  /** Set once every participant has been DM'd. Keeps the notifier idempotent. */
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+}, (t) => ({
+  statusValid: check("ceremonies_status_valid",
+    sql`${t.status} IN ('provisional','claimed','expired')`),
+  // One outstanding ceremony per pole. Partial, because a claimed or expired
+  // ceremony no longer holds its pole. Without this, a pole under sustained
+  // White raises would produce a ceremony every window and only the first
+  // could ever insert — the rest would surface as errors rather than no-ops.
+  uniqOpenPole: uniqueIndex("ceremonies_open_pole_uniq")
+    .on(t.serverId, t.poleKey)
+    .where(sql`${t.status} = 'provisional'`),
+  byOpen: index("ceremonies_open_idx").on(t.expiresAt).where(sql`${t.status} = 'provisional'`),
+}));
+
+/**
+ * Who was counted. `discord_id` and `gamertag` are denormalized at detection
+ * time deliberately: the DM path must not re-resolve them, and the row is a
+ * record of who was linked THEN, not who is linked now.
+ */
+export const ceremonyParticipants = pgTable("ceremony_participants", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  ceremonyId: bigint("ceremony_id", { mode: "number" })
+    .notNull().references(() => ceremonies.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+}, (t) => ({
+  uniqParticipant: uniqueIndex("ceremony_participants_uniq").on(t.ceremonyId, t.dayzId),
+}));
