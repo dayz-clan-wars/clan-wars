@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, factions, factionMembers, servers, type Database } from "../src/index.js";
+import { createClient, runMigrations, requireTestDatabaseUrl, factions, factionMembers, claimDrafts, ceremonies, servers, type Database } from "../src/index.js";
 import { sql } from "drizzle-orm";
 
 const URL = requireTestDatabaseUrl();
@@ -13,10 +13,17 @@ describe("faction schema", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table faction_members, claim_drafts, factions, servers restart identity cascade`);
+    await db.execute(sql`truncate table faction_members, claim_drafts, factions, ceremonies, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
   });
+
+  const ceremony = (overrides: Record<string, unknown> = {}) => db.insert(ceremonies).values({
+    serverId, poleKey: "1:2:3", windowStart: now, windowEnd: new Date(now.getTime() + 600_000),
+    status: "provisional", detectedAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
+    x: "1.00", y: "2.00", z: "3.00",
+    ...overrides,
+  }).returning();
 
   const faction = (o: Record<string, unknown> = {}) => db.insert(factions).values({
     serverId, name: "The Bears", tag: "BEAR", texture: "Flag_Bear",
@@ -83,5 +90,24 @@ describe("faction schema", () => {
   it("requires reserved_until on a reserved faction", async () => {
     // A reservation with no deadline is a permanent hole in the pool.
     await expect(faction({ reservedUntil: null })).rejects.toThrow(/factions_reserved_has_deadline/);
+  });
+
+  it("allows different players to each hold a draft for the same ceremony", async () => {
+    // A ceremony seats several participants and any of them may run the claim
+    // command — each needs their own draft rather than colliding on the first.
+    const [c] = await ceremony();
+    await db.insert(claimDrafts).values({
+      ceremonyId: c!.id, discordId: "100", name: "The Bears", tag: "BEAR", texture: "Flag_Bear", createdAt: now,
+    });
+    await expect(db.insert(claimDrafts).values({
+      ceremonyId: c!.id, discordId: "200", name: "The Wolves", tag: "WOLF", texture: "Flag_Wolf", createdAt: now,
+    })).resolves.toBeDefined();
+  });
+
+  it("refuses a second draft from the same player on one ceremony", async () => {
+    const [c] = await ceremony();
+    const draft = { ceremonyId: c!.id, discordId: "100", name: "The Bears", tag: "BEAR", texture: "Flag_Bear", createdAt: now };
+    await db.insert(claimDrafts).values(draft);
+    await expect(db.insert(claimDrafts).values(draft)).rejects.toThrow(/claim_drafts_ceremony_discord_uniq/);
   });
 });

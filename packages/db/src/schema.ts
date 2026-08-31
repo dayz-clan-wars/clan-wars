@@ -385,6 +385,9 @@ export const factionMembers = pgTable("faction_members", {
 
 /**
  * A claim in progress: name, tag and flag chosen, roster not yet confirmed.
+ * One draft per (ceremony, player) — a ceremony seats several participants
+ * and any of them may run the claim command, so each needs their own draft
+ * rather than colliding on the first one to insert.
  *
  * ⚠️ Needed because the pruning step is a second interaction. Discord custom
  * ids cap at 100 characters, so a player-chosen faction name cannot ride along
@@ -400,5 +403,5 @@ export const claimDrafts = pgTable("claim_drafts", {
   texture: text("texture").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
 }, (t) => ({
-  uniqDraft: uniqueIndex("claim_drafts_ceremony_uniq").on(t.ceremonyId),
+  uniqDraft: uniqueIndex("claim_drafts_ceremony_discord_uniq").on(t.ceremonyId, t.discordId),
 }));
