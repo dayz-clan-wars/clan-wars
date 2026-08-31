@@ -313,3 +313,92 @@ export const ceremonyParticipants = pgTable("ceremony_participants", {
 }, (t) => ({
   uniqParticipant: uniqueIndex("ceremony_participants_uniq").on(t.ceremonyId, t.dayzId),
 }));
+
+/**
+ * A faction.
+ *
+ * ⚠️ Keyed on `server_id` alone, NOT `(server_id, map)`. `servers.map` already
+ * exists, so `server_id` determines the map; carrying both invites the two
+ * disagreeing. Per-map tenancy holds through the join.
+ *
+ * There is no `flag_pool` table. The 33 claimable textures are a constant in
+ * `@factions/domain`, and availability is that constant minus the rows here in
+ * a holding status — so the claim IS the allocation, and disbanding frees the
+ * flag with no bookkeeping.
+ */
+export const factions = pgTable("factions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  name: text("name").notNull(),
+  tag: text("tag").notNull(),
+  texture: text("texture").notNull(),
+  poleKey: text("pole_key").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  status: text("status").notNull(),
+  leaderDiscordId: text("leader_discord_id").notNull(),
+  /** Provenance: which ritual produced this faction. */
+  ceremonyId: bigint("ceremony_id", { mode: "number" }).references(() => ceremonies.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  reservedUntil: timestamp("reserved_until", { withTimezone: true }),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+}, (t) => ({
+  statusValid: check("factions_status_valid",
+    sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),
+  // A reservation with no deadline is a permanent hole in a 33-slot pool.
+  reservedHasDeadline: check("factions_reserved_has_deadline",
+    sql`${t.status} <> 'reserved' OR ${t.reservedUntil} IS NOT NULL`),
+  // The three scarcity rules. All partial over the HOLDING statuses, so a
+  // lapsed or disbanded faction releases flag, tag and pole in one transition.
+  uniqTexture: uniqueIndex("factions_holding_texture_uniq")
+    .on(t.serverId, t.texture)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+  uniqTag: uniqueIndex("factions_holding_tag_uniq")
+    .on(t.serverId, sql`lower(${t.tag})`)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+  uniqPole: uniqueIndex("factions_holding_pole_uniq")
+    .on(t.serverId, t.poleKey)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+}));
+
+/**
+ * The confirmed roster.
+ *
+ * Created in this plan only because activation must verify that the UID which
+ * raised the faction's flag is on it. No command manages membership yet — that
+ * is spec §6.
+ */
+export const factionMembers = pgTable("faction_members", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" })
+    .notNull().references(() => factions.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  role: text("role").notNull(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  roleValid: check("faction_members_role_valid",
+    sql`${t.role} IN ('leader','officer','member')`),
+  uniqMember: uniqueIndex("faction_members_uniq").on(t.factionId, t.dayzId),
+}));
+
+/**
+ * A claim in progress: name, tag and flag chosen, roster not yet confirmed.
+ *
+ * ⚠️ Needed because the pruning step is a second interaction. Discord custom
+ * ids cap at 100 characters, so a player-chosen faction name cannot ride along
+ * in one — the draft has to be durable. Deleted on confirm.
+ */
+export const claimDrafts = pgTable("claim_drafts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  ceremonyId: bigint("ceremony_id", { mode: "number" })
+    .notNull().references(() => ceremonies.id, { onDelete: "cascade" }),
+  discordId: text("discord_id").notNull(),
+  name: text("name").notNull(),
+  tag: text("tag").notNull(),
+  texture: text("texture").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniqDraft: uniqueIndex("claim_drafts_ceremony_uniq").on(t.ceremonyId),
+}));
