@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { ceremonies, ceremonyParticipants, claimDrafts, factions, factionMembers } from "@factions/db";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, asc, eq, inArray } from "drizzle-orm";
 
 const HOLDING = ["reserved", "active", "dormant"];
 
@@ -11,6 +11,7 @@ export type OpenCeremony = {
 
 export interface FactionStore {
   openCeremonyFor(discordId: string): Promise<OpenCeremony | null>;
+  openCeremonyByIdFor(ceremonyId: number, discordId: string): Promise<OpenCeremony | null>;
   textureHeld(serverId: number, texture: string): Promise<boolean>;
   saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void>;
   loadDraft(ceremonyId: number, discordId: string): Promise<{ name: string; tag: string; texture: string } | null>;
@@ -28,20 +29,59 @@ export type ReserveArgs = {
 export class PgFactionStore implements FactionStore {
   constructor(private readonly db: Database) {}
 
+  /**
+   * The ceremony a `/faction claim` opens against.
+   *
+   * ⚠️ ORDER BY + LIMIT 1 is not decoration. A Discord account can be a
+   * participant in two provisional ceremonies at once — a group testing two
+   * poles — and an unordered query is free to return either row on either
+   * call. That stranded the claimant permanently: the draft went against
+   * ceremony A, the confirm re-derived ceremony B, and the id mismatch told
+   * them "already claimed or expired" on every single retry.
+   */
   async openCeremonyFor(discordId: string): Promise<OpenCeremony | null> {
     const [row] = await this.db.select({ c: ceremonies })
       .from(ceremonies)
       .innerJoin(ceremonyParticipants, eq(ceremonyParticipants.ceremonyId, ceremonies.id))
-      .where(and(eq(ceremonyParticipants.discordId, discordId), eq(ceremonies.status, "provisional")));
-    if (!row) return null;
+      .where(and(eq(ceremonyParticipants.discordId, discordId), eq(ceremonies.status, "provisional")))
+      .orderBy(asc(ceremonies.id))
+      .limit(1);
+    return row ? this.hydrate(row.c) : null;
+  }
+
+  /**
+   * The ceremony a confirm NAMES, with the caller checked against its roster.
+   *
+   * The confirm carries the ceremony id in its custom id, so it must be
+   * answered by looking that ceremony up — not by re-deriving one from the
+   * user, which is what could hand back a different ceremony than the draft
+   * was written against. The participant check is the same §5 defense
+   * openCeremonyFor provides, applied to the named row.
+   */
+  async openCeremonyByIdFor(ceremonyId: number, discordId: string): Promise<OpenCeremony | null> {
+    const [row] = await this.db.select({ c: ceremonies })
+      .from(ceremonies)
+      .innerJoin(ceremonyParticipants, eq(ceremonyParticipants.ceremonyId, ceremonies.id))
+      .where(and(
+        eq(ceremonies.id, ceremonyId),
+        eq(ceremonies.status, "provisional"),
+        eq(ceremonyParticipants.discordId, discordId),
+      ))
+      .limit(1);
+    return row ? this.hydrate(row.c) : null;
+  }
+
+  private async hydrate(c: typeof ceremonies.$inferSelect): Promise<OpenCeremony> {
     const participants = await this.db.select({
       dayzId: ceremonyParticipants.dayzId,
       discordId: ceremonyParticipants.discordId,
       gamertag: ceremonyParticipants.gamertag,
-    }).from(ceremonyParticipants).where(eq(ceremonyParticipants.ceremonyId, row.c.id));
+    }).from(ceremonyParticipants)
+      .where(eq(ceremonyParticipants.ceremonyId, c.id))
+      .orderBy(asc(ceremonyParticipants.id));
     return {
-      id: row.c.id, serverId: row.c.serverId, poleKey: row.c.poleKey,
-      x: row.c.x, y: row.c.y, z: row.c.z,
+      id: c.id, serverId: c.serverId, poleKey: c.poleKey,
+      x: c.x, y: c.y, z: c.z,
       participants,
     };
   }

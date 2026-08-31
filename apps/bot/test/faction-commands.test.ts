@@ -131,6 +131,40 @@ describe("faction claim", () => {
     expect(f).toBeUndefined();
   });
 
+  it("lets a participant in two open ceremonies claim the one their draft names", async () => {
+    // A group testing two poles: one Discord account is a participant in two
+    // provisional ceremonies. Deriving the ceremony from the USER on confirm
+    // could pick the other one, hit the id mismatch, and tell the claimant
+    // "already claimed or expired" — false, and reproducing on every retry.
+    const [second] = await db.insert(ceremonies).values({
+      serverId, poleKey: "4:5:6", x: "4.00", y: "5.00", z: "6.00",
+      windowStart: now, windowEnd: now,
+      status: "provisional", detectedAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
+    }).returning();
+    await db.insert(ceremonyParticipants).values(UIDS.map((dayzId, i) => ({
+      ceremonyId: second!.id, dayzId, discordId: `10${i}`, gamertag: `P${i}`,
+    })));
+
+    // The prompt is deterministic: lowest ceremony id, never whichever row
+    // Postgres happened to hand back.
+    expect((await handleFactionClaim(deps, "100", input)).prompt?.ceremonyId).toBe(ceremonyId);
+
+    // ...and a confirm naming the OTHER ceremony reaches that ceremony.
+    await deps.store.saveDraft(second!.id, "100", { name: "The Wolves", tag: "WOLF", texture: "Flag_Wolf" }, now);
+    const r = await handleClaimConfirm(deps, "100", second!.id, UIDS);
+    expect(r.content).toMatch(/reserved/i);
+    const [f] = await db.select().from(factions);
+    expect(f?.ceremonyId).toBe(second!.id);
+    expect(f?.poleKey).toBe("4:5:6");
+  });
+
+  it("refuses a confirm for a ceremony the caller did not attend", async () => {
+    await deps.store.saveDraft(ceremonyId, "999", input, now);
+    const r = await handleClaimConfirm(deps, "999", ceremonyId, UIDS);
+    expect(r.content).toMatch(/already been claimed or has expired|no ceremony/i);
+    expect(await db.select().from(factions)).toHaveLength(0);
+  });
+
   it("saves a separate draft per participant of one ceremony", async () => {
     await handleFactionClaim(deps, "100", input);
     await handleFactionClaim(deps, "101", { name: "The Wolves", tag: "WOLF", texture: "Flag_Wolf" });

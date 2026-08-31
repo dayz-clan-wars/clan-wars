@@ -56,8 +56,14 @@ export async function handleClaimConfirm(
   ceremonyId: number,
   keepDayzIds: string[],
 ): Promise<FactionReply> {
-  const ceremony = await deps.store.openCeremonyFor(discordId);
-  if (!ceremony || ceremony.id !== ceremonyId) return reply("That ceremony has already been claimed or has expired.");
+  // ⚠️ Fetched BY ID, not re-derived from the user. The confirm's custom id
+  // names the ceremony the draft was written against, and a claimant can be a
+  // participant in more than one open ceremony — re-deriving could return the
+  // other one and report "already claimed or expired" about a ceremony that is
+  // neither, on every retry. The store still checks the caller is on this
+  // ceremony's participant list, which is the §5 defense that mattered.
+  const ceremony = await deps.store.openCeremonyByIdFor(ceremonyId, discordId);
+  if (!ceremony) return reply("That ceremony has already been claimed or has expired.");
 
   const draft = await deps.store.loadDraft(ceremonyId, discordId);
   if (!draft) return reply("That claim expired. Run `/faction claim` again.");
