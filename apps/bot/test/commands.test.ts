@@ -52,6 +52,21 @@ describe("commands", () => {
       expect((await store.liveChallenges(now))).toHaveLength(1);
     });
 
+    it("describes the sequence by its actual length, not a hardcoded word", async () => {
+      // generateSequence takes its length as a parameter. A challenge of any
+      // other length must not be described to the player as "these three".
+      const c = await store.createChallenge({
+        ...CTX,
+        sequence: ["EmoteSalute", "EmoteClap", "EmoteDance", "EmoteWave"],
+        issuedAt: now,
+        expiresAt: new Date(now.getTime() + 600_000),
+      });
+      expect(c).not.toBeNull();
+      const reply = await handleLink(deps, CTX);
+      expect(reply.content).not.toMatch(/\bthree\b/i);
+      expect(reply.content).toMatch(/\bfour\b/i);
+    });
+
     it("refuses when the account is already linked", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
       expect(c).not.toBeNull();

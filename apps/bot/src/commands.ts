@@ -25,6 +25,10 @@ export function formatSequence(sequence: string[]): string {
   return sequence.map((token, i) => `${i + 1}. **${emoteLabel(token) ?? token}**`).join("\n");
 }
 
+/** Spelled out for the player-facing text; the numeral is fine past a handful. */
+const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six"];
+const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
+
 function challengeMessage(sequence: string[], expiresAt: Date): string {
   return [
     "**Link your account**",
@@ -33,7 +37,7 @@ function challengeMessage(sequence: string[], expiresAt: Date): string {
     "",
     formatSequence(sequence),
     "",
-    "Other emotes in between are fine — only the order of these three matters.",
+    `Other emotes in between are fine — only the order of these ${countWord(sequence.length)} matters.`,
     `Expires <t:${Math.floor(expiresAt.getTime() / 1000)}:R>. Run ` + "`/link`" + ` again to see this message.`,
   ].join("\n");
 }
