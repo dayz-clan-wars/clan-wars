@@ -107,6 +107,33 @@ describe("ceremonyTick", () => {
     expect((await tick()).detected).toBe(0);
   });
 
+  it("treats a pole bound outside hasOpenCeremony's view as still ineligible", async () => {
+    // Regression for: a ceremony opens at P and more raises land at P; the
+    // ceremony gets claimed (status -> 'claimed'), which drops it out of the
+    // PARTIAL `ceremonies_open_pole_uniq` index (provisional-only), so
+    // `hasOpenCeremony(P)` now reports false even though P belongs to a
+    // claimed faction. The still-pending raises from before the claim must
+    // not settle into a second ceremony at that now-bound pole — such a
+    // ceremony could never be claimed, colliding with
+    // `factions_holding_pole_uniq`. Simulate the end state directly (a
+    // holding-status faction bound to P, with unsettled raises still sitting
+    // at P) rather than driving the full claim flow, since only the
+    // resulting state matters to this check.
+    await raise(UIDS[0]!, 0);
+    await raise(UIDS[1]!, 1);
+    await raise(UIDS[2]!, 2);
+    await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
+      x: "1.00", y: "2.00", z: "3.00", status: "reserved", leaderDiscordId: "999", createdAt: T0,
+      reservedUntil: at(60 * 24),
+    });
+    await raise(UIDS[0]!, 20); // advances the high-water mark past the window
+    const r = await tick();
+    expect(r.detected).toBe(0);
+    expect(await db.select().from(ceremonies)).toHaveLength(0);
+    expect(await store.pendingRaises({ serverId, poleKey: POLE })).toHaveLength(0);
+  });
+
   it("does not settle a window the log has not yet advanced past", async () => {
     // The high-water mark is the newest EVENT time. With no event after the
     // window, the participant set is still unknown.
