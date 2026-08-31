@@ -240,3 +240,184 @@ export const challengeAttempts = pgTable("challenge_attempts", {
 }, (t) => ({
   uniqAttempt: uniqueIndex("challenge_attempts_challenge_dayz_uniq").on(t.challengeId, t.dayzId),
 }));
+
+/**
+ * Qualifying neutral-flag raises, as the detector sees them.
+ *
+ * ⚠️ This table is why recording and settling are separate phases. The
+ * detector's cursor advances when a raise is RECORDED; settling happens
+ * afterwards from these rows. If settling throws, nothing is lost — the raises
+ * are durable and the next pass settles them. Merging the phases would mean a
+ * settle failure silently discards events the cursor has already passed.
+ */
+export const whiteRaises = pgTable("white_raises", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  poleKey: text("pole_key").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+  /** Null until the window holding this raise has settled. */
+  settledAt: timestamp("settled_at", { withTimezone: true }),
+}, (t) => ({
+  // Replay safety: the detector re-reads events after a crash, and recording
+  // one raise twice would let a single player count as two participants.
+  uniqEvent: uniqueIndex("white_raises_event_uniq").on(t.eventId),
+  // The settling query: unconsumed raises for one pole, in time order.
+  byPolePending: index("white_raises_pending_idx")
+    .on(t.serverId, t.poleKey, t.occurredAt)
+    .where(sql`${t.settledAt} IS NULL`),
+}));
+
+/** A detected founding ritual, awaiting a claim. */
+export const ceremonies = pgTable("ceremonies", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  poleKey: text("pole_key").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  windowStart: timestamp("window_start", { withTimezone: true }).notNull(),
+  windowEnd: timestamp("window_end", { withTimezone: true }).notNull(),
+  status: text("status").notNull(),
+  detectedAt: timestamp("detected_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  /** Set once every participant has been DM'd. Keeps the notifier idempotent. */
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+}, (t) => ({
+  statusValid: check("ceremonies_status_valid",
+    sql`${t.status} IN ('provisional','claimed','expired')`),
+  // One outstanding ceremony per pole. Partial, because a claimed or expired
+  // ceremony no longer holds its pole. Without this, a pole under sustained
+  // White raises would produce a ceremony every window and only the first
+  // could ever insert — the rest would surface as errors rather than no-ops.
+  uniqOpenPole: uniqueIndex("ceremonies_open_pole_uniq")
+    .on(t.serverId, t.poleKey)
+    .where(sql`${t.status} = 'provisional'`),
+  byOpen: index("ceremonies_open_idx").on(t.expiresAt).where(sql`${t.status} = 'provisional'`),
+}));
+
+/**
+ * Who was counted. `discord_id` and `gamertag` are denormalized at detection
+ * time deliberately: the DM path must not re-resolve them, and the row is a
+ * record of who was linked THEN, not who is linked now.
+ */
+export const ceremonyParticipants = pgTable("ceremony_participants", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  ceremonyId: bigint("ceremony_id", { mode: "number" })
+    .notNull().references(() => ceremonies.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  /**
+   * When THIS participant's DM landed.
+   *
+   * ⚠️ Delivery is tracked per participant, not per ceremony, because the two
+   * failure modes are not the same. A ceremony DM has no originating channel
+   * (a ceremony must never be posted publicly), so `send` THROWS for anyone
+   * with DMs closed — there is no channel fallback. With one `notified_at` on
+   * the ceremony, a single unreachable participant means the ceremony is never
+   * marked, so every tick re-DMs everyone reachable (~8,600 duplicates each
+   * over the 24h TTL) and everyone after the failure in the loop never hears
+   * at all. Marking the ceremony done instead would silently drop that player
+   * from their own founding group, which this project refuses to do (see
+   * `notifyCompleted`: a real binding retries until it lands). Per participant,
+   * each retry targets exactly the person still owed a message.
+   */
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
+}, (t) => ({
+  uniqParticipant: uniqueIndex("ceremony_participants_uniq").on(t.ceremonyId, t.dayzId),
+}));
+
+/**
+ * A faction.
+ *
+ * ⚠️ Keyed on `server_id` alone, NOT `(server_id, map)`. `servers.map` already
+ * exists, so `server_id` determines the map; carrying both invites the two
+ * disagreeing. Per-map tenancy holds through the join.
+ *
+ * There is no `flag_pool` table. The 33 claimable textures are a constant in
+ * `@factions/domain`, and availability is that constant minus the rows here in
+ * a holding status — so the claim IS the allocation, and disbanding frees the
+ * flag with no bookkeeping.
+ */
+export const factions = pgTable("factions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  name: text("name").notNull(),
+  tag: text("tag").notNull(),
+  texture: text("texture").notNull(),
+  poleKey: text("pole_key").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  status: text("status").notNull(),
+  leaderDiscordId: text("leader_discord_id").notNull(),
+  /** Provenance: which ritual produced this faction. */
+  ceremonyId: bigint("ceremony_id", { mode: "number" }).references(() => ceremonies.id),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  reservedUntil: timestamp("reserved_until", { withTimezone: true }),
+  activatedAt: timestamp("activated_at", { withTimezone: true }),
+}, (t) => ({
+  statusValid: check("factions_status_valid",
+    sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),
+  // A reservation with no deadline is a permanent hole in a 33-slot pool.
+  reservedHasDeadline: check("factions_reserved_has_deadline",
+    sql`${t.status} <> 'reserved' OR ${t.reservedUntil} IS NOT NULL`),
+  // The three scarcity rules. All partial over the HOLDING statuses, so a
+  // lapsed or disbanded faction releases flag, tag and pole in one transition.
+  uniqTexture: uniqueIndex("factions_holding_texture_uniq")
+    .on(t.serverId, t.texture)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+  uniqTag: uniqueIndex("factions_holding_tag_uniq")
+    .on(t.serverId, sql`lower(${t.tag})`)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+  uniqPole: uniqueIndex("factions_holding_pole_uniq")
+    .on(t.serverId, t.poleKey)
+    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+}));
+
+/**
+ * The confirmed roster.
+ *
+ * Created in this plan only because activation must verify that the UID which
+ * raised the faction's flag is on it. No command manages membership yet — that
+ * is spec §6.
+ */
+export const factionMembers = pgTable("faction_members", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" })
+    .notNull().references(() => factions.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  role: text("role").notNull(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  roleValid: check("faction_members_role_valid",
+    sql`${t.role} IN ('leader','officer','member')`),
+  uniqMember: uniqueIndex("faction_members_uniq").on(t.factionId, t.dayzId),
+}));
+
+/**
+ * A claim in progress: name, tag and flag chosen, roster not yet confirmed.
+ * One draft per (ceremony, player) — a ceremony seats several participants
+ * and any of them may run the claim command, so each needs their own draft
+ * rather than colliding on the first one to insert.
+ *
+ * ⚠️ Needed because the pruning step is a second interaction. Discord custom
+ * ids cap at 100 characters, so a player-chosen faction name cannot ride along
+ * in one — the draft has to be durable. Deleted on confirm.
+ */
+export const claimDrafts = pgTable("claim_drafts", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  ceremonyId: bigint("ceremony_id", { mode: "number" })
+    .notNull().references(() => ceremonies.id, { onDelete: "cascade" }),
+  discordId: text("discord_id").notNull(),
+  name: text("name").notNull(),
+  tag: text("tag").notNull(),
+  texture: text("texture").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniqDraft: uniqueIndex("claim_drafts_ceremony_discord_uniq").on(t.ceremonyId, t.discordId),
+}));

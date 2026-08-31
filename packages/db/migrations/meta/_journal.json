@@ -43,6 +43,34 @@
       "when": 1787854967397,
       "tag": "0005_absent_wildside",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788214234866,
+      "tag": "0006_organic_adam_destine",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1788214392051,
+      "tag": "0007_solid_tarantula",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1788214547253,
+      "tag": "0008_good_catseye",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788217899977,
+      "tag": "0009_nasty_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

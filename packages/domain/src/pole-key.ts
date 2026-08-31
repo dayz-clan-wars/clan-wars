@@ -20,3 +20,25 @@ export function poleKey(at: Vec3): string {
   };
   return `${f(at.x)}:${f(at.y)}:${f(at.z)}`;
 }
+
+/**
+ * The inverse of `poleKey`. Returns null rather than throwing on a malformed
+ * key — parsing sits on a read path (e.g. reconstituting a ceremony's
+ * coordinates), and a bad key is the caller's data problem to decide how to
+ * handle, not a control-flow exception forced on every caller.
+ */
+export function parsePoleKey(key: string): Vec3 | null {
+  const parts = key.split(":");
+  if (parts.length !== 3) return null;
+  // `Number()` coercion is more permissive than it looks: `Number("")` and
+  // `Number(" ")` are 0, and `Number("0x10")`/`Number("1e5")` parse hex and
+  // scientific notation. None of those are forms `poleKey` ever emits, so
+  // validate the TEXT first — a plain decimal, optionally negative, optional
+  // fractional part — before coercing. Surrounding whitespace is trimmed
+  // first since it is harmless around a real number.
+  const DECIMAL = /^-?\d+(\.\d+)?$/;
+  const trimmed = parts.map((p) => p.trim());
+  if (!trimmed.every((p) => DECIMAL.test(p))) return null;
+  const [x, y, z] = trimmed.map(Number);
+  return { x: x!, y: y!, z: z! };
+}

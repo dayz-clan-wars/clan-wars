@@ -168,3 +168,60 @@ Recovery works, but the first attempt reads as a hard failure.
   event — one query per event (2,093 on the historical backfill) plus a
   `getAttempt` per (event x live challenge). Hoist per batch, invalidate on
   completion. Performance only; the invariant is currently correct.
+
+---
+
+# Carried forward from Plan 3's own build (2026-08-31)
+
+Plan 3 (ceremony detection and faction claim) is implemented. These were found
+during its review and consciously deferred rather than fixed.
+
+## 12. Activation cannot see a flag that is already flying
+
+`ceremonyTick` evaluates activation inline on the forward scan, and DayZ emits
+`flag.raised` only on the raise TRANSITION. A founder whose faction flag was
+already up at the pole — or who raises it in the gap between the detector
+consuming that event and the claim committing — can never activate, and nothing
+tells them why. The reservation lapses at 24h and the flag returns to the pool,
+so the 33-slot pool is safe; the cost is that the founding group loses its claim
+to a condition it cannot observe.
+
+Mitigated for now by copy only: the reservation reply tells founders to lower the
+flag first if it is already flying. A real fix needs either a bounded cursor
+rewind on activation or a reconciliation pass, and neither is worth building
+before a staged ceremony shows whether players actually hit this.
+
+## 13. A poisoned pole key logs forever
+
+If a `white_raises` row ever holds a pole key `parsePoleKey` rejects, phase 2
+logs and skips it on every tick — every 10 seconds, indefinitely. The wedge is
+gone (phase 3 still runs, so expiry and lapsing are unaffected), and the altitude
+bounds added to `parsePoleAt` mean no new such row can be created, so this is
+currently unreachable: `white_raises` holds zero rows in both the live and
+backfill databases. If it ever becomes reachable, apply the same once-per-key log
+discipline the ceremony notifier uses.
+
+## 14. `highWaterMark` is an event time, not an ingest time
+
+It is `max(occurred_at)`, so a single future-dated event pins the high-water mark
+ahead of the wall clock permanently — which silently collapses the two-clock rule
+to wall-clock-only, with no signal. Every settling and retirement decision rests
+on this value. Worth either clamping it to now, or tracking ingest time
+separately.
+
+## 15. Smaller items
+
+- `flagSuggestions` has no server context, so `/faction claim` autocomplete
+  offers all 33 flags including ones already held. Caught correctly downstream,
+  but it makes "already taken" the common path late in a server's life.
+- `white_raises.settled_at` is written from the wall clock or the window end
+  depending on whether the window qualified. Nothing reads it today; it is a
+  trap for the first query that does.
+- The roster-confirm select has no separate confirm button, so choosing in the
+  menu founds the faction. The spec (§6) called for a confirm step. Accepted
+  because the menu is ephemeral and only the claimant sees it.
+- `hasOpenCeremony`/`isPoleBound` before `settle`'s insert is a read-then-write,
+  safe only because `guardedRunner` serializes within one process. The README
+  already defers multi-instance operation to a Postgres advisory lock; that is
+  where this becomes real.
+

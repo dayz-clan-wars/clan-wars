@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "claim_drafts_ceremony_uniq";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "claim_drafts_ceremony_discord_uniq" ON "claim_drafts" USING btree ("ceremony_id","discord_id");

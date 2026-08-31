@@ -9,6 +9,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@factions/ceremony": "workspace:*",
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
     "@factions/event-log": "workspace:*",

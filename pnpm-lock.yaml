@@ -26,6 +26,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@factions/ceremony':
+        specifier: workspace:*
+        version: link:../../packages/ceremony
       '@factions/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -116,6 +119,15 @@ importers:
       '@factions/domain':
         specifier: workspace:*
         version: link:../domain
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/ceremony:
     devDependencies:
       typescript:
         specifier: ^5.6.0

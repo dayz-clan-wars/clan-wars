@@ -23,8 +23,8 @@ describe("discord wiring", () => {
   });
 
   describe("buildCommands", () => {
-    it("declares link, unlink and whoami", () => {
-      expect(buildCommands().map((c) => c.name).sort()).toEqual(["link", "unlink", "whoami"]);
+    it("declares link, unlink, whoami and faction", () => {
+      expect(buildCommands().map((c) => c.name).sort()).toEqual(["faction", "link", "unlink", "whoami"]);
     });
 
     it("gives every command a description", () => {

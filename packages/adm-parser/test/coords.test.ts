@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parsePlayerPos, parsePoleAt, inMapBounds } from "../src/index.js";
+import { parsePlayerPos, parsePoleAt, inMapBounds, inAltitudeBounds } from "../src/index.js";
 
 // Real line from production. Note the two orderings inside ONE line:
 //   player pos=<x, z, altitude>   pole at <x, altitude, z>
@@ -37,6 +37,23 @@ describe("parsePlayerPos", () => {
   it("rejects coordinates outside map bounds", () => {
     expect(parsePlayerPos(`Player "A" (id=${ID40} pos=<99999.0, 100.0, 5.0>)`)).toBeNull();
   });
+
+  it("rejects the off-map sentinel in the ALTITUDE slot", () => {
+    // ⚠️ The altitude was previously unvalidated, so this parsed. It reaches
+    // the ceremony detector as a pole key of "3000.00:-3.4028234663852886e+38:1100.00"
+    // — toFixed(2) gives up on exponential notation at 1e21 — which
+    // parsePoleKey then refuses, and the throw that follows wedged the whole
+    // tick for every server, forever.
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    expect(parsePlayerPos(`Player "A" (id=${ID40} pos=<3000.0, 1100.0, ${sentinel}>)`)).toBeNull();
+  });
+
+  it("rejects an altitude that would overflow numeric(12,2)", () => {
+    // The milder failure than the sentinel: 1e10 renders fine through
+    // toFixed(2), so the pole key parses — and then blows up on INSERT
+    // against numeric(12,2), which holds at most 10 digits before the point.
+    expect(parsePlayerPos(`Player "A" (id=${ID40} pos=<3000.0, 1100.0, 10000000000.0>)`)).toBeNull();
+  });
 });
 
 describe("parsePoleAt", () => {
@@ -53,6 +70,15 @@ describe("parsePoleAt", () => {
   it("returns null on a line with no TerritoryFlag clause", () => {
     expect(parsePoleAt('Player "A" (id=AB pos=<100.0, 200.0, 5.0>) folded Flag Pole')).toBeNull();
   });
+
+  it("rejects a pole whose altitude is the off-map sentinel", () => {
+    // The pole clause puts altitude in the MIDDLE, and this is the value that
+    // becomes the ceremony detector's pole key.
+    const sentinel = "-340282346638528859811704183484516925440.0";
+    const raw = `12:55:19 | Player "A" (id=${ID40} pos=<2993.0, 1139.0, 448.3>) ` +
+      `has raised Flag_White on TerritoryFlag at <2991.57, ${sentinel}, 1138.59>`;
+    expect(parsePoleAt(raw)).toBeNull();
+  });
 });
 
 describe("inMapBounds", () => {
@@ -64,6 +90,21 @@ describe("inMapBounds", () => {
   });
   it("accepts the far edge of the largest supported terrain (16384m)", () => {
     expect(inMapBounds(16384, 16384)).toBe(true);
+  });
+});
+
+describe("inAltitudeBounds", () => {
+  it("accepts a real pole altitude", () => {
+    expect(inAltitudeBounds(447.95)).toBe(true);
+  });
+  it("accepts an ocean-floor altitude", () => {
+    expect(inAltitudeBounds(-120)).toBe(true);
+  });
+  it("rejects the off-map sentinel", () => {
+    expect(inAltitudeBounds(-340282346638528859811704183484516925440.0)).toBe(false);
+  });
+  it("rejects an altitude that would overflow numeric(12,2)", () => {
+    expect(inAltitudeBounds(1e10)).toBe(false);
   });
 });
 
