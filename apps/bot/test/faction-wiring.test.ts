@@ -1,10 +1,12 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import {
   buildCommands, claimCustomId, parseClaimCustomId,
   planClaimReply, flagSuggestions, MAX_PRUNE_OPTIONS,
+  respondToClaimConfirm,
 } from "../src/discord.js";
-import type { FactionReply } from "../src/faction-commands.js";
+import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
+import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
 
 const participant = (n: number): Participant => ({
   dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
@@ -97,5 +99,64 @@ describe("flagSuggestions", () => {
   it("matches case-insensitively", () => {
     expect(flagSuggestions("ZENIT")).toContain("Flag_Zenit");
     expect(flagSuggestions("zenit")).toContain("Flag_Zenit");
+  });
+});
+
+describe("claim-confirm interaction", () => {
+  const now = new Date("2026-08-31T12:00:00Z");
+  const ceremony: OpenCeremony = {
+    id: 7, serverId: 1, poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
+    participants: [participant(0)],
+  };
+
+  const stub = (calls: string[]): FactionDeps => {
+    const store: FactionStore = {
+      openCeremonyFor: async () => { calls.push("openCeremonyFor"); return ceremony; },
+      openCeremonyByIdFor: async () => { calls.push("openCeremonyByIdFor"); return ceremony; },
+      textureHeld: async () => false,
+      saveDraft: async () => {},
+      loadDraft: async () => { calls.push("loadDraft"); return { name: "N", tag: "NN", texture: "Flag_Wolf" }; },
+      reserve: async () => { calls.push("reserve"); return "ok"; },
+    };
+    return { store, now: () => now, reservationTtlMs: 86_400_000 };
+  };
+
+  const interaction = (calls: string[], customId: string) => ({
+    customId,
+    userId: participant(0).discordId,
+    values: [participant(0).dayzId],
+    deferReply: vi.fn(async (_opts: { flags: number }) => { calls.push("deferReply"); }),
+    editReply: vi.fn(async (_opts: { content: string }) => { calls.push("editReply"); }),
+  });
+
+  it("defers before it touches the database", async () => {
+    // ⚠️ Confirming runs two queries plus a multi-statement transaction, and
+    // Discord's initial-response window is 3 seconds. Undeferred, a timeout
+    // lands in the worst possible order: reserve() has already committed, the
+    // flag is out of the 33-slot pool, and the player is told "The application
+    // did not respond".
+    const calls: string[] = [];
+    const i = interaction(calls, claimCustomId(7));
+    expect(await respondToClaimConfirm(stub(calls), i)).toBe(true);
+    expect(calls[0]).toBe("deferReply");
+    expect(calls).toContain("reserve");
+    expect(calls.indexOf("deferReply")).toBeLessThan(calls.indexOf("reserve"));
+  });
+
+  it("answers with editReply, because the response was already deferred", async () => {
+    const calls: string[] = [];
+    const i = interaction(calls, claimCustomId(7));
+    await respondToClaimConfirm(stub(calls), i);
+    expect(i.editReply).toHaveBeenCalledTimes(1);
+    expect(i.editReply.mock.calls[0]?.[0]).toMatchObject({ content: expect.stringMatching(/reserved/i) });
+  });
+
+  it("does not defer a component interaction that is not ours", async () => {
+    // Discord delivers every component interaction in the guild; deferring one
+    // we will not answer leaves someone else's menu showing "thinking".
+    const calls: string[] = [];
+    const i = interaction(calls, "some-other-menu");
+    expect(await respondToClaimConfirm(stub(calls), i)).toBe(false);
+    expect(i.deferReply).not.toHaveBeenCalled();
   });
 });

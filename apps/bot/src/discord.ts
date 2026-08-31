@@ -77,6 +77,38 @@ export async function routeComponent(deps: FactionDeps, i: ComponentLike): Promi
   return handleClaimConfirm(deps, i.userId, ceremonyId, i.values);
 }
 
+/** The subset of a select-menu interaction this handler needs. Structural so tests need no client. */
+export type SelectInteractionLike = ComponentLike & {
+  deferReply: (opts: { flags: number }) => Promise<unknown>;
+  editReply: (opts: { content: string }) => Promise<unknown>;
+};
+
+/**
+ * Answer a roster-confirm select. Returns false if the interaction is not ours.
+ *
+ * ⚠️ Deferred for the same reason `/faction claim` is, and with more at stake.
+ * The confirm runs two queries plus a multi-statement transaction against
+ * Discord's 3-second initial-response window, and a timeout here lands in the
+ * worst possible order: `reserve()` has already committed, the flag, tag and
+ * pole are out of the 33-slot pool, and the player is told "The application did
+ * not respond" — with nothing to tell them their faction in fact exists.
+ *
+ * The custom-id check comes FIRST: Discord delivers every component
+ * interaction in the guild, and deferring one we will never answer leaves
+ * someone else's menu stuck on "thinking".
+ */
+export async function respondToClaimConfirm(
+  deps: FactionDeps,
+  i: SelectInteractionLike,
+): Promise<boolean> {
+  if (parseClaimCustomId(i.customId) === null) return false;
+  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const reply = await routeComponent(deps, { customId: i.customId, userId: i.userId, values: i.values });
+  if (!reply) return false;
+  await i.editReply({ content: reply.content });
+  return true;
+}
+
 /** Discord's select-option cap, not our rule — see the "refuse" branch of `planClaimReply`. */
 export const MAX_PRUNE_OPTIONS = 25;
 
@@ -314,13 +346,13 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (interaction.isStringSelectMenu()) {
       try {
-        const reply = await routeComponent(factionDeps, {
+        await respondToClaimConfirm(factionDeps, {
           customId: interaction.customId,
           userId: interaction.user.id,
           values: interaction.values,
+          deferReply: (opts) => interaction.deferReply(opts),
+          editReply: (opts) => interaction.editReply(opts),
         });
-        if (!reply) return;
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
       } catch (err) {
         console.error(`component ${interaction.customId} failed`, err);
       }
