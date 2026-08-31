@@ -115,21 +115,36 @@ describe("ceremonyTick", () => {
     // claimed faction. The still-pending raises from before the claim must
     // not settle into a second ceremony at that now-bound pole — such a
     // ceremony could never be claimed, colliding with
-    // `factions_holding_pole_uniq`. Simulate the end state directly (a
-    // holding-status faction bound to P, with unsettled raises still sitting
-    // at P) rather than driving the full claim flow, since only the
-    // resulting state matters to this check.
+    // `factions_holding_pole_uniq`.
+    //
+    // The pole must still be FREE while the raises are recorded — phase 1's
+    // own `isPoleBound` check would otherwise skip recording them entirely,
+    // and phase 2 would then have nothing pending to prove anything with.
+    // So: record while free, tick once at a point where the window is not
+    // yet settleable (raises land as pending, nothing settles), THEN bind
+    // the pole, THEN advance the log past the window and tick again.
     await raise(UIDS[0]!, 0);
     await raise(UIDS[1]!, 1);
     await raise(UIDS[2]!, 2);
+
+    // First tick: log hasn't reached the window's end yet, so the raises are
+    // recorded but not yet settleable. Assert they are in fact pending —
+    // this is what makes the rest of the test honest.
+    const first = await tick(at(2));
+    expect(first.recorded).toBe(3);
+    expect(first.detected).toBe(0);
+    expect(await store.pendingRaises({ serverId, poleKey: POLE })).toHaveLength(3);
+
+    // Now the pole becomes bound — after the raises were already recorded as
+    // pending, exactly as it would after a claim.
     await db.insert(factions).values({
       serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
       x: "1.00", y: "2.00", z: "3.00", status: "reserved", leaderDiscordId: "999", createdAt: T0,
       reservedUntil: at(60 * 24),
     });
-    await raise(UIDS[0]!, 20); // advances the high-water mark past the window
-    const r = await tick();
-    expect(r.detected).toBe(0);
+    await raise(UIDS[0]!, 20); // advances the high-water mark past the window; skipped from recording, but that's fine — it only needs to move highWaterMark
+    const second = await tick(at(20));
+    expect(second.detected).toBe(0);
     expect(await db.select().from(ceremonies)).toHaveLength(0);
     expect(await store.pendingRaises({ serverId, poleKey: POLE })).toHaveLength(0);
   });
