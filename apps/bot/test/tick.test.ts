@@ -213,6 +213,29 @@ describe("verificationTick", () => {
     expect(await store.findLinkByDiscord("100")).toBeNull();
   });
 
+  it("locks out a partial sweep before it can cover a sequence", async () => {
+    // The sweep test above proves the budget stops an EXHAUSTIVE sweep. It does
+    // not prove the budget is tight enough, and at 12 it was not: because
+    // matching holds on mismatch, a run of n distinct emotes covers every
+    // ordered length-k subsequence of itself — C(12, 3) = 220 of 21,924
+    // sequences, ~1%, charged against every live challenge at once. A hit binds
+    // the ATTACKER's UID to the victim's Discord account, and the victim is
+    // then DM'd "Verified".
+    //
+    // So: a run whose only occurrence of the challenge sequence lies past the
+    // budget must not complete it. This fixture is that run — the sequence sits
+    // in the tail, reachable within 12 emotes but not within 8.
+    const pool = safeVerificationEmotes().map((e) => e.token);
+    const filler = pool.filter((t) => !SEQ.includes(t)).slice(0, 8);
+    expect(filler).toHaveLength(8);
+    await issue();
+    for (const t of [...filler, ...SEQ]) await emote(UID_A, t);
+    const r = await tick();
+    expect(r.verified, "the sequence lies past the budget and must not complete").toBe(0);
+    expect(r.lockedOut).toBeGreaterThan(0);
+    expect(await store.findLinkByDiscord("100")).toBeNull();
+  });
+
   it("still verifies a legitimate player who fumbles a few emotes first", async () => {
     // The budget must not punish normal play: a few wrong emotes, then the
     // right three in order. SEQ is EmoteSalute/EmoteClap/EmoteDance, so use

@@ -9,11 +9,23 @@ const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
 /**
  * How many safe-pool emotes one UID may spend on one challenge.
  *
- * A legitimate player needs three plus a few misfires. The sweep in C2 needs
- * 87. Twelve separates them with room to spare. Raise it if players report
- * being locked out; do not remove it.
+ * ⚠️ Paired with the sequence length; neither is safe to change alone. Because
+ * matching holds on a mismatch, a run of n distinct emotes completes any
+ * challenge whose sequence is an ordered subsequence of it — so one run covers
+ * C(n, length) sequences, against every live challenge simultaneously. This
+ * budget is what keeps n small.
+ *
+ * Stopping the exhaustive 87-emote sweep is not the bar. At length 3, twelve
+ * cleared C(12,3) = 220 of 21,924 sequences — ~1% per challenge, per run, and
+ * a hit binds the ATTACKER's UID to the victim's Discord account while the
+ * victim is DM'd "Verified". At length 4, eight clears C(8,4) = 70 of 570,024:
+ * ~0.01%.
+ *
+ * A legitimate player needs four plus a few misfires. Raise it if players
+ * report being locked out — but raise the sequence length with it, and do not
+ * remove it.
  */
-export const MAX_POOL_EMOTES_PER_ATTEMPT = 12;
+export const MAX_POOL_EMOTES_PER_ATTEMPT = 8;
 
 /**
  * ⚠️ Distinct from the projector's "pole-projector". Two consumers sharing a

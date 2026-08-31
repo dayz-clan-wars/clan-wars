@@ -8,7 +8,17 @@ import { safeVerificationEmotes } from "@factions/domain";
  * ambiguous to a player watching their own emote wheel, and shortens the
  * effective search space.
  */
-export function generateSequence(rng: () => number, length = 3): string[] {
+/**
+ * ⚠️ Length is a SECURITY parameter. Matching holds progress on a mismatch, so
+ * a challenge completes iff its sequence is a subsequence of what the player
+ * performed — meaning one run of n distinct emotes covers C(n, length)
+ * sequences at once, and is charged against every live challenge at once. At
+ * length 3 the emote budget's runs covered ~1% of the 21,924 available
+ * sequences per challenge, which is a real chance of binding an attacker's UID
+ * to someone else's Discord account. Four takes the space to 570,024. Shorten
+ * it only alongside a matching cut to MAX_POOL_EMOTES_PER_ATTEMPT.
+ */
+export function generateSequence(rng: () => number, length = 4): string[] {
   const avail = safeVerificationEmotes().map((e) => e.token);
   const chosen: string[] = [];
   for (let i = 0; i < length && avail.length > 0; i++) {

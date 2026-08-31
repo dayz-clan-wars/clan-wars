@@ -13,8 +13,15 @@ describe("generateSequence", () => {
     expect(generateSequence(seeded([0, 0, 0]), 3)).toHaveLength(3);
   });
 
-  it("defaults to length 3", () => {
-    expect(generateSequence(seeded([0, 0, 0]))).toHaveLength(3);
+  it("defaults to length 4", () => {
+    // Length is a security parameter, not a UX one. Matching holds on
+    // mismatch, so a challenge completes iff its sequence is a SUBSEQUENCE of
+    // what the player performed — a run of n distinct emotes therefore covers
+    // C(n, length) sequences at once, against every live challenge at once.
+    // At length 3 the pool offers 29*28*27 = 21,924 sequences and the emote
+    // budget's C(budget, 3) runs cover ~1% of them per challenge. Length 4
+    // takes the space to 570,024 and the coverage to ~0.01%.
+    expect(generateSequence(seeded([0, 0, 0]))).toHaveLength(4);
   });
 
   it("never repeats an emote within a sequence", () => {

@@ -698,7 +698,7 @@ invite rule ("invitee must have a linked gamertag") both rest on this section.
 
 **Emote-sequence verification, Discord-only, bound to the UID.**
 
-A player runs `/link`. The bot privately shows a random ordered sequence of three emotes. The
+A player runs `/link`. The bot privately shows a random ordered sequence of four emotes. The
 player performs them in-game, in order. A consumer reading the event log watches for a UID that
 completes a live sequence, and binds that UID to the Discord account the challenge was issued to.
 
@@ -730,14 +730,14 @@ trust. The gamertag is still captured, as a display label only.
 
 | Rule | Value | Rationale |
 |---|---|---|
-| Sequence length | 3 emotes, distinct, ordered | 29 safe tokens → 21,924 ordered sequences |
+| Sequence length | 4 emotes, distinct, ordered | 29 safe tokens → 570,024 ordered sequences. Length is a security parameter: hold-on-mismatch means one run of n distinct emotes covers C(n, length) sequences at once |
 | Challenge expiry | 10 minutes | Long enough to find the emote wheel, short enough to bound guessing |
 | Concurrent-sequence collision | Reject issuance of a sequence already outstanding | Two live challenges sharing a sequence would bind the wrong UID |
 | Matching | In-order subsequence; non-matching emotes are ignored | A player mis-clicking should not have to restart |
 | One UID | One Discord account, and vice versa | Enforced by unique index, not by convention |
 | Re-link | Requires unlinking first | Prevents silently moving a roster identity |
 | Unsafe emotes | Excluded from the pool | `EmoteSitA` is 77% of all emote lines in the export; `EmoteSuicide` carries a gameplay penalty |
-| Emote budget per attempt | 12 safe-pool emotes per (challenge, UID) | Hold-on-mismatch means an exhaustive sweep of the pool completes any sequence; a budget is what makes the issued sequence secret in practice |
+| Emote budget per attempt | 8 safe-pool emotes per (challenge, UID) | Hold-on-mismatch means an exhaustive sweep of the pool completes any sequence; a budget is what makes the issued sequence secret in practice. Blocking the exhaustive sweep is not the bar — a PARTIAL sweep of n emotes covers C(n, length) sequences against every live challenge at once, so budget and length are one dial: 8-of-4 clears 70 of 570,024 (~0.01%), where 12-of-3 cleared 220 of 21,924 (~1%) |
 
 **Verification is a prerequisite for every faction command.** An unlinked Discord account cannot
 claim, be invited, or hold a role. This is what makes §6's roster a roster of real players.
