@@ -67,9 +67,6 @@ export function settleWindows(
   return out;
 }
 
-export function qualifies(w: SettledWindow, min?: number): boolean {
-  // When used with Array.some(), the second parameter will be the array index.
-  // Only use min if it's a reasonable minimum participant count (>= MIN_PARTICIPANTS).
-  const effectiveMin = (min !== undefined && min >= MIN_PARTICIPANTS) ? min : MIN_PARTICIPANTS;
-  return w.participants.length >= effectiveMin;
+export function qualifies(w: SettledWindow, min: number = MIN_PARTICIPANTS): boolean {
+  return w.participants.length >= min;
 }

@@ -50,7 +50,8 @@ describe("settleWindows", () => {
     expect(windows).toHaveLength(2);
     expect(windows[0]!.participants.sort()).toEqual(["A", "B"]);
     expect(windows[1]!.participants).toEqual(["C"]);
-    expect(windows.some(qualifies)).toBe(false);
+    // Wrap qualifies in arrow to avoid Array.some passing array index as min parameter
+    expect(windows.some((w) => qualifies(w))).toBe(false);
   });
 
   it("excludes a raise landing exactly on the window end", () => {
