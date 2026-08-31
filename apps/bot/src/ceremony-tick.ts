@@ -25,6 +25,10 @@ export type CeremonyTickResult = {
   settled: number;
   /** ceremonies created. */
   detected: number;
+  /** reservations activated. */
+  activated: number;
+  /** reservations lapsed. */
+  lapsed: number;
 };
 
 type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
@@ -48,7 +52,7 @@ export async function ceremonyTick(
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   const ttl = opts.provisionalTtlMs ?? PROVISIONAL_TTL_MS;
-  const out: CeremonyTickResult = { scanned: 0, recorded: 0, settled: 0, detected: 0 };
+  const out: CeremonyTickResult = { scanned: 0, recorded: 0, settled: 0, detected: 0, activated: 0, lapsed: 0 };
 
   // Phase 1 — record. The cursor advances here and only here.
   let cursor = await readCursor(db, CEREMONY_CONSUMER);
@@ -62,9 +66,19 @@ export async function ceremonyTick(
       // A malformed payload is a parser bug, not a reason to stall the cursor.
       if (!p) continue;
       out.scanned++;
-      if (p.texture !== NEUTRAL_FLAG) continue;
-
       const pole: PoleRef = { serverId: ev.serverId, poleKey: p.poleKey };
+
+      // Activation: a reserved faction comes alive when its own flag goes up at
+      // its own pole, raised by someone on its roster. Everything needed is
+      // already in the event being read.
+      if (p.texture !== NEUTRAL_FLAG) {
+        const reserved = await store.reservedFactionAt(pole, p.texture);
+        if (reserved && await store.isRosterMember(reserved.id, p.dayzId)) {
+          if (await store.activate(reserved.id, ev.occurredAt)) out.activated++;
+        }
+        continue;
+      }
+
       if (await store.isPoleBound(pole)) continue;
       // Linkage is checked at PROCESSING time, not at raise time: someone who
       // links shortly after the ceremony still counts. The forgiving reading,
@@ -127,12 +141,13 @@ export async function ceremonyTick(
     }
   }
 
-  // Phase 3 — expire. Both clocks must have passed the deadline.
+  // Phase 3 — expire and lapse. BOTH clocks must have passed the deadline.
   //
-  // ⚠️ The log-clock half is not redundant. If ingest stalls, wall-clock-only
-  // expiry retires a ceremony whose claim window we never had the chance to
-  // observe.
-  for (const serverId of await store.openCeremonyServers()) {
+  // ⚠️ The log-clock half is not redundant. If ingest stalls for a day,
+  // wall-clock-only expiry retires a ceremony whose claim window we never had
+  // the chance to observe, and lapses a faction that DID raise its flag.
+  const tickServers = new Set([...await store.openCeremonyServers(), ...await store.reservedServers()]);
+  for (const serverId of tickServers) {
     const highWater = await store.highWaterMark(serverId);
     if (!highWater) continue;
     const cutoff = highWater.getTime() < now.getTime() ? highWater : now;
@@ -143,6 +158,7 @@ export async function ceremonyTick(
         eq(ceremonies.status, "provisional"),
         lte(ceremonies.expiresAt, cutoff),
       ));
+    out.lapsed += await store.lapseReservations(serverId, cutoff);
   }
 
   return out;

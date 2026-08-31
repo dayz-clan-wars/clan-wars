@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { whiteRaises, ceremonies, ceremonyParticipants, factions, identityLinks, events } from "@factions/db";
+import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionMembers, identityLinks, events } from "@factions/db";
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
 import { parsePoleKey } from "@factions/domain";
-import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, max } from "drizzle-orm";
 
 export type PoleRef = { serverId: number; poleKey: string };
 export type RecordedRaise = PoleRef & {
@@ -23,6 +23,11 @@ export interface CeremonyStore {
   hasOpenCeremony(p: PoleRef): Promise<boolean>;
   settle(p: PoleRef, w: SettledWindow, create: CeremonyDraft | null): Promise<number | null>;
   openCeremonyServers(): Promise<number[]>;
+  reservedFactionAt(p: PoleRef, texture: string): Promise<{ id: number } | null>;
+  isRosterMember(factionId: number, dayzId: string): Promise<boolean>;
+  activate(factionId: number, at: Date): Promise<boolean>;
+  lapseReservations(serverId: number, cutoff: Date): Promise<number>;
+  reservedServers(): Promise<number[]>;
 }
 
 export class PgCeremonyStore implements CeremonyStore {
@@ -150,5 +155,49 @@ export class PgCeremonyStore implements CeremonyStore {
       }
       return ceremonyId;
     });
+  }
+
+  async reservedFactionAt(p: PoleRef, texture: string): Promise<{ id: number } | null> {
+    const [row] = await this.db.select({ id: factions.id }).from(factions)
+      .where(and(
+        eq(factions.serverId, p.serverId),
+        eq(factions.poleKey, p.poleKey),
+        eq(factions.texture, texture),
+        eq(factions.status, "reserved"),
+      ));
+    return row ?? null;
+  }
+
+  async isRosterMember(factionId: number, dayzId: string): Promise<boolean> {
+    const [row] = await this.db.select({ id: factionMembers.id }).from(factionMembers)
+      .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.dayzId, dayzId)));
+    return row !== undefined;
+  }
+
+  /** Guarded on `reserved`: a concurrent lapse must not be overwritten. */
+  async activate(factionId: number, at: Date): Promise<boolean> {
+    const done = await this.db.update(factions)
+      .set({ status: "active", activatedAt: at, reservedUntil: null })
+      .where(and(eq(factions.id, factionId), eq(factions.status, "reserved")))
+      .returning({ id: factions.id });
+    return done.length > 0;
+  }
+
+  async lapseReservations(serverId: number, cutoff: Date): Promise<number> {
+    const done = await this.db.update(factions)
+      .set({ status: "lapsed" })
+      .where(and(
+        eq(factions.serverId, serverId),
+        eq(factions.status, "reserved"),
+        lte(factions.reservedUntil, cutoff),
+      ))
+      .returning({ id: factions.id });
+    return done.length;
+  }
+
+  async reservedServers(): Promise<number[]> {
+    const rows = await this.db.selectDistinct({ serverId: factions.serverId })
+      .from(factions).where(eq(factions.status, "reserved"));
+    return rows.map((r) => r.serverId);
   }
 }
