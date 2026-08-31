@@ -49,8 +49,14 @@ export type Sender = (n: Notification) => Promise<void>;
 // Retrying forever is correct — the binding is real, and the message should
 // land the moment it can — but logging every tick forever for a player who
 // will never be reachable is not. Log each challenge's failure once per
-// process rather than on every retry.
-const loggedNotifyFailures = new Set<number>();
+// notifier rather than on every retry.
+//
+// ⚠️ Owned by the caller, not this module. Module-level state would be shared
+// by every bot instance in the process AND by every test file in one module
+// registry — and since challenge ids restart at 1 after a truncate, one
+// suite's logged id silently suppresses another's expected log.
+export type NotifyFailureLog = Set<number>;
+export const createNotifyFailureLog = (): NotifyFailureLog => new Set<number>();
 
 /**
  * Tell each newly verified player, exactly once.
@@ -59,7 +65,11 @@ const loggedNotifyFailures = new Set<number>();
  * DMs, a deleted channel, a rate limit — leaves the row pending so the next
  * pass retries, rather than marking it done and dropping the message.
  */
-export async function notifyCompleted(deps: CommandDeps, send: Sender): Promise<number> {
+export async function notifyCompleted(
+  deps: CommandDeps,
+  send: Sender,
+  loggedFailures: NotifyFailureLog = createNotifyFailureLog(),
+): Promise<number> {
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
     try {
@@ -69,11 +79,15 @@ export async function notifyCompleted(deps: CommandDeps, send: Sender): Promise<
         content: "Verified — your Discord account is now linked to your character.",
       });
       await deps.store.markNotified(c.id, deps.now());
+      // A challenge that got through stops being a candidate for suppression:
+      // markNotified normally retires it, but a send that succeeds while
+      // markNotified fails must be able to report a later failure.
+      loggedFailures.delete(c.id);
       sent++;
     } catch (err) {
-      if (!loggedNotifyFailures.has(c.id)) {
+      if (!loggedFailures.has(c.id)) {
         console.error(`notify failed for challenge ${c.id}`, err);
-        loggedNotifyFailures.add(c.id);
+        loggedFailures.add(c.id);
       }
     }
   }
@@ -179,6 +193,9 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
   };
 
+  // One log per bot instance, for the life of that instance.
+  const notifyFailures = createNotifyFailureLog();
+
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
@@ -187,7 +204,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (r.verified > 0 || r.alreadyLinked > 0) {
         console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
       }
-      await notifyCompleted(deps, send);
+      await notifyCompleted(deps, send, notifyFailures);
     } catch (err) {
       // A thrown tick must not kill the interval and silently stop all verification.
       console.error("tick failed", err);

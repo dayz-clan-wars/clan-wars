@@ -109,6 +109,44 @@ describe("discord wiring", () => {
     });
   });
 
+  describe("notify failure logging", () => {
+    const complete = async (discordId: string, uid: string) => {
+      const c = await store.createChallenge({
+        discordId, guildId: "g", channelId: "c",
+        sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+      });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, uid, "Steve", now);
+    };
+
+    it("logs one failing challenge once, however many times it is retried", async () => {
+      await complete("100", UID_A);
+      const send = vi.fn().mockRejectedValue(new Error("DMs closed"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      const seen = new Set<number>();
+      await notifyCompleted(deps, send, seen);
+      await notifyCompleted(deps, send, seen);
+      await notifyCompleted(deps, send, seen);
+      expect(send).toHaveBeenCalledTimes(3);
+      expect(logged).toHaveBeenCalledTimes(1);
+      logged.mockRestore();
+    });
+
+    it("keeps one caller's failure log from silencing another's", async () => {
+      // Module-level state is shared by every bot instance in the process and
+      // by every test file in one module registry. Challenge ids restart at 1
+      // after a truncate, so a suppressed log is a cross-suite failure that
+      // only appears when the suites run together.
+      await complete("100", UID_A);
+      const send = vi.fn().mockRejectedValue(new Error("DMs closed"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      await notifyCompleted(deps, send, new Set<number>());
+      await notifyCompleted(deps, send, new Set<number>());
+      expect(logged).toHaveBeenCalledTimes(2);
+      logged.mockRestore();
+    });
+  });
+
   describe("guardedRunner", () => {
     it("skips a firing while the previous run is still in flight", async () => {
       let resolve!: () => void;
