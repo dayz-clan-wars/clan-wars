@@ -64,6 +64,13 @@
       "when": 1788214547253,
       "tag": "0008_good_catseye",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1788217899977,
+      "tag": "0009_nasty_daimon_hellstrom",
+      "breakpoints": true
     }
   ]
 }

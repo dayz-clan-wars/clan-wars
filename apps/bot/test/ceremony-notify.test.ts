@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, ceremonies, ceremonyParticipants, type Database } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { sql, asc } from "drizzle-orm";
 import { formatCeremonyDm, notifyCeremonies } from "../src/ceremony-notify.js";
 
 const URL = requireTestDatabaseUrl();
@@ -51,6 +51,53 @@ describe("ceremony notification", () => {
     expect(send).toHaveBeenCalledTimes(3);
     expect(await notifyCeremonies(db, send, () => now)).toBe(0);
     expect(send).toHaveBeenCalledTimes(3);
+  });
+
+  it("delivers to the reachable participants even when one has closed DMs", async () => {
+    // One closed DM must not silence the rest of the founding group: the
+    // whole point of the DM is that any one of them can run /faction claim.
+    await detected(3);
+    const send = vi.fn(async (n: { discordId: string }) => {
+      if (n.discordId === "101") throw new Error("DMs closed");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await notifyCeremonies(db, send, () => now);
+    expect(send.mock.calls.map((c) => c[0].discordId).sort()).toEqual(["100", "101", "102"]);
+    logged.mockRestore();
+  });
+
+  it("re-sends only to the participant who failed", async () => {
+    // Per-participant tracking is the whole reason `notified_at` lives on the
+    // participant: retrying the ceremony as a unit re-DMs everyone who already
+    // heard, once per tick, for the 24h life of the ceremony.
+    await detected(3);
+    const send = vi.fn(async (n: { discordId: string }) => {
+      if (n.discordId === "101") throw new Error("DMs closed");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    await notifyCeremonies(db, send, () => now);
+    send.mockClear();
+    send.mockResolvedValue(undefined);
+    await notifyCeremonies(db, send, () => now);
+    expect(send.mock.calls.map((c) => c[0].discordId)).toEqual(["101"]);
+    logged.mockRestore();
+  });
+
+  it("holds the ceremony's notifiedAt until every participant is delivered", async () => {
+    await detected(3);
+    const send = vi.fn(async (n: { discordId: string }) => {
+      if (n.discordId === "101") throw new Error("DMs closed");
+    });
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    expect(await notifyCeremonies(db, send, () => now)).toBe(0);
+    expect((await db.select().from(ceremonies))[0]?.notifiedAt).toBeNull();
+    const marked = await db.select().from(ceremonyParticipants).orderBy(asc(ceremonyParticipants.id));
+    expect(marked.map((p) => p.notifiedAt !== null)).toEqual([true, false, true]);
+
+    send.mockResolvedValue(undefined);
+    expect(await notifyCeremonies(db, send, () => now)).toBe(1);
+    expect((await db.select().from(ceremonies))[0]?.notifiedAt).toEqual(now);
+    logged.mockRestore();
   });
 
   it("leaves the ceremony pending when a send fails", async () => {

@@ -310,6 +310,22 @@ export const ceremonyParticipants = pgTable("ceremony_participants", {
   dayzId: text("dayz_id").notNull(),
   discordId: text("discord_id").notNull(),
   gamertag: text("gamertag").notNull(),
+  /**
+   * When THIS participant's DM landed.
+   *
+   * ⚠️ Delivery is tracked per participant, not per ceremony, because the two
+   * failure modes are not the same. A ceremony DM has no originating channel
+   * (a ceremony must never be posted publicly), so `send` THROWS for anyone
+   * with DMs closed — there is no channel fallback. With one `notified_at` on
+   * the ceremony, a single unreachable participant means the ceremony is never
+   * marked, so every tick re-DMs everyone reachable (~8,600 duplicates each
+   * over the 24h TTL) and everyone after the failure in the loop never hears
+   * at all. Marking the ceremony done instead would silently drop that player
+   * from their own founding group, which this project refuses to do (see
+   * `notifyCompleted`: a real binding retries until it lands). Per participant,
+   * each retry targets exactly the person still owed a message.
+   */
+  notifiedAt: timestamp("notified_at", { withTimezone: true }),
 }, (t) => ({
   uniqParticipant: uniqueIndex("ceremony_participants_uniq").on(t.ceremonyId, t.dayzId),
 }));
