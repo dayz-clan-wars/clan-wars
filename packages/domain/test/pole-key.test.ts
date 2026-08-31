@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { poleKey } from "../src/index.js";
+import { poleKey, parsePoleKey } from "../src/index.js";
 
 describe("poleKey", () => {
   it("rounds to 1cm and joins with colons", () => {
@@ -27,5 +27,33 @@ describe("poleKey", () => {
     const b = poleKey({ x: -0.001, y: 0, z: 0 });
     expect(a).toBe(b);
     expect(a).toBe("0.00:0.00:0.00");
+  });
+});
+
+describe("parsePoleKey", () => {
+  it("round-trips through poleKey", () => {
+    const key = poleKey({ x: 2991.57, y: 447.95, z: 1138.59 });
+    expect(parsePoleKey(key)).toEqual({ x: 2991.57, y: 447.95, z: 1138.59 });
+  });
+
+  it("round-trips a negative coordinate", () => {
+    const key = poleKey({ x: 100, y: 0, z: -5.1 });
+    expect(parsePoleKey(key)).toEqual({ x: 100, y: 0, z: -5.1 });
+  });
+
+  it("returns null for too few parts", () => {
+    expect(parsePoleKey("1.00:2.00")).toBeNull();
+  });
+
+  it("returns null for too many parts", () => {
+    expect(parsePoleKey("1.00:2.00:3.00:4.00")).toBeNull();
+  });
+
+  it("returns null for a non-numeric part", () => {
+    expect(parsePoleKey("1.00:abc:3.00")).toBeNull();
+  });
+
+  it("returns null for an empty string", () => {
+    expect(parsePoleKey("")).toBeNull();
   });
 });

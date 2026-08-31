@@ -110,6 +110,23 @@ describe("PgCeremonyStore", () => {
     expect(await store.hasOpenCeremony(p)).toBe(true);
   });
 
+  it("stores the ceremony's coordinates parsed from its pole key", async () => {
+    await record(UID_A, 0);
+    await record(UID_B, 1);
+    const p = { serverId, poleKey: POLE };
+    const raises = await store.pendingRaises(p);
+    const window = { start: now, end: new Date(now.getTime() + 600_000), raises, participants: [UID_A, UID_B] };
+    const id = await store.settle(p, window, {
+      detectedAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
+      participants: [
+        { dayzId: UID_A, discordId: "100", gamertag: "Steve" },
+        { dayzId: UID_B, discordId: "200", gamertag: "Bob" },
+      ],
+    });
+    const [row] = await db.select().from(ceremonies).where(eq(ceremonies.id, id!));
+    expect(row).toMatchObject({ x: "1.00", y: "2.00", z: "3.00" });
+  });
+
   it("consumes the raises of a window that produced no ceremony", async () => {
     // A window that fell short must not be re-settled forever, and its raises
     // must not leak into the next window — that is what makes windows

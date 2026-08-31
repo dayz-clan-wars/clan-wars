@@ -1,7 +1,8 @@
 import type { Database } from "@factions/db";
 import { whiteRaises, ceremonies, ceremonyParticipants, factions, identityLinks, events } from "@factions/db";
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
-import { and, asc, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import { parsePoleKey } from "@factions/domain";
+import { and, asc, eq, inArray, isNull, max } from "drizzle-orm";
 
 export type PoleRef = { serverId: number; poleKey: string };
 export type RecordedRaise = PoleRef & {
@@ -102,19 +103,23 @@ export class PgCeremonyStore implements CeremonyStore {
    * ceremony still consumes its raises — that is what keeps windows
    * non-overlapping in the database as well as in the pure function.
    *
-   * ⚠️ `x`/`y`/`z` are NOT NULL on `ceremonies` but nothing in `SettledWindow`
-   * or `QualifyingRaise` carries a position — flag-raise events don't record
-   * one. Until the ingest side threads coordinates through, this writes
-   * "0.00" placeholders; see task-5-report.md for the concern.
+   * ⚠️ `x`/`y`/`z` are NOT NULL on `ceremonies`. `poleKey` is exactly
+   * `${x}:${y}:${z}` (see `@factions/domain`'s `poleKey`/`parsePoleKey`), so
+   * the coordinates are recovered from `p.poleKey` rather than duplicated
+   * elsewhere. A pole key that fails to parse is an upstream data defect, not
+   * something to paper over with a placeholder — this throws instead of
+   * inserting a ceremony with bogus coordinates.
    */
   async settle(p: PoleRef, w: SettledWindow, create: CeremonyDraft | null): Promise<number | null> {
     const eventIds = w.raises.map((r) => r.eventId);
     return this.db.transaction(async (tx) => {
       let ceremonyId: number | null = null;
       if (create) {
+        const at = parsePoleKey(p.poleKey);
+        if (!at) throw new Error(`settle: malformed pole key "${p.poleKey}"`);
         const [row] = await tx.insert(ceremonies).values({
           serverId: p.serverId, poleKey: p.poleKey,
-          x: "0.00", y: "0.00", z: "0.00",
+          x: at.x.toFixed(2), y: at.y.toFixed(2), z: at.z.toFixed(2),
           windowStart: w.start, windowEnd: w.end, status: "provisional",
           detectedAt: create.detectedAt, expiresAt: create.expiresAt,
         }).returning({ id: ceremonies.id });
@@ -124,9 +129,11 @@ export class PgCeremonyStore implements CeremonyStore {
         );
       }
       if (eventIds.length > 0) {
+        // Guarded on `settledAt IS NULL` so this write is a no-op on an
+        // already-settled raise rather than a pre-read-then-write race.
         await tx.update(whiteRaises)
           .set({ settledAt: create?.detectedAt ?? w.end })
-          .where(inArray(whiteRaises.eventId, eventIds));
+          .where(and(inArray(whiteRaises.eventId, eventIds), isNull(whiteRaises.settledAt)));
       }
       return ceremonyId;
     });
