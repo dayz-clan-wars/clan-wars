@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, identityLinks, factions, ceremonies, ceremonyParticipants, type Database } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
 import { sql, eq } from "drizzle-orm";
@@ -187,6 +187,55 @@ describe("ceremonyTick", () => {
     await tick(at(60 * 48));
     const [c] = await db.select().from(ceremonies);
     expect(c?.status).toBe("expired");
+  });
+
+  // ⚠️ `settle` refuses to invent coordinates for a pole key it cannot parse,
+  // and it is right to. But that throw used to escape ceremonyTick entirely:
+  // phase 3 (expiry AND reservation lapse) never ran, and because the poisoned
+  // raises were never consumed the same pole threw again on the next tick, and
+  // every tick after — forever, for every server. Every reserved faction then
+  // held its flag, tag and pole out of the 33-slot pool permanently, which is
+  // exactly the failure the reservation lifecycle exists to prevent.
+  //
+  // The key is reachable: an unvalidated altitude of DayZ's off-map sentinel
+  // renders through toFixed(2) as e-notation, which parsePoleKey rejects.
+  const POISON = "3000.00:-3.4028234663852886e+38:1100.00";
+
+  it("settles a healthy pole even when another pole's key cannot be parsed", async () => {
+    for (const [i, m] of [0, 1, 2].entries()) await raise(UIDS[i]!, m, "Flag_White", POISON);
+    for (const [i, m] of [0, 1, 2].entries()) await raise(UIDS[i]!, m);
+    await raise(UIDS[0]!, 20);
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await tick();
+    expect(r.detected).toBe(1);
+    expect((await db.select().from(ceremonies)).map((c) => c.poleKey)).toEqual([POLE]);
+    expect(logged).toHaveBeenCalled();
+    logged.mockRestore();
+  });
+
+  it("still expires and lapses when a pole key cannot be parsed", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: "9:9:9",
+      x: "9.00", y: "9.00", z: "9.00", status: "reserved", leaderDiscordId: "999",
+      createdAt: T0, reservedUntil: at(10),
+    }).returning();
+    const [c] = await db.insert(ceremonies).values({
+      serverId, poleKey: "8:8:8", x: "8.00", y: "8.00", z: "8.00",
+      windowStart: T0, windowEnd: T0, status: "provisional",
+      detectedAt: T0, expiresAt: at(10),
+    }).returning();
+
+    // A poisoned pole with a settleable window, sitting in phase 2 ahead of
+    // phase 3.
+    for (const [i, m] of [0, 1, 2].entries()) await raise(UIDS[i]!, m, "Flag_White", POISON);
+    await raise(UIDS[0]!, 60 * 48, "Flag_White", POISON); // advances the log two days
+
+    const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+    const r = await tick(at(60 * 48));
+    expect(r.lapsed).toBe(1);
+    expect((await db.select().from(ceremonies).where(eq(ceremonies.id, c!.id)))[0]?.status).toBe("expired");
+    expect((await db.select().from(factions).where(eq(factions.id, f!.id)))[0]?.status).toBe("lapsed");
+    logged.mockRestore();
   });
 
   it("does not expire a ceremony the log has not caught up to", async () => {

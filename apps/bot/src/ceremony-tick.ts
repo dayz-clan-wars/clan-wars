@@ -96,48 +96,20 @@ export async function ceremonyTick(
 
   // Phase 2 — settle. Separate from phase 1 on purpose: the raises are already
   // durable, so a throw here loses nothing and the next pass settles them.
+  //
+  // ⚠️ Each pole is handled inside its own try/catch, and that is load-bearing.
+  // `settle` refuses to invent coordinates for a pole key it cannot parse —
+  // correctly — but an escaping throw took the WHOLE tick with it. Phase 3
+  // never ran, so nothing expired and no reservation ever lapsed; and since
+  // the poisoned raises were never consumed, the same pole threw again on the
+  // next tick and every tick after, forever, for every server on the box. A
+  // permanent hole in the 33-flag pool is the exact failure the reservation
+  // lifecycle exists to prevent, so one bad pole is logged and skipped.
   for (const pole of await store.polesWithPendingRaises()) {
-    const highWater = await store.highWaterMark(pole.serverId);
-    if (!highWater) continue;
-    const pending = await store.pendingRaises(pole);
-    for (const w of settleWindows(pending, highWater)) {
-      out.settled++;
-      // While a ceremony is outstanding at this pole, windows are consumed but
-      // never create. Otherwise a pole under sustained White raises would try
-      // to insert a ceremony every window and the partial unique index would
-      // surface each as an error rather than the no-op it is.
-      //
-      // ⚠️ `isPoleBound` must be re-checked here, even though phase 1 already
-      // checked it at record time. That earlier check is not enough: raises
-      // recorded while the pole was unbound can still be sitting unsettled
-      // when the pole becomes bound in between, because
-      // `ceremonies_open_pole_uniq` is PARTIAL on status = 'provisional'.
-      // Concretely: a ceremony opens at P; more raises land at P; the
-      // ceremony gets claimed, so its status flips to 'claimed' and it stops
-      // occupying the partial index; `hasOpenCeremony(P)` now reports false
-      // even though P is a claimed faction's pole. Without this check, the
-      // still-pending raises from before the claim would settle into a
-      // SECOND ceremony at an already-bound pole — one that can never be
-      // claimed, because claiming it collides with
-      // `factions_holding_pole_uniq`. Bound poles are ineligible, full stop,
-      // regardless of which check would have caught it first.
-      const blocked = (await store.hasOpenCeremony(pole)) || (await store.isPoleBound(pole));
-      let draft = null;
-      if (!blocked && qualifies(w)) {
-        const participants: Participant[] = [];
-        for (const dayzId of w.participants) {
-          const discordId = await store.linkedDiscordId(dayzId);
-          // Unlinked between recording and settling: skip rather than write a
-          // participant with no Discord account to DM.
-          if (!discordId) continue;
-          const gamertag = w.raises.find((r) => r.dayzId === dayzId)?.gamertag ?? "";
-          participants.push({ dayzId, discordId, gamertag });
-        }
-        if (qualifies({ ...w, participants: participants.map((x) => x.dayzId) })) {
-          draft = { detectedAt: now, expiresAt: new Date(now.getTime() + ttl), participants };
-        }
-      }
-      if (await store.settle(pole, w, draft) !== null) out.detected++;
+    try {
+      await settlePole(store, pole, { now, ttl, out });
+    } catch (err) {
+      console.error(`ceremony settle failed at pole ${pole.serverId}/${pole.poleKey}`, err);
     }
   }
 
@@ -162,4 +134,55 @@ export async function ceremonyTick(
   }
 
   return out;
+}
+
+/** One pole's settleable windows. Extracted so phase 2 can isolate a failure to a single pole. */
+async function settlePole(
+  store: CeremonyStore,
+  pole: PoleRef,
+  ctx: { now: Date; ttl: number; out: CeremonyTickResult },
+): Promise<void> {
+  const { now, ttl, out } = ctx;
+  const highWater = await store.highWaterMark(pole.serverId);
+  if (!highWater) return;
+  const pending = await store.pendingRaises(pole);
+  for (const w of settleWindows(pending, highWater)) {
+    out.settled++;
+    // While a ceremony is outstanding at this pole, windows are consumed but
+    // never create. Otherwise a pole under sustained White raises would try
+    // to insert a ceremony every window and the partial unique index would
+    // surface each as an error rather than the no-op it is.
+    //
+    // ⚠️ `isPoleBound` must be re-checked here, even though phase 1 already
+    // checked it at record time. That earlier check is not enough: raises
+    // recorded while the pole was unbound can still be sitting unsettled
+    // when the pole becomes bound in between, because
+    // `ceremonies_open_pole_uniq` is PARTIAL on status = 'provisional'.
+    // Concretely: a ceremony opens at P; more raises land at P; the
+    // ceremony gets claimed, so its status flips to 'claimed' and it stops
+    // occupying the partial index; `hasOpenCeremony(P)` now reports false
+    // even though P is a claimed faction's pole. Without this check, the
+    // still-pending raises from before the claim would settle into a
+    // SECOND ceremony at an already-bound pole — one that can never be
+    // claimed, because claiming it collides with
+    // `factions_holding_pole_uniq`. Bound poles are ineligible, full stop,
+    // regardless of which check would have caught it first.
+    const blocked = (await store.hasOpenCeremony(pole)) || (await store.isPoleBound(pole));
+    let draft = null;
+    if (!blocked && qualifies(w)) {
+      const participants: Participant[] = [];
+      for (const dayzId of w.participants) {
+        const discordId = await store.linkedDiscordId(dayzId);
+        // Unlinked between recording and settling: skip rather than write a
+        // participant with no Discord account to DM.
+        if (!discordId) continue;
+        const gamertag = w.raises.find((r) => r.dayzId === dayzId)?.gamertag ?? "";
+        participants.push({ dayzId, discordId, gamertag });
+      }
+      if (qualifies({ ...w, participants: participants.map((x) => x.dayzId) })) {
+        draft = { detectedAt: now, expiresAt: new Date(now.getTime() + ttl), participants };
+      }
+    }
+    if (await store.settle(pole, w, draft) !== null) out.detected++;
+  }
 }

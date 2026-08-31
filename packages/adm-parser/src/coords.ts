@@ -37,7 +37,8 @@ const POLE_AT_RE = new RegExp(
  * previous 16360 left the outer 24m of Sakhal as a silent-drop band, since a
  * rejected parsePoleAt makes parseFlagChange discard the whole event.
  *
- * ⚠️ inMapBounds is the SOLE guard that rejects DayZ's off-map sentinel. DayZ
+ * ⚠️ inMapBounds is the SOLE guard that rejects DayZ's off-map sentinel in the
+ * horizontals (inAltitudeBounds below does the same job for the vertical). DayZ
  * writes that sentinel in full decimal expansion —
  * `-340282346638528859811704183484516925440.0`, not `e`-notation — and there
  * is no pattern match for it anywhere: it is rejected purely because it falls
@@ -52,13 +53,41 @@ export function inMapBounds(x: number, z: number): boolean {
   return x >= MAP_MIN && x <= MAP_MAX && z >= MAP_MIN && z <= MAP_MAX;
 }
 
+/**
+ * The accepted vertical window, in metres.
+ *
+ * ⚠️ Altitude used to be unvalidated, and that was a real hole rather than a
+ * tidiness point. DayZ writes its off-map sentinel (about -3.4e38) into
+ * whichever slots it likes, and this system turns a pole's coordinates into a
+ * key with `toFixed(2)` — which switches to exponential notation at 1e21, so a
+ * sentinel altitude produces a pole key `parsePoleKey` cannot read. Downstream,
+ * a pole key that will not parse is treated as an upstream defect and throws.
+ * The milder sibling: any altitude past ten digits parses fine and then
+ * overflows `numeric(12,2)` on insert. Rejecting the line here is the honest
+ * answer — a position DayZ itself marked as nonsense is not a position.
+ *
+ * The window: DayZ terrain sits between the ocean floor and the highest peak
+ * on any supported map — roughly -60m (Chernarus/Sakhal seabed) to ~1400m
+ * (Sakhal's summits, the highest of the three). ALT_MIN/ALT_MAX are widened
+ * well past both so nothing genuine is dropped: a player in a deep wreck, or
+ * standing on the tallest structure on the tallest hill, is still comfortably
+ * inside. There is nothing in DayZ that legitimately reaches 5km up — no
+ * player-flyable aircraft in vanilla — so the band excludes only garbage.
+ */
+const ALT_MIN = -500.0;
+const ALT_MAX = 5000.0;
+
+export function inAltitudeBounds(y: number): boolean {
+  return y >= ALT_MIN && y <= ALT_MAX;
+}
+
 export function parsePlayerPos(raw: string): Vec3 | null {
   const m = PLAYER_POS_RE.exec(raw);
   if (!m) return null;
   const x = parseFloat(m[1]!);
   const z = parseFloat(m[2]!);
   const y = parseFloat(m[3]!);
-  if (!inMapBounds(x, z)) return null;
+  if (!inMapBounds(x, z) || !inAltitudeBounds(y)) return null;
   return { x, y, z };
 }
 
@@ -68,6 +97,6 @@ export function parsePoleAt(raw: string): Vec3 | null {
   const x = parseFloat(m[1]!);
   const y = parseFloat(m[2]!);
   const z = parseFloat(m[3]!);
-  if (!inMapBounds(x, z)) return null;
+  if (!inMapBounds(x, z) || !inAltitudeBounds(y)) return null;
   return { x, y, z };
 }
