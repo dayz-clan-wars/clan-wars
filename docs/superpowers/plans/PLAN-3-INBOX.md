@@ -101,3 +101,70 @@ well-formed.
 Plan 2 records `guild_id` on challenges but builds no map scoping, because no
 command needs a map yet. Spec §16 fixes the topology: one guild, per-map
 channels, commands resolve their map from the channel they are run in.
+
+## 7. Tell the player when their UID belongs to another Discord account
+
+`PgVerificationStore.completeChallenge` (`apps/bot/src/store.ts`) cancels the
+challenge and returns false when the UID is already linked to a *different*
+Discord account. Nothing reaches the player: `pendingNotifications()` selects
+only `completed_at IS NOT NULL`, so the refusal exists solely as the tick's
+`alreadyLinked` counter in the server log.
+
+The player's experience is silence. They perform the sequence correctly, see
+nothing, run `/link` again (permitted — the old challenge is now canceled), and
+loop forever with no way to learn that their character is bound elsewhere. This
+is the exact case a player who changed Discord accounts hits.
+
+Needs a notification path for refusals, not just completions — which means a
+reason column or a second pending query, since "canceled" alone cannot
+distinguish this from an ordinary expiry.
+
+## 8. Tell the player when they are locked out of their own challenge
+
+Same class as item 7. When a UID exhausts `MAX_POOL_EMOTES_PER_ATTEMPT` on a
+challenge, the correct sequence stops working and `/link` re-shows the *same*
+live challenge with the same text and no hint. Salute, clap and thumbs-up are
+ordinary social emotes and all count against the budget, so a sociable player
+can spend it without ever attacking anything, then wait out the 10-minute TTL
+with no idea why.
+
+`handleLink`'s re-show path should detect an exhausted attempt and say so, or
+issuing a fresh challenge should reset it.
+
+## 9. Document the ingest cadence the challenge TTL assumes
+
+`challengeTtlMs` defaults to 600_000, which assumes emotes reach `events`
+within ten minutes. But `apps/ingest-worker` is a one-shot batch over a
+directory of `.ADM` files and nothing in the repo schedules or tails it. If the
+real cadence exceeds the TTL, every challenge is canceled before its emotes
+arrive and no `/link` can ever succeed — silently, showing only
+`verified: 0, alreadyLinked: 0`.
+
+Plan 3 should state the required cadence in the bot README and set the TTL
+default above it.
+
+## 10. Defer the `/link` reply
+
+`apps/bot/src/discord.ts` calls `interaction.reply` without a prior
+`deferReply`, but `handleLink` does four or more round trips (link lookup,
+live-challenge lookup, a table-wide `cancelExpired` UPDATE, up to 20 inserts on
+sequence collision). Discord's initial-response window is 3 seconds. On a cold
+pool the reply throws "Unknown interaction" and the player sees "The
+application did not respond" — after the challenge row was already created.
+Recovery works, but the first attempt reads as a hard failure.
+`deferReply({ flags: Ephemeral })` then `editReply` removes the class.
+
+## 11. Two smaller items in the bot loop
+
+- `verificationTick` and `notifyCompleted` share one `try` in `start()`. A tick
+  that throws persistently means players already bound are never told,
+  indefinitely. Give `notifyCompleted` its own catch.
+- `positiveInt` accepts up to `MAX_SAFE_INTEGER`, but `setInterval` truncates
+  past 2^31-1 to a **1 ms** delay. An extra-digits typo in
+  `BOT_TICK_INTERVAL_MS` produces exactly the "hammers the database while
+  looking correctly configured" failure the comment above it warns about. Cap
+  `tickIntervalMs` at 2_147_483_647.
+- `verificationTick` re-queries `store.liveChallenges(now)` for every emote
+  event — one query per event (2,093 on the historical backfill) plus a
+  `getAttempt` per (event x live challenge). Hoist per batch, invalidate on
+  completion. Performance only; the invariant is currently correct.
