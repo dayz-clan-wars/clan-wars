@@ -39,7 +39,14 @@ export class TimelineCursor {
   #lastMs: number;
   #clockOffsetMs: number;
 
-  constructor(bootUtc: Date, clockOffsetMs: number = 0) {
+  /**
+   * ⚠️ `clockOffsetMs` is REQUIRED, deliberately without a default. A default
+   * of 0 is the silent failure the schema comment on `servers.clock_offset_ms`
+   * argues against at length: every row lands, every count-based check stays
+   * green, and only the absolute instants are hours wrong. Callers must state
+   * the offset, even when it really is zero.
+   */
+  constructor(bootUtc: Date, clockOffsetMs: number) {
     const t = bootUtc.getTime();
     this.#dayStartMs = Math.floor(t / DAY_MS) * DAY_MS;
     this.#lastMs = t;

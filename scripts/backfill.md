@@ -3,6 +3,32 @@
 Replays the production ADM export through ingest and projection, then verifies the
 result against known quantities from the log survey.
 
+## Register the server first
+
+The ingest worker no longer registers servers itself. It used to upsert a server
+row from env vars on every run, which could not know the Nitrado service id and
+could silently reactivate a server someone had deliberately deactivated.
+Registration is now a deliberate operator step, run once (and again whenever the
+service id, clock offset, or active flag changes) before starting the worker:
+
+```bash
+DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
+  pnpm --filter @factions/ingest-worker exec tsx src/register-server.ts \
+  --name "Clan Wars Livonia" --map livonia --service-id 1234 --offset-ms 25200000
+```
+
+Flags:
+
+| Flag | Meaning |
+|---|---|
+| `--name` | Server display name. Combined with `--map`, this is the row's unique key — re-running with the same `--name`/`--map` updates the existing row instead of inserting a duplicate. |
+| `--map` | Map identifier (e.g. `chernarus`, `livonia`, `sakhal`). |
+| `--service-id` | The Nitrado service id this server's ADM files are fetched from. |
+| `--offset-ms` | Milliseconds to ADD to this server's local ADM time to get UTC. Has no default — the schema requires it explicitly, because a wrong offset stores every timestamp hours off while every count-based check still stays green. Measured production values: `chernarus` 14400000 (+4h), `livonia` and `sakhal` 25200000 (+7h). |
+| `--active` | Defaults to `true`; pass `--active false` to register a server as retired without deleting its row. |
+
+Then start the worker, which only sweeps servers already registered and active.
+
 ## Run
 
 ```bash

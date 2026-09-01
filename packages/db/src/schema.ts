@@ -25,6 +25,30 @@ export const servers = pgTable("servers", {
    * inherit that failure. Every insert must state the offset explicitly.
    */
   clockOffsetMs: integer("clock_offset_ms").notNull(),
+  /**
+   * Nitrado service this server's ADM files are fetched from.
+   *
+   * Nullable: rows created by the historical-export replay predate Nitrado
+   * ingestion entirely and have no service behind them. Inventing an id for
+   * them would be fabricated data, not a missing value.
+   */
+  nitradoServiceId: integer("nitrado_service_id"),
+  /**
+   * Whether the ingest sweep should pull this server.
+   *
+   * The database is the source of truth for which servers are swept, so a
+   * server is retired by clearing this rather than by deleting rows or
+   * editing worker config. Defaults true: registering a server should start
+   * ingesting it, not require a second step.
+   *
+   * ⚠️ This column was added `NOT NULL DEFAULT true` onto an existing table,
+   * so the migration backfilled every pre-existing row — including rows
+   * created by the historical-export replay from local disk — to true. Those
+   * rows have no Nitrado service behind them (see nitradoServiceId), so the
+   * sweep's WHERE clause also requires nitradoServiceId IS NOT NULL; `active`
+   * alone is not a safe filter for which servers to pull.
+   */
+  active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   uniqNameMap: uniqueIndex("servers_name_map_uniq").on(t.name, t.map),
@@ -34,6 +58,16 @@ export const admFiles = pgTable("adm_files", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   serverId: integer("server_id").notNull().references(() => servers.id),
   filename: text("filename").notNull(),
+  /**
+   * Nitrado's download path for this file.
+   *
+   * `filename` remains the identity — the unique index is
+   * (server_id, filename) and every row written since Plan 1 uses it. `path`
+   * is only how the bytes are fetched. Nullable: rows written by the
+   * historical replay have no Nitrado path, and backfilling one for them
+   * would be inventing data.
+   */
+  path: text("path"),
   bootAt: timestamp("boot_at", { withTimezone: true }).notNull(),
   linesIngested: integer("lines_ingested").notNull().default(0),
   complete: boolean("complete").notNull().default(false),

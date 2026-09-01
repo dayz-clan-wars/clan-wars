@@ -75,6 +75,9 @@ importers:
       '@factions/event-log':
         specifier: workspace:*
         version: link:../../packages/event-log
+      '@factions/nitrado':
+        specifier: workspace:*
+        version: link:../../packages/nitrado
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(postgres@3.4.9)
@@ -178,6 +181,15 @@ importers:
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(postgres@3.4.9)
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)
+
+  packages/nitrado:
     devDependencies:
       typescript:
         specifier: ^5.6.0

@@ -37,6 +37,7 @@ for (const [filename, group] of groups) {
   const r = await ingestFile(db, {
     serverId: server!.id, filename,
     bootAt: group.bootAt, lines: group.lines, clockOffsetMs,
+    markComplete: true,
   });
   totalLines += group.lines.length;
   totalUnparsedFlagLines += r.unparsedFlagLines;
