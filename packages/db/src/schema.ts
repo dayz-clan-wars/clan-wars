@@ -468,6 +468,21 @@ export const factions = pgTable("factions", {
 }));
 
 /**
+ * The hash of the supply spawner file last successfully uploaded per server.
+ *
+ * ⚠️ This is the whole memory of the supply projection. The tick regenerates
+ * the file every pass and uploads only when the hash differs, so without this
+ * row it would re-upload an identical file forever. The hash advances ONLY on
+ * a successful upload, which is what makes a failed upload retry on the next
+ * tick instead of being lost.
+ */
+export const supplyUploads = pgTable("supply_uploads", {
+  serverId: integer("server_id").primaryKey().references(() => servers.id),
+  contentHash: text("content_hash").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+});
+
+/**
  * The confirmed roster.
  *
  * Created in this plan only because activation must verify that the UID which
