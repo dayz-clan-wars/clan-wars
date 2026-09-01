@@ -225,3 +225,54 @@ separately.
   already defers multi-instance operation to a Postgres advisory lock; that is
   where this becomes real.
 
+
+## 16. Two custom-id parsers still coerce with `Number()`
+
+`parseTransferCustomId` and `parseClaimCustomId` in `apps/bot/src/discord.ts` carry
+the coercion bug that `parseIdSuffix` was fixed for in Plan 4a: `Number("9e2")` is
+900 and `Number("0x10")` is 16. Not exploitable — component interactions are only
+delivered for components the bot itself sent, and both consumers re-authorise
+against the acting user, so the worst outcome of a coerced id is a no-op reply. But
+`config.ts` establishes `DECIMAL_RE = /^\d+$/u` as the house rule and `parsePoleKey`
+was fixed for the same class in Plan 3, so this now reads as an inconsistency. Four
+lines.
+
+## 17. A relink lets one Discord account hold two roster rows on one server
+
+Plan 4a closed the stale-UID variant: `acceptInvite` re-derives the accepter's UID
+from `identity_links` at accept time. The re-invite variant is still open. A member
+of faction F who unlinks and relinks a NEW uid can be invited again and accept —
+`createInvite`'s already-member check keys on `dayz_id`, and
+`faction_members_server_player_uniq` is on `(server_id, dayz_id)`, so neither guard
+fires and F ends up with two membership rows for one Discord id.
+
+`resolveServerContext` would then silently take the first. Worse, `leaderIs()` and
+`kick()` use scalar subqueries over `(faction_id, discord_id)`, which would raise
+"more than one row returned by a subquery" — a raw Postgres error reaching a player.
+There is no unique index on `(faction_id, discord_id)`; adding one is probably the
+fix, but it needs a check against what `/unlink` and re-linking are meant to permit.
+
+## 18. Three `apologiseForFailure` call sites are untested
+
+`interactionCreate` is a closure inside `startBot`, so deleting any of the three
+`await apologiseForFailure(interaction)` lines in `discord.ts` leaves the suite
+green. The routers are proven to throw post-defer and the helper is proven to
+answer, but nothing pins them together. Testing it needs the catch body extracted
+into an exported wrapper. Failure mode is a hung "thinking" indicator, not data loss.
+
+## 19. The lock-order convention has no enforcement
+
+Plan 4a's fix wave built a deadlock out of two separately-correct changes:
+`acceptInvite` took `faction_invites` before `factions` while `disband` took them in
+the opposite order. The fix established `factions` → `faction_invites` →
+`faction_members` as the acquisition order, but that is a comment, not a constraint,
+and only the one pair is covered by a race test. The next multi-table write is where
+this bites.
+
+## 20. Staged race tests cannot fail by reordering
+
+Races 5 and 6 in `roster-races.test.ts` construct their interleaving with real lock
+waits. Reordering statements inside `acceptInvite` or `disband` would not fail them —
+it would silently stop them staging anything, so they would pass while proving
+nothing. Each test says so in a comment. Worth knowing before trusting them as
+regression guards for the statement order they depend on.
