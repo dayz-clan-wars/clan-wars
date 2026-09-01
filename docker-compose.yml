@@ -25,5 +25,15 @@ services:
       NITRADO_TOKEN: ${NITRADO_TOKEN}
       INGEST_INTERVAL_SECONDS: "60"
       ADM_BACKFILL_BUDGET: "15"
+      # The mission's custom/ folder, where DayZ's object spawner reads the
+      # files named in cfggameplay.json's objectSpawnersArr.
+      #
+      # ⚠️ NOT under the gameserver's advertised game_specific.path
+      # (/games/.../noftp/dayzxb/), which exposes only config/. The mission
+      # tree lives in a separate ftproot/dayzxb_missions/ path, and
+      # paths_available is null, so this cannot be derived — it was read off
+      # the Nitrado file API. A wrong value uploads the file where the server
+      # never reads it, and the upload still reports success.
+      MISSION_CUSTOM_DIR: ${MISSION_CUSTOM_DIR}
 volumes:
   factions-pg:
