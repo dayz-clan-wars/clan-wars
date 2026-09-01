@@ -196,6 +196,32 @@ describe("commands", () => {
       expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: TARGET });
     });
 
+    it("says another account is verifying the character, not that something went wrong", async () => {
+      // ⚠️ Account 200 holds the open challenge for TARGET, so account 100's
+      // insert loses to verification_challenges_open_target_uniq. That index
+      // has no expiry term and cancelExpired will not touch an unexpired row,
+      // so the old "try again in a moment" was false for up to the full 24h
+      // TTL — the player retried into the same wall with no idea why.
+      const other = await store.createChallenge({
+        discordId: "200", guildId: "g", channelId: "c",
+        sequence: ["EmoteSalute", "EmoteClap", "EmoteDance"],
+        issuedAt: now, expiresAt: new Date(now.getTime() + 86_400_000), targetDayzId: TARGET,
+      });
+      expect(other).not.toBeNull();
+
+      const r = await handleLink(deps, CTX);
+
+      expect(r.content).toMatch(/someone else is verifying/i);
+      expect(r.content).toContain("Ronald");
+      expect(r.content).not.toMatch(/try again in a moment/i);
+
+      // The other account's challenge is neither cancelled nor stolen: doing
+      // either would let anyone knock a rival off a character mid-verification.
+      const rows = await db.select().from(verificationChallenges);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: other!.id, discordId: "200", canceledAt: null, completedAt: null });
+    });
+
     it("describes the sequence by its actual length, not a hardcoded word", async () => {
       // generateSequence takes its length as a parameter. A challenge of any
       // other length must not be described to the player as "these three".

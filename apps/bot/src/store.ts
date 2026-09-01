@@ -47,6 +47,18 @@ export interface VerificationStore {
    */
   factionMembershipsFor(discordId: string): Promise<{ factionName: string; role: Role }[]>;
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
+  /**
+   * The open challenge holding this character's slot, whoever owns it.
+   *
+   * ⚠️ Deliberately NOT time-bounded, unlike `findLiveChallenge`. This
+   * answers "what is blocking an insert on
+   * verification_challenges_open_target_uniq", and that index's predicate is
+   * `completed_at IS NULL AND canceled_at IS NULL` with no expiry term — an
+   * expired-but-uncancelled row blocks just as hard as a live one. Narrowing
+   * this to live rows would report "nothing is holding it" about a row that
+   * demonstrably is.
+   */
+  findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
   createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
@@ -111,6 +123,15 @@ export class PgVerificationStore implements VerificationStore {
     const [row] = await this.db.select().from(verificationChallenges)
       .where(and(eq(verificationChallenges.discordId, discordId), liveWhere(now)));
     return row ? toLive(row) : null;
+  }
+
+  async findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null> {
+    const [row] = await this.db.select().from(verificationChallenges).where(and(
+      eq(verificationChallenges.targetDayzId, targetDayzId),
+      isNull(verificationChallenges.completedAt),
+      isNull(verificationChallenges.canceledAt),
+    ));
+    return row ? { discordId: row.discordId, expiresAt: row.expiresAt } : null;
   }
 
   async liveChallenges(now: Date): Promise<LiveChallenge[]> {

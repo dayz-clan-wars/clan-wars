@@ -167,12 +167,35 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
       : `Canceled your challenge for **${switchedFrom}** — that sequence no longer works.\n\n${body}`);
   }
 
-  // A null insert means a concurrent /link for this same account beat us to
-  // the one open-challenge slot (uniqOpenPerAccount). Show theirs rather than
-  // erroring — it is the same player, twice.
+  // A null insert means the row lost to one of the two partial unique
+  // indexes, and the two cases are told apart below because they mean
+  // completely different things to the player.
+
+  // uniqOpenPerAccount: a concurrent /link for this SAME account beat us to
+  // the one open-challenge slot. Show theirs rather than erroring — it is the
+  // same player, twice.
   const concurrent = await deps.store.findLiveChallenge(ctx.discordId, now);
   if (concurrent) {
     return ephemeral(challengeMessage(concurrent.sequence, concurrent.expiresAt, await nameOf(deps, concurrent.targetDayzId)));
+  }
+
+  // ⚠️ uniqOpenTarget: ANOTHER Discord account is already verifying this
+  // character. This is not transient and must not be reported as one — that
+  // index's predicate carries no expiry term, and cancelExpired above will
+  // not touch the other account's unexpired row, so "try again in a moment"
+  // would be a lie for up to the full 24h TTL while the player retried into
+  // the same wall. Say what is true and when it ends.
+  //
+  // The other account's challenge is left strictly alone. Cancelling or
+  // stealing it would hand anyone a way to knock a rival off the character
+  // they are mid-way through verifying.
+  const holder = await deps.store.findOpenChallengeByTarget(target.dayzId);
+  if (holder && holder.discordId !== ctx.discordId) {
+    return ephemeral(
+      `Someone else is verifying **${target.gamertag}** right now, so I cannot issue a ` +
+      `challenge for that character yet. Their attempt ends <t:${Math.floor(holder.expiresAt.getTime() / 1000)}:R> — ` +
+      "run `/link` again after that. If that character is yours, ask an admin.",
+    );
   }
   return ephemeral("Could not issue a challenge right now. Try again in a moment.");
 }
