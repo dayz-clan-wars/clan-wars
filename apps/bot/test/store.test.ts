@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, type Database } from "@factions/db";
 import { sql, eq, isNotNull } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 
@@ -18,7 +18,7 @@ describe("PgVerificationStore", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links restart identity cascade`);
+    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
     store = new PgVerificationStore(db);
   });
 
@@ -29,6 +29,12 @@ describe("PgVerificationStore", () => {
     expect(c).not.toBeNull();
     return c!;
   };
+
+  const seedPlayer = (opts: { dayzId: string; gamertag: string; lastSeenAt: Date; firstSeenAt?: Date }) =>
+    db.insert(players).values({
+      dayzId: opts.dayzId, gamertag: opts.gamertag,
+      firstSeenAt: opts.firstSeenAt ?? opts.lastSeenAt, lastSeenAt: opts.lastSeenAt,
+    });
 
   it("finds no link for an unknown Discord account", async () => {
     expect(await store.findLinkByDiscord("nobody")).toBeNull();
@@ -101,8 +107,10 @@ describe("PgVerificationStore", () => {
 
   it("never completes a challenge without writing its link, under concurrency", async () => {
     // Two Discord accounts racing for the SAME UID. Exactly one may win, and
-    // the loser must not be left marked complete. Distinct sequences: the
-    // open-sequence uniqueness index is a separate concern from this race.
+    // the loser must not be left marked complete. Distinct targets and
+    // distinct accounts satisfy uniqOpenTarget/uniqOpenPerAccount so both
+    // challenges can be open at once; distinct sequences are incidental — the
+    // open-sequence uniqueness index this used to route around is gone.
     const a = await store.createChallenge({
       discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
@@ -217,5 +225,26 @@ describe("PgVerificationStore", () => {
   it("does not cancel a challenge that is still live", async () => {
     await issue("500");
     expect(await store.cancelExpired(now)).toBe(0);
+  });
+
+  it("offers recently seen players, newest first, excluding the linked", async () => {
+    const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40);
+    await seedPlayer({ dayzId: A, gamertag: "Older", lastSeenAt: new Date("2026-09-01T00:00:00Z") });
+    await seedPlayer({ dayzId: B, gamertag: "Newer", lastSeenAt: new Date("2026-09-02T00:00:00Z") });
+    await seedPlayer({ dayzId: C, gamertag: "Taken", lastSeenAt: new Date("2026-09-03T00:00:00Z") });
+    await db.insert(identityLinks).values({ discordId: "d9", dayzId: C, gamertag: "Taken", verifiedAt: new Date() });
+    expect(await store.recentUnlinkedPlayers(50)).toEqual([
+      { dayzId: B, gamertag: "Newer" },
+      { dayzId: A, gamertag: "Older" },
+    ]);
+  });
+
+  it("honours the limit", async () => {
+    // The autocomplete's pool is 50; Discord returns at most 25 of them.
+    for (let i = 0; i < 60; i++) {
+      await seedPlayer({ dayzId: `${i}`.padStart(40, "0"), gamertag: `P${i}`,
+        lastSeenAt: new Date(Date.UTC(2026, 8, 1, 0, i)) });
+    }
+    expect(await store.recentUnlinkedPlayers(50)).toHaveLength(50);
   });
 });

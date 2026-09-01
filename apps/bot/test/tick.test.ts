@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, verificationChallenges, identityLinks, type Database } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
 import { safeVerificationEmotes } from "@factions/domain";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { verificationTick, CONSUMER } from "../src/tick.js";
 
@@ -10,6 +10,8 @@ const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
 const UID_B = "B".repeat(40);
 const SEQ = ["EmoteSalute", "EmoteClap", "EmoteDance"];
+const TARGET = "C".repeat(40);
+const IMPOSTOR = "D".repeat(40);
 
 describe("verificationTick", () => {
   let db: Database;
@@ -47,6 +49,21 @@ describe("verificationTick", () => {
   };
 
   const tick = () => verificationTick(db, store, { batchSize: 100, now });
+
+  const seedChallenge = async (opts: { discordId: string; targetDayzId: string; sequence: string[] }) => {
+    const c = await store.createChallenge({
+      discordId: opts.discordId, guildId: "g", channelId: "c",
+      sequence: opts.sequence, issuedAt: now, expiresAt: later, targetDayzId: opts.targetDayzId,
+    });
+    expect(c).not.toBeNull();
+    return c!;
+  };
+
+  const seedEmote = (opts: { dayzId: string; gamertag: string; emote: string }) => appendEvent(db, {
+    serverId, admFileId, lineIndex: line++, subIndex: 0,
+    type: "emote.performed", occurredAt: now,
+    payload: { gamertag: opts.gamertag, dayzId: opts.dayzId, emote: opts.emote, item: null },
+  });
 
   it("does nothing with no events", async () => {
     expect(await tick()).toMatchObject({ scanned: 0, verified: 0 });
@@ -218,10 +235,10 @@ describe("verificationTick", () => {
     // The sweep test above proves the budget stops an EXHAUSTIVE sweep. It does
     // not prove the budget is tight enough, and at 12 it was not: because
     // matching holds on mismatch, a run of n distinct emotes covers every
-    // ordered length-k subsequence of itself — C(12, 3) = 220 of 21,924
-    // sequences, ~1%, charged against every live challenge at once. A hit binds
-    // the ATTACKER's UID to the victim's Discord account, and the victim is
-    // then DM'd "Verified".
+    // ordered length-k subsequence of itself — C(12, 3) = 220 of 24×23×22 =
+    // 12,144 sequences, ~1.8%. Since a challenge only advances for the UID it
+    // names, this is now the named target accidentally covering their own
+    // sequence, not a stranger's sweep landing on it by luck.
     //
     // So: a run whose only occurrence of the challenge sequence lies past the
     // budget must not complete it. This fixture is that run — the sequence sits
@@ -246,5 +263,52 @@ describe("verificationTick", () => {
     await emote(UID_A, "EmoteHeart");
     for (const t of SEQ) await emote(UID_A, t);
     expect((await tick()).verified).toBe(1);
+  });
+
+  it("does not advance a challenge for a DIFFERENT character's emotes", async () => {
+    // ⚠️ THE security property. A challenge names its target; only that
+    // character can advance it. Delete the dayzId comparison in tick.ts and
+    // this test must go red — it is the whole reason three emotes is enough.
+    const challenge = await seedChallenge({ discordId: "d1", targetDayzId: TARGET,
+      sequence: ["EmoteSalute", "EmoteClap", "EmoteNod"] });
+    for (const emote of ["EmoteSalute", "EmoteClap", "EmoteNod"]) {
+      await seedEmote({ dayzId: IMPOSTOR, gamertag: "Impostor", emote });
+    }
+    const r = await verificationTick(db, store, { now });
+    expect(r.verified).toBe(0);
+    expect(r.advanced).toBe(0);
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, challenge.id));
+    expect(row!.completedAt).toBeNull();
+    expect(row!.boundDayzId).toBeNull();
+  });
+
+  it("completes when the NAMED character performs the sequence", async () => {
+    const challenge = await seedChallenge({ discordId: "d1", targetDayzId: TARGET,
+      sequence: ["EmoteSalute", "EmoteClap", "EmoteNod"] });
+    for (const emote of ["EmoteSalute", "EmoteClap", "EmoteNod"]) {
+      await seedEmote({ dayzId: TARGET, gamertag: "Ronald", emote });
+    }
+    const r = await verificationTick(db, store, { now });
+    expect(r.verified).toBe(1);
+    const [link] = await db.select().from(identityLinks);
+    expect(link!.dayzId).toBe(TARGET);
+    expect(link!.discordId).toBe("d1");
+  });
+
+  it("cancels a challenge whose budget is exhausted", async () => {
+    // With a 24h TTL, an inert budget-exhausted challenge would hold the
+    // player's one open slot for a day. Cancelled, they can /link again.
+    const challenge = await seedChallenge({ discordId: "d1", targetDayzId: TARGET,
+      sequence: ["EmoteSalute", "EmoteClap", "EmoteNod"] });
+    // Nine safe emotes that never match the sequence.
+    for (const emote of ["EmoteHeart", "EmoteDance", "EmoteShrug", "EmoteMove", "EmoteCome",
+                         "EmoteSilent", "EmoteWatching", "EmoteThroat", "EmotePoint"]) {
+      await seedEmote({ dayzId: TARGET, gamertag: "Ronald", emote });
+    }
+    await verificationTick(db, store, { now });
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, challenge.id));
+    expect(row!.canceledAt).not.toBeNull();
   });
 });

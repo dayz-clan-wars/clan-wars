@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
-import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers } from "@factions/db";
-import { and, eq, gte, inArray, isNull, isNotNull, lt } from "drizzle-orm";
+import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lt } from "drizzle-orm";
 import type { Role } from "./roster-store.js";
 
 /** Statuses under which a faction still holds its flag and roster — mirrors
@@ -10,7 +10,7 @@ const HOLDING = ["reserved", "active", "dormant"];
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
-  sequence: string[]; issuedAt: Date; expiresAt: Date;
+  sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
 
@@ -28,13 +28,24 @@ export interface VerificationStore {
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
   outstandingSequences(now: Date): Promise<string[][]>;
-  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date }): Promise<LiveChallenge | null>;
+  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
   pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>>;
   markNotified(challengeId: number, at: Date): Promise<void>;
   cancelExpired(now: Date): Promise<number>;
+  /**
+   * Cancel one still-open challenge, guarded the same way `cancelExpired` is:
+   * only a row that is neither completed nor already canceled is touched, so
+   * a race with `completeChallenge` or a concurrent cancel is a no-op rather
+   * than an error.
+   */
+  cancelChallenge(challengeId: number, at: Date): Promise<boolean>;
+  /** The `limit` most recently seen players with no identity link, newest first. */
+  recentUnlinkedPlayers(limit: number): Promise<{ dayzId: string; gamertag: string }[]>;
+  /** One player by UID, or null if the event log has never seen them. */
+  playerByDayzId(dayzId: string): Promise<{ dayzId: string; gamertag: string } | null>;
 }
 
 /** A challenge is live when it is neither completed nor canceled and has not expired. */
@@ -93,7 +104,7 @@ export class PgVerificationStore implements VerificationStore {
    */
   async createChallenge(input: {
     discordId: string; guildId: string; channelId: string;
-    sequence: string[]; issuedAt: Date; expiresAt: Date;
+    sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
   }): Promise<LiveChallenge | null> {
     const [row] = await this.db.insert(verificationChallenges).values(input)
       .onConflictDoNothing()
@@ -227,11 +238,48 @@ export class PgVerificationStore implements VerificationStore {
       .returning();
     return rows.length;
   }
+
+  async cancelChallenge(challengeId: number, at: Date): Promise<boolean> {
+    const rows = await this.db.update(verificationChallenges)
+      .set({ canceledAt: at })
+      .where(and(
+        eq(verificationChallenges.id, challengeId),
+        isNull(verificationChallenges.completedAt),
+        isNull(verificationChallenges.canceledAt),
+      ))
+      .returning();
+    return rows.length > 0;
+  }
+
+  /**
+   * ⚠️ LEFT join with an IS NULL filter, not `notInArray(subquery)`. The
+   * exclusion must be evaluated by the database against the same snapshot as
+   * the ordering; pulling the linked ids into memory first would let a link
+   * committed between the two queries leak a taken character into the menu.
+   */
+  async recentUnlinkedPlayers(limit: number) {
+    const rows = await this.db
+      .select({ dayzId: players.dayzId, gamertag: players.gamertag })
+      .from(players)
+      .leftJoin(identityLinks, eq(identityLinks.dayzId, players.dayzId))
+      .where(isNull(identityLinks.id))
+      .orderBy(desc(players.lastSeenAt))
+      .limit(limit);
+    return rows;
+  }
+
+  async playerByDayzId(dayzId: string) {
+    const [row] = await this.db
+      .select({ dayzId: players.dayzId, gamertag: players.gamertag })
+      .from(players).where(eq(players.dayzId, dayzId));
+    return row ?? null;
+  }
 }
 
 function toLive(row: typeof verificationChallenges.$inferSelect): LiveChallenge {
   return {
     id: row.id, discordId: row.discordId, guildId: row.guildId,
     channelId: row.channelId, sequence: row.sequence, issuedAt: row.issuedAt, expiresAt: row.expiresAt,
+    targetDayzId: row.targetDayzId,
   };
 }
