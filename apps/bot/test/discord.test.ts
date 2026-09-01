@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, players, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { buildCommands, routeInteraction, notifyCompleted, guardedRunner } from "../src/discord.js";
@@ -7,6 +7,8 @@ import type { CommandDeps } from "../src/commands.js";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
+/** The character /link names. Seeded into `players`; the command refuses a UID the log has never seen. */
+const TARGET = UID_A;
 
 describe("discord wiring", () => {
   let db: Database;
@@ -17,9 +19,15 @@ describe("discord wiring", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links restart identity cascade`);
+    // faction_members is truncated too even though this suite never writes it:
+    // handleUnlink refuses a roster member, and files here share one database
+    // (fileParallelism is off, but leftovers survive between files), so a
+    // membership left by another suite silently changes /unlink's answer.
+    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players, faction_members, factions, servers restart identity cascade`);
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
+    // Fixture clock, not new Date(): the whole suite reasons about `now`.
+    await db.insert(players).values({ dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now });
   });
 
   describe("buildCommands", () => {
@@ -51,9 +59,17 @@ describe("discord wiring", () => {
     const base = { userId: "100", guildId: "g", channelId: "c" };
 
     it("routes /link", async () => {
-      const r = await routeInteraction(deps, { ...base, commandName: "link" });
+      const r = await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: TARGET });
       expect(r?.ephemeral).toBe(true);
-      expect(await store.findLiveChallenge("100", now)).not.toBeNull();
+      expect(await store.findLiveChallenge("100", now)).toMatchObject({ targetDayzId: TARGET });
+    });
+
+    it("refuses /link with no character chosen", async () => {
+      // Registration makes the option required, so this only happens to a
+      // stale command — and an untargeted challenge is the bug this removes.
+      const r = await routeInteraction(deps, { ...base, commandName: "link" });
+      expect(r?.content).toMatch(/pick a character/i);
+      expect(await store.findLiveChallenge("100", now)).toBeNull();
     });
 
     it("routes /whoami", async () => {

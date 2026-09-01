@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers,
+  servers, factions, factionMembers, players,
   type Database,
 } from "@factions/db";
 import { sql } from "drizzle-orm";
@@ -10,7 +10,11 @@ import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDep
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
-const CTX = { discordId: "100", guildId: "g", channelId: "c" };
+/** The character /link is asked to bind, seeded into `players` per test. */
+const TARGET = UID_A;
+/** A well-formed UID the event log has never seen. */
+const UNKNOWN = "F".repeat(40);
+const CTX = { discordId: "100", guildId: "g", channelId: "c", targetDayzId: TARGET };
 
 describe("commands", () => {
   let db: Database;
@@ -21,9 +25,15 @@ describe("commands", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers restart identity cascade`);
+    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers, players restart identity cascade`);
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
+    // ⚠️ Seeded against the fixture clock, not new Date(): the store orders and
+    // filters players by lastSeenAt, and a wall-clock fixture drifts out of the
+    // window the rest of the suite reasons about.
+    await db.insert(players).values({
+      dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now,
+    });
   });
 
   /** Seeds a holding faction with one member row for `discordId`/`role`. */
@@ -57,16 +67,63 @@ describe("commands", () => {
       expect(await store.findLiveChallenge("100", now)).not.toBeNull();
     });
 
+    it("binds the challenge to the character that was named", async () => {
+      await handleLink(deps, CTX);
+      expect(await store.findLiveChallenge("100", now)).toMatchObject({ targetDayzId: TARGET });
+    });
+
     it("shows human-readable emote labels, never raw tokens", async () => {
       const reply = await handleLink(deps, CTX);
       expect(reply.content).not.toMatch(/Emote[A-Z]/);
+    });
+
+    it("refuses a UID the event log has never seen", async () => {
+      const r = await handleLink(deps, { ...CTX, targetDayzId: UNKNOWN });
+      expect(r.content).toMatch(/have not seen/i);
+      expect(await store.liveChallenges(now)).toHaveLength(0);
+    });
+
+    it("refuses a character somebody has already linked", async () => {
+      // The autocomplete filters these out, but the menu can be stale and a
+      // user can type anything into an autocomplete field.
+      const c = await store.createChallenge({
+        ...CTX, discordId: "999", sequence: ["EmoteSalute"], issuedAt: now,
+        expiresAt: new Date(now.getTime() + 1000), targetDayzId: TARGET,
+      });
+      expect(c).not.toBeNull();
+      expect(await store.completeChallenge(c!.id, TARGET, "Ronald", now)).toBe(true);
+
+      const r = await handleLink(deps, CTX);
+      expect(r.content).toMatch(/already linked/i);
+      expect(await store.findLiveChallenge("100", now)).toBeNull();
+    });
+
+    it("names the character in the challenge message", async () => {
+      // The player must be able to see they picked the right character before
+      // walking in game to perform three emotes.
+      const r = await handleLink(deps, CTX);
+      expect(r.content).toContain("Ronald");
+      expect(r.content).toMatch(/1\./);
+      expect(r.content).toMatch(/3\./);
     });
 
     it("re-shows the existing challenge instead of issuing a second one", async () => {
       const first = await handleLink(deps, CTX);
       const second = await handleLink(deps, CTX);
       expect(second.content).toBe(first.content);
+      expect(second.content).toContain("Ronald");
       expect((await store.liveChallenges(now))).toHaveLength(1);
+    });
+
+    it("re-shows the character the live challenge names, not the one just typed", async () => {
+      // Switching characters mid-challenge is not a thing: the live challenge
+      // owns the account's one open slot, and it names its own target.
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      await handleLink(deps, CTX);
+      const r = await handleLink(deps, { ...CTX, targetDayzId: other });
+      expect(r.content).toContain("Ronald");
+      expect(r.content).not.toContain("Nancy");
     });
 
     it("describes the sequence by its actual length, not a hardcoded word", async () => {
@@ -77,7 +134,7 @@ describe("commands", () => {
         sequence: ["EmoteSalute", "EmoteClap", "EmoteDance", "EmoteWave"],
         issuedAt: now,
         expiresAt: new Date(now.getTime() + 600_000),
-        targetDayzId: UID_A,
+        targetDayzId: TARGET,
       });
       expect(c).not.toBeNull();
       const reply = await handleLink(deps, CTX);
@@ -93,39 +150,14 @@ describe("commands", () => {
       expect(reply.content).toMatch(/already linked/i);
     });
 
-    it("does not issue a sequence that is already outstanding", async () => {
-      // Pin the rng so the naive implementation would collide.
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      await handleLink(fixed, CTX);
-      await handleLink(fixed, { ...CTX, discordId: "200" });
-      const seqs = await store.outstandingSequences(now);
-      expect(seqs).toHaveLength(2);
-      expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
-    });
-
-    it("redraws when the drawn sequence is already held, and still issues one", async () => {
-      // Both calls draw identically from the pinned rng; the DB rejects the
-      // second, so handleLink must redraw rather than fail.
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      const a = await handleLink(fixed, CTX);
-      const b = await handleLink(fixed, { ...CTX, discordId: "200" });
-      expect(a.content).not.toBe(b.content);
-
-      const seqs = await store.outstandingSequences(now);
-      expect(seqs).toHaveLength(2);
-      expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
-    });
-
-    it("issues distinct sequences under concurrent /link calls", async () => {
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      await Promise.all([
-        handleLink(fixed, { ...CTX, discordId: "601" }),
-        handleLink(fixed, { ...CTX, discordId: "602" }),
-        handleLink(fixed, { ...CTX, discordId: "603" }),
+    it("issues exactly one challenge under concurrent /link calls", async () => {
+      // uniqOpenPerAccount, not a pre-read, is what guarantees this: the losing
+      // insert returns null and the loser re-reads and shows the winner's.
+      const replies = await Promise.all([
+        handleLink(deps, CTX), handleLink(deps, CTX), handleLink(deps, CTX),
       ]);
-      const seqs = (await store.outstandingSequences(now)).map((s) => JSON.stringify(s));
-      // The database, not a pre-read, is what guarantees this.
-      expect(new Set(seqs).size).toBe(seqs.length);
+      expect(await store.liveChallenges(now)).toHaveLength(1);
+      for (const r of replies) expect(r.content).toContain("Ronald");
     });
   });
 

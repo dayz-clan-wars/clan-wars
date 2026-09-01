@@ -48,7 +48,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     guildId: required(env, "DISCORD_GUILD_ID"),
     databaseUrl: required(env, "DATABASE_URL"),
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
-    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", 600_000),
+    // 24 hours, matching one-life; safe because a challenge names its target
+    // and cannot be stolen by another character performing the sequence.
+    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", 86_400_000),
     reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", 86_400_000),
     // 7 days — spec §6 invite lifetime.
     inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", 604_800_000),

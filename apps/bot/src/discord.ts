@@ -128,6 +128,8 @@ export type InteractionLike = {
   userId: string;
   guildId: string | null;
   channelId: string;
+  /** The `character` option of /link — a UID. Absent for every other command. */
+  targetDayzId?: string | null;
 };
 
 export async function routeInteraction(deps: CommandDeps, i: InteractionLike): Promise<Reply | null> {
@@ -141,7 +143,15 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
   }
 
   const ctx = { discordId: i.userId, guildId: i.guildId, channelId: i.channelId };
-  if (i.commandName === "link") return handleLink(deps, ctx);
+  if (i.commandName === "link") {
+    // The option is required at registration, so an absent value here means a
+    // client (or a stale command) sent none. Refuse rather than link a blank
+    // UID: an untargeted challenge is the bearer-token bug this work removes.
+    if (!i.targetDayzId) {
+      return { content: "Pick a character from the list when you run `/link`.", ephemeral: true };
+    }
+    return handleLink(deps, { ...ctx, targetDayzId: i.targetDayzId });
+  }
   if (i.commandName === "unlink") return handleUnlink(deps, i.userId);
   return handleWhoami(deps, i.userId);
 }
@@ -704,6 +714,8 @@ export async function start(cfg: BotConfig): Promise<void> {
           userId: interaction.user.id,
           guildId: interaction.guildId,
           channelId: interaction.channelId,
+          // Only /link declares it; getString returns null for the others.
+          targetDayzId: interaction.options.getString("character"),
         });
         if (!reply) return;
         await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });

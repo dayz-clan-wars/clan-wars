@@ -27,7 +27,6 @@ export interface VerificationStore {
   factionMembershipsFor(discordId: string): Promise<{ factionName: string; role: Role }[]>;
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
-  outstandingSequences(now: Date): Promise<string[][]>;
   createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
@@ -94,13 +93,12 @@ export class PgVerificationStore implements VerificationStore {
     return rows.map(toLive);
   }
 
-  async outstandingSequences(now: Date): Promise<string[][]> {
-    return (await this.liveChallenges(now)).map((c) => c.sequence);
-  }
-
   /**
-   * Insert a challenge, or return null when another OPEN challenge already
-   * holds this sequence. Null is an expected outcome — the caller redraws.
+   * Insert a challenge, or return null when this account already has an open
+   * one (`uniqOpenPerAccount`). Null is an expected outcome, not an error —
+   * the caller shows the challenge that won instead. Sequences are NOT unique
+   * across live challenges any more: a challenge names the one character that
+   * may satisfy it, so a shared sequence binds nobody's account by accident.
    */
   async createChallenge(input: {
     discordId: string; guildId: string; channelId: string;

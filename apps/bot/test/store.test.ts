@@ -50,11 +50,6 @@ describe("PgVerificationStore", () => {
     expect(await store.findLiveChallenge("100", new Date("2026-08-26T12:11:00Z"))).toBeNull();
   });
 
-  it("lists outstanding sequences so issuance can avoid collisions", async () => {
-    await issue();
-    expect(await store.outstandingSequences(now)).toEqual([SEQ]);
-  });
-
   it("upserts per-UID attempt progress", async () => {
     const c = await issue();
     await store.upsertAttempt(c.id, UID_A, 1, 10, 1);

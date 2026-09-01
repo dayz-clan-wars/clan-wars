@@ -16,7 +16,17 @@ export type CommandDeps = {
   challengeTtlMs: number;
 };
 
-export type LinkContext = { discordId: string; guildId: string; channelId: string };
+/**
+ * ⚠️ `targetDayzId` names the ONE character the challenge may be satisfied by.
+ * Without it the sequence was a bearer token: any character performing the
+ * emotes won the challenge, so a bystander who saw the reply could bind their
+ * own UID to someone else's Discord account. The value comes from the
+ * autocomplete choice, but a user can type anything into an autocomplete
+ * field, so `handleLink` re-validates it.
+ */
+export type LinkContext = {
+  discordId: string; guildId: string; channelId: string; targetDayzId: string;
+};
 
 const ephemeral = (content: string): Reply => ({ content, ephemeral: true });
 
@@ -29,11 +39,14 @@ export function formatSequence(sequence: string[]): string {
 const COUNT_WORDS = ["zero", "one", "two", "three", "four", "five", "six"];
 const countWord = (n: number): string => COUNT_WORDS[n] ?? String(n);
 
-function challengeMessage(sequence: string[], expiresAt: Date): string {
+function challengeMessage(sequence: string[], expiresAt: Date, gamertag: string): string {
   return [
-    "**Link your account**",
+    `**Link your account to ${gamertag}**`,
     "",
-    "In game, open the emote wheel and perform these, in this order:",
+    // Naming the character is not decoration: the challenge can only be
+    // satisfied by this one character, so a player who picked the wrong entry
+    // must find that out here, not after walking in game to perform emotes.
+    `In game, as **${gamertag}**, open the emote wheel and perform these, in this order:`,
     "",
     formatSequence(sequence),
     "",
@@ -53,38 +66,67 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
     );
   }
 
-  // Re-show rather than re-issue: a player who lost the ephemeral reply should
-  // not have their in-progress sequence invalidated.
-  const live = await deps.store.findLiveChallenge(ctx.discordId, now);
-  if (live) return ephemeral(challengeMessage(live.sequence, live.expiresAt));
+  // ⚠️ Re-validating the autocomplete choice. Autocomplete is a suggestion,
+  // not a constraint — Discord submits whatever the user typed — so both the
+  // "unknown" and the "already taken" checks below have to exist server-side.
+  // They are a friendlier refusal, not the enforcement: players.dayz_id is a
+  // foreign key and identity_links.dayz_id is unique, and those constraints
+  // remain the real guarantee behind a lost race.
+  const target = await deps.store.playerByDayzId(ctx.targetDayzId);
+  if (!target) {
+    return ephemeral(
+      "I have not seen that character on the server. Pick one from the list — " +
+      "only characters the event log has seen can be linked.",
+    );
+  }
+  const taken = await deps.store.findLinkByDayzId(target.dayzId);
+  if (taken) {
+    return ephemeral(
+      `**${target.gamertag}** is already linked to another Discord account. ` +
+      "If that character is yours, ask an admin.",
+    );
+  }
 
-  // Release sequences held by challenges that expired without completing,
-  // before drawing. Cheap, and it keeps the open-sequence pool from silting up.
+  // Re-show rather than re-issue: a player who lost the ephemeral reply should
+  // not have their in-progress sequence invalidated. The live challenge names
+  // its own target, which need not be the one just typed.
+  const live = await deps.store.findLiveChallenge(ctx.discordId, now);
+  if (live) return ephemeral(challengeMessage(live.sequence, live.expiresAt, await nameOf(deps, live.targetDayzId)));
+
+  // Close out challenges that expired without completing, before issuing a new
+  // one: an expired row still occupies this account's one open-challenge slot
+  // (uniqOpenPerAccount), so without this the insert below would be refused.
   await deps.store.cancelExpired(now);
 
   const expiresAt = new Date(now.getTime() + deps.challengeTtlMs);
-  // ⚠️ The insert is the uniqueness check. A read-then-check would let two
-  // concurrent /link calls be issued the same sequence, and two live
-  // challenges sharing a sequence bind the wrong account (see the index
-  // comment in schema.ts). The first draw uses deps.rng so tests can pin it;
-  // redraws use Math.random, because a deterministic rng that collided once
-  // would collide forever.
-  for (let attempt = 0; attempt < 20; attempt++) {
-    const sequence = generateSequence(attempt === 0 ? deps.rng : Math.random);
-    const challenge = await deps.store.createChallenge({
-      discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
-      sequence, issuedAt: now, expiresAt,
-    });
-    if (challenge) return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt));
-
-    // Null insert may mean the sequence collided (redraw and retry) OR that a
-    // concurrent /link for this same account beat us to it (the new
-    // uniqOpenPerAccount index) — a reason the redraw loop cannot fix. Check
-    // for a now-live challenge on this account and show that instead.
-    const concurrent = await deps.store.findLiveChallenge(ctx.discordId, now);
-    if (concurrent) return ephemeral(challengeMessage(concurrent.sequence, concurrent.expiresAt));
+  // One draw, no redraw loop. Sequences are no longer required to be unique
+  // across live challenges — the open-sequence index was retired because three
+  // emotes over the safe pool is only ~12k orderings, so live challenges would
+  // collide routinely and reject legitimate /link calls. A collision is
+  // harmless now that a challenge can only ever be satisfied by the character
+  // it names.
+  const sequence = generateSequence(deps.rng);
+  const challenge = await deps.store.createChallenge({
+    discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
+    sequence, issuedAt: now, expiresAt, targetDayzId: target.dayzId,
+  });
+  if (challenge) {
+    return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt, target.gamertag));
   }
-  return ephemeral("Could not issue a unique sequence right now. Try again in a moment.");
+
+  // A null insert means a concurrent /link for this same account beat us to
+  // the one open-challenge slot (uniqOpenPerAccount). Show theirs rather than
+  // erroring — it is the same player, twice.
+  const concurrent = await deps.store.findLiveChallenge(ctx.discordId, now);
+  if (concurrent) {
+    return ephemeral(challengeMessage(concurrent.sequence, concurrent.expiresAt, await nameOf(deps, concurrent.targetDayzId)));
+  }
+  return ephemeral("Could not issue a challenge right now. Try again in a moment.");
+}
+
+/** Gamertag for a UID, falling back to the UID so a message is never blank. */
+async function nameOf(deps: CommandDeps, dayzId: string): Promise<string> {
+  return (await deps.store.playerByDayzId(dayzId))?.gamertag ?? dayzId;
 }
 
 /**
