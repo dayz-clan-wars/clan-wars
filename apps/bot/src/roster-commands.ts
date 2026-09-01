@@ -160,6 +160,9 @@ export async function handleInviteAccept(deps: RosterDeps, discordId: string, in
   if (outcome === "already-member") return reply("You're already in a faction on that server.");
   if (outcome === "cooldown") return reply("You're on cooldown and can't join a faction there yet.");
   if (outcome === "not-holding") return reply("That faction is no longer active.");
+  if (outcome === "link-changed") {
+    return reply("The character you had linked when that invitation was sent is no longer the one you're linked to. Ask for a fresh invite.");
+  }
   return reply("You joined the faction.");
 }
 

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, rosterCooldowns,
+  servers, factions, factionMembers, factionInvites, identityLinks, rosterCooldowns,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -37,6 +37,11 @@ describe("PgRosterStore invites", () => {
     factionId = f!.id;
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: "L".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0,
+    });
+    // `acceptInvite` rosters the accepter's CURRENT linked UID, so the link
+    // is part of the fixture, not scenery.
+    await db.insert(identityLinks).values({
+      discordId: INVITEE_DISCORD, dayzId: INVITEE_DAYZ, gamertag: "Nine", verifiedAt: t0,
     });
 
     base = {
@@ -138,6 +143,29 @@ describe("PgRosterStore invites", () => {
       expect(row!.acceptedAt).toBeNull();
       expect(row!.declinedAt).toBeNull();
       expect(row!.revokedAt).toBeNull();
+      expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toHaveLength(1);
+    });
+
+    it("refuses an accept once the accepter has relinked a different character", async () => {
+      // The invite carries the UID it was issued against. If the accepter has
+      // since relinked, rostering them under the stored UID would credit
+      // raids to a character they no longer own — and, keyed on dayz_id
+      // rather than discord_id, would let one Discord user hold two
+      // membership rows on one server.
+      await db.update(identityLinks).set({ dayzId: "Q".repeat(40) })
+        .where(eq(identityLinks.discordId, INVITEE_DISCORD));
+
+      expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("link-changed");
+
+      // The claim rolled back: the invite is still theirs to use once relinked.
+      const [row] = await db.select().from(factionInvites).where(eq(factionInvites.id, inviteId));
+      expect(row!.acceptedAt).toBeNull();
+      expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toHaveLength(1);
+    });
+
+    it("refuses an accept from someone who has unlinked entirely", async () => {
+      await db.delete(identityLinks).where(eq(identityLinks.discordId, INVITEE_DISCORD));
+      expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("link-changed");
       expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toHaveLength(1);
     });
 

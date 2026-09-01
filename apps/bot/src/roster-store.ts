@@ -31,7 +31,7 @@ export type PendingInvite = {
   id: number; factionId: number; factionName: string; tag: string;
   serverId: number; serverName: string; expiresAt: Date;
 };
-export type AcceptInviteOutcome = "ok" | "gone" | "already-member" | "cooldown" | "not-holding";
+export type AcceptInviteOutcome = "ok" | "gone" | "already-member" | "cooldown" | "not-holding" | "link-changed";
 export type KickArgs = { factionId: number; actorDiscordId: string; targetDiscordId: string; at: Date; until: Date };
 export type KickOutcome = "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader";
 export type LeaveArgs = { factionId: number; discordId: string; at: Date; until: Date };
@@ -333,10 +333,24 @@ export class PgRosterStore implements RosterStore {
           .where(and(eq(rosterCooldowns.serverId, inv.serverId), eq(rosterCooldowns.dayzId, inv.inviteeDayzId)));
         if (cd && cd.until > at) throw new RosterAbort("cooldown");
 
-        await tx.insert(factionMembers).values({
-          factionId: inv.factionId, serverId: inv.serverId,
-          dayzId: inv.inviteeDayzId, discordId, role: "member", joinedAt: at,
-        });
+        // ⚠️ INSERT ... SELECT, not VALUES: the UID comes from the accepter's
+        // CURRENT `identity_links` row and the invite's stored UID has to
+        // agree with it. A player who unlinks and relinks a different
+        // character between invite and accept would otherwise be rostered
+        // under a UID they no longer own — misattributed raid credit (§7),
+        // and, because this table's uniqueness and the cooldown key on
+        // `dayz_id` while `membershipsFor` keys on `discord_id`, a second
+        // membership row for one Discord user on one server, after which
+        // `resolveServerContext` silently picks whichever came first.
+        // Zero rows means the link moved (or is gone); roll the claim back.
+        const inserted = await tx.execute(sql`
+          insert into faction_members (faction_id, server_id, dayz_id, discord_id, role, joined_at)
+          select ${inv.factionId}::bigint, ${inv.serverId}::integer, il.dayz_id, ${discordId}::text, 'member', ${at.toISOString()}::timestamptz
+          from identity_links il
+          where il.discord_id = ${discordId} and il.dayz_id = ${inv.inviteeDayzId}
+          returning id
+        `);
+        if ((inserted as unknown as unknown[]).length === 0) throw new RosterAbort("link-changed");
         return "ok" as const;
       });
     } catch (err) {

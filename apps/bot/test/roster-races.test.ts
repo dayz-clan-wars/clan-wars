@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, rosterCooldowns,
+  servers, factions, factionMembers, factionInvites, identityLinks, rosterCooldowns,
   type Database,
 } from "@factions/db";
 import { sql, eq, and } from "drizzle-orm";
@@ -81,6 +81,11 @@ describe("PgRosterStore concurrency", () => {
     const PLAYER_DAYZ = "P".repeat(40);
     const PLAYER_DISCORD = "d9";
     const expiresAt = new Date(t0.getTime() + 3_600_000);
+
+    // `acceptInvite` rosters the accepter's current linked UID.
+    await db.insert(identityLinks).values({
+      discordId: PLAYER_DISCORD, dayzId: PLAYER_DAYZ, gamertag: "Nine", verifiedAt: t0,
+    });
 
     const [inv1] = await db.insert(factionInvites).values({
       factionId: f1!.id, serverId,
@@ -199,6 +204,9 @@ describe("PgRosterStore concurrency", () => {
 
     const PLAYER_DAYZ = "P".repeat(40);
     const PLAYER_DISCORD = "d9";
+    await db.insert(identityLinks).values({
+      discordId: PLAYER_DISCORD, dayzId: PLAYER_DAYZ, gamertag: "Nine", verifiedAt: t0,
+    });
     const [inv] = await db.insert(factionInvites).values({
       factionId, serverId,
       inviteeDiscordId: PLAYER_DISCORD, inviteeDayzId: PLAYER_DAYZ,
