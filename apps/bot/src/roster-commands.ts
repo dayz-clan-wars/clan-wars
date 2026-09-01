@@ -135,3 +135,66 @@ export async function handleInviteDecline(deps: RosterDeps, discordId: string, i
   const ok = await deps.store.declineInvite(inviteId, discordId, deps.now());
   return reply(ok ? "Invitation declined." : "That invitation is no longer available.");
 }
+
+export type KickInput = { serverId: number | null; targetDiscordId: string };
+
+/**
+ * The store owns every precondition (self-kick, permission, and the two
+ * untouchable-target cases) because they're re-checked at write time, not
+ * just here — see `PgRosterStore.kick`. This handler only maps outcomes to
+ * messages.
+ */
+export async function handleFactionKick(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  input: KickInput,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), input.serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  const at = deps.now();
+  const outcome = await deps.store.kick({
+    factionId: membership.factionId,
+    actorDiscordId,
+    targetDiscordId: input.targetDiscordId,
+    at,
+    until: new Date(at.getTime() + deps.cooldownMs),
+  });
+
+  if (outcome === "not-permitted") return reply("Only the leader and officers can kick.");
+  if (outcome === "target-not-member") return reply(`**${mention(input.targetDiscordId)}** is not in **${membership.factionName}**.`);
+  if (outcome === "cannot-kick-self") return reply("You can't kick yourself. Use `/faction leave` instead.");
+  if (outcome === "cannot-kick-officer") return reply("Officers can't kick other officers.");
+  if (outcome === "cannot-kick-leader") return reply("You can't kick the leader.");
+
+  return reply(
+    `**${mention(input.targetDiscordId)}** has been kicked from **${membership.factionName}**. `
+    + `They cannot join a faction on **${membership.serverName}** for 3 days.`,
+  );
+}
+
+export async function handleFactionLeave(
+  deps: RosterDeps,
+  discordId: string,
+  serverId: number | null,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(discordId), serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  const at = deps.now();
+  const outcome = await deps.store.leave({
+    factionId: membership.factionId,
+    discordId,
+    at,
+    until: new Date(at.getTime() + deps.cooldownMs),
+  });
+
+  if (outcome === "not-member") return reply(`You're not in **${membership.factionName}**.`);
+  if (outcome === "leader-must-transfer") {
+    return reply("You're the leader — transfer leadership before you can leave. Use `/faction transfer`.");
+  }
+
+  return reply(`You left **${membership.factionName}**. You cannot join a faction on **${membership.serverName}** for 3 days.`);
+}

@@ -2,6 +2,7 @@ import { describe, it, expect, vi } from "vitest";
 import type { RosterStore, Membership, PendingInvite } from "../src/roster-store.js";
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
+  handleFactionKick, handleFactionLeave,
   type RosterDeps,
 } from "../src/roster-commands.js";
 
@@ -193,5 +194,93 @@ describe("handleInviteDecline", () => {
     const d = deps({ declineInvite: async () => false });
     const r = await handleInviteDecline(d, "d9", 42);
     expect(r.content).toMatch(/no longer available/i);
+  });
+});
+
+describe("handleFactionKick", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionKick(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("maps every store outcome to a distinct reply", async () => {
+    const cases: Array<[
+      "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader",
+      RegExp,
+    ]> = [
+      ["ok", /kicked/i],
+      ["not-permitted", /leader and officers can kick/i],
+      ["target-not-member", /not in .*Bears/i],
+      ["cannot-kick-self", /can't kick yourself/i],
+      ["cannot-kick-officer", /can't kick other officers/i],
+      ["cannot-kick-leader", /can't kick the leader/i],
+    ];
+    const seen = new Set<string>();
+    for (const [outcome, expected] of cases) {
+      const d = deps({ membershipsFor: async () => [membership()], kick: async () => outcome });
+      const r = await handleFactionKick(d, "d1", { serverId: null, targetDiscordId: "d9" });
+      expect(r.content).toMatch(expected);
+      expect(seen.has(r.content)).toBe(false);
+      seen.add(r.content);
+      expect(r.ephemeral).toBe(true);
+    }
+  });
+
+  it("names the cooldown and the server on success", async () => {
+    const d = deps({ membershipsFor: async () => [membership()], kick: async () => "ok" as const });
+    const r = await handleFactionKick(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/cannot join a faction on \*\*S\*\* for 3 days/);
+  });
+
+  it("passes the cooldown window through to the store", async () => {
+    const kick = vi.fn(async () => "ok" as const);
+    const d = deps({ membershipsFor: async () => [membership()], kick });
+    await handleFactionKick(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(kick).toHaveBeenCalledWith({
+      factionId: 1, actorDiscordId: "d1", targetDiscordId: "d9",
+      at: now, until: new Date(now.getTime() + 259_200_000),
+    });
+  });
+});
+
+describe("handleFactionLeave", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionLeave(d, "d1", null);
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("maps every store outcome to a distinct reply", async () => {
+    const cases: Array<["ok" | "not-member" | "leader-must-transfer", RegExp]> = [
+      ["ok", /you left/i],
+      ["not-member", /not in .*Bears/i],
+      ["leader-must-transfer", /transfer leadership/i],
+    ];
+    const seen = new Set<string>();
+    for (const [outcome, expected] of cases) {
+      const d = deps({ membershipsFor: async () => [membership()], leave: async () => outcome });
+      const r = await handleFactionLeave(d, "d1", null);
+      expect(r.content).toMatch(expected);
+      expect(seen.has(r.content)).toBe(false);
+      seen.add(r.content);
+      expect(r.ephemeral).toBe(true);
+    }
+  });
+
+  it("names the cooldown and the server on success", async () => {
+    const d = deps({ membershipsFor: async () => [membership()], leave: async () => "ok" as const });
+    const r = await handleFactionLeave(d, "d1", null);
+    expect(r.content).toMatch(/cannot join a faction on \*\*S\*\* for 3 days/);
+  });
+
+  it("passes the cooldown window through to the store", async () => {
+    const leave = vi.fn(async () => "ok" as const);
+    const d = deps({ membershipsFor: async () => [membership()], leave });
+    await handleFactionLeave(d, "d1", null);
+    expect(leave).toHaveBeenCalledWith({
+      factionId: 1, discordId: "d1",
+      at: now, until: new Date(now.getTime() + 259_200_000),
+    });
   });
 });
