@@ -52,12 +52,20 @@ lock state, still no clock.)
 
    The interleaving is narrow, so the test stages it with a real lock rather than hoping for it: a third connection holds `ACCESS EXCLUSIVE` on `roster_cooldowns`, the table `acceptInvite` reads *between* its status check and its membership INSERT, which parks the accept in exactly the gap the defect needs. Ordering is read back out of `pg_stat_activity`'s own view of who is waiting for whom — never timed, never `setTimeout`. The test was run RED against the unfixed store first and failed with the stranded row present (`expected [ { id: 2, … } ] to deeply equal []`). The fix takes `SELECT … FOR SHARE` on the faction row inside the accept transaction, which both writers must wait on, so the roster DELETE always runs after the membership INSERT.
 
+6. **Accept versus disband — lock order** (added by the follow-up re-review; a blocking defect the fix wave itself introduced). Race 5's `FOR SHARE` and Item 4's invite revoke together created a cycle: `acceptInvite` claimed the `faction_invites` row and then waited on the `factions` row, while `disband()`/`lapseReservations()` updated the `factions` row and then waited on the `faction_invites` row to set `revoked_at`. Postgres resolves that by aborting one side with 40P01 — a raw serialization error surfacing to a player who merely pressed Accept. Neither half existed before the wave.
+
+   Staged with a real row lock, like race 5: a third connection holds `FOR UPDATE` on the leader's membership row, which parks the disband *between* its `UPDATE factions` and its invite revoke; the accept then arrives at that held faction row. (A row lock, not `LOCK TABLE faction_members` — `disband`'s leader guard is a correlated SELECT on that same table, so a table-level `ACCESS EXCLUSIVE` would park the disband before it ever locked the faction row, which is the wrong gap.) The test was run against the pre-fix ordering and failed with `PostgresError: deadlock detected`. The fix moves the `FOR SHARE` **above** the claim UPDATE so both sides acquire `factions` first; the claim remains the atomic double-spend guard and carries the locked faction id in its own `WHERE`, and the `not-holding` path then has nothing written to roll back. Neither call may reject — that both settle IS the assertion that no deadlock occurred — and the outcomes are deterministic (`disband` → `"ok"`, `accept` → `"not-holding"`, invite unconsumed but revoked, no membership row).
+
+Both staged tests wrap their lock holder in a `try/finally` and close their
+extra connection, so a failing wait predicate cannot leave a lock in place
+and wedge the next `beforeEach` TRUNCATE.
+
 No test in this file needed a store-level catch for a raw Postgres
 serialization error — the app's default `READ COMMITTED` isolation means
-every one of these five races resolves as an ordinary row-lock wait
+every one of these six races resolves as an ordinary row-lock wait
 followed by a zero-row UPDATE/DELETE or a unique-index violation, both of
 which the store already handled before this task. Races 1-3 needed no
-change to `roster-store.ts`; race 5 did — see above.
+change to `roster-store.ts`; races 5 and 6 did — see above.
 
 ### Commands used
 
@@ -71,26 +79,26 @@ luck will not pass three times.
 
 **Run 1:**
 ```
- ✓ test/roster-races.test.ts (5 tests) 335ms
+ ✓ test/roster-races.test.ts (6 tests) 412ms
  Test Files  1 passed (1)
-      Tests  5 passed (5)
+      Tests  6 passed (6)
 ```
 
 **Run 2:**
 ```
- ✓ test/roster-races.test.ts (5 tests) 314ms
+ ✓ test/roster-races.test.ts (6 tests) 399ms
  Test Files  1 passed (1)
-      Tests  5 passed (5)
+      Tests  6 passed (6)
 ```
 
 **Run 3:**
 ```
- ✓ test/roster-races.test.ts (5 tests) 324ms
+ ✓ test/roster-races.test.ts (6 tests) 420ms
  Test Files  1 passed (1)
-      Tests  5 passed (5)
+      Tests  6 passed (6)
 ```
 
-All three runs: 1 file, 5 tests, 0 failed. (Output also carries a stream
+All three runs: 1 file, 6 tests, 0 failed. (Output also carries a stream
 of Postgres `NOTICE`-level `truncate cascades to table "..."` lines from
 the `beforeEach` truncate statement — expected noise from the shared
 multi-table schema, not test failures.)
@@ -119,16 +127,16 @@ test counts to report):
 | @factions/nitrado | 1 | 10 |
 | @factions/verification | 2 | 15 |
 | @factions/adm-parser | 8 | 101 |
-| @factions/bot | 19 | 325 |
+| @factions/bot | 19 | 328 |
 | @factions/db | 6 | 40 |
 
-**Total: 626 tests passed across 51 test files, 0 skipped, 0 failed. Turbo:
+**Total: 629 tests passed across 51 test files, 0 skipped, 0 failed. Turbo:
 20 successful, 20 total (0 cached — forced real execution).**
 
-This is a growth of 266 tests from the 2026-08-31 ceremony-detection
-acceptance baseline of 360 (`@factions/bot` alone grew from 136 to 325
-across this plan's ten tasks and the final-review fix wave, including the
-five races above;
+This is a growth of 269 tests from the 2026-08-31 ceremony-detection
+acceptance baseline of 360 (`@factions/bot` alone grew from 136 to 328
+across this plan's ten tasks, the final-review fix wave and its follow-up,
+including the six races above;
 `@factions/db` grew from 31 to 40 with the roster schema tests;
 `@factions/ingest-worker`, `@factions/nitrado`, `@factions/adm-parser` grew
 from unrelated, already-landed work on other branches merged into this
@@ -174,17 +182,19 @@ Discord guild, a real DayZ server, and human hands.
 
 ## PASS/FAIL
 
-**PASS** on every fixture-level check this task can make. The five
+**PASS** on every fixture-level check this task can make. The six
 concurrency races each ran three times with no flakes: the invite-accept
 race, the leadership-transfer race, the kick/leave race, the
-rename-vs-rename race and the accept-vs-disband race all resolved to
-exactly one winner and a consistent database state every time. Races 1-3
-needed no store change; races 4 and 5 were added by the final-review fix
-wave, and race 5 exposed a real defect (an unlocked status read in
-`acceptInvite` that could strand an unclearable membership row) which was
-seen failing before the `FOR SHARE` fix landed. The full workspace suite —
-626 tests across 51 files, 20/20 turbo tasks, forced past cache — passed
-with zero failures. The one open item is the staged Discord gate above,
+rename-vs-rename race, the accept-vs-disband strand race and the
+accept-vs-disband lock-order race all resolved to exactly one winner and a
+consistent database state every time. Races 1-3 needed no store change;
+races 4-6 were added by the final-review fix wave and its follow-up. Race 5
+exposed a real defect (an unlocked status read in `acceptInvite` that could
+strand an unclearable membership row) and race 6 exposed a defect the wave
+itself introduced (the `FOR SHARE` and the invite revoke disagreeing on
+lock order, deadlocking with 40P01); both were seen failing before their
+fixes landed. The full workspace suite — 629 tests across 51 files, 20/20
+turbo tasks, forced past cache — passed with zero failures. The one open item is the staged Discord gate above,
 which requires a real guild and real human hands and cannot be satisfied by
 any automated test in this repository; it joins two other staged gates
 already open elsewhere in this project.
