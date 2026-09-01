@@ -8,6 +8,7 @@ import { CLAIMABLE_FLAGS } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
 import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
+import { runPlayerProjection } from "./player-tick.js";
 import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
 import { applyNickname, type NicknameOutcome, type GuildLike } from "./nickname.js";
@@ -937,6 +938,18 @@ export async function start(cfg: BotConfig): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
+    // ⚠️ FIRST, and in its own try/catch. `/link`'s autocomplete can only
+    // offer characters this projection has recorded, so a player who has
+    // just been seen in game is unlinkable until it runs. A failure here
+    // must not stop verification — a stale menu is survivable, a halted
+    // tick is not.
+    try {
+      const p = await runPlayerProjection(db);
+      if (p.upserted > 0) console.log(`players projected ${p.upserted} of ${p.scanned} events`);
+    } catch (err) {
+      console.error("player projection failed", err);
+    }
+
     try {
       const r = await verificationTick(db, store);
       if (r.verified > 0 || r.alreadyLinked > 0) {
