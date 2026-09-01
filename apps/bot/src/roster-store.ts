@@ -88,6 +88,24 @@ class RosterAbort extends Error {
   }
 }
 
+/**
+ * The actor currently holds the `leader` seat on this faction's roster.
+ *
+ * ⚠️ `faction_members.role = 'leader'` is the SINGLE AUTHORITY for every
+ * leader-only permission. `factions.leader_discord_id` is DISPLAY PROVENANCE
+ * ONLY — `FactionCard` exposes it and `/faction info` prints it, and
+ * `transfer()` keeps it current, but nothing may ever authorise on it. It is
+ * a denormalised copy and copies drift; the roster row is the one
+ * `faction_members_leader_uniq` actually protects, so it cannot. Guarding
+ * `disband`/`rename` on the copy is exactly how a demoted ex-leader kept the
+ * power to destroy a faction they no longer led.
+ *
+ * A correlated subquery, not a pre-read: the check rides inside the
+ * statement's own WHERE, the way `kick`'s does.
+ */
+const leaderIs = (factionId: number, discordId: string) =>
+  sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId}) = 'leader'`;
+
 export class PgRosterStore implements RosterStore {
   constructor(private readonly db: Database) {}
 
@@ -511,6 +529,14 @@ export class PgRosterStore implements RosterStore {
           throw new RosterAbort("target-not-member");
         }
 
+        // Keep the denormalised copy true. It is DISPLAY PROVENANCE ONLY —
+        // never an authority. See the note on `leaderDiscordId` above
+        // `disband`; leaving it stale here is what let a demoted ex-leader
+        // disband the faction.
+        await tx.update(factions)
+          .set({ leaderDiscordId: a.toDiscordId })
+          .where(eq(factions.id, a.factionId));
+
         return "ok" as const;
       });
     } catch (err) {
@@ -538,7 +564,7 @@ export class PgRosterStore implements RosterStore {
         .set({ status: "disbanded" })
         .where(and(
           eq(factions.id, factionId),
-          eq(factions.leaderDiscordId, discordId),
+          leaderIs(factionId, discordId),
           inArray(factions.status, HOLDING),
         ))
         .returning({ id: factions.id });
@@ -566,7 +592,7 @@ export class PgRosterStore implements RosterStore {
       .set({ name: a.name, renamedAt: a.at })
       .where(and(
         eq(factions.id, a.factionId),
-        eq(factions.leaderDiscordId, a.discordId),
+        leaderIs(a.factionId, a.discordId),
         inArray(factions.status, HOLDING),
         or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
       ))
@@ -574,9 +600,9 @@ export class PgRosterStore implements RosterStore {
 
     if (updated[0]) return "ok" as const;
 
-    const [f] = await this.db.select({ leaderDiscordId: factions.leaderDiscordId })
-      .from(factions).where(eq(factions.id, a.factionId));
-    if (!f || f.leaderDiscordId !== a.discordId) return "not-leader" as const;
+    const [seat] = await this.db.select({ role: factionMembers.role }).from(factionMembers)
+      .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.discordId)));
+    if (seat?.role !== "leader") return "not-leader" as const;
     return "cooldown" as const;
   }
 }

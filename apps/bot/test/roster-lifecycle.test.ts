@@ -66,6 +66,53 @@ describe("PgRosterStore disband and rename", () => {
     });
   });
 
+  /**
+   * Leadership authority must follow the `faction_members` roster row, which
+   * `faction_members_leader_uniq` protects, and never the denormalised
+   * `factions.leader_discord_id` copy. Every other suite in this plan seeds
+   * the two in agreement and never transfers, so a guard reading the stale
+   * copy looked correct everywhere. These tests transfer first.
+   */
+  describe("after a leadership transfer", () => {
+    const NEW_LEADER = "d3";
+
+    beforeEach(async () => {
+      expect(await store.transfer({ factionId, fromDiscordId: LEADER, toDiscordId: NEW_LEADER, at: t0 })).toBe("ok");
+    });
+
+    it("names the new leader on the faction row", async () => {
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.leaderDiscordId).toBe(NEW_LEADER);
+    });
+
+    it("lets the new leader rename", async () => {
+      const r = await store.rename({ factionId, discordId: NEW_LEADER, name: "Cubs", at: t0, notBefore: past });
+      expect(r).toBe("ok");
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.name).toBe("Cubs");
+    });
+
+    it("lets the new leader disband", async () => {
+      expect(await store.disband(factionId, NEW_LEADER)).toBe("ok");
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.status).toBe("disbanded");
+    });
+
+    it("refuses the demoted old leader's rename", async () => {
+      const r = await store.rename({ factionId, discordId: LEADER, name: "Cubs", at: t0, notBefore: past });
+      expect(r).toBe("not-leader");
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.name).toBe("Bears");
+    });
+
+    it("refuses the demoted old leader's disband", async () => {
+      expect(await store.disband(factionId, LEADER)).toBe("not-leader");
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.status).toBe("active");
+      expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toHaveLength(2);
+    });
+  });
+
   describe("rename", () => {
     const renameArgs = (over: Partial<RenameArgs> = {}): RenameArgs => ({
       factionId, discordId: LEADER, name: "Second", at: t0, notBefore: past,
