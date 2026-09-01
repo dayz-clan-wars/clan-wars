@@ -205,20 +205,57 @@ still holds the full twice-replayed backfill for inspection.
 
 ## Not yet accepted: live Nitrado ingestion
 
-- [ ] **Live Nitrado tick (REQUIRED before the worker is trusted in production).**
-      Against the real service id, run one sweep. Confirm: files listed oldest-first,
-      the derived clock offset matches the measured value for that map
-      (chernarus +4h / livonia and sakhal +7h), events land, and a second tick
-      ingests only lines added since the first. Record the derived offset here —
-      if it disagrees with the measured table, STOP: the derivation over-estimates
-      by however long a file was still being written, and that is exactly the
-      silent failure clock_offset_ms exists to prevent.
+- [x] **Live Nitrado tick — PASSED 2026-09-01 against service 19831378 (CW-TEST, livonia).**
 
-This gate was not attempted: there is no real `NITRADO_TOKEN` available in
-this environment, and running the worker against the live Nitrado API
-without one would either fail outright or, if a stray token were present,
-loop against a live third-party API — explicitly out of scope for this
-acceptance run. The gate remains unchecked.
+      Ran against the real Nitrado API with a real token. Results:
+
+      **Derived offset matches the measured value.** A read-only probe over all
+      nine listed files, before anything was written:
+
+      ```
+      DayZServer_X1_x64_2026-08-31_17-16-14.ADM  raw_offset=7.0000h
+      DayZServer_X1_x64_2026-08-31_17-21-44.ADM  raw_offset=7.0000h
+      DayZServer_X1_x64_2026-08-31_17-26-10.ADM  raw_offset=8.1422h
+      DayZServer_X1_x64_2026-08-31_19-39-38.ADM  raw_offset=8.3817h
+      DayZServer_X1_x64_2026-08-31_21-53-32.ADM  raw_offset=7.0000h
+      DayZServer_X1_x64_2026-09-01_00-06-58.ADM  raw_offset=7.0000h
+      DayZServer_X1_x64_2026-09-01_02-20-12.ADM  raw_offset=8.2869h
+      DayZServer_X1_x64_2026-09-01_04-33-40.ADM  raw_offset=7.0000h
+      DayZServer_X1_x64_2026-09-01_06-47-00.ADM  raw_offset=7.0000h
+
+      DERIVED  25200000 ms (7.0000h)   MEASURED 25200000 ms (7.0000h)   MATCH
+      ```
+
+      This is the design's model confirmed against production data. Every
+      candidate is `trueOffset + writeLag`: the six files showing exactly
+      7.0000h are 124 bytes — a boot header and nothing else, never appended
+      to — so their mtime IS their creation instant. The three showing
+      8.14-8.38h were still being written when they rotated, and the excess is
+      pure lag. The minimum is the truth.
+
+      It also demonstrates why retaining the tightest bound matters: had the
+      listing contained only the three appended files, the derivation would
+      have returned 8.25h, and an implementation that overwrote rather than
+      retained would have stamped every subsequent event 1h15m off with every
+      count-based check still green.
+
+      **Files listed oldest-first and ingested:** 9 files, 8 marked complete,
+      the newest left incomplete. 123 raw lines, 23 events.
+
+      **Timestamps convert correctly.** Local `17:31:51` in the ADM line stored
+      as `2026-09-01 00:31:51+00` — +7h across the day boundary. The latest
+      event (`04:02:21Z`) agrees with that file's Nitrado mtime (`04:02:32Z`).
+      No event is future-dated relative to the wall clock.
+
+      **Second tick ingested nothing new:** raw_lines 123 -> 123, events
+      23 -> 23, `clock_offset_ms` unchanged at 25200000. The resume cursor and
+      the offset retention both hold.
+
+      **Note on the database.** Real data lives in `factions_live`, not
+      `factions`. Eleven test files truncate `servers`, `events` and
+      `raw_lines` in `factions`, so ingesting there would have every event
+      deleted by the next `pnpm test` run. `docker-compose.yml` and `.env`
+      both point at `factions_live`; `TEST_DATABASE_URL` keeps `factions`.
 
 ## PASS/FAIL
 

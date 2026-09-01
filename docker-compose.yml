@@ -18,7 +18,10 @@ services:
     depends_on:
       postgres: { condition: service_healthy }
     environment:
-      DATABASE_URL: postgres://factions:factions@postgres:5432/factions
+      # ⚠️ factions_live, NOT factions. Eleven test files truncate `servers`,
+      # `events` and `raw_lines` in `factions`, so pointing the worker there
+      # would have every ingested event deleted by the next `pnpm test`.
+      DATABASE_URL: postgres://factions:factions@postgres:5432/factions_live
       NITRADO_TOKEN: ${NITRADO_TOKEN}
       INGEST_INTERVAL_SECONDS: "60"
       ADM_BACKFILL_BUDGET: "15"
