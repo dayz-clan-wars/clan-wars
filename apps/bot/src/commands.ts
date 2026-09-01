@@ -105,15 +105,17 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   // it.
   let switchedFrom: string | null = null;
   if (live) {
-    // ⚠️ Ordering, not decoration: the cancel must be COMMITTED before the
-    // insert below, or the new row collides with the row it replaces on BOTH
-    // partial unique indexes (uniqOpenPerAccount, and
-    // verification_challenges_open_target_uniq when switching back to a
-    // character this account previously named). These are separate
-    // autocommitted statements, so the cancel is durable by the time
-    // createChallenge runs — no transaction needed, and wrapping them in one
-    // would be worse: the indexes are evaluated at insert time against
-    // uncommitted-in-transaction state, which is the same conflict.
+    // ⚠️ Ordering, not decoration: the cancel must run BEFORE the insert
+    // below, or the new row collides with the row it replaces on
+    // uniqOpenPerAccount (and on verification_challenges_open_target_uniq when
+    // switching back to a character this account previously named). The
+    // ordering is the whole requirement — an UPDATE that sets canceled_at
+    // drops the row out of both partial indexes within its own transaction, so
+    // these two statements are correct either autocommitted, as here, or
+    // wrapped in one transaction. They are left autocommitted because the gap
+    // is self-healing: a crash between them leaves the old challenge canceled
+    // and both index slots free, so the next /link issues cleanly with neither
+    // character locked out.
     //
     // cancelChallenge is the guarded cancel — it touches only a row that is
     // neither completed nor already canceled. False means the row closed under

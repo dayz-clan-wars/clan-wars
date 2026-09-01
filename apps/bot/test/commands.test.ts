@@ -167,19 +167,33 @@ describe("commands", () => {
       expect(live[0]).toMatchObject({ targetDayzId: TARGET });
     });
 
-    it("refuses to switch once the tick has already bound the old target", async () => {
-      // The cancel is guarded: a completed challenge is not cancellable, so
-      // the switch must notice the account is now linked rather than issue a
-      // second challenge on top of a live link.
+    it("refuses to switch when the tick binds the old target mid-handler", async () => {
+      // ⚠️ The link must appear BETWEEN handleLink's top-of-handler read and
+      // its cancel, which is the only window in which cancelChallenge returns
+      // false in production. Completing the challenge before the call instead
+      // would be answered by the already-linked guard at the top of the
+      // handler, and the test would pass with the !canceled branch deleted.
+      class TickRacesTheCancel extends PgVerificationStore {
+        override async cancelChallenge(challengeId: number, at: Date) {
+          // The verification tick lands here: it binds the old target, so our
+          // guarded cancel then finds a completed row and refuses it.
+          await super.completeChallenge(challengeId, TARGET, "Ronald", at);
+          return super.cancelChallenge(challengeId, at);
+        }
+      }
       const other = "B".repeat(40);
       await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
       await handleLink(deps, CTX);
-      const live = await store.findLiveChallenge("100", now);
-      expect(await store.completeChallenge(live!.id, TARGET, "Ronald", now)).toBe(true);
 
-      const r = await handleLink(deps, { ...CTX, targetDayzId: other });
-      expect(r.content).toMatch(/already linked|just finished/i);
+      const racing = { ...deps, store: new TickRacesTheCancel(db) };
+      const r = await handleLink(racing, { ...CTX, targetDayzId: other });
+
+      // Only the !canceled branch produces this wording.
+      expect(r.content).toMatch(/just finished/i);
+      expect(r.content).toContain("Ronald");
+      // No challenge issued on top of a live link.
       expect(await store.liveChallenges(now)).toHaveLength(0);
+      expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: TARGET });
     });
 
     it("describes the sequence by its actual length, not a hardcoded word", async () => {
