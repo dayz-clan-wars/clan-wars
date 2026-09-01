@@ -7,5 +7,20 @@ services:
       POSTGRES_DB: factions
     ports: ["5434:5432"]
     volumes: ["factions-pg:/var/lib/postgresql/data"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factions"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+  ingest-worker:
+    build: { context: ., dockerfile: apps/ingest-worker/Dockerfile }
+    restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DATABASE_URL: postgres://factions:factions@postgres:5432/factions
+      NITRADO_TOKEN: ${NITRADO_TOKEN}
+      INGEST_INTERVAL_SECONDS: "60"
+      ADM_BACKFILL_BUDGET: "15"
 volumes:
   factions-pg:
