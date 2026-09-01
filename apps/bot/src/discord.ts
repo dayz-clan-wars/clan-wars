@@ -731,6 +731,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         });
       } catch (err) {
         console.error(`component ${interaction.customId} failed`, err);
+        // `respondToClaimConfirm` defers before it touches the store, so
+        // logging and dropping leaves the player on "thinking" forever.
+        await apologiseForFailure(interaction);
       }
       return;
     }
@@ -745,6 +748,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         });
       } catch (err) {
         console.error(`component ${interaction.customId} failed`, err);
+        // Same as above, and this is the path accept/decline/transfer/disband
+        // ride on — the one most likely to throw from the store.
+        await apologiseForFailure(interaction);
       }
     }
   });

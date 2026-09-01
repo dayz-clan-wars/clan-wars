@@ -452,6 +452,79 @@ describe("apologiseForFailure", () => {
 });
 
 /**
+ * The component paths — buttons and the claim select — defer before they
+ * touch the store, exactly as the chat-input path does, so a store throw
+ * there strands the interaction on "thinking" in the same way. The button
+ * path is where accept, decline, transfer and disband live, which makes it
+ * the likeliest place for a store throw to land.
+ *
+ * These drive the real routers with a throwing store, through the same
+ * `catch { log; apologiseForFailure }` composition the `interactionCreate`
+ * listener now uses on both paths. What they prove is that the interaction
+ * really is deferred-and-unanswered at the moment the throw escapes the
+ * router — so the apology is both reachable and necessary. (The listener
+ * itself is a closure inside `startBot` and cannot be imported; the wiring of
+ * these two catches is verified by reading `discord.ts`.)
+ */
+describe("a store throw on a component path still answers the player", () => {
+  const boom = () => { throw new Error("store exploded"); };
+
+  const componentInteraction = () => {
+    const i = {
+      customId: inviteAcceptCustomId(7),
+      userId: "d1",
+      values: [] as string[],
+      deferred: false,
+      replied: false,
+      deferReply: vi.fn(async () => { i.deferred = true; }),
+      editReply: vi.fn(async (_o: { content: string }) => { i.replied = true; }),
+    };
+    return i;
+  };
+
+  const runCatching = async (i: ReturnType<typeof componentInteraction>, run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (err) {
+      console.error(`component ${i.customId} failed`, err);
+      await apologiseForFailure(i);
+    }
+  };
+
+  it("apologises on the button path", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = componentInteraction();
+    const d: RosterDeps = {
+      store: { acceptInvite: boom } as unknown as RosterStore,
+      now: () => new Date("2026-08-31T12:00:00Z"),
+      inviteTtlMs: 1, cooldownMs: 1, renameCooldownMs: 1,
+    };
+
+    await runCatching(i, () => routeRosterButton(d, i));
+
+    // The hazard is real: the router deferred, and the throw escaped before
+    // anything answered.
+    expect(i.deferReply).toHaveBeenCalled();
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+    err.mockRestore();
+  });
+
+  it("apologises on the select-menu path", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = componentInteraction();
+    i.customId = claimCustomId(3);
+    i.values = ["uid-1"];
+    const d = { store: { openCeremonyFor: boom } } as unknown as FactionDeps;
+
+    await runCatching(i, () => respondToClaimConfirm(d, i));
+
+    expect(i.deferReply).toHaveBeenCalled();
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+    err.mockRestore();
+  });
+});
+
+/**
  * `PUBLIC_ROSTER_SUBCOMMANDS` picks the defer flags before the handler runs,
  * and each handler independently sets `RosterReply.ephemeral`. The wiring
  * uses the set and ignores the field, so nothing but this test stops the two
