@@ -313,8 +313,20 @@ export class PgRosterStore implements RosterStore {
         const inv = claimed[0];
         if (!inv) return "gone" as const;
 
+        // ⚠️ `FOR SHARE`, not a plain read. An unlocked SELECT here is not a
+        // check at all under READ COMMITTED: `disband()` and
+        // `lapseReservations()` both UPDATE this row and then DELETE the
+        // roster, and that DELETE cannot see the membership row this
+        // transaction has not inserted yet. Read status, watch a disband
+        // commit in the gap, insert anyway — and the row outlives its
+        // faction. `faction_members_server_player_uniq` has no status
+        // predicate, so that row then bars the player from every future
+        // faction on the server and NO command can clear it (§4.1). The share
+        // lock makes both writers wait for this transaction instead, so their
+        // DELETE always runs after this INSERT.
         const [f] = await tx.select({ id: factions.id }).from(factions)
-          .where(and(eq(factions.id, inv.factionId), inArray(factions.status, HOLDING)));
+          .where(and(eq(factions.id, inv.factionId), inArray(factions.status, HOLDING)))
+          .for("share");
         if (!f) throw new RosterAbort("not-holding");
 
         const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)

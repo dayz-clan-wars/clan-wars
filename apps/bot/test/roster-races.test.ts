@@ -7,6 +7,28 @@ import {
 import { sql, eq, and } from "drizzle-orm";
 import { PgRosterStore } from "../src/roster-store.js";
 
+/**
+ * How many backends are parked on a heavyweight lock right now. This is
+ * Postgres's own view of who is waiting for whom — the same evidence the
+ * other tests in this file get from a unique-index conflict, just observable
+ * while the racers are still mid-flight. Ordering is derived from it; no test
+ * here waits out a duration.
+ */
+async function blockedBackends(db: Database): Promise<number> {
+  const rows = await db.execute(sql`select count(*)::int as n from pg_stat_activity
+    where datname = current_database() and wait_event_type = 'Lock'`);
+  return Number((rows as unknown as { n: number }[])[0]!.n);
+}
+
+/** Spin until a condition over real database state holds. Never a fixed delay. */
+async function until(what: string, pred: () => Promise<boolean>): Promise<void> {
+  for (let i = 0; i < 5000; i++) {
+    if (await pred()) return;
+  }
+  throw new Error(`never observed: ${what}`);
+}
+
+
 const URL = requireTestDatabaseUrl();
 const t0 = new Date("2026-08-31T12:00:00Z");
 const UNTIL = new Date(t0.getTime() + 259_200_000);
@@ -143,5 +165,83 @@ describe("PgRosterStore concurrency", () => {
       .where(and(eq(rosterCooldowns.serverId, serverId), eq(rosterCooldowns.dayzId, TARGET_DAYZ)));
     expect(cooldowns).toHaveLength(1);
     expect(cooldowns[0]!.until.getTime()).toBe(UNTIL.getTime());
+  });
+  /**
+   * §4.1: a membership row must never outlive its faction's hold.
+   * `faction_members_server_player_uniq` carries no status predicate, so a
+   * stranded row bars that player from EVERY future faction on the server
+   * with no command able to clear it — `/faction leave`, `createInvite` and
+   * `acceptInvite` all refuse it. Manual SQL is the only escape.
+   *
+   * The interleaving that produces one is narrow, so it is staged here rather
+   * than hoped for: a third connection holds ACCESS EXCLUSIVE on
+   * `roster_cooldowns`, which is the table `acceptInvite` reads between its
+   * faction-status check and its membership INSERT. That parks the accept in
+   * exactly the gap the defect needs, using a real lock — the ordering below
+   * is read back out of `pg_stat_activity`, never timed.
+   *
+   * Unfixed (an unlocked status SELECT), the disband commits inside that gap
+   * and its roster DELETE cannot see the row the accept has not inserted yet;
+   * the accept then inserts into a disbanded faction. Fixed, the accept's
+   * `FOR SHARE` on the faction row makes the disband's `UPDATE factions` wait
+   * for it, so the DELETE always runs after the INSERT.
+   */
+  it("an accept racing a disband cannot strand a membership row", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
+      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
+    }).returning();
+    const factionId = f!.id;
+
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
+    });
+
+    const PLAYER_DAYZ = "P".repeat(40);
+    const PLAYER_DISCORD = "d9";
+    const [inv] = await db.insert(factionInvites).values({
+      factionId, serverId,
+      inviteeDiscordId: PLAYER_DISCORD, inviteeDayzId: PLAYER_DAYZ,
+      invitedByDiscordId: "d1", createdAt: t0, expiresAt: new Date(t0.getTime() + 3_600_000),
+    }).returning();
+
+    const dbC = createClient(URL);
+    let openTheGap!: () => void;
+    let closeTheGap!: () => void;
+    const gapOpen = new Promise<void>((r) => { openTheGap = r; });
+    const gapClosed = new Promise<void>((r) => { closeTheGap = r; });
+    const holder = dbC.transaction(async (tx) => {
+      await tx.execute(sql`lock table roster_cooldowns in access exclusive mode`);
+      openTheGap();
+      await gapClosed;
+    });
+    await gapOpen;
+
+    const accepting = storeA.acceptInvite(inv!.id, PLAYER_DISCORD, t0);
+    await until("the accept parked on roster_cooldowns", async () => await blockedBackends(db) >= 1);
+
+    // The disband either runs straight through (nothing holds it back when the
+    // accept's status read took no lock) or parks on the faction row the
+    // accept is holding FOR SHARE. Both are settled states to wait for.
+    const disbanding = storeB.disband(factionId, "d1");
+    let disbandSettled = false;
+    void disbanding.then(() => { disbandSettled = true; }, () => { disbandSettled = true; });
+    await until("the disband settled or parked", async () =>
+      disbandSettled || await blockedBackends(db) >= 2);
+
+    closeTheGap();
+    await holder;
+
+    const [acceptOutcome, disbandOutcome] = await Promise.all([accepting, disbanding]);
+    expect(disbandOutcome).toBe("ok");
+    expect(["ok", "not-holding"]).toContain(acceptOutcome);
+
+    const [after] = await db.select().from(factions).where(eq(factions.id, factionId));
+    expect(after!.status).toBe("disbanded");
+
+    // The whole point: nothing rostered survives the faction's hold.
+    const stranded = await db.select().from(factionMembers)
+      .where(eq(factionMembers.serverId, serverId));
+    expect(stranded).toEqual([]);
   });
 });
