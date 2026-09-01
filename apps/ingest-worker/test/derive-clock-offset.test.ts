@@ -30,4 +30,18 @@ describe("deriveClockOffsetMs", () => {
     const local = Date.UTC(2026, 6, 22, 1, 0, 0);
     expect(deriveClockOffsetMs([{ localTimestampMs: local, modifiedAtMs: local + 7 * HOUR }])).toBe(7 * HOUR);
   });
+
+  it("documents the hazard: a zero mtime poisons the minimum", () => {
+    // This test documents the hazard rather than endorsing it. A zero mtime
+    // (from a missing upload mtime) wins the minimum and produces a hugely
+    // negative offset, shifting every ingested timestamp by decades. This is
+    // the exact class of silent failure this module prevents — but on the
+    // caller's side. The function is behaving correctly; the test exists so a
+    // future reader sees the consequence rather than reasoning about it.
+    const realistic = { localTimestampMs: 1000, modifiedAtMs: 1000 + 7 * HOUR };
+    const missing = { localTimestampMs: 1000, modifiedAtMs: 0 };
+    const result = deriveClockOffsetMs([realistic, missing]);
+    // modifiedAtMs: 0, localTimestampMs: 1000 → offset = -1000
+    expect(result).toBe(-1000);
+  });
 });

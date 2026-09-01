@@ -12,6 +12,12 @@ export type OffsetCandidate = { localTimestampMs: number; modifiedAtMs: number }
  * to every count-based check in this system — every row lands, every
  * acceptance count matches, and only the absolute instants are hours wrong.
  * The caller must fall back to the stored offset instead.
+ *
+ * ⚠️ CALLER OBLIGATION: Candidates must be pre-filtered to those with a real
+ * mtime (`modifiedAtMs > 0`) and a parseable local timestamp. A zero mtime wins
+ * the minimum and produces a hugely negative offset, shifting every ingested
+ * timestamp by decades. The upstream API client reports a missing mtime faithfully
+ * as 0; only the caller knows which candidates are real and which are missing.
  */
 export function deriveClockOffsetMs(candidates: OffsetCandidate[]): number | null {
   if (candidates.length === 0) return null;
