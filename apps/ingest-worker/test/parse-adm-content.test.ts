@@ -37,4 +37,31 @@ describe("parseAdmContent", () => {
     // unusable rather than partially usable.
     expect(() => parseAdmContent("07:52:16 | orphan line")).toThrow(/AdminLog started on/);
   });
+
+  it("drops the final line when told to and the text ends mid-line", () => {
+    // ⚠️ The live file is downloaded while the server appends to it, so the
+    // last byte can land mid-line. That fragment must not be stored: doing so
+    // advances the cursor past it, and the complete version can never be
+    // written afterwards.
+    const { lines } = parseAdmContent(`${HEADER}\n07:52:16 | a\n07:52:17 | trunc`, {
+      dropPartialTrailingLine: true,
+    });
+    expect(lines).toEqual([HEADER, "07:52:16 | a"]);
+  });
+
+  it("keeps the final line when the text ends in a newline", () => {
+    // A newline proves the line is whole, so nothing is dropped even with the
+    // option on.
+    const { lines } = parseAdmContent(`${HEADER}\n07:52:16 | a\n`, {
+      dropPartialTrailingLine: true,
+    });
+    expect(lines).toEqual([HEADER, "07:52:16 | a"]);
+  });
+
+  it("keeps the final line by default even without a trailing newline", () => {
+    // ⚠️ Default OFF. For a finished file the last line is real, and dropping
+    // it would lose a line permanently.
+    const { lines } = parseAdmContent(`${HEADER}\n07:52:16 | a`);
+    expect(lines).toEqual([HEADER, "07:52:16 | a"]);
+  });
 });

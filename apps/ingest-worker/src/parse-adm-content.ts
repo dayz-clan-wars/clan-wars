@@ -1,5 +1,21 @@
 import { parseBootHeader } from "@factions/adm-parser";
 
+export type ParseAdmOptions = {
+  /**
+   * Drop the final line when the text does not end in a newline.
+   *
+   * ⚠️ Pass true ONLY for the file the server is still appending to. That
+   * download can end mid-line, and `split` yields the half-written fragment as
+   * a full element: it is non-blank, so it is stored at index `N-1` and the
+   * cursor advances to `N`. The next tick sees the COMPLETE line at `N-1`,
+   * skips it (writes resume at the cursor) and `onConflictDoNothing` would
+   * discard it anyway — the line is permanently truncated and any event it
+   * carried is permanently lost. Defaults to FALSE: for a finished file the
+   * last line is real, and dropping it would lose a line for good.
+   */
+  dropPartialTrailingLine?: boolean;
+};
+
 /**
  * Split one ADM file's text into its boot instant and its non-blank lines.
  *
@@ -11,8 +27,14 @@ import { parseBootHeader } from "@factions/adm-parser";
  * given an absolute timestamp, so the file is rejected rather than partially
  * ingested.
  */
-export function parseAdmContent(text: string): { bootAt: Date; lines: string[] } {
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+export function parseAdmContent(
+  text: string,
+  opts: ParseAdmOptions = {},
+): { bootAt: Date; lines: string[] } {
+  let lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (opts.dropPartialTrailingLine && !text.endsWith("\n") && lines.length > 0) {
+    lines = lines.slice(0, -1);
+  }
   for (const line of lines) {
     const boot = parseBootHeader(line);
     if (boot) return { bootAt: boot, lines };
