@@ -159,8 +159,14 @@ export class PgVerificationStore implements VerificationStore {
       // verificationTick: the batch cursor is never written and the whole
       // batch is redone, forever. Zero affected rows means we lost the race,
       // which is a false return, not an error.
+      // ⚠️ targetDayzId is included here too: even if a future caller forgot
+      // the tick's own UID-equality guard and called this with the wrong
+      // dayzId, the store itself refuses to bind (or cancel under) a
+      // challenge for a UID it doesn't name. Defense in depth on the one
+      // property this whole design rests on.
       const stillOpen = and(
         eq(verificationChallenges.id, challengeId),
+        eq(verificationChallenges.targetDayzId, dayzId),
         isNull(verificationChallenges.completedAt),
         isNull(verificationChallenges.canceledAt),
       );
@@ -263,7 +269,7 @@ export class PgVerificationStore implements VerificationStore {
       .from(players)
       .leftJoin(identityLinks, eq(identityLinks.dayzId, players.dayzId))
       .where(isNull(identityLinks.id))
-      .orderBy(desc(players.lastSeenAt))
+      .orderBy(desc(players.lastSeenAt), desc(players.dayzId))
       .limit(limit);
     return rows;
   }

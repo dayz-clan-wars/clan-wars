@@ -311,4 +311,27 @@ describe("verificationTick", () => {
       .where(eq(verificationChallenges.id, challenge.id));
     expect(row!.canceledAt).not.toBeNull();
   });
+
+  it("cancels a challenge the instant its budget is spent, with no further events", async () => {
+    // ⚠️ Regression for the off-by-one: the cancel must fire on the event
+    // that reaches MAX_POOL_EMOTES_PER_ATTEMPT, not wait for a next one that
+    // may never come. A player who fumbles EXACTLY eight safe emotes and then
+    // logs off must not hold their one open challenge slot for the 24h TTL.
+    // Against a pre-increment guard (seenCount >= MAX checked BEFORE the
+    // write), this test is red: seen_count ends at 8, the loop simply exits,
+    // and nothing ever cancels the challenge.
+    const challenge = await seedChallenge({ discordId: "d1", targetDayzId: TARGET,
+      sequence: ["EmoteSalute", "EmoteClap", "EmoteNod"] });
+    // Exactly eight safe emotes that never match the sequence.
+    const eight = ["EmoteHeart", "EmoteDance", "EmoteShrug", "EmoteMove",
+                   "EmoteCome", "EmoteSilent", "EmoteWatching", "EmoteThroat"];
+    expect(eight).toHaveLength(8);
+    for (const emote of eight) {
+      await seedEmote({ dayzId: TARGET, gamertag: "Ronald", emote });
+    }
+    await verificationTick(db, store, { now });
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, challenge.id));
+    expect(row!.canceledAt).not.toBeNull();
+  });
 });

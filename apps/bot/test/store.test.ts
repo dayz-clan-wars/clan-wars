@@ -227,6 +227,19 @@ describe("PgVerificationStore", () => {
     expect(await store.cancelExpired(now)).toBe(0);
   });
 
+  it("refuses to cancel a challenge that already completed", async () => {
+    // The guard is the half that matters: without it, a stray cancelChallenge
+    // call on an already-bound challenge would either corrupt it (violating
+    // verification_challenges_single_outcome) or throw and poison the
+    // verificationTick cursor loop forever.
+    const c = await issue("600");
+    await store.completeChallenge(c.id, UID_A, "Steve", later);
+    expect(await store.cancelChallenge(c.id, later)).toBe(false);
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row!.canceledAt).toBeNull();
+  });
+
   it("offers recently seen players, newest first, excluding the linked", async () => {
     const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40);
     await seedPlayer({ dayzId: A, gamertag: "Older", lastSeenAt: new Date("2026-09-01T00:00:00Z") });
