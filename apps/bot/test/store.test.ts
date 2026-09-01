@@ -180,7 +180,14 @@ describe("PgVerificationStore", () => {
     expect(links).toHaveLength(1);
   });
 
-  it("refuses a second open challenge holding the same sequence", async () => {
+  it("refuses a second open challenge for the same character", async () => {
+    // Used to cover verification_challenges_open_sequence_uniq. That index was
+    // retired (see schema.ts's tombstone comment on the target column — three
+    // emotes over 24 tokens collide routinely, so blocking on shared sequences
+    // would actively break /link) and replaced by
+    // verification_challenges_open_target_uniq: `second` conflicts here
+    // because it names the same target UID as `first`, not because it shares
+    // a sequence.
     const first = await issue("100");
     expect(first).not.toBeNull();
     const second = await store.createChallenge({
@@ -190,7 +197,12 @@ describe("PgVerificationStore", () => {
     expect(second).toBeNull();
   });
 
-  it("frees a sequence once its challenge is canceled as expired", async () => {
+  it("frees a target UID once its challenge is canceled as expired", async () => {
+    // Also formerly about the retired open-sequence index (see the comment
+    // above). Both challenges here reuse SEQ, which no longer matters — what
+    // makes `reused` non-null is that canceling the first frees its target
+    // UID from verification_challenges_open_target_uniq, since `reused` names
+    // the same target (UID_A).
     await store.createChallenge({
       discordId: "300", guildId: "g", channelId: "c", sequence: SEQ,
       issuedAt: now, expiresAt: new Date(now.getTime() - 1), targetDayzId: UID_A,
