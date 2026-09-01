@@ -163,6 +163,43 @@ describe("NitradoClient.uploadFile", () => {
     await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/missing token for/);
   });
 
+  it("rejects a binary POST that answers 200 with a failure payload", async () => {
+    // ⚠️ Distinct from the 200-with-failure test above, which fails on STEP
+    // ONE (the token request, guarded by assertSuccess). Here step one
+    // succeeds and only the signed-URL POST — the call that actually writes
+    // the bytes — answers 200 with status:"error". Without the body check in
+    // uploadFile this resolves, supply-tick advances the stored hash, and the
+    // server file diverges from the database forever with nothing retrying.
+    const fake = async (url: string) =>
+      String(url).includes("file_server/upload")
+        ? new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put", token: "T" } } }), { status: 200 })
+        : new Response(JSON.stringify({ status: "error", message: "quota exceeded" }), { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/quota exceeded/);
+  });
+
+  it("accepts a binary POST that answers 200 with an empty body", async () => {
+    // ⚠️ The other half of the guard, and the half that protects the working
+    // deployment: nobody has verified that this endpoint returns an envelope
+    // at all. An empty (or non-JSON) body MUST stay a success — asserting
+    // status === "success" unconditionally would break every real upload.
+    const fake = async (url: string) =>
+      String(url).includes("file_server/upload")
+        ? new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put", token: "T" } } }), { status: 200 })
+        : new Response("", { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).resolves.toBeUndefined();
+  });
+
+  it("accepts a binary POST whose body is not JSON", async () => {
+    const fake = async (url: string) =>
+      String(url).includes("file_server/upload")
+        ? new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put", token: "T" } } }), { status: 200 })
+        : new Response("OK", { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).resolves.toBeUndefined();
+  });
+
   it("fails when the binary POST is rejected", async () => {
     const fake = async (url: string) =>
       String(url).includes("file_server/upload")

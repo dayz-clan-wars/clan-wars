@@ -153,5 +153,33 @@ export class NitradoClient {
       signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) throw new Error(`Nitrado upload failed ${res.status} for ${remoteDir}/${fileName}`);
+
+    // ⚠️ res.ok alone is not enough on THIS step either. Nitrado answers some
+    // errors with HTTP 200 and status:"error"; if that happened here the
+    // upload would resolve, supply-tick would advance the stored hash, and the
+    // file on the server would diverge from the database permanently with
+    // nothing ever retrying it.
+    //
+    // ⚠️ HONEST AMBIGUITY: nobody has verified what this signed-URL endpoint
+    // actually returns on success — it may well be an empty body, and the
+    // working deployment depends on that staying a success. So this is
+    // deliberately narrow: throw ONLY when the body parses as JSON AND carries
+    // a `status` that is not "success". An empty or non-JSON body stays a
+    // success. If we ever observe a real success envelope here, tighten it.
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = text.trim() === "" ? undefined : JSON.parse(text);
+    } catch {
+      parsed = undefined; // Not JSON — nothing to assert against.
+    }
+    if (parsed && typeof parsed === "object" && "status" in parsed) {
+      const body = parsed as Record<string, any>;
+      if (body.status !== "success") {
+        throw new Error(
+          `Nitrado upload returned status=${body.status} for ${remoteDir}/${fileName}: ${body.message ?? "no message"}`,
+        );
+      }
+    }
   }
 }
