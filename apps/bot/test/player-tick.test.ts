@@ -102,4 +102,26 @@ describe("runPlayerProjection", () => {
     expect(row!.firstSeenAt.toISOString()).toBe("2026-09-01T10:00:00.000Z");
     expect(row!.lastSeenAt.toISOString()).toBe("2026-09-01T11:00:00.000Z");
   });
+
+  it("skips a player.position event with a missing dayzId, without writing a row, and still advances the cursor", async () => {
+    await seedEvent({ type: "player.position", occurredAt: new Date("2026-09-01T10:00:00Z"),
+      payload: { gamertag: "Ronald", pos: { x: 1, y: 2, z: 3 } } });
+    const r = await runPlayerProjection(db);
+    expect(r.scanned).toBe(0);
+    expect(r.upserted).toBe(0);
+    const rows = await db.select().from(players);
+    expect(rows).toHaveLength(0);
+    expect(await readCursor(db, PLAYER_CONSUMER)).toBeGreaterThan(0);
+  });
+
+  it("skips an emote.performed event with an empty gamertag, without writing a row, and still advances the cursor", async () => {
+    await seedEvent({ type: "emote.performed", occurredAt: new Date("2026-09-01T10:00:00Z"),
+      payload: { dayzId: A, gamertag: "", emote: "EmoteClap", item: null } });
+    const r = await runPlayerProjection(db);
+    expect(r.scanned).toBe(0);
+    expect(r.upserted).toBe(0);
+    const rows = await db.select().from(players);
+    expect(rows).toHaveLength(0);
+    expect(await readCursor(db, PLAYER_CONSUMER)).toBeGreaterThan(0);
+  });
 });
