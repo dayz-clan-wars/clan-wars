@@ -75,12 +75,15 @@ const ROLE_ORDER = sql<number>`case ${factionMembers.role} when 'leader' then 0 
  * non-"ok" outcome.
  *
  * ⚠️ A bare early `return` from a Drizzle transaction callback COMMITS the
- * transaction — it does not roll back. Returning "not-holding" or "cooldown"
+ * transaction — it does not roll back. Returning "cooldown" or "link-changed"
  * directly, after the invite row was already updated to `accepted_at = now`,
  * would consume the invite while adding no member: the player permanently
  * loses the offer and gains nothing, with no error anywhere. Throwing here
  * instead makes Drizzle roll the whole transaction back, and the catch below
  * translates the sentinel back into the outcome the caller expects.
+ *
+ * A `return` is only safe for an outcome decided before the claim UPDATE
+ * runs — "gone" and "not-holding" both are.
  */
 class RosterAbort extends Error {
   constructor(public readonly outcome: string) {
@@ -321,18 +324,62 @@ export class PgRosterStore implements RosterStore {
    * guard, not a convenience — without it anyone who can guess an id could
    * join a faction they were never offered.
    *
-   * The faction-holding and cooldown checks run AFTER the invite is claimed
-   * (it must be claimed first so a concurrent accept cannot double-spend it)
-   * but must abort via `throw`, not `return`, or the claim they just made
-   * would commit with no membership row to show for it. See `RosterAbort`.
+   * The faction-holding check runs BEFORE the invite is claimed — see the
+   * lock-order note on the `FOR SHARE` below, which is what keeps this path
+   * from deadlocking against `disband`/`lapseReservations`. Everything after
+   * the claim (the cooldown floor, the identity-link equality) must abort via
+   * `throw`, not `return`, or the claim just made would commit with no
+   * membership row to show for it. See `RosterAbort`.
    */
   async acceptInvite(inviteId: number, discordId: string, at: Date): Promise<AcceptInviteOutcome> {
     try {
       return await this.db.transaction(async (tx) => {
+        // Which faction row to lock. Unlocked, and it decides nothing: the
+        // claim UPDATE below carries the same faction id in its own WHERE, so
+        // an invite that somehow moved between the two yields zero rows and
+        // "gone". A plain SELECT takes no ROW lock, so this read is not part
+        // of any lock cycle.
+        const [target] = await tx.select({ factionId: factionInvites.factionId })
+          .from(factionInvites).where(eq(factionInvites.id, inviteId));
+        if (!target) return "gone" as const;
+
+        // ⚠️ `FOR SHARE`, not a plain read, and it must come BEFORE the claim
+        // UPDATE below. Two separate reasons, both load-bearing:
+        //
+        // 1. An unlocked SELECT is not a check at all under READ COMMITTED.
+        //    `disband()` and `lapseReservations()` both UPDATE this row and
+        //    then DELETE the roster, and that DELETE cannot see the
+        //    membership row this transaction has not inserted yet. Read
+        //    status, watch a disband commit in the gap, insert anyway — and
+        //    the row outlives its faction. `faction_members_server_player_uniq`
+        //    has no status predicate, so that row then bars the player from
+        //    every future faction on the server and NO command can clear it
+        //    (§4.1). The share lock makes both writers wait for this
+        //    transaction instead, so their DELETE always runs after this
+        //    INSERT.
+        //
+        // 2. LOCK ORDER: `factions` before `faction_invites`. Both writers
+        //    update the faction row FIRST and only then revoke its
+        //    outstanding invites. Claiming the invite before taking this lock
+        //    closes a cycle — this transaction holding the invite row and
+        //    waiting on the faction row, the writer holding the faction row
+        //    and waiting on the invite row — and Postgres resolves that by
+        //    aborting one side with 40P01, surfacing as a raw error to a
+        //    player who merely pressed Accept. Acquiring in the same order as
+        //    the writers makes the deadlock impossible rather than rare.
+        //
+        // Nothing has been written at this point, which is why "not-holding"
+        // can return directly instead of needing a `RosterAbort`.
+        const [f] = await tx.select({ id: factions.id }).from(factions)
+          .where(and(eq(factions.id, target.factionId), inArray(factions.status, HOLDING)))
+          .for("share");
+        if (!f) return "not-holding" as const;
+
         const claimed = await tx.update(factionInvites)
           .set({ acceptedAt: at })
           .where(and(
             eq(factionInvites.id, inviteId),
+            eq(factionInvites.factionId, target.factionId),
             eq(factionInvites.inviteeDiscordId, discordId),
             isNull(factionInvites.acceptedAt),
             isNull(factionInvites.declinedAt),
@@ -342,22 +389,6 @@ export class PgRosterStore implements RosterStore {
           .returning();
         const inv = claimed[0];
         if (!inv) return "gone" as const;
-
-        // ⚠️ `FOR SHARE`, not a plain read. An unlocked SELECT here is not a
-        // check at all under READ COMMITTED: `disband()` and
-        // `lapseReservations()` both UPDATE this row and then DELETE the
-        // roster, and that DELETE cannot see the membership row this
-        // transaction has not inserted yet. Read status, watch a disband
-        // commit in the gap, insert anyway — and the row outlives its
-        // faction. `faction_members_server_player_uniq` has no status
-        // predicate, so that row then bars the player from every future
-        // faction on the server and NO command can clear it (§4.1). The share
-        // lock makes both writers wait for this transaction instead, so their
-        // DELETE always runs after this INSERT.
-        const [f] = await tx.select({ id: factions.id }).from(factions)
-          .where(and(eq(factions.id, inv.factionId), inArray(factions.status, HOLDING)))
-          .for("share");
-        if (!f) throw new RosterAbort("not-holding");
 
         const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)
           .where(and(eq(rosterCooldowns.serverId, inv.serverId), eq(rosterCooldowns.dayzId, inv.inviteeDayzId)));

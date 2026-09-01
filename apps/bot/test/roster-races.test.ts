@@ -20,6 +20,37 @@ async function blockedBackends(db: Database): Promise<number> {
   return Number((rows as unknown as { n: number }[])[0]!.n);
 }
 
+/**
+ * Open a transaction on its own connection that holds `take` (a lock-taking
+ * statement) until `body` finishes, then always releases it and closes the
+ * connection.
+ *
+ * ⚠️ The release must happen on EVERY path. If `until` below throws while the
+ * gap is open, an un-released holder leaves its lock in place and wedges the
+ * next `beforeEach` TRUNCATE — one broken test would then look like a broken
+ * file. Hence the `finally`.
+ */
+async function holdingLock(take: ReturnType<typeof sql>, body: () => Promise<void>): Promise<void> {
+  const dbC = createClient(URL);
+  let opened!: () => void;
+  let close!: () => void;
+  const isOpen = new Promise<void>((r) => { opened = r; });
+  const closed = new Promise<void>((r) => { close = r; });
+  const holder = dbC.transaction(async (tx) => {
+    await tx.execute(take);
+    opened();
+    await closed;
+  });
+  try {
+    await isOpen;
+    await body();
+  } finally {
+    close();
+    await holder.catch(() => {});
+    await dbC.$client.end();
+  }
+}
+
 /** Spin until a condition over real database state holds. Never a fixed delay. */
 async function until(what: string, pred: () => Promise<boolean>): Promise<void> {
   for (let i = 0; i < 5000; i++) {
@@ -247,32 +278,21 @@ describe("PgRosterStore concurrency", () => {
       invitedByDiscordId: "d1", createdAt: t0, expiresAt: new Date(t0.getTime() + 3_600_000),
     }).returning();
 
-    const dbC = createClient(URL);
-    let openTheGap!: () => void;
-    let closeTheGap!: () => void;
-    const gapOpen = new Promise<void>((r) => { openTheGap = r; });
-    const gapClosed = new Promise<void>((r) => { closeTheGap = r; });
-    const holder = dbC.transaction(async (tx) => {
-      await tx.execute(sql`lock table roster_cooldowns in access exclusive mode`);
-      openTheGap();
-      await gapClosed;
+    let accepting!: Promise<string>;
+    let disbanding!: Promise<string>;
+    await holdingLock(sql`lock table roster_cooldowns in access exclusive mode`, async () => {
+      accepting = storeA.acceptInvite(inv!.id, PLAYER_DISCORD, t0);
+      await until("the accept parked on roster_cooldowns", async () => await blockedBackends(db) >= 1);
+
+      // The disband either runs straight through (nothing holds it back when
+      // the accept's status read took no lock) or parks on the faction row
+      // the accept is holding FOR SHARE. Both are settled states to wait for.
+      disbanding = storeB.disband(factionId, "d1");
+      let disbandSettled = false;
+      void disbanding.then(() => { disbandSettled = true; }, () => { disbandSettled = true; });
+      await until("the disband settled or parked", async () =>
+        disbandSettled || await blockedBackends(db) >= 2);
     });
-    await gapOpen;
-
-    const accepting = storeA.acceptInvite(inv!.id, PLAYER_DISCORD, t0);
-    await until("the accept parked on roster_cooldowns", async () => await blockedBackends(db) >= 1);
-
-    // The disband either runs straight through (nothing holds it back when the
-    // accept's status read took no lock) or parks on the faction row the
-    // accept is holding FOR SHARE. Both are settled states to wait for.
-    const disbanding = storeB.disband(factionId, "d1");
-    let disbandSettled = false;
-    void disbanding.then(() => { disbandSettled = true; }, () => { disbandSettled = true; });
-    await until("the disband settled or parked", async () =>
-      disbandSettled || await blockedBackends(db) >= 2);
-
-    closeTheGap();
-    await holder;
 
     const [acceptOutcome, disbandOutcome] = await Promise.all([accepting, disbanding]);
     expect(disbandOutcome).toBe("ok");
@@ -285,5 +305,83 @@ describe("PgRosterStore concurrency", () => {
     const stranded = await db.select().from(factionMembers)
       .where(eq(factionMembers.serverId, serverId));
     expect(stranded).toEqual([]);
+  });
+  /**
+   * LOCK ORDER, not a data race. `acceptInvite` and `disband` both touch
+   * `factions` and `faction_invites`; if they take them in opposite orders,
+   * Postgres resolves the cycle by aborting one side with 40P01 — a raw
+   * serialization failure surfacing to a player who merely pressed Accept.
+   *
+   * Both halves of the cycle were introduced by the final-review fix wave:
+   * the accept's `FOR SHARE` on `factions` (Item 2) and the disband's revoke
+   * of outstanding invites (Item 4). Before the wave neither existed.
+   *
+   * Staged with a real row lock, the same way the accept-vs-disband test
+   * above is: a third connection holds `FOR UPDATE` on the leader's
+   * membership row, which parks the disband between its `UPDATE factions`
+   * (faction row now locked) and its invite revoke. The accept then runs into
+   * that held faction row. Under the broken order it is already holding the
+   * invite row it claimed, so when the disband is released and reaches its
+   * revoke the cycle closes. Under the fixed order the accept takes
+   * `factions` FIRST and holds nothing the disband needs, so the disband
+   * completes and the accept simply finds the faction gone.
+   *
+   * A row lock, not `lock table faction_members` — `disband`'s leader guard
+   * is a correlated SELECT on that same table, and a table-level ACCESS
+   * EXCLUSIVE would park the disband BEFORE it locked the faction row, which
+   * is the wrong gap entirely.
+   */
+  it("an accept and a disband cannot deadlock on faction versus invite", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
+      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
+    }).returning();
+    const factionId = f!.id;
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
+    });
+
+    const PLAYER_DAYZ = "P".repeat(40);
+    const PLAYER_DISCORD = "d9";
+    await db.insert(identityLinks).values({
+      discordId: PLAYER_DISCORD, dayzId: PLAYER_DAYZ, gamertag: "Nine", verifiedAt: t0,
+    });
+    const [inv] = await db.insert(factionInvites).values({
+      factionId, serverId,
+      inviteeDiscordId: PLAYER_DISCORD, inviteeDayzId: PLAYER_DAYZ,
+      invitedByDiscordId: "d1", createdAt: t0, expiresAt: new Date(t0.getTime() + 3_600_000),
+    }).returning();
+
+    let accepting!: Promise<string>;
+    let disbanding!: Promise<string>;
+    await holdingLock(
+      sql`select id from faction_members where faction_id = ${factionId} for update`,
+      async () => {
+        // The disband takes the faction row, then parks on the held roster row
+        // — with its invite revoke still ahead of it.
+        disbanding = storeB.disband(factionId, "d1");
+        await until("the disband parked on the roster row", async () => await blockedBackends(db) >= 1);
+
+        // The accept now arrives at that same faction row.
+        accepting = storeA.acceptInvite(inv!.id, PLAYER_DISCORD, t0);
+        await until("the accept parked on the faction row", async () => await blockedBackends(db) >= 2);
+      },
+    );
+
+    // Neither of these may reject. A 40P01 deadlock abort throws out of the
+    // store — `acceptInvite`'s catch rethrows anything that is not a
+    // `RosterAbort`, and `disband` has no catch at all — so the assertion
+    // that both settle IS the assertion that no deadlock occurred.
+    const [acceptOutcome, disbandOutcome] = await Promise.all([accepting, disbanding]);
+    expect(disbandOutcome).toBe("ok");
+    // Deterministic: the accept was waiting on the faction row, so it reads
+    // the row only after the disband committed `disbanded` onto it.
+    expect(acceptOutcome).toBe("not-holding");
+
+    // ...and the invite was not consumed on the way past.
+    const [after] = await db.select().from(factionInvites).where(eq(factionInvites.id, inv!.id));
+    expect(after!.acceptedAt).toBeNull();
+    expect(after!.revokedAt).not.toBeNull();
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.serverId, serverId))).toEqual([]);
   });
 });
