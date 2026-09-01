@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, type Database } from "@factions/db";
-import { sql, eq, isNotNull } from "drizzle-orm";
+import { sql, and, eq, isNotNull } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -132,11 +132,19 @@ describe("PgVerificationStore", () => {
   });
 
   it("never completes a challenge without writing its link, under concurrency", async () => {
-    // Two Discord accounts racing for the SAME UID. Exactly one may win, and
-    // the loser must not be left marked complete. Distinct targets and
-    // distinct accounts satisfy uniqOpenTarget/uniqOpenPerAccount so both
-    // challenges can be open at once; distinct sequences are incidental — the
-    // open-sequence uniqueness index this used to route around is gone.
+    // Two accounts verifying at once, plus a DUPLICATE delivery of one of the
+    // completions — the shape two bot instances produce (inbox item 22: the
+    // notifier and the tick are at-least-once across processes, and nothing
+    // enforces single-instance). Two accounts cannot race for one UID any
+    // more — verification_challenges_open_target_uniq forbids two open
+    // challenges naming the same character — so the race that remains is the
+    // same challenge being completed twice.
+    //
+    // ⚠️ Each call passes the UID its own challenge NAMES. Passing another
+    // challenge's UID is not a race, it is the caller bug the store now
+    // refuses outright ("refuses to bind a UID the challenge does not name"),
+    // and a test that did it would be exercising that refusal by accident
+    // rather than the concurrency it claims to cover.
     const a = await store.createChallenge({
       discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
@@ -148,22 +156,43 @@ describe("PgVerificationStore", () => {
 
     const results = await Promise.all([
       store.completeChallenge(a!.id, UID_A, "Steve", later),
-      store.completeChallenge(b!.id, UID_A, "Steve", later),
+      store.completeChallenge(a!.id, UID_A, "Steve", later),
+      store.completeChallenge(b!.id, UID_B, "Nora", later),
     ]);
 
-    expect(results.filter(Boolean)).toHaveLength(1);
+    // b wins its own; exactly one of the two deliveries of a wins.
+    expect(results[2]).toBe(true);
+    expect([results[0], results[1]].filter(Boolean)).toHaveLength(1);
 
-    const links = await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A));
-    expect(links).toHaveLength(1);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A))).toHaveLength(1);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_B))).toHaveLength(1);
 
-    // The invariant that actually matters: every completed challenge has a
-    // link row for its Discord account.
+    // Forward: every completed challenge has a link row for its Discord account.
     const completed = await db.select().from(verificationChallenges)
       .where(isNotNull(verificationChallenges.completedAt));
     for (const c of completed) {
       const [link] = await db.select().from(identityLinks)
         .where(eq(identityLinks.discordId, c.discordId));
       expect(link, `challenge ${c.id} completed with no link for ${c.discordId}`).toBeDefined();
+    }
+
+    // Converse: every link row was produced by a completed challenge that
+    // NAMED that UID. This is the direction that catches a link bound under a
+    // challenge for some other character — the forward check above cannot see
+    // it, because such a link leaves no completed challenge behind at all.
+    const links = await db.select().from(identityLinks);
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const [challenge] = await db.select().from(verificationChallenges).where(and(
+        eq(verificationChallenges.discordId, link.discordId),
+        eq(verificationChallenges.targetDayzId, link.dayzId),
+        eq(verificationChallenges.boundDayzId, link.dayzId),
+        isNotNull(verificationChallenges.completedAt),
+      ));
+      expect(
+        challenge,
+        `link ${link.discordId} -> ${link.dayzId} has no completed challenge naming that UID`,
+      ).toBeDefined();
     }
   });
 
