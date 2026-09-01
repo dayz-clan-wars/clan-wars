@@ -90,6 +90,40 @@ describe("PgRosterStore kick and leave", () => {
         .where(and(eq(rosterCooldowns.serverId, serverId), eq(rosterCooldowns.dayzId, "O".repeat(40))));
       expect(row!.until.getTime()).toBe(UNTIL.getTime());
     });
+
+    it("does not report ok or write a cooldown when the target is removed out from under the kick", async () => {
+      // Simulate a concurrent departure: a separate transaction deletes the
+      // target's membership row and holds the row lock (uncommitted) while
+      // this kick's own read of actor/target still sees the old, pre-delete
+      // state. Only when the racer commits does kick's own DELETE proceed —
+      // by which point the row is gone. A kick() that decides "ok" from a
+      // stale pre-read (rather than from what its own DELETE actually
+      // removed) gets this wrong: it reports success and writes a cooldown
+      // for a member who was never actually kicked by this call.
+      let releaseLock!: () => void;
+      const lockHeld = new Promise<void>((resolve) => { releaseLock = resolve; });
+      let lockAcquired!: () => void;
+      const lockAcquiredPromise = new Promise<void>((resolve) => { lockAcquired = resolve; });
+
+      const racer = db.transaction(async (tx) => {
+        await tx.delete(factionMembers)
+          .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, OFFICER)));
+        lockAcquired();
+        await lockHeld;
+      });
+
+      await lockAcquiredPromise;
+      const kickPromise = store.kick(kickArgs({ actorDiscordId: LEADER, targetDiscordId: OFFICER }));
+      // Give kick's own (non-blocking) SELECTs time to run and its DELETE
+      // time to reach the lock and start blocking, before we release it.
+      await new Promise((resolve) => setTimeout(resolve, 100));
+      releaseLock();
+      await racer;
+
+      const result = await kickPromise;
+      expect(result).not.toBe("ok");
+      expect(await db.select().from(rosterCooldowns)).toHaveLength(0);
+    });
   });
 
   describe("leave", () => {

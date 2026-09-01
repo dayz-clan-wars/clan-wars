@@ -355,31 +355,55 @@ export class PgRosterStore {
    * to kick the leader gets "cannot-kick-leader", not "cannot-kick-officer"
    * — the leader is untouchable regardless of who is doing the kicking.
    */
+  /**
+   * The permission logic lives entirely inside the DELETE's own WHERE — a
+   * correlated subquery for the actor's *current* role, plus the target-role
+   * exclusions — so the outcome is decided from `.returning()`, exactly like
+   * `leave` below. Nothing here pre-reads roles and then acts on a stale
+   * belief about them.
+   *
+   * ⚠️ A version that instead pre-read the actor's and target's roles,
+   * decided the outcome from that read, and then ran the delete
+   * unconditionally (or only guarded by `role <> 'leader'`, without
+   * checking how many rows it actually removed) has a real TOCTOU gap: if
+   * the target's role changes between the read and the delete — a
+   * concurrent leadership transfer, say — the delete can match zero rows
+   * while the code still reports "ok" and still writes the cooldown. The
+   * row count from `.returning()` is the only trustworthy source for the
+   * decision; the follow-up read below runs only on zero rows, and only to
+   * choose which failure message to show — it decides nothing.
+   */
   async kick(a: KickArgs): Promise<KickOutcome> {
     if (a.actorDiscordId === a.targetDiscordId) return "cannot-kick-self";
 
     return this.db.transaction(async (tx) => {
-      const [actor] = await tx.select({ role: factionMembers.role }).from(factionMembers)
-        .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.actorDiscordId)));
-      const [target] = await tx.select({
-        role: factionMembers.role, dayzId: factionMembers.dayzId, serverId: factionMembers.serverId,
-      }).from(factionMembers)
-        .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
+      const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId})`;
 
-      if (!target) return "target-not-member" as const;
-      if (!actor || actor.role === "member") return "not-permitted" as const;
-      if (target.role === "leader") return "cannot-kick-leader" as const;
-      if (actor.role === "officer" && target.role === "officer") return "cannot-kick-officer" as const;
-
-      await tx.delete(factionMembers)
+      const deleted = await tx.delete(factionMembers)
         .where(and(
           eq(factionMembers.factionId, a.factionId),
           eq(factionMembers.discordId, a.targetDiscordId),
           ne(factionMembers.role, "leader"),
-        ));
+          sql`${actorRole} in ('leader', 'officer')`,
+          sql`not (${actorRole} = 'officer' and ${factionMembers.role} = 'officer')`,
+        ))
+        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId });
+
+      const row = deleted[0];
+      if (!row) {
+        const [actor] = await tx.select({ role: factionMembers.role }).from(factionMembers)
+          .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.actorDiscordId)));
+        const [target] = await tx.select({ role: factionMembers.role }).from(factionMembers)
+          .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
+
+        if (!target) return "target-not-member" as const;
+        if (!actor || actor.role === "member") return "not-permitted" as const;
+        if (target.role === "leader") return "cannot-kick-leader" as const;
+        return "cannot-kick-officer" as const;
+      }
 
       await tx.insert(rosterCooldowns)
-        .values({ serverId: target.serverId, dayzId: target.dayzId, until: a.until })
+        .values({ serverId: row.serverId, dayzId: row.dayzId, until: a.until })
         .onConflictDoUpdate({
           target: [rosterCooldowns.serverId, rosterCooldowns.dayzId],
           // The later of the two: a cooldown is a floor, never shortened.
