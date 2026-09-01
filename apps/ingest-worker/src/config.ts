@@ -3,6 +3,7 @@ export type WorkerConfig = {
   nitradoToken: string;
   intervalSeconds: number;
   backfillBudget: number;
+  missionCustomDir: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -34,5 +35,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): WorkerConfig {
     intervalSeconds: intAtLeast(env, "INGEST_INTERVAL_SECONDS", 60, 1),
     // Zero is meaningful: process only the live file this tick.
     backfillBudget: intAtLeast(env, "ADM_BACKFILL_BUDGET", 15, 0),
+    // No sensible default: a wrong or absent path uploads the supply file
+    // where the server never reads it, and nothing would report that.
+    missionCustomDir: required(env, "MISSION_CUSTOM_DIR"),
   };
 }

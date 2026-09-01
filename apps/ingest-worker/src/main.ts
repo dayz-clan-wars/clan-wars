@@ -1,15 +1,24 @@
+import { readFileSync } from "node:fs";
 import { createClient } from "@factions/db";
 import { NitradoClient } from "@factions/nitrado";
 import { loadConfig } from "./config.js";
 import { ingestSweep } from "./sweep.js";
-import type { NitradoLike } from "./tick.js";
+import { loadTemplate } from "./supplies.js";
 
 const cfg = loadConfig(process.env);
 const db = createClient(cfg.databaseUrl);
 
-// One client per service id, cached for the process lifetime.
-const clients = new Map<number, NitradoLike>();
-const clientFor = (serviceId: number): NitradoLike => {
+// Parsed ONCE at startup. A malformed template must stop the worker here,
+// loudly, rather than throwing on every sweep forever.
+const offsets = loadTemplate(JSON.parse(
+  readFileSync(new URL("../assets/flag-supplies.template.json", import.meta.url), "utf8"),
+));
+
+// One client per service id, cached for the process lifetime. Typed to the
+// concrete NitradoClient (not the narrower NitradoLike) because it also
+// needs to satisfy SupplyUploader for the supply tick below.
+const clients = new Map<number, NitradoClient>();
+const clientFor = (serviceId: number): NitradoClient => {
   let c = clients.get(serviceId);
   if (!c) {
     c = new NitradoClient(cfg.nitradoToken, serviceId);
@@ -36,6 +45,13 @@ for (;;) {
       backfillBudget: cfg.backfillBudget,
       failures,
       onServerError: (serverId, err) => console.error(`ingest failed for server ${serverId}`, err),
+      supplies: {
+        clientFor,
+        offsets,
+        remoteDir: cfg.missionCustomDir,
+        fileName: "faction-supplies.json",
+      },
+      onSupplyError: (serverId, err) => console.error(`supply tick failed for server ${serverId}`, err),
     });
     console.log(`ingest sweep: ${r.servers} servers in ${Date.now() - started}ms`);
   } catch (err) {
