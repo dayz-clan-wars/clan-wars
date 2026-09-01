@@ -276,3 +276,19 @@ waits. Reordering statements inside `acceptInvite` or `disband` would not fail t
 it would silently stop them staging anything, so they would pass while proving
 nothing. Each test says so in a comment. Worth knowing before trusting them as
 regression guards for the statement order they depend on.
+
+## 21. Apps contend on the single shared test database
+
+`pnpm -r test` fails in `apps/projector` and `apps/ingest-worker` while both pass in
+isolation: every app points at the one `factions` test database and truncates shared
+tables underneath its neighbours. Confirmed pre-existing during the targeted-linking
+plan — stashing all branch work made the projector failures *worse*, not better.
+
+Two consequences beyond the noise. A recursive run cannot be trusted as a gate, so
+per-package runs are doing the real work. And the failure set moves with vitest's
+file ordering (it orders by size), so an unrelated edit that changes a file's byte
+count can surface or hide a failure — which is exactly how a latent isolation bug in
+`discord.test.ts` surfaced during Task 5 of that plan.
+
+The fix is isolation, not more truncation: a database or schema per package, named
+from the package, so no two suites share a namespace.
