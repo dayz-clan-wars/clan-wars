@@ -17,7 +17,14 @@ describe("faction claim", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table faction_members, claim_drafts, factions, ceremony_participants, ceremonies, servers restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table faction_members, claim_drafts, factions, ceremony_participants, ceremonies, servers restart identity cascade`);
+    });
     deps = { store: new PgFactionStore(db), now: () => now, reservationTtlMs: 86_400_000 };
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;

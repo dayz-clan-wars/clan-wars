@@ -179,6 +179,26 @@ export const identityLinks = pgTable("identity_links", {
   uniqDayz: uniqueIndex("identity_links_dayz_uniq").on(t.dayzId),
 }));
 
+/**
+ * Every character the event log has ever seen.
+ *
+ * Keyed on the UID, not the display name: a rename is then a column update
+ * rather than a new identity, and two players who have ever shared a gamertag
+ * remain two rows. `/link`'s autocomplete reads this, and spec §6's
+ * leader-inactivity mechanic (Plan 4c) will read `last_seen_at`.
+ *
+ * ⚠️ Both timestamps are EVENT times, not wall-clock. A backfill of old logs
+ * must not make a long-absent player look recently active.
+ */
+export const players = pgTable("players", {
+  dayzId: text("dayz_id").primaryKey(),
+  gamertag: text("gamertag").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  byLastSeen: index("players_last_seen_idx").on(t.lastSeenAt),
+}));
+
 /** One issued emote sequence for one Discord account. */
 export const verificationChallenges = pgTable("verification_challenges", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
@@ -195,6 +215,28 @@ export const verificationChallenges = pgTable("verification_challenges", {
   boundDayzId: text("bound_dayz_id"),
   /** Set once the player has been told. Keeps the notifier idempotent. */
   notifiedAt: timestamp("notified_at", { withTimezone: true }),
+  /**
+   * The character this challenge verifies, chosen by the player at /link time.
+   *
+   * ⚠️ This column is the security model. The tick advances a challenge ONLY
+   * for events carrying this UID, so a challenge can only be won by the
+   * character it names — which is what makes a three-emote sequence sufficient
+   * and what retired the open-sequence unique index below.
+   */
+  targetDayzId: text("target_dayz_id").notNull(),
+  /**
+   * Why the challenge was canceled, when the player needs to be told.
+   *
+   * ⚠️ NULL is not "unknown", it is "say nothing". Only cancels the player
+   * must hear about set this, and `pendingNotifications` keys on the reason
+   * rather than on `canceled_at`. That is deliberate: keying on `canceled_at`
+   * would make every historical expiry and every switch-cancel — rows that
+   * predate this column and rows whose player was already told inline by
+   * `/link` — pending on the first tick after deploy, and the bot would DM a
+   * backlog of long-dead challenges. A new column is NULL everywhere it was
+   * not explicitly written, so nothing already in the table can flood.
+   */
+  cancelReason: text("cancel_reason"),
 }, (t) => ({
   byDiscord: index("verification_challenges_discord_idx").on(t.discordId),
   // Partial index matching the live-challenge query exactly ("not completed,
@@ -212,30 +254,41 @@ export const verificationChallenges = pgTable("verification_challenges", {
     "verification_challenges_bound_requires_complete",
     sql`${t.boundDayzId} IS NULL OR ${t.completedAt} IS NOT NULL`,
   ),
-  notifiedOnlyWhenComplete: check(
-    "verification_challenges_notified_requires_complete",
-    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  // notified_at once required a completion. A budget-exhausted challenge is
+  // now told to its player too (spec §5.3), and that message is made
+  // exactly-once by the same notified_at discipline — so what notified_at
+  // requires is an OUTCOME, not specifically a completion. It still cannot be
+  // set on a live challenge.
+  notifiedOnlyWhenSettled: check(
+    "verification_challenges_notified_requires_outcome",
+    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL OR ${t.canceledAt} IS NOT NULL`,
+  ),
+  // A reason is a property of a cancellation; it must not exist without one.
+  reasonOnlyWhenCanceled: check(
+    "verification_challenges_reason_requires_cancel",
+    sql`${t.cancelReason} IS NULL OR ${t.canceledAt} IS NOT NULL`,
   ),
   notBothOutcomes: check(
     "verification_challenges_single_outcome",
     sql`NOT (${t.completedAt} IS NOT NULL AND ${t.canceledAt} IS NOT NULL)`,
   ),
-  // ⚠️ SECURITY BOUNDARY, not an optimisation. Two live challenges sharing a
-  // sequence means the emotes that satisfy one also satisfy the other, and the
-  // tick binds whichever row comes back first — so the wrong Discord account
-  // gets bound to the performing player's UID. A read-then-check in the
-  // command layer cannot close that race; only this index can.
-  // Partial, because a completed or canceled challenge no longer competes for
-  // its sequence and must not hold it forever.
-  uniqOpenSequence: uniqueIndex("verification_challenges_open_sequence_uniq")
-    .on(t.sequence)
-    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // `verification_challenges_open_sequence_uniq` was REMOVED here. It was a
+  // real security boundary while a challenge named nobody — two live
+  // challenges sharing a sequence let the tick bind the wrong account. A
+  // challenge now names its target UID, so that race cannot occur, and
+  // reinstating the index would actively break /link: three emotes over 24
+  // tokens is 12,144 sequences, so live challenges collide routinely.
   // One open challenge per account. Without it, two concurrent /link calls
   // both miss findLiveChallenge and create two live challenges, each holding a
   // sequence, and the re-show path then returns an arbitrary one — so the
   // player can be shown a different sequence than the one they are working on.
   uniqOpenPerAccount: uniqueIndex("verification_challenges_open_account_uniq")
     .on(t.discordId)
+    .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
+  // One live challenge per CHARACTER. Without it, two Discord accounts can
+  // both hold open challenges for one UID and race to bind it.
+  uniqOpenTarget: uniqueIndex("verification_challenges_open_target_uniq")
+    .on(t.targetDayzId)
     .where(sql`${t.completedAt} IS NULL AND ${t.canceledAt} IS NULL`),
 }));
 

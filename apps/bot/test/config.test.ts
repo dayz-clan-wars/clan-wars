@@ -15,7 +15,7 @@ describe("loadConfig", () => {
   it("defaults the tick interval and challenge TTL", () => {
     const cfg = loadConfig(OK);
     expect(cfg.tickIntervalMs).toBe(10_000);
-    expect(cfg.challengeTtlMs).toBe(600_000);
+    expect(cfg.challengeTtlMs).toBe(86_400_000);
   });
 
   it.each(["DISCORD_TOKEN", "DISCORD_APPLICATION_ID", "DISCORD_GUILD_ID", "DATABASE_URL"])(

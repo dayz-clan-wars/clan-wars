@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
-import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers } from "@factions/db";
-import { and, eq, gte, inArray, isNull, isNotNull, lt } from "drizzle-orm";
+import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
 import type { Role } from "./roster-store.js";
 
 /** Statuses under which a faction still holds its flag and roster — mirrors
@@ -10,9 +10,30 @@ const HOLDING = ["reserved", "active", "dormant"];
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
-  sequence: string[]; issuedAt: Date; expiresAt: Date;
+  sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
+
+/**
+ * Why a challenge was canceled, when the player has to be told about it.
+ *
+ * ⚠️ A reason is what makes a cancellation notifiable — see
+ * `pendingNotifications`. Cancels the player already knows about (the
+ * switch-cancel in `/link`, which says so in its own reply) and cancels
+ * nobody is waiting on (`cancelExpired`) deliberately pass none.
+ */
+export type CancelReason = "budget-exhausted";
+
+/**
+ * A challenge whose outcome the player has not been told about yet.
+ *
+ * `boundDayzId` is non-null exactly when `outcome` is "completed" — the
+ * schema forbids a bound row that is not complete.
+ */
+export type PendingNotification = LiveChallenge & (
+  | { outcome: "completed"; boundDayzId: string }
+  | { outcome: CancelReason; boundDayzId: null }
+);
 
 export interface VerificationStore {
   findLinkByDiscord(discordId: string): Promise<{ dayzId: string; gamertag: string; verifiedAt: Date } | null>;
@@ -26,15 +47,41 @@ export interface VerificationStore {
    */
   factionMembershipsFor(discordId: string): Promise<{ factionName: string; role: Role }[]>;
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
+  /**
+   * The open challenge holding this character's slot, whoever owns it.
+   *
+   * ⚠️ Deliberately NOT time-bounded, unlike `findLiveChallenge`. This
+   * answers "what is blocking an insert on
+   * verification_challenges_open_target_uniq", and that index's predicate is
+   * `completed_at IS NULL AND canceled_at IS NULL` with no expiry term — an
+   * expired-but-uncancelled row blocks just as hard as a live one. Narrowing
+   * this to live rows would report "nothing is holding it" about a row that
+   * demonstrably is.
+   */
+  findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
-  outstandingSequences(now: Date): Promise<string[][]>;
-  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date }): Promise<LiveChallenge | null>;
+  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
-  pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>>;
+  pendingNotifications(): Promise<PendingNotification[]>;
   markNotified(challengeId: number, at: Date): Promise<void>;
   cancelExpired(now: Date): Promise<number>;
+  /**
+   * Cancel one still-open challenge, guarded the same way `cancelExpired` is:
+   * only a row that is neither completed nor already canceled is touched, so
+   * a race with `completeChallenge` or a concurrent cancel is a no-op rather
+   * than an error.
+   *
+   * Passing a `reason` also makes the cancellation notifiable — the player
+   * gets a DM saying what happened. Omit it when the player has already been
+   * told (the `/link` switch-cancel says so in its own reply).
+   */
+  cancelChallenge(challengeId: number, at: Date, reason?: CancelReason): Promise<boolean>;
+  /** The `limit` most recently seen players with no identity link, newest first. */
+  recentUnlinkedPlayers(limit: number): Promise<{ dayzId: string; gamertag: string }[]>;
+  /** One player by UID, or null if the event log has never seen them. */
+  playerByDayzId(dayzId: string): Promise<{ dayzId: string; gamertag: string } | null>;
 }
 
 /** A challenge is live when it is neither completed nor canceled and has not expired. */
@@ -78,22 +125,30 @@ export class PgVerificationStore implements VerificationStore {
     return row ? toLive(row) : null;
   }
 
+  async findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null> {
+    const [row] = await this.db.select().from(verificationChallenges).where(and(
+      eq(verificationChallenges.targetDayzId, targetDayzId),
+      isNull(verificationChallenges.completedAt),
+      isNull(verificationChallenges.canceledAt),
+    ));
+    return row ? { discordId: row.discordId, expiresAt: row.expiresAt } : null;
+  }
+
   async liveChallenges(now: Date): Promise<LiveChallenge[]> {
     const rows = await this.db.select().from(verificationChallenges).where(liveWhere(now));
     return rows.map(toLive);
   }
 
-  async outstandingSequences(now: Date): Promise<string[][]> {
-    return (await this.liveChallenges(now)).map((c) => c.sequence);
-  }
-
   /**
-   * Insert a challenge, or return null when another OPEN challenge already
-   * holds this sequence. Null is an expected outcome — the caller redraws.
+   * Insert a challenge, or return null when this account already has an open
+   * one (`uniqOpenPerAccount`). Null is an expected outcome, not an error —
+   * the caller shows the challenge that won instead. Sequences are NOT unique
+   * across live challenges any more: a challenge names the one character that
+   * may satisfy it, so a shared sequence binds nobody's account by accident.
    */
   async createChallenge(input: {
     discordId: string; guildId: string; channelId: string;
-    sequence: string[]; issuedAt: Date; expiresAt: Date;
+    sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
   }): Promise<LiveChallenge | null> {
     const [row] = await this.db.insert(verificationChallenges).values(input)
       .onConflictDoNothing()
@@ -123,6 +178,10 @@ export class PgVerificationStore implements VerificationStore {
    * account — the losing side of a race, not an error. The challenge is
    * canceled in that case so the player is not left waiting on a sequence
    * that can never bind.
+   *
+   * Also returns false, changing nothing at all, when `dayzId` is not the
+   * challenge's `targetDayzId`. A challenge binds only the character it
+   * names; see the guard inside.
    */
   async completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
@@ -140,6 +199,22 @@ export class PgVerificationStore implements VerificationStore {
       // Lost the race before we got the lock: not an error, just not ours.
       if (challenge.completedAt !== null || challenge.canceledAt !== null) return false;
 
+      // ⚠️ THE security property, enforced by the store itself. A challenge
+      // may only ever bind the ONE character it names. The tick has its own
+      // UID-equality guard, but this must not depend on it: without the check
+      // here, a caller passing the wrong UID still reaches the identity_links
+      // INSERT below and binds this Discord account to a UID its challenge
+      // never named — only the challenge UPDATE is refused (its predicate
+      // includes target_dayz_id), so the caller is told `false` while the
+      // wrong link sits committed and the challenge is left open, holding
+      // both its account slot and its target slot for the full TTL with the
+      // player unable to see or cancel it.
+      //
+      // Not a pre-read-then-write: this runs inside the FOR UPDATE
+      // transaction that already holds the row, so the value cannot change
+      // under us before the writes below.
+      if (challenge.targetDayzId !== dayzId) return false;
+
       // ⚠️ Both outcomes are guarded on the challenge still being open, and the
       // guard is part of the same statement as the write — the SELECT above is
       // a plain read, so a concurrent cancelExpired (any /link fires one) can
@@ -148,8 +223,15 @@ export class PgVerificationStore implements VerificationStore {
       // verificationTick: the batch cursor is never written and the whole
       // batch is redone, forever. Zero affected rows means we lost the race,
       // which is a false return, not an error.
+      // ⚠️ targetDayzId is repeated here as genuine defence in depth. The
+      // guarantee that this store never binds a UID a challenge does not name
+      // is provided by the equality check above, under the row lock — this
+      // copy is a second, statement-level backstop so neither write can touch
+      // a row whose target changed, or be reached by some future path that
+      // skips the check above.
       const stillOpen = and(
         eq(verificationChallenges.id, challengeId),
+        eq(verificationChallenges.targetDayzId, dayzId),
         isNull(verificationChallenges.completedAt),
         isNull(verificationChallenges.canceledAt),
       );
@@ -197,12 +279,35 @@ export class PgVerificationStore implements VerificationStore {
     });
   }
 
-  async pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>> {
+  /**
+   * Outcomes the player still has to hear about: completions, and the
+   * cancellations that carry a reason.
+   *
+   * ⚠️ The cancellation half keys on `cancel_reason`, NOT on `canceled_at`.
+   * Every expiry and every `/link` switch-cancel also sets `canceled_at`, and
+   * none of those should be DMed — least of all the pile of them already in
+   * the table, which a `canceled_at IS NOT NULL` predicate would make pending
+   * all at once on the first tick after deploy. `cancel_reason` is NULL on
+   * every pre-existing row and on every cancel that does not pass one, so
+   * only cancels written by this code, after this deploy, are ever notified.
+   */
+  async pendingNotifications(): Promise<PendingNotification[]> {
     const rows = await this.db.select().from(verificationChallenges).where(and(
-      isNotNull(verificationChallenges.completedAt),
       isNull(verificationChallenges.notifiedAt),
+      or(
+        isNotNull(verificationChallenges.completedAt),
+        isNotNull(verificationChallenges.cancelReason),
+      ),
     ));
-    return rows.filter((r) => r.boundDayzId !== null).map((r) => ({ ...toLive(r), boundDayzId: r.boundDayzId! }));
+    return rows.flatMap((r): PendingNotification[] => {
+      if (r.completedAt !== null) {
+        // A completed row with no bound UID is unrepresentable
+        // (verification_challenges_bound_requires_complete is the other half);
+        // skip rather than assert so a notifier is never the thing that throws.
+        return r.boundDayzId === null ? [] : [{ ...toLive(r), outcome: "completed" as const, boundDayzId: r.boundDayzId }];
+      }
+      return [{ ...toLive(r), outcome: r.cancelReason as CancelReason, boundDayzId: null }];
+    });
   }
 
   async markNotified(challengeId: number, at: Date): Promise<void> {
@@ -227,11 +332,48 @@ export class PgVerificationStore implements VerificationStore {
       .returning();
     return rows.length;
   }
+
+  async cancelChallenge(challengeId: number, at: Date, reason?: CancelReason): Promise<boolean> {
+    const rows = await this.db.update(verificationChallenges)
+      .set({ canceledAt: at, cancelReason: reason ?? null })
+      .where(and(
+        eq(verificationChallenges.id, challengeId),
+        isNull(verificationChallenges.completedAt),
+        isNull(verificationChallenges.canceledAt),
+      ))
+      .returning();
+    return rows.length > 0;
+  }
+
+  /**
+   * ⚠️ LEFT join with an IS NULL filter, not `notInArray(subquery)`. The
+   * exclusion must be evaluated by the database against the same snapshot as
+   * the ordering; pulling the linked ids into memory first would let a link
+   * committed between the two queries leak a taken character into the menu.
+   */
+  async recentUnlinkedPlayers(limit: number) {
+    const rows = await this.db
+      .select({ dayzId: players.dayzId, gamertag: players.gamertag })
+      .from(players)
+      .leftJoin(identityLinks, eq(identityLinks.dayzId, players.dayzId))
+      .where(isNull(identityLinks.id))
+      .orderBy(desc(players.lastSeenAt), desc(players.dayzId))
+      .limit(limit);
+    return rows;
+  }
+
+  async playerByDayzId(dayzId: string) {
+    const [row] = await this.db
+      .select({ dayzId: players.dayzId, gamertag: players.gamertag })
+      .from(players).where(eq(players.dayzId, dayzId));
+    return row ?? null;
+  }
 }
 
 function toLive(row: typeof verificationChallenges.$inferSelect): LiveChallenge {
   return {
     id: row.id, discordId: row.discordId, guildId: row.guildId,
     channelId: row.channelId, sequence: row.sequence, issuedAt: row.issuedAt, expiresAt: row.expiresAt,
+    targetDayzId: row.targetDayzId,
   };
 }

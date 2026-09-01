@@ -1,5 +1,5 @@
 import {
-  Client, GatewayIntentBits, REST, Routes, MessageFlags,
+  Client, GatewayIntentBits, REST, Routes, MessageFlags, PermissionFlagsBits,
   SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
@@ -8,8 +8,10 @@ import { CLAIMABLE_FLAGS } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
 import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
+import { runPlayerProjection } from "./player-tick.js";
 import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
+import { applyNickname, type NicknameOutcome, type GuildLike } from "./nickname.js";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps, type FactionReply } from "./faction-commands.js";
 import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
@@ -24,10 +26,21 @@ import {
 } from "./roster-commands.js";
 import { PgRosterStore, type Membership } from "./roster-store.js";
 
+// Registration (buildCommands) and reading (the interactionCreate handler)
+// live hundreds of lines apart in this file. A string literal duplicated at
+// both sites can drift silently — Discord would then hand the value under a
+// name the reader never asks for, and getString would return null for every
+// /link, invisibly. Sharing this constant makes that class of bug impossible.
+export const LINK_GAMERTAG_OPTION = "gamertag";
+
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
     new SlashCommandBuilder().setName("link")
-      .setDescription("Bind your Discord account to your in-game character"),
+      .setDescription("Bind your Discord account to your in-game character")
+      .addStringOption((o) => o.setName(LINK_GAMERTAG_OPTION)
+        .setDescription("Which character is yours")
+        .setRequired(true)
+        .setAutocomplete(true)),
     new SlashCommandBuilder().setName("unlink")
       .setDescription("Remove the binding between your Discord account and your character"),
     new SlashCommandBuilder().setName("whoami")
@@ -128,6 +141,8 @@ export type InteractionLike = {
   userId: string;
   guildId: string | null;
   channelId: string;
+  /** The `character` option of /link — a UID. Absent for every other command. */
+  targetDayzId?: string | null;
 };
 
 export async function routeInteraction(deps: CommandDeps, i: InteractionLike): Promise<Reply | null> {
@@ -141,8 +156,16 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
   }
 
   const ctx = { discordId: i.userId, guildId: i.guildId, channelId: i.channelId };
-  if (i.commandName === "link") return handleLink(deps, ctx);
-  if (i.commandName === "unlink") return handleUnlink(deps, i.userId);
+  if (i.commandName === "link") {
+    // The option is required at registration, so an absent value here means a
+    // client (or a stale command) sent none. Refuse rather than link a blank
+    // UID: an untargeted challenge is the bearer-token bug this work removes.
+    if (!i.targetDayzId) {
+      return { content: "Pick a character from the list when you run `/link`.", ephemeral: true };
+    }
+    return handleLink(deps, { ...ctx, targetDayzId: i.targetDayzId });
+  }
+  if (i.commandName === "unlink") return handleUnlink(deps, i.userId, i.guildId);
   return handleWhoami(deps, i.userId);
 }
 
@@ -250,6 +273,31 @@ export function planClaimReply(reply: FactionReply): ClaimRenderPlan {
 export function flagSuggestions(query: string): string[] {
   const q = query.toLowerCase();
   return CLAIMABLE_FLAGS.filter((f) => f.toLowerCase().includes(q)).slice(0, 25);
+}
+
+/**
+ * Filters the recently-seen-and-unlinked candidate pool for the `/link`
+ * `gamertag` autocomplete, case-insensitively, capped at Discord's 25-choice
+ * limit. Pure so it is directly testable without a live autocomplete
+ * interaction.
+ *
+ * ⚠️ The choice's value is the UID (`dayzId`), not the display name: two
+ * characters can share a gamertag, and carrying the UID means the submit
+ * path never has to re-resolve a name back to a player.
+ */
+export function playerSuggestions(
+  players: { dayzId: string; gamertag: string }[],
+  query: string,
+): { name: string; value: string }[] {
+  const q = query.toLowerCase();
+  return players
+    .filter((p) => p.gamertag.toLowerCase().includes(q))
+    .slice(0, 25)
+    // ⚠️ Discord caps a choice name at 100 characters and rejects the whole
+    // response if one exceeds it — the field then renders EMPTY, so a single
+    // overlong gamertag would make nobody pickable. Nothing constrains
+    // `players.gamertag`, which is copied verbatim from an ADM line.
+    .map((p) => ({ name: p.gamertag.slice(0, 100), value: p.dayzId }));
 }
 
 /**
@@ -460,25 +508,107 @@ export async function deliverInviteDm(
 
 export * from "./notify.js";
 
+/** Injected into `notifyCompleted` so tests need no discord.js client. */
+export type NicknameApplier = (
+  guildId: string, discordId: string, nickname: string | null,
+) => Promise<NicknameOutcome>;
+
 /**
- * Tell each newly verified player, exactly once.
+ * `NicknameOutcome` plus one case that belongs only to the caller: no rename
+ * was even attempted, either because no `NicknameApplier` was wired (a unit
+ * test of the notifier itself, or a bot instance with no Discord client) or
+ * because there was no link to read a gamertag from. Distinct from "failed"
+ * — that means an attempt was made and Discord refused or errored — so the
+ * DM doesn't tell a player something failed when nothing was tried.
+ */
+export type RenameOutcome = NicknameOutcome | "not-attempted";
+
+/**
+ * Player-facing sentence for how the rename went. The link itself is never in
+ * question here — this only ever runs after `completeChallenge` has already
+ * committed the binding — so every branch leads with that being settled.
+ */
+function nicknameOutcomeSuffix(outcome: RenameOutcome): string {
+  switch (outcome) {
+    case "not-attempted":
+      return "";
+    case "ok":
+      return " Your nickname has been set to match.";
+    case "is-owner":
+      return " Your nickname could not be changed: Discord will not let a bot rename the server owner.";
+    case "outranked":
+      return " Your nickname could not be changed: the bot's role is below yours, so an admin needs to move it above.";
+    case "no-permission":
+      return " Your nickname could not be changed: the bot does not have the Manage Nicknames permission.";
+    case "failed":
+      return " Your nickname could not be changed right now.";
+  }
+}
+
+/**
+ * Tell each player their challenge's outcome, exactly once.
+ *
+ * Two outcomes reach here: a completion, and a challenge canceled because its
+ * target spent the whole emote budget without finishing the sequence (spec
+ * §5.3). Both ride the same `notified_at` discipline, so neither is ever sent
+ * twice, and neither an ordinary expiry nor a `/link` switch-cancel reaches
+ * here at all — they carry no cancel reason. See `pendingNotifications`.
  *
  * `markNotified` runs only after `send` resolves. A send that throws — closed
  * DMs, a deleted channel, a rate limit — leaves the row pending so the next
  * pass retries, rather than marking it done and dropping the message.
+ *
+ * ⚠️ The rename is attempted here, strictly AFTER the identity link (this
+ * only ever runs for challenges `completeChallenge` has already committed).
+ * It is wrapped in its OWN try/catch, separate from the `send`/`markNotified`
+ * one below: `renameOnLink` calls into a real discord.js permission
+ * predicate and guild fetch, which — unlike `applyNickname` itself — are not
+ * guaranteed not to throw (a partially-cached `Guild`, for instance). If that
+ * escaped into the outer catch, it would land exactly where a failed `send`
+ * lands: no DM delivered, the row left pending, retried forever — silently
+ * losing the notification over something that was only ever supposed to be
+ * best-effort.
  */
 export async function notifyCompleted(
   deps: CommandDeps,
   send: Sender,
   loggedFailures: NotifyFailureLog = createNotifyFailureLog(),
+  renameOnLink?: NicknameApplier,
 ): Promise<number> {
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
     try {
+      if (c.outcome !== "completed") {
+        // Nothing was bound, so there is no rename to attempt and no link to
+        // read — only the character they were trying to verify, named so a
+        // player with several does not have to guess which attempt died.
+        await send({
+          discordId: c.discordId,
+          channelId: c.channelId,
+          content: await lockedOutMessage(deps, c.targetDayzId),
+        });
+        await deps.store.markNotified(c.id, deps.now());
+        loggedFailures.delete(c.id);
+        sent++;
+        continue;
+      }
+      let outcome: RenameOutcome = "not-attempted";
+      if (renameOnLink) {
+        try {
+          // The link is already committed by the time a challenge appears
+          // here, so this lookup exists only to get the gamertag to rename
+          // to — it is not a gate on anything.
+          const link = await deps.store.findLinkByDiscord(c.discordId);
+          if (link) outcome = await renameOnLink(c.guildId, c.discordId, link.gamertag);
+        } catch (err) {
+          console.warn(`nickname lookup/rename failed for ${c.discordId}`, err);
+          outcome = "failed";
+        }
+      }
       await send({
         discordId: c.discordId,
         channelId: c.channelId,
-        content: "Verified — your Discord account is now linked to your character.",
+        content: "Verified — your Discord account is now linked to your character." + nicknameOutcomeSuffix(outcome),
       });
       await deps.store.markNotified(c.id, deps.now());
       // A challenge that got through stops being a candidate for suppression:
@@ -494,6 +624,62 @@ export async function notifyCompleted(
     }
   }
   return sent;
+}
+
+/**
+ * What a player is told when their challenge ran out of emote budget.
+ *
+ * The count is not mentioned as a number the player can act on: the budget is
+ * the primary defence against the named target backing into its own sequence
+ * by accident (see MAX_POOL_EMOTES_PER_ATTEMPT), and a player who reads it as
+ * a target to optimise against has misunderstood what to do — perform the
+ * three emotes, in order, without wandering the wheel.
+ */
+async function lockedOutMessage(deps: CommandDeps, targetDayzId: string): Promise<string> {
+  // Cosmetic only — a missing player row must not cost the player their
+  // message, so fall back to the UID rather than letting this decide anything.
+  const name = (await deps.store.playerByDayzId(targetDayzId))?.gamertag ?? targetDayzId;
+  return (
+    `Your link challenge for **${name}** was canceled: too many emotes were performed ` +
+    "before the sequence was completed, so it can no longer be finished. " +
+    "Run `/link` again for a fresh sequence, and perform just those emotes, in order."
+  );
+}
+
+/** The subset of a discord.js `Client` a `NicknameApplier` needs. Structural so tests need no real client. */
+export type NicknameClientLike = { guilds: { fetch(guildId: string): Promise<RealGuildLike> } };
+/** discord.js's `Guild` has all of this; kept minimal here so the adapter stays honest about what it uses. */
+export type RealGuildLike = {
+  ownerId: string;
+  members: {
+    fetch(userId: string): Promise<{ manageable: boolean; setNickname(nick: string | null): Promise<unknown> }>;
+    me: { permissions: { has(perm: bigint): boolean } } | null;
+  };
+};
+
+/**
+ * Adapts a real discord.js `Client` to the `NicknameApplier` shape
+ * `notifyCompleted` and `handleUnlink`'s `clearNickname` both take. This is
+ * the ONLY place real discord.js types meet `nickname.ts`'s structural
+ * `GuildLike` — everything else stays client-free for testing.
+ */
+export function createNicknameApplier(client: NicknameClientLike): NicknameApplier {
+  return async (guildId, discordId, nickname) => {
+    let guild: RealGuildLike;
+    try {
+      guild = await client.guilds.fetch(guildId);
+    } catch (err) {
+      console.warn(`nickname change failed — could not fetch guild ${guildId}`, err);
+      return "failed";
+    }
+    const guildLike: GuildLike = {
+      ownerId: guild.ownerId,
+      members: { fetch: (userId) => guild.members.fetch(userId) },
+      members_me_permissions_has: () =>
+        guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames) ?? false,
+    };
+    return applyNickname(guildLike, discordId, nickname);
+  };
 }
 
 /**
@@ -541,9 +727,6 @@ export function guardedRunner(job: () => Promise<void>): {
 export async function start(cfg: BotConfig): Promise<void> {
   const db = createClient(cfg.databaseUrl);
   const store = new PgVerificationStore(db);
-  const deps: CommandDeps = {
-    store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
-  };
   const factionStore = new PgFactionStore(db);
   const factionDeps: FactionDeps = {
     store: factionStore, now: () => new Date(), reservationTtlMs: cfg.reservationTtlMs,
@@ -571,6 +754,14 @@ export async function start(cfg: BotConfig): Promise<void> {
   }
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+  // Fetching one member and patching a nickname are plain REST calls — this
+  // needs no gateway intent beyond the `Guilds` one already requested above.
+  const renameOnLink = createNicknameApplier(client);
+  const deps: CommandDeps = {
+    store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
+    clearNickname: (guildId, discordId) => renameOnLink(guildId, discordId, null).then(() => undefined),
+  };
 
   const renderFactionReply = async (
     interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown> },
@@ -620,6 +811,16 @@ export async function start(cfg: BotConfig): Promise<void> {
         } catch (err) {
           // The autocomplete window is also short-lived; a dropped response
           // just means no suggestions this keystroke, not a broken command.
+          console.error(`${focused.name} autocomplete failed`, err);
+        }
+      } else if (interaction.commandName === "link" && interaction.options.getFocused(true).name === LINK_GAMERTAG_OPTION) {
+        const focused = interaction.options.getFocused(true);
+        try {
+          const candidates = await store.recentUnlinkedPlayers(50);
+          await interaction.respond(playerSuggestions(candidates, String(focused.value)));
+        } catch (err) {
+          // Same short response window as the /faction autocompletes above:
+          // a dropped response just means no suggestions this keystroke.
           console.error(`${focused.name} autocomplete failed`, err);
         }
       }
@@ -704,6 +905,8 @@ export async function start(cfg: BotConfig): Promise<void> {
           userId: interaction.user.id,
           guildId: interaction.guildId,
           channelId: interaction.channelId,
+          // Only /link declares it; getString returns null for the others.
+          targetDayzId: interaction.options.getString(LINK_GAMERTAG_OPTION),
         });
         if (!reply) return;
         await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
@@ -775,12 +978,24 @@ export async function start(cfg: BotConfig): Promise<void> {
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
+    // ⚠️ FIRST, and in its own try/catch. `/link`'s autocomplete can only
+    // offer characters this projection has recorded, so a player who has
+    // just been seen in game is unlinkable until it runs. A failure here
+    // must not stop verification — a stale menu is survivable, a halted
+    // tick is not.
+    try {
+      const p = await runPlayerProjection(db);
+      if (p.upserted > 0) console.log(`players projected ${p.upserted} of ${p.scanned} events`);
+    } catch (err) {
+      console.error("player projection failed", err);
+    }
+
     try {
       const r = await verificationTick(db, store);
       if (r.verified > 0 || r.alreadyLinked > 0) {
         console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
       }
-      await notifyCompleted(deps, send, notifyFailures);
+      await notifyCompleted(deps, send, notifyFailures, renameOnLink);
     } catch (err) {
       // A thrown tick must not kill the interval and silently stop all verification.
       console.error("tick failed", err);

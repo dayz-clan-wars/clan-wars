@@ -7,21 +7,24 @@ import type { VerificationStore } from "./store.js";
 const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
 
 /**
- * How many safe-pool emotes one UID may spend on one challenge.
+ * How many safe-pool emotes the challenge's TARGET may spend on one
+ * challenge before it is canceled.
  *
- * ⚠️ Paired with the sequence length; neither is safe to change alone. Because
- * matching holds on a mismatch, a run of n distinct emotes completes any
- * challenge whose sequence is an ordered subsequence of it — so one run covers
- * C(n, length) sequences, against every live challenge simultaneously. This
- * budget is what keeps n small.
+ * ⚠️ Since the tick only ever advances a challenge for the UID it names (see
+ * the comparison below), this is no longer defence-in-depth against a sweep
+ * by some other attacker — no other UID's emotes reach this code at all. It
+ * is the PRIMARY defence against the named target completing its own
+ * sequence by accident over the life of the challenge: because matching holds
+ * on a mismatch, a run of n distinct emotes completes any sequence that is an
+ * ordered subsequence of it, so one run of n covers C(n, length) of the
+ * sequence space just by chance.
  *
- * Stopping the exhaustive 87-emote sweep is not the bar. At length 3, twelve
- * cleared C(12,3) = 220 of 21,924 sequences — ~1% per challenge, per run, and
- * a hit binds the ATTACKER's UID to the victim's Discord account while the
- * victim is DM'd "Verified". At length 4, eight clears C(8,4) = 70 of 570,024:
- * ~0.01%.
+ * At a 24-token safe pool and length-3 sequences there are 24×23×22 = 12,144
+ * ordered sequences. Eight emotes cover C(8,3) = 56 of them — about 0.46% —
+ * so a target who fumbles for a full day still has under a 1-in-200 chance of
+ * backing into their own sequence.
  *
- * A legitimate player needs four plus a few misfires. Raise it if players
+ * A legitimate player needs three plus a few misfires. Raise it if players
  * report being locked out — but raise the sequence length with it, and do not
  * remove it.
  */
@@ -50,8 +53,11 @@ export type TickResult = {
    */
   alreadyLinked: number;
   /**
-   * A UID exhausted its per-challenge emote budget (MAX_POOL_EMOTES_PER_ATTEMPT).
-   * Non-zero means either a fumbling player or a sweep attempt.
+   * The challenge's named target exhausted its emote budget
+   * (MAX_POOL_EMOTES_PER_ATTEMPT) without completing the sequence, and the
+   * challenge was canceled as a result. Only the target's own emotes ever
+   * reach this check, so a non-zero value means a fumbling player, not a
+   * sweep attempt — no other UID's emotes get far enough to be counted.
    */
   lockedOut: number;
 };
@@ -104,6 +110,13 @@ export async function verificationTick(
         // ingest order, which is not when the player acted.
         if (ev.occurredAt < challenge.issuedAt) continue;
 
+        // ⚠️ THE security boundary. A challenge names the character it
+        // verifies, so only that character's emotes may advance it. This one
+        // comparison is why a three-emote sequence is sufficient and why the
+        // open-sequence unique index could be retired. Removing it silently
+        // restores the old lottery: any UID would win any live challenge.
+        if (payload.dayzId !== challenge.targetDayzId) continue;
+
         const attempt = await store.getAttempt(challenge.id, payload.dayzId);
         const progressIndex = attempt?.progressIndex ?? 0;
         const lastMatchedEventId = attempt?.lastMatchedEventId ?? 0;
@@ -119,8 +132,11 @@ export async function verificationTick(
 
         const seenCount = attempt?.seenCount ?? 0;
         if (seenCount >= MAX_POOL_EMOTES_PER_ATTEMPT) {
-          // Locked out per (challenge, UID), NOT per challenge: an attacker
-          // burning their own budget must not deny the real player theirs.
+          // Defensive only: the post-increment check below cancels the
+          // challenge the moment the budget is actually spent, so a
+          // still-live challenge should never be seen already at or past
+          // budget. This stays as a backstop in case a canceled challenge
+          // is somehow re-read as live within the same batch (e.g. a retry).
           out.lockedOut++;
           continue;
         }
@@ -137,15 +153,40 @@ export async function verificationTick(
           // right sequence and can never be verified, silently. Writing the
           // marker only after the completion succeeds means a throw here
           // replays the event intact.
-          const bound = await store.completeChallenge(challenge.id, payload.dayzId, payload.gamertag, now);
+          const bound = await store.completeChallenge(challenge.id, challenge.targetDayzId, payload.gamertag, now);
           if (bound) out.verified++;
           else out.alreadyLinked++;
         }
 
         // Every safe-pool emote is recorded, whether or not it advanced —
         // otherwise the budget could never be spent and the sweep would work.
-        await store.upsertAttempt(challenge.id, payload.dayzId, index, ev.id, seenCount + 1);
+        await store.upsertAttempt(challenge.id, challenge.targetDayzId, index, ev.id, seenCount + 1);
         if (index !== progressIndex) out.advanced++;
+
+        // ⚠️ Post-increment, not pre-increment: the budget is spent by THIS
+        // write, so the cancel must fire on the event that reaches it, not
+        // wait for a (possibly nonexistent) next one. A player who fumbles
+        // exactly MAX_POOL_EMOTES_PER_ATTEMPT safe emotes and then logs off
+        // must not hold their one open challenge slot for the full 24h TTL —
+        // checking seenCount BEFORE the increment misses exactly that case,
+        // since nothing ever revisits this challenge to notice.
+        if (!complete && seenCount + 1 >= MAX_POOL_EMOTES_PER_ATTEMPT) {
+          // Locked out per (challenge, UID), NOT per challenge: an attacker
+          // burning their own budget must not deny the real player theirs.
+          out.lockedOut++;
+          // The named target has spent its whole budget without completing
+          // the sequence. With a 24h TTL an inert, budget-exhausted challenge
+          // would hold the player's one open slot for a day; cancel it now,
+          // guarded so a concurrent completion or cancel is a no-op, so they
+          // can run /link again immediately.
+          //
+          // ⚠️ With a reason, which is what makes the cancellation notifiable
+          // (spec §5.3: "cancelled with a message telling the player to run
+          // /link again"). Without it the player sees nothing at all — the
+          // sequence simply stops working, and the next /link hands them three
+          // different emotes with no explanation.
+          await store.cancelChallenge(challenge.id, now, "budget-exhausted");
+        }
       }
     }
     await writeCursor(db, CONSUMER, cursor);

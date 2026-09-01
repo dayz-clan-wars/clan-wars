@@ -3,11 +3,14 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   identityLinks, verificationChallenges, challengeAttempts, type Database,
 } from "../src/index.js";
-import { sql } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
 const UID_B = "B".repeat(40);
+const TARGET = "T".repeat(40);
+const A = "C".repeat(40);
+const B = "D".repeat(40);
 
 describe("identity schema", () => {
   let db: Database;
@@ -42,6 +45,7 @@ describe("identity schema", () => {
       discordId: "200", guildId: "g1", channelId: "c1",
       sequence: ["EmoteSalute", "EmoteClap", "EmoteDance"],
       issuedAt: new Date(), expiresAt: new Date(Date.now() + 600_000),
+      targetDayzId: "E".repeat(40),
     }).returning();
     expect(row?.sequence).toEqual(["EmoteSalute", "EmoteClap", "EmoteDance"]);
     expect(row?.completedAt).toBeNull();
@@ -51,6 +55,7 @@ describe("identity schema", () => {
     const [c] = await db.insert(verificationChallenges).values({
       discordId: "300", guildId: "g1", channelId: "c1",
       sequence: ["EmoteSalute"], issuedAt: new Date(), expiresAt: new Date(Date.now() + 600_000),
+      targetDayzId: "F".repeat(40),
     }).returning();
 
     await db.insert(challengeAttempts).values({ challengeId: c!.id, dayzId: UID_A, progressIndex: 1 });
@@ -68,6 +73,7 @@ describe("identity schema", () => {
     const base = {
       discordId: "900", guildId: "g", channelId: "c",
       sequence: ["EmoteSalute"], issuedAt: new Date(), expiresAt: new Date(Date.now() + 600_000),
+      targetDayzId: "G".repeat(40),
     };
 
     it("rejects bound_dayz_id without a completion", async () => {
@@ -91,5 +97,35 @@ describe("identity schema", () => {
         .values({ ...base, completedAt: now, boundDayzId: UID_B, notifiedAt: now }).returning();
       expect(row?.boundDayzId).toBe(UID_B);
     });
+  });
+
+  it("refuses two live challenges for the same character", async () => {
+    // Two Discord accounts must not race to bind one character.
+    const base = {
+      guildId: "g", channelId: "c", sequence: ["EmoteSalute"],
+      issuedAt: new Date(), expiresAt: new Date(Date.now() + 3_600_000),
+      targetDayzId: TARGET,
+    };
+    await db.insert(verificationChallenges).values({ ...base, discordId: "d1" });
+    await expect(db.insert(verificationChallenges).values({ ...base, discordId: "d2" }))
+      .rejects.toThrow(/verification_challenges_open_target_uniq/);
+  });
+
+  it("allows two live challenges to share a sequence", async () => {
+    // The old open-sequence index is GONE. With 3 emotes over 24 tokens there
+    // are only 12,144 sequences, so collisions are ordinary and must not
+    // reject a legitimate /link. Safe because a challenge names its target.
+    const seq = ["EmoteSalute", "EmoteClap", "EmoteNod"];
+    const base = { guildId: "g", channelId: "c", sequence: seq,
+      issuedAt: new Date(), expiresAt: new Date(Date.now() + 3_600_000) };
+    await db.insert(verificationChallenges).values({ ...base, discordId: "d3", targetDayzId: A });
+    await db.insert(verificationChallenges).values({ ...base, discordId: "d4", targetDayzId: B });
+    // A plain full-table select would be brittle here: this file does not
+    // truncate verification_challenges between tests, so rows from earlier
+    // tests in this suite are still present. Filter to the two rows this
+    // test itself inserted instead of relying on the table starting empty.
+    const rows = await db.select().from(verificationChallenges)
+      .where(inArray(verificationChallenges.targetDayzId, [A, B]));
+    expect(rows).toHaveLength(2);
   });
 });

@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, type Database } from "@factions/db";
-import { sql, eq, isNotNull } from "drizzle-orm";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, type Database } from "@factions/db";
+import { sql, and, eq, isNotNull } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -18,17 +18,30 @@ describe("PgVerificationStore", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
+    });
     store = new PgVerificationStore(db);
   });
 
-  const issue = async (discordId = "100") => {
+  const issue = async (discordId = "100", targetDayzId = UID_A) => {
     const c = await store.createChallenge({
-      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId,
     });
     expect(c).not.toBeNull();
     return c!;
   };
+
+  const seedPlayer = (opts: { dayzId: string; gamertag: string; lastSeenAt: Date; firstSeenAt?: Date }) =>
+    db.insert(players).values({
+      dayzId: opts.dayzId, gamertag: opts.gamertag,
+      firstSeenAt: opts.firstSeenAt ?? opts.lastSeenAt, lastSeenAt: opts.lastSeenAt,
+    });
 
   it("finds no link for an unknown Discord account", async () => {
     expect(await store.findLinkByDiscord("nobody")).toBeNull();
@@ -42,11 +55,6 @@ describe("PgVerificationStore", () => {
   it("does not return an expired challenge as live", async () => {
     await issue();
     expect(await store.findLiveChallenge("100", new Date("2026-08-26T12:11:00Z"))).toBeNull();
-  });
-
-  it("lists outstanding sequences so issuance can avoid collisions", async () => {
-    await issue();
-    expect(await store.outstandingSequences(now)).toEqual([SEQ]);
   });
 
   it("upserts per-UID attempt progress", async () => {
@@ -76,11 +84,35 @@ describe("PgVerificationStore", () => {
     const first = await issue("100");
     await store.completeChallenge(first.id, UID_A, "Steve", later);
     const second = await store.createChallenge({
-      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     expect(second).not.toBeNull();
     expect(await store.completeChallenge(second!.id, UID_A, "Steve", later)).toBe(false);
     expect(await store.findLinkByDiscord("200")).toBeNull();
+  });
+
+  it("refuses to bind a UID the challenge does not name", async () => {
+    // The store-level half of THE security property. The tick has its own
+    // UID-equality guard, but the store must not depend on it: a caller that
+    // passes the wrong UID must get no link row and no state change at all.
+    // Without the equality check inside the FOR UPDATE transaction, the
+    // identity_links INSERT still runs — binding this account to a UID its
+    // challenge never named — and only the challenge UPDATE is refused, so
+    // the caller sees `false` while the wrong link sits committed and the
+    // challenge stays open, holding both index slots for its full TTL.
+    const c = await issue("700", UID_A);
+
+    expect(await store.completeChallenge(c.id, UID_B, "Mallory", later)).toBe(false);
+
+    expect(await db.select().from(identityLinks), "no link may be written for a UID the challenge does not name")
+      .toHaveLength(0);
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row?.completedAt).toBeNull();
+    // Left open, not canceled: the wrong-UID caller must not be able to close
+    // someone else's challenge either.
+    expect(row?.canceledAt).toBeNull();
+    expect(await store.findLiveChallenge("700", now)).not.toBeNull();
   });
 
   it("deletes a link and reports whether one existed", async () => {
@@ -99,37 +131,103 @@ describe("PgVerificationStore", () => {
     expect(await store.pendingNotifications()).toEqual([]);
   });
 
+  it("surfaces a budget-exhausted cancellation for notification, exactly once", async () => {
+    // Spec §5.3: a budget-exhausted challenge "is cancelled with a message
+    // telling the player to run /link again". Nothing but pendingNotifications
+    // can deliver that, and it used to select completions only.
+    const c = await issue("800", UID_A);
+    expect(await store.cancelChallenge(c.id, later, "budget-exhausted")).toBe(true);
+
+    const pending = await store.pendingNotifications();
+    expect(pending.map((p) => p.id)).toEqual([c.id]);
+    expect(pending[0]).toMatchObject({ outcome: "budget-exhausted", boundDayzId: null, targetDayzId: UID_A });
+
+    // Same notified_at discipline as a completion: told once, never again.
+    await store.markNotified(c.id, later);
+    expect(await store.pendingNotifications()).toEqual([]);
+  });
+
+  it("never notifies a cancellation that carries no reason", async () => {
+    // ⚠️ The first-deploy flood guard. Keying the cancelled half of
+    // pendingNotifications on `canceled_at` rather than on `cancel_reason`
+    // would make every historical expiry pending at once on the first tick
+    // after deploy — and would also DM the /link switch-cancel, which the
+    // player was already told about in the reply that replaced it.
+    const expired = await issue("801", UID_A);
+    expect(await store.cancelExpired(new Date(later.getTime() + 1))).toBe(1);
+
+    const switched = await issue("802", UID_B);
+    expect(await store.cancelChallenge(switched.id, later)).toBe(true);
+
+    expect(await store.pendingNotifications()).toEqual([]);
+    const rows = await db.select().from(verificationChallenges)
+      .where(isNotNull(verificationChallenges.canceledAt));
+    expect(rows.map((r) => r.cancelReason)).toEqual([null, null]);
+    expect(rows).toHaveLength(2);
+  });
+
   it("never completes a challenge without writing its link, under concurrency", async () => {
-    // Two Discord accounts racing for the SAME UID. Exactly one may win, and
-    // the loser must not be left marked complete. Distinct sequences: the
-    // open-sequence uniqueness index is a separate concern from this race.
+    // Two accounts verifying at once, plus a DUPLICATE delivery of one of the
+    // completions — the shape two bot instances produce (inbox item 22: the
+    // notifier and the tick are at-least-once across processes, and nothing
+    // enforces single-instance). Two accounts cannot race for one UID any
+    // more — verification_challenges_open_target_uniq forbids two open
+    // challenges naming the same character — so the race that remains is the
+    // same challenge being completed twice.
+    //
+    // ⚠️ Each call passes the UID its own challenge NAMES. Passing another
+    // challenge's UID is not a race, it is the caller bug the store now
+    // refuses outright ("refuses to bind a UID the challenge does not name"),
+    // and a test that did it would be exercising that refusal by accident
+    // rather than the concurrency it claims to cover.
     const a = await store.createChallenge({
-      discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     const b = await store.createChallenge({
-      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ_B, issuedAt: now, expiresAt: later,
+      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ_B, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
 
     const results = await Promise.all([
       store.completeChallenge(a!.id, UID_A, "Steve", later),
-      store.completeChallenge(b!.id, UID_A, "Steve", later),
+      store.completeChallenge(a!.id, UID_A, "Steve", later),
+      store.completeChallenge(b!.id, UID_B, "Nora", later),
     ]);
 
-    expect(results.filter(Boolean)).toHaveLength(1);
+    // b wins its own; exactly one of the two deliveries of a wins.
+    expect(results[2]).toBe(true);
+    expect([results[0], results[1]].filter(Boolean)).toHaveLength(1);
 
-    const links = await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A));
-    expect(links).toHaveLength(1);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_A))).toHaveLength(1);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.dayzId, UID_B))).toHaveLength(1);
 
-    // The invariant that actually matters: every completed challenge has a
-    // link row for its Discord account.
+    // Forward: every completed challenge has a link row for its Discord account.
     const completed = await db.select().from(verificationChallenges)
       .where(isNotNull(verificationChallenges.completedAt));
     for (const c of completed) {
       const [link] = await db.select().from(identityLinks)
         .where(eq(identityLinks.discordId, c.discordId));
       expect(link, `challenge ${c.id} completed with no link for ${c.discordId}`).toBeDefined();
+    }
+
+    // Converse: every link row was produced by a completed challenge that
+    // NAMED that UID. This is the direction that catches a link bound under a
+    // challenge for some other character — the forward check above cannot see
+    // it, because such a link leaves no completed challenge behind at all.
+    const links = await db.select().from(identityLinks);
+    expect(links).toHaveLength(2);
+    for (const link of links) {
+      const [challenge] = await db.select().from(verificationChallenges).where(and(
+        eq(verificationChallenges.discordId, link.discordId),
+        eq(verificationChallenges.targetDayzId, link.dayzId),
+        eq(verificationChallenges.boundDayzId, link.dayzId),
+        isNotNull(verificationChallenges.completedAt),
+      ));
+      expect(
+        challenge,
+        `link ${link.discordId} -> ${link.dayzId} has no completed challenge naming that UID`,
+      ).toBeDefined();
     }
   });
 
@@ -164,13 +262,13 @@ describe("PgVerificationStore", () => {
 
   it("is idempotent when the same account re-completes its own binding", async () => {
     const first = await store.createChallenge({
-      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(first).not.toBeNull();
     expect(await store.completeChallenge(first!.id, UID_B, "Steve", later)).toBe(true);
 
     const second = await store.createChallenge({
-      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(second).not.toBeNull();
     // Same account, same UID — already bound, so this succeeds without a
@@ -180,24 +278,36 @@ describe("PgVerificationStore", () => {
     expect(links).toHaveLength(1);
   });
 
-  it("refuses a second open challenge holding the same sequence", async () => {
+  it("refuses a second open challenge for the same character", async () => {
+    // Used to cover verification_challenges_open_sequence_uniq. That index was
+    // retired (see schema.ts's tombstone comment on the target column — three
+    // emotes over 24 tokens collide routinely, so blocking on shared sequences
+    // would actively break /link) and replaced by
+    // verification_challenges_open_target_uniq: `second` conflicts here
+    // because it names the same target UID as `first`, not because it shares
+    // a sequence.
     const first = await issue("100");
     expect(first).not.toBeNull();
     const second = await store.createChallenge({
-      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     // Null, not a throw — the caller redraws.
     expect(second).toBeNull();
   });
 
-  it("frees a sequence once its challenge is canceled as expired", async () => {
+  it("frees a target UID once its challenge is canceled as expired", async () => {
+    // Also formerly about the retired open-sequence index (see the comment
+    // above). Both challenges here reuse SEQ, which no longer matters — what
+    // makes `reused` non-null is that canceling the first frees its target
+    // UID from verification_challenges_open_target_uniq, since `reused` names
+    // the same target (UID_A).
     await store.createChallenge({
       discordId: "300", guildId: "g", channelId: "c", sequence: SEQ,
-      issuedAt: now, expiresAt: new Date(now.getTime() - 1),
+      issuedAt: now, expiresAt: new Date(now.getTime() - 1), targetDayzId: UID_A,
     });
     expect(await store.cancelExpired(now)).toBe(1);
     const reused = await store.createChallenge({
-      discordId: "400", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "400", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     expect(reused).not.toBeNull();
   });
@@ -205,5 +315,41 @@ describe("PgVerificationStore", () => {
   it("does not cancel a challenge that is still live", async () => {
     await issue("500");
     expect(await store.cancelExpired(now)).toBe(0);
+  });
+
+  it("refuses to cancel ONE challenge that already completed", async () => {
+    // Distinct from the cancelExpired test above: this is the targeted
+    // cancelChallenge path the budget-exhaustion cancel uses.
+    // The guard is the half that matters: without it, a stray cancelChallenge
+    // call on an already-bound challenge would either corrupt it (violating
+    // verification_challenges_single_outcome) or throw and poison the
+    // verificationTick cursor loop forever.
+    const c = await issue("600");
+    await store.completeChallenge(c.id, UID_A, "Steve", later);
+    expect(await store.cancelChallenge(c.id, later)).toBe(false);
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row!.canceledAt).toBeNull();
+  });
+
+  it("offers recently seen players, newest first, excluding the linked", async () => {
+    const A = "a".repeat(40), B = "b".repeat(40), C = "c".repeat(40);
+    await seedPlayer({ dayzId: A, gamertag: "Older", lastSeenAt: new Date("2026-09-01T00:00:00Z") });
+    await seedPlayer({ dayzId: B, gamertag: "Newer", lastSeenAt: new Date("2026-09-02T00:00:00Z") });
+    await seedPlayer({ dayzId: C, gamertag: "Taken", lastSeenAt: new Date("2026-09-03T00:00:00Z") });
+    await db.insert(identityLinks).values({ discordId: "d9", dayzId: C, gamertag: "Taken", verifiedAt: new Date() });
+    expect(await store.recentUnlinkedPlayers(50)).toEqual([
+      { dayzId: B, gamertag: "Newer" },
+      { dayzId: A, gamertag: "Older" },
+    ]);
+  });
+
+  it("honours the limit", async () => {
+    // The autocomplete's pool is 50; Discord returns at most 25 of them.
+    for (let i = 0; i < 60; i++) {
+      await seedPlayer({ dayzId: `${i}`.padStart(40, "0"), gamertag: `P${i}`,
+        lastSeenAt: new Date(Date.UTC(2026, 8, 1, 0, i)) });
+    }
+    expect(await store.recentUnlinkedPlayers(50)).toHaveLength(50);
   });
 });

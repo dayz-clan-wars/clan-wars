@@ -276,3 +276,39 @@ waits. Reordering statements inside `acceptInvite` or `disband` would not fail t
 it would silently stop them staging anything, so they would pass while proving
 nothing. Each test says so in a comment. Worth knowing before trusting them as
 regression guards for the statement order they depend on.
+
+## 21. Apps contend on the single shared test database
+
+`pnpm -r test` fails in `apps/projector` and `apps/ingest-worker` while both pass in
+isolation: every app points at the one `factions` test database and truncates shared
+tables underneath its neighbours. Confirmed pre-existing during the targeted-linking
+plan — stashing all branch work made the projector failures *worse*, not better.
+
+Two consequences beyond the noise. A recursive run cannot be trusted as a gate, so
+per-package runs are doing the real work. And the failure set moves with vitest's
+file ordering (it orders by size), so an unrelated edit that changes a file's byte
+count can surface or hide a failure — which is exactly how a latent isolation bug in
+`discord.test.ts` surfaced during Task 5 of that plan.
+
+The fix is isolation, not more truncation: a database or schema per package, named
+from the package, so no two suites share a namespace.
+
+## 22. The bot is single-instance-only, and nothing enforces it
+
+`notifyCompleted` sends the DM BEFORE calling `markNotified` (`apps/bot/src/discord.ts`).
+That order is deliberate and right for one process — marking first would drop the DM
+entirely if the send then failed — but it makes the notifier at-least-once across
+processes: two instances both read `pendingNotifications()`, both send, then both mark.
+
+Observed for real on 2026-09-01, during the targeted-linking live gate: a stale bot
+process survived a `pkill` whose pattern did not match the expanded tsx command line,
+a second was started alongside it, and the verified player received the completion DM
+twice. The verification itself was unaffected — `completeChallenge` is guarded and only
+one link row exists — so the blast radius is duplicate notifications, not duplicate
+bindings.
+
+Two things worth doing before anyone runs a second instance for availability: take an
+advisory lock (or a row lease) around the notify step so only one process notifies, and
+give the bot a startup guard that refuses to run when another holds the lock. The same
+argument applies to the ceremony notifier and the players projection, which share the
+loop.

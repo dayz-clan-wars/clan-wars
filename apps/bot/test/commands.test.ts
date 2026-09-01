@@ -1,16 +1,20 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers,
+  servers, factions, factionMembers, players, verificationChallenges,
   type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
-const CTX = { discordId: "100", guildId: "g", channelId: "c" };
+/** The character /link is asked to bind, seeded into `players` per test. */
+const TARGET = UID_A;
+/** A well-formed UID the event log has never seen. */
+const UNKNOWN = "F".repeat(40);
+const CTX = { discordId: "100", guildId: "g", channelId: "c", targetDayzId: TARGET };
 
 describe("commands", () => {
   let db: Database;
@@ -21,9 +25,22 @@ describe("commands", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers, players restart identity cascade`);
+    });
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
+    // ⚠️ Seeded against the fixture clock, not new Date(): the store orders and
+    // filters players by lastSeenAt, and a wall-clock fixture drifts out of the
+    // window the rest of the suite reasons about.
+    await db.insert(players).values({
+      dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now,
+    });
   });
 
   /** Seeds a holding faction with one member row for `discordId`/`role`. */
@@ -57,16 +74,152 @@ describe("commands", () => {
       expect(await store.findLiveChallenge("100", now)).not.toBeNull();
     });
 
+    it("binds the challenge to the character that was named", async () => {
+      await handleLink(deps, CTX);
+      expect(await store.findLiveChallenge("100", now)).toMatchObject({ targetDayzId: TARGET });
+    });
+
     it("shows human-readable emote labels, never raw tokens", async () => {
       const reply = await handleLink(deps, CTX);
       expect(reply.content).not.toMatch(/Emote[A-Z]/);
+    });
+
+    it("refuses a UID the event log has never seen", async () => {
+      const r = await handleLink(deps, { ...CTX, targetDayzId: UNKNOWN });
+      expect(r.content).toMatch(/have not seen/i);
+      expect(await store.liveChallenges(now)).toHaveLength(0);
+    });
+
+    it("refuses a character somebody has already linked", async () => {
+      // The autocomplete filters these out, but the menu can be stale and a
+      // user can type anything into an autocomplete field.
+      const c = await store.createChallenge({
+        ...CTX, discordId: "999", sequence: ["EmoteSalute"], issuedAt: now,
+        expiresAt: new Date(now.getTime() + 1000), targetDayzId: TARGET,
+      });
+      expect(c).not.toBeNull();
+      expect(await store.completeChallenge(c!.id, TARGET, "Ronald", now)).toBe(true);
+
+      const r = await handleLink(deps, CTX);
+      expect(r.content).toMatch(/already linked/i);
+      expect(await store.findLiveChallenge("100", now)).toBeNull();
+    });
+
+    it("names the character in the challenge message", async () => {
+      // The player must be able to see they picked the right character before
+      // walking in game to perform three emotes.
+      const r = await handleLink(deps, CTX);
+      expect(r.content).toContain("Ronald");
+      expect(r.content).toMatch(/1\./);
+      expect(r.content).toMatch(/3\./);
     });
 
     it("re-shows the existing challenge instead of issuing a second one", async () => {
       const first = await handleLink(deps, CTX);
       const second = await handleLink(deps, CTX);
       expect(second.content).toBe(first.content);
+      expect(second.content).toContain("Ronald");
       expect((await store.liveChallenges(now))).toHaveLength(1);
+    });
+
+    it("switches to a different character, cancelling the old challenge", async () => {
+      // A mis-pick out of the autocomplete must not strand the player for the
+      // full 24h TTL — nor strand the abandoned character, whose slot in
+      // verification_challenges_open_target_uniq is freed by the cancel.
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      const first = await handleLink(deps, CTX);
+      const second = await handleLink(deps, { ...CTX, targetDayzId: other });
+
+      // The reply says the old sequence is dead, and shows the new character.
+      expect(second.content).toMatch(/canceled/i);
+      expect(second.content).toContain("Ronald");
+      expect(second.content).toContain("Nancy");
+      expect(second.content).not.toBe(first.content);
+
+      // Exactly one live challenge, and it names the new target.
+      const live = await store.liveChallenges(now);
+      expect(live).toHaveLength(1);
+      expect(live[0]).toMatchObject({ targetDayzId: other });
+
+      // The old one is canceled, not merely superseded — an uncanceled row
+      // would keep Ronald unlinkable by anybody for 24 hours.
+      const old = await db.select().from(verificationChallenges)
+        .where(eq(verificationChallenges.targetDayzId, TARGET));
+      expect(old).toHaveLength(1);
+      expect(old[0]!.canceledAt).toEqual(now);
+    });
+
+    it("can switch back to the first character afterwards", async () => {
+      // Switching back re-uses a target this account already named, which
+      // collides on verification_challenges_open_target_uniq unless the first
+      // cancel committed before the second insert.
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, targetDayzId: other });
+      const back = await handleLink(deps, CTX);
+
+      expect(back.content).toContain("Ronald");
+      expect(back.content).toMatch(/canceled/i);
+      const live = await store.liveChallenges(now);
+      expect(live).toHaveLength(1);
+      expect(live[0]).toMatchObject({ targetDayzId: TARGET });
+    });
+
+    it("refuses to switch when the tick binds the old target mid-handler", async () => {
+      // ⚠️ The link must appear BETWEEN handleLink's top-of-handler read and
+      // its cancel, which is the only window in which cancelChallenge returns
+      // false in production. Completing the challenge before the call instead
+      // would be answered by the already-linked guard at the top of the
+      // handler, and the test would pass with the !canceled branch deleted.
+      class TickRacesTheCancel extends PgVerificationStore {
+        override async cancelChallenge(challengeId: number, at: Date) {
+          // The verification tick lands here: it binds the old target, so our
+          // guarded cancel then finds a completed row and refuses it.
+          await super.completeChallenge(challengeId, TARGET, "Ronald", at);
+          return super.cancelChallenge(challengeId, at);
+        }
+      }
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      await handleLink(deps, CTX);
+
+      const racing = { ...deps, store: new TickRacesTheCancel(db) };
+      const r = await handleLink(racing, { ...CTX, targetDayzId: other });
+
+      // Only the !canceled branch produces this wording.
+      expect(r.content).toMatch(/just finished/i);
+      expect(r.content).toContain("Ronald");
+      // No challenge issued on top of a live link.
+      expect(await store.liveChallenges(now)).toHaveLength(0);
+      expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: TARGET });
+    });
+
+    it("says another account is verifying the character, not that something went wrong", async () => {
+      // ⚠️ Account 200 holds the open challenge for TARGET, so account 100's
+      // insert loses to verification_challenges_open_target_uniq. That index
+      // has no expiry term and cancelExpired will not touch an unexpired row,
+      // so the old "try again in a moment" was false for up to the full 24h
+      // TTL — the player retried into the same wall with no idea why.
+      const other = await store.createChallenge({
+        discordId: "200", guildId: "g", channelId: "c",
+        sequence: ["EmoteSalute", "EmoteClap", "EmoteDance"],
+        issuedAt: now, expiresAt: new Date(now.getTime() + 86_400_000), targetDayzId: TARGET,
+      });
+      expect(other).not.toBeNull();
+
+      const r = await handleLink(deps, CTX);
+
+      expect(r.content).toMatch(/someone else is verifying/i);
+      expect(r.content).toContain("Ronald");
+      expect(r.content).not.toMatch(/try again in a moment/i);
+
+      // The other account's challenge is neither cancelled nor stolen: doing
+      // either would let anyone knock a rival off a character mid-verification.
+      const rows = await db.select().from(verificationChallenges);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ id: other!.id, discordId: "200", canceledAt: null, completedAt: null });
     });
 
     it("describes the sequence by its actual length, not a hardcoded word", async () => {
@@ -77,6 +230,7 @@ describe("commands", () => {
         sequence: ["EmoteSalute", "EmoteClap", "EmoteDance", "EmoteWave"],
         issuedAt: now,
         expiresAt: new Date(now.getTime() + 600_000),
+        targetDayzId: TARGET,
       });
       expect(c).not.toBeNull();
       const reply = await handleLink(deps, CTX);
@@ -85,69 +239,44 @@ describe("commands", () => {
     });
 
     it("refuses when the account is already linked", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       const reply = await handleLink(deps, CTX);
       expect(reply.content).toMatch(/already linked/i);
     });
 
-    it("does not issue a sequence that is already outstanding", async () => {
-      // Pin the rng so the naive implementation would collide.
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      await handleLink(fixed, CTX);
-      await handleLink(fixed, { ...CTX, discordId: "200" });
-      const seqs = await store.outstandingSequences(now);
-      expect(seqs).toHaveLength(2);
-      expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
-    });
-
-    it("redraws when the drawn sequence is already held, and still issues one", async () => {
-      // Both calls draw identically from the pinned rng; the DB rejects the
-      // second, so handleLink must redraw rather than fail.
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      const a = await handleLink(fixed, CTX);
-      const b = await handleLink(fixed, { ...CTX, discordId: "200" });
-      expect(a.content).not.toBe(b.content);
-
-      const seqs = await store.outstandingSequences(now);
-      expect(seqs).toHaveLength(2);
-      expect(JSON.stringify(seqs[0])).not.toBe(JSON.stringify(seqs[1]));
-    });
-
-    it("issues distinct sequences under concurrent /link calls", async () => {
-      const fixed: CommandDeps = { ...deps, rng: () => 0 };
-      await Promise.all([
-        handleLink(fixed, { ...CTX, discordId: "601" }),
-        handleLink(fixed, { ...CTX, discordId: "602" }),
-        handleLink(fixed, { ...CTX, discordId: "603" }),
+    it("issues exactly one challenge under concurrent /link calls", async () => {
+      // uniqOpenPerAccount, not a pre-read, is what guarantees this: the losing
+      // insert returns null and the loser re-reads and shows the winner's.
+      const replies = await Promise.all([
+        handleLink(deps, CTX), handleLink(deps, CTX), handleLink(deps, CTX),
       ]);
-      const seqs = (await store.outstandingSequences(now)).map((s) => JSON.stringify(s));
-      // The database, not a pre-read, is what guarantees this.
-      expect(new Set(seqs).size).toBe(seqs.length);
+      expect(await store.liveChallenges(now)).toHaveLength(1);
+      for (const r of replies) expect(r.content).toContain("Ronald");
     });
   });
 
   describe("handleUnlink", () => {
     it("reports when there was nothing to unlink", async () => {
-      expect((await handleUnlink(deps, "100")).content).toMatch(/not linked/i);
+      expect((await handleUnlink(deps, "100", "g")).content).toMatch(/not linked/i);
     });
 
     it("removes an existing link", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
-      expect((await handleUnlink(deps, "100")).content).toMatch(/unlinked/i);
+      expect((await handleUnlink(deps, "100", "g")).content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("100")).toBeNull();
     });
 
     it("refuses to unlink a faction leader", async () => {
       await seedMembership("d1", "leader", "Bears");
-      const c = await store.createChallenge({ ...CTX, discordId: "d1", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d1", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d1");
+      const r = await handleUnlink(deps, "d1", "g");
       expect(r.content).toMatch(/transfer/i);
       expect(r.content).toMatch(/Bears/);
       expect(await store.findLinkByDiscord("d1")).not.toBeNull();
@@ -155,24 +284,66 @@ describe("commands", () => {
 
     it("refuses to unlink an ordinary member", async () => {
       await seedMembership("d2", "member", "Wolves");
-      const c = await store.createChallenge({ ...CTX, discordId: "d2", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d2", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d2");
+      const r = await handleUnlink(deps, "d2", "g");
       expect(r.content).toMatch(/faction/i);
       expect(r.content).toMatch(/Wolves/);
       expect(await store.findLinkByDiscord("d2")).not.toBeNull();
     });
 
     it("still unlinks someone on no roster", async () => {
-      const c = await store.createChallenge({ ...CTX, discordId: "d3", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d3", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d3");
+      const r = await handleUnlink(deps, "d3", "g");
       expect(r.content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("d3")).toBeNull();
+    });
+
+    it("clears the nickname after a successful unlink", async () => {
+      const c = await store.createChallenge({ ...CTX, discordId: "d4", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "d4", "g");
+      expect(clearNickname).toHaveBeenCalledWith("g", "d4");
+    });
+
+    it("does not touch the nickname when there was nothing to unlink", async () => {
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "100", "g");
+      expect(clearNickname).not.toHaveBeenCalled();
+    });
+
+    it("does not touch the nickname when the unlink is refused for a faction leader", async () => {
+      await seedMembership("d5", "leader", "Eagles");
+      const c = await store.createChallenge({ ...CTX, discordId: "d5", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "d5", "g");
+      expect(clearNickname).not.toHaveBeenCalled();
+    });
+
+    it("still reports success when the nickname clear fails", async () => {
+      // The unlink already committed by the time this runs — a Discord
+      // hiccup here must not turn a successful unlink into a reported error.
+      const c = await store.createChallenge({ ...CTX, discordId: "d6", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockRejectedValue(new Error("boom"));
+      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const r = await handleUnlink({ ...deps, clearNickname }, "d6", "g");
+      expect(r.content).toMatch(/unlinked/i);
+      expect(await store.findLinkByDiscord("d6")).toBeNull();
+      warned.mockRestore();
     });
   });
 
@@ -182,14 +353,14 @@ describe("commands", () => {
     });
 
     it("reports the linked gamertag", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).toContain("Steve");
     });
 
     it("does not print the full UID", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).not.toContain(UID_A);
