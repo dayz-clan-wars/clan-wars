@@ -77,6 +77,7 @@ describe("commands", () => {
         sequence: ["EmoteSalute", "EmoteClap", "EmoteDance", "EmoteWave"],
         issuedAt: now,
         expiresAt: new Date(now.getTime() + 600_000),
+        targetDayzId: UID_A,
       });
       expect(c).not.toBeNull();
       const reply = await handleLink(deps, CTX);
@@ -85,7 +86,7 @@ describe("commands", () => {
     });
 
     it("refuses when the account is already linked", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       const reply = await handleLink(deps, CTX);
@@ -134,7 +135,7 @@ describe("commands", () => {
     });
 
     it("removes an existing link", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleUnlink(deps, "100")).content).toMatch(/unlinked/i);
@@ -143,7 +144,7 @@ describe("commands", () => {
 
     it("refuses to unlink a faction leader", async () => {
       await seedMembership("d1", "leader", "Bears");
-      const c = await store.createChallenge({ ...CTX, discordId: "d1", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d1", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
@@ -155,7 +156,7 @@ describe("commands", () => {
 
     it("refuses to unlink an ordinary member", async () => {
       await seedMembership("d2", "member", "Wolves");
-      const c = await store.createChallenge({ ...CTX, discordId: "d2", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d2", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
@@ -166,7 +167,7 @@ describe("commands", () => {
     });
 
     it("still unlinks someone on no roster", async () => {
-      const c = await store.createChallenge({ ...CTX, discordId: "d3", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, discordId: "d3", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
@@ -182,14 +183,14 @@ describe("commands", () => {
     });
 
     it("reports the linked gamertag", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).toContain("Steve");
     });
 
     it("does not print the full UID", async () => {
-      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleWhoami(deps, "100")).content).not.toContain(UID_A);

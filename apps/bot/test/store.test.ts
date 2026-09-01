@@ -22,9 +22,9 @@ describe("PgVerificationStore", () => {
     store = new PgVerificationStore(db);
   });
 
-  const issue = async (discordId = "100") => {
+  const issue = async (discordId = "100", targetDayzId = UID_A) => {
     const c = await store.createChallenge({
-      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId,
     });
     expect(c).not.toBeNull();
     return c!;
@@ -76,7 +76,7 @@ describe("PgVerificationStore", () => {
     const first = await issue("100");
     await store.completeChallenge(first.id, UID_A, "Steve", later);
     const second = await store.createChallenge({
-      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     expect(second).not.toBeNull();
     expect(await store.completeChallenge(second!.id, UID_A, "Steve", later)).toBe(false);
@@ -104,10 +104,10 @@ describe("PgVerificationStore", () => {
     // the loser must not be left marked complete. Distinct sequences: the
     // open-sequence uniqueness index is a separate concern from this race.
     const a = await store.createChallenge({
-      discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "401", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     const b = await store.createChallenge({
-      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ_B, issuedAt: now, expiresAt: later,
+      discordId: "402", guildId: "g", channelId: "c", sequence: SEQ_B, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
@@ -164,13 +164,13 @@ describe("PgVerificationStore", () => {
 
   it("is idempotent when the same account re-completes its own binding", async () => {
     const first = await store.createChallenge({
-      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(first).not.toBeNull();
     expect(await store.completeChallenge(first!.id, UID_B, "Steve", later)).toBe(true);
 
     const second = await store.createChallenge({
-      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "500", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_B,
     });
     expect(second).not.toBeNull();
     // Same account, same UID — already bound, so this succeeds without a
@@ -184,7 +184,7 @@ describe("PgVerificationStore", () => {
     const first = await issue("100");
     expect(first).not.toBeNull();
     const second = await store.createChallenge({
-      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "200", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     // Null, not a throw — the caller redraws.
     expect(second).toBeNull();
@@ -193,11 +193,11 @@ describe("PgVerificationStore", () => {
   it("frees a sequence once its challenge is canceled as expired", async () => {
     await store.createChallenge({
       discordId: "300", guildId: "g", channelId: "c", sequence: SEQ,
-      issuedAt: now, expiresAt: new Date(now.getTime() - 1),
+      issuedAt: now, expiresAt: new Date(now.getTime() - 1), targetDayzId: UID_A,
     });
     expect(await store.cancelExpired(now)).toBe(1);
     const reused = await store.createChallenge({
-      discordId: "400", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId: "400", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
     });
     expect(reused).not.toBeNull();
   });

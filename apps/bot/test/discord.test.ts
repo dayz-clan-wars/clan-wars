@@ -82,6 +82,7 @@ describe("discord wiring", () => {
       const c = await store.createChallenge({
         discordId, guildId: "g", channelId: "c",
         sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        targetDayzId: uid,
       });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, uid, "Steve", now);
@@ -123,6 +124,7 @@ describe("discord wiring", () => {
       const c = await store.createChallenge({
         discordId, guildId: "g", channelId: "c",
         sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        targetDayzId: uid,
       });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, uid, "Steve", now);

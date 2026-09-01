@@ -38,9 +38,9 @@ describe("verificationTick", () => {
     payload: { gamertag, dayzId, emote: token, item: null },
   });
 
-  const issue = async (discordId = "100") => {
+  const issue = async (discordId = "100", targetDayzId = UID_A) => {
     const c = await store.createChallenge({
-      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later,
+      discordId, guildId: "g", channelId: "c", sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId,
     });
     expect(c).not.toBeNull();
     return c!;
@@ -99,6 +99,7 @@ describe("verificationTick", () => {
     await store.createChallenge({
       discordId: "100", guildId: "g", channelId: "c", sequence: SEQ,
       issuedAt: new Date("2026-08-26T11:00:00Z"), expiresAt: new Date("2026-08-26T11:10:00Z"),
+      targetDayzId: UID_A,
     });
     for (const t of SEQ) await emote(UID_A, t);
     expect((await tick()).verified).toBe(0);
