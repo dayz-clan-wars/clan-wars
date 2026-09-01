@@ -37,6 +37,9 @@ export async function supplyTick(db: Database, deps: {
       inArray(factions.status, [...HOLDING_STATUSES]),
     ))
     // Stable order, or the bytes differ between ticks and we upload forever.
+    // Total without a tie-break only because factions_holding_tag_uniq is
+    // UNIQUE(serverId, lower(tag)) over exactly these statuses. If that index
+    // loosens, add a second key or the hash flaps.
     .orderBy(asc(factions.tag));
 
   // ⚠️ numeric columns arrive as STRINGS from Drizzle. Without Number() the

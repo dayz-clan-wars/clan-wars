@@ -121,19 +121,45 @@ describe("supplyTick", () => {
     const bodies: string[] = [];
     const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    for (const o of JSON.parse(bodies[0]!).Objects) {
+    const objects = JSON.parse(bodies[0]!).Objects;
+    // Without this the loop below asserts nothing on an empty file, so any
+    // mutation that drops the faction turns this test green instead of red.
+    expect(objects).toHaveLength(72);
+    for (const o of objects) {
       for (const p of o.pos) expect(typeof p).toBe("number");
       expect(Number.isFinite(o.pos[0])).toBe(true);
     }
   });
 
   it("ignores factions on another server", async () => {
+    // Both servers hold a faction, so this pins "ours kept, theirs dropped"
+    // rather than the weaker "an otherwise-empty file stays empty".
     const other = await seedServer("other");
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
     await seedFaction({ tag: "OTH", texture: "Flag_Wolf", x: "1", y: "2", z: "3", status: "active", serverId: other });
     const bodies: string[] = [];
     const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(JSON.parse(bodies[0]!)).toEqual({ Objects: [] });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects).toHaveLength(72);
+    expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["COK"]);
+  });
+
+  it("spawns the kit for a dormant faction too", async () => {
+    // ⚠️ dormant is the third HOLDING status and the only one no other test
+    // covers. Drop it from the inArray filter and every dormant faction's kit
+    // silently stops spawning — which is the whole projection design, since
+    // "disband and lapse fall out for free" only holds if the code filters by
+    // exactly the holding set.
+    await seedFaction({ tag: "DOR", texture: "Flag_Wolf", x: "100.50", y: "20.25", z: "300.75", status: "dormant" });
+    const bodies: string[] = [];
+    const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 1, uploaded: true });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects).toHaveLength(72);
+    expect(objects.every((o: any) => o.customString === "DOR")).toBe(true);
+    expect(objects.some((o: any) => o.name === "Flag_Wolf")).toBe(true);
   });
 
   it("emits factions in a stable tag order regardless of insertion order", async () => {
