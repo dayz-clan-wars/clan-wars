@@ -172,6 +172,40 @@ describe("PgRosterStore concurrency", () => {
     expect(cooldowns[0]!.until.getTime()).toBe(UNTIL.getTime());
   });
   /**
+   * §8's fourth race: two renames inside the cooldown window. The second
+   * UPDATE blocks on the row lock the first holds, then re-evaluates its own
+   * WHERE against the committed row — where `renamed_at` is now the first
+   * writer's instant, which no longer satisfies the cooldown floor. Exactly
+   * one wins, and the stored name is that one's; there is no interleaving
+   * where both land or where the loser's name is what sticks.
+   */
+  it("two renames inside the cooldown: one wins and its name is the stored one", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
+      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
+    }).returning();
+    const factionId = f!.id;
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
+    });
+
+    const RENAME_COOLDOWN_MS = 604_800_000;
+    const notBefore = new Date(t0.getTime() - RENAME_COOLDOWN_MS);
+
+    const [r1, r2] = await Promise.all([
+      storeA.rename({ factionId, discordId: "d1", name: "Cubs", at: t0, notBefore }),
+      storeB.rename({ factionId, discordId: "d1", name: "Wolves", at: t0, notBefore }),
+    ]);
+
+    expect([r1, r2].filter((r) => r === "ok")).toHaveLength(1);
+    expect([r1, r2].filter((r) => r === "cooldown")).toHaveLength(1);
+
+    const [after] = await db.select().from(factions).where(eq(factions.id, factionId));
+    expect(after!.name).toBe(r1 === "ok" ? "Cubs" : "Wolves");
+    expect(after!.renamedAt!.getTime()).toBe(t0.getTime());
+  });
+
+  /**
    * §4.1: a membership row must never outlive its faction's hold.
    * `faction_members_server_player_uniq` carries no status predicate, so a
    * stranded row bars that player from EVERY future faction on the server
