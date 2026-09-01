@@ -30,6 +30,15 @@ export class NitradoClient {
     private readonly timeoutMs: number = 30_000,
   ) {}
 
+  // ⚠️ Nitrado answers some errors with HTTP 200 and status:"error". Checking
+  // res.ok alone reports those as success. Both getJson and postJson route
+  // through this single check so the guard can't drift between the two.
+  private assertSuccess(body: Record<string, any>, path: string): void {
+    if (body.status !== "success") {
+      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
+    }
+  }
+
   private async getJson(path: string): Promise<Record<string, any>> {
     const res = await this.fetchFn(`${API_BASE}${path}`, {
       headers: { Authorization: `Bearer ${this.token}` },
@@ -37,11 +46,7 @@ export class NitradoClient {
     });
     if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
     const body = (await res.json()) as Record<string, any>;
-    // ⚠️ Nitrado answers some errors with HTTP 200 and status:"error".
-    // Checking res.ok alone reports those as success.
-    if (body.status !== "success") {
-      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
-    }
+    this.assertSuccess(body, path);
     return body;
   }
 
@@ -54,10 +59,7 @@ export class NitradoClient {
     });
     if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
     const body = (await res.json()) as Record<string, any>;
-    // ⚠️ Same 200-with-error hazard as getJson: check the payload, not just res.ok.
-    if (body.status !== "success") {
-      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
-    }
+    this.assertSuccess(body, path);
     return body;
   }
 
@@ -141,9 +143,12 @@ export class NitradoClient {
     const url = json.data?.token?.url;
     const token = json.data?.token?.token;
     if (!url) throw new Error(`Nitrado upload: missing token url for ${remoteDir}/${fileName}`);
+    // A missing token would otherwise degrade silently into a bare 403 from
+    // step two — throw here so the failure is distinguishable at 3am.
+    if (!token) throw new Error(`Nitrado upload: missing token for ${remoteDir}/${fileName}`);
     const res = await this.fetchFn(url, {
       method: "POST",
-      headers: { "Content-Type": "application/binary", ...(token ? { token } : {}) },
+      headers: { "Content-Type": "application/binary", token },
       body: content,
       signal: AbortSignal.timeout(this.timeoutMs),
     });
