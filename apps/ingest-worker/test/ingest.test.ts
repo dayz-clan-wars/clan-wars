@@ -219,4 +219,15 @@ describe("ingestFile", () => {
       expect(done?.complete).toBe(true);
     });
   });
+
+  it("never un-completes a file that is already complete", async () => {
+    // ⚠️ A short Nitrado listing can put an already-finished file last, which
+    // makes the tick treat it as the live file (`markComplete: false`).
+    // Writing that through would re-open a finished file for re-download on
+    // every subsequent tick.
+    await ingestFile(db, { ...opts(), markComplete: true });
+    await ingestFile(db, { ...opts(), markComplete: false });
+    const [row] = await db.select().from(admFiles);
+    expect(row?.complete).toBe(true);
+  });
 });

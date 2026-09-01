@@ -115,8 +115,14 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
   // cause already-ingested lines to be reprocessed under this row's id.
   const newLinesIngested = Math.max(total, existing.linesIngested);
 
+  // ⚠️ Completeness never regresses. A short Nitrado listing can put an
+  // already-complete file last, which makes the tick treat it as the live
+  // file (`markComplete: false`); writing that through would re-open a
+  // finished file for re-download on every subsequent tick.
+  const newComplete = existing.complete || opts.markComplete;
+
   await db.update(admFiles)
-    .set({ linesIngested: newLinesIngested, complete: opts.markComplete, path: opts.path ?? existing.path })
+    .set({ linesIngested: newLinesIngested, complete: newComplete, path: opts.path ?? existing.path })
     .where(eq(admFiles.id, admFileId));
 
   return { linesCaptured, eventsAppended, unparsedFlagLines, linesIngested: newLinesIngested };
