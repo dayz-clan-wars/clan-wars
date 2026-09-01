@@ -7,10 +7,6 @@ settings:
 importers:
 
   .:
-    dependencies:
-      '@factions/db':
-        specifier: workspace:*
-        version: link:packages/db
     devDependencies:
       '@types/node':
         specifier: ^22.0.0

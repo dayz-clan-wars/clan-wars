@@ -6,9 +6,6 @@
     "node": ">=20"
   },
   "packageManager": "pnpm@9.12.0",
-  "dependencies": {
-    "@factions/db": "workspace:*"
-  },
   "scripts": {
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",

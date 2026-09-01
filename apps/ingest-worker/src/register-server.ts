@@ -9,7 +9,7 @@ import { createClient, servers } from "@factions/db";
  * deactivated.
  *
  * Usage:
- *   DATABASE_URL=... pnpm exec tsx scripts/register-server.ts \
+ *   DATABASE_URL=... pnpm --filter @factions/ingest-worker exec tsx src/register-server.ts \
  *     --name "Clan Wars Livonia" --map livonia --service-id 1234 --offset-ms 25200000
  */
 function arg(flag: string): string | undefined {
@@ -26,7 +26,7 @@ const active = arg("--active") !== "false";
 
 if (!databaseUrl || !name || !map || !serviceIdRaw || !offsetRaw) {
   console.error(
-    "Usage: DATABASE_URL=... tsx scripts/register-server.ts --name <name> --map <map> " +
+    "Usage: DATABASE_URL=... pnpm --filter @factions/ingest-worker exec tsx src/register-server.ts --name <name> --map <map> " +
     "--service-id <n> --offset-ms <n> [--active false]\n\n" +
     "--offset-ms is milliseconds to ADD to this server's local ADM time to get UTC.\n" +
     "Measured production values: chernarus 14400000 (+4h), livonia and sakhal 25200000 (+7h).\n" +

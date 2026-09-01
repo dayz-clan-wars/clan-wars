@@ -13,7 +13,7 @@ service id, clock offset, or active flag changes) before starting the worker:
 
 ```bash
 DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
-  pnpm exec tsx scripts/register-server.ts \
+  pnpm --filter @factions/ingest-worker exec tsx src/register-server.ts \
   --name "Clan Wars Livonia" --map livonia --service-id 1234 --offset-ms 25200000
 ```
 
