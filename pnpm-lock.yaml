@@ -75,6 +75,9 @@ importers:
       '@factions/event-log':
         specifier: workspace:*
         version: link:../../packages/event-log
+      '@factions/nitrado':
+        specifier: workspace:*
+        version: link:../../packages/nitrado
       drizzle-orm:
         specifier: ^0.36.0
         version: 0.36.4(postgres@3.4.9)

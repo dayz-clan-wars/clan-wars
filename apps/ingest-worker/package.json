@@ -13,6 +13,7 @@
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
     "@factions/event-log": "workspace:*",
+    "@factions/nitrado": "workspace:*",
     "drizzle-orm": "^0.36.0"
   },
   "devDependencies": {
