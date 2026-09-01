@@ -88,10 +88,49 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   }
 
   // Re-show rather than re-issue: a player who lost the ephemeral reply should
-  // not have their in-progress sequence invalidated. The live challenge names
-  // its own target, which need not be the one just typed.
+  // not have their in-progress sequence invalidated, and must see the SAME
+  // three emotes they already walked in game to perform.
   const live = await deps.store.findLiveChallenge(ctx.discordId, now);
-  if (live) return ephemeral(challengeMessage(live.sequence, live.expiresAt, await nameOf(deps, live.targetDayzId)));
+  if (live && live.targetDayzId === target.dayzId) {
+    return ephemeral(challengeMessage(live.sequence, live.expiresAt, target.gamertag));
+  }
+
+  // Naming a different character switches, it does not re-show. An account
+  // gets one open challenge (uniqOpenPerAccount) and a challenge now lives for
+  // 24 hours, so re-showing here would strand anyone who mis-picked out of the
+  // autocomplete for a full day — and would strand the abandoned character
+  // too, since its slot in verification_challenges_open_target_uniq stays
+  // held. Replacing the challenge steals nothing, for exactly the reason the
+  // TTL could be raised: a challenge names the one character that can satisfy
+  // it.
+  let switchedFrom: string | null = null;
+  if (live) {
+    // ⚠️ Ordering, not decoration: the cancel must be COMMITTED before the
+    // insert below, or the new row collides with the row it replaces on BOTH
+    // partial unique indexes (uniqOpenPerAccount, and
+    // verification_challenges_open_target_uniq when switching back to a
+    // character this account previously named). These are separate
+    // autocommitted statements, so the cancel is durable by the time
+    // createChallenge runs — no transaction needed, and wrapping them in one
+    // would be worse: the indexes are evaluated at insert time against
+    // uncommitted-in-transaction state, which is the same conflict.
+    //
+    // cancelChallenge is the guarded cancel — it touches only a row that is
+    // neither completed nor already canceled. False means the row closed under
+    // us; the only way it closes as COMPLETE is the tick binding the old
+    // target, so re-read the link before issuing anything.
+    const canceled = await deps.store.cancelChallenge(live.id, now);
+    if (!canceled) {
+      const justLinked = await deps.store.findLinkByDiscord(ctx.discordId);
+      if (justLinked) {
+        return ephemeral(
+          `You just finished linking to **${justLinked.gamertag}**. ` +
+          "Run `/unlink` first if you need to bind a different character.",
+        );
+      }
+    }
+    switchedFrom = await nameOf(deps, live.targetDayzId);
+  }
 
   // Close out challenges that expired without completing, before issuing a new
   // one: an expired row still occupies this account's one open-challenge slot
@@ -111,7 +150,12 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
     sequence, issuedAt: now, expiresAt, targetDayzId: target.dayzId,
   });
   if (challenge) {
-    return ephemeral(challengeMessage(challenge.sequence, challenge.expiresAt, target.gamertag));
+    const body = challengeMessage(challenge.sequence, challenge.expiresAt, target.gamertag);
+    // Say the old sequence is dead. A player who switched must not go on
+    // performing emotes that can no longer bind anything.
+    return ephemeral(switchedFrom === null
+      ? body
+      : `Canceled your challenge for **${switchedFrom}** — that sequence no longer works.\n\n${body}`);
   }
 
   // A null insert means a concurrent /link for this same account beat us to

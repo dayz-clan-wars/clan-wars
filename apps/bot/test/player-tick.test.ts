@@ -17,7 +17,14 @@ describe("runPlayerProjection", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table events, raw_lines, adm_files, players, servers, consumer_cursors restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table events, raw_lines, adm_files, players, servers, consumer_cursors restart identity cascade`);
+    });
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: new Date("2026-09-01T00:00:00Z") }).returning();

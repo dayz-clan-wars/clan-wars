@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, players,
+  servers, factions, factionMembers, players, verificationChallenges,
   type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
 
@@ -25,7 +25,14 @@ describe("commands", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers, players restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers, players restart identity cascade`);
+    });
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
     // ⚠️ Seeded against the fixture clock, not new Date(): the store orders and
@@ -115,15 +122,64 @@ describe("commands", () => {
       expect((await store.liveChallenges(now))).toHaveLength(1);
     });
 
-    it("re-shows the character the live challenge names, not the one just typed", async () => {
-      // Switching characters mid-challenge is not a thing: the live challenge
-      // owns the account's one open slot, and it names its own target.
+    it("switches to a different character, cancelling the old challenge", async () => {
+      // A mis-pick out of the autocomplete must not strand the player for the
+      // full 24h TTL — nor strand the abandoned character, whose slot in
+      // verification_challenges_open_target_uniq is freed by the cancel.
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      const first = await handleLink(deps, CTX);
+      const second = await handleLink(deps, { ...CTX, targetDayzId: other });
+
+      // The reply says the old sequence is dead, and shows the new character.
+      expect(second.content).toMatch(/canceled/i);
+      expect(second.content).toContain("Ronald");
+      expect(second.content).toContain("Nancy");
+      expect(second.content).not.toBe(first.content);
+
+      // Exactly one live challenge, and it names the new target.
+      const live = await store.liveChallenges(now);
+      expect(live).toHaveLength(1);
+      expect(live[0]).toMatchObject({ targetDayzId: other });
+
+      // The old one is canceled, not merely superseded — an uncanceled row
+      // would keep Ronald unlinkable by anybody for 24 hours.
+      const old = await db.select().from(verificationChallenges)
+        .where(eq(verificationChallenges.targetDayzId, TARGET));
+      expect(old).toHaveLength(1);
+      expect(old[0]!.canceledAt).toEqual(now);
+    });
+
+    it("can switch back to the first character afterwards", async () => {
+      // Switching back re-uses a target this account already named, which
+      // collides on verification_challenges_open_target_uniq unless the first
+      // cancel committed before the second insert.
       const other = "B".repeat(40);
       await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
       await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, targetDayzId: other });
+      const back = await handleLink(deps, CTX);
+
+      expect(back.content).toContain("Ronald");
+      expect(back.content).toMatch(/canceled/i);
+      const live = await store.liveChallenges(now);
+      expect(live).toHaveLength(1);
+      expect(live[0]).toMatchObject({ targetDayzId: TARGET });
+    });
+
+    it("refuses to switch once the tick has already bound the old target", async () => {
+      // The cancel is guarded: a completed challenge is not cancellable, so
+      // the switch must notice the account is now linked rather than issue a
+      // second challenge on top of a live link.
+      const other = "B".repeat(40);
+      await db.insert(players).values({ dayzId: other, gamertag: "Nancy", firstSeenAt: now, lastSeenAt: now });
+      await handleLink(deps, CTX);
+      const live = await store.findLiveChallenge("100", now);
+      expect(await store.completeChallenge(live!.id, TARGET, "Ronald", now)).toBe(true);
+
       const r = await handleLink(deps, { ...CTX, targetDayzId: other });
-      expect(r.content).toContain("Ronald");
-      expect(r.content).not.toContain("Nancy");
+      expect(r.content).toMatch(/already linked|just finished/i);
+      expect(await store.liveChallenges(now)).toHaveLength(0);
     });
 
     it("describes the sequence by its actual length, not a hardcoded word", async () => {

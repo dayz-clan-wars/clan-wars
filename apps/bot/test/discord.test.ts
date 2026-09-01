@@ -23,7 +23,14 @@ describe("discord wiring", () => {
     // handleUnlink refuses a roster member, and files here share one database
     // (fileParallelism is off, but leftovers survive between files), so a
     // membership left by another suite silently changes /unlink's answer.
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players, faction_members, factions, servers restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players, faction_members, factions, servers restart identity cascade`);
+    });
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
     // Fixture clock, not new Date(): the whole suite reasons about `now`.

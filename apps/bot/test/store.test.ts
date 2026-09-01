@@ -18,7 +18,14 @@ describe("PgVerificationStore", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
+    // SET LOCAL shares the truncate's connection (the pool hands out any
+    // connection, and the setting reverts at commit), so the dozens of
+    // "truncate cascades to ..." NOTICEs stay out of the suite's output and a
+    // genuine warning is visible when one appears.
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
+    });
     store = new PgVerificationStore(db);
   });
 
