@@ -339,3 +339,34 @@ migration), populated at registration from a `file_server/list` call rather than
 guessed, with `MISSION_CUSTOM_DIR` retired or kept only as a backfill default. Worth
 also considering whether the upload should verify the directory belongs to the service
 it is uploading for.
+
+## 24. Out-of-band changes to the supply file on the server are never detected
+
+`supply_uploads.content_hash` is the supply projection's only memory, and it records
+what the tick last **sent**, not what the game server currently holds. That makes the
+"self-healing" claim narrower than it reads: it heals *upload failures* (the hash does
+not advance on a throw, so the next tick retries), and nothing else.
+
+If the file changes on the server side — a mission wipe, an FTP restore from a backup,
+an operator editing `custom/faction-supplies.json` by hand, a Nitrado-side rollback —
+the stored hash still equals the hash of what the tick would generate. So the tick
+short-circuits, no upload is attempted, and the factions' supplies stay gone until
+something unrelated changes the roster and shifts the hash. There is no log line,
+because from the tick's point of view there was nothing to do.
+
+Not fixed on `feat/faction-supplies` because detection is a design decision about
+cadence, not a patch. The candidates:
+
+- **`file_server/list` size/mtime check each tick** — one cheap request per server,
+  catches deletion and most edits, but not an edit that preserves size, and mtime
+  semantics on that endpoint are unverified.
+- **Download and compare** — exact, but a request and a full file transfer per server
+  per tick just to learn nothing changed.
+- **Periodic unconditional re-upload** (say hourly, or every N ticks) — simplest to
+  reason about and needs no new API surface, but writes for no reason and would mask
+  rather than report the drift.
+- **Store nothing and always upload** — correct and stupid; rejected already in §4.4.
+
+Whichever is chosen should also decide whether drift is *reported* (an operator wants
+to know their file was reverted) or merely repaired silently. The spec's §8 carries the
+gap; §2.1 and §6 were corrected so they no longer overclaim.

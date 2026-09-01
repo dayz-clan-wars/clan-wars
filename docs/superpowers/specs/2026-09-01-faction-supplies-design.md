@@ -57,6 +57,15 @@ the stored hash untouched, so the next tick tries again. Removal on disband
 and on a lapsed reservation then needs no code of its own — those rows stop
 being holding, and the next regeneration simply lacks them.
 
+**The self-healing is narrower than "the file always matches the table."** The
+stored hash is the tick's only memory, and it describes what we last *sent*,
+not what is on the server now. It heals **upload failures**. It does not detect
+**server-side drift**: if the file is deleted, reverted or edited on the server
+— a mission wipe, an FTP restore, an operator with a text editor — the stored
+hash still equals the hash of what the tick would generate, so no upload is
+ever attempted again and the divergence is permanent until a faction changes.
+See §8.
+
 This is the same shape as the `players` projection: derive from the table, do
 not accumulate edits.
 
@@ -180,6 +189,11 @@ when it follows.
 **A failed upload is retried by the next tick**, because the hash only advances
 on success. No dead-letter, no manual repair.
 
+**That retry covers upload failures only.** The stored hash records what we
+last sent, not what the server currently holds, so a file changed or removed
+*on the server* is invisible to the tick and never re-uploaded. Carried forward
+in §8 rather than solved here — detection needs a cadence decision.
+
 **A failing upload must not stop the ingest sweep.** It gets its own try/catch,
 like the ceremony steps in the bot's loop, and logs so a persistent failure is
 visible rather than silent.
@@ -223,3 +237,14 @@ at the pole with a rooster flag. Recorded with the real values observed.
   spawner files dynamically, that decision gets revisited with its own design.
 - **Items taken from the kit vanish at restart** (§2.4) — inherent to
   non-persistent spawns, and the reason the kit reads as a resupply.
+- **Out-of-band changes to the file on the server are never detected**
+  (§2.1, §6). `supply_uploads.content_hash` is the only memory, and it records
+  what we last *sent*. If the file is deleted, reverted or hand-edited on the
+  server — a mission wipe, an FTP restore, an operator edit — the stored hash
+  still matches what the tick would generate, so no upload is ever attempted
+  again. The supplies stay gone until something unrelated changes the roster.
+  Not solved here because detection needs a design decision about cadence: a
+  `file_server/list` size/mtime check every tick is cheap but weak, a full
+  download-and-compare is exact but costs a request per server per tick, and a
+  periodic unconditional re-upload is simplest but writes for no reason. Pick
+  one deliberately rather than bolting one on.
