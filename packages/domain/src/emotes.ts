@@ -4,19 +4,24 @@ export type EmoteEntry = { label: string; token: string; safe: boolean };
  * Every `performed Emote*` token observed in the production ADM export
  * (2026-08-26: 35 distinct tokens across 2,093 lines).
  *
- * `safe: false` excludes an emote from verification sequences, for one of two
+ * `safe: false` excludes an emote from verification sequences, for one of THREE
  * reasons:
  *
  *   1. It occurs in natural play. `EmoteSitA` is 1,611 of the 2,093 emote
  *      lines — 77% of all emote traffic. A sequence containing it would
- *      routinely be completed by accident, binding a UID that never ran
- *      `/link`.
+ *      routinely be completed by accident.
  *   2. It carries a gameplay penalty. Asking a player to prove identity by
  *      killing their character is not a verification flow.
+ *   3. ⚠️ It is not confirmed selectable from the in-game emote wheel.
  *
- * ⚠️ Do not add a token here that has not been observed in a real ADM line.
- * A guessed token can never be performed, so a sequence containing it can
- * never complete, and the failure looks like a broken parser.
+ * Reason 3 replaced the rule this file used to carry — "do not add a token that
+ * has not been observed in a real ADM line". That rule was not enough, and it
+ * shipped a broken /link: `EmoteSOS` IS observed (3 times in the five-week
+ * production export, 0.14% of emote traffic) and a player still could not find
+ * it on the wheel. Observation proves a token can be produced; it does not
+ * prove a player can perform it on request. The safe set is therefore one-life's
+ * list, every member of which has been performed by a real player completing a
+ * real /link in production.
  */
 export const EMOTE_DICTIONARY: EmoteEntry[] = [
   { label: "salute", token: "EmoteSalute", safe: true },
@@ -42,13 +47,7 @@ export const EMOTE_DICTIONARY: EmoteEntry[] = [
   { label: "watching", token: "EmoteWatching", safe: true },
   { label: "cut throat", token: "EmoteThroat", safe: true },
   { label: "rock paper scissors", token: "EmoteRPSRandom", safe: true },
-  { label: "hold", token: "EmoteHold", safe: true },
-  { label: "SOS", token: "EmoteSOS", safe: true },
-  // Taunts — observed in the export, absent from one-life's dictionary.
-  { label: "taunt", token: "EmoteTaunt", safe: true },
   { label: "taunt elbow", token: "EmoteTauntElbow", safe: true },
-  { label: "blow a kiss", token: "EmoteTauntKiss", safe: true },
-  { label: "thinking", token: "EmoteTauntThink", safe: true },
   // Unsafe — natural play (postures players hold for minutes at a time).
   { label: "sit", token: "EmoteSitA", safe: false },
   { label: "sit cross-legged", token: "EmoteSitB", safe: false },
@@ -57,6 +56,14 @@ export const EMOTE_DICTIONARY: EmoteEntry[] = [
   // Unsafe — gameplay penalty.
   { label: "suicide", token: "EmoteSuicide", safe: false },
   { label: "vomit", token: "EmoteVomit", safe: false },
+  // Unsafe — reason 3: not confirmed selectable from the in-game emote wheel.
+  // Observed in the export, but EmoteSOS is the one that reached a player and
+  // could not be performed.
+  { label: "hold", token: "EmoteHold", safe: false },
+  { label: "SOS", token: "EmoteSOS", safe: false },
+  { label: "taunt", token: "EmoteTaunt", safe: false },
+  { label: "blow a kiss", token: "EmoteTauntKiss", safe: false },
+  { label: "thinking", token: "EmoteTauntThink", safe: false },
 ];
 
 const byLabel = new Map(EMOTE_DICTIONARY.map((e) => [e.label.toLowerCase(), e]));

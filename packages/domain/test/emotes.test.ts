@@ -1,6 +1,16 @@
 import { describe, it, expect } from "vitest";
 import { EMOTE_DICTIONARY, emoteToken, emoteLabel, safeVerificationEmotes } from "../src/emotes.js";
 
+// one-life's list, which is the empirically-working set: every token here has
+// been performed by a real player completing a real /link in production.
+const ONE_LIFE_SAFE = [
+  "EmoteSalute", "EmoteSurrender", "EmoteGreeting", "EmoteClap", "EmoteHeart",
+  "EmotePoint", "EmotePointSelf", "EmoteThumb", "EmoteThumbDown", "EmoteNod",
+  "EmoteShake", "EmoteDance", "EmoteFacepalm", "EmoteShrug", "EmoteTimeout",
+  "EmoteLookAtMe", "EmoteListening", "EmoteCome", "EmoteMove", "EmoteSilent",
+  "EmoteWatching", "EmoteThroat", "EmoteRPSRandom", "EmoteTauntElbow",
+];
+
 describe("emote dictionary", () => {
   it("has a unique token for every entry", () => {
     const tokens = EMOTE_DICTIONARY.map((e) => e.token);
@@ -48,5 +58,25 @@ describe("emote dictionary", () => {
     const n = safeVerificationEmotes().length;
     // n*(n-1)*(n-2) distinct ordered sequences; require at least 10k.
     expect(n * (n - 1) * (n - 2)).toBeGreaterThan(10_000);
+  });
+
+  it("offers exactly one-life's safe set", () => {
+    expect(safeVerificationEmotes().map((e) => e.token).sort())
+      .toEqual([...ONE_LIFE_SAFE].sort());
+  });
+
+  it("never offers an emote that is not confirmed on the wheel", () => {
+    // The five this project added beyond one-life. EmoteSOS is the one that
+    // reached a player and could not be performed.
+    for (const token of ["EmoteSOS", "EmoteHold", "EmoteTaunt", "EmoteTauntKiss", "EmoteTauntThink"]) {
+      expect(safeVerificationEmotes().map((e) => e.token)).not.toContain(token);
+    }
+  });
+
+  it("still LABELS the excluded tokens, so the parser can name them", () => {
+    // They stay in the dictionary; only the safe flag changes. Dropping them
+    // entirely would make real emote lines unlabelable.
+    expect(emoteLabel("EmoteSOS")).toBe("SOS");
+    expect(EMOTE_DICTIONARY.find((e) => e.token === "EmoteSOS")?.safe).toBe(false);
   });
 });

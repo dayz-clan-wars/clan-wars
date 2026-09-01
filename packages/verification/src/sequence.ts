@@ -9,16 +9,21 @@ import { safeVerificationEmotes } from "@factions/domain";
  * effective search space.
  */
 /**
- * ⚠️ Length is a SECURITY parameter. Matching holds progress on a mismatch, so
- * a challenge completes iff its sequence is a subsequence of what the player
- * performed — meaning one run of n distinct emotes covers C(n, length)
- * sequences at once, and is charged against every live challenge at once. At
- * length 3 the emote budget's runs covered ~1% of the 21,924 available
- * sequences per challenge, which is a real chance of binding an attacker's UID
- * to someone else's Discord account. Four takes the space to 570,024. Shorten
- * it only alongside a matching cut to MAX_POOL_EMOTES_PER_ATTEMPT.
+ * ⚠️ Length is a security parameter, but NOT the one it used to be.
+ *
+ * Before targeted challenges, a challenge named nobody: any UID performing the
+ * sequence won it, so length had to make the space too large to sweep. Four was
+ * chosen for that reason.
+ *
+ * A challenge now names its target UID and can only be advanced by that
+ * character (see the design's §3), so that attack is unreachable and three
+ * suffices. What length still bounds is the residual risk: someone claims an
+ * unlinked player's character and waits for them to perform the sequence by
+ * accident. Three over 24 tokens is 12,144 ordered sequences, and
+ * MAX_POOL_EMOTES_PER_ATTEMPT caps one challenge's exposure at C(8,3) = 56 of
+ * them — 0.46%. Shorten it further only alongside a cut to that budget.
  */
-export function generateSequence(rng: () => number, length = 4): string[] {
+export function generateSequence(rng: () => number, length = 3): string[] {
   const avail = safeVerificationEmotes().map((e) => e.token);
   const chosen: string[] = [];
   for (let i = 0; i < length && avail.length > 0; i++) {
