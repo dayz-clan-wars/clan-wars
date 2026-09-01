@@ -1,5 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
+import {
+  createClient, runMigrations, requireTestDatabaseUrl,
+  servers, factions, factionMembers,
+  type Database,
+} from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
@@ -17,10 +21,23 @@ describe("commands", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links restart identity cascade`);
+    await db.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers restart identity cascade`);
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
   });
+
+  /** Seeds a holding faction with one member row for `discordId`/`role`. */
+  const seedMembership = async (discordId: string, role: "leader" | "officer" | "member", factionName = "Bears") => {
+    const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
+    const [f] = await db.insert(factions).values({
+      serverId: s!.id, name: factionName, tag: factionName.slice(0, 4).toUpperCase(),
+      texture: `Flag_${factionName}`, poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
+      status: "active", leaderDiscordId: role === "leader" ? discordId : "someone-else", createdAt: now,
+    }).returning();
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId: s!.id, dayzId: "P".repeat(40), discordId, role, joinedAt: now,
+    });
+  };
 
   describe("formatSequence", () => {
     it("renders human labels, numbered, not raw tokens", () => {
@@ -122,6 +139,40 @@ describe("commands", () => {
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
       expect((await handleUnlink(deps, "100")).content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("100")).toBeNull();
+    });
+
+    it("refuses to unlink a faction leader", async () => {
+      await seedMembership("d1", "leader", "Bears");
+      const c = await store.createChallenge({ ...CTX, discordId: "d1", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const r = await handleUnlink(deps, "d1");
+      expect(r.content).toMatch(/transfer/i);
+      expect(r.content).toMatch(/Bears/);
+      expect(await store.findLinkByDiscord("d1")).not.toBeNull();
+    });
+
+    it("refuses to unlink an ordinary member", async () => {
+      await seedMembership("d2", "member", "Wolves");
+      const c = await store.createChallenge({ ...CTX, discordId: "d2", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const r = await handleUnlink(deps, "d2");
+      expect(r.content).toMatch(/faction/i);
+      expect(r.content).toMatch(/Wolves/);
+      expect(await store.findLinkByDiscord("d2")).not.toBeNull();
+    });
+
+    it("still unlinks someone on no roster", async () => {
+      const c = await store.createChallenge({ ...CTX, discordId: "d3", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000) });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const r = await handleUnlink(deps, "d3");
+      expect(r.content).toMatch(/unlinked/i);
+      expect(await store.findLinkByDiscord("d3")).toBeNull();
     });
   });
 

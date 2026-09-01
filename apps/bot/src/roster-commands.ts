@@ -1,4 +1,4 @@
-import type { RosterStore } from "./roster-store.js";
+import type { FactionCard, RosterStore } from "./roster-store.js";
 import { resolveServerContext } from "./roster-context.js";
 
 export type RosterPrompt =
@@ -345,4 +345,84 @@ export async function handleFactionRename(
   if (outcome === "cooldown") return reply("Your faction was renamed too recently — try again later.");
 
   return reply(`Your faction is now named **${name}**.`);
+}
+
+/**
+ * `info` and `roster` are the only public replies in this plan — §6 makes
+ * them public deliberately: flags are visible in-game, so roster membership
+ * is not intelligence worth hiding. Every branch of both handlers, errors
+ * included, goes through this instead of the ephemeral `reply()` above.
+ */
+const publicReply = (content: string): RosterReply => ({ content, ephemeral: false });
+
+/**
+ * Shared by `handleFactionInfo` and `handleFactionRoster`: with a name, look
+ * that faction up directly (no membership check — either command can be
+ * pointed at a faction the caller isn't in). Without one, fall back to the
+ * caller's own membership via `resolveServerContext`.
+ */
+async function findFactionCard(
+  deps: RosterDeps,
+  discordId: string,
+  name: string | null,
+): Promise<{ card: FactionCard } | { error: RosterReply }> {
+  if (name !== null) {
+    const card = await deps.store.factionByName(name);
+    return card ? { card } : { error: publicReply(`No faction named **${name}**.`) };
+  }
+
+  const ctx = resolveServerContext(await deps.store.membershipsFor(discordId), null);
+  if (ctx.kind === "no-faction") return { error: publicReply("You are not in a faction. Name one to look it up.") };
+  if (ctx.kind === "not-on-server") return { error: publicReply("You don't hold a faction on that server.") };
+  if (ctx.kind === "ambiguous") return { error: publicReply("You're in a faction on more than one server — name one.") };
+
+  const card = await deps.store.factionById(ctx.membership.factionId);
+  return card ? { card } : { error: publicReply("Your faction could not be found.") };
+}
+
+export async function handleFactionInfo(
+  deps: RosterDeps,
+  discordId: string,
+  name: string | null,
+): Promise<RosterReply> {
+  const found = await findFactionCard(deps, discordId, name);
+  if ("error" in found) return found.error;
+  const { card } = found;
+
+  const founded = `<t:${Math.floor(card.createdAt.getTime() / 1000)}:D>`;
+  return publicReply([
+    `**${card.name}** [${card.tag}] — ${card.serverName}`,
+    `Flag: ${card.texture}`,
+    `Status: ${card.status}`,
+    `Members: ${card.memberCount}`,
+    `Pole: ${card.poleKey}`,
+    `Founded: ${founded}`,
+  ].join("\n"));
+}
+
+const ROLE_LABELS = [["leader", "Leader"], ["officer", "Officers"], ["member", "Members"]] as const;
+
+export async function handleFactionRoster(
+  deps: RosterDeps,
+  discordId: string,
+  name: string | null,
+): Promise<RosterReply> {
+  const found = await findFactionCard(deps, discordId, name);
+  if ("error" in found) return found.error;
+  const { card } = found;
+
+  const roster = await deps.store.rosterOf(card.id);
+  const lines = [`**${card.name}** [${card.tag}] roster (${roster.length}):`];
+  for (const [role, label] of ROLE_LABELS) {
+    const entries = roster.filter((e) => e.role === role);
+    if (entries.length === 0) continue;
+    lines.push(`**${label}**`);
+    for (const entry of entries) {
+      // The gamertag is null when a member's identity link was removed
+      // (see `PgRosterStore.rosterOf`) — falling back to the mention keeps
+      // them visible on their own faction's roster instead of vanishing.
+      lines.push(`- ${entry.gamertag ?? mention(entry.discordId)}`);
+    }
+  }
+  return publicReply(lines.join("\n"));
 }

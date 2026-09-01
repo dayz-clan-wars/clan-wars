@@ -1,6 +1,12 @@
 import type { Database } from "@factions/db";
-import { identityLinks, verificationChallenges, challengeAttempts } from "@factions/db";
-import { and, eq, gte, isNull, isNotNull, lt } from "drizzle-orm";
+import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers } from "@factions/db";
+import { and, eq, gte, inArray, isNull, isNotNull, lt } from "drizzle-orm";
+import type { Role } from "./roster-store.js";
+
+/** Statuses under which a faction still holds its flag and roster — mirrors
+ * `PgRosterStore`'s HOLDING, kept separate because this store owns no
+ * roster concept of its own beyond this one gate. */
+const HOLDING = ["reserved", "active", "dormant"];
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
@@ -12,6 +18,13 @@ export interface VerificationStore {
   findLinkByDiscord(discordId: string): Promise<{ dayzId: string; gamertag: string; verifiedAt: Date } | null>;
   findLinkByDayzId(dayzId: string): Promise<{ discordId: string } | null>;
   deleteLinkByDiscord(discordId: string): Promise<boolean>;
+  /**
+   * ⚠️ Gated on roster membership. Unlinking is what binds a Discord account to
+   * a UID, and a faction's leader is identified by their Discord id — so
+   * unlinking a leader orphans the faction into exactly the frozen state §6's
+   * succession mechanic exists to prevent, reachable in one command.
+   */
+  factionMembershipsFor(discordId: string): Promise<{ factionName: string; role: Role }[]>;
   findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
   outstandingSequences(now: Date): Promise<string[][]>;
@@ -47,6 +60,16 @@ export class PgVerificationStore implements VerificationStore {
   async deleteLinkByDiscord(discordId: string): Promise<boolean> {
     const rows = await this.db.delete(identityLinks).where(eq(identityLinks.discordId, discordId)).returning();
     return rows.length > 0;
+  }
+
+  async factionMembershipsFor(discordId: string): Promise<{ factionName: string; role: Role }[]> {
+    const rows = await this.db.select({
+      factionName: factions.name,
+      role: factionMembers.role,
+    }).from(factionMembers)
+      .innerJoin(factions, eq(factionMembers.factionId, factions.id))
+      .where(and(eq(factionMembers.discordId, discordId), inArray(factions.status, HOLDING)));
+    return rows.map((r) => ({ ...r, role: r.role as Role }));
   }
 
   async findLiveChallenge(discordId: string, now: Date): Promise<LiveChallenge | null> {

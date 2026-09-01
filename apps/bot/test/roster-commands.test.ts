@@ -1,10 +1,11 @@
 import { describe, it, expect, vi } from "vitest";
-import type { RosterStore, Membership, PendingInvite } from "../src/roster-store.js";
+import type { RosterStore, Membership, PendingInvite, FactionCard, RosterEntry } from "../src/roster-store.js";
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave,
   handleFactionPromote, handleFactionDemote, handleFactionTransfer,
   handleFactionDisband, handleFactionRename,
+  handleFactionInfo, handleFactionRoster,
   type RosterDeps,
 } from "../src/roster-commands.js";
 
@@ -453,5 +454,125 @@ describe("handleFactionRename", () => {
     const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename: async () => "ok" });
     const r = await handleFactionRename(d, "d1", { serverId: null, name: "Bears" });
     expect(r.content).toMatch(/now named \*\*Bears\*\*/);
+  });
+});
+
+const factionCard = (over: Partial<FactionCard> = {}): FactionCard => ({
+  id: 1, serverId: 1, serverName: "S", name: "Bears", tag: "BEAR",
+  texture: "Flag_Bears", status: "active", poleKey: "1.00:2.00:3.00",
+  memberCount: 3, leaderDiscordId: "d1", createdAt: now,
+  ...over,
+});
+
+const rosterEntry = (over: Partial<RosterEntry> = {}): RosterEntry => ({
+  dayzId: "P1", discordId: "d1", gamertag: "Gamertag", role: "member", joinedAt: now,
+  ...over,
+});
+
+describe("handleFactionInfo", () => {
+  it("looks up a named faction regardless of the caller's own membership", async () => {
+    const membershipsFor = vi.fn();
+    const d = deps({ membershipsFor, factionByName: async (name) => (name === "Bears" ? factionCard() : null) });
+    const r = await handleFactionInfo(d, "d9", "Bears");
+    expect(r.content).toMatch(/Bears/);
+    expect(membershipsFor).not.toHaveBeenCalled();
+  });
+
+  it("reports no faction by that name", async () => {
+    const d = deps({ factionByName: async () => null });
+    const r = await handleFactionInfo(d, "d9", "Ghosts");
+    expect(r.content).toMatch(/no faction named/i);
+    expect(r.content).toMatch(/Ghosts/);
+    expect(r.ephemeral).toBe(false);
+  });
+
+  it("without a name, uses the caller's own membership", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1 })],
+      factionById: async (id) => (id === 1 ? factionCard() : null),
+    });
+    const r = await handleFactionInfo(d, "d1", null);
+    expect(r.content).toMatch(/Bears/);
+  });
+
+  it("refuses when the caller holds no faction and named none", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionInfo(d, "d1", null);
+    expect(r.content).toMatch(/not in a faction/i);
+    expect(r.ephemeral).toBe(false);
+  });
+
+  it("renders name, tag, flag, status, member count, pole key and founding date, and is public", async () => {
+    const d = deps({ factionByName: async () => factionCard({
+      name: "Bears", tag: "BEAR", texture: "Flag_Bears", status: "active",
+      memberCount: 7, poleKey: "1.00:2.00:3.00", createdAt: now,
+    }) });
+    const r = await handleFactionInfo(d, "d9", "Bears");
+    expect(r.content).toMatch(/Bears/);
+    expect(r.content).toMatch(/BEAR/);
+    expect(r.content).toMatch(/Flag_Bears/);
+    expect(r.content).toMatch(/active/i);
+    expect(r.content).toMatch(/7/);
+    expect(r.content).toMatch(/1\.00:2\.00:3\.00/);
+    expect(r.content).toContain(`<t:${Math.floor(now.getTime() / 1000)}:D>`);
+    expect(r.ephemeral).toBe(false);
+  });
+});
+
+describe("handleFactionRoster", () => {
+  it("looks up a named faction regardless of the caller's own membership", async () => {
+    const membershipsFor = vi.fn();
+    const d = deps({
+      membershipsFor,
+      factionByName: async () => factionCard(),
+      rosterOf: async () => [rosterEntry()],
+    });
+    const r = await handleFactionRoster(d, "d9", "Bears");
+    expect(r.content).toMatch(/Bears/);
+    expect(membershipsFor).not.toHaveBeenCalled();
+  });
+
+  it("without a name, uses the caller's own membership", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1 })],
+      factionById: async () => factionCard(),
+      rosterOf: async () => [rosterEntry()],
+    });
+    const r = await handleFactionRoster(d, "d1", null);
+    expect(r.content).toMatch(/Bears/);
+    expect(r.ephemeral).toBe(false);
+  });
+
+  it("groups members by role, leader first", async () => {
+    const d = deps({
+      factionByName: async () => factionCard(),
+      rosterOf: async () => [
+        rosterEntry({ discordId: "leader1", gamertag: "Lead", role: "leader" }),
+        rosterEntry({ discordId: "officer1", gamertag: "Off", role: "officer" }),
+        rosterEntry({ discordId: "member1", gamertag: "Mem", role: "member" }),
+      ],
+    });
+    const r = await handleFactionRoster(d, "d9", "Bears");
+    const leaderIdx = r.content.indexOf("Lead");
+    const officerIdx = r.content.indexOf("Off");
+    const memberIdx = r.content.indexOf("Mem");
+    expect(leaderIdx).toBeGreaterThan(-1);
+    expect(leaderIdx).toBeLessThan(officerIdx);
+    expect(officerIdx).toBeLessThan(memberIdx);
+  });
+
+  it("falls back to the Discord mention when the gamertag is null", async () => {
+    const d = deps({
+      factionByName: async () => factionCard(),
+      rosterOf: async () => [rosterEntry({ discordId: "d42", gamertag: null, role: "member" })],
+    });
+    const r = await handleFactionRoster(d, "d9", "Bears");
+    expect(r.content).toMatch(/<@d42>/);
+  });
+
+  it("reports no faction by that name", async () => {
+    const d = deps({ factionByName: async () => null });
+    const r = await handleFactionRoster(d, "d9", "Ghosts");
+    expect(r.content).toMatch(/no faction named/i);
   });
 });
