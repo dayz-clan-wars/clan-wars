@@ -227,7 +227,9 @@ describe("PgVerificationStore", () => {
     expect(await store.cancelExpired(now)).toBe(0);
   });
 
-  it("refuses to cancel a challenge that already completed", async () => {
+  it("refuses to cancel ONE challenge that already completed", async () => {
+    // Distinct from the cancelExpired test above: this is the targeted
+    // cancelChallenge path the budget-exhaustion cancel uses.
     // The guard is the half that matters: without it, a stray cancelChallenge
     // call on an already-bound challenge would either corrupt it (violating
     // verification_challenges_single_outcome) or throw and poison the
