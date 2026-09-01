@@ -75,7 +75,7 @@ describe("faction schema", () => {
 
   it("refuses a duplicate roster member", async () => {
     const [f] = await faction();
-    const m = { factionId: f!.id, dayzId: UID_A, discordId: "100", role: "leader" as const, joinedAt: now };
+    const m = { factionId: f!.id, serverId, dayzId: UID_A, discordId: "100", role: "leader" as const, joinedAt: now };
     await db.insert(factionMembers).values(m);
     await expect(db.insert(factionMembers).values(m)).rejects.toThrow(/faction_members_uniq/);
   });
@@ -83,7 +83,7 @@ describe("faction schema", () => {
   it("rejects an unknown role", async () => {
     const [f] = await faction();
     await expect(db.insert(factionMembers).values({
-      factionId: f!.id, dayzId: UID_A, discordId: "100", role: "emperor", joinedAt: now,
+      factionId: f!.id, serverId, dayzId: UID_A, discordId: "100", role: "emperor", joinedAt: now,
     })).rejects.toThrow(/faction_members_role_valid/);
   });
 

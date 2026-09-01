@@ -142,7 +142,7 @@ export class PgFactionStore implements FactionStore {
         }).returning({ id: factions.id });
 
         await tx.insert(factionMembers).values(a.members.map((m) => ({
-          factionId: f!.id, dayzId: m.dayzId, discordId: m.discordId,
+          factionId: f!.id, serverId: a.serverId, dayzId: m.dayzId, discordId: m.discordId,
           role: m.discordId === a.leaderDiscordId ? "leader" : "member",
           joinedAt: a.at,
         })));

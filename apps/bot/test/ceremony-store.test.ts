@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, ceremonies, whiteRaises, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
 const UID_B = "B".repeat(40);
+const PLAYER = "C".repeat(40);
 const POLE = "1:2:3";
 const now = new Date("2026-08-31T12:00:00Z");
 
@@ -39,6 +40,16 @@ describe("PgCeremonyStore", () => {
   const record = async (dayzId: string, minutes: number) => {
     const occurredAt = new Date(now.getTime() + minutes * 60_000);
     await store.recordRaise({ serverId, poleKey: POLE, dayzId, gamertag: "Steve", occurredAt, eventId: await event(occurredAt) });
+  };
+
+  const seedReservedFaction = async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
+      x: "1.00", y: "2.00", z: "3.00", status: "reserved",
+      leaderDiscordId: "100", createdAt: now,
+      reservedUntil: new Date("2026-08-01T00:00:00Z"),
+    }).returning();
+    return f!.id;
   };
 
   it("reports the newest ingested event time as the high-water mark", async () => {
@@ -138,5 +149,37 @@ describe("PgCeremonyStore", () => {
     expect(await store.settle(p, window, null)).toBeNull();
     expect(await store.pendingRaises(p)).toHaveLength(0);
     expect(await db.select().from(ceremonies)).toHaveLength(0);
+  });
+
+  it("releases the roster when a reservation lapses", async () => {
+    // ⚠️ The one-faction-per-server index carries no status predicate, so a
+    // membership row that outlives its faction's hold locks the player out of
+    // every future faction on that server, forever.
+    const factionId = await seedReservedFaction();
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: PLAYER, discordId: "d1", role: "leader", joinedAt: new Date(),
+    });
+
+    const lapsed = await store.lapseReservations(serverId, new Date("2026-08-01T00:00:00Z"));
+
+    expect(lapsed).toBe(1);
+    const rows = await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId));
+    expect(rows).toEqual([]);
+  });
+
+  it("revokes outstanding invites when a reservation lapses", async () => {
+    // A lapsed faction's offers can only ever answer "no longer active", and
+    // `/faction invites` shows at most five — dead offers would hide live ones.
+    const factionId = await seedReservedFaction();
+    const cutoff = new Date("2026-08-01T00:00:00Z");
+    await db.insert(factionInvites).values({
+      factionId, serverId, inviteeDiscordId: "d9", inviteeDayzId: PLAYER,
+      invitedByDiscordId: "d1", createdAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
+    });
+
+    expect(await store.lapseReservations(serverId, cutoff)).toBe(1);
+
+    const [inv] = await db.select().from(factionInvites);
+    expect(inv!.revokedAt).not.toBeNull();
   });
 });

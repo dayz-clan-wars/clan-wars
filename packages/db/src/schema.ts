@@ -393,6 +393,8 @@ export const factions = pgTable("factions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   reservedUntil: timestamp("reserved_until", { withTimezone: true }),
   activatedAt: timestamp("activated_at", { withTimezone: true }),
+  /** Null means never renamed, so no cooldown applies. Set by `/faction rename`. */
+  renamedAt: timestamp("renamed_at", { withTimezone: true }),
 }, (t) => ({
   statusValid: check("factions_status_valid",
     sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),
@@ -423,6 +425,16 @@ export const factionMembers = pgTable("faction_members", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   factionId: bigint("faction_id", { mode: "number" })
     .notNull().references(() => factions.id, { onDelete: "cascade" }),
+  /**
+   * Denormalized from the faction so "one player, one faction per server" can
+   * be an INDEX rather than a code path that remembers to look.
+   *
+   * ⚠️ The index below carries no partial predicate, which is only correct
+   * because a membership row does not outlive its faction's hold: lapsing and
+   * disbanding DELETE the roster. Membership in a lapsed faction is not a
+   * weaker membership — it is not a membership.
+   */
+  serverId: integer("server_id").notNull().references(() => servers.id),
   dayzId: text("dayz_id").notNull(),
   discordId: text("discord_id").notNull(),
   role: text("role").notNull(),
@@ -431,6 +443,65 @@ export const factionMembers = pgTable("faction_members", {
   roleValid: check("faction_members_role_valid",
     sql`${t.role} IN ('leader','officer','member')`),
   uniqMember: uniqueIndex("faction_members_uniq").on(t.factionId, t.dayzId),
+  uniqServerPlayer: uniqueIndex("faction_members_server_player_uniq").on(t.serverId, t.dayzId),
+  // Exactly one leader. Transfer is one transaction demoting and promoting;
+  // this is what makes two simultaneous transfers impossible rather than
+  // merely unlikely.
+  uniqLeader: uniqueIndex("faction_members_leader_uniq")
+    .on(t.factionId).where(sql`${t.role} = 'leader'`),
+}));
+
+/**
+ * An outstanding invitation. An offer, not a standing permission — hence the TTL.
+ */
+export const factionInvites = pgTable("faction_invites", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" })
+    .notNull().references(() => factions.id, { onDelete: "cascade" }),
+  /** Denormalized so the accept guard needs no join. */
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  inviteeDiscordId: text("invitee_discord_id").notNull(),
+  /** The roster keys on the UID; the invite is issued to a Discord user. Both are needed. */
+  inviteeDayzId: text("invitee_dayz_id").notNull(),
+  invitedByDiscordId: text("invited_by_discord_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  declinedAt: timestamp("declined_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+}, (t) => ({
+  /**
+   * One outstanding offer per faction per player.
+   *
+   * ⚠️ The predicate deliberately excludes `expires_at > now()`. A Postgres
+   * partial index predicate must be IMMUTABLE and `now()` is not, so such an
+   * index is rejected outright at creation. Expiry is enforced on the read and
+   * accept paths instead; re-inviting someone whose offer lapsed REFRESHES
+   * this row rather than inserting a second one.
+   *
+   * Scoped to the faction, not the player: several factions may court the same
+   * player, and choosing between them is the player's to make.
+   */
+  uniqPending: uniqueIndex("faction_invites_pending_uniq")
+    .on(t.factionId, t.inviteeDayzId)
+    .where(sql`${t.acceptedAt} IS NULL AND ${t.declinedAt} IS NULL AND ${t.revokedAt} IS NULL`),
+}));
+
+/**
+ * How long a player is barred from joining any faction on this server.
+ *
+ * Stores the DECISION, not the departure event, so the accept path is a
+ * NOT EXISTS against one row rather than a "find the newest departure" query.
+ * Kicks and voluntary departures are treated identically: §6's reasoning is
+ * that the two collapse under collusion ("just kick me"), so punishing them
+ * differently buys nothing. Disbanding writes nothing at all.
+ */
+export const rosterCooldowns = pgTable("roster_cooldowns", {
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  dayzId: text("dayz_id").notNull(),
+  until: timestamp("until", { withTimezone: true }).notNull(),
+}, (t) => ({
+  pk: uniqueIndex("roster_cooldowns_pk").on(t.serverId, t.dayzId),
 }));
 
 /**

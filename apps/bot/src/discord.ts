@@ -1,6 +1,6 @@
 import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags,
-  SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder,
+  SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
 import { createClient } from "@factions/db";
@@ -15,6 +15,14 @@ import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
+import {
+  handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
+  handleFactionKick, handleFactionLeave, handleFactionPromote, handleFactionDemote,
+  handleFactionTransfer, handleFactionDisband, handleFactionRename,
+  handleFactionInfo, handleFactionRoster,
+  type RosterDeps, type RosterReply, type RosterPrompt,
+} from "./roster-commands.js";
+import { PgRosterStore, type Membership } from "./roster-store.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
@@ -30,8 +38,88 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
         .setDescription("Found a faction from a ceremony you took part in")
         .addStringOption((o) => o.setName("name").setDescription("Faction name").setRequired(true).setMaxLength(64))
         .addStringOption((o) => o.setName("tag").setDescription("Short tag, 2-5 letters or digits").setRequired(true).setMaxLength(5))
-        .addStringOption((o) => o.setName("flag").setDescription("One of the 33 claimable flags").setRequired(true).setAutocomplete(true))),
+        .addStringOption((o) => o.setName("flag").setDescription("One of the 33 claimable flags").setRequired(true).setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("invite")
+        .setDescription("Invite a linked player to your faction")
+        .addUserOption((o) => o.setName("user").setDescription("Who to invite").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("invites")
+        .setDescription("List your pending faction invitations"))
+      .addSubcommand((s) => s.setName("kick")
+        .setDescription("Remove a member from your faction")
+        .addUserOption((o) => o.setName("user").setDescription("Who to kick").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("leave")
+        .setDescription("Leave your faction")
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("promote")
+        .setDescription("Promote a member to officer")
+        .addUserOption((o) => o.setName("user").setDescription("Who to promote").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("demote")
+        .setDescription("Demote an officer to member")
+        .addUserOption((o) => o.setName("user").setDescription("Who to demote").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("transfer")
+        .setDescription("Transfer leadership to another member")
+        .addUserOption((o) => o.setName("user").setDescription("Who to make leader").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("disband")
+        .setDescription("Disband your faction, releasing its flag, tag and pole")
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("rename")
+        .setDescription("Rename your faction")
+        .addStringOption((o) => o.setName("name").setDescription("New faction name").setRequired(true).setMaxLength(64))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("roster")
+        .setDescription("Show a faction's roster")
+        .addStringOption((o) => o.setName("name").setDescription("Faction name; defaults to your own"))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("info")
+        .setDescription("Show a faction's public info card")
+        .addStringOption((o) => o.setName("name").setDescription("Faction name; defaults to your own"))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true))),
   ].map((c) => c.toJSON());
+}
+
+/**
+ * `info` and `roster` are the only public roster replies (spec §6); every
+ * other roster reply is ephemeral. Fixed per subcommand, not per reply,
+ * because the defer flags have to be chosen before the handler runs — which
+ * means this set and the handlers' own `RosterReply.ephemeral` values are two
+ * statements of the same fact and must not drift. `faction-wiring.test.ts`
+ * asserts they agree.
+ */
+export const PUBLIC_ROSTER_SUBCOMMANDS = new Set(["info", "roster"]);
+
+/**
+ * What a player is told when a roster command throws.
+ *
+ * ⚠️ Every roster subcommand defers before it touches the store, and a
+ * deferred interaction that never receives an `editReply` sits on "thinking"
+ * for good. Logging the throw and dropping it — which is what the catch used
+ * to do — leaves the player staring at that. This apology is also what covers
+ * the `default:` arm of the subcommand switch, which is unreachable against a
+ * current command registration but not against a stale guild one.
+ */
+export const INTERACTION_FAILURE_MESSAGE =
+  "Something went wrong handling that. Try again in a moment.";
+
+export type ApologisableInteraction = {
+  deferred: boolean;
+  replied: boolean;
+  editReply: (opts: { content: string }) => Promise<unknown>;
+};
+
+/** Best effort: the interaction token may already be dead, and a throw from
+ * inside a discord.js listener's catch is an unhandled rejection. */
+export async function apologiseForFailure(i: ApologisableInteraction): Promise<void> {
+  if (!i.deferred || i.replied) return;
+  try {
+    await i.editReply({ content: INTERACTION_FAILURE_MESSAGE });
+  } catch (err) {
+    console.error("could not deliver the failure apology", err);
+  }
 }
 
 /** The subset of a discord.js interaction the router needs. Kept structural so tests need no client. */
@@ -164,6 +252,212 @@ export function flagSuggestions(query: string): string[] {
   return CLAIMABLE_FLAGS.filter((f) => f.toLowerCase().includes(q)).slice(0, 25);
 }
 
+/**
+ * Formats the caller's own faction memberships for the `server` autocomplete
+ * option, capped at Discord's 25-choice limit. Pure so it is directly
+ * testable without a live autocomplete interaction.
+ */
+export function serverChoices(memberships: Membership[]): { name: string; value: number }[] {
+  return memberships.slice(0, 25).map((m) => ({ name: m.serverName, value: m.serverId }));
+}
+
+// ---------------------------------------------------------------------------
+// Roster button custom ids
+//
+// Each prefix is its own namespace. Every parser below checks its prefix
+// FIRST and returns null otherwise — Discord delivers every component
+// interaction in the guild to this bot, so deferring one this router will
+// never answer leaves someone else's button stuck on "thinking" forever.
+// See `respondToClaimConfirm` above, which documents the same reasoning for
+// `/faction claim`.
+// ---------------------------------------------------------------------------
+
+export const INVITE_ACCEPT_PREFIX = "invite-accept:";
+export const INVITE_DECLINE_PREFIX = "invite-decline:";
+export const TRANSFER_PREFIX = "roster-transfer:";
+export const DISBAND_PREFIX = "roster-disband:";
+
+export const inviteAcceptCustomId = (inviteId: number): string => `${INVITE_ACCEPT_PREFIX}${inviteId}`;
+export const inviteDeclineCustomId = (inviteId: number): string => `${INVITE_DECLINE_PREFIX}${inviteId}`;
+export const transferCustomId = (factionId: number, targetDiscordId: string): string =>
+  `${TRANSFER_PREFIX}${factionId}:${targetDiscordId}`;
+export const disbandCustomId = (factionId: number): string => `${DISBAND_PREFIX}${factionId}`;
+
+/**
+ * A custom id suffix is decimal digits or it is nothing.
+ *
+ * ⚠️ `Number()` alone accepts far more than that: `Number("9e2")` is 900 and
+ * `Number("0x10")` is 16, so `invite-accept:9e2` would parse as invite 900.
+ * Not exploitable — every consumer re-checks ownership — but `config.ts`
+ * already sets this house rule and `parsePoleKey` was fixed for this exact
+ * bug class. Validate the text, then coerce.
+ */
+const DECIMAL_RE = /^\d+$/u;
+
+function parseIdSuffix(customId: string, prefix: string): number | null {
+  if (!customId.startsWith(prefix)) return null;
+  const raw = customId.slice(prefix.length);
+  if (!DECIMAL_RE.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+export function parseInviteAcceptCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, INVITE_ACCEPT_PREFIX);
+}
+
+export function parseInviteDeclineCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, INVITE_DECLINE_PREFIX);
+}
+
+export function parseDisbandCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, DISBAND_PREFIX);
+}
+
+export function parseTransferCustomId(customId: string): { factionId: number; targetDiscordId: string } | null {
+  if (!customId.startsWith(TRANSFER_PREFIX)) return null;
+  const rest = customId.slice(TRANSFER_PREFIX.length);
+  const sep = rest.indexOf(":");
+  if (sep === -1) return null;
+  const factionId = Number(rest.slice(0, sep));
+  const targetDiscordId = rest.slice(sep + 1);
+  if (!Number.isSafeInteger(factionId) || factionId <= 0 || targetDiscordId === "") return null;
+  return { factionId, targetDiscordId };
+}
+
+/** The subset of a button interaction the roster router needs. Structural so tests need no client. */
+export type ButtonInteractionLike = {
+  customId: string;
+  userId: string;
+  deferReply: (opts: { flags?: number }) => Promise<unknown>;
+  editReply: (opts: { content: string }) => Promise<unknown>;
+};
+
+/**
+ * Routes the four roster button prefixes. Returns false, without deferring,
+ * for any custom id that is not ours — see the note above the prefix block.
+ *
+ * `/faction transfer` and `/faction disband` deliberately never call the
+ * store (see `handleFactionTransfer` / `handleFactionDisband`): both are
+ * confirmation-gated, and the store call belongs here, on the confirming
+ * button. Disband especially — it is irreversible, releasing the flag, tag
+ * and pole to a 33-slot pool a rival can claim immediately.
+ */
+export async function routeRosterButton(deps: RosterDeps, i: ButtonInteractionLike): Promise<boolean> {
+  const acceptId = parseInviteAcceptCustomId(i.customId);
+  if (acceptId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const reply = await handleInviteAccept(deps, i.userId, acceptId);
+    await i.editReply({ content: reply.content });
+    return true;
+  }
+
+  const declineId = parseInviteDeclineCustomId(i.customId);
+  if (declineId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const reply = await handleInviteDecline(deps, i.userId, declineId);
+    await i.editReply({ content: reply.content });
+    return true;
+  }
+
+  const transfer = parseTransferCustomId(i.customId);
+  if (transfer !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const outcome = await deps.store.transfer({
+      factionId: transfer.factionId, fromDiscordId: i.userId, toDiscordId: transfer.targetDiscordId, at: deps.now(),
+    });
+    const content = outcome === "ok"
+      ? "Leadership has been transferred."
+      : outcome === "not-leader"
+        ? "Only the leader can transfer leadership."
+        : `<@${transfer.targetDiscordId}> is no longer a member of that faction.`;
+    await i.editReply({ content });
+    return true;
+  }
+
+  const disbandFactionId = parseDisbandCustomId(i.customId);
+  if (disbandFactionId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const outcome = await deps.store.disband(disbandFactionId, i.userId);
+    const content = outcome === "ok"
+      ? "The faction has been disbanded. Its flag, tag and pole are back in the pool."
+      : "Only the leader can disband the faction.";
+    await i.editReply({ content });
+    return true;
+  }
+
+  return false;
+}
+
+function inviteButtons(inviteId: number): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(inviteAcceptCustomId(inviteId)).setLabel("Accept").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(inviteDeclineCustomId(inviteId)).setLabel("Decline").setStyle(ButtonStyle.Danger),
+  );
+}
+
+export type RosterButtonSpec = { customId: string; label: string; style: "success" | "danger" };
+
+/**
+ * Decides WHAT buttons a `RosterReply.prompt` needs, as plain data — no
+ * discord.js types touched here so this is directly testable, the same
+ * reasoning `planClaimReply` documents above for the claim-confirm select.
+ *
+ * One row per element of the outer array. `list-invites` renders one row
+ * per pending invite (an accept button beside a decline button, both
+ * carrying that invite's id) — see spec §2.5 and `MAX_LISTED_INVITES`,
+ * which is what keeps this inside Discord's five-row cap.
+ */
+export function planRosterButtons(prompt: RosterPrompt | undefined): RosterButtonSpec[][] {
+  if (!prompt) return [];
+  if (prompt.kind === "confirm-transfer") {
+    return [[{ customId: transferCustomId(prompt.factionId, prompt.targetDiscordId), label: "Confirm transfer", style: "danger" }]];
+  }
+  if (prompt.kind === "confirm-disband") {
+    return [[{ customId: disbandCustomId(prompt.factionId), label: "Confirm disband", style: "danger" }]];
+  }
+  return prompt.invites.map((inv) => [
+    { customId: inviteAcceptCustomId(inv.id), label: `Accept ${inv.tag}`, style: "success" as const },
+    { customId: inviteDeclineCustomId(inv.id), label: `Decline ${inv.tag}`, style: "danger" as const },
+  ]);
+}
+
+/** The subset of a discord.js `Client` this needs to attempt an invite DM. Structural so tests need no client. */
+export type DmClientLike = {
+  users: {
+    fetch: (discordId: string) => Promise<{
+      send: (opts: { content: string; components: ActionRowBuilder<ButtonBuilder>[] }) => Promise<unknown>;
+    }>;
+  };
+};
+
+/** The subset of the inviter's interaction needed to report a failed DM. Structural so tests need no client. */
+export type FollowUpLike = { followUp: (opts: { content: string; flags: number }) => Promise<unknown> };
+
+/**
+ * Attempts to deliver a `RosterReply.dm` — currently only ever an invite —
+ * with its accept/decline buttons attached.
+ *
+ * ⚠️ A closed DM is ordinary, not an error: the invitation is already
+ * durable in the database, and `/faction invites` is the pull route that
+ * makes it reachable. What matters is that the INVITER — not the invitee —
+ * is told, or they will wait on a friend who never saw anything. See spec
+ * §2.5.
+ */
+export async function deliverInviteDm(
+  client: DmClientLike,
+  interaction: FollowUpLike,
+  dm: NonNullable<RosterReply["dm"]>,
+): Promise<void> {
+  try {
+    const user = await client.users.fetch(dm.discordId);
+    await user.send({ content: dm.content, components: [inviteButtons(dm.inviteId)] });
+  } catch (err) {
+    console.warn("invite DM failed", err);
+    await interaction.followUp({ content: dm.onFailure, flags: MessageFlags.Ephemeral });
+  }
+}
+
 export * from "./notify.js";
 
 /**
@@ -254,6 +548,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const factionDeps: FactionDeps = {
     store: factionStore, now: () => new Date(), reservationTtlMs: cfg.reservationTtlMs,
   };
+  const rosterStore = new PgRosterStore(db);
+  const rosterDeps: RosterDeps = {
+    store: rosterStore, now: () => new Date(),
+    inviteTtlMs: cfg.inviteTtlMs, cooldownMs: cfg.cooldownMs, renameCooldownMs: cfg.renameCooldownMs,
+  };
   const ceremonyStore = new PgCeremonyStore(db);
 
   try {
@@ -291,16 +590,37 @@ export async function start(cfg: BotConfig): Promise<void> {
     await interaction.editReply({ content: plan.content, components: [row] });
   };
 
+  const renderRosterReply = async (
+    interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown>; followUp: FollowUpLike["followUp"] },
+    reply: RosterReply,
+  ): Promise<void> => {
+    const rows = planRosterButtons(reply.prompt).map((row) =>
+      new ActionRowBuilder<ButtonBuilder>().addComponents(row.map((b) =>
+        new ButtonBuilder().setCustomId(b.customId).setLabel(b.label)
+          .setStyle(b.style === "success" ? ButtonStyle.Success : ButtonStyle.Danger),
+      )));
+    await interaction.editReply({ content: reply.content, components: rows });
+
+    if (reply.dm) {
+      await deliverInviteDm(client, interaction, reply.dm);
+    }
+  };
+
   client.on("interactionCreate", async (interaction) => {
     if (interaction.isAutocomplete()) {
-      if (interaction.commandName === "faction" && interaction.options.getFocused(true).name === "flag") {
-        const query = interaction.options.getFocused();
+      if (interaction.commandName === "faction") {
+        const focused = interaction.options.getFocused(true);
         try {
-          await interaction.respond(flagSuggestions(query).map((f) => ({ name: f, value: f })));
+          if (focused.name === "flag") {
+            await interaction.respond(flagSuggestions(String(focused.value)).map((f) => ({ name: f, value: f })));
+          } else if (focused.name === "server") {
+            const memberships = await rosterStore.membershipsFor(interaction.user.id);
+            await interaction.respond(serverChoices(memberships));
+          }
         } catch (err) {
           // The autocomplete window is also short-lived; a dropped response
           // just means no suggestions this keystroke, not a broken command.
-          console.error("flag autocomplete failed", err);
+          console.error(`${focused.name} autocomplete failed`, err);
         }
       }
       return;
@@ -322,7 +642,60 @@ export async function start(cfg: BotConfig): Promise<void> {
               texture: interaction.options.getString("flag", true),
             });
             await renderFactionReply(interaction, reply);
+            return;
           }
+
+          // ⚠️ Every roster handler makes at least two database round trips
+          // (membershipsFor plus the write), so this defers up front for the
+          // same reason claim does — see the comment above.
+          const ephemeral = !PUBLIC_ROSTER_SUBCOMMANDS.has(sub);
+          await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
+
+          const serverId = interaction.options.getInteger("server");
+          const userId = (name: string) => interaction.options.getUser(name, true).id;
+
+          let reply: RosterReply;
+          switch (sub) {
+            case "invite":
+              reply = await handleFactionInvite(rosterDeps, interaction.user.id, { serverId, inviteeDiscordId: userId("user") });
+              break;
+            case "invites":
+              reply = await handleFactionInvites(rosterDeps, interaction.user.id);
+              break;
+            case "kick":
+              reply = await handleFactionKick(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "leave":
+              reply = await handleFactionLeave(rosterDeps, interaction.user.id, serverId);
+              break;
+            case "promote":
+              reply = await handleFactionPromote(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "demote":
+              reply = await handleFactionDemote(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "transfer":
+              reply = await handleFactionTransfer(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "disband":
+              reply = await handleFactionDisband(rosterDeps, interaction.user.id, serverId);
+              break;
+            case "rename":
+              reply = await handleFactionRename(rosterDeps, interaction.user.id, { serverId, name: interaction.options.getString("name", true) });
+              break;
+            case "info":
+              reply = await handleFactionInfo(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
+              break;
+            case "roster":
+              reply = await handleFactionRoster(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
+              break;
+            default:
+              // Unreachable against a current registration; a stale guild
+              // command would land here, and after the defer above a bare
+              // return would hang the interaction. The catch apologises.
+              throw new Error(`unknown /faction subcommand: ${sub}`);
+          }
+          await renderRosterReply(interaction, reply);
           return;
         }
 
@@ -340,6 +713,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         // expired interaction token — which is only a 3-second window — would
         // take the bot down for every player. Log and drop the one interaction.
         console.error(`interaction ${interaction.commandName} failed`, err);
+        // ...but if we already deferred, dropping it silently leaves the
+        // player on "thinking" forever. Say something.
+        await apologiseForFailure(interaction);
       }
       return;
     }
@@ -355,6 +731,26 @@ export async function start(cfg: BotConfig): Promise<void> {
         });
       } catch (err) {
         console.error(`component ${interaction.customId} failed`, err);
+        // `respondToClaimConfirm` defers before it touches the store, so
+        // logging and dropping leaves the player on "thinking" forever.
+        await apologiseForFailure(interaction);
+      }
+      return;
+    }
+
+    if (interaction.isButton()) {
+      try {
+        await routeRosterButton(rosterDeps, {
+          customId: interaction.customId,
+          userId: interaction.user.id,
+          deferReply: (opts) => interaction.deferReply(opts),
+          editReply: (opts) => interaction.editReply(opts),
+        });
+      } catch (err) {
+        console.error(`component ${interaction.customId} failed`, err);
+        // Same as above, and this is the path accept/decline/transfer/disband
+        // ride on — the one most likely to throw from the store.
+        await apologiseForFailure(interaction);
       }
     }
   });

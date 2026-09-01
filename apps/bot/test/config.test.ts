@@ -55,4 +55,23 @@ describe("loadConfig", () => {
   it("defaults the reservation window to 24 hours", () => {
     expect(loadConfig(OK).reservationTtlMs).toBe(86_400_000);
   });
+
+  it("defaults the roster durations", () => {
+    const cfg = loadConfig(OK);
+    expect(cfg.inviteTtlMs).toBe(604_800_000);
+    expect(cfg.cooldownMs).toBe(259_200_000);
+    expect(cfg.renameCooldownMs).toBe(604_800_000);
+  });
+
+  it("accepts overridden roster durations", () => {
+    const cfg = loadConfig({
+      ...OK,
+      BOT_INVITE_TTL_MS: "1000",
+      BOT_COOLDOWN_MS: "2000",
+      BOT_RENAME_COOLDOWN_MS: "3000",
+    });
+    expect(cfg.inviteTtlMs).toBe(1000);
+    expect(cfg.cooldownMs).toBe(2000);
+    expect(cfg.renameCooldownMs).toBe(3000);
+  });
 });

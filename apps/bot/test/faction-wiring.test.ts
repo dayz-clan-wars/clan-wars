@@ -3,10 +3,22 @@ import {
   buildCommands, claimCustomId, parseClaimCustomId,
   planClaimReply, flagSuggestions, MAX_PRUNE_OPTIONS,
   respondToClaimConfirm,
+  INVITE_ACCEPT_PREFIX, INVITE_DECLINE_PREFIX, TRANSFER_PREFIX, DISBAND_PREFIX,
+  inviteAcceptCustomId, inviteDeclineCustomId, transferCustomId, disbandCustomId,
+  parseInviteAcceptCustomId, parseInviteDeclineCustomId, parseTransferCustomId, parseDisbandCustomId,
+  routeRosterButton, serverChoices, deliverInviteDm, planRosterButtons,
+  PUBLIC_ROSTER_SUBCOMMANDS, apologiseForFailure, INTERACTION_FAILURE_MESSAGE,
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
 import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
+import type { RosterStore, Membership } from "../src/roster-store.js";
+import type { RosterDeps, RosterReply, RosterPrompt } from "../src/roster-commands.js";
+import {
+  handleFactionInvite, handleFactionInvites, handleFactionKick, handleFactionLeave,
+  handleFactionPromote, handleFactionDemote, handleFactionTransfer, handleFactionDisband,
+  handleFactionRename, handleFactionInfo, handleFactionRoster,
+} from "../src/roster-commands.js";
 
 const participant = (n: number): Participant => ({
   dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
@@ -159,4 +171,414 @@ describe("claim-confirm interaction", () => {
     expect(await respondToClaimConfirm(stub(calls), i)).toBe(false);
     expect(i.deferReply).not.toHaveBeenCalled();
   });
+});
+
+describe("roster custom ids", () => {
+  it("round-trips an invite accept id and rejects a foreign one", () => {
+    expect(parseInviteAcceptCustomId(inviteAcceptCustomId(9))).toBe(9);
+    expect(parseInviteAcceptCustomId("claim-confirm:9")).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_DECLINE_PREFIX}9`)).toBeNull();
+  });
+
+  it("round-trips an invite decline id and rejects a foreign one", () => {
+    expect(parseInviteDeclineCustomId(inviteDeclineCustomId(9))).toBe(9);
+    expect(parseInviteDeclineCustomId("claim-confirm:9")).toBeNull();
+    expect(parseInviteDeclineCustomId(`${INVITE_ACCEPT_PREFIX}9`)).toBeNull();
+  });
+
+  it("parses a transfer custom id and rejects a foreign one", () => {
+    expect(parseTransferCustomId("roster-transfer:12:d9")).toEqual({ factionId: 12, targetDiscordId: "d9" });
+    expect(parseTransferCustomId("claim-confirm:12")).toBeNull();
+  });
+
+  it("round-trips a disband id and rejects a foreign one", () => {
+    expect(parseDisbandCustomId(disbandCustomId(12))).toBe(12);
+    expect(parseDisbandCustomId(`${TRANSFER_PREFIX}12:d9`)).toBeNull();
+  });
+
+  it("refuses a suffix that is not plain decimal digits", () => {
+    // `Number("9e2")` is 900 and `Number("0x10")` is 16 — coercing before
+    // validating would silently retarget the button at another invite.
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}9e2`)).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}0x10`)).toBeNull();
+    expect(parseInviteAcceptCustomId(INVITE_ACCEPT_PREFIX)).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}+7`)).toBeNull();
+    expect(parseInviteDeclineCustomId(`${INVITE_DECLINE_PREFIX}0x10`)).toBeNull();
+    expect(parseDisbandCustomId(`${DISBAND_PREFIX}9e2`)).toBeNull();
+    // ...and a plain decimal id still works.
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}900`)).toBe(900);
+  });
+
+  it("keeps every custom id inside Discord's 100-character cap", () => {
+    // A Discord custom id longer than 100 chars is rejected at send time, so
+    // the message never renders and the player sees nothing at all.
+    expect(transferCustomId(9_007_199_254_740_991, "1".repeat(20)).length).toBeLessThanOrEqual(100);
+    expect(inviteAcceptCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+    expect(inviteDeclineCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+    expect(disbandCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("routeRosterButton", () => {
+  const now = new Date("2026-08-31T12:00:00Z");
+
+  const unimplemented = (name: string) => () => { throw new Error(`unexpected call: ${name}`); };
+
+  const fakeStore = (overrides: Partial<RosterStore>): RosterStore => ({
+    membershipsFor: unimplemented("membershipsFor"),
+    linkFor: unimplemented("linkFor"),
+    linkForDayzId: unimplemented("linkForDayzId"),
+    memberOf: unimplemented("memberOf"),
+    rosterOf: unimplemented("rosterOf"),
+    factionById: unimplemented("factionById"),
+    factionByName: unimplemented("factionByName"),
+    cooldownUntil: unimplemented("cooldownUntil"),
+    createInvite: unimplemented("createInvite"),
+    pendingInvitesFor: unimplemented("pendingInvitesFor"),
+    acceptInvite: unimplemented("acceptInvite"),
+    declineInvite: unimplemented("declineInvite"),
+    kick: unimplemented("kick"),
+    leave: unimplemented("leave"),
+    setRole: unimplemented("setRole"),
+    transfer: unimplemented("transfer"),
+    disband: unimplemented("disband"),
+    rename: unimplemented("rename"),
+    ...overrides,
+  } as RosterStore);
+
+  const deps = (overrides: Partial<RosterStore>): RosterDeps => ({
+    store: fakeStore(overrides),
+    now: () => now,
+    inviteTtlMs: 604_800_000,
+    cooldownMs: 259_200_000,
+    renameCooldownMs: 604_800_000,
+  });
+
+  const interaction = (calls: string[], customId: string) => ({
+    customId,
+    userId: "d1",
+    deferReply: vi.fn(async () => { calls.push("deferReply"); }),
+    editReply: vi.fn(async (_opts: { content: string }) => { calls.push("editReply"); }),
+  });
+
+  it("does not defer a button that is not ours", async () => {
+    const calls: string[] = [];
+    const d = deps({});
+    const i = interaction(calls, "some-other-button");
+    expect(await routeRosterButton(d, i)).toBe(false);
+    expect(i.deferReply).not.toHaveBeenCalled();
+  });
+
+  it("defers before accepting an invite", async () => {
+    const calls: string[] = [];
+    const d = deps({ acceptInvite: async () => { calls.push("acceptInvite"); return "ok"; } });
+    const i = interaction(calls, inviteAcceptCustomId(9));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "acceptInvite", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/joined/i) });
+  });
+
+  it("defers before declining an invite", async () => {
+    const calls: string[] = [];
+    const d = deps({ declineInvite: async () => { calls.push("declineInvite"); return true; } });
+    const i = interaction(calls, inviteDeclineCustomId(9));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "declineInvite", "editReply"]);
+  });
+
+  it("defers before transferring leadership, and calls the store — not the prompt-only handler", async () => {
+    const calls: string[] = [];
+    const d = deps({
+      transfer: async (a) => {
+        calls.push("transfer");
+        expect(a).toMatchObject({ factionId: 12, fromDiscordId: "d1", toDiscordId: "d9" });
+        return "ok";
+      },
+    });
+    const i = interaction(calls, transferCustomId(12, "d9"));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "transfer", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/transfer/i) });
+  });
+
+  it("defers before disbanding, and calls the store — not the prompt-only handler", async () => {
+    const calls: string[] = [];
+    const d = deps({
+      disband: async (factionId, discordId) => {
+        calls.push("disband");
+        expect(factionId).toBe(12);
+        expect(discordId).toBe("d1");
+        return "ok";
+      },
+    });
+    const i = interaction(calls, disbandCustomId(12));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "disband", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/disband/i) });
+  });
+
+  it("reports a race where the actor is no longer the leader by the time the button is pressed", async () => {
+    const calls: string[] = [];
+    const d = deps({ transfer: async () => "not-leader" });
+    const i = interaction(calls, transferCustomId(12, "d9"));
+    await routeRosterButton(d, i);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/only the leader/i) });
+  });
+});
+
+describe("serverChoices", () => {
+  const membership = (over: Partial<Membership> = {}): Membership => ({
+    factionId: 1, serverId: 1, serverName: "S1", factionName: "Bears", tag: "BEAR", role: "leader",
+    ...over,
+  });
+
+  it("formats each membership as name: server name, value: server id", () => {
+    const memberships = [membership({ serverId: 1, serverName: "Alpha" }), membership({ serverId: 2, serverName: "Bravo" })];
+    expect(serverChoices(memberships)).toEqual([
+      { name: "Alpha", value: 1 },
+      { name: "Bravo", value: 2 },
+    ]);
+  });
+
+  it("caps at Discord's 25-choice limit", () => {
+    const memberships = Array.from({ length: 30 }, (_, i) => membership({ serverId: i, serverName: `S${i}` }));
+    expect(serverChoices(memberships)).toHaveLength(25);
+  });
+});
+
+describe("deliverInviteDm", () => {
+  const dm: NonNullable<RosterReply["dm"]> = {
+    discordId: "d9", content: "You're invited", onFailure: "Could not DM them the invite — they'll still see it with `/faction invites`.", inviteId: 7,
+  };
+
+  it("sends the DM with accept/decline buttons when the user is reachable", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const client = { users: { fetch: vi.fn().mockResolvedValue({ send }) } };
+    const followUp = vi.fn();
+    await deliverInviteDm(client, { followUp }, dm);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toMatchObject({ content: "You're invited" });
+    expect(followUp).not.toHaveBeenCalled();
+  });
+
+  it("tells the inviter, naming /faction invites, when the DM cannot be delivered", async () => {
+    // A closed DM is ordinary, not an error — the invitation is already
+    // durable in the database, and /faction invites is the pull route that
+    // makes it reachable. What matters is the INVITER is told.
+    const client = { users: { fetch: vi.fn().mockRejectedValue(new Error("DMs closed")) } };
+    const followUp = vi.fn().mockResolvedValue(undefined);
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await deliverInviteDm(client, { followUp }, dm);
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]?.[0].content).toMatch(/\/faction invites/);
+    warned.mockRestore();
+  });
+});
+
+describe("planRosterButtons", () => {
+  it("renders nothing for a reply with no prompt", () => {
+    expect(planRosterButtons(undefined)).toEqual([]);
+  });
+
+  it("renders a single confirm-transfer row", () => {
+    const prompt: RosterPrompt = { kind: "confirm-transfer", factionId: 12, targetDiscordId: "d9" };
+    expect(planRosterButtons(prompt)).toEqual([
+      [{ customId: transferCustomId(12, "d9"), label: "Confirm transfer", style: "danger" }],
+    ]);
+  });
+
+  it("renders a single confirm-disband row", () => {
+    const prompt: RosterPrompt = { kind: "confirm-disband", factionId: 12 };
+    expect(planRosterButtons(prompt)).toEqual([
+      [{ customId: disbandCustomId(12), label: "Confirm disband", style: "danger" }],
+    ]);
+  });
+
+  it("renders one accept/decline row per listed invite, on the same custom ids the DM path uses", () => {
+    const prompt: RosterPrompt = {
+      kind: "list-invites",
+      invites: [{ id: 7, tag: "BEAR" }, { id: 8, tag: "WOLF" }],
+      hiddenCount: 0,
+    };
+    expect(planRosterButtons(prompt)).toEqual([
+      [
+        { customId: inviteAcceptCustomId(7), label: "Accept BEAR", style: "success" },
+        { customId: inviteDeclineCustomId(7), label: "Decline BEAR", style: "danger" },
+      ],
+      [
+        { customId: inviteAcceptCustomId(8), label: "Accept WOLF", style: "success" },
+        { customId: inviteDeclineCustomId(8), label: "Decline WOLF", style: "danger" },
+      ],
+    ]);
+  });
+
+  it("stays inside Discord's five-row cap even at MAX_LISTED_INVITES", () => {
+    const invites = Array.from({ length: 5 }, (_, i) => ({ id: i + 1, tag: `T${i}` }));
+    const prompt: RosterPrompt = { kind: "list-invites", invites, hiddenCount: 3 };
+    expect(planRosterButtons(prompt)).toHaveLength(5);
+  });
+});
+
+describe("apologiseForFailure", () => {
+  const fake = (over: Partial<{ deferred: boolean; replied: boolean }> = {}) => ({
+    deferred: true, replied: false, editReply: vi.fn(async () => undefined), ...over,
+  });
+
+  it("answers a deferred interaction so it cannot hang on thinking", async () => {
+    const i = fake();
+    await apologiseForFailure(i);
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+  });
+
+  it("says nothing when the interaction was never deferred", async () => {
+    const i = fake({ deferred: false });
+    await apologiseForFailure(i);
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it("says nothing when the interaction was already answered", async () => {
+    const i = fake({ replied: true });
+    await apologiseForFailure(i);
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it("swallows a dead interaction token rather than becoming an unhandled rejection", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = { deferred: true, replied: false, editReply: vi.fn(async () => { throw new Error("Unknown interaction"); }) };
+    await expect(apologiseForFailure(i)).resolves.toBeUndefined();
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+  });
+});
+
+/**
+ * The component paths — buttons and the claim select — defer before they
+ * touch the store, exactly as the chat-input path does, so a store throw
+ * there strands the interaction on "thinking" in the same way. The button
+ * path is where accept, decline, transfer and disband live, which makes it
+ * the likeliest place for a store throw to land.
+ *
+ * These drive the real routers with a throwing store, through the same
+ * `catch { log; apologiseForFailure }` composition the `interactionCreate`
+ * listener now uses on both paths. What they prove is that the interaction
+ * really is deferred-and-unanswered at the moment the throw escapes the
+ * router — so the apology is both reachable and necessary. (The listener
+ * itself is a closure inside `startBot` and cannot be imported; the wiring of
+ * these two catches is verified by reading `discord.ts`.)
+ */
+describe("a store throw on a component path still answers the player", () => {
+  const boom = () => { throw new Error("store exploded"); };
+
+  const componentInteraction = () => {
+    const i = {
+      customId: inviteAcceptCustomId(7),
+      userId: "d1",
+      values: [] as string[],
+      deferred: false,
+      replied: false,
+      deferReply: vi.fn(async () => { i.deferred = true; }),
+      editReply: vi.fn(async (_o: { content: string }) => { i.replied = true; }),
+    };
+    return i;
+  };
+
+  const runCatching = async (i: ReturnType<typeof componentInteraction>, run: () => Promise<unknown>) => {
+    try {
+      await run();
+    } catch (err) {
+      console.error(`component ${i.customId} failed`, err);
+      await apologiseForFailure(i);
+    }
+  };
+
+  it("apologises on the button path", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = componentInteraction();
+    const d: RosterDeps = {
+      store: { acceptInvite: boom } as unknown as RosterStore,
+      now: () => new Date("2026-08-31T12:00:00Z"),
+      inviteTtlMs: 1, cooldownMs: 1, renameCooldownMs: 1,
+    };
+
+    await runCatching(i, () => routeRosterButton(d, i));
+
+    // The hazard is real: the router deferred, and the throw escaped before
+    // anything answered.
+    expect(i.deferReply).toHaveBeenCalled();
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+    err.mockRestore();
+  });
+
+  it("apologises on the select-menu path", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = componentInteraction();
+    i.customId = claimCustomId(3);
+    i.values = ["uid-1"];
+    const d = { store: { openCeremonyFor: boom } } as unknown as FactionDeps;
+
+    await runCatching(i, () => respondToClaimConfirm(d, i));
+
+    expect(i.deferReply).toHaveBeenCalled();
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+    err.mockRestore();
+  });
+});
+
+/**
+ * `PUBLIC_ROSTER_SUBCOMMANDS` picks the defer flags before the handler runs,
+ * and each handler independently sets `RosterReply.ephemeral`. The wiring
+ * uses the set and ignores the field, so nothing but this test stops the two
+ * from drifting into disagreement — at which point a reply Discord already
+ * committed to being ephemeral would claim to be public, or the reverse.
+ */
+describe("PUBLIC_ROSTER_SUBCOMMANDS agrees with the handlers", () => {
+  const store = {
+    membershipsFor: async () => [{ factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader" as const }],
+    linkFor: async () => null,
+    factionByName: async () => ({
+      id: 1, serverId: 1, serverName: "S", name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", poleKey: "1:2:3", memberCount: 1, leaderDiscordId: "d1",
+      createdAt: new Date("2026-08-31T12:00:00Z"),
+    }),
+    rosterOf: async () => [],
+    createInvite: async () => ({ outcome: "ok" as const, inviteId: 7 }),
+    kick: async () => "ok" as const,
+    leave: async () => "ok" as const,
+    setRole: async () => "ok" as const,
+    rename: async () => "ok" as const,
+  } as unknown as RosterStore;
+  const deps: RosterDeps = {
+    store, now: () => new Date("2026-08-31T12:00:00Z"),
+    inviteTtlMs: 1, cooldownMs: 1, renameCooldownMs: 1,
+  };
+  const U = "d1";
+  const target = { serverId: null, targetDiscordId: "d2" };
+
+  const invocations: Record<string, () => Promise<RosterReply>> = {
+    invite: () => handleFactionInvite(deps, U, { serverId: null, inviteeDiscordId: "d2" }),
+    invites: () => handleFactionInvites(deps, U),
+    kick: () => handleFactionKick(deps, U, target),
+    leave: () => handleFactionLeave(deps, U, null),
+    promote: () => handleFactionPromote(deps, U, target),
+    demote: () => handleFactionDemote(deps, U, target),
+    transfer: () => handleFactionTransfer(deps, U, target),
+    disband: () => handleFactionDisband(deps, U, null),
+    rename: () => handleFactionRename(deps, U, { serverId: null, name: "Cubs" }),
+    info: () => handleFactionInfo(deps, U, "Bears", null),
+    roster: () => handleFactionRoster(deps, U, "Bears", null),
+  };
+
+  it("covers every roster subcommand the wiring registers", () => {
+    const registered = (buildCommands().find((c) => c.name === "faction") as { options: { name: string }[] })
+      .options.map((o) => o.name).filter((n) => n !== "claim");
+    expect(new Set(registered)).toEqual(new Set(Object.keys(invocations)));
+    for (const sub of PUBLIC_ROSTER_SUBCOMMANDS) expect(registered).toContain(sub);
+  });
+
+  for (const [sub, run] of Object.entries(invocations)) {
+    it(`${sub} replies ${PUBLIC_ROSTER_SUBCOMMANDS.has(sub) ? "publicly" : "ephemerally"}`, async () => {
+      const reply = await run();
+      expect(reply.ephemeral).toBe(!PUBLIC_ROSTER_SUBCOMMANDS.has(sub));
+    });
+  }
 });

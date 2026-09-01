@@ -87,7 +87,27 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   return ephemeral("Could not issue a unique sequence right now. Try again in a moment.");
 }
 
+/**
+ * ⚠️ Gated on roster membership. Unlinking is what binds a Discord account to
+ * a UID, and a faction's leader is identified by their Discord id — so
+ * unlinking a leader orphans the faction into exactly the frozen state §6's
+ * succession mechanic exists to prevent, reachable in one command with no
+ * confirmation.
+ */
 export async function handleUnlink(deps: CommandDeps, discordId: string): Promise<Reply> {
+  const memberships = await deps.store.factionMembershipsFor(discordId);
+  const leading = memberships.find((m) => m.role === "leader");
+  if (leading) {
+    return ephemeral(
+      `You lead **${leading.factionName}** — transfer leadership or disband the faction before unlinking.`,
+    );
+  }
+  if (memberships.length > 0) {
+    return ephemeral(
+      `You're a member of **${memberships[0]!.factionName}** — leave the faction before unlinking.`,
+    );
+  }
+
   const removed = await deps.store.deleteLinkByDiscord(discordId);
   return ephemeral(
     removed
