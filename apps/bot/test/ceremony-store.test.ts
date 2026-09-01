@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionMembers, ceremonies, whiteRaises, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
 
@@ -165,5 +165,21 @@ describe("PgCeremonyStore", () => {
     expect(lapsed).toBe(1);
     const rows = await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId));
     expect(rows).toEqual([]);
+  });
+
+  it("revokes outstanding invites when a reservation lapses", async () => {
+    // A lapsed faction's offers can only ever answer "no longer active", and
+    // `/faction invites` shows at most five — dead offers would hide live ones.
+    const factionId = await seedReservedFaction();
+    const cutoff = new Date("2026-08-01T00:00:00Z");
+    await db.insert(factionInvites).values({
+      factionId, serverId, inviteeDiscordId: "d9", inviteeDayzId: PLAYER,
+      invitedByDiscordId: "d1", createdAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
+    });
+
+    expect(await store.lapseReservations(serverId, cutoff)).toBe(1);
+
+    const [inv] = await db.select().from(factionInvites);
+    expect(inv!.revokedAt).not.toBeNull();
   });
 });

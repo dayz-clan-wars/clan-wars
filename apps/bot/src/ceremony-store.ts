@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionMembers, identityLinks, events } from "@factions/db";
+import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionInvites, factionMembers, identityLinks, events } from "@factions/db";
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
 import { parsePoleKey } from "@factions/domain";
 import { and, asc, eq, inArray, isNull, lte, max } from "drizzle-orm";
@@ -203,8 +203,21 @@ export class PgCeremonyStore implements CeremonyStore {
         ))
         .returning({ id: factions.id });
       if (done.length > 0) {
+        const lapsed = done.map((d) => d.id);
         await tx.delete(factionMembers)
-          .where(inArray(factionMembers.factionId, done.map((d) => d.id)));
+          .where(inArray(factionMembers.factionId, lapsed));
+        // Outstanding offers die with the faction. Left open they keep
+        // appearing in `/faction invites` with buttons that can only ever
+        // answer "no longer active", and — capped at MAX_LISTED_INVITES —
+        // they crowd live invites out of the list.
+        await tx.update(factionInvites)
+          .set({ revokedAt: cutoff })
+          .where(and(
+            inArray(factionInvites.factionId, lapsed),
+            isNull(factionInvites.acceptedAt),
+            isNull(factionInvites.declinedAt),
+            isNull(factionInvites.revokedAt),
+          ));
       }
       return done.length;
     });

@@ -260,7 +260,16 @@ export class PgRosterStore implements RosterStore {
     });
   }
 
-  /** Invites still open and not yet expired, soonest-expiring first. */
+  /**
+   * Invites still open and not yet expired, soonest-expiring first.
+   *
+   * Filtered to a HOLDING faction: an invite to a disbanded or lapsed one can
+   * only ever answer "that faction is no longer active", and since the
+   * listing is capped at `MAX_LISTED_INVITES` a dead offer would push a live
+   * one off the end. `disband()` and `lapseReservations()` revoke outstanding
+   * invites too; this filter is what covers a faction that went dormant or
+   * was released by a path that did not.
+   */
   async pendingInvitesFor(dayzId: string, at: Date): Promise<PendingInvite[]> {
     const rows = await this.db.select({
       id: factionInvites.id,
@@ -279,6 +288,7 @@ export class PgRosterStore implements RosterStore {
         isNull(factionInvites.declinedAt),
         isNull(factionInvites.revokedAt),
         gt(factionInvites.expiresAt, at),
+        inArray(factions.status, HOLDING),
       ))
       .orderBy(asc(factionInvites.expiresAt));
     return rows;
@@ -598,6 +608,17 @@ export class PgRosterStore implements RosterStore {
       if (!updated[0]) return "not-leader" as const;
 
       await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
+
+      // Outstanding offers die with the faction, for the reason spelled out
+      // on `pendingInvitesFor`.
+      await tx.update(factionInvites)
+        .set({ revokedAt: sql`now()` })
+        .where(and(
+          eq(factionInvites.factionId, factionId),
+          isNull(factionInvites.acceptedAt),
+          isNull(factionInvites.declinedAt),
+          isNull(factionInvites.revokedAt),
+        ));
 
       return "ok" as const;
     });

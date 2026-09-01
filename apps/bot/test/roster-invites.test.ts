@@ -186,6 +186,19 @@ describe("PgRosterStore invites", () => {
   });
 
   describe("pendingInvitesFor", () => {
+    it("drops an invite whose faction has been disbanded", async () => {
+      const { inviteId } = await store.createInvite(base).then((r) => ({ inviteId: r.inviteId! }));
+      expect(await store.pendingInvitesFor(INVITEE_DAYZ, t1)).toHaveLength(1);
+
+      expect(await store.disband(factionId, LEADER)).toBe("ok");
+
+      // Both halves of the fix: the faction is no longer HOLDING, and the
+      // outstanding offer was revoked rather than left dangling.
+      expect(await store.pendingInvitesFor(INVITEE_DAYZ, t1)).toEqual([]);
+      const [row] = await db.select().from(factionInvites).where(eq(factionInvites.id, inviteId));
+      expect(row!.revokedAt).not.toBeNull();
+    });
+
     it("lists only open, unexpired invites, soonest-expiring first", async () => {
       const [f2] = await db.insert(factions).values({
         serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf", poleKey: "4:5:6",
