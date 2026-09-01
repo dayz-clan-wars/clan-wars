@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
+import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 
 const HOLDING = ["reserved", "active", "dormant"];
 
@@ -69,6 +69,24 @@ export interface RosterStore {
 
 // Leader, then officer, then member — matches the ordering rosterOf promises.
 const ROLE_ORDER = sql<number>`case ${factionMembers.role} when 'leader' then 0 when 'officer' then 1 else 2 end`;
+
+/**
+ * Thrown from inside `acceptInvite`'s transaction to abort it with a
+ * non-"ok" outcome.
+ *
+ * ⚠️ A bare early `return` from a Drizzle transaction callback COMMITS the
+ * transaction — it does not roll back. Returning "not-holding" or "cooldown"
+ * directly, after the invite row was already updated to `accepted_at = now`,
+ * would consume the invite while adding no member: the player permanently
+ * loses the offer and gains nothing, with no error anywhere. Throwing here
+ * instead makes Drizzle roll the whole transaction back, and the catch below
+ * translates the sentinel back into the outcome the caller expects.
+ */
+class RosterAbort extends Error {
+  constructor(public readonly outcome: AcceptInviteOutcome) {
+    super(`roster-abort:${outcome}`);
+  }
+}
 
 /**
  * Read methods only. Write methods (createInvite through rename) land in
@@ -187,5 +205,141 @@ export class PgRosterStore {
         gt(rosterCooldowns.until, new Date()),
       ));
     return row?.until ?? null;
+  }
+
+  /**
+   * Upserts on the pending index rather than inserting blindly: the index
+   * has no expiry term (a partial index predicate must be IMMUTABLE, and
+   * `now()` is not), so a lapsed offer still occupies the slot. Re-inviting
+   * someone whose earlier offer expired must REFRESH that row, not collide
+   * with it.
+   *
+   * The faction-holding, already-member and cooldown reads are advisory —
+   * they let us report a precise reason here. They are not the binding
+   * checks; `acceptInvite` re-checks everything that matters at write time,
+   * because the truth can change between this call and that one.
+   */
+  async createInvite(a: CreateInviteArgs): Promise<{ outcome: CreateInviteOutcome; inviteId: number | null }> {
+    return this.db.transaction(async (tx) => {
+      const [f] = await tx.select({ id: factions.id }).from(factions)
+        .where(and(eq(factions.id, a.factionId), inArray(factions.status, HOLDING)));
+      if (!f) return { outcome: "not-holding" as const, inviteId: null };
+
+      const [existing] = await tx.select({ id: factionMembers.id }).from(factionMembers)
+        .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.inviteeDayzId)));
+      if (existing) return { outcome: "already-member" as const, inviteId: null };
+
+      const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)
+        .where(and(eq(rosterCooldowns.serverId, a.serverId), eq(rosterCooldowns.dayzId, a.inviteeDayzId)));
+      if (cd && cd.until > a.at) return { outcome: "cooldown" as const, inviteId: null };
+
+      const [row] = await tx.insert(factionInvites)
+        .values({
+          factionId: a.factionId, serverId: a.serverId,
+          inviteeDiscordId: a.inviteeDiscordId, inviteeDayzId: a.inviteeDayzId,
+          invitedByDiscordId: a.invitedByDiscordId,
+          createdAt: a.at, expiresAt: a.expiresAt,
+        })
+        .onConflictDoUpdate({
+          target: [factionInvites.factionId, factionInvites.inviteeDayzId],
+          targetWhere: sql`accepted_at IS NULL AND declined_at IS NULL AND revoked_at IS NULL`,
+          set: { expiresAt: a.expiresAt, createdAt: a.at, invitedByDiscordId: a.invitedByDiscordId },
+        })
+        .returning({ id: factionInvites.id });
+      return { outcome: "ok" as const, inviteId: row!.id };
+    });
+  }
+
+  /** Invites still open and not yet expired, soonest-expiring first. */
+  async pendingInvitesFor(dayzId: string, at: Date): Promise<PendingInvite[]> {
+    const rows = await this.db.select({
+      id: factionInvites.id,
+      factionId: factionInvites.factionId,
+      factionName: factions.name,
+      tag: factions.tag,
+      serverId: factionInvites.serverId,
+      serverName: servers.name,
+      expiresAt: factionInvites.expiresAt,
+    }).from(factionInvites)
+      .innerJoin(factions, eq(factionInvites.factionId, factions.id))
+      .innerJoin(servers, eq(factionInvites.serverId, servers.id))
+      .where(and(
+        eq(factionInvites.inviteeDayzId, dayzId),
+        isNull(factionInvites.acceptedAt),
+        isNull(factionInvites.declinedAt),
+        isNull(factionInvites.revokedAt),
+        gt(factionInvites.expiresAt, at),
+      ))
+      .orderBy(asc(factionInvites.expiresAt));
+    return rows;
+  }
+
+  /**
+   * Every precondition is part of the write, not a pre-check followed by an
+   * unconditional write: the invite id travels in a Discord button custom
+   * id, which is guessable, so the invitee-match clause below is a security
+   * guard, not a convenience — without it anyone who can guess an id could
+   * join a faction they were never offered.
+   *
+   * The faction-holding and cooldown checks run AFTER the invite is claimed
+   * (it must be claimed first so a concurrent accept cannot double-spend it)
+   * but must abort via `throw`, not `return`, or the claim they just made
+   * would commit with no membership row to show for it. See `RosterAbort`.
+   */
+  async acceptInvite(inviteId: number, discordId: string, at: Date): Promise<AcceptInviteOutcome> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const claimed = await tx.update(factionInvites)
+          .set({ acceptedAt: at })
+          .where(and(
+            eq(factionInvites.id, inviteId),
+            eq(factionInvites.inviteeDiscordId, discordId),
+            isNull(factionInvites.acceptedAt),
+            isNull(factionInvites.declinedAt),
+            isNull(factionInvites.revokedAt),
+            gt(factionInvites.expiresAt, at),
+          ))
+          .returning();
+        const inv = claimed[0];
+        if (!inv) return "gone" as const;
+
+        const [f] = await tx.select({ id: factions.id }).from(factions)
+          .where(and(eq(factions.id, inv.factionId), inArray(factions.status, HOLDING)));
+        if (!f) throw new RosterAbort("not-holding");
+
+        const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)
+          .where(and(eq(rosterCooldowns.serverId, inv.serverId), eq(rosterCooldowns.dayzId, inv.inviteeDayzId)));
+        if (cd && cd.until > at) throw new RosterAbort("cooldown");
+
+        await tx.insert(factionMembers).values({
+          factionId: inv.factionId, serverId: inv.serverId,
+          dayzId: inv.inviteeDayzId, discordId, role: "member", joinedAt: at,
+        });
+        return "ok" as const;
+      });
+    } catch (err) {
+      if (err instanceof RosterAbort) return err.outcome;
+      if (String(err).includes("faction_members_server_player_uniq")) return "already-member";
+      throw err;
+    }
+  }
+
+  /**
+   * No expiry gate: declining a lapsed offer is still a legitimate way to
+   * close it out, and an expired-but-undeclined row would otherwise linger
+   * forever with no harm done by letting the invitee dismiss it.
+   */
+  async declineInvite(inviteId: number, discordId: string, at: Date): Promise<boolean> {
+    const rows = await this.db.update(factionInvites)
+      .set({ declinedAt: at })
+      .where(and(
+        eq(factionInvites.id, inviteId),
+        eq(factionInvites.inviteeDiscordId, discordId),
+        isNull(factionInvites.acceptedAt),
+        isNull(factionInvites.declinedAt),
+        isNull(factionInvites.revokedAt),
+      ))
+      .returning({ id: factionInvites.id });
+    return rows.length > 0;
   }
 }

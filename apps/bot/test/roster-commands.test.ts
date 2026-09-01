@@ -1,0 +1,197 @@
+import { describe, it, expect, vi } from "vitest";
+import type { RosterStore, Membership, PendingInvite } from "../src/roster-store.js";
+import {
+  handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
+  type RosterDeps,
+} from "../src/roster-commands.js";
+
+const now = new Date("2026-08-31T12:00:00Z");
+
+const membership = (over: Partial<Membership> = {}): Membership => ({
+  factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader",
+  ...over,
+});
+
+/** A hand-written fake satisfying the full `RosterStore` interface. Methods
+ * this suite never exercises throw if called, so an accidental write shows
+ * up as a test failure instead of silently succeeding. */
+function fakeStore(overrides: Partial<RosterStore>): RosterStore {
+  const unimplemented = (name: string) => () => {
+    throw new Error(`unexpected call: ${name}`);
+  };
+  return {
+    membershipsFor: unimplemented("membershipsFor"),
+    linkFor: unimplemented("linkFor"),
+    linkForDayzId: unimplemented("linkForDayzId"),
+    memberOf: unimplemented("memberOf"),
+    rosterOf: unimplemented("rosterOf"),
+    factionById: unimplemented("factionById"),
+    factionByName: unimplemented("factionByName"),
+    cooldownUntil: unimplemented("cooldownUntil"),
+    createInvite: unimplemented("createInvite"),
+    pendingInvitesFor: unimplemented("pendingInvitesFor"),
+    acceptInvite: unimplemented("acceptInvite"),
+    declineInvite: unimplemented("declineInvite"),
+    kick: unimplemented("kick"),
+    leave: unimplemented("leave"),
+    setRole: unimplemented("setRole"),
+    transfer: unimplemented("transfer"),
+    disband: unimplemented("disband"),
+    rename: unimplemented("rename"),
+    ...overrides,
+  } as RosterStore;
+}
+
+const deps = (overrides: Partial<RosterStore>): RosterDeps => ({
+  store: fakeStore(overrides),
+  now: () => now,
+  inviteTtlMs: 604_800_000,
+  cooldownMs: 259_200_000,
+  renameCooldownMs: 604_800_000,
+});
+
+describe("handleFactionInvite", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const r = await handleFactionInvite(deps({ membershipsFor: async () => [] }), "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("refuses when the actor is a plain member", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "member" })] });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toBe("Only the leader and officers can invite.");
+    expect(r.ephemeral).toBe(true);
+  });
+
+  it("refuses when the invitee has no linked character, without writing an invite", async () => {
+    const createInvite = vi.fn();
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => null,
+      createInvite,
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/has not linked a character yet/i);
+    expect(r.content).toMatch(/\/link/);
+    expect(createInvite).not.toHaveBeenCalled();
+  });
+
+  it("reports already-member distinctly", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => ({ dayzId: "P1", gamertag: "G" }),
+      createInvite: async () => ({ outcome: "already-member" as const, inviteId: null }),
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/already in a faction/i);
+  });
+
+  it("reports cooldown distinctly", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => ({ dayzId: "P1", gamertag: "G" }),
+      createInvite: async () => ({ outcome: "cooldown" as const, inviteId: null }),
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/cooldown/i);
+  });
+
+  it("reports not-holding distinctly", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => ({ dayzId: "P1", gamertag: "G" }),
+      createInvite: async () => ({ outcome: "not-holding" as const, inviteId: null }),
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/no longer active/i);
+  });
+
+  it("succeeds and includes a DM to the invitee", async () => {
+    const createInvite = vi.fn(async () => ({ outcome: "ok" as const, inviteId: 42 }));
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => ({ dayzId: "P1", gamertag: "G" }),
+      createInvite,
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/Invited/);
+    expect(r.dm?.discordId).toBe("d9");
+    expect(r.dm?.content).toMatch(/Bears/);
+    expect(createInvite).toHaveBeenCalledWith(expect.objectContaining({
+      factionId: 1, serverId: 1, inviteeDiscordId: "d9", inviteeDayzId: "P1", invitedByDiscordId: "d1",
+      at: now, expiresAt: new Date(now.getTime() + 604_800_000),
+    }));
+  });
+
+  it("refuses an ambiguous actor without a named server", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ serverId: 1 }), membership({ serverId: 2 })] });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/more than one server/i);
+  });
+
+  it("refuses a named server the actor holds no faction on", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ serverId: 1 })] });
+    const r = await handleFactionInvite(d, "d1", { serverId: 99, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/don't hold a faction on that server/i);
+  });
+});
+
+describe("handleFactionInvites", () => {
+  it("asks the caller to link when they have none", async () => {
+    const d = deps({ linkFor: async () => null });
+    const r = await handleFactionInvites(d, "d9");
+    expect(r.content).toMatch(/link a character/i);
+  });
+
+  it("reports no pending invitations", async () => {
+    const d = deps({ linkFor: async () => ({ dayzId: "P1", gamertag: "G" }), pendingInvitesFor: async () => [] });
+    const r = await handleFactionInvites(d, "d9");
+    expect(r.content).toMatch(/no pending invitations/i);
+  });
+
+  it("lists pending invitations", async () => {
+    const invite: PendingInvite = {
+      id: 7, factionId: 1, factionName: "Bears", tag: "BEAR",
+      serverId: 1, serverName: "S", expiresAt: new Date(now.getTime() + 1000),
+    };
+    const d = deps({ linkFor: async () => ({ dayzId: "P1", gamertag: "G" }), pendingInvitesFor: async () => [invite] });
+    const r = await handleFactionInvites(d, "d9");
+    expect(r.content).toMatch(/Bears/);
+    expect(r.content).toMatch(/BEAR/);
+  });
+});
+
+describe("handleInviteAccept", () => {
+  it("maps every store outcome to a distinct reply", async () => {
+    const cases: Array<["ok" | "gone" | "already-member" | "cooldown" | "not-holding", RegExp]> = [
+      ["ok", /joined/i],
+      ["gone", /no longer available/i],
+      ["already-member", /already in a faction/i],
+      ["cooldown", /cooldown/i],
+      ["not-holding", /no longer active/i],
+    ];
+    const seen = new Set<string>();
+    for (const [outcome, expected] of cases) {
+      const d = deps({ acceptInvite: async () => outcome });
+      const r = await handleInviteAccept(d, "d9", 42);
+      expect(r.content).toMatch(expected);
+      expect(seen.has(r.content)).toBe(false);
+      seen.add(r.content);
+      expect(r.ephemeral).toBe(true);
+    }
+  });
+});
+
+describe("handleInviteDecline", () => {
+  it("confirms a successful decline", async () => {
+    const d = deps({ declineInvite: async () => true });
+    const r = await handleInviteDecline(d, "d9", 42);
+    expect(r.content).toMatch(/declined/i);
+  });
+
+  it("reports when the invite is no longer available", async () => {
+    const d = deps({ declineInvite: async () => false });
+    const r = await handleInviteDecline(d, "d9", 42);
+    expect(r.content).toMatch(/no longer available/i);
+  });
+});
