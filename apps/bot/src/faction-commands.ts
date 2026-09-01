@@ -99,5 +99,6 @@ export async function handleClaimConfirm(
     // produces no event and the faction silently never activates.
     "If a flag is already up on that pole, **lower it first** — only the act of raising is recorded.",
     "If the flag is not up within 24 hours the reservation lapses and the flag returns to the pool.",
+    "Base-building supplies have been queued for your pole and will be waiting there after the next server restart.",
   ].join("\n"));
 }

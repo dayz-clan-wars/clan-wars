@@ -188,6 +188,14 @@ describe("faction claim", () => {
     expect(r.content).toMatch(/lower/i);
   });
 
+  it("tells the claimant their supplies arrive after the next restart", async () => {
+    // Without this they walk to their pole, find nothing, and report a bug.
+    await handleFactionClaim(deps, "100", input);
+    const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
+    expect(r.content).toMatch(/supplies/i);
+    expect(r.content).toMatch(/restart/i);
+  });
+
   it("saves a separate draft per participant of one ceremony", async () => {
     await handleFactionClaim(deps, "100", input);
     await handleFactionClaim(deps, "101", { name: "The Wolves", tag: "WOLF", texture: "Flag_Wolf" });
