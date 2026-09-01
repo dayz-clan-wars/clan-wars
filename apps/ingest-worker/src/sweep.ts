@@ -8,6 +8,11 @@ export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
 export type SweepDeps = {
   clientFor: ClientFactory;
   backfillBudget: number;
+  /**
+   * Per-file consecutive failure counts, shared across every server and every
+   * sweep. Owned by main.ts for the process lifetime — see TickDeps.
+   */
+  failures: Map<string, number>;
   /** Called when one server's tick throws; the sweep continues with the rest. */
   onServerError?: (serverId: number, err: unknown) => void;
 };
@@ -32,6 +37,7 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         serverId: s.id,
         client: deps.clientFor(s.nitradoServiceId!),
         backfillBudget: deps.backfillBudget,
+        failures: deps.failures,
       });
     } catch (err) {
       deps.onServerError?.(s.id, err);

@@ -18,6 +18,11 @@ const clientFor = (serviceId: number): NitradoLike => {
   return c;
 };
 
+// ⚠️ ONE map for the whole process: the bounded per-file failure counter that
+// stops a single un-ingestible file from blocking a server's live file
+// forever. Resetting it per sweep would restore the permanent block.
+const failures = new Map<string, number>();
+
 const sleep = (ms: number) => new Promise((res) => setTimeout(res, ms));
 
 // Sequential by construction: the next sweep starts only after this one
@@ -29,6 +34,7 @@ for (;;) {
     const r = await ingestSweep(db, {
       clientFor,
       backfillBudget: cfg.backfillBudget,
+      failures,
       onServerError: (serverId, err) => console.error(`ingest failed for server ${serverId}`, err),
     });
     console.log(`ingest sweep: ${r.servers} servers in ${Date.now() - started}ms`);

@@ -24,7 +24,7 @@ describe("ingestSweep", () => {
   it("sweeps every active server", async () => {
     await addServer();
     await addServer();
-    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15 });
+    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15, failures: new Map() });
     expect(r.servers).toBe(2);
   });
 
@@ -32,7 +32,7 @@ describe("ingestSweep", () => {
     // The database decides which servers are swept, so retiring one is a
     // flag rather than a config edit or a row deletion.
     await addServer({ active: false });
-    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15 });
+    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15, failures: new Map() });
     expect(r.servers).toBe(0);
   });
 
@@ -43,7 +43,7 @@ describe("ingestSweep", () => {
     // them. Sweeping those would build an API client for a null service id
     // on every tick, forever.
     await addServer({ nitradoServiceId: null });
-    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15 });
+    const r = await ingestSweep(db, { clientFor: () => empty, backfillBudget: 15, failures: new Map() });
     expect(r.servers).toBe(0);
   });
 
@@ -57,7 +57,7 @@ describe("ingestSweep", () => {
       ? { listAdmFiles: async () => { throw new Error("nitrado down"); }, downloadFile: async () => "" }
       : empty;
     await db.update(servers).set({ nitradoServiceId: 99 }).where(sql`id = ${bad!.id}`);
-    const r = await ingestSweep(db, { clientFor, backfillBudget: 15, onServerError });
+    const r = await ingestSweep(db, { clientFor, backfillBudget: 15, failures: new Map(), onServerError });
     expect(r.servers).toBe(2);
     expect(onServerError).toHaveBeenCalledTimes(1);
   });
