@@ -291,7 +291,11 @@ export function playerSuggestions(
   return players
     .filter((p) => p.gamertag.toLowerCase().includes(q))
     .slice(0, 25)
-    .map((p) => ({ name: p.gamertag, value: p.dayzId }));
+    // ⚠️ Discord caps a choice name at 100 characters and rejects the whole
+    // response if one exceeds it — the field then renders EMPTY, so a single
+    // overlong gamertag would make nobody pickable. Nothing constrains
+    // `players.gamertag`, which is copied verbatim from an ADM line.
+    .map((p) => ({ name: p.gamertag.slice(0, 100), value: p.dayzId }));
 }
 
 /**

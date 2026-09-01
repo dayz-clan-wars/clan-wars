@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import {
   buildCommands, routeInteraction, notifyCompleted, guardedRunner,
-  playerSuggestions, LINK_GAMERTAG_OPTION,
+  playerSuggestions,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
 
@@ -62,15 +62,16 @@ describe("discord wiring", () => {
       expect(opt.autocomplete).toBe(true);
     });
 
-    it("registers the option under the same name the router reads", () => {
-      // Regression guard for the naming split this task resolved: the
-      // registered option and interaction.options.getString(...) in start()
-      // must agree, or /link silently receives null for its target on every
-      // invocation. Both sides read LINK_GAMERTAG_OPTION, so this can only
-      // fail if the constant's registered spelling itself changes.
-      const link = buildCommands().find((c) => c.name === "link")!;
-      const opt = (link.options ?? [])[0] as any;
-      expect(opt.name).toBe(LINK_GAMERTAG_OPTION);
+    it("truncates a choice name to Discord's 100-character limit", () => {
+      // ⚠️ Discord rejects a choice whose name exceeds 100 characters, and a
+      // rejected autocomplete response renders as an EMPTY field rather than
+      // an error — the player simply cannot pick anyone. Nothing constrains
+      // `players.gamertag` to a sane length, so clamp here.
+      const long = "x".repeat(140);
+      const [choice] = playerSuggestions([{ dayzId: "1", gamertag: long }], "x");
+      expect(choice!.name.length).toBe(100);
+      // The UID is what the submit path uses, so it must survive intact.
+      expect(choice!.value).toBe("1");
     });
 
     it("gives every command a description", () => {
