@@ -8,14 +8,24 @@ import { and, eq } from "drizzle-orm";
 export type IngestOptions = {
   serverId: number;
   filename: string;
+  /** Nitrado download path, when the bytes came from Nitrado. */
+  path?: string | null;
   bootAt: Date;
   lines: string[];
   clockOffsetMs: number;
+  /**
+   * Whether this file is finished. FALSE for the newest file, which the
+   * server is still writing — marking it complete would make the next tick
+   * skip the lines it is about to gain.
+   */
+  markComplete: boolean;
 };
 
 export type IngestResult = {
   linesCaptured: number;
   eventsAppended: number;
+  /** The new resume cursor: how many lines of this file have been ingested. */
+  linesIngested: number;
   /**
    * Raw lines that mention `TerritoryFlag` or `Flag Pole` but produced no event.
    *
@@ -35,21 +45,35 @@ const FLAG_SHAPED_RE = /TerritoryFlag|Flag Pole/u;
 
 export async function ingestFile(db: Database, opts: IngestOptions): Promise<IngestResult> {
   const [file] = await db.insert(admFiles)
-    .values({ serverId: opts.serverId, filename: opts.filename, bootAt: opts.bootAt })
+    .values({ serverId: opts.serverId, filename: opts.filename, path: opts.path ?? null, bootAt: opts.bootAt })
     .onConflictDoNothing({ target: [admFiles.serverId, admFiles.filename] })
     .returning();
 
-  const admFileId = file?.id ?? (await db.select().from(admFiles).where(
+  const existing = file ?? (await db.select().from(admFiles).where(
     and(eq(admFiles.serverId, opts.serverId), eq(admFiles.filename, opts.filename)),
-  ))[0]!.id;
+  ))[0]!;
+  const admFileId = existing.id;
+
+  const total = opts.lines.length;
+  // Clamp: the file shrank or rotated. Never reprocess under this row's id.
+  const from = Math.min(Math.max(existing.linesIngested, 0), total);
 
   const cursor = new TimelineCursor(opts.bootAt, opts.clockOffsetMs);
   let eventsAppended = 0;
   let linesCaptured = 0;
   let unparsedFlagLines = 0;
 
-  for (let lineIndex = 0; lineIndex < opts.lines.length; lineIndex++) {
+  for (let lineIndex = 0; lineIndex < total; lineIndex++) {
     const raw = opts.lines[lineIndex]!;
+
+    // ⚠️ The cursor advances over EVERY line, including ones already written.
+    // It is stateful — it rolls the date forward on a backwards clock jump —
+    // so starting it at `from` would lose every midnight crossed before the
+    // resume point and put every later timestamp a day early, silently.
+    const occurredAt = cursor.advance(raw);
+
+    // Writes, and only writes, resume at the cursor.
+    if (lineIndex < from) continue;
 
     const [stored] = await db.insert(rawLines)
       .values({ admFileId, lineIndex, content: raw })
@@ -57,7 +81,6 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
       .returning();
     if (stored) linesCaptured++;
 
-    const occurredAt = cursor.advance(raw);
     if (!occurredAt) {
       if (FLAG_SHAPED_RE.test(raw)) unparsedFlagLines++;
       continue;
@@ -86,10 +109,10 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
   }
 
   await db.update(admFiles)
-    .set({ linesIngested: opts.lines.length, complete: true })
+    .set({ linesIngested: total, complete: opts.markComplete, path: opts.path ?? existing.path })
     .where(eq(admFiles.id, admFileId));
 
-  return { linesCaptured, eventsAppended, unparsedFlagLines };
+  return { linesCaptured, eventsAppended, unparsedFlagLines, linesIngested: total };
 }
 
 /** Flatten a ParsedLine into the jsonb payload shape the projector reads. */

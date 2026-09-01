@@ -50,6 +50,7 @@ for (const filename of names) {
     bootAt,
     lines,
     clockOffsetMs: server!.clockOffsetMs,
+    markComplete: true,
   });
   console.log(
     `${filename}: ${r.linesCaptured} lines, ${r.eventsAppended} events, ` +

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, events, rawLines, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, events, rawLines, admFiles, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { ingestFile } from "../src/ingest.js";
 
@@ -31,6 +31,7 @@ describe("ingestFile", () => {
   const opts = () => ({
     serverId, filename: "a.ADM",
     bootAt: new Date("2026-07-22T07:01:37Z"), lines: LINES, clockOffsetMs: 0,
+    markComplete: true,
   });
 
   it("captures every line losslessly", async () => {
@@ -93,5 +94,82 @@ describe("ingestFile", () => {
     await ingestFile(db, { ...opts(), clockOffsetMs: 4 * 60 * 60 * 1000 });
     const rows = await db.select().from(events).orderBy(events.lineIndex);
     expect(rows[1]?.occurredAt.toISOString()).toBe("2026-07-22T14:21:40.000Z");
+  });
+
+  describe("resuming", () => {
+    const ingest = (lines: string[], markComplete = false) => ingestFile(db, {
+      serverId, filename: "resume.ADM", bootAt: new Date("2026-07-22T07:01:37Z"),
+      lines, clockOffsetMs: 0, markComplete,
+    });
+
+    it("returns the line count as the new cursor", async () => {
+      const r = await ingest(LINES);
+      expect(r.linesIngested).toBe(LINES.length);
+    });
+
+    it("writes nothing twice when the same lines are ingested again", async () => {
+      // The defect this task fixes: the old implementation re-inserted every
+      // line of every file on every run and leaned on ON CONFLICT to discard
+      // them. At a 60-second cadence that is the whole file, every minute.
+      await ingest(LINES);
+      const before = (await db.select().from(rawLines)).length;
+      const second = await ingest(LINES);
+      expect(second.linesCaptured).toBe(0);
+      expect((await db.select().from(rawLines)).length).toBe(before);
+    });
+
+    it("ingests only the lines a growing file has gained", async () => {
+      await ingest(LINES);
+      const grown = [...LINES, `15:00:00 | Player "YrJustBad" (id=${ID}) has been disconnected`];
+      const r = await ingest(grown);
+      expect(r.linesCaptured).toBe(1);
+      expect(r.linesIngested).toBe(grown.length);
+    });
+
+    it("does not reprocess a file that shrank or rotated", async () => {
+      // The cursor is past the end. Reprocessing would rewrite line 0 of a
+      // different file's content under the same adm_files row.
+      await ingest(LINES);
+      const r = await ingest(LINES.slice(0, 2));
+      expect(r.linesCaptured).toBe(0);
+    });
+
+    it("keeps timestamps correct across midnight when resuming mid-file", async () => {
+      // ⚠️ THE test. TimelineCursor is stateful: it rolls the date forward on
+      // a backwards clock jump. Resuming with a FRESH cursor at the resume
+      // point loses that rollover, and every later timestamp is a day early —
+      // silently, with every row still landing and every count still green.
+      const beforeMidnight = [
+        "AdminLog started on 2026-07-22 at 22:00:00",
+        `22:30:00 | Player "YrJustBad" (id=${ID} pos=<2990.4, 1138.3, 448.0>) has raised Flag_Livonia on TerritoryFlag at <2991.569092, 447.946503, 1138.587646>`,
+      ];
+      const afterMidnight = [
+        ...beforeMidnight,
+        `00:30:00 | Player "YrJustBad" (id=${ID} pos=<2990.4, 1138.3, 448.0>) has raised Flag_Livonia on TerritoryFlag at <2991.569092, 447.946503, 1138.587646>`,
+      ];
+      await ingestFile(db, {
+        serverId, filename: "midnight.ADM", bootAt: new Date("2026-07-22T22:00:00Z"),
+        lines: beforeMidnight, clockOffsetMs: 0, markComplete: false,
+      });
+      await ingestFile(db, {
+        serverId, filename: "midnight.ADM", bootAt: new Date("2026-07-22T22:00:00Z"),
+        lines: afterMidnight, clockOffsetMs: 0, markComplete: false,
+      });
+      const rows = await db.select().from(events).orderBy(events.id);
+      const last = rows[rows.length - 1]!;
+      // The 00:30 line belongs to the 23rd, not the 22nd.
+      expect(last.occurredAt.toISOString()).toBe("2026-07-23T00:30:00.000Z");
+    });
+
+    it("marks a file complete only when told to", async () => {
+      // The live file is still being written; marking it complete would make
+      // the next tick skip the lines it is about to gain.
+      await ingest(LINES, false);
+      const [live] = await db.select().from(admFiles);
+      expect(live?.complete).toBe(false);
+      await ingest(LINES, true);
+      const [done] = await db.select().from(admFiles);
+      expect(done?.complete).toBe(true);
+    });
   });
 });
