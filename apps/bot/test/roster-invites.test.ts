@@ -89,6 +89,47 @@ describe("PgRosterStore invites", () => {
     expect(await db.select().from(factionInvites)).toHaveLength(0);
   });
 
+  it("refuses an inviter who is only a member of the faction", async () => {
+    // §5: the guard is in the write, not just the handler — an officer who is
+    // demoted between the handler's read and this insert must not get through.
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "R".repeat(40), discordId: "d2", role: "member", joinedAt: t0,
+    });
+    const r = await store.createInvite({ ...base, invitedByDiscordId: "d2" });
+    expect(r).toEqual({ outcome: "not-permitted", inviteId: null });
+    expect(await db.select().from(factionInvites)).toHaveLength(0);
+  });
+
+  it("refuses an inviter who is not on the roster at all", async () => {
+    const r = await store.createInvite({ ...base, invitedByDiscordId: "stranger" });
+    expect(r).toEqual({ outcome: "not-permitted", inviteId: null });
+    expect(await db.select().from(factionInvites)).toHaveLength(0);
+  });
+
+  it("lets an officer invite", async () => {
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "O".repeat(40), discordId: "d2", role: "officer", joinedAt: t0,
+    });
+    const r = await store.createInvite({ ...base, invitedByDiscordId: "d2" });
+    expect(r.outcome).toBe("ok");
+  });
+
+  it("refuses a demoted inviter refreshing their own outstanding offer", async () => {
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "O".repeat(40), discordId: "d2", role: "officer", joinedAt: t0,
+    });
+    const first = await store.createInvite({ ...base, invitedByDiscordId: "d2" });
+    expect(first.outcome).toBe("ok");
+
+    await db.update(factionMembers).set({ role: "member" }).where(eq(factionMembers.discordId, "d2"));
+    // The ON CONFLICT arm inherits the SELECT's guard, so the refresh is
+    // refused too rather than silently extending the offer.
+    const again = await store.createInvite({ ...base, invitedByDiscordId: "d2", at: t1, expiresAt: new Date(t1.getTime() + 1000) });
+    expect(again).toEqual({ outcome: "not-permitted", inviteId: null });
+    const [row] = await db.select().from(factionInvites);
+    expect(row!.expiresAt.getTime()).toBe(base.expiresAt.getTime());
+  });
+
   it("refuses to invite into a lapsed faction", async () => {
     await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, factionId));
     const r = await store.createInvite(base);

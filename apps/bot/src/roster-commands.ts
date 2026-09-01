@@ -95,6 +95,11 @@ export async function handleFactionInvite(
   if (outcome === "not-holding") {
     return reply("Your faction is no longer active enough to invite anyone.");
   }
+  // The store re-checks the actor's role at write time, so this fires when
+  // the actor was demoted between the membership read above and the insert.
+  if (outcome === "not-permitted") {
+    return reply("Only the leader and officers can invite.");
+  }
 
   return {
     content: `Invited **${mention(input.inviteeDiscordId)}** to **${membership.factionName}** [${membership.tag}].`,

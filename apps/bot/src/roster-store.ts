@@ -26,7 +26,7 @@ export type CreateInviteArgs = {
   inviteeDiscordId: string; inviteeDayzId: string; invitedByDiscordId: string;
   at: Date; expiresAt: Date;
 };
-export type CreateInviteOutcome = "ok" | "already-member" | "cooldown" | "not-holding";
+export type CreateInviteOutcome = "ok" | "not-permitted" | "already-member" | "cooldown" | "not-holding";
 export type PendingInvite = {
   id: number; factionId: number; factionName: string; tag: string;
   serverId: number; serverName: string; expiresAt: Date;
@@ -243,20 +243,31 @@ export class PgRosterStore implements RosterStore {
         .where(and(eq(rosterCooldowns.serverId, a.serverId), eq(rosterCooldowns.dayzId, a.inviteeDayzId)));
       if (cd && cd.until > a.at) return { outcome: "cooldown" as const, inviteId: null };
 
-      const [row] = await tx.insert(factionInvites)
-        .values({
-          factionId: a.factionId, serverId: a.serverId,
-          inviteeDiscordId: a.inviteeDiscordId, inviteeDayzId: a.inviteeDayzId,
-          invitedByDiscordId: a.invitedByDiscordId,
-          createdAt: a.at, expiresAt: a.expiresAt,
-        })
-        .onConflictDoUpdate({
-          target: [factionInvites.factionId, factionInvites.inviteeDayzId],
-          targetWhere: sql`accepted_at IS NULL AND declined_at IS NULL AND revoked_at IS NULL`,
-          set: { expiresAt: a.expiresAt, createdAt: a.at, invitedByDiscordId: a.invitedByDiscordId },
-        })
-        .returning({ id: factionInvites.id });
-      return { outcome: "ok" as const, inviteId: row!.id };
+      // ⚠️ The actor's leader-or-officer check rides in this statement, not in
+      // the handler — §5: every write carries its own guard. A pre-read here
+      // would let an officer racing their own demotion still issue the
+      // invite. INSERT ... SELECT is what gives an INSERT a WHERE; the
+      // ON CONFLICT arm inherits it, so a demoted actor cannot refresh an
+      // existing offer either. Zero rows means the actor may not invite.
+      const rows = await tx.execute(sql`
+        insert into faction_invites
+          (faction_id, server_id, invitee_discord_id, invitee_dayz_id, invited_by_discord_id, created_at, expires_at)
+        select ${a.factionId}::bigint, ${a.serverId}::integer,
+               ${a.inviteeDiscordId}::text, ${a.inviteeDayzId}::text, ${a.invitedByDiscordId}::text,
+               ${a.at.toISOString()}::timestamptz, ${a.expiresAt.toISOString()}::timestamptz
+        where (select role from faction_members
+               where faction_id = ${a.factionId}::bigint and discord_id = ${a.invitedByDiscordId}::text)
+              in ('leader', 'officer')
+        on conflict (faction_id, invitee_dayz_id)
+          where accepted_at is null and declined_at is null and revoked_at is null
+        do update set expires_at = excluded.expires_at,
+                      created_at = excluded.created_at,
+                      invited_by_discord_id = excluded.invited_by_discord_id
+        returning id
+      `);
+      const row = (rows as unknown as { id: string | number }[])[0];
+      if (!row) return { outcome: "not-permitted" as const, inviteId: null };
+      return { outcome: "ok" as const, inviteId: Number(row.id) };
     });
   }
 
