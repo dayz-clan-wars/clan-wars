@@ -22,11 +22,18 @@ export class NitradoClient {
     private readonly token: string,
     private readonly serviceId: number,
     private readonly fetchFn: typeof fetch = fetch,
+    /**
+     * ⚠️ Per-request deadline. Without one, a stalled connection blocks the
+     * ENTIRE sequential sweep — every other server included — until undici's
+     * ~300s default fires, with no log line while it hangs.
+     */
+    private readonly timeoutMs: number = 30_000,
   ) {}
 
   private async getJson(path: string): Promise<Record<string, any>> {
     const res = await this.fetchFn(`${API_BASE}${path}`, {
       headers: { Authorization: `Bearer ${this.token}` },
+      signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
     return res.json() as Promise<Record<string, any>>;
@@ -69,6 +76,17 @@ export class NitradoClient {
 
     // Oldest-first. Ordering is load-bearing: the tick backfills in this order
     // and a file's timestamps depend on every file before it.
+    //
+    // ⚠️ HAZARD, knowingly unfixed: `localTimestampMs` comes from the
+    // filename, which carries SERVER-LOCAL time. If a server's local clock
+    // steps BACKWARDS (a DST transition, an operator changing the timezone),
+    // the file created after the step sorts BEFORE its predecessor. The
+    // genuinely live file is then treated by the tick as an old file, marked
+    // `complete` and skipped forever, while the stale one is re-downloaded
+    // every tick — the symptom is a server that silently stops ingesting after
+    // a backwards clock step. Accepted because the production servers run
+    // fixed UTC+4/+7 with no DST, and cross-checking Nitrado's mtime would
+    // introduce a worse hazard that fires on routine re-uploads.
     files.sort((a, b) => a.localTimestampMs - b.localTimestampMs);
     return files;
   }
@@ -80,7 +98,7 @@ export class NitradoClient {
     );
     const url = dl?.data?.token?.url;
     if (!url) throw new Error("Nitrado: no download url returned");
-    const res = await this.fetchFn(url);
+    const res = await this.fetchFn(url, { signal: AbortSignal.timeout(this.timeoutMs) });
     if (!res.ok) throw new Error(`Nitrado download ${res.status}`);
     return res.text();
   }

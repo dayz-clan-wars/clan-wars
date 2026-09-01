@@ -110,3 +110,29 @@ describe("NitradoClient.downloadFile", () => {
       .rejects.toThrow(/no download url/);
   });
 });
+
+describe("NitradoClient request timeout", () => {
+  it("aborts a request that never responds", async () => {
+    // ⚠️ Without a deadline a stalled connection blocks the entire sequential
+    // sweep until undici's ~300s default, with nothing logged while it hangs.
+    const fetchFn = vi.fn((_url: string, init?: RequestInit) => new Promise<Response>((_resolve, reject) => {
+      init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+    }));
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch, 10);
+    await expect(client.listAdmFiles()).rejects.toThrow(/timeout/i);
+  });
+
+  it("passes the deadline to the download request too", async () => {
+    // Only the signed-URL fetch stalls; the API call that hands it over is fine.
+    const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.startsWith("https://api.nitrado.net")) {
+        return { ok: true, json: async () => ({ data: { token: { url: "https://dl.nitrado/x" } } }) } as unknown as Response;
+      }
+      return new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
+      });
+    });
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch, 10);
+    await expect(client.downloadFile("/a.ADM")).rejects.toThrow(/timeout/i);
+  });
+});
