@@ -292,3 +292,23 @@ count can surface or hide a failure — which is exactly how a latent isolation 
 
 The fix is isolation, not more truncation: a database or schema per package, named
 from the package, so no two suites share a namespace.
+
+## 22. The bot is single-instance-only, and nothing enforces it
+
+`notifyCompleted` sends the DM BEFORE calling `markNotified` (`apps/bot/src/discord.ts`).
+That order is deliberate and right for one process — marking first would drop the DM
+entirely if the send then failed — but it makes the notifier at-least-once across
+processes: two instances both read `pendingNotifications()`, both send, then both mark.
+
+Observed for real on 2026-09-01, during the targeted-linking live gate: a stale bot
+process survived a `pkill` whose pattern did not match the expanded tsx command line,
+a second was started alongside it, and the verified player received the completion DM
+twice. The verification itself was unaffected — `completeChallenge` is guarded and only
+one link row exists — so the blast radius is duplicate notifications, not duplicate
+bindings.
+
+Two things worth doing before anyone runs a second instance for availability: take an
+advisory lock (or a row lease) around the notify step so only one process notifies, and
+give the bot a startup guard that refuses to run when another holds the lock. The same
+argument applies to the ceremony notifier and the players projection, which share the
+loop.
