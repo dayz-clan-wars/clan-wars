@@ -6,6 +6,7 @@ import {
   handleFactionPromote, handleFactionDemote, handleFactionTransfer,
   handleFactionDisband, handleFactionRename,
   handleFactionInfo, handleFactionRoster,
+  MAX_LISTED_INVITES,
   type RosterDeps,
 } from "../src/roster-commands.js";
 
@@ -148,13 +149,16 @@ describe("handleFactionInvites", () => {
     expect(r.content).toMatch(/link a character/i);
   });
 
-  it("reports no pending invitations", async () => {
+  it("reports no pending invitations, with no button prompt and no empty component list", async () => {
     const d = deps({ linkFor: async () => ({ dayzId: "P1", gamertag: "G" }), pendingInvitesFor: async () => [] });
     const r = await handleFactionInvites(d, "d9");
     expect(r.content).toMatch(/no pending invitations/i);
+    // A clear message, not an empty list of accept/decline buttons the
+    // player has nothing to do with.
+    expect(r.prompt).toBeUndefined();
   });
 
-  it("lists pending invitations", async () => {
+  it("lists pending invitations with an accept/decline button pair per invite", async () => {
     const invite: PendingInvite = {
       id: 7, factionId: 1, factionName: "Bears", tag: "BEAR",
       serverId: 1, serverName: "S", expiresAt: new Date(now.getTime() + 1000),
@@ -163,6 +167,25 @@ describe("handleFactionInvites", () => {
     const r = await handleFactionInvites(d, "d9");
     expect(r.content).toMatch(/Bears/);
     expect(r.content).toMatch(/BEAR/);
+    // §2.5: /faction invites carries "the same accept and decline buttons"
+    // as the DM — the buttons ride on the same INVITE_ACCEPT/DECLINE_PREFIX
+    // custom ids, built from this prompt by Task 9's Discord layer.
+    expect(r.prompt).toEqual({ kind: "list-invites", invites: [{ id: 7, tag: "BEAR" }], hiddenCount: 0 });
+  });
+
+  it("shows only the first MAX_LISTED_INVITES and discloses the rest by count, rather than truncating silently", async () => {
+    const invites: PendingInvite[] = Array.from({ length: 8 }, (_, i) => ({
+      id: i + 1, factionId: i + 1, factionName: `Faction${i}`, tag: `TAG${i}`,
+      serverId: 1, serverName: "S", expiresAt: new Date(now.getTime() + 1000),
+    }));
+    const d = deps({ linkFor: async () => ({ dayzId: "P1", gamertag: "G" }), pendingInvitesFor: async () => invites });
+    const r = await handleFactionInvites(d, "d9");
+    expect(r.prompt?.kind).toBe("list-invites");
+    if (r.prompt?.kind !== "list-invites") throw new Error("expected list-invites");
+    expect(r.prompt.invites).toHaveLength(MAX_LISTED_INVITES);
+    expect(r.prompt.invites.map((i) => i.id)).toEqual([1, 2, 3, 4, 5]);
+    expect(r.prompt.hiddenCount).toBe(3);
+    expect(r.content).toMatch(/3 more not shown/);
   });
 });
 
@@ -503,6 +526,27 @@ describe("handleFactionInfo", () => {
     expect(r.ephemeral).toBe(false);
   });
 
+  it("a named server selects that faction, disambiguating a caller who holds more than one", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1, serverId: 1 }), membership({ factionId: 2, serverId: 2 })],
+      factionById: async (id) => (id === 2 ? factionCard({ id: 2, name: "Wolves" }) : factionCard({ id: 1, name: "Bears" })),
+    });
+    const r = await handleFactionInfo(d, "d1", null, 2);
+    expect(r.content).toMatch(/\*\*Wolves\*\*/);
+    expect(r.content).not.toMatch(/\*\*Bears\*\*/);
+  });
+
+  it("naming a server the caller holds no faction on refuses, rather than silently falling back to the other one", async () => {
+    const factionById = vi.fn();
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1, serverId: 1 })],
+      factionById,
+    });
+    const r = await handleFactionInfo(d, "d1", null, 999);
+    expect(r.content).toMatch(/don't hold a faction on that server/i);
+    expect(factionById).not.toHaveBeenCalled();
+  });
+
   it("renders name, tag, flag, status, member count, pole key and founding date, and is public", async () => {
     const d = deps({ factionByName: async () => factionCard({
       name: "Bears", tag: "BEAR", texture: "Flag_Bears", status: "active",
@@ -542,6 +586,28 @@ describe("handleFactionRoster", () => {
     const r = await handleFactionRoster(d, "d1", null);
     expect(r.content).toMatch(/Bears/);
     expect(r.ephemeral).toBe(false);
+  });
+
+  it("a named server selects that faction, disambiguating a caller who holds more than one", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1, serverId: 1 }), membership({ factionId: 2, serverId: 2 })],
+      factionById: async (id) => (id === 2 ? factionCard({ id: 2, name: "Wolves" }) : factionCard({ id: 1, name: "Bears" })),
+      rosterOf: async () => [rosterEntry()],
+    });
+    const r = await handleFactionRoster(d, "d1", null, 2);
+    expect(r.content).toMatch(/Wolves/);
+    expect(r.content).not.toMatch(/Bears/);
+  });
+
+  it("naming a server the caller holds no faction on refuses, rather than silently falling back to the other one", async () => {
+    const factionById = vi.fn();
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1, serverId: 1 })],
+      factionById,
+    });
+    const r = await handleFactionRoster(d, "d1", null, 999);
+    expect(r.content).toMatch(/don't hold a faction on that server/i);
+    expect(factionById).not.toHaveBeenCalled();
   });
 
   it("groups members by role, leader first", async () => {

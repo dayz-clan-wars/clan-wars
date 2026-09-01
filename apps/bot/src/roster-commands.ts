@@ -3,7 +3,15 @@ import { resolveServerContext } from "./roster-context.js";
 
 export type RosterPrompt =
   | { kind: "confirm-transfer"; factionId: number; targetDiscordId: string }
-  | { kind: "confirm-disband"; factionId: number };
+  | { kind: "confirm-disband"; factionId: number }
+  /**
+   * §2.5: `/faction invites` carries "the same accept and decline buttons"
+   * as the DM. `invites` is capped at `MAX_LISTED_INVITES` so the reply
+   * stays inside Discord's five-action-row limit; `hiddenCount` is how many
+   * more are not shown, so a long queue is disclosed rather than silently
+   * truncated.
+   */
+  | { kind: "list-invites"; invites: { id: number; tag: string }[]; hiddenCount: number };
 
 export type RosterReply = {
   content: string;
@@ -107,6 +115,14 @@ export async function handleFactionInvite(
  * not a faction — invitations arrive regardless of what faction, if any,
  * the caller currently holds.
  */
+/**
+ * Discord caps a message at five action rows, and each listed invite takes
+ * one row (an accept button beside a decline button) — see §2.5, which
+ * requires `/faction invites` to carry "the same accept and decline
+ * buttons" as the DM. Five rows is therefore the hard ceiling, not a nicety.
+ */
+export const MAX_LISTED_INVITES = 5;
+
 export async function handleFactionInvites(deps: RosterDeps, discordId: string): Promise<RosterReply> {
   const link = await deps.store.linkFor(discordId);
   if (!link) return reply("You need to link a character first. Run `/link`.");
@@ -114,10 +130,23 @@ export async function handleFactionInvites(deps: RosterDeps, discordId: string):
   const invites = await deps.store.pendingInvitesFor(link.dayzId, deps.now());
   if (invites.length === 0) return reply("You have no pending invitations.");
 
-  const lines = invites.map((inv) =>
-    `**${inv.factionName}** [${inv.tag}] on **${inv.serverName}** — expires <t:${Math.floor(inv.expiresAt.getTime() / 1000)}:R> (id: ${inv.id})`,
+  const shown = invites.slice(0, MAX_LISTED_INVITES);
+  const hiddenCount = invites.length - shown.length;
+
+  const lines = shown.map((inv) =>
+    `**${inv.factionName}** [${inv.tag}] on **${inv.serverName}** — expires <t:${Math.floor(inv.expiresAt.getTime() / 1000)}:R>`,
   );
-  return reply(["Your pending invitations:", ...lines].join("\n"));
+  if (hiddenCount > 0) {
+    // Disclosed, not silently dropped: accepting or declining one of the
+    // shown invites is what makes the next one visible.
+    lines.push(`...and ${hiddenCount} more not shown. Accept or decline one of these to see the rest.`);
+  }
+
+  return {
+    content: ["Your pending invitations:", ...lines].join("\n"),
+    ephemeral: true,
+    prompt: { kind: "list-invites", invites: shown.map((inv) => ({ id: inv.id, tag: inv.tag })), hiddenCount },
+  };
 }
 
 /**
@@ -368,16 +397,17 @@ async function findFactionCard(
   deps: RosterDeps,
   discordId: string,
   name: string | null,
+  requestedServerId: number | null,
 ): Promise<{ card: FactionCard } | { error: RosterReply }> {
   if (name !== null) {
     const card = await deps.store.factionByName(name);
     return card ? { card } : { error: publicReply(`No faction named **${name}**.`) };
   }
 
-  const ctx = resolveServerContext(await deps.store.membershipsFor(discordId), null);
+  const ctx = resolveServerContext(await deps.store.membershipsFor(discordId), requestedServerId);
   if (ctx.kind === "no-faction") return { error: publicReply("You are not in a faction. Name one to look it up.") };
   if (ctx.kind === "not-on-server") return { error: publicReply("You don't hold a faction on that server.") };
-  if (ctx.kind === "ambiguous") return { error: publicReply("You're in a faction on more than one server — name one.") };
+  if (ctx.kind === "ambiguous") return { error: publicReply("You're in a faction on more than one server — name one, or pick a server.") };
 
   const card = await deps.store.factionById(ctx.membership.factionId);
   return card ? { card } : { error: publicReply("Your faction could not be found.") };
@@ -387,8 +417,9 @@ export async function handleFactionInfo(
   deps: RosterDeps,
   discordId: string,
   name: string | null,
+  serverId: number | null = null,
 ): Promise<RosterReply> {
-  const found = await findFactionCard(deps, discordId, name);
+  const found = await findFactionCard(deps, discordId, name, serverId);
   if ("error" in found) return found.error;
   const { card } = found;
 
@@ -409,8 +440,9 @@ export async function handleFactionRoster(
   deps: RosterDeps,
   discordId: string,
   name: string | null,
+  serverId: number | null = null,
 ): Promise<RosterReply> {
-  const found = await findFactionCard(deps, discordId, name);
+  const found = await findFactionCard(deps, discordId, name, serverId);
   if ("error" in found) return found.error;
   const { card } = found;
 

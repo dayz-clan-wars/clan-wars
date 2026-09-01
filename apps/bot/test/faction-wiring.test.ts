@@ -6,13 +6,13 @@ import {
   INVITE_ACCEPT_PREFIX, INVITE_DECLINE_PREFIX, TRANSFER_PREFIX, DISBAND_PREFIX,
   inviteAcceptCustomId, inviteDeclineCustomId, transferCustomId, disbandCustomId,
   parseInviteAcceptCustomId, parseInviteDeclineCustomId, parseTransferCustomId, parseDisbandCustomId,
-  routeRosterButton, serverChoices, deliverInviteDm,
+  routeRosterButton, serverChoices, deliverInviteDm, planRosterButtons,
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
 import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
 import type { RosterStore, Membership } from "../src/roster-store.js";
-import type { RosterDeps, RosterReply } from "../src/roster-commands.js";
+import type { RosterDeps, RosterReply, RosterPrompt } from "../src/roster-commands.js";
 
 const participant = (n: number): Participant => ({
   dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
@@ -353,5 +353,49 @@ describe("deliverInviteDm", () => {
     expect(followUp).toHaveBeenCalledTimes(1);
     expect(followUp.mock.calls[0]?.[0].content).toMatch(/\/faction invites/);
     warned.mockRestore();
+  });
+});
+
+describe("planRosterButtons", () => {
+  it("renders nothing for a reply with no prompt", () => {
+    expect(planRosterButtons(undefined)).toEqual([]);
+  });
+
+  it("renders a single confirm-transfer row", () => {
+    const prompt: RosterPrompt = { kind: "confirm-transfer", factionId: 12, targetDiscordId: "d9" };
+    expect(planRosterButtons(prompt)).toEqual([
+      [{ customId: transferCustomId(12, "d9"), label: "Confirm transfer", style: "danger" }],
+    ]);
+  });
+
+  it("renders a single confirm-disband row", () => {
+    const prompt: RosterPrompt = { kind: "confirm-disband", factionId: 12 };
+    expect(planRosterButtons(prompt)).toEqual([
+      [{ customId: disbandCustomId(12), label: "Confirm disband", style: "danger" }],
+    ]);
+  });
+
+  it("renders one accept/decline row per listed invite, on the same custom ids the DM path uses", () => {
+    const prompt: RosterPrompt = {
+      kind: "list-invites",
+      invites: [{ id: 7, tag: "BEAR" }, { id: 8, tag: "WOLF" }],
+      hiddenCount: 0,
+    };
+    expect(planRosterButtons(prompt)).toEqual([
+      [
+        { customId: inviteAcceptCustomId(7), label: "Accept BEAR", style: "success" },
+        { customId: inviteDeclineCustomId(7), label: "Decline BEAR", style: "danger" },
+      ],
+      [
+        { customId: inviteAcceptCustomId(8), label: "Accept WOLF", style: "success" },
+        { customId: inviteDeclineCustomId(8), label: "Decline WOLF", style: "danger" },
+      ],
+    ]);
+  });
+
+  it("stays inside Discord's five-row cap even at MAX_LISTED_INVITES", () => {
+    const invites = Array.from({ length: 5 }, (_, i) => ({ id: i + 1, tag: `T${i}` }));
+    const prompt: RosterPrompt = { kind: "list-invites", invites, hiddenCount: 3 };
+    expect(planRosterButtons(prompt)).toHaveLength(5);
   });
 });

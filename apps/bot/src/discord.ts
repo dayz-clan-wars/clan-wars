@@ -20,7 +20,7 @@ import {
   handleFactionKick, handleFactionLeave, handleFactionPromote, handleFactionDemote,
   handleFactionTransfer, handleFactionDisband, handleFactionRename,
   handleFactionInfo, handleFactionRoster,
-  type RosterDeps, type RosterReply,
+  type RosterDeps, type RosterReply, type RosterPrompt,
 } from "./roster-commands.js";
 import { PgRosterStore, type Membership } from "./roster-store.js";
 
@@ -343,6 +343,32 @@ function inviteButtons(inviteId: number): ActionRowBuilder<ButtonBuilder> {
   );
 }
 
+export type RosterButtonSpec = { customId: string; label: string; style: "success" | "danger" };
+
+/**
+ * Decides WHAT buttons a `RosterReply.prompt` needs, as plain data — no
+ * discord.js types touched here so this is directly testable, the same
+ * reasoning `planClaimReply` documents above for the claim-confirm select.
+ *
+ * One row per element of the outer array. `list-invites` renders one row
+ * per pending invite (an accept button beside a decline button, both
+ * carrying that invite's id) — see spec §2.5 and `MAX_LISTED_INVITES`,
+ * which is what keeps this inside Discord's five-row cap.
+ */
+export function planRosterButtons(prompt: RosterPrompt | undefined): RosterButtonSpec[][] {
+  if (!prompt) return [];
+  if (prompt.kind === "confirm-transfer") {
+    return [[{ customId: transferCustomId(prompt.factionId, prompt.targetDiscordId), label: "Confirm transfer", style: "danger" }]];
+  }
+  if (prompt.kind === "confirm-disband") {
+    return [[{ customId: disbandCustomId(prompt.factionId), label: "Confirm disband", style: "danger" }]];
+  }
+  return prompt.invites.map((inv) => [
+    { customId: inviteAcceptCustomId(inv.id), label: `Accept ${inv.tag}`, style: "success" as const },
+    { customId: inviteDeclineCustomId(inv.id), label: `Decline ${inv.tag}`, style: "danger" as const },
+  ]);
+}
+
 /** The subset of a discord.js `Client` this needs to attempt an invite DM. Structural so tests need no client. */
 export type DmClientLike = {
   users: {
@@ -520,19 +546,11 @@ export async function start(cfg: BotConfig): Promise<void> {
     interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown>; followUp: FollowUpLike["followUp"] },
     reply: RosterReply,
   ): Promise<void> => {
-    const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-    if (reply.prompt?.kind === "confirm-transfer") {
-      const { factionId, targetDiscordId } = reply.prompt;
-      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(transferCustomId(factionId, targetDiscordId))
-          .setLabel("Confirm transfer").setStyle(ButtonStyle.Danger),
-      ));
-    } else if (reply.prompt?.kind === "confirm-disband") {
-      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
-        new ButtonBuilder().setCustomId(disbandCustomId(reply.prompt.factionId))
-          .setLabel("Confirm disband").setStyle(ButtonStyle.Danger),
-      ));
-    }
+    const rows = planRosterButtons(reply.prompt).map((row) =>
+      new ActionRowBuilder<ButtonBuilder>().addComponents(row.map((b) =>
+        new ButtonBuilder().setCustomId(b.customId).setLabel(b.label)
+          .setStyle(b.style === "success" ? ButtonStyle.Success : ButtonStyle.Danger),
+      )));
     await interaction.editReply({ content: reply.content, components: rows });
 
     if (reply.dm) {
@@ -618,10 +636,10 @@ export async function start(cfg: BotConfig): Promise<void> {
               reply = await handleFactionRename(rosterDeps, interaction.user.id, { serverId, name: interaction.options.getString("name", true) });
               break;
             case "info":
-              reply = await handleFactionInfo(rosterDeps, interaction.user.id, interaction.options.getString("name"));
+              reply = await handleFactionInfo(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
               break;
             case "roster":
-              reply = await handleFactionRoster(rosterDeps, interaction.user.id, interaction.options.getString("name"));
+              reply = await handleFactionRoster(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
               break;
             default:
               return;
