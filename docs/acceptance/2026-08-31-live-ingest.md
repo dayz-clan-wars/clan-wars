@@ -128,8 +128,9 @@ refactor did not silently drop or double any lines.
 
 The same `replay-main.ts` command was re-run a second time against
 `factions_backfill` without dropping or recreating it — the file's 1,026
-entries in `adm_files` were already `complete` from the first run, so the
-resume path should skip re-processing every one of them.
+entries in `adm_files` already had `lines_ingested` equal to their full line
+count from the first run, so the cursor resume path should write nothing on
+the second pass.
 
 Replay summary output (identical to the first run's console output, because
 the script always logs the export's own line/file counts regardless of
@@ -150,9 +151,13 @@ Post-second-replay verification:
 
 **New lines captured on the second replay: 0.** This is the defect this
 plan exists to fix, demonstrated on 69,326 real production lines rather
-than a fixture: every one of the 1,026 files was already marked `complete`
-from the first run, so the cursor resume path skipped all of them and
-appended nothing on the second pass.
+than a fixture. The mechanism is the cursor, not the `complete` flag:
+`ingestFile` never reads `complete` — there is no such branch. For each file
+it computes `from = existing.linesIngested` (`ingest.ts:59`), which the first
+run had already advanced to that file's total line count, and then skips every
+line with `lineIndex < from` (`ingest.ts:76`). The cursor still walked all
+69,326 lines — it must, because it is stateful and rolls the date forward on
+midnight crossings — but wrote none of them.
 
 ## Step 4: full test suite
 
