@@ -52,6 +52,10 @@ for (;;) {
         fileName: "faction-supplies.json",
       },
       onSupplyError: (serverId, err) => console.error(`supply tick failed for server ${serverId}`, err),
+      // Only fires on an actual upload, so this stays quiet on the ticks where
+      // nothing changed — which is almost all of them.
+      onSupplyUploaded: (serverId, r) =>
+        console.log(`supply file uploaded for server ${serverId}: ${r.factions} holding factions`),
     });
     console.log(`ingest sweep: ${r.servers} servers in ${Date.now() - started}ms`);
   } catch (err) {

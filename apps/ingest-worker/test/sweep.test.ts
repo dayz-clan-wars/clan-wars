@@ -74,6 +74,30 @@ describe("ingestSweep", () => {
     expect(seen.length).toBeGreaterThan(0);
   });
 
+  it("reports an upload once, and stays quiet when nothing changed", async () => {
+    // ⚠️ The sweep discards SupplyTickResult, so without this callback a
+    // successful upload leaves NO trace in the log at all — only failures do,
+    // and an operator cannot tell that a claim produced a file.
+    //
+    // The second sweep is the half that keeps this honest: a callback fired
+    // unconditionally (rather than on `uploaded`) would pass the first
+    // assertion and log on every tick forever.
+    const [srv] = await addServer();
+    const onSupplyUploaded = vi.fn();
+    const supplies = {
+      offsets: [], remoteDir: "/d", fileName: "f.json",
+      clientFor: () => ({ uploadFile: async () => {} }),
+    };
+    await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
+    expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
+    expect(onSupplyUploaded.mock.calls[0]![0]).toBe(srv!.id);
+    expect(onSupplyUploaded.mock.calls[0]![1]).toMatchObject({ uploaded: true });
+
+    // Same roster, same bytes, same hash: no upload, so nothing to report.
+    await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
+    expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
+  });
+
   it("keeps ingesting when the supply tick throws", async () => {
     // ⚠️ A Nitrado file-server outage must not stop log ingestion. Supplies
     // are cosmetic; missing events are permanent.

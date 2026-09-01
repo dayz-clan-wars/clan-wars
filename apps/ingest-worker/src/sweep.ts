@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { servers } from "@factions/db";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { ingestTick, type NitradoLike } from "./tick.js";
-import { supplyTick, type SupplyUploader } from "./supply-tick.js";
+import { supplyTick, type SupplyUploader, type SupplyTickResult } from "./supply-tick.js";
 import type { SpawnObject } from "./supplies.js";
 
 export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
@@ -25,6 +25,13 @@ export type SweepDeps = {
     fileName: string;
   };
   onSupplyError?: (serverId: number, err: unknown) => void;
+  /**
+   * Called only when the supply tick actually uploaded. Without it a
+   * successful upload is invisible: the sweep discards SupplyTickResult, so
+   * only failures ever reach the log and an operator cannot tell from the
+   * logs that a claim produced a file.
+   */
+  onSupplyUploaded?: (serverId: number, result: SupplyTickResult) => void;
 };
 
 /** One sweep across every active server. The database decides which those are. */
@@ -58,7 +65,7 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
     // the next restart, missing events never do.
     if (deps.supplies) {
       try {
-        await supplyTick(db, {
+        const result = await supplyTick(db, {
           serverId: s.id,
           client: deps.supplies.clientFor(s.nitradoServiceId!),
           offsets: deps.supplies.offsets,
@@ -75,6 +82,7 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
           fileName: deps.supplies.fileName,
           now: new Date(),
         });
+        if (result.uploaded) deps.onSupplyUploaded?.(s.id, result);
       } catch (err) {
         deps.onSupplyError?.(s.id, err);
       }
