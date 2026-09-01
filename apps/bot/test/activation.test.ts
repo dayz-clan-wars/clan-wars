@@ -37,7 +37,7 @@ describe("activation and lapse", () => {
       createdAt: T0, reservedUntil: new Date(T0.getTime() + 86_400_000),
     }).returning();
     factionId = fac!.id;
-    await db.insert(factionMembers).values({ factionId, dayzId: MEMBER, discordId: "100", role: "leader", joinedAt: T0 });
+    await db.insert(factionMembers).values({ factionId, serverId, dayzId: MEMBER, discordId: "100", role: "leader", joinedAt: T0 });
   });
 
   const raise = (dayzId: string, minutes: number, texture: string, poleKey = POLE) =>
