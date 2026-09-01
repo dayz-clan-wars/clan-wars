@@ -7,12 +7,18 @@ import {
   inviteAcceptCustomId, inviteDeclineCustomId, transferCustomId, disbandCustomId,
   parseInviteAcceptCustomId, parseInviteDeclineCustomId, parseTransferCustomId, parseDisbandCustomId,
   routeRosterButton, serverChoices, deliverInviteDm, planRosterButtons,
+  PUBLIC_ROSTER_SUBCOMMANDS, apologiseForFailure, INTERACTION_FAILURE_MESSAGE,
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
 import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
 import type { RosterStore, Membership } from "../src/roster-store.js";
 import type { RosterDeps, RosterReply, RosterPrompt } from "../src/roster-commands.js";
+import {
+  handleFactionInvite, handleFactionInvites, handleFactionKick, handleFactionLeave,
+  handleFactionPromote, handleFactionDemote, handleFactionTransfer, handleFactionDisband,
+  handleFactionRename, handleFactionInfo, handleFactionRoster,
+} from "../src/roster-commands.js";
 
 const participant = (n: number): Participant => ({
   dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
@@ -398,4 +404,95 @@ describe("planRosterButtons", () => {
     const prompt: RosterPrompt = { kind: "list-invites", invites, hiddenCount: 3 };
     expect(planRosterButtons(prompt)).toHaveLength(5);
   });
+});
+
+describe("apologiseForFailure", () => {
+  const fake = (over: Partial<{ deferred: boolean; replied: boolean }> = {}) => ({
+    deferred: true, replied: false, editReply: vi.fn(async () => undefined), ...over,
+  });
+
+  it("answers a deferred interaction so it cannot hang on thinking", async () => {
+    const i = fake();
+    await apologiseForFailure(i);
+    expect(i.editReply).toHaveBeenCalledWith({ content: INTERACTION_FAILURE_MESSAGE });
+  });
+
+  it("says nothing when the interaction was never deferred", async () => {
+    const i = fake({ deferred: false });
+    await apologiseForFailure(i);
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it("says nothing when the interaction was already answered", async () => {
+    const i = fake({ replied: true });
+    await apologiseForFailure(i);
+    expect(i.editReply).not.toHaveBeenCalled();
+  });
+
+  it("swallows a dead interaction token rather than becoming an unhandled rejection", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const i = { deferred: true, replied: false, editReply: vi.fn(async () => { throw new Error("Unknown interaction"); }) };
+    await expect(apologiseForFailure(i)).resolves.toBeUndefined();
+    expect(err).toHaveBeenCalled();
+    err.mockRestore();
+  });
+});
+
+/**
+ * `PUBLIC_ROSTER_SUBCOMMANDS` picks the defer flags before the handler runs,
+ * and each handler independently sets `RosterReply.ephemeral`. The wiring
+ * uses the set and ignores the field, so nothing but this test stops the two
+ * from drifting into disagreement — at which point a reply Discord already
+ * committed to being ephemeral would claim to be public, or the reverse.
+ */
+describe("PUBLIC_ROSTER_SUBCOMMANDS agrees with the handlers", () => {
+  const store = {
+    membershipsFor: async () => [{ factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader" as const }],
+    linkFor: async () => null,
+    factionByName: async () => ({
+      id: 1, serverId: 1, serverName: "S", name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", poleKey: "1:2:3", memberCount: 1, leaderDiscordId: "d1",
+      createdAt: new Date("2026-08-31T12:00:00Z"),
+    }),
+    rosterOf: async () => [],
+    createInvite: async () => ({ outcome: "ok" as const, inviteId: 7 }),
+    kick: async () => "ok" as const,
+    leave: async () => "ok" as const,
+    setRole: async () => "ok" as const,
+    rename: async () => "ok" as const,
+  } as unknown as RosterStore;
+  const deps: RosterDeps = {
+    store, now: () => new Date("2026-08-31T12:00:00Z"),
+    inviteTtlMs: 1, cooldownMs: 1, renameCooldownMs: 1,
+  };
+  const U = "d1";
+  const target = { serverId: null, targetDiscordId: "d2" };
+
+  const invocations: Record<string, () => Promise<RosterReply>> = {
+    invite: () => handleFactionInvite(deps, U, { serverId: null, inviteeDiscordId: "d2" }),
+    invites: () => handleFactionInvites(deps, U),
+    kick: () => handleFactionKick(deps, U, target),
+    leave: () => handleFactionLeave(deps, U, null),
+    promote: () => handleFactionPromote(deps, U, target),
+    demote: () => handleFactionDemote(deps, U, target),
+    transfer: () => handleFactionTransfer(deps, U, target),
+    disband: () => handleFactionDisband(deps, U, null),
+    rename: () => handleFactionRename(deps, U, { serverId: null, name: "Cubs" }),
+    info: () => handleFactionInfo(deps, U, "Bears", null),
+    roster: () => handleFactionRoster(deps, U, "Bears", null),
+  };
+
+  it("covers every roster subcommand the wiring registers", () => {
+    const registered = (buildCommands().find((c) => c.name === "faction") as { options: { name: string }[] })
+      .options.map((o) => o.name).filter((n) => n !== "claim");
+    expect(new Set(registered)).toEqual(new Set(Object.keys(invocations)));
+    for (const sub of PUBLIC_ROSTER_SUBCOMMANDS) expect(registered).toContain(sub);
+  });
+
+  for (const [sub, run] of Object.entries(invocations)) {
+    it(`${sub} replies ${PUBLIC_ROSTER_SUBCOMMANDS.has(sub) ? "publicly" : "ephemerally"}`, async () => {
+      const reply = await run();
+      expect(reply.ephemeral).toBe(!PUBLIC_ROSTER_SUBCOMMANDS.has(sub));
+    });
+  }
 });

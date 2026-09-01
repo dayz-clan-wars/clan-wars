@@ -82,6 +82,46 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   ].map((c) => c.toJSON());
 }
 
+/**
+ * `info` and `roster` are the only public roster replies (spec §6); every
+ * other roster reply is ephemeral. Fixed per subcommand, not per reply,
+ * because the defer flags have to be chosen before the handler runs — which
+ * means this set and the handlers' own `RosterReply.ephemeral` values are two
+ * statements of the same fact and must not drift. `faction-wiring.test.ts`
+ * asserts they agree.
+ */
+export const PUBLIC_ROSTER_SUBCOMMANDS = new Set(["info", "roster"]);
+
+/**
+ * What a player is told when a roster command throws.
+ *
+ * ⚠️ Every roster subcommand defers before it touches the store, and a
+ * deferred interaction that never receives an `editReply` sits on "thinking"
+ * for good. Logging the throw and dropping it — which is what the catch used
+ * to do — leaves the player staring at that. This apology is also what covers
+ * the `default:` arm of the subcommand switch, which is unreachable against a
+ * current command registration but not against a stale guild one.
+ */
+export const INTERACTION_FAILURE_MESSAGE =
+  "Something went wrong handling that. Try again in a moment.";
+
+export type ApologisableInteraction = {
+  deferred: boolean;
+  replied: boolean;
+  editReply: (opts: { content: string }) => Promise<unknown>;
+};
+
+/** Best effort: the interaction token may already be dead, and a throw from
+ * inside a discord.js listener's catch is an unhandled rejection. */
+export async function apologiseForFailure(i: ApologisableInteraction): Promise<void> {
+  if (!i.deferred || i.replied) return;
+  try {
+    await i.editReply({ content: INTERACTION_FAILURE_MESSAGE });
+  } catch (err) {
+    console.error("could not deliver the failure apology", err);
+  }
+}
+
 /** The subset of a discord.js interaction the router needs. Kept structural so tests need no client. */
 export type InteractionLike = {
   commandName: string;
@@ -537,11 +577,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     await interaction.editReply({ content: plan.content, components: [row] });
   };
 
-  // `info` and `roster` are the only public roster replies (spec §6); every
-  // other roster reply is ephemeral. Fixed per subcommand, not per reply, so
-  // the defer flags can be chosen before the handler runs.
-  const PUBLIC_ROSTER_SUBCOMMANDS = new Set(["info", "roster"]);
-
   const renderRosterReply = async (
     interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown>; followUp: FollowUpLike["followUp"] },
     reply: RosterReply,
@@ -642,7 +677,10 @@ export async function start(cfg: BotConfig): Promise<void> {
               reply = await handleFactionRoster(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
               break;
             default:
-              return;
+              // Unreachable against a current registration; a stale guild
+              // command would land here, and after the defer above a bare
+              // return would hang the interaction. The catch apologises.
+              throw new Error(`unknown /faction subcommand: ${sub}`);
           }
           await renderRosterReply(interaction, reply);
           return;
@@ -662,6 +700,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         // expired interaction token — which is only a 3-second window — would
         // take the bot down for every player. Log and drop the one interaction.
         console.error(`interaction ${interaction.commandName} failed`, err);
+        // ...but if we already deferred, dropping it silently leaves the
+        // player on "thinking" forever. Say something.
+        await apologiseForFailure(interaction);
       }
       return;
     }
