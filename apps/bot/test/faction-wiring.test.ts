@@ -3,10 +3,16 @@ import {
   buildCommands, claimCustomId, parseClaimCustomId,
   planClaimReply, flagSuggestions, MAX_PRUNE_OPTIONS,
   respondToClaimConfirm,
+  INVITE_ACCEPT_PREFIX, INVITE_DECLINE_PREFIX, TRANSFER_PREFIX, DISBAND_PREFIX,
+  inviteAcceptCustomId, inviteDeclineCustomId, transferCustomId, disbandCustomId,
+  parseInviteAcceptCustomId, parseInviteDeclineCustomId, parseTransferCustomId, parseDisbandCustomId,
+  routeRosterButton, serverChoices, deliverInviteDm,
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
 import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
+import type { RosterStore, Membership } from "../src/roster-store.js";
+import type { RosterDeps, RosterReply } from "../src/roster-commands.js";
 
 const participant = (n: number): Participant => ({
   dayzId: `dayz-${n}`.padEnd(10, "0"), discordId: `discord-${n}`, gamertag: `Player${n}`,
@@ -158,5 +164,194 @@ describe("claim-confirm interaction", () => {
     const i = interaction(calls, "some-other-menu");
     expect(await respondToClaimConfirm(stub(calls), i)).toBe(false);
     expect(i.deferReply).not.toHaveBeenCalled();
+  });
+});
+
+describe("roster custom ids", () => {
+  it("round-trips an invite accept id and rejects a foreign one", () => {
+    expect(parseInviteAcceptCustomId(inviteAcceptCustomId(9))).toBe(9);
+    expect(parseInviteAcceptCustomId("claim-confirm:9")).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_DECLINE_PREFIX}9`)).toBeNull();
+  });
+
+  it("round-trips an invite decline id and rejects a foreign one", () => {
+    expect(parseInviteDeclineCustomId(inviteDeclineCustomId(9))).toBe(9);
+    expect(parseInviteDeclineCustomId("claim-confirm:9")).toBeNull();
+    expect(parseInviteDeclineCustomId(`${INVITE_ACCEPT_PREFIX}9`)).toBeNull();
+  });
+
+  it("parses a transfer custom id and rejects a foreign one", () => {
+    expect(parseTransferCustomId("roster-transfer:12:d9")).toEqual({ factionId: 12, targetDiscordId: "d9" });
+    expect(parseTransferCustomId("claim-confirm:12")).toBeNull();
+  });
+
+  it("round-trips a disband id and rejects a foreign one", () => {
+    expect(parseDisbandCustomId(disbandCustomId(12))).toBe(12);
+    expect(parseDisbandCustomId(`${TRANSFER_PREFIX}12:d9`)).toBeNull();
+  });
+
+  it("keeps every custom id inside Discord's 100-character cap", () => {
+    // A Discord custom id longer than 100 chars is rejected at send time, so
+    // the message never renders and the player sees nothing at all.
+    expect(transferCustomId(9_007_199_254_740_991, "1".repeat(20)).length).toBeLessThanOrEqual(100);
+    expect(inviteAcceptCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+    expect(inviteDeclineCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+    expect(disbandCustomId(Number.MAX_SAFE_INTEGER).length).toBeLessThanOrEqual(100);
+  });
+});
+
+describe("routeRosterButton", () => {
+  const now = new Date("2026-08-31T12:00:00Z");
+
+  const unimplemented = (name: string) => () => { throw new Error(`unexpected call: ${name}`); };
+
+  const fakeStore = (overrides: Partial<RosterStore>): RosterStore => ({
+    membershipsFor: unimplemented("membershipsFor"),
+    linkFor: unimplemented("linkFor"),
+    linkForDayzId: unimplemented("linkForDayzId"),
+    memberOf: unimplemented("memberOf"),
+    rosterOf: unimplemented("rosterOf"),
+    factionById: unimplemented("factionById"),
+    factionByName: unimplemented("factionByName"),
+    cooldownUntil: unimplemented("cooldownUntil"),
+    createInvite: unimplemented("createInvite"),
+    pendingInvitesFor: unimplemented("pendingInvitesFor"),
+    acceptInvite: unimplemented("acceptInvite"),
+    declineInvite: unimplemented("declineInvite"),
+    kick: unimplemented("kick"),
+    leave: unimplemented("leave"),
+    setRole: unimplemented("setRole"),
+    transfer: unimplemented("transfer"),
+    disband: unimplemented("disband"),
+    rename: unimplemented("rename"),
+    ...overrides,
+  } as RosterStore);
+
+  const deps = (overrides: Partial<RosterStore>): RosterDeps => ({
+    store: fakeStore(overrides),
+    now: () => now,
+    inviteTtlMs: 604_800_000,
+    cooldownMs: 259_200_000,
+    renameCooldownMs: 604_800_000,
+  });
+
+  const interaction = (calls: string[], customId: string) => ({
+    customId,
+    userId: "d1",
+    deferReply: vi.fn(async () => { calls.push("deferReply"); }),
+    editReply: vi.fn(async (_opts: { content: string }) => { calls.push("editReply"); }),
+  });
+
+  it("does not defer a button that is not ours", async () => {
+    const calls: string[] = [];
+    const d = deps({});
+    const i = interaction(calls, "some-other-button");
+    expect(await routeRosterButton(d, i)).toBe(false);
+    expect(i.deferReply).not.toHaveBeenCalled();
+  });
+
+  it("defers before accepting an invite", async () => {
+    const calls: string[] = [];
+    const d = deps({ acceptInvite: async () => { calls.push("acceptInvite"); return "ok"; } });
+    const i = interaction(calls, inviteAcceptCustomId(9));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "acceptInvite", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/joined/i) });
+  });
+
+  it("defers before declining an invite", async () => {
+    const calls: string[] = [];
+    const d = deps({ declineInvite: async () => { calls.push("declineInvite"); return true; } });
+    const i = interaction(calls, inviteDeclineCustomId(9));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "declineInvite", "editReply"]);
+  });
+
+  it("defers before transferring leadership, and calls the store — not the prompt-only handler", async () => {
+    const calls: string[] = [];
+    const d = deps({
+      transfer: async (a) => {
+        calls.push("transfer");
+        expect(a).toMatchObject({ factionId: 12, fromDiscordId: "d1", toDiscordId: "d9" });
+        return "ok";
+      },
+    });
+    const i = interaction(calls, transferCustomId(12, "d9"));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "transfer", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/transfer/i) });
+  });
+
+  it("defers before disbanding, and calls the store — not the prompt-only handler", async () => {
+    const calls: string[] = [];
+    const d = deps({
+      disband: async (factionId, discordId) => {
+        calls.push("disband");
+        expect(factionId).toBe(12);
+        expect(discordId).toBe("d1");
+        return "ok";
+      },
+    });
+    const i = interaction(calls, disbandCustomId(12));
+    expect(await routeRosterButton(d, i)).toBe(true);
+    expect(calls).toEqual(["deferReply", "disband", "editReply"]);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/disband/i) });
+  });
+
+  it("reports a race where the actor is no longer the leader by the time the button is pressed", async () => {
+    const calls: string[] = [];
+    const d = deps({ transfer: async () => "not-leader" });
+    const i = interaction(calls, transferCustomId(12, "d9"));
+    await routeRosterButton(d, i);
+    expect(i.editReply).toHaveBeenCalledWith({ content: expect.stringMatching(/only the leader/i) });
+  });
+});
+
+describe("serverChoices", () => {
+  const membership = (over: Partial<Membership> = {}): Membership => ({
+    factionId: 1, serverId: 1, serverName: "S1", factionName: "Bears", tag: "BEAR", role: "leader",
+    ...over,
+  });
+
+  it("formats each membership as name: server name, value: server id", () => {
+    const memberships = [membership({ serverId: 1, serverName: "Alpha" }), membership({ serverId: 2, serverName: "Bravo" })];
+    expect(serverChoices(memberships)).toEqual([
+      { name: "Alpha", value: 1 },
+      { name: "Bravo", value: 2 },
+    ]);
+  });
+
+  it("caps at Discord's 25-choice limit", () => {
+    const memberships = Array.from({ length: 30 }, (_, i) => membership({ serverId: i, serverName: `S${i}` }));
+    expect(serverChoices(memberships)).toHaveLength(25);
+  });
+});
+
+describe("deliverInviteDm", () => {
+  const dm: NonNullable<RosterReply["dm"]> = {
+    discordId: "d9", content: "You're invited", onFailure: "Could not DM them the invite — they'll still see it with `/faction invites`.", inviteId: 7,
+  };
+
+  it("sends the DM with accept/decline buttons when the user is reachable", async () => {
+    const send = vi.fn().mockResolvedValue(undefined);
+    const client = { users: { fetch: vi.fn().mockResolvedValue({ send }) } };
+    const followUp = vi.fn();
+    await deliverInviteDm(client, { followUp }, dm);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]?.[0]).toMatchObject({ content: "You're invited" });
+    expect(followUp).not.toHaveBeenCalled();
+  });
+
+  it("tells the inviter, naming /faction invites, when the DM cannot be delivered", async () => {
+    // A closed DM is ordinary, not an error — the invitation is already
+    // durable in the database, and /faction invites is the pull route that
+    // makes it reachable. What matters is the INVITER is told.
+    const client = { users: { fetch: vi.fn().mockRejectedValue(new Error("DMs closed")) } };
+    const followUp = vi.fn().mockResolvedValue(undefined);
+    const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await deliverInviteDm(client, { followUp }, dm);
+    expect(followUp).toHaveBeenCalledTimes(1);
+    expect(followUp.mock.calls[0]?.[0].content).toMatch(/\/faction invites/);
+    warned.mockRestore();
   });
 });

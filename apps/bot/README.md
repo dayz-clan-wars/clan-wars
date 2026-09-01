@@ -14,6 +14,10 @@ in-game verification tick confirms it.
 | `DATABASE_URL` | yes | Postgres connection string for the `@factions/db` schema (identity links, verification challenges, event log). |
 | `BOT_TICK_INTERVAL_MS` | no (default `10000`) | How often the verification tick scans new emote events, in milliseconds. Plain decimal digits only. |
 | `BOT_CHALLENGE_TTL_MS` | no (default `600000`) | How long an issued `/link` challenge stays live before it expires. Plain decimal digits only. |
+| `BOT_RESERVATION_TTL_MS` | no (default `86400000`) | How long a `/faction claim` reservation holds a flag, tag and pole before it can be reclaimed. Plain decimal digits only. |
+| `BOT_INVITE_TTL_MS` | no (default `604800000`, 7 days) | How long a `/faction invite` stays pending before it expires. Plain decimal digits only. |
+| `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Plain decimal digits only. |
+| `BOT_RENAME_COOLDOWN_MS` | no (default `604800000`, 7 days) | The minimum time between two `/faction rename`s of the same faction. Plain decimal digits only. |
 
 Example `.env` (placeholders only — never commit real values):
 
@@ -24,6 +28,10 @@ DISCORD_GUILD_ID=000000000000000000
 DATABASE_URL=postgres://factions:factions@localhost:5434/factions
 BOT_TICK_INTERVAL_MS=10000
 BOT_CHALLENGE_TTL_MS=600000
+BOT_RESERVATION_TTL_MS=86400000
+BOT_INVITE_TTL_MS=604800000
+BOT_COOLDOWN_MS=259200000
+BOT_RENAME_COOLDOWN_MS=604800000
 ```
 
 ## Creating the Discord application and inviting the bot

@@ -27,6 +27,15 @@ describe("discord wiring", () => {
       expect(buildCommands().map((c) => c.name).sort()).toEqual(["faction", "link", "unlink", "whoami"]);
     });
 
+    it("registers every roster subcommand", () => {
+      const faction = buildCommands().find((c) => c.name === "faction")!;
+      const names = (faction.options ?? []).map((o: any) => o.name).sort();
+      expect(names).toEqual([
+        "claim", "demote", "disband", "info", "invite", "invites",
+        "kick", "leave", "promote", "rename", "roster", "transfer",
+      ]);
+    });
+
     it("gives every command a description", () => {
       // Cast: RESTPostAPIApplicationCommandsJSONBody is a union that also covers
       // context-menu and primary-entry-point commands, neither of which carries

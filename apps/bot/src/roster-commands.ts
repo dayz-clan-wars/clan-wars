@@ -17,7 +17,7 @@ export type RosterReply = {
    * needs to be told — so the Discord layer appends the outcome to the
    * reply. See Task 9, Step 4a.
    */
-  dm?: { discordId: string; content: string; onFailure: string };
+  dm?: { discordId: string; content: string; onFailure: string; inviteId: number };
 };
 
 export type RosterDeps = {
@@ -68,7 +68,7 @@ export async function handleFactionInvite(
   }
 
   const at = deps.now();
-  const { outcome } = await deps.store.createInvite({
+  const { outcome, inviteId } = await deps.store.createInvite({
     factionId: membership.factionId,
     serverId: membership.serverId,
     inviteeDiscordId: input.inviteeDiscordId,
@@ -95,6 +95,9 @@ export async function handleFactionInvite(
       discordId: input.inviteeDiscordId,
       content: `You've been invited to join **${membership.factionName}** [${membership.tag}] on **${membership.serverName}**. Run \`/faction invites\` to accept or decline.`,
       onFailure: "Could not DM them the invite — they'll still see it with `/faction invites`.",
+      // `outcome === "ok"` is the only branch that reaches here, and
+      // `createInvite` always returns a real id alongside that outcome.
+      inviteId: inviteId!,
     },
   };
 }

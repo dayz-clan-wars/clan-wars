@@ -1,6 +1,6 @@
 import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags,
-  SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder,
+  SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
 import { createClient } from "@factions/db";
@@ -15,6 +15,14 @@ import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
+import {
+  handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
+  handleFactionKick, handleFactionLeave, handleFactionPromote, handleFactionDemote,
+  handleFactionTransfer, handleFactionDisband, handleFactionRename,
+  handleFactionInfo, handleFactionRoster,
+  type RosterDeps, type RosterReply,
+} from "./roster-commands.js";
+import { PgRosterStore, type Membership } from "./roster-store.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
@@ -30,7 +38,47 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
         .setDescription("Found a faction from a ceremony you took part in")
         .addStringOption((o) => o.setName("name").setDescription("Faction name").setRequired(true).setMaxLength(64))
         .addStringOption((o) => o.setName("tag").setDescription("Short tag, 2-5 letters or digits").setRequired(true).setMaxLength(5))
-        .addStringOption((o) => o.setName("flag").setDescription("One of the 33 claimable flags").setRequired(true).setAutocomplete(true))),
+        .addStringOption((o) => o.setName("flag").setDescription("One of the 33 claimable flags").setRequired(true).setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("invite")
+        .setDescription("Invite a linked player to your faction")
+        .addUserOption((o) => o.setName("user").setDescription("Who to invite").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("invites")
+        .setDescription("List your pending faction invitations"))
+      .addSubcommand((s) => s.setName("kick")
+        .setDescription("Remove a member from your faction")
+        .addUserOption((o) => o.setName("user").setDescription("Who to kick").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("leave")
+        .setDescription("Leave your faction")
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("promote")
+        .setDescription("Promote a member to officer")
+        .addUserOption((o) => o.setName("user").setDescription("Who to promote").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("demote")
+        .setDescription("Demote an officer to member")
+        .addUserOption((o) => o.setName("user").setDescription("Who to demote").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("transfer")
+        .setDescription("Transfer leadership to another member")
+        .addUserOption((o) => o.setName("user").setDescription("Who to make leader").setRequired(true))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("disband")
+        .setDescription("Disband your faction, releasing its flag, tag and pole")
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("rename")
+        .setDescription("Rename your faction")
+        .addStringOption((o) => o.setName("name").setDescription("New faction name").setRequired(true).setMaxLength(64))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("roster")
+        .setDescription("Show a faction's roster")
+        .addStringOption((o) => o.setName("name").setDescription("Faction name; defaults to your own"))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("info")
+        .setDescription("Show a faction's public info card")
+        .addStringOption((o) => o.setName("name").setDescription("Faction name; defaults to your own"))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true))),
   ].map((c) => c.toJSON());
 }
 
@@ -164,6 +212,173 @@ export function flagSuggestions(query: string): string[] {
   return CLAIMABLE_FLAGS.filter((f) => f.toLowerCase().includes(q)).slice(0, 25);
 }
 
+/**
+ * Formats the caller's own faction memberships for the `server` autocomplete
+ * option, capped at Discord's 25-choice limit. Pure so it is directly
+ * testable without a live autocomplete interaction.
+ */
+export function serverChoices(memberships: Membership[]): { name: string; value: number }[] {
+  return memberships.slice(0, 25).map((m) => ({ name: m.serverName, value: m.serverId }));
+}
+
+// ---------------------------------------------------------------------------
+// Roster button custom ids
+//
+// Each prefix is its own namespace. Every parser below checks its prefix
+// FIRST and returns null otherwise — Discord delivers every component
+// interaction in the guild to this bot, so deferring one this router will
+// never answer leaves someone else's button stuck on "thinking" forever.
+// See `respondToClaimConfirm` above, which documents the same reasoning for
+// `/faction claim`.
+// ---------------------------------------------------------------------------
+
+export const INVITE_ACCEPT_PREFIX = "invite-accept:";
+export const INVITE_DECLINE_PREFIX = "invite-decline:";
+export const TRANSFER_PREFIX = "roster-transfer:";
+export const DISBAND_PREFIX = "roster-disband:";
+
+export const inviteAcceptCustomId = (inviteId: number): string => `${INVITE_ACCEPT_PREFIX}${inviteId}`;
+export const inviteDeclineCustomId = (inviteId: number): string => `${INVITE_DECLINE_PREFIX}${inviteId}`;
+export const transferCustomId = (factionId: number, targetDiscordId: string): string =>
+  `${TRANSFER_PREFIX}${factionId}:${targetDiscordId}`;
+export const disbandCustomId = (factionId: number): string => `${DISBAND_PREFIX}${factionId}`;
+
+function parseIdSuffix(customId: string, prefix: string): number | null {
+  if (!customId.startsWith(prefix)) return null;
+  const n = Number(customId.slice(prefix.length));
+  return Number.isSafeInteger(n) && n > 0 ? n : null;
+}
+
+export function parseInviteAcceptCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, INVITE_ACCEPT_PREFIX);
+}
+
+export function parseInviteDeclineCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, INVITE_DECLINE_PREFIX);
+}
+
+export function parseDisbandCustomId(customId: string): number | null {
+  return parseIdSuffix(customId, DISBAND_PREFIX);
+}
+
+export function parseTransferCustomId(customId: string): { factionId: number; targetDiscordId: string } | null {
+  if (!customId.startsWith(TRANSFER_PREFIX)) return null;
+  const rest = customId.slice(TRANSFER_PREFIX.length);
+  const sep = rest.indexOf(":");
+  if (sep === -1) return null;
+  const factionId = Number(rest.slice(0, sep));
+  const targetDiscordId = rest.slice(sep + 1);
+  if (!Number.isSafeInteger(factionId) || factionId <= 0 || targetDiscordId === "") return null;
+  return { factionId, targetDiscordId };
+}
+
+/** The subset of a button interaction the roster router needs. Structural so tests need no client. */
+export type ButtonInteractionLike = {
+  customId: string;
+  userId: string;
+  deferReply: (opts: { flags?: number }) => Promise<unknown>;
+  editReply: (opts: { content: string }) => Promise<unknown>;
+};
+
+/**
+ * Routes the four roster button prefixes. Returns false, without deferring,
+ * for any custom id that is not ours — see the note above the prefix block.
+ *
+ * `/faction transfer` and `/faction disband` deliberately never call the
+ * store (see `handleFactionTransfer` / `handleFactionDisband`): both are
+ * confirmation-gated, and the store call belongs here, on the confirming
+ * button. Disband especially — it is irreversible, releasing the flag, tag
+ * and pole to a 33-slot pool a rival can claim immediately.
+ */
+export async function routeRosterButton(deps: RosterDeps, i: ButtonInteractionLike): Promise<boolean> {
+  const acceptId = parseInviteAcceptCustomId(i.customId);
+  if (acceptId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const reply = await handleInviteAccept(deps, i.userId, acceptId);
+    await i.editReply({ content: reply.content });
+    return true;
+  }
+
+  const declineId = parseInviteDeclineCustomId(i.customId);
+  if (declineId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const reply = await handleInviteDecline(deps, i.userId, declineId);
+    await i.editReply({ content: reply.content });
+    return true;
+  }
+
+  const transfer = parseTransferCustomId(i.customId);
+  if (transfer !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const outcome = await deps.store.transfer({
+      factionId: transfer.factionId, fromDiscordId: i.userId, toDiscordId: transfer.targetDiscordId, at: deps.now(),
+    });
+    const content = outcome === "ok"
+      ? "Leadership has been transferred."
+      : outcome === "not-leader"
+        ? "Only the leader can transfer leadership."
+        : `<@${transfer.targetDiscordId}> is no longer a member of that faction.`;
+    await i.editReply({ content });
+    return true;
+  }
+
+  const disbandFactionId = parseDisbandCustomId(i.customId);
+  if (disbandFactionId !== null) {
+    await i.deferReply({ flags: MessageFlags.Ephemeral });
+    const outcome = await deps.store.disband(disbandFactionId, i.userId);
+    const content = outcome === "ok"
+      ? "The faction has been disbanded. Its flag, tag and pole are back in the pool."
+      : "Only the leader can disband the faction.";
+    await i.editReply({ content });
+    return true;
+  }
+
+  return false;
+}
+
+function inviteButtons(inviteId: number): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(inviteAcceptCustomId(inviteId)).setLabel("Accept").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(inviteDeclineCustomId(inviteId)).setLabel("Decline").setStyle(ButtonStyle.Danger),
+  );
+}
+
+/** The subset of a discord.js `Client` this needs to attempt an invite DM. Structural so tests need no client. */
+export type DmClientLike = {
+  users: {
+    fetch: (discordId: string) => Promise<{
+      send: (opts: { content: string; components: ActionRowBuilder<ButtonBuilder>[] }) => Promise<unknown>;
+    }>;
+  };
+};
+
+/** The subset of the inviter's interaction needed to report a failed DM. Structural so tests need no client. */
+export type FollowUpLike = { followUp: (opts: { content: string; flags: number }) => Promise<unknown> };
+
+/**
+ * Attempts to deliver a `RosterReply.dm` — currently only ever an invite —
+ * with its accept/decline buttons attached.
+ *
+ * ⚠️ A closed DM is ordinary, not an error: the invitation is already
+ * durable in the database, and `/faction invites` is the pull route that
+ * makes it reachable. What matters is that the INVITER — not the invitee —
+ * is told, or they will wait on a friend who never saw anything. See spec
+ * §2.5.
+ */
+export async function deliverInviteDm(
+  client: DmClientLike,
+  interaction: FollowUpLike,
+  dm: NonNullable<RosterReply["dm"]>,
+): Promise<void> {
+  try {
+    const user = await client.users.fetch(dm.discordId);
+    await user.send({ content: dm.content, components: [inviteButtons(dm.inviteId)] });
+  } catch (err) {
+    console.warn("invite DM failed", err);
+    await interaction.followUp({ content: dm.onFailure, flags: MessageFlags.Ephemeral });
+  }
+}
+
 export * from "./notify.js";
 
 /**
@@ -254,6 +469,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const factionDeps: FactionDeps = {
     store: factionStore, now: () => new Date(), reservationTtlMs: cfg.reservationTtlMs,
   };
+  const rosterStore = new PgRosterStore(db);
+  const rosterDeps: RosterDeps = {
+    store: rosterStore, now: () => new Date(),
+    inviteTtlMs: cfg.inviteTtlMs, cooldownMs: cfg.cooldownMs, renameCooldownMs: cfg.renameCooldownMs,
+  };
   const ceremonyStore = new PgCeremonyStore(db);
 
   try {
@@ -291,16 +511,50 @@ export async function start(cfg: BotConfig): Promise<void> {
     await interaction.editReply({ content: plan.content, components: [row] });
   };
 
+  // `info` and `roster` are the only public roster replies (spec §6); every
+  // other roster reply is ephemeral. Fixed per subcommand, not per reply, so
+  // the defer flags can be chosen before the handler runs.
+  const PUBLIC_ROSTER_SUBCOMMANDS = new Set(["info", "roster"]);
+
+  const renderRosterReply = async (
+    interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown>; followUp: FollowUpLike["followUp"] },
+    reply: RosterReply,
+  ): Promise<void> => {
+    const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+    if (reply.prompt?.kind === "confirm-transfer") {
+      const { factionId, targetDiscordId } = reply.prompt;
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(transferCustomId(factionId, targetDiscordId))
+          .setLabel("Confirm transfer").setStyle(ButtonStyle.Danger),
+      ));
+    } else if (reply.prompt?.kind === "confirm-disband") {
+      rows.push(new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(disbandCustomId(reply.prompt.factionId))
+          .setLabel("Confirm disband").setStyle(ButtonStyle.Danger),
+      ));
+    }
+    await interaction.editReply({ content: reply.content, components: rows });
+
+    if (reply.dm) {
+      await deliverInviteDm(client, interaction, reply.dm);
+    }
+  };
+
   client.on("interactionCreate", async (interaction) => {
     if (interaction.isAutocomplete()) {
-      if (interaction.commandName === "faction" && interaction.options.getFocused(true).name === "flag") {
-        const query = interaction.options.getFocused();
+      if (interaction.commandName === "faction") {
+        const focused = interaction.options.getFocused(true);
         try {
-          await interaction.respond(flagSuggestions(query).map((f) => ({ name: f, value: f })));
+          if (focused.name === "flag") {
+            await interaction.respond(flagSuggestions(String(focused.value)).map((f) => ({ name: f, value: f })));
+          } else if (focused.name === "server") {
+            const memberships = await rosterStore.membershipsFor(interaction.user.id);
+            await interaction.respond(serverChoices(memberships));
+          }
         } catch (err) {
           // The autocomplete window is also short-lived; a dropped response
           // just means no suggestions this keystroke, not a broken command.
-          console.error("flag autocomplete failed", err);
+          console.error(`${focused.name} autocomplete failed`, err);
         }
       }
       return;
@@ -322,7 +576,57 @@ export async function start(cfg: BotConfig): Promise<void> {
               texture: interaction.options.getString("flag", true),
             });
             await renderFactionReply(interaction, reply);
+            return;
           }
+
+          // ⚠️ Every roster handler makes at least two database round trips
+          // (membershipsFor plus the write), so this defers up front for the
+          // same reason claim does — see the comment above.
+          const ephemeral = !PUBLIC_ROSTER_SUBCOMMANDS.has(sub);
+          await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
+
+          const serverId = interaction.options.getInteger("server");
+          const userId = (name: string) => interaction.options.getUser(name, true).id;
+
+          let reply: RosterReply;
+          switch (sub) {
+            case "invite":
+              reply = await handleFactionInvite(rosterDeps, interaction.user.id, { serverId, inviteeDiscordId: userId("user") });
+              break;
+            case "invites":
+              reply = await handleFactionInvites(rosterDeps, interaction.user.id);
+              break;
+            case "kick":
+              reply = await handleFactionKick(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "leave":
+              reply = await handleFactionLeave(rosterDeps, interaction.user.id, serverId);
+              break;
+            case "promote":
+              reply = await handleFactionPromote(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "demote":
+              reply = await handleFactionDemote(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "transfer":
+              reply = await handleFactionTransfer(rosterDeps, interaction.user.id, { serverId, targetDiscordId: userId("user") });
+              break;
+            case "disband":
+              reply = await handleFactionDisband(rosterDeps, interaction.user.id, serverId);
+              break;
+            case "rename":
+              reply = await handleFactionRename(rosterDeps, interaction.user.id, { serverId, name: interaction.options.getString("name", true) });
+              break;
+            case "info":
+              reply = await handleFactionInfo(rosterDeps, interaction.user.id, interaction.options.getString("name"));
+              break;
+            case "roster":
+              reply = await handleFactionRoster(rosterDeps, interaction.user.id, interaction.options.getString("name"));
+              break;
+            default:
+              return;
+          }
+          await renderRosterReply(interaction, reply);
           return;
         }
 
@@ -350,6 +654,20 @@ export async function start(cfg: BotConfig): Promise<void> {
           customId: interaction.customId,
           userId: interaction.user.id,
           values: interaction.values,
+          deferReply: (opts) => interaction.deferReply(opts),
+          editReply: (opts) => interaction.editReply(opts),
+        });
+      } catch (err) {
+        console.error(`component ${interaction.customId} failed`, err);
+      }
+      return;
+    }
+
+    if (interaction.isButton()) {
+      try {
+        await routeRosterButton(rosterDeps, {
+          customId: interaction.customId,
+          userId: interaction.user.id,
           deferReply: (opts) => interaction.deferReply(opts),
           editReply: (opts) => interaction.editReply(opts),
         });

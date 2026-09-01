@@ -6,6 +6,9 @@ export type BotConfig = {
   tickIntervalMs: number;
   challengeTtlMs: number;
   reservationTtlMs: number;
+  inviteTtlMs: number;
+  cooldownMs: number;
+  renameCooldownMs: number;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -47,5 +50,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
     challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", 600_000),
     reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", 86_400_000),
+    // 7 days — spec §6 invite lifetime.
+    inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", 604_800_000),
+    // 3 days — spec §6 kick/leave cooldown.
+    cooldownMs: positiveInt(env, "BOT_COOLDOWN_MS", 259_200_000),
+    // 7 days — spec §6 rename cooldown.
+    renameCooldownMs: positiveInt(env, "BOT_RENAME_COOLDOWN_MS", 604_800_000),
   };
 }

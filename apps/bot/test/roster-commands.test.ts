@@ -121,6 +121,7 @@ describe("handleFactionInvite", () => {
     expect(r.content).toMatch(/Invited/);
     expect(r.dm?.discordId).toBe("d9");
     expect(r.dm?.content).toMatch(/Bears/);
+    expect(r.dm?.inviteId).toBe(42);
     expect(createInvite).toHaveBeenCalledWith(expect.objectContaining({
       factionId: 1, serverId: 1, inviteeDiscordId: "d9", inviteeDayzId: "P1", invitedByDiscordId: "d1",
       at: now, expiresAt: new Date(now.getTime() + 604_800_000),
