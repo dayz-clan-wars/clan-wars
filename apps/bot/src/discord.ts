@@ -24,10 +24,21 @@ import {
 } from "./roster-commands.js";
 import { PgRosterStore, type Membership } from "./roster-store.js";
 
+// Registration (buildCommands) and reading (the interactionCreate handler)
+// live hundreds of lines apart in this file. A string literal duplicated at
+// both sites can drift silently — Discord would then hand the value under a
+// name the reader never asks for, and getString would return null for every
+// /link, invisibly. Sharing this constant makes that class of bug impossible.
+export const LINK_GAMERTAG_OPTION = "gamertag";
+
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
     new SlashCommandBuilder().setName("link")
-      .setDescription("Bind your Discord account to your in-game character"),
+      .setDescription("Bind your Discord account to your in-game character")
+      .addStringOption((o) => o.setName(LINK_GAMERTAG_OPTION)
+        .setDescription("Which character is yours")
+        .setRequired(true)
+        .setAutocomplete(true)),
     new SlashCommandBuilder().setName("unlink")
       .setDescription("Remove the binding between your Discord account and your character"),
     new SlashCommandBuilder().setName("whoami")
@@ -260,6 +271,27 @@ export function planClaimReply(reply: FactionReply): ClaimRenderPlan {
 export function flagSuggestions(query: string): string[] {
   const q = query.toLowerCase();
   return CLAIMABLE_FLAGS.filter((f) => f.toLowerCase().includes(q)).slice(0, 25);
+}
+
+/**
+ * Filters the recently-seen-and-unlinked candidate pool for the `/link`
+ * `gamertag` autocomplete, case-insensitively, capped at Discord's 25-choice
+ * limit. Pure so it is directly testable without a live autocomplete
+ * interaction.
+ *
+ * ⚠️ The choice's value is the UID (`dayzId`), not the display name: two
+ * characters can share a gamertag, and carrying the UID means the submit
+ * path never has to re-resolve a name back to a player.
+ */
+export function playerSuggestions(
+  players: { dayzId: string; gamertag: string }[],
+  query: string,
+): { name: string; value: string }[] {
+  const q = query.toLowerCase();
+  return players
+    .filter((p) => p.gamertag.toLowerCase().includes(q))
+    .slice(0, 25)
+    .map((p) => ({ name: p.gamertag, value: p.dayzId }));
 }
 
 /**
@@ -632,6 +664,16 @@ export async function start(cfg: BotConfig): Promise<void> {
           // just means no suggestions this keystroke, not a broken command.
           console.error(`${focused.name} autocomplete failed`, err);
         }
+      } else if (interaction.commandName === "link" && interaction.options.getFocused(true).name === LINK_GAMERTAG_OPTION) {
+        const focused = interaction.options.getFocused(true);
+        try {
+          const candidates = await store.recentUnlinkedPlayers(50);
+          await interaction.respond(playerSuggestions(candidates, String(focused.value)));
+        } catch (err) {
+          // Same short response window as the /faction autocompletes above:
+          // a dropped response just means no suggestions this keystroke.
+          console.error(`${focused.name} autocomplete failed`, err);
+        }
       }
       return;
     }
@@ -715,7 +757,7 @@ export async function start(cfg: BotConfig): Promise<void> {
           guildId: interaction.guildId,
           channelId: interaction.channelId,
           // Only /link declares it; getString returns null for the others.
-          targetDayzId: interaction.options.getString("character"),
+          targetDayzId: interaction.options.getString(LINK_GAMERTAG_OPTION),
         });
         if (!reply) return;
         await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });

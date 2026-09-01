@@ -2,7 +2,10 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, players, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
-import { buildCommands, routeInteraction, notifyCompleted, guardedRunner } from "../src/discord.js";
+import {
+  buildCommands, routeInteraction, notifyCompleted, guardedRunner,
+  playerSuggestions, LINK_GAMERTAG_OPTION,
+} from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
 
 const URL = requireTestDatabaseUrl();
@@ -51,6 +54,25 @@ describe("discord wiring", () => {
       ]);
     });
 
+    it("registers /link with a required autocompleting gamertag option", () => {
+      const link = buildCommands().find((c) => c.name === "link")!;
+      const opt = (link.options ?? [])[0] as any;
+      expect(opt.name).toBe("gamertag");
+      expect(opt.required).toBe(true);
+      expect(opt.autocomplete).toBe(true);
+    });
+
+    it("registers the option under the same name the router reads", () => {
+      // Regression guard for the naming split this task resolved: the
+      // registered option and interaction.options.getString(...) in start()
+      // must agree, or /link silently receives null for its target on every
+      // invocation. Both sides read LINK_GAMERTAG_OPTION, so this can only
+      // fail if the constant's registered spelling itself changes.
+      const link = buildCommands().find((c) => c.name === "link")!;
+      const opt = (link.options ?? [])[0] as any;
+      expect(opt.name).toBe(LINK_GAMERTAG_OPTION);
+    });
+
     it("gives every command a description", () => {
       // Cast: RESTPostAPIApplicationCommandsJSONBody is a union that also covers
       // context-menu and primary-entry-point commands, neither of which carries
@@ -59,6 +81,27 @@ describe("discord wiring", () => {
       for (const c of buildCommands()) {
         expect((c as { description?: string }).description?.length).toBeGreaterThan(0);
       }
+    });
+  });
+
+  describe("playerSuggestions", () => {
+    it("returns at most Discord's 25 choices", () => {
+      // ⚠️ Discord rejects an autocomplete response with more than 25 choices,
+      // and the field then shows nothing at all. The candidate POOL is 50.
+      const many = Array.from({ length: 50 }, (_, i) => ({ dayzId: `${i}`, gamertag: `P${i}` }));
+      expect(playerSuggestions(many, "")).toHaveLength(25);
+    });
+
+    it("filters case-insensitively on the typed query", () => {
+      const ps = [{ dayzId: "1", gamertag: "RonaldRaygun552" }, { dayzId: "2", gamertag: "Someone" }];
+      expect(playerSuggestions(ps, "ronald")).toEqual([{ name: "RonaldRaygun552", value: "1" }]);
+    });
+
+    it("carries the UID as the value, not the gamertag", () => {
+      // Two characters can share a display name; the UID disambiguates and
+      // means the submit path never re-resolves a name.
+      const ps = [{ dayzId: "abc", gamertag: "Twin" }, { dayzId: "def", gamertag: "Twin" }];
+      expect(playerSuggestions(ps, "twin").map((c) => c.value)).toEqual(["abc", "def"]);
     });
   });
 
