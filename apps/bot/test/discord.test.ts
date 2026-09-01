@@ -4,9 +4,10 @@ import { sql } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store.js";
 import {
   buildCommands, routeInteraction, notifyCompleted, guardedRunner,
-  playerSuggestions,
+  playerSuggestions, createNicknameApplier, type NicknameClientLike, type RealGuildLike,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
+import type { NicknameOutcome } from "../src/nickname.js";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
@@ -184,6 +185,42 @@ describe("discord wiring", () => {
       const retry = vi.fn().mockResolvedValue(undefined);
       expect(await notifyCompleted(deps, retry)).toBe(1);
     });
+
+    it("attempts the rename with the guild, discord id, and gamertag of the newly-bound link", async () => {
+      await complete("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      const renameOnLink = vi.fn().mockResolvedValue("ok" as NicknameOutcome);
+      await notifyCompleted(deps, send, undefined, renameOnLink);
+      expect(renameOnLink).toHaveBeenCalledWith("g", "100", "Steve");
+    });
+
+    it("reports a successful rename in the DM content", async () => {
+      await complete("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      const renameOnLink = vi.fn().mockResolvedValue("ok" as NicknameOutcome);
+      await notifyCompleted(deps, send, undefined, renameOnLink);
+      expect(send.mock.calls[0]?.[0]?.content).toMatch(/nickname has been set/i);
+    });
+
+    it("reports why the rename failed without failing the notification", async () => {
+      await complete("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      const renameOnLink = vi.fn().mockResolvedValue("outranked" as NicknameOutcome);
+      expect(await notifyCompleted(deps, send, undefined, renameOnLink)).toBe(1);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).toMatch(/verified/i);
+      expect(content).toMatch(/role is below yours/i);
+    });
+
+    it("still notifies and marks the challenge notified when no renamer is supplied", async () => {
+      // The default is a stand-in for "no Discord client wired" (unit tests
+      // of the notifier itself); the link and the notification must not
+      // depend on it.
+      await complete("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      expect(await store.pendingNotifications()).toHaveLength(0);
+    });
   });
 
   describe("notify failure logging", () => {
@@ -268,6 +305,62 @@ describe("discord wiring", () => {
       expect(runner.inFlight()).not.toBeNull();
       resolve();
       await runner.inFlight();
+    });
+  });
+
+  describe("createNicknameApplier", () => {
+    function fakeClient(guild: RealGuildLike | Error): NicknameClientLike {
+      return {
+        guilds: {
+          fetch: async () => {
+            if (guild instanceof Error) throw guild;
+            return guild;
+          },
+        },
+      };
+    }
+
+    it("renames through the adapted guild when permitted", async () => {
+      const setNickname = vi.fn().mockResolvedValue(undefined);
+      const client = fakeClient({
+        ownerId: "owner",
+        members: {
+          fetch: async () => ({ manageable: true, setNickname }),
+          me: { permissions: { has: () => true } },
+        },
+      });
+      const outcome = await createNicknameApplier(client)("g", "u1", "Ronald");
+      expect(outcome).toBe("ok");
+      expect(setNickname).toHaveBeenCalledWith("Ronald");
+    });
+
+    it("reports no-permission via the real guild's members.me permission check", async () => {
+      const client = fakeClient({
+        ownerId: "owner",
+        members: {
+          fetch: async () => ({ manageable: true, setNickname: vi.fn() }),
+          me: { permissions: { has: () => false } },
+        },
+      });
+      expect(await createNicknameApplier(client)("g", "u1", "Ronald")).toBe("no-permission");
+    });
+
+    it("treats an absent members.me the same as lacking the permission", async () => {
+      // A real discord.js `members.me` can be null before the client has
+      // cached its own member for the guild; that must read as "cannot
+      // rename yet", not throw.
+      const client = fakeClient({
+        ownerId: "owner",
+        members: { fetch: async () => ({ manageable: true, setNickname: vi.fn() }), me: null },
+      });
+      expect(await createNicknameApplier(client)("g", "u1", "Ronald")).toBe("no-permission");
+    });
+
+    it("reports failed, without throwing, when the guild itself cannot be fetched", async () => {
+      const client = fakeClient(new Error("unknown guild"));
+      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(await createNicknameApplier(client)("g", "u1", "Ronald")).toBe("failed");
+      warned.mockRestore();
     });
   });
 });

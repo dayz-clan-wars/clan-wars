@@ -39,7 +39,7 @@ BOT_RENAME_COOLDOWN_MS=604800000
 1. Go to the [Discord Developer Portal](https://discord.com/developers/applications) and create a new application.
 2. Under **Bot**, add a bot user and copy its token into `DISCORD_TOKEN`. Under **General Information**, copy the application (client) ID into `DISCORD_APPLICATION_ID`.
 3. Under **OAuth2 → URL Generator**, select both the `bot` and `applications.commands` scopes. The `bot` scope is what lets the bot join a server and send messages/DMs; `applications.commands` is what lets it register and respond to slash commands.
-4. Under **Bot Permissions**, at minimum select "Send Messages" (used for the notification fallback when a player's DMs are closed).
+4. Under **Bot Permissions**, at minimum select "Send Messages" (used for the notification fallback when a player's DMs are closed) and "Manage Nicknames" (used to set a player's server nickname to their gamertag once `/link` verifies — not needed for linking itself, only for the rename, so linking still works if this is left off, just without the nickname change). Discord will never let a bot rename the server owner, no matter what permission it holds; that rename attempt always fails, and it's reported to the player as such.
 5. Open the generated URL, pick the target server, and authorize. Copy that server's ID into `DISCORD_GUILD_ID`.
 
 ## Command registration is per-guild, not global

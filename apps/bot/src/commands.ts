@@ -14,6 +14,13 @@ export type CommandDeps = {
   rng: () => number;
   now: () => Date;
   challengeTtlMs: number;
+  /**
+   * Best-effort, silent nickname clear for `/unlink`. Optional so tests that
+   * don't care about Discord renames can omit it; when present it is never
+   * allowed to make an otherwise-successful unlink report an error — the
+   * unlink itself has already committed by the time this runs.
+   */
+  clearNickname?: (guildId: string, discordId: string) => Promise<void>;
 };
 
 /**
@@ -182,7 +189,7 @@ async function nameOf(deps: CommandDeps, dayzId: string): Promise<string> {
  * succession mechanic exists to prevent, reachable in one command with no
  * confirmation.
  */
-export async function handleUnlink(deps: CommandDeps, discordId: string): Promise<Reply> {
+export async function handleUnlink(deps: CommandDeps, discordId: string, guildId: string): Promise<Reply> {
   const memberships = await deps.store.factionMembershipsFor(discordId);
   const leading = memberships.find((m) => m.role === "leader");
   if (leading) {
@@ -197,6 +204,16 @@ export async function handleUnlink(deps: CommandDeps, discordId: string): Promis
   }
 
   const removed = await deps.store.deleteLinkByDiscord(discordId);
+  if (removed && deps.clearNickname) {
+    // Best-effort and silent: the unlink already committed, and a Discord
+    // hiccup (or a permission the bot never had) must not turn a successful
+    // unlink into a reported error.
+    try {
+      await deps.clearNickname(guildId, discordId);
+    } catch (err) {
+      console.warn(`nickname clear failed for ${discordId}`, err);
+    }
+  }
   return ephemeral(
     removed
       ? "Unlinked. Run `/link` to bind a character again."

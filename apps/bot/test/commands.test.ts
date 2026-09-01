@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, players, verificationChallenges,
@@ -233,14 +233,14 @@ describe("commands", () => {
 
   describe("handleUnlink", () => {
     it("reports when there was nothing to unlink", async () => {
-      expect((await handleUnlink(deps, "100")).content).toMatch(/not linked/i);
+      expect((await handleUnlink(deps, "100", "g")).content).toMatch(/not linked/i);
     });
 
     it("removes an existing link", async () => {
       const c = await store.createChallenge({ ...CTX, sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
-      expect((await handleUnlink(deps, "100")).content).toMatch(/unlinked/i);
+      expect((await handleUnlink(deps, "100", "g")).content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("100")).toBeNull();
     });
 
@@ -250,7 +250,7 @@ describe("commands", () => {
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d1");
+      const r = await handleUnlink(deps, "d1", "g");
       expect(r.content).toMatch(/transfer/i);
       expect(r.content).toMatch(/Bears/);
       expect(await store.findLinkByDiscord("d1")).not.toBeNull();
@@ -262,7 +262,7 @@ describe("commands", () => {
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d2");
+      const r = await handleUnlink(deps, "d2", "g");
       expect(r.content).toMatch(/faction/i);
       expect(r.content).toMatch(/Wolves/);
       expect(await store.findLinkByDiscord("d2")).not.toBeNull();
@@ -273,9 +273,51 @@ describe("commands", () => {
       expect(c).not.toBeNull();
       await store.completeChallenge(c!.id, UID_A, "Steve", now);
 
-      const r = await handleUnlink(deps, "d3");
+      const r = await handleUnlink(deps, "d3", "g");
       expect(r.content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("d3")).toBeNull();
+    });
+
+    it("clears the nickname after a successful unlink", async () => {
+      const c = await store.createChallenge({ ...CTX, discordId: "d4", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "d4", "g");
+      expect(clearNickname).toHaveBeenCalledWith("g", "d4");
+    });
+
+    it("does not touch the nickname when there was nothing to unlink", async () => {
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "100", "g");
+      expect(clearNickname).not.toHaveBeenCalled();
+    });
+
+    it("does not touch the nickname when the unlink is refused for a faction leader", async () => {
+      await seedMembership("d5", "leader", "Eagles");
+      const c = await store.createChallenge({ ...CTX, discordId: "d5", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockResolvedValue(undefined);
+      await handleUnlink({ ...deps, clearNickname }, "d5", "g");
+      expect(clearNickname).not.toHaveBeenCalled();
+    });
+
+    it("still reports success when the nickname clear fails", async () => {
+      // The unlink already committed by the time this runs — a Discord
+      // hiccup here must not turn a successful unlink into a reported error.
+      const c = await store.createChallenge({ ...CTX, discordId: "d6", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+
+      const clearNickname = vi.fn().mockRejectedValue(new Error("boom"));
+      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+      const r = await handleUnlink({ ...deps, clearNickname }, "d6", "g");
+      expect(r.content).toMatch(/unlinked/i);
+      expect(await store.findLinkByDiscord("d6")).toBeNull();
+      warned.mockRestore();
     });
   });
 

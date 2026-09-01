@@ -1,5 +1,5 @@
 import {
-  Client, GatewayIntentBits, REST, Routes, MessageFlags,
+  Client, GatewayIntentBits, REST, Routes, MessageFlags, PermissionFlagsBits,
   SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
@@ -10,6 +10,7 @@ import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
 import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
+import { applyNickname, type NicknameOutcome, type GuildLike } from "./nickname.js";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps, type FactionReply } from "./faction-commands.js";
 import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
@@ -163,7 +164,7 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
     }
     return handleLink(deps, { ...ctx, targetDayzId: i.targetDayzId });
   }
-  if (i.commandName === "unlink") return handleUnlink(deps, i.userId);
+  if (i.commandName === "unlink") return handleUnlink(deps, i.userId, i.guildId);
   return handleWhoami(deps, i.userId);
 }
 
@@ -506,25 +507,64 @@ export async function deliverInviteDm(
 
 export * from "./notify.js";
 
+/** Injected into `notifyCompleted` so tests need no discord.js client. */
+export type NicknameApplier = (
+  guildId: string, discordId: string, nickname: string | null,
+) => Promise<NicknameOutcome>;
+
+/**
+ * Player-facing sentence for how the rename went. The link itself is never in
+ * question here — this only ever runs after `completeChallenge` has already
+ * committed the binding — so every branch leads with that being settled.
+ */
+function nicknameOutcomeSuffix(outcome: NicknameOutcome): string {
+  switch (outcome) {
+    case "ok":
+      return " Your nickname has been set to match.";
+    case "is-owner":
+      return " Your nickname could not be changed: Discord will not let a bot rename the server owner.";
+    case "outranked":
+      return " Your nickname could not be changed: the bot's role is below yours, so an admin needs to move it above.";
+    case "no-permission":
+      return " Your nickname could not be changed: the bot does not have the Manage Nicknames permission.";
+    case "failed":
+      return " Your nickname could not be changed right now.";
+  }
+}
+
 /**
  * Tell each newly verified player, exactly once.
  *
  * `markNotified` runs only after `send` resolves. A send that throws — closed
  * DMs, a deleted channel, a rate limit — leaves the row pending so the next
  * pass retries, rather than marking it done and dropping the message.
+ *
+ * ⚠️ The rename is attempted here, strictly AFTER the identity link (this
+ * only ever runs for challenges `completeChallenge` has already committed).
+ * A rename failure is reported in the DM, never allowed to withhold, delay,
+ * or roll back the link — `applyNickname` cannot throw, so nothing here can
+ * either.
  */
 export async function notifyCompleted(
   deps: CommandDeps,
   send: Sender,
   loggedFailures: NotifyFailureLog = createNotifyFailureLog(),
+  renameOnLink: NicknameApplier = async () => "failed",
 ): Promise<number> {
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
     try {
+      // The link is already committed by the time a challenge appears here,
+      // so this lookup exists only to get the gamertag to rename to — it is
+      // not a gate on anything.
+      const link = await deps.store.findLinkByDiscord(c.discordId);
+      const outcome: NicknameOutcome = link
+        ? await renameOnLink(c.guildId, c.discordId, link.gamertag)
+        : "failed";
       await send({
         discordId: c.discordId,
         channelId: c.channelId,
-        content: "Verified — your Discord account is now linked to your character.",
+        content: "Verified — your Discord account is now linked to your character." + nicknameOutcomeSuffix(outcome),
       });
       await deps.store.markNotified(c.id, deps.now());
       // A challenge that got through stops being a candidate for suppression:
@@ -540,6 +580,42 @@ export async function notifyCompleted(
     }
   }
   return sent;
+}
+
+/** The subset of a discord.js `Client` a `NicknameApplier` needs. Structural so tests need no real client. */
+export type NicknameClientLike = { guilds: { fetch(guildId: string): Promise<RealGuildLike> } };
+/** discord.js's `Guild` has all of this; kept minimal here so the adapter stays honest about what it uses. */
+export type RealGuildLike = {
+  ownerId: string;
+  members: {
+    fetch(userId: string): Promise<{ manageable: boolean; setNickname(nick: string | null): Promise<unknown> }>;
+    me: { permissions: { has(perm: bigint): boolean } } | null;
+  };
+};
+
+/**
+ * Adapts a real discord.js `Client` to the `NicknameApplier` shape
+ * `notifyCompleted` and `handleUnlink`'s `clearNickname` both take. This is
+ * the ONLY place real discord.js types meet `nickname.ts`'s structural
+ * `GuildLike` — everything else stays client-free for testing.
+ */
+export function createNicknameApplier(client: NicknameClientLike): NicknameApplier {
+  return async (guildId, discordId, nickname) => {
+    let guild: RealGuildLike;
+    try {
+      guild = await client.guilds.fetch(guildId);
+    } catch (err) {
+      console.warn(`nickname change failed — could not fetch guild ${guildId}`, err);
+      return "failed";
+    }
+    const guildLike: GuildLike = {
+      ownerId: guild.ownerId,
+      members: { fetch: (userId) => guild.members.fetch(userId) },
+      members_me_permissions_has: () =>
+        guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames) ?? false,
+    };
+    return applyNickname(guildLike, discordId, nickname);
+  };
 }
 
 /**
@@ -587,9 +663,6 @@ export function guardedRunner(job: () => Promise<void>): {
 export async function start(cfg: BotConfig): Promise<void> {
   const db = createClient(cfg.databaseUrl);
   const store = new PgVerificationStore(db);
-  const deps: CommandDeps = {
-    store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
-  };
   const factionStore = new PgFactionStore(db);
   const factionDeps: FactionDeps = {
     store: factionStore, now: () => new Date(), reservationTtlMs: cfg.reservationTtlMs,
@@ -617,6 +690,14 @@ export async function start(cfg: BotConfig): Promise<void> {
   }
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+
+  // Fetching one member and patching a nickname are plain REST calls — this
+  // needs no gateway intent beyond the `Guilds` one already requested above.
+  const renameOnLink = createNicknameApplier(client);
+  const deps: CommandDeps = {
+    store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
+    clearNickname: (guildId, discordId) => renameOnLink(guildId, discordId, null).then(() => undefined),
+  };
 
   const renderFactionReply = async (
     interaction: { editReply: (opts: InteractionEditReplyOptions) => Promise<unknown> },
@@ -838,7 +919,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (r.verified > 0 || r.alreadyLinked > 0) {
         console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
       }
-      await notifyCompleted(deps, send, notifyFailures);
+      await notifyCompleted(deps, send, notifyFailures, renameOnLink);
     } catch (err) {
       // A thrown tick must not kill the interval and silently stop all verification.
       console.error("tick failed", err);
