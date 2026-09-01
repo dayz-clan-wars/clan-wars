@@ -76,9 +76,14 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   // ⚠️ Re-validating the autocomplete choice. Autocomplete is a suggestion,
   // not a constraint — Discord submits whatever the user typed — so both the
   // "unknown" and the "already taken" checks below have to exist server-side.
-  // They are a friendlier refusal, not the enforcement: players.dayz_id is a
-  // foreign key and identity_links.dayz_id is unique, and those constraints
-  // remain the real guarantee behind a lost race.
+  // They are a friendlier refusal, not the enforcement. The real guarantees
+  // behind a lost race are two database constraints:
+  // `verification_challenges_open_target_uniq` (one open challenge per
+  // character, whoever issued it) and `identity_links_dayz_uniq` (one link per
+  // character). There is deliberately NO foreign key from
+  // verification_challenges.target_dayz_id to players.dayz_id — the column is
+  // bare `text NOT NULL` — so an unknown UID reaching the insert is refused by
+  // nothing at all, and the lookup above is the only thing standing there.
   const target = await deps.store.playerByDayzId(ctx.targetDayzId);
   if (!target) {
     return ephemeral(
