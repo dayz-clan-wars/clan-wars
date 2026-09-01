@@ -108,11 +108,18 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
     }
   }
 
+  // ADM filenames encode their creation time, so the same filename always
+  // means the same file. The cursor must therefore be monotonic: never write
+  // a value lower than what's stored, or a truncated/partial re-download
+  // (fewer lines than last time) would move the resume point backwards and
+  // cause already-ingested lines to be reprocessed under this row's id.
+  const newLinesIngested = Math.max(total, existing.linesIngested);
+
   await db.update(admFiles)
-    .set({ linesIngested: total, complete: opts.markComplete, path: opts.path ?? existing.path })
+    .set({ linesIngested: newLinesIngested, complete: opts.markComplete, path: opts.path ?? existing.path })
     .where(eq(admFiles.id, admFileId));
 
-  return { linesCaptured, eventsAppended, unparsedFlagLines, linesIngested: total };
+  return { linesCaptured, eventsAppended, unparsedFlagLines, linesIngested: newLinesIngested };
 }
 
 /** Flatten a ParsedLine into the jsonb payload shape the projector reads. */
