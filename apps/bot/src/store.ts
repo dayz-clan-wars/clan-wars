@@ -4,9 +4,7 @@ import { and, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-
 import { HOLDING_STATUSES } from "@factions/domain";
 import type { Role } from "./roster-store.js";
 
-/** Statuses under which a faction still holds its flag and roster — mirrors
- * `PgRosterStore`'s HOLDING, kept separate because this store owns no
- * roster concept of its own beyond this one gate. */
+/** Statuses under which a faction still holds its flag and roster. */
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
 // but drizzle's inArray() requires a plain mutable array.
