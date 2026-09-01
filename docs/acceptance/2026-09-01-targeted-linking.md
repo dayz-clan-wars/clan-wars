@@ -103,7 +103,9 @@ which is the ordering the design requires.
 2. **Migrating ahead of the running process.** `factions_live` was migrated while the
    bot still ran pre-migration code, so `handleLink` inserted a null `target_dayz_id`
    against a NOT NULL column and Discord showed "The application did not respond" twice.
-   No data damage; both inserts rolled back. Correct order is restart-then-migrate.
+   No data damage; both inserts rolled back. The correct order is stop -> migrate ->
+   start: both old-code-on-new-schema and new-code-on-old-schema break, so the
+   migration is a downtime window rather than a rolling restart.
 3. **A duplicate completion DM**, caused by two bot processes surviving a `pkill` whose
    pattern missed the expanded tsx command line. Not a code defect, but it exposed a
    real constraint now recorded as inbox item 22: `notifyCompleted` sends before it

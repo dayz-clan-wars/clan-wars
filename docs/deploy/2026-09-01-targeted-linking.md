@@ -19,10 +19,24 @@ null `target_dayz_id` against the new NOT NULL column and Discord showed "The
 application did not respond" to a real user, twice. No data damage — both
 inserts rolled back — but the window is player-visible.
 
-Restart-then-migrate, or take the bot down for the migration window. Either
-way, confirm the old process is actually gone: the duplicate-DM incident below
+**STOP the bot, migrate, then START it on the new code.** There is no ordering
+in which old and new code may run against the same database, because BOTH
+directions break:
+
+- old code + new schema — `handleLink` inserts a null `target_dayz_id` against
+  a NOT NULL column (this is the incident above);
+- new code + old schema — `cancelChallenge` always sets `cancel_reason` and
+  `pendingNotifications` selects it, so every cancel and every notifier tick
+  throws `column does not exist` until `0013` lands.
+
+So the migration window is a real downtime window, not a rolling restart. Do
+not phrase this to yourself as "restart and migrate" — that reads as either
+order and one of them is the incident above.
+
+Then confirm the old process is actually gone: the duplicate-DM incident below
 was caused by a `pkill` pattern that did not match the expanded `tsx` command
-line, leaving a stale bot alive.
+line, leaving a stale bot alive. Match on `src/main.ts`, and count the
+survivors before starting anything.
 
 ## 2. Only ONE bot instance may run
 
