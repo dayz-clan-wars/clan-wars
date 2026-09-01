@@ -513,12 +513,24 @@ export type NicknameApplier = (
 ) => Promise<NicknameOutcome>;
 
 /**
+ * `NicknameOutcome` plus one case that belongs only to the caller: no rename
+ * was even attempted, either because no `NicknameApplier` was wired (a unit
+ * test of the notifier itself, or a bot instance with no Discord client) or
+ * because there was no link to read a gamertag from. Distinct from "failed"
+ * — that means an attempt was made and Discord refused or errored — so the
+ * DM doesn't tell a player something failed when nothing was tried.
+ */
+export type RenameOutcome = NicknameOutcome | "not-attempted";
+
+/**
  * Player-facing sentence for how the rename went. The link itself is never in
  * question here — this only ever runs after `completeChallenge` has already
  * committed the binding — so every branch leads with that being settled.
  */
-function nicknameOutcomeSuffix(outcome: NicknameOutcome): string {
+function nicknameOutcomeSuffix(outcome: RenameOutcome): string {
   switch (outcome) {
+    case "not-attempted":
+      return "";
     case "ok":
       return " Your nickname has been set to match.";
     case "is-owner":
@@ -541,26 +553,37 @@ function nicknameOutcomeSuffix(outcome: NicknameOutcome): string {
  *
  * ⚠️ The rename is attempted here, strictly AFTER the identity link (this
  * only ever runs for challenges `completeChallenge` has already committed).
- * A rename failure is reported in the DM, never allowed to withhold, delay,
- * or roll back the link — `applyNickname` cannot throw, so nothing here can
- * either.
+ * It is wrapped in its OWN try/catch, separate from the `send`/`markNotified`
+ * one below: `renameOnLink` calls into a real discord.js permission
+ * predicate and guild fetch, which — unlike `applyNickname` itself — are not
+ * guaranteed not to throw (a partially-cached `Guild`, for instance). If that
+ * escaped into the outer catch, it would land exactly where a failed `send`
+ * lands: no DM delivered, the row left pending, retried forever — silently
+ * losing the notification over something that was only ever supposed to be
+ * best-effort.
  */
 export async function notifyCompleted(
   deps: CommandDeps,
   send: Sender,
   loggedFailures: NotifyFailureLog = createNotifyFailureLog(),
-  renameOnLink: NicknameApplier = async () => "failed",
+  renameOnLink?: NicknameApplier,
 ): Promise<number> {
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
     try {
-      // The link is already committed by the time a challenge appears here,
-      // so this lookup exists only to get the gamertag to rename to — it is
-      // not a gate on anything.
-      const link = await deps.store.findLinkByDiscord(c.discordId);
-      const outcome: NicknameOutcome = link
-        ? await renameOnLink(c.guildId, c.discordId, link.gamertag)
-        : "failed";
+      let outcome: RenameOutcome = "not-attempted";
+      if (renameOnLink) {
+        try {
+          // The link is already committed by the time a challenge appears
+          // here, so this lookup exists only to get the gamertag to rename
+          // to — it is not a gate on anything.
+          const link = await deps.store.findLinkByDiscord(c.discordId);
+          if (link) outcome = await renameOnLink(c.guildId, c.discordId, link.gamertag);
+        } catch (err) {
+          console.warn(`nickname lookup/rename failed for ${c.discordId}`, err);
+          outcome = "failed";
+        }
+      }
       await send({
         discordId: c.discordId,
         channelId: c.channelId,

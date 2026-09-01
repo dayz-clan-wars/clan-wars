@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, players, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
+import { PermissionFlagsBits } from "discord.js";
 import { PgVerificationStore } from "../src/store.js";
 import {
   buildCommands, routeInteraction, notifyCompleted, guardedRunner,
@@ -212,13 +213,36 @@ describe("discord wiring", () => {
       expect(content).toMatch(/role is below yours/i);
     });
 
-    it("still notifies and marks the challenge notified when no renamer is supplied", async () => {
-      // The default is a stand-in for "no Discord client wired" (unit tests
-      // of the notifier itself); the link and the notification must not
-      // depend on it.
+    it("still sends the DM and marks the challenge notified when the renamer throws", async () => {
+      // Regression guard: `renameOnLink` calls into a real discord.js
+      // permission predicate and guild fetch, neither of which is guaranteed
+      // not to throw (e.g. a not-yet-cached Guild). That throw must be caught
+      // in its OWN try/catch, separate from the one guarding `send` and
+      // `markNotified` below — if it escaped into that outer catch, this
+      // would behave exactly like a failed `send`: no DM, challenge stays
+      // pending, retried forever. It must not: the rename is best-effort,
+      // the notification is not.
+      await complete("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      const renameOnLink = vi.fn().mockRejectedValue(new Error("permission predicate exploded"));
+      const warned = vi.spyOn(console, "warn").mockImplementation(() => {});
+      expect(await notifyCompleted(deps, send, undefined, renameOnLink)).toBe(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(send.mock.calls[0]?.[0]?.content).toMatch(/could not be changed right now/i);
+      expect(await store.pendingNotifications()).toHaveLength(0);
+      expect(warned).toHaveBeenCalled();
+      warned.mockRestore();
+    });
+
+    it("attempts no rename, and says nothing about a nickname, when no renamer is supplied", async () => {
+      // No default stand-in function: an unsupplied renamer means "not
+      // attempted", which is a different message than "attempted and
+      // failed" — a player told a rename failed when none was tried would
+      // be misled about what to do next.
       await complete("100", UID_A);
       const send = vi.fn().mockResolvedValue(undefined);
       expect(await notifyCompleted(deps, send)).toBe(1);
+      expect(send.mock.calls[0]?.[0]?.content).not.toMatch(/nickname/i);
       expect(await store.pendingNotifications()).toHaveLength(0);
     });
   });
@@ -322,27 +346,34 @@ describe("discord wiring", () => {
 
     it("renames through the adapted guild when permitted", async () => {
       const setNickname = vi.fn().mockResolvedValue(undefined);
+      const has = vi.fn(() => true);
       const client = fakeClient({
         ownerId: "owner",
         members: {
           fetch: async () => ({ manageable: true, setNickname }),
-          me: { permissions: { has: () => true } },
+          me: { permissions: { has } },
         },
       });
       const outcome = await createNicknameApplier(client)("g", "u1", "Ronald");
       expect(outcome).toBe("ok");
       expect(setNickname).toHaveBeenCalledWith("Ronald");
+      // Guards against plumbing the wrong permission flag through the
+      // adapter — a fake that ignores its argument would pass this test
+      // regardless of which flag (or none) was actually checked.
+      expect(has).toHaveBeenCalledWith(PermissionFlagsBits.ManageNicknames);
     });
 
     it("reports no-permission via the real guild's members.me permission check", async () => {
+      const has = vi.fn(() => false);
       const client = fakeClient({
         ownerId: "owner",
         members: {
           fetch: async () => ({ manageable: true, setNickname: vi.fn() }),
-          me: { permissions: { has: () => false } },
+          me: { permissions: { has } },
         },
       });
       expect(await createNicknameApplier(client)("g", "u1", "Ronald")).toBe("no-permission");
+      expect(has).toHaveBeenCalledWith(PermissionFlagsBits.ManageNicknames);
     });
 
     it("treats an absent members.me the same as lacking the permission", async () => {
