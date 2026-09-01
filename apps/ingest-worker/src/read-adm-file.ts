@@ -1,17 +1,16 @@
 import { readFile } from "node:fs/promises";
-import { parseBootHeader } from "@factions/adm-parser";
+import { parseAdmContent } from "./parse-adm-content.js";
 
 /**
- * Reads one .ADM file. The boot header names the file's start instant; without it
- * no line in the file can be given an absolute timestamp, so the file is rejected.
+ * Reads one .ADM file from disk. Parsing lives in `parseAdmContent` so the
+ * Nitrado path, which already holds the text, shares one implementation.
  */
 export async function readAdmFile(path: string): Promise<{ bootAt: Date; lines: string[] }> {
-  const text = await readFile(path, "utf8");
-  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-
-  for (const line of lines) {
-    const boot = parseBootHeader(line);
-    if (boot) return { bootAt: boot, lines };
+  try {
+    return parseAdmContent(await readFile(path, "utf8"));
+  } catch (err) {
+    // Keep the filename in the message; a bare "no header" is useless when
+    // replaying a directory of 1,026 files.
+    throw new Error(`${(err as Error).message} in ${path}`);
   }
-  throw new Error(`No "AdminLog started on" header found in ${path}`);
 }
