@@ -6,6 +6,8 @@ type FakeGuildOptions = {
   manageable?: boolean;
   hasPermission?: boolean;
   throws?: Error;
+  /** Make the permission predicate itself throw — see the test below. */
+  permissionThrows?: Error;
 };
 
 function fakeGuild(opts: FakeGuildOptions = {}): GuildLike & { calls: [string, string | null][] } {
@@ -14,6 +16,7 @@ function fakeGuild(opts: FakeGuildOptions = {}): GuildLike & { calls: [string, s
     manageable = true,
     hasPermission = true,
     throws,
+    permissionThrows,
   } = opts;
   const calls: [string, string | null][] = [];
   return {
@@ -36,11 +39,47 @@ function fakeGuild(opts: FakeGuildOptions = {}): GuildLike & { calls: [string, s
         };
       },
     },
-    members_me_permissions_has: () => hasPermission,
+    members_me_permissions_has: () => {
+      if (permissionThrows) throw permissionThrows;
+      return hasPermission;
+    },
   };
 }
 
 describe("applyNickname", () => {
+  it("returns failed when the PERMISSION PREDICATE itself throws", async () => {
+    // ⚠️ Regression guard for a real defect: the owner comparison and this
+    // predicate once sat OUTSIDE the try. In production the predicate is
+    // `guild.members.me?.permissions.has(...)`, so a throw there escaped
+    // applyNickname, escaped the adapter, and landed in notifyCompleted's
+    // catch BEFORE send and markNotified — no DM, the row stayed pending,
+    // and it retried on every tick forever. Move those checks back outside
+    // the try and this test goes red.
+    const guild = fakeGuild({ permissionThrows: new Error("permissions unavailable") });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await applyNickname(guild, "u1", "Ronald")).toBe("failed");
+      expect(warn).toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("returns failed when reading the guild owner throws", async () => {
+    // Same hazard on the other predicate: `ownerId` can throw on a partial
+    // or uncached Guild.
+    const guild = fakeGuild();
+    Object.defineProperty(guild, "ownerId", {
+      get() { throw new Error("guild not cached"); },
+    });
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      expect(await applyNickname(guild, "u1", "Ronald")).toBe("failed");
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
   it("sets the nickname to the gamertag", async () => {
     const guild = fakeGuild();
     expect(await applyNickname(guild, "u1", "Ronald")).toBe("ok");
