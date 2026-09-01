@@ -2,8 +2,8 @@
 export type AdmFileRef = {
   path: string;
   name: string;
-  /** Parsed from the filename, which carries SERVER-LOCAL time. Null when unparseable. */
-  localTimestampMs: number | null;
+  /** Parsed from the filename, which carries SERVER-LOCAL time. Unparseable files are dropped to preserve oldest-first ordering invariant. */
+  localTimestampMs: number;
   /** Nitrado's own mtime, in UTC ms. 0 when the API omitted it — see the derivation guard. */
   modifiedAtMs: number;
 };
@@ -49,11 +49,19 @@ export class NitradoClient {
     );
     const entries: any[] = listing?.data?.entries ?? [];
     const files: AdmFileRef[] = entries
-      .filter((e) => typeof e.name === "string" && e.name.endsWith(".ADM") && e.path)
+      .filter((e) => {
+        if (!(typeof e.name === "string" && e.name.endsWith(".ADM") && e.path)) return false;
+        const ts = this.parseFilenameTs(e.name);
+        if (ts === null) {
+          console.warn(`Nitrado: dropping ADM file with unparseable name: ${e.name}`);
+          return false;
+        }
+        return true;
+      })
       .map((e) => ({
         path: e.path as string,
         name: e.name as string,
-        localTimestampMs: this.parseFilenameTs(e.name),
+        localTimestampMs: this.parseFilenameTs(e.name)!,
         // ⚠️ Faithfully report a missing mtime as 0. The derivation EXCLUDES
         // zeros; silently substituting "now" here would corrupt the offset.
         modifiedAtMs: (e.modified_at ?? 0) * 1000,
@@ -61,7 +69,7 @@ export class NitradoClient {
 
     // Oldest-first. Ordering is load-bearing: the tick backfills in this order
     // and a file's timestamps depend on every file before it.
-    files.sort((a, b) => (a.localTimestampMs ?? 0) - (b.localTimestampMs ?? 0));
+    files.sort((a, b) => a.localTimestampMs - b.localTimestampMs);
     return files;
   }
 

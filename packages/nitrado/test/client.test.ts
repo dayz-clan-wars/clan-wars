@@ -61,13 +61,21 @@ describe("NitradoClient.listAdmFiles", () => {
     expect(f?.modifiedAtMs).toBe(0);
   });
 
-  it("reports an unparseable filename as a null local timestamp", async () => {
+  it("drops files with unparseable filenames, preserving oldest-first ordering invariant", async () => {
+    // Unparseable filenames (ones not matching the naming regex) are dropped,
+    // not kept with a null timestamp. A null would coerce to 0 in sorting,
+    // placing it at the front ahead of genuinely old files and violating
+    // the oldest-first ordering that the ingest tick depends on.
     const fetchFn = fakeFetch({
-      "/file_server/list": listing([{ name: "weird.ADM", path: "/w.ADM", modified_at: 100 }]),
+      "/file_server/list": listing([
+        { name: "DayZServer_X1_x64_2026-07-23_01-00-00.ADM", path: "/b.ADM", modified_at: 200 },
+        { name: "weird.ADM", path: "/w.ADM", modified_at: 100 },
+        { name: "DayZServer_X1_x64_2026-07-22_01-00-00.ADM", path: "/a.ADM", modified_at: 100 },
+      ]),
       "/gameservers": GS,
     });
-    const [f] = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).listAdmFiles();
-    expect(f?.localTimestampMs).toBeNull();
+    const files = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).listAdmFiles();
+    expect(files.map((f) => f.path)).toEqual(["/a.ADM", "/b.ADM"]);
   });
 
   it("throws when the gameserver path cannot be resolved", async () => {
