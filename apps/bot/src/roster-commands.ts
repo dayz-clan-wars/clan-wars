@@ -277,3 +277,72 @@ export async function handleFactionTransfer(
     prompt: { kind: "confirm-transfer", factionId: membership.factionId, targetDiscordId: input.targetDiscordId },
   };
 }
+
+/**
+ * Never calls the store, for the same reason as `handleFactionTransfer`:
+ * disbanding is irreversible, so it needs confirmation before it happens.
+ * The store call happens on the button, in Task 9's routing.
+ */
+export async function handleFactionDisband(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  serverId: number | null,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  if (membership.role !== "leader") {
+    return reply("Only the leader can disband the faction.");
+  }
+
+  return {
+    content: `Disband **${membership.factionName}**? This releases its flag, tag and pole and cannot be undone.`,
+    ephemeral: true,
+    prompt: { kind: "confirm-disband", factionId: membership.factionId },
+  };
+}
+
+export type RenameInput = { serverId: number | null; name: string };
+
+/**
+ * Control characters (`\p{Cc}` — things like NUL and other non-printables —
+ * and `\p{Cf}` — format characters such as zero-width joiners and
+ * bidi-override marks that can visually spoof other text) are rejected
+ * because §10 derives channel names from the tag or id, never the raw
+ * faction name — this validation exists to keep the *displayed* name sane,
+ * not to protect a channel name that never touches it.
+ */
+const CONTROL_CHARS = /[\p{Cc}\p{Cf}]/u;
+
+export async function handleFactionRename(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  input: RenameInput,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), input.serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  const name = input.name.trim();
+  if (name.length < 3 || name.length > 64) {
+    return reply("Faction names must be 3-64 characters.");
+  }
+  if (CONTROL_CHARS.test(name)) {
+    return reply("Faction names can't contain control characters.");
+  }
+
+  const at = deps.now();
+  const outcome = await deps.store.rename({
+    factionId: membership.factionId,
+    discordId: actorDiscordId,
+    name,
+    at,
+    notBefore: new Date(at.getTime() - deps.renameCooldownMs),
+  });
+
+  if (outcome === "not-leader") return reply("Only the leader can rename the faction.");
+  if (outcome === "cooldown") return reply("Your faction was renamed too recently — try again later.");
+
+  return reply(`Your faction is now named **${name}**.`);
+}

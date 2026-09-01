@@ -4,6 +4,7 @@ import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave,
   handleFactionPromote, handleFactionDemote, handleFactionTransfer,
+  handleFactionDisband, handleFactionRename,
   type RosterDeps,
 } from "../src/roster-commands.js";
 
@@ -375,5 +376,82 @@ describe("handleFactionTransfer", () => {
     const r = await handleFactionTransfer(d, "d1", { serverId: null, targetDiscordId: "d9" });
     expect(r.prompt).toEqual({ kind: "confirm-transfer", factionId: 1, targetDiscordId: "d9" });
     expect(r.ephemeral).toBe(true);
+  });
+});
+
+describe("handleFactionDisband", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionDisband(d, "d1", null);
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("refuses a non-leader without touching the store", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "officer" })] });
+    const r = await handleFactionDisband(d, "d1", null);
+    expect(r.content).toMatch(/only the leader can disband/i);
+    expect(r.prompt).toBeUndefined();
+  });
+
+  it("does not call the store and returns a confirm-disband prompt", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })] });
+    const r = await handleFactionDisband(d, "d1", null);
+    expect(r.prompt).toEqual({ kind: "confirm-disband", factionId: 1 });
+    expect(r.ephemeral).toBe(true);
+  });
+});
+
+describe("handleFactionRename", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionRename(d, "d1", { serverId: null, name: "Bears" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("refuses a name that's too short without touching the store", async () => {
+    const rename = vi.fn();
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename });
+    const r = await handleFactionRename(d, "d1", { serverId: null, name: "AB" });
+    expect(r.content).toMatch(/3-64 characters/i);
+    expect(rename).not.toHaveBeenCalled();
+  });
+
+  it("refuses a name that's too long without touching the store", async () => {
+    const rename = vi.fn();
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename });
+    const r = await handleFactionRename(d, "d1", { serverId: null, name: "x".repeat(65) });
+    expect(r.content).toMatch(/3-64 characters/i);
+    expect(rename).not.toHaveBeenCalled();
+  });
+
+  it("refuses a name containing control characters without touching the store", async () => {
+    const rename = vi.fn();
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename });
+    const r = await handleFactionRename(d, "d1", { serverId: null, name: "Bad\u200BName" });
+    expect(r.content).toMatch(/control characters/i);
+    expect(rename).not.toHaveBeenCalled();
+  });
+
+  it("trims the name before validating and passing it to the store", async () => {
+    const rename = vi.fn(async () => "ok" as const);
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename });
+    await handleFactionRename(d, "d1", { serverId: null, name: "  Bears  " });
+    expect(rename).toHaveBeenCalledWith({
+      factionId: 1, discordId: "d1", name: "Bears", at: now, notBefore: new Date(now.getTime() - 604_800_000),
+    });
+  });
+
+  it("maps not-leader and cooldown outcomes to messages", async () => {
+    for (const [outcome, expected] of [["not-leader", /only the leader can rename/i], ["cooldown", /renamed too recently/i]] as const) {
+      const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename: async () => outcome });
+      const r = await handleFactionRename(d, "d1", { serverId: null, name: "Bears" });
+      expect(r.content).toMatch(expected);
+    }
+  });
+
+  it("confirms success with the new name", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })], rename: async () => "ok" });
+    const r = await handleFactionRename(d, "d1", { serverId: null, name: "Bears" });
+    expect(r.content).toMatch(/now named \*\*Bears\*\*/);
   });
 });

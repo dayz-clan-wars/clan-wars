@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
-import { and, asc, eq, gt, inArray, isNull, ne, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
 
 const HOLDING = ["reserved", "active", "dormant"];
 
@@ -88,15 +88,7 @@ class RosterAbort extends Error {
   }
 }
 
-/**
- * Read methods only. Write methods (createInvite through rename) land in
- * Tasks 4-7 — this class deliberately does NOT `implements RosterStore` yet,
- * because a partial implementation would either need unreachable
- * `throw new Error("not implemented")` stubs (a defect in their own right) or
- * a false claim of completeness. Task 7 adds the last write method and the
- * `implements` clause together.
- */
-export class PgRosterStore {
+export class PgRosterStore implements RosterStore {
   constructor(private readonly db: Database) {}
 
   async membershipsFor(discordId: string): Promise<Membership[]> {
@@ -525,5 +517,66 @@ export class PgRosterStore {
       if (err instanceof RosterAbort) return err.outcome as TransferOutcome;
       throw err;
     }
+  }
+
+  /**
+   * One transaction, two writes: the status update (guarded on leadership
+   * and a holding status, exactly like the other permission checks in this
+   * file) then the roster delete. §6 is explicit that disbanding is not
+   * betrayal — no cooldown is written for anyone, unlike `kick`/`leave`.
+   *
+   * The status update must land first and the delete must be conditioned on
+   * it succeeding: a bare `return "not-leader"` after the update fails
+   * writes nothing, so that path is safe to `return` from directly. But if
+   * the update succeeds, this transaction still has to run the delete
+   * before it can report "ok" — there is no non-"ok" outcome left to abort
+   * on at that point, so `RosterAbort` never comes into play here.
+   */
+  async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader"> {
+    return this.db.transaction(async (tx) => {
+      const updated = await tx.update(factions)
+        .set({ status: "disbanded" })
+        .where(and(
+          eq(factions.id, factionId),
+          eq(factions.leaderDiscordId, discordId),
+          inArray(factions.status, HOLDING),
+        ))
+        .returning({ id: factions.id });
+
+      if (!updated[0]) return "not-leader" as const;
+
+      await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
+
+      return "ok" as const;
+    });
+  }
+
+  /**
+   * A single guarded UPDATE, like `setRole`/`kick`/`leave`: leadership,
+   * holding status, and the cooldown floor on `renamed_at` all live in the
+   * WHERE, so the outcome comes from `.returning()`. `renamed_at` is null
+   * for a faction that has never been renamed, and a null must always be
+   * allowed — the `isNull` arm of the `or` covers that case.
+   *
+   * The follow-up read on zero rows only distinguishes "not the leader"
+   * from "still on cooldown" for the message; it decides nothing.
+   */
+  async rename(a: RenameArgs): Promise<RenameOutcome> {
+    const updated = await this.db.update(factions)
+      .set({ name: a.name, renamedAt: a.at })
+      .where(and(
+        eq(factions.id, a.factionId),
+        eq(factions.leaderDiscordId, a.discordId),
+        inArray(factions.status, HOLDING),
+        or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
+      ))
+      .returning({ id: factions.id });
+
+    if (updated[0]) return "ok" as const;
+
+    const [f] = await this.db.select({ leaderDiscordId: factions.leaderDiscordId })
+      .from(factions).where(eq(factions.id, a.factionId));
+    if (!f || f.leaderDiscordId !== a.discordId) return "not-leader" as const;
+    return "cooldown" as const;
   }
 }
