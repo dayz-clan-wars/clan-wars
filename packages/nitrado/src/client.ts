@@ -30,13 +30,37 @@ export class NitradoClient {
     private readonly timeoutMs: number = 30_000,
   ) {}
 
+  // ⚠️ Nitrado answers some errors with HTTP 200 and status:"error". Checking
+  // res.ok alone reports those as success. Both getJson and postJson route
+  // through this single check so the guard can't drift between the two.
+  private assertSuccess(body: Record<string, any>, path: string): void {
+    if (body.status !== "success") {
+      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
+    }
+  }
+
   private async getJson(path: string): Promise<Record<string, any>> {
     const res = await this.fetchFn(`${API_BASE}${path}`, {
       headers: { Authorization: `Bearer ${this.token}` },
       signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
-    return res.json() as Promise<Record<string, any>>;
+    const body = (await res.json()) as Record<string, any>;
+    this.assertSuccess(body, path);
+    return body;
+  }
+
+  private async postJson(path: string, payload: Record<string, unknown>): Promise<Record<string, any>> {
+    const res = await this.fetchFn(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
+    const body = (await res.json()) as Record<string, any>;
+    this.assertSuccess(body, path);
+    return body;
   }
 
   /** Filename time is SERVER-LOCAL; treated as UTC here purely as a comparable number. */
@@ -101,5 +125,61 @@ export class NitradoClient {
     const res = await this.fetchFn(url, { signal: AbortSignal.timeout(this.timeoutMs) });
     if (!res.ok) throw new Error(`Nitrado download ${res.status}`);
     return res.text();
+  }
+
+  /**
+   * Write a file to the game server, via Nitrado's two-step token flow.
+   *
+   * ⚠️ Step two is NOT a normal API call: the URL comes from step one, the
+   * token goes in a bare `token` header (not Authorization), and the body is
+   * sent as application/binary. Sending it as JSON with a bearer silently
+   * fails.
+   */
+  async uploadFile(remoteDir: string, fileName: string, content: string): Promise<void> {
+    const json = await this.postJson(`/services/${this.serviceId}/gameservers/file_server/upload`, {
+      path: remoteDir,
+      file: fileName,
+    });
+    const url = json.data?.token?.url;
+    const token = json.data?.token?.token;
+    if (!url) throw new Error(`Nitrado upload: missing token url for ${remoteDir}/${fileName}`);
+    // A missing token would otherwise degrade silently into a bare 403 from
+    // step two — throw here so the failure is distinguishable at 3am.
+    if (!token) throw new Error(`Nitrado upload: missing token for ${remoteDir}/${fileName}`);
+    const res = await this.fetchFn(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/binary", token },
+      body: content,
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Nitrado upload failed ${res.status} for ${remoteDir}/${fileName}`);
+
+    // ⚠️ res.ok alone is not enough on THIS step either. Nitrado answers some
+    // errors with HTTP 200 and status:"error"; if that happened here the
+    // upload would resolve, supply-tick would advance the stored hash, and the
+    // file on the server would diverge from the database permanently with
+    // nothing ever retrying it.
+    //
+    // ⚠️ HONEST AMBIGUITY: nobody has verified what this signed-URL endpoint
+    // actually returns on success — it may well be an empty body, and the
+    // working deployment depends on that staying a success. So this is
+    // deliberately narrow: throw ONLY when the body parses as JSON AND carries
+    // a `status` that is not "success". An empty or non-JSON body stays a
+    // success. If we ever observe a real success envelope here, tighten it.
+    const text = await res.text();
+    let parsed: unknown;
+    try {
+      parsed = text.trim() === "" ? undefined : JSON.parse(text);
+    } catch {
+      parsed = undefined; // Not JSON — nothing to assert against.
+    }
+    if (parsed && typeof parsed === "object" && "status" in parsed) {
+      const body = parsed as Record<string, any>;
+      if (body.status !== "success") {
+        throw new Error(
+          `Nitrado upload returned status=${body.status} for ${remoteDir}/${fileName}: ${body.message ?? "no message"}`,
+        );
+      }
+    }
   }
 }

@@ -312,3 +312,61 @@ advisory lock (or a row lease) around the notify step so only one process notifi
 give the bot a startup guard that refuses to run when another holds the lock. The same
 argument applies to the ceremony notifier and the players projection, which share the
 loop.
+
+## 23. `MISSION_CUSTOM_DIR` is process-wide, so supplies are single-server-only
+
+The supply projection uploads to `cfg.missionCustomDir` — one environment value the
+sweep hands to **every** server it visits (`apps/ingest-worker/src/sweep.ts`, the
+`remoteDir` field of the `supplies` dep). But that path is service-specific: the live
+value is `/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/custom`, and
+the `ni…_4` segment is the Nitrado service id.
+
+With one active server this is correct, which is why the deployment works. Add a
+second and its supply file is uploaded into the **first** service's directory. The
+failure mode is the bad one: if that path happens to exist under the second service's
+credentials, the upload SUCCEEDS. Nothing errors, `supply_uploads` advances the hash,
+and the second server's supplies simply never appear — with no log line, and no retry,
+because from the tick's point of view everything worked.
+
+Not fixed on `feat/faction-supplies` because the fix is a schema change: the path
+belongs on the `servers` row next to `nitrado_service_id`, not in the process
+environment. Load-bearing comments are in place at both sites (`sweep.ts` at the
+`remoteDir` call site and `config.ts` beside `missionCustomDir`) so the next person to
+register a second server sees it before they hit it.
+
+The fix, when it is written: a `servers.mission_custom_dir` column (generated
+migration), populated at registration from a `file_server/list` call rather than
+guessed, with `MISSION_CUSTOM_DIR` retired or kept only as a backfill default. Worth
+also considering whether the upload should verify the directory belongs to the service
+it is uploading for.
+
+## 24. Out-of-band changes to the supply file on the server are never detected
+
+`supply_uploads.content_hash` is the supply projection's only memory, and it records
+what the tick last **sent**, not what the game server currently holds. That makes the
+"self-healing" claim narrower than it reads: it heals *upload failures* (the hash does
+not advance on a throw, so the next tick retries), and nothing else.
+
+If the file changes on the server side — a mission wipe, an FTP restore from a backup,
+an operator editing `custom/faction-supplies.json` by hand, a Nitrado-side rollback —
+the stored hash still equals the hash of what the tick would generate. So the tick
+short-circuits, no upload is attempted, and the factions' supplies stay gone until
+something unrelated changes the roster and shifts the hash. There is no log line,
+because from the tick's point of view there was nothing to do.
+
+Not fixed on `feat/faction-supplies` because detection is a design decision about
+cadence, not a patch. The candidates:
+
+- **`file_server/list` size/mtime check each tick** — one cheap request per server,
+  catches deletion and most edits, but not an edit that preserves size, and mtime
+  semantics on that endpoint are unverified.
+- **Download and compare** — exact, but a request and a full file transfer per server
+  per tick just to learn nothing changed.
+- **Periodic unconditional re-upload** (say hourly, or every N ticks) — simplest to
+  reason about and needs no new API surface, but writes for no reason and would mask
+  rather than report the drift.
+- **Store nothing and always upload** — correct and stupid; rejected already in §4.4.
+
+Whichever is chosen should also decide whether drift is *reported* (an operator wants
+to know their file was reverted) or merely repaired silently. The spec's §8 carries the
+gap; §2.1 and §6 were corrected so they no longer overclaim.

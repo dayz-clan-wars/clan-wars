@@ -21,6 +21,8 @@ describe("ingestSweep", () => {
     name: `S${Math.random()}`, map: "livonia", clockOffsetMs: 7 * HOUR, nitradoServiceId: 1, ...o,
   }).returning();
 
+  const baseDeps = { clientFor: () => empty, backfillBudget: 15, failures: new Map<string, number>() };
+
   it("sweeps every active server", async () => {
     await addServer();
     await addServer();
@@ -60,5 +62,53 @@ describe("ingestSweep", () => {
     const r = await ingestSweep(db, { clientFor, backfillBudget: 15, failures: new Map(), onServerError });
     expect(r.servers).toBe(2);
     expect(onServerError).toHaveBeenCalledTimes(1);
+  });
+
+  it("runs the supply tick for each server", async () => {
+    await addServer();
+    const seen: number[] = [];
+    await ingestSweep(db, {
+      ...baseDeps,
+      supplies: { offsets: [], remoteDir: "/d", fileName: "f.json", clientFor: () => ({ uploadFile: async () => { seen.push(1); } }) },
+    });
+    expect(seen.length).toBeGreaterThan(0);
+  });
+
+  it("reports an upload once, and stays quiet when nothing changed", async () => {
+    // ⚠️ The sweep discards SupplyTickResult, so without this callback a
+    // successful upload leaves NO trace in the log at all — only failures do,
+    // and an operator cannot tell that a claim produced a file.
+    //
+    // The second sweep is the half that keeps this honest: a callback fired
+    // unconditionally (rather than on `uploaded`) would pass the first
+    // assertion and log on every tick forever.
+    const [srv] = await addServer();
+    const onSupplyUploaded = vi.fn();
+    const supplies = {
+      offsets: [], remoteDir: "/d", fileName: "f.json",
+      clientFor: () => ({ uploadFile: async () => {} }),
+    };
+    await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
+    expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
+    expect(onSupplyUploaded.mock.calls[0]![0]).toBe(srv!.id);
+    expect(onSupplyUploaded.mock.calls[0]![1]).toMatchObject({ uploaded: true });
+
+    // Same roster, same bytes, same hash: no upload, so nothing to report.
+    await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
+    expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps ingesting when the supply tick throws", async () => {
+    // ⚠️ A Nitrado file-server outage must not stop log ingestion. Supplies
+    // are cosmetic; missing events are permanent.
+    await addServer();
+    const errors: unknown[] = [];
+    const r = await ingestSweep(db, {
+      ...baseDeps,
+      supplies: { offsets: [], remoteDir: "/d", fileName: "f.json", clientFor: () => ({ uploadFile: async () => { throw new Error("boom"); } }) },
+      onSupplyError: (_id, err) => errors.push(err),
+    });
+    expect(r.servers).toBeGreaterThan(0);
+    expect(errors).toHaveLength(1);
   });
 });

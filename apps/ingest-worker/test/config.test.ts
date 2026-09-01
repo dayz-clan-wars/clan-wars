@@ -1,7 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "../src/config.js";
 
-const OK = { DATABASE_URL: "postgres://x", NITRADO_TOKEN: "t" };
+const OK = {
+  DATABASE_URL: "postgres://x",
+  NITRADO_TOKEN: "t",
+  MISSION_CUSTOM_DIR: "/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/custom",
+};
 
 describe("loadConfig", () => {
   it("reads a complete environment", () => {
@@ -15,11 +19,15 @@ describe("loadConfig", () => {
     expect(cfg.backfillBudget).toBe(15);
   });
 
-  for (const key of ["DATABASE_URL", "NITRADO_TOKEN"]) {
+  for (const key of ["DATABASE_URL", "NITRADO_TOKEN", "MISSION_CUSTOM_DIR"]) {
     it(`refuses to start without ${key}`, () => {
       expect(() => loadConfig({ ...OK, [key]: undefined })).toThrow(key);
     });
   }
+
+  it("requires MISSION_CUSTOM_DIR", () => {
+    expect(() => loadConfig({ ...OK, MISSION_CUSTOM_DIR: undefined })).toThrow(/MISSION_CUSTOM_DIR/);
+  });
 
   it("rejects an interval that Number() would silently reinterpret", () => {
     // "1e3" and " 10 " both coerce happily and would produce an interval

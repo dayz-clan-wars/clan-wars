@@ -1,12 +1,14 @@
 import type { Database } from "@factions/db";
 import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
 import { and, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
+import { HOLDING_STATUSES } from "@factions/domain";
 import type { Role } from "./roster-store.js";
 
-/** Statuses under which a faction still holds its flag and roster — mirrors
- * `PgRosterStore`'s HOLDING, kept separate because this store owns no
- * roster concept of its own beyond this one gate. */
-const HOLDING = ["reserved", "active", "dormant"];
+/** Statuses under which a faction still holds its flag and roster. */
+// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
+// tuple) so every faction/domain consumer gets full literal-type checking,
+// but drizzle's inArray() requires a plain mutable array.
+const HOLDING: string[] = [...HOLDING_STATUSES];
 
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string; channelId: string;
