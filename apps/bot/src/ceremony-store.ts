@@ -183,16 +183,31 @@ export class PgCeremonyStore implements CeremonyStore {
     return done.length > 0;
   }
 
+  /**
+   * Lapse expired reservations and RELEASE their rosters.
+   *
+   * ⚠️ The delete is not cleanup. `faction_members_server_player_uniq` carries
+   * no status predicate, so a membership row surviving its faction's hold bars
+   * that player from every future faction on the server, permanently, with no
+   * command able to clear it. One transaction: a faction never exists in the
+   * state "lapsed but still rostered".
+   */
   async lapseReservations(serverId: number, cutoff: Date): Promise<number> {
-    const done = await this.db.update(factions)
-      .set({ status: "lapsed" })
-      .where(and(
-        eq(factions.serverId, serverId),
-        eq(factions.status, "reserved"),
-        lte(factions.reservedUntil, cutoff),
-      ))
-      .returning({ id: factions.id });
-    return done.length;
+    return this.db.transaction(async (tx) => {
+      const done = await tx.update(factions)
+        .set({ status: "lapsed" })
+        .where(and(
+          eq(factions.serverId, serverId),
+          eq(factions.status, "reserved"),
+          lte(factions.reservedUntil, cutoff),
+        ))
+        .returning({ id: factions.id });
+      if (done.length > 0) {
+        await tx.delete(factionMembers)
+          .where(inArray(factionMembers.factionId, done.map((d) => d.id)));
+      }
+      return done.length;
+    });
   }
 
   async reservedServers(): Promise<number[]> {
