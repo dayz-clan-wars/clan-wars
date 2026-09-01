@@ -546,7 +546,13 @@ function nicknameOutcomeSuffix(outcome: RenameOutcome): string {
 }
 
 /**
- * Tell each newly verified player, exactly once.
+ * Tell each player their challenge's outcome, exactly once.
+ *
+ * Two outcomes reach here: a completion, and a challenge canceled because its
+ * target spent the whole emote budget without finishing the sequence (spec
+ * §5.3). Both ride the same `notified_at` discipline, so neither is ever sent
+ * twice, and neither an ordinary expiry nor a `/link` switch-cancel reaches
+ * here at all — they carry no cancel reason. See `pendingNotifications`.
  *
  * `markNotified` runs only after `send` resolves. A send that throws — closed
  * DMs, a deleted channel, a rate limit — leaves the row pending so the next
@@ -572,6 +578,20 @@ export async function notifyCompleted(
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
     try {
+      if (c.outcome !== "completed") {
+        // Nothing was bound, so there is no rename to attempt and no link to
+        // read — only the character they were trying to verify, named so a
+        // player with several does not have to guess which attempt died.
+        await send({
+          discordId: c.discordId,
+          channelId: c.channelId,
+          content: await lockedOutMessage(deps, c.targetDayzId),
+        });
+        await deps.store.markNotified(c.id, deps.now());
+        loggedFailures.delete(c.id);
+        sent++;
+        continue;
+      }
       let outcome: RenameOutcome = "not-attempted";
       if (renameOnLink) {
         try {
@@ -604,6 +624,26 @@ export async function notifyCompleted(
     }
   }
   return sent;
+}
+
+/**
+ * What a player is told when their challenge ran out of emote budget.
+ *
+ * The count is not mentioned as a number the player can act on: the budget is
+ * the primary defence against the named target backing into its own sequence
+ * by accident (see MAX_POOL_EMOTES_PER_ATTEMPT), and a player who reads it as
+ * a target to optimise against has misunderstood what to do — perform the
+ * three emotes, in order, without wandering the wheel.
+ */
+async function lockedOutMessage(deps: CommandDeps, targetDayzId: string): Promise<string> {
+  // Cosmetic only — a missing player row must not cost the player their
+  // message, so fall back to the UID rather than letting this decide anything.
+  const name = (await deps.store.playerByDayzId(targetDayzId))?.gamertag ?? targetDayzId;
+  return (
+    `Your link challenge for **${name}** was canceled: too many emotes were performed ` +
+    "before the sequence was completed, so it can no longer be finished. " +
+    "Run `/link` again for a fresh sequence, and perform just those emotes, in order."
+  );
 }
 
 /** The subset of a discord.js `Client` a `NicknameApplier` needs. Structural so tests need no real client. */

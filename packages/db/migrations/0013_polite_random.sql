@@ -1,0 +1,4 @@
+ALTER TABLE "verification_challenges" DROP CONSTRAINT "verification_challenges_notified_requires_complete";--> statement-breakpoint
+ALTER TABLE "verification_challenges" ADD COLUMN "cancel_reason" text;--> statement-breakpoint
+ALTER TABLE "verification_challenges" ADD CONSTRAINT "verification_challenges_notified_requires_outcome" CHECK ("verification_challenges"."notified_at" IS NULL OR "verification_challenges"."completed_at" IS NOT NULL OR "verification_challenges"."canceled_at" IS NOT NULL);--> statement-breakpoint
+ALTER TABLE "verification_challenges" ADD CONSTRAINT "verification_challenges_reason_requires_cancel" CHECK ("verification_challenges"."cancel_reason" IS NULL OR "verification_challenges"."canceled_at" IS NOT NULL);

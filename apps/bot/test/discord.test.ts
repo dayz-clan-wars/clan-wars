@@ -234,6 +234,53 @@ describe("discord wiring", () => {
       warned.mockRestore();
     });
 
+    const exhaust = async (discordId: string, uid: string) => {
+      const c = await store.createChallenge({
+        discordId, guildId: "g", channelId: "c",
+        sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        targetDayzId: uid,
+      });
+      expect(c).not.toBeNull();
+      expect(await store.cancelChallenge(c!.id, now, "budget-exhausted")).toBe(true);
+      return c!;
+    };
+
+    it("tells a player whose budget ran out to run /link again, exactly once", async () => {
+      // Spec §5.3. The tick cancels the challenge; without this the player
+      // gets silence, then three different emotes on their next /link with no
+      // explanation of why the first set stopped working.
+      await exhaust("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).toMatch(/canceled/i);
+      expect(content).toMatch(/\/link/);
+      expect(content).not.toMatch(/verified/i);
+      expect(await notifyCompleted(deps, send)).toBe(0);
+      expect(send).toHaveBeenCalledTimes(1);
+    });
+
+    it("attempts no rename for a cancellation, because nothing was bound", async () => {
+      // A renamer here would be renaming on the strength of a link that does
+      // not exist — and a "your nickname could not be changed" suffix would
+      // tell a player something failed that was never even relevant.
+      await exhaust("100", UID_A);
+      const send = vi.fn().mockResolvedValue(undefined);
+      const renameOnLink = vi.fn().mockResolvedValue("ok" as NicknameOutcome);
+      expect(await notifyCompleted(deps, send, undefined, renameOnLink)).toBe(1);
+      expect(renameOnLink).not.toHaveBeenCalled();
+      expect(send.mock.calls[0]?.[0]?.content).not.toMatch(/nickname/i);
+    });
+
+    it("leaves a cancellation pending when its send throws", async () => {
+      await exhaust("100", UID_A);
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await notifyCompleted(deps, vi.fn().mockRejectedValue(new Error("DMs closed")))).toBe(0);
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
+      expect(await notifyCompleted(deps, vi.fn().mockResolvedValue(undefined))).toBe(1);
+    });
+
     it("attempts no rename, and says nothing about a nickname, when no renamer is supplied", async () => {
       // No default stand-in function: an unsupplied renamer means "not
       // attempted", which is a different message than "attempted and

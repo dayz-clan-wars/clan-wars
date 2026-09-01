@@ -224,6 +224,19 @@ export const verificationChallenges = pgTable("verification_challenges", {
    * and what retired the open-sequence unique index below.
    */
   targetDayzId: text("target_dayz_id").notNull(),
+  /**
+   * Why the challenge was canceled, when the player needs to be told.
+   *
+   * ⚠️ NULL is not "unknown", it is "say nothing". Only cancels the player
+   * must hear about set this, and `pendingNotifications` keys on the reason
+   * rather than on `canceled_at`. That is deliberate: keying on `canceled_at`
+   * would make every historical expiry and every switch-cancel — rows that
+   * predate this column and rows whose player was already told inline by
+   * `/link` — pending on the first tick after deploy, and the bot would DM a
+   * backlog of long-dead challenges. A new column is NULL everywhere it was
+   * not explicitly written, so nothing already in the table can flood.
+   */
+  cancelReason: text("cancel_reason"),
 }, (t) => ({
   byDiscord: index("verification_challenges_discord_idx").on(t.discordId),
   // Partial index matching the live-challenge query exactly ("not completed,
@@ -241,9 +254,19 @@ export const verificationChallenges = pgTable("verification_challenges", {
     "verification_challenges_bound_requires_complete",
     sql`${t.boundDayzId} IS NULL OR ${t.completedAt} IS NOT NULL`,
   ),
-  notifiedOnlyWhenComplete: check(
-    "verification_challenges_notified_requires_complete",
-    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL`,
+  // notified_at once required a completion. A budget-exhausted challenge is
+  // now told to its player too (spec §5.3), and that message is made
+  // exactly-once by the same notified_at discipline — so what notified_at
+  // requires is an OUTCOME, not specifically a completion. It still cannot be
+  // set on a live challenge.
+  notifiedOnlyWhenSettled: check(
+    "verification_challenges_notified_requires_outcome",
+    sql`${t.notifiedAt} IS NULL OR ${t.completedAt} IS NOT NULL OR ${t.canceledAt} IS NOT NULL`,
+  ),
+  // A reason is a property of a cancellation; it must not exist without one.
+  reasonOnlyWhenCanceled: check(
+    "verification_challenges_reason_requires_cancel",
+    sql`${t.cancelReason} IS NULL OR ${t.canceledAt} IS NOT NULL`,
   ),
   notBothOutcomes: check(
     "verification_challenges_single_outcome",

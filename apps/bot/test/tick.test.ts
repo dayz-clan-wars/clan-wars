@@ -317,6 +317,12 @@ describe("verificationTick", () => {
     const [row] = await db.select().from(verificationChallenges)
       .where(eq(verificationChallenges.id, challenge.id));
     expect(row!.canceledAt).not.toBeNull();
+    // ⚠️ The reason is what makes the cancellation reach the player (spec
+    // §5.3). Cancelling without one is the silent failure this replaced: the
+    // sequence stops working, nothing is said, and the next /link hands out
+    // three different emotes with no explanation.
+    expect(row!.cancelReason, "a budget cancel the player is never told about is the defect")
+      .toBe("budget-exhausted");
   });
 
   it("cancels a challenge the instant its budget is spent, with no further events", async () => {

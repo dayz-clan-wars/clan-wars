@@ -131,6 +131,41 @@ describe("PgVerificationStore", () => {
     expect(await store.pendingNotifications()).toEqual([]);
   });
 
+  it("surfaces a budget-exhausted cancellation for notification, exactly once", async () => {
+    // Spec §5.3: a budget-exhausted challenge "is cancelled with a message
+    // telling the player to run /link again". Nothing but pendingNotifications
+    // can deliver that, and it used to select completions only.
+    const c = await issue("800", UID_A);
+    expect(await store.cancelChallenge(c.id, later, "budget-exhausted")).toBe(true);
+
+    const pending = await store.pendingNotifications();
+    expect(pending.map((p) => p.id)).toEqual([c.id]);
+    expect(pending[0]).toMatchObject({ outcome: "budget-exhausted", boundDayzId: null, targetDayzId: UID_A });
+
+    // Same notified_at discipline as a completion: told once, never again.
+    await store.markNotified(c.id, later);
+    expect(await store.pendingNotifications()).toEqual([]);
+  });
+
+  it("never notifies a cancellation that carries no reason", async () => {
+    // ⚠️ The first-deploy flood guard. Keying the cancelled half of
+    // pendingNotifications on `canceled_at` rather than on `cancel_reason`
+    // would make every historical expiry pending at once on the first tick
+    // after deploy — and would also DM the /link switch-cancel, which the
+    // player was already told about in the reply that replaced it.
+    const expired = await issue("801", UID_A);
+    expect(await store.cancelExpired(new Date(later.getTime() + 1))).toBe(1);
+
+    const switched = await issue("802", UID_B);
+    expect(await store.cancelChallenge(switched.id, later)).toBe(true);
+
+    expect(await store.pendingNotifications()).toEqual([]);
+    const rows = await db.select().from(verificationChallenges)
+      .where(isNotNull(verificationChallenges.canceledAt));
+    expect(rows.map((r) => r.cancelReason)).toEqual([null, null]);
+    expect(rows).toHaveLength(2);
+  });
+
   it("never completes a challenge without writing its link, under concurrency", async () => {
     // Two accounts verifying at once, plus a DUPLICATE delivery of one of the
     // completions — the shape two bot instances produce (inbox item 22: the

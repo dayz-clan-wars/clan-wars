@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, lt } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
 import type { Role } from "./roster-store.js";
 
 /** Statuses under which a faction still holds its flag and roster — mirrors
@@ -13,6 +13,27 @@ export type LiveChallenge = {
   sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
+
+/**
+ * Why a challenge was canceled, when the player has to be told about it.
+ *
+ * ⚠️ A reason is what makes a cancellation notifiable — see
+ * `pendingNotifications`. Cancels the player already knows about (the
+ * switch-cancel in `/link`, which says so in its own reply) and cancels
+ * nobody is waiting on (`cancelExpired`) deliberately pass none.
+ */
+export type CancelReason = "budget-exhausted";
+
+/**
+ * A challenge whose outcome the player has not been told about yet.
+ *
+ * `boundDayzId` is non-null exactly when `outcome` is "completed" — the
+ * schema forbids a bound row that is not complete.
+ */
+export type PendingNotification = LiveChallenge & (
+  | { outcome: "completed"; boundDayzId: string }
+  | { outcome: CancelReason; boundDayzId: null }
+);
 
 export interface VerificationStore {
   findLinkByDiscord(discordId: string): Promise<{ dayzId: string; gamertag: string; verifiedAt: Date } | null>;
@@ -31,7 +52,7 @@ export interface VerificationStore {
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
-  pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>>;
+  pendingNotifications(): Promise<PendingNotification[]>;
   markNotified(challengeId: number, at: Date): Promise<void>;
   cancelExpired(now: Date): Promise<number>;
   /**
@@ -39,8 +60,12 @@ export interface VerificationStore {
    * only a row that is neither completed nor already canceled is touched, so
    * a race with `completeChallenge` or a concurrent cancel is a no-op rather
    * than an error.
+   *
+   * Passing a `reason` also makes the cancellation notifiable — the player
+   * gets a DM saying what happened. Omit it when the player has already been
+   * told (the `/link` switch-cancel says so in its own reply).
    */
-  cancelChallenge(challengeId: number, at: Date): Promise<boolean>;
+  cancelChallenge(challengeId: number, at: Date, reason?: CancelReason): Promise<boolean>;
   /** The `limit` most recently seen players with no identity link, newest first. */
   recentUnlinkedPlayers(limit: number): Promise<{ dayzId: string; gamertag: string }[]>;
   /** One player by UID, or null if the event log has never seen them. */
@@ -233,12 +258,35 @@ export class PgVerificationStore implements VerificationStore {
     });
   }
 
-  async pendingNotifications(): Promise<Array<LiveChallenge & { boundDayzId: string }>> {
+  /**
+   * Outcomes the player still has to hear about: completions, and the
+   * cancellations that carry a reason.
+   *
+   * ⚠️ The cancellation half keys on `cancel_reason`, NOT on `canceled_at`.
+   * Every expiry and every `/link` switch-cancel also sets `canceled_at`, and
+   * none of those should be DMed — least of all the pile of them already in
+   * the table, which a `canceled_at IS NOT NULL` predicate would make pending
+   * all at once on the first tick after deploy. `cancel_reason` is NULL on
+   * every pre-existing row and on every cancel that does not pass one, so
+   * only cancels written by this code, after this deploy, are ever notified.
+   */
+  async pendingNotifications(): Promise<PendingNotification[]> {
     const rows = await this.db.select().from(verificationChallenges).where(and(
-      isNotNull(verificationChallenges.completedAt),
       isNull(verificationChallenges.notifiedAt),
+      or(
+        isNotNull(verificationChallenges.completedAt),
+        isNotNull(verificationChallenges.cancelReason),
+      ),
     ));
-    return rows.filter((r) => r.boundDayzId !== null).map((r) => ({ ...toLive(r), boundDayzId: r.boundDayzId! }));
+    return rows.flatMap((r): PendingNotification[] => {
+      if (r.completedAt !== null) {
+        // A completed row with no bound UID is unrepresentable
+        // (verification_challenges_bound_requires_complete is the other half);
+        // skip rather than assert so a notifier is never the thing that throws.
+        return r.boundDayzId === null ? [] : [{ ...toLive(r), outcome: "completed" as const, boundDayzId: r.boundDayzId }];
+      }
+      return [{ ...toLive(r), outcome: r.cancelReason as CancelReason, boundDayzId: null }];
+    });
   }
 
   async markNotified(challengeId: number, at: Date): Promise<void> {
@@ -264,9 +312,9 @@ export class PgVerificationStore implements VerificationStore {
     return rows.length;
   }
 
-  async cancelChallenge(challengeId: number, at: Date): Promise<boolean> {
+  async cancelChallenge(challengeId: number, at: Date, reason?: CancelReason): Promise<boolean> {
     const rows = await this.db.update(verificationChallenges)
-      .set({ canceledAt: at })
+      .set({ canceledAt: at, cancelReason: reason ?? null })
       .where(and(
         eq(verificationChallenges.id, challengeId),
         isNull(verificationChallenges.completedAt),

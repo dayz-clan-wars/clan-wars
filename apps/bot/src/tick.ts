@@ -179,7 +179,13 @@ export async function verificationTick(
           // would hold the player's one open slot for a day; cancel it now,
           // guarded so a concurrent completion or cancel is a no-op, so they
           // can run /link again immediately.
-          await store.cancelChallenge(challenge.id, now);
+          //
+          // ⚠️ With a reason, which is what makes the cancellation notifiable
+          // (spec §5.3: "cancelled with a message telling the player to run
+          // /link again"). Without it the player sees nothing at all — the
+          // sequence simply stops working, and the next /link hands them three
+          // different emotes with no explanation.
+          await store.cancelChallenge(challenge.id, now, "budget-exhausted");
         }
       }
     }
