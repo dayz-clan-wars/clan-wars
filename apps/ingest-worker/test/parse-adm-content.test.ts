@@ -64,4 +64,11 @@ describe("parseAdmContent", () => {
     const { lines } = parseAdmContent(`${HEADER}\n07:52:16 | a`);
     expect(lines).toEqual([HEADER, "07:52:16 | a"]);
   });
+
+  it("keeps a complete final line when only whitespace trails it", () => {
+    // The blank filter removes the whitespace element, so the last CONTENT
+    // line arrived whole — dropping it would lose a real line for a tick.
+    const { lines } = parseAdmContent(`${HEADER}\n07:52:16 | a\n   `, { dropPartialTrailingLine: true });
+    expect(lines).toEqual([HEADER, "07:52:16 | a"]);
+  });
 });

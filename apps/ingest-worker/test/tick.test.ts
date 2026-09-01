@@ -213,6 +213,45 @@ describe("ingestTick", () => {
     expect(attempts).toBe(3);
   });
 
+  it("never quarantines the live file, so a transient outage self-heals", async () => {
+    // ⚠️ The quarantine that fixes a poison BACKFILL file must not apply to
+    // the live file. Three failed ticks is three minutes at the default 60s
+    // interval — a routine Nitrado hiccup. If those three counted, the only
+    // file that still grows would be skipped for the rest of the process and
+    // the sweep would keep logging success while ingesting nothing.
+    const client = twoFiles();
+    const original = client.downloadFile.bind(client);
+    let live = 0;
+    client.downloadFile = async (p: string) => {
+      if (p === "/b.ADM") { live++; if (live <= 3) throw new Error("502 from Nitrado"); }
+      return original(p);
+    };
+    const failures = new Map<string, number>();
+
+    for (let i = 0; i < 4; i++) {
+      await ingestTick(db, { serverId, client, backfillBudget: 15, failures });
+    }
+
+    // The 4th tick must still attempt it, and succeed.
+    expect(live).toBe(4);
+    expect(await storedLines("DayZServer_X1_x64_2026-07-23_01-00-00.ADM")).toEqual(FILE_B.trimEnd().split("\n"));
+  });
+
+  it("ignores an implausible derived offset instead of ratcheting onto it", async () => {
+    // An operator restores an ADM file from a backup that preserves its
+    // original mtime. The candidate is a year in the past, wins the minimum,
+    // and — because retention only ever moves DOWN — would be permanent.
+    const client = fake([
+      { name: "DayZServer_X1_x64_2026-07-22_01-00-00.ADM", path: "/a.ADM", localMs: day(22), modMs: day(22) - 365 * 24 * HOUR, text: FILE_A },
+      { name: "DayZServer_X1_x64_2026-07-23_01-00-00.ADM", path: "/b.ADM", localMs: day(23), modMs: day(23) + 7 * HOUR, text: FILE_B },
+    ]);
+    const r = await ingestTick(db, { serverId, client, backfillBudget: 15, failures: new Map() });
+
+    expect(r.offsetMs).toBe(7 * HOUR);
+    const [s] = await db.select().from(servers).where(eq(servers.id, serverId));
+    expect(s?.clockOffsetMs).toBe(7 * HOUR);
+  });
+
   it("does not store the live file's dangling final line until it is complete", async () => {
     // ⚠️ The live file is downloaded while the server is appending to it, so
     // the last byte can land mid-line. Storing that fragment advances the

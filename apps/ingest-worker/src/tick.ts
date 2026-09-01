@@ -23,6 +23,9 @@ export type NitradoLike = {
  */
 const MAX_FILE_ATTEMPTS = 3;
 
+/** No real timezone lies outside UTC-14..UTC+14. */
+const MAX_PLAUSIBLE_OFFSET_MS = 14 * 60 * 60 * 1000;
+
 export type TickDeps = {
   serverId: number;
   client: NitradoLike;
@@ -69,7 +72,20 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
     .map((f) => ({ localTimestampMs: f.localTimestampMs, modifiedAtMs: f.modifiedAtMs }));
 
   const derived = deriveClockOffsetMs(candidates);
-  if (derived !== null) {
+  // ⚠️ Reject an implausible derivation BEFORE it can be retained. Retention
+  // is a one-way downward ratchet, so a single poisoned value would be
+  // permanent: an operator restoring an ADM file from a backup that preserves
+  // its original mtime yields a candidate a year in the past, which wins the
+  // minimum and can never be raised again. No real timezone lies outside
+  // UTC-14..UTC+14, so anything beyond that is not a clock offset.
+  const plausible = derived !== null && Math.abs(derived) <= MAX_PLAUSIBLE_OFFSET_MS;
+  if (derived !== null && !plausible) {
+    console.error(
+      `ingest: ignoring implausible derived clock offset ${derived}ms for server ${serverId}; ` +
+      `keeping ${server.clockOffsetMs}ms`,
+    );
+  }
+  if (derived !== null && plausible) {
     // ⚠️ RETAIN the tightest bound ever observed; never overwrite with a
     // looser one. Every candidate is `trueOffset + writeLag`, so a tick that
     // happens to list only long-lag files derives a LARGER offset. Taking the
@@ -107,8 +123,15 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
   let allCaughtUp = true;
 
   /**
-   * Count one failure. Returns true while the file should still block the
-   * live file, false once it has been written off.
+   * Count one failure against a BACKFILL file. Returns true while the file
+   * should still block the live file, false once it has been written off.
+   *
+   * ⚠️ Never called for the live file. Quarantining that one would turn a
+   * three-minute Nitrado outage into a permanent, silent halt: three failed
+   * ticks at the default 60s interval and the process would skip the only
+   * file that still grows, logging nothing but successful sweeps thereafter.
+   * Retrying the live file forever is correct — it self-heals the moment the
+   * API does, and a failing live file blocks nothing but itself.
    */
   const recordFailure = (key: string, path: string): boolean => {
     const attempts = (failures.get(key) ?? 0) + 1;
@@ -133,8 +156,9 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
     if (row?.complete && !isNewest) continue;
 
     // A quarantined file is still re-listed every tick. Skip it here, before
-    // spending a download, rather than re-attempting it forever.
-    if ((failures.get(failureKey) ?? 0) >= MAX_FILE_ATTEMPTS) continue;
+    // spending a download, rather than re-attempting it forever. The live file
+    // is never quarantined, so it is never skipped for this reason.
+    if (!isNewest && (failures.get(failureKey) ?? 0) >= MAX_FILE_ATTEMPTS) continue;
 
     if (!isNewest) {
       if (budget <= 0) { allCaughtUp = false; continue; }
@@ -150,7 +174,7 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
       text = await client.downloadFile(file.path);
     } catch (err) {
       console.error(`ingest: download failed for ${file.path}`, err);
-      if (recordFailure(failureKey, file.path)) allCaughtUp = false;
+      if (isNewest || recordFailure(failureKey, file.path)) allCaughtUp = false;
       continue;
     }
 
@@ -165,7 +189,7 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
       // A file with no boot header cannot be timestamped at all. Skip it
       // rather than throwing: one bad file must not stop the sweep.
       console.error(`ingest: unusable file ${file.path}`, err);
-      if (recordFailure(failureKey, file.path)) allCaughtUp = false;
+      if (isNewest || recordFailure(failureKey, file.path)) allCaughtUp = false;
       continue;
     }
 

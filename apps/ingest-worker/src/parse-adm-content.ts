@@ -31,8 +31,13 @@ export function parseAdmContent(
   text: string,
   opts: ParseAdmOptions = {},
 ): { bootAt: Date; lines: string[] } {
-  let lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
-  if (opts.dropPartialTrailingLine && !text.endsWith("\n") && lines.length > 0) {
+  const parts = text.split(/\r?\n/);
+  let lines = parts.filter((l) => l.trim().length > 0);
+  // Only the LAST element of the raw split can be a half-written line, and
+  // only when it carries content: text ending in "...L5\n   " has a blank
+  // final element, so L5 itself arrived whole and must not be dropped.
+  const tailIsPartial = (parts[parts.length - 1] ?? "").trim().length > 0;
+  if (opts.dropPartialTrailingLine && tailIsPartial && lines.length > 0) {
     lines = lines.slice(0, -1);
   }
   for (const line of lines) {
