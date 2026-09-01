@@ -36,7 +36,29 @@ export class NitradoClient {
       signal: AbortSignal.timeout(this.timeoutMs),
     });
     if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
-    return res.json() as Promise<Record<string, any>>;
+    const body = (await res.json()) as Record<string, any>;
+    // ⚠️ Nitrado answers some errors with HTTP 200 and status:"error".
+    // Checking res.ok alone reports those as success.
+    if (body.status !== "success") {
+      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
+    }
+    return body;
+  }
+
+  private async postJson(path: string, payload: Record<string, unknown>): Promise<Record<string, any>> {
+    const res = await this.fetchFn(`${API_BASE}${path}`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.token}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Nitrado ${res.status} for ${path}`);
+    const body = (await res.json()) as Record<string, any>;
+    // ⚠️ Same 200-with-error hazard as getJson: check the payload, not just res.ok.
+    if (body.status !== "success") {
+      throw new Error(`Nitrado ${path} returned status=${body.status}: ${body.message ?? "no message"}`);
+    }
+    return body;
   }
 
   /** Filename time is SERVER-LOCAL; treated as UTC here purely as a comparable number. */
@@ -101,5 +123,30 @@ export class NitradoClient {
     const res = await this.fetchFn(url, { signal: AbortSignal.timeout(this.timeoutMs) });
     if (!res.ok) throw new Error(`Nitrado download ${res.status}`);
     return res.text();
+  }
+
+  /**
+   * Write a file to the game server, via Nitrado's two-step token flow.
+   *
+   * ⚠️ Step two is NOT a normal API call: the URL comes from step one, the
+   * token goes in a bare `token` header (not Authorization), and the body is
+   * sent as application/binary. Sending it as JSON with a bearer silently
+   * fails.
+   */
+  async uploadFile(remoteDir: string, fileName: string, content: string): Promise<void> {
+    const json = await this.postJson(`/services/${this.serviceId}/gameservers/file_server/upload`, {
+      path: remoteDir,
+      file: fileName,
+    });
+    const url = json.data?.token?.url;
+    const token = json.data?.token?.token;
+    if (!url) throw new Error(`Nitrado upload: missing token url for ${remoteDir}/${fileName}`);
+    const res = await this.fetchFn(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/binary", ...(token ? { token } : {}) },
+      body: content,
+      signal: AbortSignal.timeout(this.timeoutMs),
+    });
+    if (!res.ok) throw new Error(`Nitrado upload failed ${res.status} for ${remoteDir}/${fileName}`);
   }
 }

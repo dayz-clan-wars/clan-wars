@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import { NitradoClient } from "../src/client.js";
 
-const GS = { data: { gameserver: { game_specific: { path: "/games/ni1234/noftp/dayzxb/" } } } };
+const GS = { status: "success", data: { gameserver: { game_specific: { path: "/games/ni1234/noftp/dayzxb/" } } } };
 
 /** Serves canned JSON by URL substring, so a test states only what it cares about. */
 function fakeFetch(routes: Record<string, unknown>, text?: string) {
@@ -16,7 +16,9 @@ function fakeFetch(routes: Record<string, unknown>, text?: string) {
   });
 }
 
-const listing = (entries: unknown[]) => ({ data: { entries } });
+// All routed fixture bodies below carry status:"success" — Nitrado wraps
+// every real response this way, and getJson now rejects anything else.
+const listing = (entries: unknown[]) => ({ status: "success", data: { entries } });
 
 describe("NitradoClient.listAdmFiles", () => {
   it("returns ADM files oldest-first by their filename timestamp", async () => {
@@ -79,7 +81,7 @@ describe("NitradoClient.listAdmFiles", () => {
   });
 
   it("throws when the gameserver path cannot be resolved", async () => {
-    const fetchFn = fakeFetch({ "/gameservers": { data: {} } });
+    const fetchFn = fakeFetch({ "/gameservers": { status: "success", data: {} } });
     await expect(new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).listAdmFiles())
       .rejects.toThrow(/could not resolve gameserver path/);
   });
@@ -97,7 +99,7 @@ describe("NitradoClient.downloadFile", () => {
     // returned the JSON body would silently ingest an API envelope as if it
     // were log lines.
     const fetchFn = fakeFetch(
-      { "/file_server/download": { data: { token: { url: "https://dl.nitrado.net/x" } } } },
+      { "/file_server/download": { status: "success", data: { token: { url: "https://dl.nitrado.net/x" } } } },
       "AdminLog started on 2026-07-22 at 07:01:37",
     );
     const text = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).downloadFile("/a.ADM");
@@ -105,9 +107,58 @@ describe("NitradoClient.downloadFile", () => {
   });
 
   it("throws when no download url is returned", async () => {
-    const fetchFn = fakeFetch({ "/file_server/download": { data: {} } });
+    const fetchFn = fakeFetch({ "/file_server/download": { status: "success", data: {} } });
     await expect(new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).downloadFile("/a.ADM"))
       .rejects.toThrow(/no download url/);
+  });
+});
+
+describe("NitradoClient.uploadFile", () => {
+  it("uploads via the two-step token flow", async () => {
+    const calls: { url: string; init: any }[] = [];
+    const fake = async (url: string, init: any) => {
+      calls.push({ url: String(url), init });
+      if (String(url).includes("file_server/upload")) {
+        return new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put", token: "T0K" } } }), { status: 200 });
+      }
+      return new Response("", { status: 200 });
+    };
+    const c = new NitradoClient("tok", 42, fake as any);
+    await c.uploadFile("/games/x/ftproot/dayzxb/mission/custom", "faction-supplies.json", "{}");
+
+    expect(calls[0]!.url).toContain("/services/42/gameservers/file_server/upload");
+    expect(JSON.parse(calls[0]!.init.body)).toEqual({ path: "/games/x/ftproot/dayzxb/mission/custom", file: "faction-supplies.json" });
+    // ⚠️ The second POST carries the token in a bare `token` HEADER — not a
+    // bearer, not a query parameter — with an application/binary body.
+    expect(calls[1]!.url).toBe("https://up.example/put");
+    expect(calls[1]!.init.headers.token).toBe("T0K");
+    expect(calls[1]!.init.headers["Content-Type"]).toBe("application/binary");
+    expect(calls[1]!.init.body).toBe("{}");
+  });
+
+  it("treats HTTP 200 with a failure payload as a failure", async () => {
+    // ⚠️ Nitrado answers some errors with 200 and status:"error". Trusting
+    // res.ok alone would record a hash for a file that was never written, and
+    // the supply projection would then never retry.
+    const fake = async () =>
+      new Response(JSON.stringify({ status: "error", message: "nope" }), { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/nope|error/i);
+  });
+
+  it("fails when the upload token is missing", async () => {
+    const fake = async () => new Response(JSON.stringify({ status: "success", data: {} }), { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/token/i);
+  });
+
+  it("fails when the binary POST is rejected", async () => {
+    const fake = async (url: string) =>
+      String(url).includes("file_server/upload")
+        ? new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put", token: "T" } } }), { status: 200 })
+        : new Response("denied", { status: 403 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/403/);
   });
 });
 
@@ -126,7 +177,7 @@ describe("NitradoClient request timeout", () => {
     // Only the signed-URL fetch stalls; the API call that hands it over is fine.
     const fetchFn = vi.fn(async (url: string, init?: RequestInit) => {
       if (url.startsWith("https://api.nitrado.net")) {
-        return { ok: true, json: async () => ({ data: { token: { url: "https://dl.nitrado/x" } } }) } as unknown as Response;
+        return { ok: true, json: async () => ({ status: "success", data: { token: { url: "https://dl.nitrado/x" } } }) } as unknown as Response;
       }
       return new Promise<Response>((_resolve, reject) => {
         init?.signal?.addEventListener("abort", () => reject(init.signal!.reason));
