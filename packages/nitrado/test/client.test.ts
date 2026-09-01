@@ -146,10 +146,21 @@ describe("NitradoClient.uploadFile", () => {
     await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/nope|error/i);
   });
 
-  it("fails when the upload token is missing", async () => {
+  it("fails when the upload token url is missing", async () => {
     const fake = async () => new Response(JSON.stringify({ status: "success", data: {} }), { status: 200 });
     const c = new NitradoClient("tok", 42, fake as any);
-    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/token/i);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/missing token url/);
+  });
+
+  it("fails when the upload token itself is missing", async () => {
+    // ⚠️ Distinct from the missing-url case above: the url check on the line
+    // before runs first, so a fixture that omits BOTH would only ever
+    // exercise the url branch. This fixture supplies a url but omits `token`,
+    // so it reaches the second guard specifically.
+    const fake = async () =>
+      new Response(JSON.stringify({ status: "success", data: { token: { url: "https://up.example/put" } } }), { status: 200 });
+    const c = new NitradoClient("tok", 42, fake as any);
+    await expect(c.uploadFile("/dir", "f.json", "{}")).rejects.toThrow(/missing token for/);
   });
 
   it("fails when the binary POST is rejected", async () => {
