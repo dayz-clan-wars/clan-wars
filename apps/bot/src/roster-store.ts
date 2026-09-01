@@ -83,7 +83,7 @@ const ROLE_ORDER = sql<number>`case ${factionMembers.role} when 'leader' then 0 
  * translates the sentinel back into the outcome the caller expects.
  */
 class RosterAbort extends Error {
-  constructor(public readonly outcome: AcceptInviteOutcome) {
+  constructor(public readonly outcome: string) {
     super(`roster-abort:${outcome}`);
   }
 }
@@ -318,7 +318,7 @@ export class PgRosterStore {
         return "ok" as const;
       });
     } catch (err) {
-      if (err instanceof RosterAbort) return err.outcome;
+      if (err instanceof RosterAbort) return err.outcome as AcceptInviteOutcome;
       if (String(err).includes("faction_members_server_player_uniq")) return "already-member";
       throw err;
     }
@@ -448,5 +448,82 @@ export class PgRosterStore {
 
       return "ok" as const;
     });
+  }
+
+  /**
+   * The permission check (actor must currently be the leader) and the
+   * untouchable-target guard (the leader can't be re-roled by this path —
+   * use `transfer`) both live in the UPDATE's own WHERE, exactly like
+   * `kick`/`leave` above: the outcome comes from `.returning()`, never from
+   * a prior read. The follow-up reads only run on zero rows, and only to
+   * pick which failure message to show.
+   */
+  async setRole(a: SetRoleArgs): Promise<SetRoleOutcome> {
+    const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId})`;
+
+    const updated = await this.db.update(factionMembers)
+      .set({ role: a.role })
+      .where(and(
+        eq(factionMembers.factionId, a.factionId),
+        eq(factionMembers.discordId, a.targetDiscordId),
+        ne(factionMembers.role, "leader"),
+        sql`${actorRole} = 'leader'`,
+      ))
+      .returning({ id: factionMembers.id });
+
+    if (updated[0]) return "ok" as const;
+
+    const [target] = await this.db.select({ role: factionMembers.role }).from(factionMembers)
+      .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
+    if (!target) return "target-not-member" as const;
+    if (target.role === "leader") return "cannot-target-leader" as const;
+    return "not-leader" as const;
+  }
+
+  /**
+   * Demotes the old leader before promoting the target — both inside this
+   * one transaction. `faction_members_leader_uniq` is a partial unique
+   * index permitting exactly one leader per faction at a time; promoting
+   * the target first, while `fromDiscordId` is still seated as leader,
+   * would collide with that index. Demoting first frees the slot the
+   * promote then claims. This ordering looks arbitrary but is not — a
+   * later refactor that "tidies" it into promote-then-demote reintroduces
+   * the collision.
+   */
+  async transfer(a: TransferArgs): Promise<TransferOutcome> {
+    try {
+      return await this.db.transaction(async (tx) => {
+        const demoted = await tx.update(factionMembers)
+          .set({ role: "officer" })
+          .where(and(
+            eq(factionMembers.factionId, a.factionId),
+            eq(factionMembers.discordId, a.fromDiscordId),
+            eq(factionMembers.role, "leader"),
+          ))
+          .returning({ id: factionMembers.id });
+        // Nothing has been written yet on this path — a bare return is safe.
+        if (!demoted[0]) return "not-leader" as const;
+
+        const promoted = await tx.update(factionMembers)
+          .set({ role: "leader" })
+          .where(and(
+            eq(factionMembers.factionId, a.factionId),
+            eq(factionMembers.discordId, a.toDiscordId),
+            ne(factionMembers.role, "leader"),
+          ))
+          .returning({ id: factionMembers.id });
+        if (!promoted[0]) {
+          // The demote above already wrote. A bare `return` here would
+          // COMMIT it, leaving the faction leaderless. Throw so the whole
+          // transaction rolls back instead. See `RosterAbort`.
+          throw new RosterAbort("target-not-member");
+        }
+
+        return "ok" as const;
+      });
+    } catch (err) {
+      if (err instanceof RosterAbort) return err.outcome as TransferOutcome;
+      throw err;
+    }
   }
 }

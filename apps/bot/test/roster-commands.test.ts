@@ -3,6 +3,7 @@ import type { RosterStore, Membership, PendingInvite } from "../src/roster-store
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave,
+  handleFactionPromote, handleFactionDemote, handleFactionTransfer,
   type RosterDeps,
 } from "../src/roster-commands.js";
 
@@ -282,5 +283,97 @@ describe("handleFactionLeave", () => {
       factionId: 1, discordId: "d1",
       at: now, until: new Date(now.getTime() + 259_200_000),
     });
+  });
+});
+
+describe("handleFactionPromote", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionPromote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("maps every store outcome to a distinct reply", async () => {
+    const cases: Array<["ok" | "not-leader" | "target-not-member" | "cannot-target-leader", RegExp]> = [
+      ["ok", /officer/i],
+      ["not-leader", /leader can promote/i],
+      ["target-not-member", /not in .*Bears/i],
+      ["cannot-target-leader", /leader doesn't need promoting/i],
+    ];
+    const seen = new Set<string>();
+    for (const [outcome, expected] of cases) {
+      const d = deps({ membershipsFor: async () => [membership()], setRole: async () => outcome });
+      const r = await handleFactionPromote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+      expect(r.content).toMatch(expected);
+      expect(seen.has(r.content)).toBe(false);
+      seen.add(r.content);
+      expect(r.ephemeral).toBe(true);
+    }
+  });
+
+  it("passes the role and target through to the store", async () => {
+    const setRole = vi.fn(async () => "ok" as const);
+    const d = deps({ membershipsFor: async () => [membership()], setRole });
+    await handleFactionPromote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(setRole).toHaveBeenCalledWith({
+      factionId: 1, actorDiscordId: "d1", targetDiscordId: "d9", role: "officer",
+    });
+  });
+});
+
+describe("handleFactionDemote", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionDemote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("maps every store outcome to a distinct reply", async () => {
+    const cases: Array<["ok" | "not-leader" | "target-not-member" | "cannot-target-leader", RegExp]> = [
+      ["ok", /member/i],
+      ["not-leader", /leader can demote/i],
+      ["target-not-member", /not in .*Bears/i],
+      ["cannot-target-leader", /can't demote the leader/i],
+    ];
+    const seen = new Set<string>();
+    for (const [outcome, expected] of cases) {
+      const d = deps({ membershipsFor: async () => [membership()], setRole: async () => outcome });
+      const r = await handleFactionDemote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+      expect(r.content).toMatch(expected);
+      expect(seen.has(r.content)).toBe(false);
+      seen.add(r.content);
+      expect(r.ephemeral).toBe(true);
+    }
+  });
+
+  it("passes the role and target through to the store", async () => {
+    const setRole = vi.fn(async () => "ok" as const);
+    const d = deps({ membershipsFor: async () => [membership()], setRole });
+    await handleFactionDemote(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(setRole).toHaveBeenCalledWith({
+      factionId: 1, actorDiscordId: "d1", targetDiscordId: "d9", role: "member",
+    });
+  });
+});
+
+describe("handleFactionTransfer", () => {
+  it("refuses when the actor holds no faction", async () => {
+    const d = deps({ membershipsFor: async () => [] });
+    const r = await handleFactionTransfer(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/not in a faction/i);
+  });
+
+  it("refuses a non-leader without touching the store", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "officer" })] });
+    const r = await handleFactionTransfer(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.content).toMatch(/only the leader can transfer/i);
+    expect(r.prompt).toBeUndefined();
+  });
+
+  it("does not call the store and returns a confirm-transfer prompt", async () => {
+    const d = deps({ membershipsFor: async () => [membership({ role: "leader" })] });
+    const r = await handleFactionTransfer(d, "d1", { serverId: null, targetDiscordId: "d9" });
+    expect(r.prompt).toEqual({ kind: "confirm-transfer", factionId: 1, targetDiscordId: "d9" });
+    expect(r.ephemeral).toBe(true);
   });
 });

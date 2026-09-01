@@ -198,3 +198,82 @@ export async function handleFactionLeave(
 
   return reply(`You left **${membership.factionName}**. You cannot join a faction on **${membership.serverName}** for 3 days.`);
 }
+
+export type RoleTargetInput = { serverId: number | null; targetDiscordId: string };
+
+/**
+ * The store owns every precondition (permission and the untouchable-leader
+ * target) because they're re-checked at write time — see
+ * `PgRosterStore.setRole`. This handler only maps outcomes to messages.
+ */
+export async function handleFactionPromote(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  input: RoleTargetInput,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), input.serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  const outcome = await deps.store.setRole({
+    factionId: membership.factionId,
+    actorDiscordId,
+    targetDiscordId: input.targetDiscordId,
+    role: "officer",
+  });
+
+  if (outcome === "not-leader") return reply("Only the leader can promote.");
+  if (outcome === "target-not-member") return reply(`**${mention(input.targetDiscordId)}** is not in **${membership.factionName}**.`);
+  if (outcome === "cannot-target-leader") return reply("The leader doesn't need promoting.");
+
+  return reply(`**${mention(input.targetDiscordId)}** is now an officer in **${membership.factionName}**.`);
+}
+
+export async function handleFactionDemote(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  input: RoleTargetInput,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), input.serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  const outcome = await deps.store.setRole({
+    factionId: membership.factionId,
+    actorDiscordId,
+    targetDiscordId: input.targetDiscordId,
+    role: "member",
+  });
+
+  if (outcome === "not-leader") return reply("Only the leader can demote.");
+  if (outcome === "target-not-member") return reply(`**${mention(input.targetDiscordId)}** is not in **${membership.factionName}**.`);
+  if (outcome === "cannot-target-leader") return reply("You can't demote the leader. Use `/faction transfer` first.");
+
+  return reply(`**${mention(input.targetDiscordId)}** is now a member in **${membership.factionName}**.`);
+}
+
+/**
+ * Never calls the store: §6 requires confirmation before leadership
+ * actually changes hands, so this only validates the actor is the leader
+ * and hands back a `confirm-transfer` prompt. The store call happens on the
+ * button, in Task 9's routing.
+ */
+export async function handleFactionTransfer(
+  deps: RosterDeps,
+  actorDiscordId: string,
+  input: RoleTargetInput,
+): Promise<RosterReply> {
+  const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), input.serverId);
+  if (ctx.kind !== "ok") return contextRefusal(ctx);
+  const { membership } = ctx;
+
+  if (membership.role !== "leader") {
+    return reply("Only the leader can transfer leadership.");
+  }
+
+  return {
+    content: `Transfer leadership of **${membership.factionName}** to **${mention(input.targetDiscordId)}**? This cannot be undone by you alone.`,
+    ephemeral: true,
+    prompt: { kind: "confirm-transfer", factionId: membership.factionId, targetDiscordId: input.targetDiscordId },
+  };
+}
