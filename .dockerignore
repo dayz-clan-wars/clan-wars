@@ -1,0 +1,22 @@
+# The ingest-worker image builds with `context: .` (docker-compose.yml), so the
+# build context is the REPO ROOT and this file must live here, not beside the
+# Dockerfile. The Dockerfile copies `packages/` and `apps/ingest-worker/`
+# wholesale, both of which contain a real `node_modules/` and `.turbo/` on a
+# developer machine; without these rules they are uploaded into the context and
+# then overwritten by `pnpm install --frozen-lockfile` anyway.
+node_modules
+**/node_modules
+.turbo
+**/.turbo
+dist
+**/dist
+.git
+.gitignore
+.env
+.env.*
+**/.env
+**/.env.*
+coverage
+**/coverage
+**/*.log
+.DS_Store
