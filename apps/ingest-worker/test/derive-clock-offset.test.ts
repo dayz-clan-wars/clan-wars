@@ -41,7 +41,34 @@ describe("deriveClockOffsetMs", () => {
     const realistic = { localTimestampMs: 1000, modifiedAtMs: 1000 + 7 * HOUR };
     const missing = { localTimestampMs: 1000, modifiedAtMs: 0 };
     const result = deriveClockOffsetMs([realistic, missing]);
-    // modifiedAtMs: 0, localTimestampMs: 1000 → offset = -1000
-    expect(result).toBe(-1000);
+    // modifiedAtMs: 0, localTimestampMs: 1000 → offset = -1000, which the
+    // 15-minute grid snap then floors to -900_000. Still a wildly wrong
+    // offset; the snapping does not rescue a poisoned candidate.
+    expect(result).toBe(-900_000);
+  });
+
+  it("snaps the minimum DOWN to the 15-minute grid", () => {
+    // Every candidate is `trueOffset + writeLag`, so the minimum is
+    // `trueOffset + smallestLag`. Real timezone offsets are whole 15-minute
+    // units, so flooring to the grid recovers the true offset exactly
+    // whenever the smallest write-lag is under 15 minutes.
+    const min = 7 * HOUR + 43_000;
+    expect(deriveClockOffsetMs([
+      { localTimestampMs: 0, modifiedAtMs: min },
+      { localTimestampMs: 0, modifiedAtMs: 9 * HOUR },
+    ])).toBe(7 * HOUR);
+  });
+
+  it("snaps a negative offset correctly, flooring toward negative infinity", () => {
+    // Derivation, worked out rather than guessed:
+    //   min           = -4h + 43s = -14_400_000 + 43_000 = -14_357_000
+    //   min / 900_000 = -15.952...
+    //   Math.floor    = -16          (toward negative infinity)
+    //   -16 * 900_000 = -14_400_000  = exactly -4h
+    // Flooring lands ON the grid point the true offset occupies rather than
+    // overshooting a step past it, because the lag pushed the minimum ABOVE
+    // -4h, not below it.
+    const min = -4 * HOUR + 43_000;
+    expect(deriveClockOffsetMs([{ localTimestampMs: 0, modifiedAtMs: min }])).toBe(-4 * HOUR);
   });
 });
