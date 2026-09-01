@@ -132,6 +132,10 @@ export class PgVerificationStore implements VerificationStore {
    * account — the losing side of a race, not an error. The challenge is
    * canceled in that case so the player is not left waiting on a sequence
    * that can never bind.
+   *
+   * Also returns false, changing nothing at all, when `dayzId` is not the
+   * challenge's `targetDayzId`. A challenge binds only the character it
+   * names; see the guard inside.
    */
   async completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
@@ -149,6 +153,22 @@ export class PgVerificationStore implements VerificationStore {
       // Lost the race before we got the lock: not an error, just not ours.
       if (challenge.completedAt !== null || challenge.canceledAt !== null) return false;
 
+      // ⚠️ THE security property, enforced by the store itself. A challenge
+      // may only ever bind the ONE character it names. The tick has its own
+      // UID-equality guard, but this must not depend on it: without the check
+      // here, a caller passing the wrong UID still reaches the identity_links
+      // INSERT below and binds this Discord account to a UID its challenge
+      // never named — only the challenge UPDATE is refused (its predicate
+      // includes target_dayz_id), so the caller is told `false` while the
+      // wrong link sits committed and the challenge is left open, holding
+      // both its account slot and its target slot for the full TTL with the
+      // player unable to see or cancel it.
+      //
+      // Not a pre-read-then-write: this runs inside the FOR UPDATE
+      // transaction that already holds the row, so the value cannot change
+      // under us before the writes below.
+      if (challenge.targetDayzId !== dayzId) return false;
+
       // ⚠️ Both outcomes are guarded on the challenge still being open, and the
       // guard is part of the same statement as the write — the SELECT above is
       // a plain read, so a concurrent cancelExpired (any /link fires one) can
@@ -157,11 +177,12 @@ export class PgVerificationStore implements VerificationStore {
       // verificationTick: the batch cursor is never written and the whole
       // batch is redone, forever. Zero affected rows means we lost the race,
       // which is a false return, not an error.
-      // ⚠️ targetDayzId is included here too: even if a future caller forgot
-      // the tick's own UID-equality guard and called this with the wrong
-      // dayzId, the store itself refuses to bind (or cancel under) a
-      // challenge for a UID it doesn't name. Defense in depth on the one
-      // property this whole design rests on.
+      // ⚠️ targetDayzId is repeated here as genuine defence in depth. The
+      // guarantee that this store never binds a UID a challenge does not name
+      // is provided by the equality check above, under the row lock — this
+      // copy is a second, statement-level backstop so neither write can touch
+      // a row whose target changed, or be reached by some future path that
+      // skips the check above.
       const stillOpen = and(
         eq(verificationChallenges.id, challengeId),
         eq(verificationChallenges.targetDayzId, dayzId),

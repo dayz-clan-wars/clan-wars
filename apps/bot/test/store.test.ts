@@ -91,6 +91,30 @@ describe("PgVerificationStore", () => {
     expect(await store.findLinkByDiscord("200")).toBeNull();
   });
 
+  it("refuses to bind a UID the challenge does not name", async () => {
+    // The store-level half of THE security property. The tick has its own
+    // UID-equality guard, but the store must not depend on it: a caller that
+    // passes the wrong UID must get no link row and no state change at all.
+    // Without the equality check inside the FOR UPDATE transaction, the
+    // identity_links INSERT still runs — binding this account to a UID its
+    // challenge never named — and only the challenge UPDATE is refused, so
+    // the caller sees `false` while the wrong link sits committed and the
+    // challenge stays open, holding both index slots for its full TTL.
+    const c = await issue("700", UID_A);
+
+    expect(await store.completeChallenge(c.id, UID_B, "Mallory", later)).toBe(false);
+
+    expect(await db.select().from(identityLinks), "no link may be written for a UID the challenge does not name")
+      .toHaveLength(0);
+    const [row] = await db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.id, c.id));
+    expect(row?.completedAt).toBeNull();
+    // Left open, not canceled: the wrong-UID caller must not be able to close
+    // someone else's challenge either.
+    expect(row?.canceledAt).toBeNull();
+    expect(await store.findLiveChallenge("700", now)).not.toBeNull();
+  });
+
   it("deletes a link and reports whether one existed", async () => {
     const c = await issue();
     await store.completeChallenge(c.id, UID_A, "Steve", later);
