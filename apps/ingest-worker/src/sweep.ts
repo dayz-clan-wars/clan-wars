@@ -62,6 +62,15 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
           serverId: s.id,
           client: deps.supplies.clientFor(s.nitradoServiceId!),
           offsets: deps.supplies.offsets,
+          // ⚠️ SINGLE-SERVER ONLY. `remoteDir` is one process-wide value
+          // (MISSION_CUSTOM_DIR) handed to EVERY server in this loop, but the
+          // path is service-specific — it embeds the Nitrado service id. With
+          // one active server this is correct. With two, the second server's
+          // file goes into the first service's directory, and if that path
+          // exists the upload SUCCEEDS silently into a folder the second
+          // server never reads: no error, the hash advances, and its supplies
+          // simply never appear. Fixing it properly means a per-server column
+          // (a schema change). See PLAN-3-INBOX item 23 and config.ts.
           remoteDir: deps.supplies.remoteDir,
           fileName: deps.supplies.fileName,
           now: new Date(),

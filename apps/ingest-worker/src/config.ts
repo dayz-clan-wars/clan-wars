@@ -37,6 +37,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): WorkerConfig {
     backfillBudget: intAtLeast(env, "ADM_BACKFILL_BUDGET", 15, 0),
     // No sensible default: a wrong or absent path uploads the supply file
     // where the server never reads it, and nothing would report that.
+    //
+    // ⚠️ SINGLE-SERVER ONLY. This is ONE process-wide value applied to every
+    // server the sweep visits, but the path is service-specific — the live
+    // value embeds a Nitrado service id
+    // (`/games/ni<serviceid>_4/ftproot/...`). With one active server that is
+    // correct. With two, the second server's file is uploaded into the FIRST
+    // service's directory, and if that path exists the upload SUCCEEDS
+    // silently into a folder the second server never reads: no error, hash
+    // advances, supplies never appear. Making this per-server means a
+    // `servers` column, which is a schema change. See PLAN-3-INBOX item 23.
     missionCustomDir: required(env, "MISSION_CUSTOM_DIR"),
   };
 }

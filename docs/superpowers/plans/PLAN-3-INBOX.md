@@ -312,3 +312,30 @@ advisory lock (or a row lease) around the notify step so only one process notifi
 give the bot a startup guard that refuses to run when another holds the lock. The same
 argument applies to the ceremony notifier and the players projection, which share the
 loop.
+
+## 23. `MISSION_CUSTOM_DIR` is process-wide, so supplies are single-server-only
+
+The supply projection uploads to `cfg.missionCustomDir` — one environment value the
+sweep hands to **every** server it visits (`apps/ingest-worker/src/sweep.ts`, the
+`remoteDir` field of the `supplies` dep). But that path is service-specific: the live
+value is `/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/custom`, and
+the `ni…_4` segment is the Nitrado service id.
+
+With one active server this is correct, which is why the deployment works. Add a
+second and its supply file is uploaded into the **first** service's directory. The
+failure mode is the bad one: if that path happens to exist under the second service's
+credentials, the upload SUCCEEDS. Nothing errors, `supply_uploads` advances the hash,
+and the second server's supplies simply never appear — with no log line, and no retry,
+because from the tick's point of view everything worked.
+
+Not fixed on `feat/faction-supplies` because the fix is a schema change: the path
+belongs on the `servers` row next to `nitrado_service_id`, not in the process
+environment. Load-bearing comments are in place at both sites (`sweep.ts` at the
+`remoteDir` call site and `config.ts` beside `missionCustomDir`) so the next person to
+register a second server sees it before they hit it.
+
+The fix, when it is written: a `servers.mission_custom_dir` column (generated
+migration), populated at registration from a `file_server/list` call rather than
+guessed, with `MISSION_CUSTOM_DIR` retired or kept only as a backfill default. Worth
+also considering whether the upload should verify the directory belongs to the service
+it is uploading for.
