@@ -85,6 +85,13 @@
       "when": 1788247310666,
       "tag": "0011_jazzy_nomad",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1788279975790,
+      "tag": "0012_clever_lenny_balinger",
+      "breakpoints": true
     }
   ]
 }
