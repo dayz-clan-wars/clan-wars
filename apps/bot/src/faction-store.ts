@@ -1,8 +1,12 @@
 import type { Database } from "@factions/db";
 import { ceremonies, ceremonyParticipants, claimDrafts, factions, factionMembers } from "@factions/db";
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { HOLDING_STATUSES } from "@factions/domain";
 
-const HOLDING = ["reserved", "active", "dormant"];
+// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
+// tuple) so every faction/domain consumer gets full literal-type checking,
+// but drizzle's inArray() requires a plain mutable array.
+const HOLDING: string[] = [...HOLDING_STATUSES];
 
 export type OpenCeremony = {
   id: number; serverId: number; poleKey: string; x: string; y: string; z: string;

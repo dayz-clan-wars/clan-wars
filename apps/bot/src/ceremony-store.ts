@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionInvites, factionMembers, identityLinks, events } from "@factions/db";
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
-import { parsePoleKey } from "@factions/domain";
+import { HOLDING_STATUSES, parsePoleKey } from "@factions/domain";
 import { and, asc, eq, inArray, isNull, lte, max } from "drizzle-orm";
 
 export type PoleRef = { serverId: number; poleKey: string };
@@ -11,7 +11,10 @@ export type RecordedRaise = PoleRef & {
 export type Participant = { dayzId: string; discordId: string; gamertag: string };
 export type CeremonyDraft = { detectedAt: Date; expiresAt: Date; participants: Participant[] };
 
-const HOLDING = ["reserved", "active", "dormant"];
+// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
+// tuple) so every faction/domain consumer gets full literal-type checking,
+// but drizzle's inArray() requires a plain mutable array.
+const HOLDING: string[] = [...HOLDING_STATUSES];
 
 export interface CeremonyStore {
   highWaterMark(serverId: number): Promise<Date | null>;

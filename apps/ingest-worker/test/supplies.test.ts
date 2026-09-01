@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { loadTemplate, generateSupplies } from "../src/supplies.js";
 
 const RAW = JSON.parse(readFileSync(new URL("../assets/flag-supplies.template.json", import.meta.url), "utf8"));
@@ -84,8 +85,23 @@ describe("generateSupplies", () => {
   });
 
   it("is byte-stable for the same input", () => {
-    // The hash in the upload tick compares these bytes. Any nondeterminism
-    // (key order, float formatting) would re-upload on every single tick.
-    expect(generateSupplies(offsets, [COK])).toBe(generateSupplies(offsets, [COK]));
+    // A golden hash, not a self-comparison: the upload tick hashes these
+    // exact bytes and only re-uploads when the hash changes, so this must
+    // catch a changed key order, a changed float format or a dropped field
+    // — not just "the function agrees with itself in one process".
+    const out = generateSupplies(offsets, [COK]);
+    const digest = createHash("sha256").update(out).digest("hex");
+    expect(digest).toBe("497b9b852cddc4f949afe55c3e278c1214246a84b6c0d3e28a0dd401538b08b1");
+  });
+
+  it("emits exactly the six spawner fields per object, no more and no fewer", () => {
+    // Adding a field to SpawnObject and forgetting to add it to the hand-
+    // rolled serializer would silently drop it from the uploaded file —
+    // valid JSON, semantically wrong. Guard the field set explicitly.
+    const out = JSON.parse(generateSupplies(offsets, [COK]));
+    const expectedKeys = ["name", "pos", "ypr", "scale", "enableCEPersistency", "customString"].sort();
+    for (const obj of out.Objects) {
+      expect(Object.keys(obj).sort()).toEqual(expectedKeys);
+    }
   });
 });
