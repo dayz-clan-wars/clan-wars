@@ -283,9 +283,22 @@ export const transferCustomId = (factionId: number, targetDiscordId: string): st
   `${TRANSFER_PREFIX}${factionId}:${targetDiscordId}`;
 export const disbandCustomId = (factionId: number): string => `${DISBAND_PREFIX}${factionId}`;
 
+/**
+ * A custom id suffix is decimal digits or it is nothing.
+ *
+ * ⚠️ `Number()` alone accepts far more than that: `Number("9e2")` is 900 and
+ * `Number("0x10")` is 16, so `invite-accept:9e2` would parse as invite 900.
+ * Not exploitable — every consumer re-checks ownership — but `config.ts`
+ * already sets this house rule and `parsePoleKey` was fixed for this exact
+ * bug class. Validate the text, then coerce.
+ */
+const DECIMAL_RE = /^\d+$/u;
+
 function parseIdSuffix(customId: string, prefix: string): number | null {
   if (!customId.startsWith(prefix)) return null;
-  const n = Number(customId.slice(prefix.length));
+  const raw = customId.slice(prefix.length);
+  if (!DECIMAL_RE.test(raw)) return null;
+  const n = Number(raw);
   return Number.isSafeInteger(n) && n > 0 ? n : null;
 }
 

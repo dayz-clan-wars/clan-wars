@@ -56,8 +56,18 @@ describe("PgRosterStore", () => {
     await db.insert(factionMembers).values({
       factionId: goneFactionId, serverId: s2!.id, dayzId: PLAYER, discordId: LEADER_DISCORD, role: "leader", joinedAt: now,
     });
+    const [s3] = await db.insert(servers).values({ name: "S3", map: "chernarus", clockOffsetMs: 0 }).returning();
+    const dormantFactionId = (await db.insert(factions).values({
+      serverId: s3!.id, name: "Sleeping", tag: "SLP", texture: "Flag_Sleeping", poleKey: "7:8:9",
+      x: "7.00", y: "8.00", z: "9.00", status: "dormant", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    }).returning())[0]!.id;
+    await db.insert(factionMembers).values({
+      factionId: dormantFactionId, serverId: s3!.id, dayzId: PLAYER, discordId: LEADER_DISCORD, role: "leader", joinedAt: now,
+    });
+
     const rows = await store.membershipsFor(LEADER_DISCORD);
-    expect(rows.map((r) => r.factionName)).toEqual(["Live"]);
+    // Dormant IS holding — it keeps its flag, tag and pole — so it is listed.
+    expect(rows.map((r) => r.factionName)).toEqual(["Live", "Sleeping"]);
   });
 
   it("returns a roster entry with a null gamertag when the link is gone", async () => {
@@ -116,5 +126,22 @@ describe("PgRosterStore", () => {
     expect(byName).toMatchObject({ id: factionId });
     expect(await store.factionById(999999)).toBeNull();
     expect(await store.factionByName("nope")).toBeNull();
+  });
+
+  it("scopes a name lookup to the requested server", async () => {
+    // Faction names are unique per server, not globally: `/faction info
+    // name:Bears server:2` must not answer with server 1's Bears.
+    const here = await seedFaction({ status: "active", name: "Bears" });
+    const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+    const there = (await db.insert(factions).values({
+      serverId: s2!.id, name: "Bears", tag: "BR2", texture: "Flag_Bears2", poleKey: "4:5:6",
+      x: "4.00", y: "5.00", z: "6.00", status: "active", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    }).returning())[0]!.id;
+
+    expect(await store.factionByName("bears", serverId)).toMatchObject({ id: here });
+    expect(await store.factionByName("bears", s2!.id)).toMatchObject({ id: there });
+    expect(await store.factionByName("bears", 999999)).toBeNull();
+    // No server given keeps the old unqualified behaviour.
+    expect(await store.factionByName("bears")).not.toBeNull();
   });
 });

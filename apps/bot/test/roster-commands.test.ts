@@ -510,6 +510,18 @@ describe("handleFactionInfo", () => {
     expect(r.ephemeral).toBe(false);
   });
 
+  it("passes the requested server through to the name lookup", async () => {
+    // The `server` option is registered on info and roster; ignoring it here
+    // is how `/faction info name:Bears server:2` answered with server 1's.
+    const factionByName = vi.fn(async () => factionCard());
+    const d = deps({ factionByName });
+    await handleFactionInfo(d, "d9", "Bears", 2);
+    expect(factionByName).toHaveBeenCalledWith("Bears", 2);
+
+    await handleFactionInfo(d, "d9", "Bears", null);
+    expect(factionByName).toHaveBeenLastCalledWith("Bears", null);
+  });
+
   it("without a name, uses the caller's own membership", async () => {
     const d = deps({
       membershipsFor: async () => [membership({ factionId: 1 })],

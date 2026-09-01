@@ -51,7 +51,7 @@ export interface RosterStore {
   memberOf(factionId: number, discordId: string): Promise<{ dayzId: string; role: Role } | null>;
   rosterOf(factionId: number): Promise<RosterEntry[]>;
   factionById(factionId: number): Promise<FactionCard | null>;
-  factionByName(name: string): Promise<FactionCard | null>;
+  factionByName(name: string, serverId?: number | null): Promise<FactionCard | null>;
   cooldownUntil(serverId: number, dayzId: string): Promise<Date | null>;
 
   // Writes (Tasks 4-7)
@@ -176,8 +176,17 @@ export class PgRosterStore implements RosterStore {
     return this.factionCard(eq(factions.id, factionId));
   }
 
-  async factionByName(name: string): Promise<FactionCard | null> {
-    return this.factionCard(eq(sql`lower(${factions.name})`, name.toLowerCase()));
+  /**
+   * Scoped to a server when one is given: faction names are unique per
+   * server, not globally, so `/faction info name:Bears server:2` must not be
+   * answered with server 1's Bears. Without a server the first match stands,
+   * which is what an unqualified lookup can honestly promise.
+   */
+  async factionByName(name: string, serverId?: number | null): Promise<FactionCard | null> {
+    const byName = eq(sql`lower(${factions.name})`, name.toLowerCase());
+    return this.factionCard(
+      serverId == null ? byName : and(byName, eq(factions.serverId, serverId))!,
+    );
   }
 
   private async factionCard(where: ReturnType<typeof eq>): Promise<FactionCard | null> {

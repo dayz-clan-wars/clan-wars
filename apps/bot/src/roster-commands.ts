@@ -408,7 +408,11 @@ async function findFactionCard(
   requestedServerId: number | null,
 ): Promise<{ card: FactionCard } | { error: RosterReply }> {
   if (name !== null) {
-    const card = await deps.store.factionByName(name);
+    // `requestedServerId` is registered as an option on both `info` and
+    // `roster`, so it has to be honoured here too — names are unique per
+    // server, and answering with another server's faction is a promise the
+    // command visibly breaks.
+    const card = await deps.store.factionByName(name, requestedServerId);
     return card ? { card } : { error: publicReply(`No faction named **${name}**.`) };
   }
 

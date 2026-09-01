@@ -196,6 +196,19 @@ describe("roster custom ids", () => {
     expect(parseDisbandCustomId(`${TRANSFER_PREFIX}12:d9`)).toBeNull();
   });
 
+  it("refuses a suffix that is not plain decimal digits", () => {
+    // `Number("9e2")` is 900 and `Number("0x10")` is 16 — coercing before
+    // validating would silently retarget the button at another invite.
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}9e2`)).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}0x10`)).toBeNull();
+    expect(parseInviteAcceptCustomId(INVITE_ACCEPT_PREFIX)).toBeNull();
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}+7`)).toBeNull();
+    expect(parseInviteDeclineCustomId(`${INVITE_DECLINE_PREFIX}0x10`)).toBeNull();
+    expect(parseDisbandCustomId(`${DISBAND_PREFIX}9e2`)).toBeNull();
+    // ...and a plain decimal id still works.
+    expect(parseInviteAcceptCustomId(`${INVITE_ACCEPT_PREFIX}900`)).toBe(900);
+  });
+
   it("keeps every custom id inside Discord's 100-character cap", () => {
     // A Discord custom id longer than 100 chars is rejected at send time, so
     // the message never renders and the player sees nothing at all.
