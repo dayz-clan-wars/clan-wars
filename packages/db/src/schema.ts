@@ -40,6 +40,13 @@ export const servers = pgTable("servers", {
    * server is retired by clearing this rather than by deleting rows or
    * editing worker config. Defaults true: registering a server should start
    * ingesting it, not require a second step.
+   *
+   * ⚠️ This column was added `NOT NULL DEFAULT true` onto an existing table,
+   * so the migration backfilled every pre-existing row — including rows
+   * created by the historical-export replay from local disk — to true. Those
+   * rows have no Nitrado service behind them (see nitradoServiceId), so the
+   * sweep's WHERE clause also requires nitradoServiceId IS NOT NULL; `active`
+   * alone is not a safe filter for which servers to pull.
    */
   active: boolean("active").notNull().default(true),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
