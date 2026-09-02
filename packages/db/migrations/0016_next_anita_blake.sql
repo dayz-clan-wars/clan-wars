@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "events_raise_lookup_idx" ON "events" USING btree ("server_id",("payload"->>'poleKey'),("payload"->>'texture'),"occurred_at") WHERE "events"."type" = 'flag.raised';

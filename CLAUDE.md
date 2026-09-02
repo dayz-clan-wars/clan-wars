@@ -115,6 +115,15 @@ there should be a test that fails when they disagree. See
 - **Pole coordinates are a raid target.** They are gated to faction members in
   `/faction info` and kept out of DMs. Every Discord command reply is ephemeral
   (`RosterReply.ephemeral` is the literal `true`, so a public one will not compile).
+- **The dormancy clock's raise lookup depends on `events_raise_lookup_idx`** — a partial
+  index over `(server_id, payload->>'poleKey', payload->>'texture', occurred_at)` where
+  `type = 'flag.raised'`. Without it the subquery filters every `flag.raised` row on the
+  server once per faction per tick (352ms vs 0.41ms at a year of projected ingest), and
+  nothing errors — `guardedRunner` just skips overlapping runs, so the clock silently
+  stops keeping up. The index's payload keys and the query's are two statements of one
+  fact; `apps/bot/test/dormancy-index-drift.test.ts` holds them together. Do not
+  "simplify" it to `(server_id, occurred_at)`: that form is *worse than no index* for a
+  faction that has not raised in months, which is the only kind dormancy cares about.
 - **The supply spawner file is a projection of the factions table.** The worker
   regenerates it every sweep, hashes it, and uploads only on a change. The hash advances
   only on a successful upload. Nothing coordinates the bot and the worker — status is
@@ -128,8 +137,8 @@ Faction dormancy is **deployed**. A faction that does not raise its own flag at 
 pole for 7 days goes dormant and loses its supply kit; 14 further days disband it. Spec
 and plan are in `docs/superpowers/`.
 
-Live as of 2026-09-02: migration `0015` applied to `factions_live` (16 of 16 journal
-entries), the bot restarted on the dormancy code as a single instance, and the
+Live as of 2026-09-02: migrations `0015` and `0016` applied to `factions_live` (17 of 17
+journal entries), the bot restarted on the dormancy code as a single instance, and the
 ingest worker rebuilt and recreated. The acceptance check was run before and after —
 one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null, so the
 first tick transitioned nothing, which is what it had to do. Runbook:
@@ -151,23 +160,18 @@ faction's supplies. That is a decision, not a side effect.
 
 ### Known-open, in rough priority order
 
-1. **`clocks()` is N correlated scans of `events` every 10s, with no index covering the
-   jsonb keys** (`apps/bot/src/dormancy-store.ts`). Harmless at one faction and six
-   events; grows with the log and degrades silently, because `guardedRunner` skips
-   overlapping runs rather than erroring. `EXPLAIN ANALYZE` it against `factions_live`
-   before deciding between a grouped query and a partial index.
-2. **Inbox item 24** — out-of-band changes to the supply file are never detected. The
+1. **Inbox item 24** — out-of-band changes to the supply file are never detected. The
    stored hash records what we last *sent*, not what the server holds.
-3. **Inbox item 21** — test-database isolation. Until this is fixed, `pnpm -r test`
+2. **Inbox item 21** — test-database isolation. Until this is fixed, `pnpm -r test`
    cannot be trusted as a gate.
-4. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
+3. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
    `dormant_since` stamped during it; withheld disbands are silent (no counter); a
    genuinely dead server never releases its flags.
-5. `/faction roster` still lists any named faction's members to anyone. Deliberate per
+4. `/faction roster` still lists any named faction's members to anyone. Deliberate per
    spec §6, but worth revisiting alongside the pole gating.
-6. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
+5. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
    player completing a real `/link` in production". That is not true — about ten of the
    24 have ever appeared in live data. A player was blocked by `EmoteMove` on
    2026-09-01.
-7. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
+6. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.

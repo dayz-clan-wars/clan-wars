@@ -410,7 +410,7 @@ gap; §2.1 and §6 were corrected so they no longer overclaim.
 
 # Carried forward from faction dormancy (2026-09-02)
 
-## 25. `clocks()` scans the event log once per faction, every ten seconds
+## 25. ~~`clocks()` scans the event log once per faction, every ten seconds~~ — DONE 2026-09-02
 
 `apps/bot/src/dormancy-store.ts`'s `LAST_RAISE` is a correlated subquery evaluated once
 per examined faction, filtering `events` on `type`, `server_id`, and two `payload->>`
@@ -433,6 +433,47 @@ certain risk for a speculative gain. Decide it with real numbers — `EXPLAIN AN
 against `factions_live` — between a single grouped query (join `events` to `factions` on
 `server_id` plus the two payload keys, `GROUP BY factions.id`) and a partial index such
 as `CREATE INDEX ON events (server_id, occurred_at) WHERE type = 'flag.raised'`.
+
+### Resolution
+
+Fixed by `events_raise_lookup_idx` (migration `0016`): a partial index on
+`(server_id, payload->>'poleKey', payload->>'texture', occurred_at)` where
+`type = 'flag.raised'`. The query is unchanged — which was the point, since the
+objection above was to rewriting the statement that gates an irreversible operation.
+
+Measured on a throwaway `factions_bench` database at a year of projected ingest — 1M
+events, 120k of them `flag.raised`, 45 examined factions:
+
+| variant | per tick |
+|---|---|
+| current query, no new index | 352 ms |
+| grouped rewrite, no new index | 47 ms |
+| **current query + `events_raise_lookup_idx`** | **0.41 ms** |
+| grouped rewrite + the index | 34 ms |
+
+**The partial index this item proposed — `(server_id, occurred_at) where type =
+'flag.raised'` — is a trap, and the numbers are why.** It measured 11.6ms because the
+planner walks it backward and stops at the first row matching the payload predicate,
+which is fast for a faction that raised recently. Adding five factions that had not
+raised in ~300 days took it to 180ms and **595,318 buffers — nine times worse than the
+unindexed baseline's 68,282** — because each stale faction scans backward through every
+newer raise. The factions it is worst for are precisely the ones dormancy exists to
+find. Indexing the payload keys themselves has no such asymmetry: a stale faction costs
+the same as a fresh one.
+
+The grouped rewrite works and is 7x, but it aggregates every `flag.raised` row on every
+tick regardless of faction count, and it cannot use the index (34ms with it). It was the
+wrong axis: the cost was never the N, it was the missing access path.
+
+Write cost is negligible — 20k inserted events went 43ms to 64ms, about 1µs per row,
+against a live server ingesting ~280 events/day. The index is 5.6MB per 120k raises.
+
+`apps/bot/test/dormancy-index-drift.test.ts` pins it, and pins it on the property that
+matters: asserting the plan merely *names* the index is too weak, because `server_id`
+alone keeps it usable and a renamed payload key still yields an index scan. It asserts
+both payload keys appear in `Index Cond` and none is left in a `Filter`. Verified by
+mutation — renaming `poleKey`, renaming `texture`, and changing the event type each fail
+it.
 
 ## 26. Three residual gaps in the dormancy liveness guard
 

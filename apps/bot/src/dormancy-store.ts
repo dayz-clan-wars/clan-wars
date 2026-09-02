@@ -32,7 +32,7 @@ export interface DormancyStore {
  * there — so the read model would report every faction as never having raised
  * a flag. `ceremony-tick` reads the event log directly for the same reason.
  */
-const LAST_RAISE = sql<Date | null>`(
+export const LAST_RAISE = sql<Date | null>`(
   select max(e.occurred_at)
   from events e
   where e.type = 'flag.raised'
@@ -54,7 +54,7 @@ const SERVER_LAST_EVENT = sql<Date | null>`(
 )`;
 
 /** Statuses whose clock is worth reading. See dormancy.ts's decide(). */
-const EXAMINED = ["active", "dormant"];
+export const EXAMINED = ["active", "dormant"];
 
 export class PgDormancyStore implements DormancyStore {
   constructor(private readonly db: Database) {}

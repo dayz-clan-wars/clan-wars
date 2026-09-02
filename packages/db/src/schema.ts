@@ -100,6 +100,18 @@ export const events = pgTable("events", {
   uniqEvent: uniqueIndex("events_idempotency_uniq").on(t.serverId, t.admFileId, t.lineIndex, t.subIndex),
   byType: index("events_type_idx").on(t.type),
   byServerOccurred: index("events_server_occurred_idx").on(t.serverId, t.occurredAt),
+  // ⚠️ The dormancy clock's per-faction "when did this faction last raise its
+  // own flag at its own pole" lookup, and the only index covering the payload
+  // keys. Without it that subquery filters every flag.raised row on the server
+  // once per faction per tick: measured at 1M events / 120k raises / 45
+  // factions, 352ms per tick versus 0.4ms with it. The columns must stay in
+  // this order — the three equalities first, occurred_at last — or `max()`
+  // cannot be answered by walking the index. `events_raise_lookup_idx` is
+  // pinned by apps/bot/test/dormancy-index-drift.test.ts, which fails if the
+  // planner stops choosing it.
+  byRaiseLookup: index("events_raise_lookup_idx")
+    .on(t.serverId, sql`(${t.payload}->>'poleKey')`, sql`(${t.payload}->>'texture')`, t.occurredAt)
+    .where(sql`${t.type} = 'flag.raised'`),
 }));
 
 export const consumerCursors = pgTable("consumer_cursors", {
