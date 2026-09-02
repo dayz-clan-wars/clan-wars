@@ -174,7 +174,7 @@ describe("supplyTick", () => {
   it("⚠️ omits a dormant faction — this is how a stale flag stops the kit", async () => {
     // The bot sets the status; the worker only reads it. Nothing coordinates
     // the two, which is why this filter is the whole mechanism.
-    const active = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "1", y: "2", z: "3", status: "active" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "1", y: "2", z: "3", status: "active" });
     await seedFaction({ tag: "DRM", texture: "Flag_Wolf", x: "4", y: "5", z: "6", status: "dormant" });
     const bodies: string[] = [];
     const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
@@ -183,7 +183,6 @@ describe("supplyTick", () => {
     expect(r.factions).toBe(1);
     const tags = new Set(JSON.parse(bodies[0]!).Objects.map((o: any) => o.customString));
     expect([...tags]).toEqual(["COK"]);
-    expect(active.status).toBe("active");
   });
 
   it("changes the hash when a faction goes dormant, so the file is re-uploaded", async () => {
