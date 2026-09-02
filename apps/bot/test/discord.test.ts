@@ -42,6 +42,24 @@ describe("discord wiring", () => {
     await db.insert(players).values({ dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now });
   });
 
+  it("exports a dormancy tick that startBot can run", async () => {
+    // ⚠️ The tick, the store and the notifier are each tested alone. Nothing
+    // proves they are actually wired into the bot's job, and an unwired tick is
+    // silent: no error, no transitions, supplies flowing forever.
+    const { dormancyTick } = await import("../src/dormancy-tick.js");
+    const { PgDormancyStore } = await import("../src/dormancy-store.js");
+    const { notifyDormancy } = await import("../src/dormancy-notify.js");
+    expect(typeof dormancyTick).toBe("function");
+    expect(typeof notifyDormancy).toBe("function");
+
+    const store = new PgDormancyStore(db);
+    const r = await dormancyTick(store, {
+      now: new Date("2026-09-02T12:00:00Z"),
+      windows: { dormantAfterMs: 604_800_000, disbandAfterDormantMs: 1_209_600_000 },
+    });
+    expect(r.examined).toBe(0);
+  });
+
   describe("buildCommands", () => {
     it("declares link, unlink, whoami and faction", () => {
       expect(buildCommands().map((c) => c.name).sort()).toEqual(["faction", "link", "unlink", "whoami"]);
