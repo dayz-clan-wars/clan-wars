@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions } from "@factions/db";
-import { inArray, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 
 export type FactionClockRow = FactionClock & {
@@ -12,6 +12,9 @@ export type FactionClockRow = FactionClock & {
 
 export interface DormancyStore {
   clocks(): Promise<FactionClockRow[]>;
+  goDormant(factionId: number, at: Date): Promise<boolean>;
+  revive(factionId: number): Promise<boolean>;
+  stampDormantSince(factionId: number, at: Date): Promise<boolean>;
 }
 
 /**
@@ -59,5 +62,43 @@ export class PgDormancyStore implements DormancyStore {
       lastRaiseAt: r.lastRaiseAt === null ? null : new Date(r.lastRaiseAt as unknown as string),
       dormantSince: r.dormantSince === null ? null : new Date(r.dormantSince as unknown as string),
     }));
+  }
+
+  /**
+   * ⚠️ Every transition is guarded on the status it expects and reports
+   * whether it actually moved a row. That boolean is what makes the DM
+   * at-most-once: only the tick that performed the transition sends, so two
+   * overlapping ticks cannot both warn the same leader.
+   */
+  async goDormant(factionId: number, at: Date): Promise<boolean> {
+    const rows = await this.db.update(factions)
+      .set({ status: "dormant", dormantSince: at })
+      .where(and(eq(factions.id, factionId), eq(factions.status, "active")))
+      .returning({ id: factions.id });
+    return rows.length > 0;
+  }
+
+  async revive(factionId: number): Promise<boolean> {
+    const rows = await this.db.update(factions)
+      .set({ status: "active", dormantSince: null })
+      .where(and(eq(factions.id, factionId), eq(factions.status, "dormant")))
+      .returning({ id: factions.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * Start the clock on a dormant row that has none. Reachable only if
+   * something outside this tick set the status; see decide()'s "stamp".
+   */
+  async stampDormantSince(factionId: number, at: Date): Promise<boolean> {
+    const rows = await this.db.update(factions)
+      .set({ dormantSince: at })
+      .where(and(
+        eq(factions.id, factionId),
+        eq(factions.status, "dormant"),
+        isNull(factions.dormantSince),
+      ))
+      .returning({ id: factions.id });
+    return rows.length > 0;
   }
 }

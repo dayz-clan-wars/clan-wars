@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, events, admFiles, type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
 import { PgDormancyStore } from "../src/dormancy-store.js";
 
@@ -12,52 +12,52 @@ const now = new Date("2026-09-02T12:00:00Z");
 const ago = (ms: number) => new Date(now.getTime() - ms);
 
 describe("PgDormancyStore", () => {
-  describe("clocks", () => {
-    let db: Database;
-    let store: PgDormancyStore;
-    let serverId = 0;
-    let admFileId = 0;
-    let lineIndex = 0;
+  let db: Database;
+  let store: PgDormancyStore;
+  let serverId = 0;
+  let admFileId = 0;
+  let lineIndex = 0;
 
-    beforeEach(async () => {
-      db = createClient(URL);
-      await runMigrations(db);
-      await db.transaction(async (tx) => {
-        await tx.execute(sql`set local client_min_messages = warning`);
-        await tx.execute(sql`truncate table events, raw_lines, adm_files, factions, servers restart identity cascade`);
-      });
-      const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
-      serverId = s!.id;
-      const [f] = await db.insert(admFiles).values({
-        serverId, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true,
-      }).returning();
-      admFileId = f!.id;
-      lineIndex = 0;
-      store = new PgDormancyStore(db);
+  beforeEach(async () => {
+    db = createClient(URL);
+    await runMigrations(db);
+    await db.transaction(async (tx) => {
+      await tx.execute(sql`set local client_min_messages = warning`);
+      await tx.execute(sql`truncate table events, raw_lines, adm_files, factions, servers restart identity cascade`);
+    });
+    const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
+    serverId = s!.id;
+    const [f] = await db.insert(admFiles).values({
+      serverId, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true,
+    }).returning();
+    admFileId = f!.id;
+    lineIndex = 0;
+    store = new PgDormancyStore(db);
+  });
+
+  const seedFaction = async (o: Partial<{ tag: string; texture: string; poleKey: string; status: string; createdAt: Date; activatedAt: Date | null; dormantSince: Date | null }> = {}) => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: o.tag ?? "Bears", tag: o.tag ?? "BEAR",
+      // Default derived from tag, not a fixed literal: tests that seed several
+      // factions without overriding texture (e.g. distinct tags, default
+      // status "active") would otherwise collide on factions_holding_texture_uniq.
+      texture: o.texture ?? `Flag_${o.tag ?? "Bear"}`, poleKey: o.poleKey ?? "1:2:3",
+      x: "1", y: "2", z: "3", status: o.status ?? "active",
+      leaderDiscordId: "d1", createdAt: o.createdAt ?? ago(999_999_999),
+      activatedAt: o.activatedAt ?? null, dormantSince: o.dormantSince ?? null,
+      reservedUntil: (o.status ?? "active") === "reserved" ? now : null,
+    }).returning();
+    return f!;
+  };
+
+  const seedRaise = (o: { poleKey: string; texture: string; at: Date; type?: EventType }) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: o.type ?? "flag.raised",
+      occurredAt: o.at,
+      payload: { dayzId: "A", gamertag: "G", texture: o.texture, poleKey: o.poleKey },
     });
 
-    const seedFaction = async (o: Partial<{ tag: string; texture: string; poleKey: string; status: string; createdAt: Date; activatedAt: Date | null; dormantSince: Date | null }> = {}) => {
-      const [f] = await db.insert(factions).values({
-        serverId, name: o.tag ?? "Bears", tag: o.tag ?? "BEAR",
-        // Default derived from tag, not a fixed literal: tests that seed several
-        // factions without overriding texture (e.g. distinct tags, default
-        // status "active") would otherwise collide on factions_holding_texture_uniq.
-        texture: o.texture ?? `Flag_${o.tag ?? "Bear"}`, poleKey: o.poleKey ?? "1:2:3",
-        x: "1", y: "2", z: "3", status: o.status ?? "active",
-        leaderDiscordId: "d1", createdAt: o.createdAt ?? ago(999_999_999),
-        activatedAt: o.activatedAt ?? null, dormantSince: o.dormantSince ?? null,
-        reservedUntil: (o.status ?? "active") === "reserved" ? now : null,
-      }).returning();
-      return f!;
-    };
-
-    const seedRaise = (o: { poleKey: string; texture: string; at: Date; type?: EventType }) =>
-      db.insert(events).values({
-        serverId, admFileId, lineIndex: lineIndex++, type: o.type ?? "flag.raised",
-        occurredAt: o.at,
-        payload: { dayzId: "A", gamertag: "G", texture: o.texture, poleKey: o.poleKey },
-      });
-
+  describe("clocks", () => {
     it("reports the last raise of the faction's own flag at its own pole", async () => {
       const f = await seedFaction({ poleKey: "1:2:3", texture: "Flag_Bear" });
       await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(20_000) });
@@ -121,6 +121,55 @@ describe("PgDormancyStore", () => {
       expect(clock!.leaderDiscordId).toBe("d1");
       expect(clock!.name).toBe("BEAR");
       expect(clock!.dormantSince).toBeNull();
+    });
+  });
+
+  describe("transitions", () => {
+    it("goes dormant and stamps the timestamp", async () => {
+      const f = await seedFaction({ status: "active" });
+      expect(await store.goDormant(f.id, now)).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("dormant");
+      expect(row!.dormantSince).toEqual(now);
+    });
+
+    it("⚠️ only the transition that actually happened reports true", async () => {
+      // This is what makes the DM at-most-once. A second tick that races the
+      // first must not send a duplicate warning.
+      const f = await seedFaction({ status: "active" });
+      expect(await store.goDormant(f.id, now)).toBe(true);
+      expect(await store.goDormant(f.id, now)).toBe(false);
+    });
+
+    it("refuses to make a reserved faction dormant", async () => {
+      const f = await seedFaction({ status: "reserved" });
+      expect(await store.goDormant(f.id, now)).toBe(false);
+    });
+
+    it("revives, clearing the timestamp", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(1000) });
+      expect(await store.revive(f.id)).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("active");
+      expect(row!.dormantSince).toBeNull();
+    });
+
+    it("revives only from dormant, and only once", async () => {
+      const f = await seedFaction({ status: "active" });
+      expect(await store.revive(f.id)).toBe(false);
+    });
+
+    it("stamps a dormant row that has no timestamp, without touching one that has", async () => {
+      const bare = await seedFaction({ tag: "AAA", poleKey: "1:1:1", status: "dormant", dormantSince: null });
+      const stamped = await seedFaction({ tag: "BBB", poleKey: "2:2:2", status: "dormant", dormantSince: ago(5000) });
+
+      expect(await store.stampDormantSince(bare.id, now)).toBe(true);
+      expect(await store.stampDormantSince(stamped.id, now)).toBe(false);
+
+      const [a] = await db.select().from(factions).where(eq(factions.id, bare.id));
+      const [b] = await db.select().from(factions).where(eq(factions.id, stamped.id));
+      expect(a!.dormantSince).toEqual(now);
+      expect(b!.dormantSince).toEqual(ago(5000));
     });
   });
 });
