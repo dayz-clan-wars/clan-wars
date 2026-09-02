@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions } from "@factions/db";
-import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import { disbandFactionTx } from "./roster-store.js";
 
@@ -34,6 +34,18 @@ const LAST_RAISE = sql<Date | null>`(
     and e.payload->>'texture' = ${factions.texture}
 )`;
 
+/**
+ * The server's newest `events` row of ANY type — the disband liveness gate's
+ * evidence that ingest is still running. Deliberately not filtered to
+ * `flag.raised`: a server with a live ADM feed but a faction that genuinely
+ * never raises again is exactly the case disband should still catch.
+ */
+const SERVER_LAST_EVENT = sql<Date | null>`(
+  select max(e.occurred_at)
+  from events e
+  where e.server_id = ${factions.serverId}
+)`;
+
 /** Statuses whose clock is worth reading. See dormancy.ts's decide(). */
 const EXAMINED = ["active", "dormant"];
 
@@ -54,6 +66,7 @@ export class PgDormancyStore implements DormancyStore {
       // row with neither. Without this a faction with no ingested raise reads
       // as infinitely stale and is dormant on the first tick.
       lastRaiseAt: sql<Date | null>`coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt})`,
+      serverLastEventAt: SERVER_LAST_EVENT,
     }).from(factions).where(inArray(factions.status, EXAMINED));
 
     return rows.map((r) => ({
@@ -63,6 +76,7 @@ export class PgDormancyStore implements DormancyStore {
       // than trust the driver's mapping.
       lastRaiseAt: r.lastRaiseAt === null ? null : new Date(r.lastRaiseAt as unknown as string),
       dormantSince: r.dormantSince === null ? null : new Date(r.dormantSince as unknown as string),
+      serverLastEventAt: r.serverLastEventAt === null ? null : new Date(r.serverLastEventAt as unknown as string),
     }));
   }
 
@@ -105,17 +119,24 @@ export class PgDormancyStore implements DormancyStore {
   }
 
   /**
-   * ⚠️ `isNotNull` is not redundant. `dormant_since < cutoff` is NULL — not
+   * ⚠️ `isNotNull` is not redundant. `dormant_since <= cutoff` is NULL — not
    * false — for a row with no timestamp, and a guard that silently fails to
    * match is the right outcome here only by accident. Stating it makes the
    * rule "a faction is never disbanded without an observed dormancy start"
    * explicit rather than emergent from SQL three-valued logic.
+   *
+   * ⚠️ `lte`, matching `decide()`'s `>=` on the same boundary. `dormancyTick`
+   * calls this with `dormantBefore = now - disbandAfterDormantMs`, the exact
+   * instant `decide()` treats as due; a mismatched operator here (`lt`) would
+   * make `decide()` say "disband" while this guard refused the row, so a row
+   * exactly at the cutoff would silently sit for one extra tick before
+   * disbanding anyway.
    */
   async disbandDormant(factionId: number, dormantBefore: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => disbandFactionTx(tx, factionId, and(
       eq(factions.status, "dormant"),
       isNotNull(factions.dormantSince),
-      lt(factions.dormantSince, dormantBefore),
+      lte(factions.dormantSince, dormantBefore),
     )!));
   }
 }

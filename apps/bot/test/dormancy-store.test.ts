@@ -122,6 +122,25 @@ describe("PgDormancyStore", () => {
       expect(clock!.name).toBe("BEAR");
       expect(clock!.dormantSince).toBeNull();
     });
+
+    it("⚠️ reports the server's newest event, of any type — the disband liveness gate's evidence", async () => {
+      // Not scoped to this faction's own pole or texture: a server-wide crash
+      // loop must be visible even to a faction whose own flag was never the
+      // problem. A different faction's raise on the same server counts.
+      const a = await seedFaction({ tag: "AAA", poleKey: "1:1:1" });
+      await seedFaction({ tag: "BBB", poleKey: "2:2:2" });
+      await seedRaise({ poleKey: "2:2:2", texture: "Flag_BBB", at: ago(10) });
+
+      const clocks = await store.clocks();
+      const forA = clocks.find((c) => c.id === a.id)!;
+      expect(forA.serverLastEventAt).toEqual(ago(10));
+    });
+
+    it("reports null server liveness when the server has no ingested events at all", async () => {
+      await seedFaction({ tag: "BEAR" });
+      const [clock] = await store.clocks();
+      expect(clock!.serverLastEventAt).toBeNull();
+    });
   });
 
   describe("transitions", () => {
@@ -182,6 +201,10 @@ describe("PgDormancyStore", () => {
     it("does not disband one that is not yet due", async () => {
       const f = await seedFaction({ status: "dormant", dormantSince: ago(500) });
       expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
+      // The operation destroys player property with no undo — a false return
+      // that still wrote would be worse than useless.
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("dormant");
     });
 
     it("⚠️ never disbands a dormant faction with no dormant_since", async () => {
@@ -189,11 +212,29 @@ describe("PgDormancyStore", () => {
       // a NULL comparison silently matching would release a flag on no evidence.
       const f = await seedFaction({ status: "dormant", dormantSince: null });
       expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("dormant");
+      expect(row!.dormantSince).toBeNull();
     });
 
     it("refuses an active faction whatever the cutoff", async () => {
       const f = await seedFaction({ status: "active", dormantSince: ago(999_999) });
       expect(await store.disbandDormant(f.id, now)).toBe(false);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("active");
+    });
+
+    it("⚠️ disbands exactly at the cutoff, matching decide()'s >= boundary", async () => {
+      // decide() treats a row exactly `disbandAfterDormantMs` old as due
+      // ("`>=`"). This store call is what dormancyTick actually makes with
+      // `dormantBefore = now - disbandAfterDormantMs`, so the guard here must
+      // agree at the exact boundary or a row due by decide()'s reckoning sits
+      // for one extra tick before disbanding anyway.
+      const cutoff = ago(1000);
+      const f = await seedFaction({ status: "dormant", dormantSince: cutoff });
+      expect(await store.disbandDormant(f.id, cutoff)).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("disbanded");
     });
 
     it("⚠️ clears the roster and revokes invites, exactly as /faction disband does", async () => {

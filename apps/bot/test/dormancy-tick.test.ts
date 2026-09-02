@@ -12,7 +12,10 @@ const windows = {
 
 const row = (o: Partial<FactionClockRow>): FactionClockRow => ({
   id: 1, name: "Bears", tag: "BEAR", leaderDiscordId: "d1",
-  status: "active", lastRaiseAt: now, dormantSince: null, ...o,
+  // serverLastEventAt defaults to "now" — live — so existing cases keep
+  // exercising the branch they always did; the liveness gate itself is
+  // covered in dormancy.test.ts and dormancy-store.test.ts.
+  status: "active", lastRaiseAt: now, dormantSince: null, serverLastEventAt: now, ...o,
 });
 
 const fakeStore = (clocks: FactionClockRow[], over: Partial<DormancyStore> = {}): DormancyStore => ({
@@ -34,6 +37,7 @@ describe("dormancyTick", () => {
     expect(r.dormant).toBe(1);
     expect(r.notices).toEqual([{
       kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
+      dormantAfterMs: DEFAULT_DORMANT_AFTER_MS,
       disbandAt: new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS),
     }]);
   });
@@ -57,6 +61,10 @@ describe("dormancyTick", () => {
     expect(revive).toHaveBeenCalledWith(1);
     expect(r.revived).toBe(1);
     expect(r.notices[0]!.kind).toBe("revive");
+    // ⚠️ disbandAt is meaningless for a revive — the faction is no longer
+    // dormant, so nothing is counting down. Omitted, not populated with a
+    // number nobody should read.
+    expect(r.notices[0]!.disbandAt).toBeUndefined();
   });
 
   it("⚠️ revives rather than disbands a faction that raised its flag on day 20", async () => {
