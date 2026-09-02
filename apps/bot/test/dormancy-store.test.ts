@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, events, admFiles, type Database,
+  servers, factions, factionMembers, factionInvites, events, admFiles, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
@@ -170,6 +170,52 @@ describe("PgDormancyStore", () => {
       const [b] = await db.select().from(factions).where(eq(factions.id, stamped.id));
       expect(a!.dormantSince).toEqual(now);
       expect(b!.dormantSince).toEqual(ago(5000));
+    });
+
+    it("disbands a faction dormant past the window", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
+      expect(await store.disbandDormant(f.id, ago(1000))).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("disbanded");
+    });
+
+    it("does not disband one that is not yet due", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(500) });
+      expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
+    });
+
+    it("⚠️ never disbands a dormant faction with no dormant_since", async () => {
+      // decide() returns "stamp" for this, but the store must refuse it too:
+      // a NULL comparison silently matching would release a flag on no evidence.
+      const f = await seedFaction({ status: "dormant", dormantSince: null });
+      expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
+    });
+
+    it("refuses an active faction whatever the cutoff", async () => {
+      const f = await seedFaction({ status: "active", dormantSince: ago(999_999) });
+      expect(await store.disbandDormant(f.id, now)).toBe(false);
+    });
+
+    it("⚠️ clears the roster and revokes invites, exactly as /faction disband does", async () => {
+      // A status write alone leaves membership rows pointing at a disbanded
+      // faction. They are invisible to their owners — the membership lookup
+      // filters on HOLDING_STATUSES — but still collide with
+      // faction_members_server_player_uniq if those players join another faction
+      // on the same server.
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
+      await db.insert(factionMembers).values({
+        factionId: f.id, serverId, discordId: "d1", dayzId: "A".repeat(40), role: "leader", joinedAt: now,
+      });
+      await db.insert(factionInvites).values({
+        factionId: f.id, serverId, invitedByDiscordId: "d1", inviteeDiscordId: "d2",
+        inviteeDayzId: "B".repeat(40), createdAt: now, expiresAt: new Date(now.getTime() + 1000),
+      });
+
+      expect(await store.disbandDormant(f.id, ago(1000))).toBe(true);
+
+      expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, f.id))).toHaveLength(0);
+      const [invite] = await db.select().from(factionInvites).where(eq(factionInvites.factionId, f.id));
+      expect(invite!.revokedAt).not.toBeNull();
     });
   });
 });

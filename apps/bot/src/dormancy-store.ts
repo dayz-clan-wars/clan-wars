@@ -1,7 +1,8 @@
 import type { Database } from "@factions/db";
 import { factions } from "@factions/db";
-import { and, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull, lt, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
+import { disbandFactionTx } from "./roster-store.js";
 
 export type FactionClockRow = FactionClock & {
   id: number;
@@ -15,6 +16,7 @@ export interface DormancyStore {
   goDormant(factionId: number, at: Date): Promise<boolean>;
   revive(factionId: number): Promise<boolean>;
   stampDormantSince(factionId: number, at: Date): Promise<boolean>;
+  disbandDormant(factionId: number, dormantBefore: Date): Promise<boolean>;
 }
 
 /**
@@ -100,5 +102,20 @@ export class PgDormancyStore implements DormancyStore {
       ))
       .returning({ id: factions.id });
     return rows.length > 0;
+  }
+
+  /**
+   * ⚠️ `isNotNull` is not redundant. `dormant_since < cutoff` is NULL — not
+   * false — for a row with no timestamp, and a guard that silently fails to
+   * match is the right outcome here only by accident. Stating it makes the
+   * rule "a faction is never disbanded without an observed dormancy start"
+   * explicit rather than emergent from SQL three-valued logic.
+   */
+  async disbandDormant(factionId: number, dormantBefore: Date): Promise<boolean> {
+    return this.db.transaction(async (tx) => disbandFactionTx(tx, factionId, and(
+      eq(factions.status, "dormant"),
+      isNotNull(factions.dormantSince),
+      lt(factions.dormantSince, dormantBefore),
+    )!));
   }
 }

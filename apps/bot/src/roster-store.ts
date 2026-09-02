@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
-import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
@@ -112,6 +112,50 @@ class RosterAbort extends Error {
  */
 const leaderIs = (factionId: number, discordId: string) =>
   sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId}) = 'leader'`;
+
+/** The transaction handle drizzle hands to `db.transaction`. */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * Everything disbanding a faction does, minus who is allowed to do it.
+ *
+ * ⚠️ Shared with the dormancy tick's auto-disband rather than reimplemented.
+ * The status write is the least of it: membership rows left behind point at a
+ * disbanded faction, invisible to their owners because the membership lookup
+ * filters on HOLDING_STATUSES, yet still able to collide with
+ * `faction_members_server_player_uniq` when those players join elsewhere.
+ *
+ * ⚠️ Lock order: `factions`, then `faction_members`, then `faction_invites`.
+ * Inbox item 19 records a deadlock built out of two separately-correct changes
+ * taking two of these tables in opposite orders. Any new writer to this set
+ * follows this order.
+ *
+ * `guard` is the caller's authority to do it — a leader check for
+ * `/faction disband`, a dormancy-window check for the tick.
+ */
+export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): Promise<boolean> {
+  const updated = await tx.update(factions)
+    .set({ status: "disbanded" })
+    .where(and(eq(factions.id, factionId), guard, inArray(factions.status, HOLDING)))
+    .returning({ id: factions.id });
+
+  if (!updated[0]) return false;
+
+  await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
+
+  // Outstanding offers die with the faction, for the reason spelled out
+  // on `pendingInvitesFor`.
+  await tx.update(factionInvites)
+    .set({ revokedAt: sql`now()` })
+    .where(and(
+      eq(factionInvites.factionId, factionId),
+      isNull(factionInvites.acceptedAt),
+      isNull(factionInvites.declinedAt),
+      isNull(factionInvites.revokedAt),
+    ));
+
+  return true;
+}
 
 export class PgRosterStore implements RosterStore {
   constructor(private readonly db: Database) {}
@@ -650,33 +694,8 @@ export class PgRosterStore implements RosterStore {
    * on at that point, so `RosterAbort` never comes into play here.
    */
   async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader"> {
-    return this.db.transaction(async (tx) => {
-      const updated = await tx.update(factions)
-        .set({ status: "disbanded" })
-        .where(and(
-          eq(factions.id, factionId),
-          leaderIs(factionId, discordId),
-          inArray(factions.status, HOLDING),
-        ))
-        .returning({ id: factions.id });
-
-      if (!updated[0]) return "not-leader" as const;
-
-      await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
-
-      // Outstanding offers die with the faction, for the reason spelled out
-      // on `pendingInvitesFor`.
-      await tx.update(factionInvites)
-        .set({ revokedAt: sql`now()` })
-        .where(and(
-          eq(factionInvites.factionId, factionId),
-          isNull(factionInvites.acceptedAt),
-          isNull(factionInvites.declinedAt),
-          isNull(factionInvites.revokedAt),
-        ));
-
-      return "ok" as const;
-    });
+    return this.db.transaction(async (tx) =>
+      await disbandFactionTx(tx, factionId, leaderIs(factionId, discordId)) ? "ok" as const : "not-leader" as const);
   }
 
   /**
