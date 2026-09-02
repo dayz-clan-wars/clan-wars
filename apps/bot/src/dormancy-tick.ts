@@ -1,9 +1,7 @@
 import { decide, type DormancyWindows } from "./dormancy.js";
 import type { DormancyStore } from "./dormancy-store.js";
 
-/** A leader who needs telling. Disband produces none — see the tick. */
-export type DormancyNotice = {
-  kind: "dormant" | "revive";
+type DormancyNoticeBase = {
   factionId: number;
   leaderDiscordId: string;
   name: string;
@@ -14,14 +12,23 @@ export type DormancyNotice = {
    * stays the one source of truth for the number a leader is told.
    */
   dormantAfterMs: number;
-  /**
-   * When the flag, tag and pole return to the pool if nothing changes.
-   * Meaningless for a "revive" notice — the faction is no longer dormant, so
-   * nothing is counting down — and omitted there rather than populated with
-   * a number nobody should read.
-   */
-  disbandAt?: Date;
 };
+
+/**
+ * A leader who needs telling. Disband produces none — see the tick.
+ *
+ * Discriminated on `kind` so `disbandAt` — when the flag, tag and pole
+ * return to the pool if nothing changes — can only exist on a "dormant"
+ * notice, where it's required rather than optional: a "revive" notice has
+ * nothing counting down, so a value there would be a number nobody should
+ * read. Making the field's presence follow from `kind` at the type level
+ * means a hand-built or future-constructed dormant notice missing
+ * `disbandAt` fails to compile, instead of type-checking and then throwing
+ * at DM time.
+ */
+export type DormancyNotice =
+  | (DormancyNoticeBase & { kind: "dormant"; disbandAt: Date })
+  | (DormancyNoticeBase & { kind: "revive" });
 
 export type DormancyTickResult = {
   examined: number;
@@ -97,15 +104,17 @@ function notice(
   now: Date,
   windows: DormancyWindows,
 ): DormancyNotice {
-  return {
-    kind,
+  const base = {
     factionId: clock.id,
     leaderDiscordId: clock.leaderDiscordId,
     name: clock.name,
     tag: clock.tag,
     dormantAfterMs: windows.dormantAfterMs,
-    // Only "dormant" needs a deadline; "revive" leaves it unset — see the
-    // field's doc comment on DormancyNotice.
-    ...(kind === "dormant" ? { disbandAt: new Date(now.getTime() + windows.disbandAfterDormantMs) } : {}),
   };
+  // Only "dormant" carries a deadline — see DormancyNotice's discriminated
+  // union — so the two branches build distinct shapes rather than one
+  // object with an optional field.
+  return kind === "dormant"
+    ? { ...base, kind, disbandAt: new Date(now.getTime() + windows.disbandAfterDormantMs) }
+    : { ...base, kind };
 }

@@ -2,11 +2,17 @@ import { describe, it, expect, vi } from "vitest";
 import { formatDormancyDm, notifyDormancy } from "../src/dormancy-notify.js";
 import type { DormancyNotice } from "../src/dormancy-tick.js";
 
-const base: DormancyNotice = {
-  kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
+const common = {
+  factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
   dormantAfterMs: 604_800_000,
+};
+// Typed as the "dormant" branch specifically, not the DormancyNotice union:
+// disbandAt only exists on that branch, and these tests read it directly.
+const base: Extract<DormancyNotice, { kind: "dormant" }> = {
+  ...common, kind: "dormant",
   disbandAt: new Date("2026-09-16T12:00:00Z"),
 };
+const revived: DormancyNotice = { ...common, kind: "revive" };
 
 describe("formatDormancyDm", () => {
   it("tells a dormant leader what happened, what to do, and the deadline", () => {
@@ -14,7 +20,7 @@ describe("formatDormancyDm", () => {
     expect(msg).toMatch(/Bears/);
     expect(msg).toMatch(/supplies/i);
     expect(msg).toMatch(/raise/i);
-    expect(msg).toContain(`<t:${Math.floor(base.disbandAt!.getTime() / 1000)}:R>`);
+    expect(msg).toContain(`<t:${Math.floor(base.disbandAt.getTime() / 1000)}:R>`);
   });
 
   it("⚠️ interpolates the window rather than hardcoding 'seven days'", () => {
@@ -25,8 +31,18 @@ describe("formatDormancyDm", () => {
     expect(formatDormancyDm({ ...base, dormantAfterMs: 86_400_000 })).toMatch(/\b1 day\b/);
   });
 
+  it("⚠️ reports a sub-day window in hours rather than rounding down to 0 days", () => {
+    // Math.round(ms / a day) floors anything under 12 hours to "0 days" —
+    // production runs a multi-day window, but a staging BOT_DORMANT_AFTER_MS
+    // of six hours must not tell a leader their flag has been down for zero
+    // days. See the note above formatDuration.
+    expect(formatDormancyDm({ ...base, dormantAfterMs: 6 * 3_600_000 })).toMatch(/\b6 hours\b/);
+    expect(formatDormancyDm({ ...base, dormantAfterMs: 6 * 3_600_000 })).not.toMatch(/\bdays?\b/);
+    expect(formatDormancyDm({ ...base, dormantAfterMs: 3_600_000 })).toMatch(/\b1 hour\b/);
+  });
+
   it("confirms a revival", () => {
-    const msg = formatDormancyDm({ ...base, kind: "revive" });
+    const msg = formatDormancyDm(revived);
     expect(msg).toMatch(/Bears/);
     expect(msg).toMatch(/supplies/i);
     expect(msg).not.toMatch(/returns to the pool/i);
@@ -35,8 +51,8 @@ describe("formatDormancyDm", () => {
   it("⚠️ never includes pole coordinates", () => {
     // A DM is screenshottable and the message does not need them. Same rule as
     // /faction info's members-only pole line.
-    for (const kind of ["dormant", "revive"] as const) {
-      expect(formatDormancyDm({ ...base, kind })).not.toMatch(/\d+\.\d+:\d+\.\d+:\d+\.\d+/);
+    for (const notice of [base, revived]) {
+      expect(formatDormancyDm(notice)).not.toMatch(/\d+\.\d+:\d+\.\d+:\d+\.\d+/);
     }
   });
 });

@@ -63,8 +63,9 @@ describe("dormancyTick", () => {
     expect(r.notices[0]!.kind).toBe("revive");
     // ⚠️ disbandAt is meaningless for a revive — the faction is no longer
     // dormant, so nothing is counting down. Omitted, not populated with a
-    // number nobody should read.
-    expect(r.notices[0]!.disbandAt).toBeUndefined();
+    // number nobody should read — and the "revive" arm of DormancyNotice's
+    // discriminated union has no such field to populate.
+    expect("disbandAt" in r.notices[0]!).toBe(false);
   });
 
   it("⚠️ revives rather than disbands a faction that raised its flag on day 20", async () => {
