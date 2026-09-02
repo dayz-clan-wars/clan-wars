@@ -45,9 +45,16 @@ the turbo gate are what do the real work.
   `ps ax | grep "src/main.ts" | grep -v grep`. Kill with `pkill -f "src/main.ts"` —
   a pattern that does not match the expanded `tsx` command line is what left the stale
   process last time.
-- **Migrations** apply at bot startup via `runMigrations`. Generate with
-  `cd packages/db && npx drizzle-kit generate`, and **read the generated SQL** before
-  letting it near `factions_live`.
+- **⚠️ Nothing applies migrations in production.** `runMigrations` is exported from
+  `packages/db/src/migrate.ts` but is called *only from tests* — `apps/bot/src` never
+  calls it, and there is no `db:migrate` script. A deploy that assumes "the bot migrates
+  at startup" starts a bot whose queries reference columns the live database does not
+  have; on 2026-09-02 that produced a `dormancy tick failed … column "dormant_since"
+  does not exist` loop until `0015` was applied by hand. Apply migrations deliberately,
+  as a step of their own, before starting the new code — see
+  `docs/deploy/2026-09-02-dormancy.md` for the one-off runner that does it safely.
+  Generate with `cd packages/db && npx drizzle-kit generate`, and **read the generated
+  SQL** before letting it near `factions_live`.
 - **⚠️ Stop the bot before migrating** when a migration adds NOT NULL columns or
   constraints. Old code + new schema and new code + old schema both break; see
   `docs/deploy/2026-09-01-targeted-linking.md` for the incident.
@@ -117,17 +124,18 @@ there should be a test that fails when they disagree. See
 
 ## Current state — 2026-09-02
 
-Faction dormancy just merged to `main` (`764f976`). A faction that does not raise its own
-flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further days
-disband it. Spec and plan are in `docs/superpowers/`.
+Faction dormancy is **deployed**. A faction that does not raise its own flag at its own
+pole for 7 days goes dormant and loses its supply kit; 14 further days disband it. Spec
+and plan are in `docs/superpowers/`.
 
-**`main` is 21 commits ahead of `origin/main`, and nothing is deployed.** The live bot
-and worker still run the pre-dormancy code. Deploying means: rebuild the worker image,
-restart the bot (migration `0015` applies at startup — additive and nullable, so no
-stop-then-migrate dance needed), and confirm one bot instance.
+Live as of 2026-09-02: migration `0015` applied to `factions_live` (16 of 16 journal
+entries), the bot restarted on the dormancy code as a single instance, and the
+ingest worker rebuilt and recreated. The acceptance check was run before and after —
+one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null, so the
+first tick transitioned nothing, which is what it had to do. Runbook:
+`docs/deploy/2026-09-02-dormancy.md`.
 
-Before deploying the dormancy tick, run the read-only acceptance check — the first tick
-must transition nothing:
+The read-only acceptance check, to re-run before any future dormancy change:
 
     docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "
       select f.tag, f.status, f.dormant_since,
@@ -138,7 +146,7 @@ must transition nothing:
                f.activated_at, f.created_at) as age
       from factions f where f.status in ('active','dormant')"
 
-Any row with `age` over 7 days will be made dormant on the first tick, cutting a real
+Any row with `age` over 7 days will be made dormant on the next tick, cutting a real
 faction's supplies. That is a decision, not a side effect.
 
 ### Known-open, in rough priority order

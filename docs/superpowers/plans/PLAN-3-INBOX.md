@@ -473,3 +473,27 @@ distinct players, more evidence than `EmoteNod` (1 by 1) or `EmoteTimeout` (3 by
 which are also in the pool. So the fix is not simply demoting it. Correct the docstring
 to say what the set actually is, and let the lockout messages — which now name the emote
 a player never reached — accumulate evidence about which tokens really are unperformable.
+
+## 28. Nothing applies migrations in production
+
+`runMigrations` (`packages/db/src/migrate.ts`) is called only from test setup. No app
+calls it, and no package defines a `db:migrate` script, so every migration has reached
+`factions_live` by hand. Until 2026-09-02 CLAUDE.md claimed the opposite — that they
+apply at bot startup — and the dormancy deploy started the bot against a database with
+no `dormant_since`, logging a failed dormancy tick every 10s for four minutes. Harmless
+that time (the failing statement is a read, and `guardedRunner` swallows it); a NOT NULL
+column or a broken write path would have been player-visible.
+
+The docs are corrected and `docs/deploy/2026-09-02-dormancy.md` carries a one-off runner.
+That leaves the gap itself: applying a migration is a hand-assembled script written from
+a runbook, at the moment of a deploy, against production.
+
+The obvious fix — call `runMigrations` at bot startup, making the docs retroactively
+true — is the wrong one. It would run migrations at the least controlled moment, from
+whichever process happens to start first, and it directly contradicts the
+stop-then-migrate rule that `docs/deploy/2026-09-01-targeted-linking.md` exists to
+enforce: a NOT NULL migration must be applied with the bot *down*, and a bot that
+migrates itself can never be. What is wanted is a checked-in `db:migrate` script, run as
+its own deliberate step, with the `factions_live` guard and the
+`__drizzle_migrations`-vs-journal comparison from the runbook built in — the two checks
+that made applying `0015` by hand safe rather than lucky.
