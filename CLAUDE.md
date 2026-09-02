@@ -11,12 +11,21 @@ pnpm workspace + turbo. TypeScript, vitest, drizzle-orm over postgres.js, discor
 
 ## ⚠️ Read this before touching anything
 
-**`factions_live` is production. `factions` is the test database.** Both live on the
-same Postgres, port 5434. A dozen test files `truncate` `events`, `factions`,
-`verification_challenges` and friends in `factions`, so a process pointed at the wrong
-one loses real player data on the next `pnpm test`. Every DB-backed suite needs:
+**`factions_live` is production.** It lives on the same Postgres as everything else,
+port 5434. Nothing but a deliberate migration step or a read-only check should ever
+point at it.
+
+**`TEST_DATABASE_URL` is a BASE URL, not a target.** Since 2026-09-02 (inbox item 21)
+only its host, port and credentials are used; the database it names is discarded, and
+each package derives its own `factions_test_<package>` — created by a shared vitest
+`globalSetup`, migrated by the suites themselves. Set it to:
 
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions"
+
+⚠️ Do **not** try to aim a suite at a particular database by editing that URL; it has no
+effect, by design. That is what makes a typo unable to truncate live player data any
+more. `TEST_DATABASE_FRESH=1` drops and recreates a package's database — the right
+response to *editing* a migration rather than adding one.
 
 **Port 5434 only.** 5432 and 5433 belong to other projects on this machine — never
 stop, remove, or repoint their containers.
@@ -27,9 +36,8 @@ stop, remove, or repoint their containers.
       npx turbo run typecheck test --concurrency=1 --force
 
 Expect **20/20 tasks**. A cached pass proves nothing; check the count, not the exit code.
-`pnpm -r test` is NOT a trustworthy gate — every app shares the one test database and
-truncates shared tables underneath its neighbours (inbox item 21). Per-package runs and
-the turbo gate are what do the real work.
+`pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
+turbo gate stays the gate, because it runs `typecheck` too.
 
 ---
 
@@ -152,6 +160,11 @@ one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null
 first tick transitioned nothing, which is what it had to do. Runbook:
 `docs/deploy/2026-09-02-dormancy.md`.
 
+Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
+package, `pnpm -r test` green for the first time, and the shared `factions` database no
+longer written to by any suite. Nothing about it reaches production — it is test
+infrastructure only. Acceptance: `docs/acceptance/2026-09-02-test-database-isolation.md`.
+
 The read-only acceptance check, to re-run before any future dormancy change:
 
     docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "
@@ -168,16 +181,14 @@ faction's supplies. That is a decision, not a side effect.
 
 ### Known-open, in rough priority order
 
-1. **Inbox item 21** — test-database isolation. Until this is fixed, `pnpm -r test`
-   cannot be trusted as a gate.
-2. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
+1. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
    `dormant_since` stamped during it; withheld disbands are silent (no counter); a
    genuinely dead server never releases its flags.
-3. `/faction roster` still lists any named faction's members to anyone. Deliberate per
+2. `/faction roster` still lists any named faction's members to anyone. Deliberate per
    spec §6, but worth revisiting alongside the pole gating.
-4. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
+3. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
    player completing a real `/link` in production". That is not true — about ten of the
    24 have ever appeared in live data. A player was blocked by `EmoteMove` on
    2026-09-01.
-5. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
+4. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.

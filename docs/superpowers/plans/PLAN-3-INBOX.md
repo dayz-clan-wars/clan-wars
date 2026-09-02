@@ -298,7 +298,31 @@ it would silently stop them staging anything, so they would pass while proving
 nothing. Each test says so in a comment. Worth knowing before trusting them as
 regression guards for the statement order they depend on.
 
-## 21. Apps contend on the single shared test database
+## 21. ~~Apps contend on the single shared test database~~ — DONE 2026-09-02
+
+Fixed by deriving one database per package from the package name. `TEST_DATABASE_URL`
+is now a **base**: its host, port and credentials are used and the database it names is
+discarded, so every suite runs in `factions_test_<package>` and no two share a
+namespace. A vitest `globalSetup` shared from `packages/db/src/test-setup.ts` creates
+the database; the suites' existing `runMigrations` calls bring the schema up, so a
+reused database can never be stale. `TEST_DATABASE_FRESH=1` drops and recreates, which
+is the right response to *editing* a migration rather than adding one.
+
+`pnpm -r test` now exits 0 with every package passing, and a canary row inserted into
+the shared `factions` database survived a full forced `turbo run test` — the truncations
+were never the bug, sharing a namespace was, so they are all unchanged.
+
+Two things fell out that were not the point but are worth recording:
+
+- **`apps/projector` had no `vitest.config.ts` at all**, so it had neither serial file
+  ordering nor any setup. It was half the symptom.
+- **The old hazard is now structurally unreachable.** A `TEST_DATABASE_URL` typo
+  pointing at `factions_live` used to mean the next `pnpm test` truncated real player
+  data. Derived names always carry the `factions_test_` prefix, so the base URL can no
+  longer name a database the suites will write to. Acceptance in
+  `docs/acceptance/2026-09-02-test-database-isolation.md`.
+
+### Original writeup
 
 `pnpm -r test` fails in `apps/projector` and `apps/ingest-worker` while both pass in
 isolation: every app points at the one `factions` test database and truncates shared
