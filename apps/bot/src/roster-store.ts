@@ -132,6 +132,18 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  *
  * `guard` is the caller's authority to do it — a leader check for
  * `/faction disband`, a dormancy-window check for the tick.
+ *
+ * One transaction, two writes: the status update (carrying `guard` and a
+ * holding-status check) then the roster delete. §6 is explicit that
+ * disbanding is not betrayal — no cooldown is written for anyone, unlike
+ * `kick`/`leave`.
+ *
+ * The status update must land first and the delete must be conditioned on
+ * it succeeding: a bare `return false` after the update fails writes
+ * nothing, so that path is safe to return from directly. There is no
+ * non-boolean outcome to unwind here, so `RosterAbort` never comes into play
+ * — unlike `acceptInvite`, this function has nothing left to report once the
+ * update has matched a row.
  */
 export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): Promise<boolean> {
   const updated = await tx.update(factions)
@@ -681,17 +693,11 @@ export class PgRosterStore implements RosterStore {
   }
 
   /**
-   * One transaction, two writes: the status update (guarded on leadership
-   * and a holding status, exactly like the other permission checks in this
-   * file) then the roster delete. §6 is explicit that disbanding is not
-   * betrayal — no cooldown is written for anyone, unlike `kick`/`leave`.
-   *
-   * The status update must land first and the delete must be conditioned on
-   * it succeeding: a bare `return "not-leader"` after the update fails
-   * writes nothing, so that path is safe to `return` from directly. But if
-   * the update succeeds, this transaction still has to run the delete
-   * before it can report "ok" — there is no non-"ok" outcome left to abort
-   * on at that point, so `RosterAbort` never comes into play here.
+   * The leader-only entry point. Everything disbanding actually does — the
+   * status write, the roster delete, the invite revocation, the lock order —
+   * lives in `disbandFactionTx` above, shared with the dormancy tick's
+   * auto-disband; this just supplies the leadership check as that function's
+   * `guard`.
    */
   async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader"> {
     return this.db.transaction(async (tx) =>
