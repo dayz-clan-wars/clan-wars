@@ -399,6 +399,13 @@ export async function handleFactionRename(
  * that faction up directly (no membership check — either command can be
  * pointed at a faction the caller isn't in). Without one, fall back to the
  * caller's own membership via `resolveServerContext`.
+ *
+ * ⚠️ The missing membership check is DELIBERATE and was reconfirmed on
+ * 2026-09-02. Who flies which flag is public by design — it is what makes an
+ * identity worth holding — so anyone may read any faction's roster. The
+ * private thing is the POLE, and `handleFactionInfo` gates those coordinates
+ * to members separately. Do not "harden" this into a membership check; the
+ * asymmetry is the design.
  */
 async function findFactionCard(
   deps: RosterDeps,

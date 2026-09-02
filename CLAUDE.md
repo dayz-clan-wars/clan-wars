@@ -123,6 +123,14 @@ there should be a test that fails when they disagree. See
 - **Pole coordinates are a raid target.** They are gated to faction members in
   `/faction info` and kept out of DMs. Every Discord command reply is ephemeral
   (`RosterReply.ephemeral` is the literal `true`, so a public one will not compile).
+- **Roster membership is PUBLIC, on purpose — do not "fix" it.** `/faction roster
+  name:<rival>` listing another faction's members to anyone is the intended product
+  behaviour (confirmed 2026-09-02), not an oversight inherited from spec §6. Knowing who
+  flies which flag is the point of flying one; it is what makes an identity worth
+  holding and a rivalry legible. This is deliberately NOT the same rule as the pole
+  coordinates above: who someone is is public, where their base is is not. Gating the
+  roster would also break the one lookup a player has for deciding who they are looking
+  at. A past version of this file listed it as a gap "worth revisiting"; it is not.
 - **The dormancy clock's raise lookup depends on `events_raise_lookup_idx`** — a partial
   index over `(server_id, payload->>'poleKey', payload->>'texture', occurred_at)` where
   `type = 'flag.raised'`. Without it the subquery filters every `flag.raised` row on the
@@ -185,11 +193,9 @@ faction's supplies. That is a decision, not a side effect.
    gaps. The disband countdown now pauses while a server is dark, which is the safe
    direction and is logged loudly, but it means the pool cannot reclaim a flag from a
    server that never comes back without manual intervention.
-2. `/faction roster` still lists any named faction's members to anyone. Deliberate per
-   spec §6, but worth revisiting alongside the pole gating.
-3. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
+2. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
    player completing a real `/link` in production". That is not true — about ten of the
    24 have ever appeared in live data. A player was blocked by `EmoteMove` on
    2026-09-01.
-4. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
+3. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.
