@@ -42,10 +42,16 @@ describe("discord wiring", () => {
     await db.insert(players).values({ dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now });
   });
 
-  it("exports a dormancy tick that startBot can run", async () => {
-    // ⚠️ The tick, the store and the notifier are each tested alone. Nothing
-    // proves they are actually wired into the bot's job, and an unwired tick is
-    // silent: no error, no transitions, supplies flowing forever.
+  it("dormancy modules load and their signatures match how startBot calls them", async () => {
+    // ⚠️ This does NOT prove the tick is wired into the bot's guarded job.
+    // Deleting the dormancy block from `startBot`'s runner would leave this
+    // test green, because it only imports the modules and calls them exactly
+    // as it would if `discord.ts` never touched them at all. What it does
+    // prove: the modules load without throwing, and `dormancyTick`'s and
+    // `notifyDormancy`'s signatures still match the shape `startBot` calls
+    // them with, so a rename or a reordered argument fails here instead of
+    // silently at runtime. Actual wiring — that `startBot` really runs this
+    // every tick — can only be confirmed by a live deployment check.
     const { dormancyTick } = await import("../src/dormancy-tick.js");
     const { PgDormancyStore } = await import("../src/dormancy-store.js");
     const { notifyDormancy } = await import("../src/dormancy-notify.js");
