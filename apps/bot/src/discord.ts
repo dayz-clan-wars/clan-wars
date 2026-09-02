@@ -96,16 +96,6 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
 }
 
 /**
- * `info` and `roster` are the only public roster replies (spec §6); every
- * other roster reply is ephemeral. Fixed per subcommand, not per reply,
- * because the defer flags have to be chosen before the handler runs — which
- * means this set and the handlers' own `RosterReply.ephemeral` values are two
- * statements of the same fact and must not drift. `faction-wiring.test.ts`
- * asserts they agree.
- */
-export const PUBLIC_ROSTER_SUBCOMMANDS = new Set(["info", "roster"]);
-
-/**
  * What a player is told when a roster command throws.
  *
  * ⚠️ Every roster subcommand defers before it touches the store, and a
@@ -849,8 +839,12 @@ export async function start(cfg: BotConfig): Promise<void> {
           // ⚠️ Every roster handler makes at least two database round trips
           // (membershipsFor plus the write), so this defers up front for the
           // same reason claim does — see the comment above.
-          const ephemeral = !PUBLIC_ROSTER_SUBCOMMANDS.has(sub);
-          await interaction.deferReply(ephemeral ? { flags: MessageFlags.Ephemeral } : {});
+          // ⚠️ Every roster reply is ephemeral, `info` and `roster` included:
+          // the info card carries the faction's pole coordinates, which is a
+          // raid target, and a public reply handed it to the whole channel.
+          // `RosterReply.ephemeral` is typed as the literal `true` so the
+          // handlers cannot disagree with this line.
+          await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
           const serverId = interaction.options.getInteger("server");
           const userId = (name: string) => interaction.options.getUser(name, true).id;

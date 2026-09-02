@@ -15,7 +15,14 @@ export type RosterPrompt =
 
 export type RosterReply = {
   content: string;
-  ephemeral: boolean;
+  /**
+   * ⚠️ Literal `true`, not `boolean`. `info` and `roster` used to reply
+   * publicly, which put a faction's pole coordinates in a channel anyone
+   * could read. Typing this as the literal means the compiler refuses a
+   * public roster reply, so restoring one is a deliberate type change and
+   * not a passing `false`.
+   */
+  ephemeral: true;
   prompt?: RosterPrompt;
   /**
    * A direct message the Discord layer should attempt after replying.
@@ -388,14 +395,6 @@ export async function handleFactionRename(
 }
 
 /**
- * `info` and `roster` are the only public replies in this plan — §6 makes
- * them public deliberately: flags are visible in-game, so roster membership
- * is not intelligence worth hiding. Every branch of both handlers, errors
- * included, goes through this instead of the ephemeral `reply()` above.
- */
-const publicReply = (content: string): RosterReply => ({ content, ephemeral: false });
-
-/**
  * Shared by `handleFactionInfo` and `handleFactionRoster`: with a name, look
  * that faction up directly (no membership check — either command can be
  * pointed at a faction the caller isn't in). Without one, fall back to the
@@ -413,16 +412,16 @@ async function findFactionCard(
     // server, and answering with another server's faction is a promise the
     // command visibly breaks.
     const card = await deps.store.factionByName(name, requestedServerId);
-    return card ? { card } : { error: publicReply(`No faction named **${name}**.`) };
+    return card ? { card } : { error: reply(`No faction named **${name}**.`) };
   }
 
   const ctx = resolveServerContext(await deps.store.membershipsFor(discordId), requestedServerId);
-  if (ctx.kind === "no-faction") return { error: publicReply("You are not in a faction. Name one to look it up.") };
-  if (ctx.kind === "not-on-server") return { error: publicReply("You don't hold a faction on that server.") };
-  if (ctx.kind === "ambiguous") return { error: publicReply("You're in a faction on more than one server — name one, or pick a server.") };
+  if (ctx.kind === "no-faction") return { error: reply("You are not in a faction. Name one to look it up.") };
+  if (ctx.kind === "not-on-server") return { error: reply("You don't hold a faction on that server.") };
+  if (ctx.kind === "ambiguous") return { error: reply("You're in a faction on more than one server — name one, or pick a server.") };
 
   const card = await deps.store.factionById(ctx.membership.factionId);
-  return card ? { card } : { error: publicReply("Your faction could not be found.") };
+  return card ? { card } : { error: reply("Your faction could not be found.") };
 }
 
 export async function handleFactionInfo(
@@ -435,13 +434,20 @@ export async function handleFactionInfo(
   if ("error" in found) return found.error;
   const { card } = found;
 
+  // ⚠️ The pole line is shown to members of THIS faction only. It is the
+  // faction's base coordinates — a raid target — and `info` takes a name, so
+  // without this check any player could read any faction's coordinates off
+  // `/faction info name:<rival>`. Making the reply ephemeral hid that from the
+  // channel; it did not stop the caller from asking.
+  const isMember = (await deps.store.membershipsFor(discordId)).some((m) => m.factionId === card.id);
+
   const founded = `<t:${Math.floor(card.createdAt.getTime() / 1000)}:D>`;
-  return publicReply([
+  return reply([
     `**${card.name}** [${card.tag}] — ${card.serverName}`,
     `Flag: ${card.texture}`,
     `Status: ${card.status}`,
     `Members: ${card.memberCount}`,
-    `Pole: ${card.poleKey}`,
+    ...(isMember ? [`Pole: ${card.poleKey}`] : []),
     `Founded: ${founded}`,
   ].join("\n"));
 }
@@ -471,5 +477,5 @@ export async function handleFactionRoster(
       lines.push(`- ${entry.gamertag ?? mention(entry.discordId)}`);
     }
   }
-  return publicReply(lines.join("\n"));
+  return reply(lines.join("\n"));
 }

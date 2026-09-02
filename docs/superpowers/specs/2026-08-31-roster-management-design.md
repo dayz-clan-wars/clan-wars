@@ -248,9 +248,23 @@ from `S3`. Per-map channels remain open (inbox item 6) and are not blocked by th
 
 ### 5.2 Replies
 
-Everything except `info` and `roster` replies ephemerally, matching the bot-wide default.
-`info` and `roster` are public per §6 — flags are visible in-game, so roster membership is not
-intelligence worth hiding.
+**Every** reply is ephemeral, `info` and `roster` included.
+
+§6 makes `info` and `roster` public on the reasoning that flags are visible in-game, so roster
+membership is not intelligence worth hiding. That reasoning holds for membership and does not
+hold for the info card, which carries the faction's **pole coordinates** — a raid target, not
+something a rival can read off a flag from across the map. `info` takes a `name` and does no
+membership check to find the card, so `/faction info name:<rival>` was a recon command that
+posted the answer into the channel.
+
+Two changes, because ephemerality alone does not fix it — it hides the answer from the channel,
+not from the caller:
+
+- `RosterReply.ephemeral` is typed as the literal `true`, so a public roster reply no longer
+  compiles. This replaces `PUBLIC_ROSTER_SUBCOMMANDS`, which stated the same fact a second time
+  in the wiring and had to be kept in agreement by a test.
+- The `Pole:` line is emitted **only when the caller is a member of that faction**. Every other
+  field of the card stays visible to anyone, so `info` remains a directory.
 
 ### 5.3 The `/unlink` gate
 

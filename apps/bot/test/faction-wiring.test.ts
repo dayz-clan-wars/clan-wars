@@ -7,7 +7,7 @@ import {
   inviteAcceptCustomId, inviteDeclineCustomId, transferCustomId, disbandCustomId,
   parseInviteAcceptCustomId, parseInviteDeclineCustomId, parseTransferCustomId, parseDisbandCustomId,
   routeRosterButton, serverChoices, deliverInviteDm, planRosterButtons,
-  PUBLIC_ROSTER_SUBCOMMANDS, apologiseForFailure, INTERACTION_FAILURE_MESSAGE,
+  apologiseForFailure, INTERACTION_FAILURE_MESSAGE,
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
@@ -525,13 +525,16 @@ describe("a store throw on a component path still answers the player", () => {
 });
 
 /**
- * `PUBLIC_ROSTER_SUBCOMMANDS` picks the defer flags before the handler runs,
- * and each handler independently sets `RosterReply.ephemeral`. The wiring
- * uses the set and ignores the field, so nothing but this test stops the two
- * from drifting into disagreement — at which point a reply Discord already
- * committed to being ephemeral would claim to be public, or the reverse.
+ * Every roster subcommand replies ephemerally — `info` and `roster` included,
+ * because the info card carries the faction's pole coordinates and a public
+ * reply put a raid target in a channel anyone could read.
+ *
+ * `RosterReply.ephemeral` is typed as the literal `true`, so a handler that
+ * tried to reply publicly would not compile. This covers what the type cannot:
+ * that every registered subcommand is actually routed through a handler that
+ * returns one, so a new subcommand cannot arrive replying publicly.
  */
-describe("PUBLIC_ROSTER_SUBCOMMANDS agrees with the handlers", () => {
+describe("every roster subcommand replies ephemerally", () => {
   const store = {
     membershipsFor: async () => [{ factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader" as const }],
     linkFor: async () => null,
@@ -572,13 +575,12 @@ describe("PUBLIC_ROSTER_SUBCOMMANDS agrees with the handlers", () => {
     const registered = (buildCommands().find((c) => c.name === "faction") as { options: { name: string }[] })
       .options.map((o) => o.name).filter((n) => n !== "claim");
     expect(new Set(registered)).toEqual(new Set(Object.keys(invocations)));
-    for (const sub of PUBLIC_ROSTER_SUBCOMMANDS) expect(registered).toContain(sub);
   });
 
   for (const [sub, run] of Object.entries(invocations)) {
-    it(`${sub} replies ${PUBLIC_ROSTER_SUBCOMMANDS.has(sub) ? "publicly" : "ephemerally"}`, async () => {
+    it(`${sub} replies ephemerally`, async () => {
       const reply = await run();
-      expect(reply.ephemeral).toBe(!PUBLIC_ROSTER_SUBCOMMANDS.has(sub));
+      expect(reply.ephemeral).toBe(true);
     });
   }
 });

@@ -495,11 +495,42 @@ const rosterEntry = (over: Partial<RosterEntry> = {}): RosterEntry => ({
 
 describe("handleFactionInfo", () => {
   it("looks up a named faction regardless of the caller's own membership", async () => {
-    const membershipsFor = vi.fn();
-    const d = deps({ membershipsFor, factionByName: async (name) => (name === "Bears" ? factionCard() : null) });
+    const d = deps({
+      membershipsFor: async () => [],
+      factionByName: async (name) => (name === "Bears" ? factionCard() : null),
+    });
     const r = await handleFactionInfo(d, "d9", "Bears");
     expect(r.content).toMatch(/Bears/);
-    expect(membershipsFor).not.toHaveBeenCalled();
+  });
+
+  it("shows the pole to a member of that faction", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1 })],
+      factionByName: async () => factionCard({ id: 1 }),
+    });
+    const r = await handleFactionInfo(d, "d1", "Bears");
+    expect(r.content).toMatch(/Pole: 1\.00:2\.00:3\.00/);
+  });
+
+  it("⚠️ hides the pole from everyone else — it is the faction's base coordinates", async () => {
+    // `/faction info name:<rival>` is the recon path: `info` takes a name and
+    // does no membership check to find the card, so without this the pole of
+    // any faction on the server is one command away. Ephemeral replies hide
+    // this from the channel, NOT from the caller.
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 2 })],
+      factionByName: async () => factionCard({ id: 1 }),
+    });
+    const r = await handleFactionInfo(d, "d9", "Bears");
+    expect(r.content).toMatch(/Bears/);
+    expect(r.content).not.toMatch(/Pole/);
+    expect(r.content).not.toContain("1.00:2.00:3.00");
+  });
+
+  it("hides the pole from a caller in no faction at all", async () => {
+    const d = deps({ membershipsFor: async () => [], factionByName: async () => factionCard({ id: 1 }) });
+    const r = await handleFactionInfo(d, "d9", "Bears");
+    expect(r.content).not.toMatch(/Pole/);
   });
 
   it("reports no faction by that name", async () => {
@@ -507,14 +538,14 @@ describe("handleFactionInfo", () => {
     const r = await handleFactionInfo(d, "d9", "Ghosts");
     expect(r.content).toMatch(/no faction named/i);
     expect(r.content).toMatch(/Ghosts/);
-    expect(r.ephemeral).toBe(false);
+    expect(r.ephemeral).toBe(true);
   });
 
   it("passes the requested server through to the name lookup", async () => {
     // The `server` option is registered on info and roster; ignoring it here
     // is how `/faction info name:Bears server:2` answered with server 1's.
     const factionByName = vi.fn(async () => factionCard());
-    const d = deps({ factionByName });
+    const d = deps({ factionByName, membershipsFor: async () => [] });
     await handleFactionInfo(d, "d9", "Bears", 2);
     expect(factionByName).toHaveBeenCalledWith("Bears", 2);
 
@@ -535,7 +566,7 @@ describe("handleFactionInfo", () => {
     const d = deps({ membershipsFor: async () => [] });
     const r = await handleFactionInfo(d, "d1", null);
     expect(r.content).toMatch(/not in a faction/i);
-    expect(r.ephemeral).toBe(false);
+    expect(r.ephemeral).toBe(true);
   });
 
   it("a named server selects that faction, disambiguating a caller who holds more than one", async () => {
@@ -559,12 +590,16 @@ describe("handleFactionInfo", () => {
     expect(factionById).not.toHaveBeenCalled();
   });
 
-  it("renders name, tag, flag, status, member count, pole key and founding date, and is public", async () => {
-    const d = deps({ factionByName: async () => factionCard({
-      name: "Bears", tag: "BEAR", texture: "Flag_Bears", status: "active",
-      memberCount: 7, poleKey: "1.00:2.00:3.00", createdAt: now,
-    }) });
-    const r = await handleFactionInfo(d, "d9", "Bears");
+  it("renders name, tag, flag, status, member count, pole key and founding date, ephemerally", async () => {
+    const d = deps({
+      // A member, so the pole line is included — see the pole-visibility tests.
+      membershipsFor: async () => [membership({ factionId: 1 })],
+      factionByName: async () => factionCard({
+        id: 1, name: "Bears", tag: "BEAR", texture: "Flag_Bears", status: "active",
+        memberCount: 7, poleKey: "1.00:2.00:3.00", createdAt: now,
+      }),
+    });
+    const r = await handleFactionInfo(d, "d1", "Bears");
     expect(r.content).toMatch(/Bears/);
     expect(r.content).toMatch(/BEAR/);
     expect(r.content).toMatch(/Flag_Bears/);
@@ -572,7 +607,7 @@ describe("handleFactionInfo", () => {
     expect(r.content).toMatch(/7/);
     expect(r.content).toMatch(/1\.00:2\.00:3\.00/);
     expect(r.content).toContain(`<t:${Math.floor(now.getTime() / 1000)}:D>`);
-    expect(r.ephemeral).toBe(false);
+    expect(r.ephemeral).toBe(true);
   });
 });
 
@@ -597,7 +632,7 @@ describe("handleFactionRoster", () => {
     });
     const r = await handleFactionRoster(d, "d1", null);
     expect(r.content).toMatch(/Bears/);
-    expect(r.ephemeral).toBe(false);
+    expect(r.ephemeral).toBe(true);
   });
 
   it("a named server selects that faction, disambiguating a caller who holds more than one", async () => {
