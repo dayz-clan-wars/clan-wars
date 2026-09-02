@@ -405,3 +405,71 @@ cadence, not a patch. The candidates:
 Whichever is chosen should also decide whether drift is *reported* (an operator wants
 to know their file was reverted) or merely repaired silently. The spec's §8 carries the
 gap; §2.1 and §6 were corrected so they no longer overclaim.
+
+---
+
+# Carried forward from faction dormancy (2026-09-02)
+
+## 25. `clocks()` scans the event log once per faction, every ten seconds
+
+`apps/bot/src/dormancy-store.ts`'s `LAST_RAISE` is a correlated subquery evaluated once
+per examined faction, filtering `events` on `type`, `server_id`, and two `payload->>`
+extractions. `events` is indexed on `(type)` and `(server_id, occurred_at)` only —
+nothing covers the jsonb keys — so each evaluation degenerates to a scan of every
+`flag.raised` row for that server. It runs from the bot's guarded job at
+`BOT_TICK_INTERVAL_MS`, default 10 seconds, forever.
+
+This is also the first non-cursor read of `events` in the codebase. Every other consumer
+(`ceremony-tick`, the projectors) advances a cursor and touches each row once.
+
+Harmless today: one server, one faction, six `flag.raised` rows. After a year of ingest
+that is tens of thousands of rows scanned ~33 times per tick, against the same database
+the worker is writing to. The symptom is not an error — `guardedRunner` skips a firing
+while the previous one is still running, so the tick quietly stops keeping up.
+
+Deliberately not fixed during the dormancy build: rewriting the query that gates an
+irreversible operation, for a performance problem that does not yet bite, trades a
+certain risk for a speculative gain. Decide it with real numbers — `EXPLAIN ANALYZE`
+against `factions_live` — between a single grouped query (join `events` to `factions` on
+`server_id` plus the two payload keys, `GROUP BY factions.id`) and a partial index such
+as `CREATE INDEX ON events (server_id, occurred_at) WHERE type = 'flag.raised'`.
+
+## 26. Three residual gaps in the dormancy liveness guard
+
+Disband refuses on a server whose newest `events` row is older than `dormantAfterMs`, so
+an ingest outage cannot mass-disband. Three things that guard does not cover:
+
+- **An outage can poison a `dormant_since` stamped during it.** Ingest down days 0-20,
+  recovers on day 20 and backfills. A faction that genuinely raised on day 10 now reads
+  11 days stale — not fresh, so no revive — while its `dormant_since` was stamped on day
+  7 from evidence that did not exist yet. On day 21 the server is live, the gate opens,
+  and it disbands on 11 days of proven silence rather than 14. Narrow (only raises in
+  the day 8-13 window are exposed; anything inside the last 7 days revives) and strictly
+  better than the mass-disband it replaces, but the fix is to re-stamp `dormant_since`
+  when the server was not live for the stamping interval.
+- **Suppression is silent.** When the gate blocks a disband, `decide()` returns null and
+  the tick counts nothing. No log line, no counter distinguishing "nothing was due" from
+  "disbands are being withheld because ingest is down". A `withheld` counter in
+  `dormancy-tick.ts` would make the outage visible from the bot's own logs.
+- **A genuinely dead game server never releases its flags.** No ADM lines means no
+  events means the gate stays shut forever. Correct by design and the safe direction,
+  but the scarce-pool reclamation then has no path without manual intervention.
+
+## 27. `emotes.ts` overclaims what the safe pool has been proven to do
+
+`packages/domain/src/emotes.ts`'s docstring says the safe set is "one-life's list, every
+member of which has been performed by a real player completing a real `/link` in
+production". That is not true. It is one-life's published list; roughly ten of the 24
+have ever appeared in live data at all.
+
+The claim is load-bearing because it is what a reader consults when deciding whether a
+token is trustworthy — and it shipped a broken `/link` once already (`EmoteSOS`, fixed
+in `186cbe6`). It happened again on 2026-09-01: Wintershadow394 was drawn
+`move → clap → taunt elbow`, never produced `EmoteMove` at all — no such line exists in
+the raw ADM log — and spent his whole emote budget on the two he could do.
+
+`EmoteMove` is not obviously bogus: the historical export has 5 performances by 3
+distinct players, more evidence than `EmoteNod` (1 by 1) or `EmoteTimeout` (3 by 1),
+which are also in the pool. So the fix is not simply demoting it. Correct the docstring
+to say what the set actually is, and let the lockout messages — which now name the emote
+a player never reached — accumulate evidence about which tokens really are unperformable.
