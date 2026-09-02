@@ -5,3 +5,7 @@ dist/
 .env
 .env.local
 .superpowers/
+
+# Git worktrees created for isolated feature work. Never commit their contents:
+# each is a full checkout of this repo.
+.claude/worktrees/
