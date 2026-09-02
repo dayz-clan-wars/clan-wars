@@ -1,3 +1,5 @@
+import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
+
 export type BotConfig = {
   token: string;
   applicationId: string;
@@ -65,8 +67,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // supplies at a base that is fine or feeding one that has already decayed.
     // The server's own value is readable from cfggameplay.json — see the
     // dormancy design's §7 for why that is not wired up yet.
-    dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", 604_800_000),
+    //
+    // The fallback itself comes from dormancy.ts, not a repeated literal:
+    // that constant is also what the test suite asserts against, so editing
+    // it here alone would leave production on the old value while every test
+    // stayed green.
+    dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", DEFAULT_DORMANT_AFTER_MS),
     // 14 further days before the flag, tag and pole return to the 33-slot pool.
-    disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", 1_209_600_000),
+    disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
   };
 }
