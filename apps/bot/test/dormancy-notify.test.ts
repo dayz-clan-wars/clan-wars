@@ -4,6 +4,7 @@ import type { DormancyNotice } from "../src/dormancy-tick.js";
 
 const base: DormancyNotice = {
   kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
+  dormantAfterMs: 604_800_000,
   disbandAt: new Date("2026-09-16T12:00:00Z"),
 };
 
@@ -13,7 +14,15 @@ describe("formatDormancyDm", () => {
     expect(msg).toMatch(/Bears/);
     expect(msg).toMatch(/supplies/i);
     expect(msg).toMatch(/raise/i);
-    expect(msg).toContain(`<t:${Math.floor(base.disbandAt.getTime() / 1000)}:R>`);
+    expect(msg).toContain(`<t:${Math.floor(base.disbandAt!.getTime() / 1000)}:R>`);
+  });
+
+  it("⚠️ interpolates the window rather than hardcoding 'seven days'", () => {
+    // BOT_DORMANT_AFTER_MS is configuration; a message naming the wrong
+    // number is worse than one that says nothing.
+    expect(formatDormancyDm(base)).toMatch(/\b7 days\b/);
+    expect(formatDormancyDm({ ...base, dormantAfterMs: 3 * 86_400_000 })).toMatch(/\b3 days\b/);
+    expect(formatDormancyDm({ ...base, dormantAfterMs: 86_400_000 })).toMatch(/\b1 day\b/);
   });
 
   it("confirms a revival", () => {

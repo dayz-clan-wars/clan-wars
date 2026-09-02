@@ -15,16 +15,23 @@ export function formatDormancyDm(n: DormancyNotice): string {
     ].join("\n");
   }
 
+  // Interpolated from the window, not hardcoded: BOT_DORMANT_AFTER_MS is
+  // configuration, and a message naming the wrong number is worse than one
+  // that says nothing.
+  const days = Math.round(n.dormantAfterMs / 86_400_000);
+  const dayWord = days === 1 ? "day" : "days";
+
   return [
     `**${n.name}** [${n.tag}] has gone dormant`,
     "",
     // The game says nothing when a flag expires, so this is the only warning
     // a leader ever gets.
-    "Your flag has not been raised in seven days, so the base it protects has started to decay " +
+    `Your flag has not been raised in ${days} ${dayWord}, so the base it protects has started to decay ` +
     "and your supply kit has stopped.",
     "",
     "Raise your flag in game to start it again — supplies come back at the next server restart.",
-    `If nobody raises it, the flag, tag and pole return to the pool <t:${Math.floor(n.disbandAt.getTime() / 1000)}:R>.`,
+    // disbandAt is always set for a "dormant" notice — see DormancyNotice.
+    `If nobody raises it, the flag, tag and pole return to the pool <t:${Math.floor(n.disbandAt!.getTime() / 1000)}:R>.`,
   ].join("\n");
 }
 

@@ -8,8 +8,19 @@ export type DormancyNotice = {
   leaderDiscordId: string;
   name: string;
   tag: string;
-  /** When the flag, tag and pole return to the pool if nothing changes. */
-  disbandAt: Date;
+  /**
+   * How long a flag may go unraised before the faction goes dormant. Carried
+   * here (rather than hardcoded in the DM copy) so `BOT_DORMANT_AFTER_MS`
+   * stays the one source of truth for the number a leader is told.
+   */
+  dormantAfterMs: number;
+  /**
+   * When the flag, tag and pole return to the pool if nothing changes.
+   * Meaningless for a "revive" notice — the faction is no longer dormant, so
+   * nothing is counting down — and omitted there rather than populated with
+   * a number nobody should read.
+   */
+  disbandAt?: Date;
 };
 
 export type DormancyTickResult = {
@@ -92,6 +103,9 @@ function notice(
     leaderDiscordId: clock.leaderDiscordId,
     name: clock.name,
     tag: clock.tag,
-    disbandAt: new Date(now.getTime() + windows.disbandAfterDormantMs),
+    dormantAfterMs: windows.dormantAfterMs,
+    // Only "dormant" needs a deadline; "revive" leaves it unset — see the
+    // field's doc comment on DormancyNotice.
+    ...(kind === "dormant" ? { disbandAt: new Date(now.getTime() + windows.disbandAfterDormantMs) } : {}),
   };
 }
