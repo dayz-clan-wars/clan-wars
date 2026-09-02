@@ -3,7 +3,6 @@ export type WorkerConfig = {
   nitradoToken: string;
   intervalSeconds: number;
   backfillBudget: number;
-  missionCustomDir: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -35,18 +34,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): WorkerConfig {
     intervalSeconds: intAtLeast(env, "INGEST_INTERVAL_SECONDS", 60, 1),
     // Zero is meaningful: process only the live file this tick.
     backfillBudget: intAtLeast(env, "ADM_BACKFILL_BUDGET", 15, 0),
-    // No sensible default: a wrong or absent path uploads the supply file
-    // where the server never reads it, and nothing would report that.
-    //
-    // ⚠️ SINGLE-SERVER ONLY. This is ONE process-wide value applied to every
-    // server the sweep visits, but the path is service-specific — the live
-    // value embeds a Nitrado service id
-    // (`/games/ni<serviceid>_4/ftproot/...`). With one active server that is
-    // correct. With two, the second server's file is uploaded into the FIRST
-    // service's directory, and if that path exists the upload SUCCEEDS
-    // silently into a folder the second server never reads: no error, hash
-    // advances, supplies never appear. Making this per-server means a
-    // `servers` column, which is a schema change. See PLAN-3-INBOX item 23.
-    missionCustomDir: required(env, "MISSION_CUSTOM_DIR"),
+    // ⚠️ There is deliberately no MISSION_CUSTOM_DIR here any more. The supply
+    // file's destination is per SERVER, not per process — the path embeds the
+    // gameserver's username — so it is resolved from each server's own Nitrado
+    // service each sweep (NitradoClient.missionCustomDir). One env value
+    // applied to every server was correct for exactly one of them and
+    // silently wrong for the rest.
   };
 }

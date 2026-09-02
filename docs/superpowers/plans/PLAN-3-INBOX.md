@@ -334,7 +334,7 @@ give the bot a startup guard that refuses to run when another holds the lock. Th
 argument applies to the ceremony notifier and the players projection, which share the
 loop.
 
-## 23. `MISSION_CUSTOM_DIR` is process-wide, so supplies are single-server-only
+## 23. ~~`MISSION_CUSTOM_DIR` is process-wide~~ — DONE 2026-09-02
 
 The supply projection uploads to `cfg.missionCustomDir` — one environment value the
 sweep hands to **every** server it visits (`apps/ingest-worker/src/sweep.ts`, the
@@ -355,11 +355,25 @@ environment. Load-bearing comments are in place at both sites (`sweep.ts` at the
 `remoteDir` call site and `config.ts` beside `missionCustomDir`) so the next person to
 register a second server sees it before they hit it.
 
-The fix, when it is written: a `servers.mission_custom_dir` column (generated
-migration), populated at registration from a `file_server/list` call rather than
-guessed, with `MISSION_CUSTOM_DIR` retired or kept only as a backfill default. Worth
-also considering whether the upload should verify the directory belongs to the service
-it is uploading for.
+**Resolved — and NOT the way this item proposed.** The writeup above is wrong on
+one point of fact, which is what made a schema change look necessary: the
+`ni11558038_4` segment is **not** the Nitrado service id. The service id is
+`19831378`. That segment is `gameserver.username`, and `game` and
+`settings.config.mission` sit beside it in the same `/gameservers` response the
+client already fetches for `listAdmFiles`:
+
+    /games/{username}/ftproot/{game}_missions/{mission}/custom
+
+Verified against the live file server on 2026-09-02 — that exact path lists
+`faction-supplies.json`. So the path IS derivable, and `NitradoClient.missionCustomDir()`
+now derives it per server each sweep. `MISSION_CUSTOM_DIR` is retired from
+`config.ts` and from compose.
+
+No column, deliberately. A path stored at registration goes stale the moment an
+operator changes the mission or the map, and a stale path uploads into a directory
+the server no longer reads — succeeding silently, which is the exact failure class
+this item exists to remove. Deriving it costs one GET per server per sweep and
+tracks a mission change on its own.
 
 ## 24. Out-of-band changes to the supply file on the server are never detected
 

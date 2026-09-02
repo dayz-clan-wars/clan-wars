@@ -69,9 +69,64 @@ describe("ingestSweep", () => {
     const seen: number[] = [];
     await ingestSweep(db, {
       ...baseDeps,
-      supplies: { offsets: [], remoteDir: "/d", fileName: "f.json", clientFor: () => ({ uploadFile: async () => { seen.push(1); } }) },
+      supplies: {
+        offsets: [], fileName: "f.json",
+        clientFor: () => ({ uploadFile: async () => { seen.push(1); }, missionCustomDir: async () => "/d" }),
+      },
     });
     expect(seen.length).toBeGreaterThan(0);
+  });
+
+  it("⚠️ uploads each server's supplies to that server's OWN mission directory", async () => {
+    // THE bug this replaced a process-wide MISSION_CUSTOM_DIR to fix. That
+    // path embeds the gameserver's username, so it is service-specific; one
+    // value handed to every server in the loop sent the second server's file
+    // into the FIRST server's directory. And if that directory exists under
+    // the second service's credentials the upload SUCCEEDS — no error, the
+    // hash advances, and the second server's supplies simply never appear.
+    const [a] = await addServer({ nitradoServiceId: 11 });
+    const [b] = await addServer({ nitradoServiceId: 22 });
+    const dirs: string[] = [];
+    await ingestSweep(db, {
+      ...baseDeps,
+      supplies: {
+        offsets: [], fileName: "f.json",
+        clientFor: (serviceId) => ({
+          missionCustomDir: async () => `/games/ni${serviceId}/ftproot/dayzxb_missions/m/custom`,
+          uploadFile: async (dir: string) => { dirs.push(dir); },
+        }),
+      },
+    });
+    expect(a!.id).not.toBe(b!.id);
+    expect(new Set(dirs).size).toBe(2);
+    expect(dirs).toContain("/games/ni11/ftproot/dayzxb_missions/m/custom");
+    expect(dirs).toContain("/games/ni22/ftproot/dayzxb_missions/m/custom");
+  });
+
+  it("⚠️ skips one server's supplies when its directory cannot be resolved, and keeps sweeping", async () => {
+    // A throw here must not upload into a fallback directory — a wrong
+    // directory is the silent failure — and must not cost the other server
+    // its supplies.
+    await addServer({ nitradoServiceId: 11 });
+    await addServer({ nitradoServiceId: 22 });
+    const dirs: string[] = [];
+    const errors: number[] = [];
+    await ingestSweep(db, {
+      ...baseDeps,
+      supplies: {
+        offsets: [], fileName: "f.json",
+        clientFor: (serviceId) => ({
+          missionCustomDir: async () => {
+            if (serviceId === 11) throw new Error("no mission dir");
+            return "/games/ni22/ftproot/dayzxb_missions/m/custom";
+          },
+          uploadFile: async (dir: string) => { dirs.push(dir); },
+        }),
+      },
+      onSupplyError: (serverId) => { errors.push(serverId); },
+    });
+    expect(errors).toHaveLength(1);
+    expect(dirs).toEqual(["/games/ni22/ftproot/dayzxb_missions/m/custom"]);
   });
 
   it("reports an upload once, and stays quiet when nothing changed", async () => {
@@ -85,8 +140,8 @@ describe("ingestSweep", () => {
     const [srv] = await addServer();
     const onSupplyUploaded = vi.fn();
     const supplies = {
-      offsets: [], remoteDir: "/d", fileName: "f.json",
-      clientFor: () => ({ uploadFile: async () => {} }),
+      offsets: [], fileName: "f.json",
+      clientFor: () => ({ uploadFile: async () => {}, missionCustomDir: async () => "/d" }),
     };
     await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
     expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
@@ -105,7 +160,10 @@ describe("ingestSweep", () => {
     const errors: unknown[] = [];
     const r = await ingestSweep(db, {
       ...baseDeps,
-      supplies: { offsets: [], remoteDir: "/d", fileName: "f.json", clientFor: () => ({ uploadFile: async () => { throw new Error("boom"); } }) },
+      supplies: {
+        offsets: [], fileName: "f.json",
+        clientFor: () => ({ uploadFile: async () => { throw new Error("boom"); }, missionCustomDir: async () => "/d" }),
+      },
       onSupplyError: (_id, err) => errors.push(err),
     });
     expect(r.servers).toBeGreaterThan(0);

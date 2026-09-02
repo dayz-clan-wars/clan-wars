@@ -7,6 +7,25 @@ import type { SpawnObject } from "./supplies.js";
 
 export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
 
+/**
+ * What the sweep needs of a server's Nitrado client for supplies: somewhere to
+ * write, and the ability to say where that is.
+ *
+ * ⚠️ `missionCustomDir` lives here and NOT on `SupplyUploader`, which
+ * `supplyTick` takes: the tick only ever writes, and widening its dependency
+ * to something it does not call would make every one of its tests carry a stub
+ * for a method under test nowhere.
+ */
+export type SupplyClient = SupplyUploader & {
+  /**
+   * This server's own mission custom directory. Asked per server rather than
+   * configured once: the path embeds the gameserver's username, so a single
+   * process-wide value is correct for exactly one server and silently wrong
+   * for every other. See the call site below.
+   */
+  missionCustomDir(): Promise<string>;
+};
+
 export type SweepDeps = {
   clientFor: ClientFactory;
   backfillBudget: number;
@@ -19,9 +38,8 @@ export type SweepDeps = {
   onServerError?: (serverId: number, err: unknown) => void;
   /** Absent in tests that only exercise ingestion. */
   supplies?: {
-    clientFor: (nitradoServiceId: number) => SupplyUploader;
+    clientFor: (nitradoServiceId: number) => SupplyClient;
     offsets: SpawnObject[];
-    remoteDir: string;
     fileName: string;
   };
   onSupplyError?: (serverId: number, err: unknown) => void;
@@ -65,20 +83,24 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
     // the next restart, missing events never do.
     if (deps.supplies) {
       try {
+        const client = deps.supplies.clientFor(s.nitradoServiceId!);
+        // ⚠️ Per server, from that server's own Nitrado service. This used to
+        // be one process-wide MISSION_CUSTOM_DIR handed to every server in
+        // this loop, which was correct for exactly one: the path embeds the
+        // gameserver's USERNAME, so the second server's file went into the
+        // first's directory — and if that directory exists under the second
+        // service's credentials the upload SUCCEEDS, the hash advances, and
+        // its supplies simply never appear, with nothing in the log.
+        //
+        // A throw here skips only this server's supplies, by the same
+        // reasoning as the catch below: no fallback directory, because
+        // uploading to the wrong one is the failure being prevented.
+        const remoteDir = await client.missionCustomDir();
         const result = await supplyTick(db, {
           serverId: s.id,
-          client: deps.supplies.clientFor(s.nitradoServiceId!),
+          client,
           offsets: deps.supplies.offsets,
-          // ⚠️ SINGLE-SERVER ONLY. `remoteDir` is one process-wide value
-          // (MISSION_CUSTOM_DIR) handed to EVERY server in this loop, but the
-          // path is service-specific — it embeds the Nitrado service id. With
-          // one active server this is correct. With two, the second server's
-          // file goes into the first service's directory, and if that path
-          // exists the upload SUCCEEDS silently into a folder the second
-          // server never reads: no error, the hash advances, and its supplies
-          // simply never appear. Fixing it properly means a per-server column
-          // (a schema change). See PLAN-3-INBOX item 23 and config.ts.
-          remoteDir: deps.supplies.remoteDir,
+          remoteDir,
           fileName: deps.supplies.fileName,
           now: new Date(),
         });

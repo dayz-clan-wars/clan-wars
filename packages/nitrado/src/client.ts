@@ -70,6 +70,42 @@ export class NitradoClient {
     return Date.UTC(+m[1]!, +m[2]! - 1, +m[3]!, +m[4]!, +m[5]!, +m[6]!);
   }
 
+  /**
+   * Where this server's mission reads its object-spawner files from.
+   *
+   * ⚠️ NOT under `game_specific.path`. That is the `noftp` tree and exposes
+   * only `config/`; the mission lives in the sibling `ftproot` tree, and
+   * `paths_available` is null, so nothing hands this path over directly. It is
+   * composed from three fields of the same `/gameservers` response
+   * `listAdmFiles` already reads:
+   *
+   *     /games/{username}/ftproot/{game}_missions/{mission}/custom
+   *
+   * ⚠️ `username` (ni11558038_4), NOT the Nitrado service id (19831378). They
+   * are different values, which is why this cannot be derived from the service
+   * id the sweep already holds and has to come from the API.
+   *
+   * Derived per server on every sweep rather than stored: a stored path goes
+   * stale the moment an operator changes the mission or the map, and a stale
+   * path means uploading into a directory the server no longer reads —
+   * succeeding silently, which is the failure this exists to prevent. One GET
+   * per server per sweep is cheaper than that class of bug.
+   *
+   * Throws on any missing field. A composed path with a hole in it is
+   * syntactically fine and points somewhere real-looking and wrong, and
+   * uploadFile reports success for a write the game never reads.
+   */
+  async missionCustomDir(): Promise<string> {
+    const gs = (await this.getJson(`/services/${this.serviceId}/gameservers`))?.data?.gameserver;
+    const username = gs?.username;
+    const game = gs?.game;
+    const mission = gs?.settings?.config?.mission;
+    if (!username) throw new Error("Nitrado: gameserver has no username, cannot locate the mission directory");
+    if (!game) throw new Error("Nitrado: gameserver has no game, cannot locate the mission directory");
+    if (!mission) throw new Error("Nitrado: gameserver has no settings.config.mission, cannot locate the mission directory");
+    return `/games/${username}/ftproot/${game}_missions/${mission}/custom`;
+  }
+
   async listAdmFiles(): Promise<AdmFileRef[]> {
     const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
     const base = gs?.data?.gameserver?.game_specific?.path;

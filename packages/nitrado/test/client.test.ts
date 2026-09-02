@@ -235,3 +235,51 @@ describe("NitradoClient request timeout", () => {
     await expect(client.downloadFile("/a.ADM")).rejects.toThrow(/timeout/i);
   });
 });
+
+/**
+ * The real shape, from service 19831378 on 2026-09-02. The mission custom dir
+ * is NOT under game_specific.path (which is the `noftp` tree and exposes only
+ * config/); it lives in the sibling `ftproot` tree, and `paths_available` is
+ * null, so the path has to be composed from these three fields.
+ */
+const GS_FULL = {
+  status: "success",
+  data: {
+    gameserver: {
+      username: "ni11558038_4",
+      game: "dayzxb",
+      game_specific: { path: "/games/ni11558038_4/noftp/dayzxb/", paths_available: null },
+      settings: { config: { mission: "dayzOffline.enoch" } },
+    },
+  },
+};
+
+describe("NitradoClient.missionCustomDir", () => {
+  const client = (gs: unknown) =>
+    new NitradoClient("t", 1, fakeFetch({ "/gameservers": gs }) as unknown as typeof fetch);
+
+  it("composes the mission custom directory from username, game and mission", async () => {
+    // ⚠️ Verified against the live file server on 2026-09-02: this exact path
+    // lists faction-supplies.json. The `ni11558038_4` segment is the
+    // gameserver USERNAME, not the Nitrado service id (19831378) — which is
+    // why the path cannot be derived from the service id the sweep already has.
+    expect(await client(GS_FULL).missionCustomDir()).toBe(
+      "/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/custom",
+    );
+  });
+
+  it("throws rather than composing a path with a hole in it", async () => {
+    // ⚠️ Each missing field would otherwise yield a syntactically fine path
+    // pointing somewhere real-looking and wrong — and uploadFile reports
+    // success for a write into a directory the game never reads, which is the
+    // silent failure this whole change exists to remove.
+    for (const drop of ["username", "game"]) {
+      const gs = structuredClone(GS_FULL) as any;
+      delete gs.data.gameserver[drop];
+      await expect(client(gs).missionCustomDir()).rejects.toThrow(new RegExp(drop, "i"));
+    }
+    const noMission = structuredClone(GS_FULL) as any;
+    delete noMission.data.gameserver.settings.config.mission;
+    await expect(client(noMission).missionCustomDir()).rejects.toThrow(/mission/i);
+  });
+});

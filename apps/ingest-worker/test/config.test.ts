@@ -4,7 +4,6 @@ import { loadConfig } from "../src/config.js";
 const OK = {
   DATABASE_URL: "postgres://x",
   NITRADO_TOKEN: "t",
-  MISSION_CUSTOM_DIR: "/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/custom",
 };
 
 describe("loadConfig", () => {
@@ -19,14 +18,21 @@ describe("loadConfig", () => {
     expect(cfg.backfillBudget).toBe(15);
   });
 
-  for (const key of ["DATABASE_URL", "NITRADO_TOKEN", "MISSION_CUSTOM_DIR"]) {
+  for (const key of ["DATABASE_URL", "NITRADO_TOKEN"]) {
     it(`refuses to start without ${key}`, () => {
       expect(() => loadConfig({ ...OK, [key]: undefined })).toThrow(key);
     });
   }
 
-  it("requires MISSION_CUSTOM_DIR", () => {
-    expect(() => loadConfig({ ...OK, MISSION_CUSTOM_DIR: undefined })).toThrow(/MISSION_CUSTOM_DIR/);
+  it("⚠️ no longer takes a mission directory from the environment", () => {
+    // One process-wide path was correct for exactly one server: it embeds the
+    // gameserver's username, so the second server's file went into the first
+    // server's directory — succeeding silently. It is resolved per server from
+    // Nitrado now, and a stale env value must not be able to come back and
+    // override that.
+    const cfg = loadConfig({ ...OK, MISSION_CUSTOM_DIR: "/somewhere/stale" }) as Record<string, unknown>;
+    expect(cfg).not.toHaveProperty("missionCustomDir");
+    expect(Object.values(cfg)).not.toContain("/somewhere/stale");
   });
 
   it("rejects an interval that Number() would silently reinterpret", () => {

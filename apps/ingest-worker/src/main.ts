@@ -48,7 +48,6 @@ for (;;) {
       supplies: {
         clientFor,
         offsets,
-        remoteDir: cfg.missionCustomDir,
         fileName: "faction-supplies.json",
       },
       onSupplyError: (serverId, err) => console.error(`supply tick failed for server ${serverId}`, err),
