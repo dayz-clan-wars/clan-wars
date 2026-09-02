@@ -59,7 +59,7 @@ describe("supplyTick", () => {
     expect(uploads[0]!.dir).toBe("/d");
     expect(uploads[0]!.name).toBe("f.json");
     const parsed = JSON.parse(uploads[0]!.body);
-    expect(parsed.Objects).toHaveLength(72);
+    expect(parsed.Objects).toHaveLength(103);
     expect(parsed.Objects.every((o: any) => o.customString === "COK")).toBe(true);
   });
 
@@ -124,7 +124,7 @@ describe("supplyTick", () => {
     const objects = JSON.parse(bodies[0]!).Objects;
     // Without this the loop below asserts nothing on an empty file, so any
     // mutation that drops the faction turns this test green instead of red.
-    expect(objects).toHaveLength(72);
+    expect(objects).toHaveLength(103);
     for (const o of objects) {
       for (const p of o.pos) expect(typeof p).toBe("number");
       expect(Number.isFinite(o.pos[0])).toBe(true);
@@ -141,7 +141,7 @@ describe("supplyTick", () => {
     const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toHaveLength(72);
+    expect(objects).toHaveLength(103);
     expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["COK"]);
   });
 
@@ -157,7 +157,7 @@ describe("supplyTick", () => {
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     expect(r).toEqual({ factions: 1, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toHaveLength(72);
+    expect(objects).toHaveLength(103);
     expect(objects.every((o: any) => o.customString === "DOR")).toBe(true);
     expect(objects.some((o: any) => o.name === "Flag_Wolf")).toBe(true);
   });

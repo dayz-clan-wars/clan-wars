@@ -102,10 +102,12 @@ resupply at the pole, not a permanent grant of items.
 
 `livonia/custom/flag-supplies.json` is committed to this repo unchanged, as
 captured in game. It contains **73 objects** around a single `TerritoryFlag` at
-`5572.65 / 310.81 / 8811.84`, so **72 are emitted per faction**. Verified
+`5572.65 / 310.81 / 8811.84`, so **103 are emitted per faction** — the 72
+non-anchor objects, with the flag item emitted twice and the wooden logs raised
+from 20 to 50. Verified
 against the file: exactly one `TerritoryFlag` and exactly one `Flag_White`.
 
-The kit is 20 `WoodenLog`, 10 `NailBox`, 10 `MetalPlate`, 5 each of
+The kit is 50 `WoodenLog` (the template captured 20), 10 `NailBox`, 10 `MetalPlate`, 5 each of
 `Whetstone`, `CombinationLock4`, `MetalWire` and `BarbedWire`, one of each
 barrel colour, plus `Pickaxe`, `Hatchet`, `HandSaw`, `Pliers`,
 `PileOfWoodenPlanks`, `FenceKit` and `WatchtowerKit`.
@@ -119,8 +121,28 @@ Parsing fails loudly if the anchor is absent or duplicated. A template with no
 anchor would otherwise yield absolute coordinates, piling every faction's kit
 at one arbitrary spot on the map — a silent, map-wide defect.
 
+### Kit quantities
+
+`KIT_QUANTITIES` in `supplies.ts` overrides the count the template was captured
+with, per template name: the flag item is emitted **twice** and `WoodenLog`
+**fifty** times. Extra copies stack on the template's own entries rather than
+moving anything — which is how the template expresses quantity in the first
+place, its five `Whetstone` and twenty `WoodenLog` entries each sharing one
+position and differing only in yaw drift from being piled up in game.
+
+Where a name has several template entries, the total is spread round-robin
+across them (50 over 20 is ten 3s then ten 2s), so the captured yaw variety
+survives instead of one entry being stamped thirty times. The remainder goes to
+the earliest entries, so the split is deterministic — the bytes are hashed, and
+a total that varied between runs would re-upload every sweep forever.
+
+A `KIT_QUANTITIES` key naming an object the template does not contain throws at
+load. Its only other symptom would be the template's own count shipping
+unchanged: a kit silently short, with nothing reporting it.
+
 `Flag_White` in the template is the flag item, not the pole. It is emitted with
-the faction's chosen texture substituted.
+the faction's chosen texture substituted — a spare, so a raided faction can
+re-raise without waiting for the next sweep.
 
 ---
 
