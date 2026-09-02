@@ -133,10 +133,10 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * `guard` is the caller's authority to do it — a leader check for
  * `/faction disband`, a dormancy-window check for the tick.
  *
- * One transaction, two writes: the status update (carrying `guard` and a
- * holding-status check) then the roster delete. §6 is explicit that
- * disbanding is not betrayal — no cooldown is written for anyone, unlike
- * `kick`/`leave`.
+ * One transaction, three writes: the status update (carrying `guard` and a
+ * holding-status check), then the roster delete, then the outstanding
+ * invite revocation. §6 is explicit that disbanding is not betrayal — no
+ * cooldown is written for anyone, unlike `kick`/`leave`.
  *
  * The status update must land first and the delete must be conditioned on
  * it succeeding: a bare `return false` after the update fails writes

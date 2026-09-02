@@ -16,6 +16,13 @@ export interface DormancyStore {
   goDormant(factionId: number, at: Date): Promise<boolean>;
   revive(factionId: number): Promise<boolean>;
   stampDormantSince(factionId: number, at: Date): Promise<boolean>;
+  /**
+   * ⚠️ Does not check server liveness. The caller — `decide()` in
+   * dormancy.ts, routed through dormancy-tick.ts — is responsible for
+   * confirming the server's ingest hasn't gone silent before calling this.
+   * Call it directly (an admin reap command, a backfill script) and it will
+   * happily disband factions on a server whose events have stopped arriving.
+   */
   disbandDormant(factionId: number, dormantBefore: Date): Promise<boolean>;
 }
 
@@ -131,6 +138,14 @@ export class PgDormancyStore implements DormancyStore {
    * make `decide()` say "disband" while this guard refused the row, so a row
    * exactly at the cutoff would silently sit for one extra tick before
    * disbanding anyway.
+   *
+   * ⚠️ This method enforces none of the server-liveness precondition. It
+   * will disband a dormant row on a server whose ingest has gone silent
+   * just as readily as one that's healthy — the liveness guard lives in
+   * `decide()` (dormancy.ts), called through dormancy-tick.ts, not here.
+   * A caller that invokes this directly (an admin reap command, a backfill
+   * script) bypasses that guard and can permanently disband factions during
+   * an outage.
    */
   async disbandDormant(factionId: number, dormantBefore: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => disbandFactionTx(tx, factionId, and(
