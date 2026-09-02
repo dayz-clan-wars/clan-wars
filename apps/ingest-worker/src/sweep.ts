@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { servers } from "@factions/db";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { ingestTick, type NitradoLike } from "./tick.js";
-import { supplyTick, type SupplyUploader, type SupplyTickResult } from "./supply-tick.js";
+import { supplyTick, type SupplyUploader, type SupplyTickResult, type SupplyDrift } from "./supply-tick.js";
 import type { SpawnObject } from "./supplies.js";
 
 export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
@@ -50,6 +50,13 @@ export type SweepDeps = {
    * logs that a claim produced a file.
    */
   onSupplyUploaded?: (serverId: number, result: SupplyTickResult) => void;
+  /**
+   * Called when the file on the game server is not the one we last uploaded.
+   * The tick repairs it either way; this exists so the repair is not silent —
+   * whatever rewrote the file (a mission wipe, an FTP restore, a Nitrado
+   * rollback) has almost certainly touched more than this one file.
+   */
+  onSupplyDrift?: (serverId: number, drift: SupplyDrift) => void;
 };
 
 /** One sweep across every active server. The database decides which those are. */
@@ -103,6 +110,7 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
           remoteDir,
           fileName: deps.supplies.fileName,
           now: new Date(),
+          onDrift: (d) => deps.onSupplyDrift?.(s.id, d),
         });
         if (result.uploaded) deps.onSupplyUploaded?.(s.id, result);
       } catch (err) {

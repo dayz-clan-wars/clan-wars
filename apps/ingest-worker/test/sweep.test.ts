@@ -71,10 +71,37 @@ describe("ingestSweep", () => {
       ...baseDeps,
       supplies: {
         offsets: [], fileName: "f.json",
-        clientFor: () => ({ uploadFile: async () => { seen.push(1); }, missionCustomDir: async () => "/d" }),
+        clientFor: () => ({ statFile: async () => null, uploadFile: async () => { seen.push(1); }, missionCustomDir: async () => "/d" }),
       },
     });
     expect(seen.length).toBeGreaterThan(0);
+  });
+
+  it("reports drift with the server it happened on", async () => {
+    // ⚠️ The sweep is the only place the server id is known. A drift callback
+    // that reached the log without one would name no server, and an operator
+    // running more than one could not tell whose file was rewritten.
+    const [srv] = await addServer();
+    const stored = { size: 0, mtime: 1_000_000 };
+    let stats = 0;
+    const client = {
+      missionCustomDir: async () => "/d",
+      uploadFile: async (_d: string, _n: string, b: string) => { stored.size = Buffer.byteLength(b); },
+      // The first stat runs straight after the upload and establishes the
+      // baseline truthfully; the next one finds a file someone else rewrote.
+      statFile: async () => (++stats === 1
+        ? { size: stored.size, modifiedAtMs: stored.mtime }
+        : { size: stored.size + 1, modifiedAtMs: stored.mtime }),
+    };
+    const drifts: { serverId: number }[] = [];
+    const deps = {
+      ...baseDeps,
+      supplies: { offsets: [], fileName: "f.json", clientFor: () => client },
+      onSupplyDrift: (serverId: number) => { drifts.push({ serverId }); },
+    };
+    await ingestSweep(db, deps);
+    await ingestSweep(db, deps);
+    expect(drifts.map((d) => d.serverId)).toEqual([srv!.id]);
   });
 
   it("⚠️ uploads each server's supplies to that server's OWN mission directory", async () => {
@@ -92,6 +119,7 @@ describe("ingestSweep", () => {
       supplies: {
         offsets: [], fileName: "f.json",
         clientFor: (serviceId) => ({
+          statFile: async () => null,
           missionCustomDir: async () => `/games/ni${serviceId}/ftproot/dayzxb_missions/m/custom`,
           uploadFile: async (dir: string) => { dirs.push(dir); },
         }),
@@ -116,6 +144,7 @@ describe("ingestSweep", () => {
       supplies: {
         offsets: [], fileName: "f.json",
         clientFor: (serviceId) => ({
+          statFile: async () => null,
           missionCustomDir: async () => {
             if (serviceId === 11) throw new Error("no mission dir");
             return "/games/ni22/ftproot/dayzxb_missions/m/custom";
@@ -141,7 +170,7 @@ describe("ingestSweep", () => {
     const onSupplyUploaded = vi.fn();
     const supplies = {
       offsets: [], fileName: "f.json",
-      clientFor: () => ({ uploadFile: async () => {}, missionCustomDir: async () => "/d" }),
+      clientFor: () => ({ statFile: async () => null, uploadFile: async () => {}, missionCustomDir: async () => "/d" }),
     };
     await ingestSweep(db, { ...baseDeps, supplies, onSupplyUploaded });
     expect(onSupplyUploaded).toHaveBeenCalledTimes(1);
@@ -162,7 +191,7 @@ describe("ingestSweep", () => {
       ...baseDeps,
       supplies: {
         offsets: [], fileName: "f.json",
-        clientFor: () => ({ uploadFile: async () => { throw new Error("boom"); }, missionCustomDir: async () => "/d" }),
+        clientFor: () => ({ statFile: async () => null, uploadFile: async () => { throw new Error("boom"); }, missionCustomDir: async () => "/d" }),
       },
       onSupplyError: (_id, err) => errors.push(err),
     });

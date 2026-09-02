@@ -128,6 +128,14 @@ there should be a test that fails when they disagree. See
   regenerates it every sweep, hashes it, and uploads only on a change. The hash advances
   only on a successful upload. Nothing coordinates the bot and the worker — status is
   the whole interface.
+- **The supply file's drift baseline is OBSERVED, never computed.** `supply_uploads`
+  stores the `size` and `modified_at` the game server itself reported right after our
+  upload, and the quiet path compares against those. Do not "simplify" it to compare the
+  remote mtime with `uploaded_at` — they match today, but `modified_at` is the game
+  server's clock (fixed UTC+4/+7, the same fact `listAdmFiles` works around), and any
+  offset makes every tick see drift and re-upload forever. Both size and mtime are
+  compared because neither subsumes the other: mtime catches a same-length edit, size
+  catches a restore that preserved timestamps.
 
 ---
 
@@ -137,8 +145,8 @@ Faction dormancy is **deployed**. A faction that does not raise its own flag at 
 pole for 7 days goes dormant and loses its supply kit; 14 further days disband it. Spec
 and plan are in `docs/superpowers/`.
 
-Live as of 2026-09-02: migrations `0015` and `0016` applied to `factions_live` (17 of 17
-journal entries), the bot restarted on the dormancy code as a single instance, and the
+Live as of 2026-09-02: migrations `0015`, `0016` and `0017` applied to `factions_live`
+(18 of 18 journal entries), the bot restarted on the dormancy code as a single instance, and the
 ingest worker rebuilt and recreated. The acceptance check was run before and after —
 one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null, so the
 first tick transitioned nothing, which is what it had to do. Runbook:
@@ -160,18 +168,16 @@ faction's supplies. That is a decision, not a side effect.
 
 ### Known-open, in rough priority order
 
-1. **Inbox item 24** — out-of-band changes to the supply file are never detected. The
-   stored hash records what we last *sent*, not what the server holds.
-2. **Inbox item 21** — test-database isolation. Until this is fixed, `pnpm -r test`
+1. **Inbox item 21** — test-database isolation. Until this is fixed, `pnpm -r test`
    cannot be trusted as a gate.
-3. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
+2. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
    `dormant_since` stamped during it; withheld disbands are silent (no counter); a
    genuinely dead server never releases its flags.
-4. `/faction roster` still lists any named faction's members to anyone. Deliberate per
+3. `/faction roster` still lists any named faction's members to anyone. Deliberate per
    spec §6, but worth revisiting alongside the pole gating.
-5. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
+4. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real
    player completing a real `/link` in production". That is not true — about ten of the
    24 have ever appeared in live data. A player was blocked by `EmoteMove` on
    2026-09-01.
-6. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
+5. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.

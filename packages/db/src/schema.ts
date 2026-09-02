@@ -504,6 +504,25 @@ export const supplyUploads = pgTable("supply_uploads", {
   serverId: integer("server_id").primaryKey().references(() => servers.id),
   contentHash: text("content_hash").notNull(),
   uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+  /**
+   * What the game server reported for the file immediately AFTER our upload —
+   * its own size and mtime, not ours.
+   *
+   * ⚠️ Observed, never computed. The obvious alternative is to compare the
+   * remote mtime against `uploadedAt`, which happens to match today. It is a
+   * trap: `modified_at` comes from the GAME SERVER's filesystem clock, and
+   * those run fixed UTC+4/+7 (see the ADM filename hazard in
+   * NitradoClient.listAdmFiles). Any clock offset would make every tick see
+   * drift and re-upload forever — the "always upload" behaviour spec §4.4
+   * rejected. Comparing observation to observation is immune to that.
+   *
+   * ⚠️ Null means the baseline was never captured — the stat after an upload
+   * failed. Drift detection is SKIPPED for a null baseline rather than
+   * treating it as a mismatch, because the alternative re-uploads on every
+   * tick until the stat succeeds. The next quiet tick backfills it.
+   */
+  remoteSize: integer("remote_size"),
+  remoteModifiedAt: timestamp("remote_modified_at", { withTimezone: true }),
 });
 
 /**

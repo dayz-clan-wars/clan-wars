@@ -151,6 +151,33 @@ export class NitradoClient {
     return files;
   }
 
+  /**
+   * What the game server currently reports about one file, or null when it is
+   * not there. Used to notice that something other than us rewrote it.
+   *
+   * ⚠️ `modified_at` is the GAME SERVER's clock, in seconds. Do not compare it
+   * to a timestamp of ours: those servers run fixed UTC+4/+7 and any offset
+   * would read as permanent drift. Compare it only against a value previously
+   * returned by this method.
+   *
+   * ⚠️ A directory that does not exist and a file that does not exist both
+   * arrive here as "no entry". Returning null for either is deliberate: the
+   * caller's repair for both is the same upload.
+   */
+  async statFile(remoteDir: string, fileName: string): Promise<{ size: number; modifiedAtMs: number } | null> {
+    const listing = await this.getJson(
+      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(remoteDir)}`,
+    );
+    const entries: any[] = listing?.data?.entries ?? [];
+    const entry = entries.find((e) => e?.name === fileName && e?.type === "file");
+    if (!entry) return null;
+    // ⚠️ A missing size or mtime must not read as 0 — that is a real value
+    // here and would look like drift on every tick. Treat an entry we cannot
+    // measure as no entry, so the caller re-uploads once and re-observes.
+    if (typeof entry.size !== "number" || typeof entry.modified_at !== "number") return null;
+    return { size: entry.size, modifiedAtMs: entry.modified_at * 1000 };
+  }
+
   /** Two steps: the API returns a signed URL, then the bytes come from there. */
   async downloadFile(filePath: string): Promise<string> {
     const dl = await this.getJson(

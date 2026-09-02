@@ -375,7 +375,7 @@ the server no longer reads — succeeding silently, which is the exact failure c
 this item exists to remove. Deriving it costs one GET per server per sweep and
 tracks a mission change on its own.
 
-## 24. Out-of-band changes to the supply file on the server are never detected
+## 24. ~~Out-of-band changes to the supply file on the server are never detected~~ — DONE 2026-09-02
 
 `supply_uploads.content_hash` is the supply projection's only memory, and it records
 what the tick last **sent**, not what the game server currently holds. That makes the
@@ -409,6 +409,52 @@ gap; §2.1 and §6 were corrected so they no longer overclaim.
 ---
 
 # Carried forward from faction dormancy (2026-09-02)
+
+### Resolution
+
+`file_server/list` was probed against the live server before choosing. It returns `size`
+in bytes and `modified_at` in whole seconds per entry, and the entry for our file read
+`modified_at` 1788307434 — exactly the `uploaded_at` epoch stored in `supply_uploads`.
+So the endpoint's mtime semantics, listed above as unverified, are real and precise.
+That settled the cadence question: one `list` per server per sweep gets both signals, so
+"download and compare" buys nothing.
+
+**The tempting version of this is wrong.** Comparing the remote mtime to our own
+`uploaded_at` works today and would break silently: `modified_at` is the GAME SERVER's
+filesystem clock, and those run fixed UTC+4/+7 — the same fact the ADM filename hazard in
+`listAdmFiles` already works around. Any offset would read as permanent drift and
+re-upload every tick, which is the always-upload behaviour §4.4 rejected. So the baseline
+is **observed, not computed**: after a successful upload the tick stats the file and
+stores what the server itself reported (`remote_size`, `remote_modified_at`, migration
+`0017`). Comparison is then observation against observation, immune to clock offset.
+
+Both signals are kept because neither subsumes the other, and a mutation test proved it:
+with only mtime compared, the whole suite still passed. Size catches a restore that
+preserves timestamps (`rsync -a`, an FTP client issuing MFMT); mtime catches an edit that
+preserves length. Each now has a test that fails without the other's check.
+
+Drift is repaired *and* reported (`onSupplyDrift` → `console.error` naming expected vs
+found). Whatever rewrote the file — a mission wipe, an FTP restore, a Nitrado rollback —
+has almost certainly not stopped at this one file, so silence would hide the larger
+event.
+
+Two behaviours worth knowing:
+
+- **A null baseline is adopted, not treated as drift.** Every existing row is null the
+  moment this ships, and a row returns to null whenever the stat after an upload fails.
+  Writing the baseline only after an upload would leave detection switched off until the
+  roster happened to change — on a server with stable factions, forever. Uploading
+  instead would be exact, but a Nitrado listing outage would then re-upload every tick.
+  The backfill deliberately does not restamp `uploaded_at`: nothing was uploaded.
+- **A stat failure on the quiet path propagates.** Being unable to check is not evidence
+  the file is intact, and that path was not going to upload anyway, so there is no cost
+  to being loud.
+
+Verified on `factions_live`: the first quiet tick after deploy backfilled the baseline
+(19767 bytes, the exact byte length the projection generates) without touching
+`uploaded_at`. Perturbing the stored baseline produced one drift line naming expected vs
+found, one re-upload, a fresh baseline, and then silence — one drift, one upload, no
+storm.
 
 ## 25. ~~`clocks()` scans the event log once per faction, every ten seconds~~ — DONE 2026-09-02
 

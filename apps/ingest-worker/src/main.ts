@@ -55,6 +55,19 @@ for (;;) {
       // nothing changed — which is almost all of them.
       onSupplyUploaded: (serverId, r) =>
         console.log(`supply file uploaded for server ${serverId}: ${r.factions} holding factions`),
+      // ⚠️ Loud on purpose. The tick has already repaired the file by the time
+      // this runs, so nothing is broken — but something outside this system
+      // rewrote it, and whatever did is unlikely to have stopped at one file.
+      onSupplyDrift: (serverId, d) => {
+        const found = d.found
+          ? `size ${d.found.size}, mtime ${new Date(d.found.modifiedAtMs).toISOString()}`
+          : "no such file";
+        console.error(
+          `supply file on server ${serverId} was changed outside this worker — ` +
+          `expected size ${d.expected.size}, mtime ${new Date(d.expected.modifiedAtMs).toISOString()}; ` +
+          `found ${found}. Re-uploading.`,
+        );
+      },
     });
     console.log(`ingest sweep: ${r.servers} servers in ${Date.now() - started}ms`);
   } catch (err) {

@@ -283,3 +283,42 @@ describe("NitradoClient.missionCustomDir", () => {
     await expect(client(noMission).missionCustomDir()).rejects.toThrow(/mission/i);
   });
 });
+
+describe("NitradoClient.statFile", () => {
+  // The shape verified against the live server on 2026-09-02: entries carry
+  // `size` in bytes and `modified_at` in whole SECONDS.
+  const entry = (over: Record<string, unknown> = {}) => ({
+    name: "faction-supplies.json", type: "file", size: 19767, modified_at: 1788307434, ...over,
+  });
+
+  it("reports the size and mtime the server holds", async () => {
+    const fetchFn = fakeFetch({ "/file_server/list": listing([entry({ name: "teleports.json", size: 5 }), entry()]) });
+    const stat = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch)
+      .statFile("/games/ni1/ftproot/dayzxb_missions/m/custom", "faction-supplies.json");
+    // Milliseconds, not seconds: the caller stores this as a timestamptz.
+    expect(stat).toEqual({ size: 19767, modifiedAtMs: 1788307434000 });
+  });
+
+  it("returns null when the file is not in the directory", async () => {
+    const fetchFn = fakeFetch({ "/file_server/list": listing([entry({ name: "teleports.json" })]) });
+    const stat = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).statFile("/d", "faction-supplies.json");
+    expect(stat).toBeNull();
+  });
+
+  it("returns null for a directory that shares the name", async () => {
+    const fetchFn = fakeFetch({ "/file_server/list": listing([entry({ type: "dir" })]) });
+    const stat = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).statFile("/d", "faction-supplies.json");
+    expect(stat).toBeNull();
+  });
+
+  it("⚠️ returns null rather than 0 when the listing omits size or mtime", async () => {
+    // 0 is a legal size and a legal mtime. Substituting it for "unknown"
+    // would make the caller compare a real baseline against a fabricated one
+    // and re-upload on every tick forever.
+    for (const missing of [{ size: undefined }, { modified_at: undefined }]) {
+      const fetchFn = fakeFetch({ "/file_server/list": listing([entry(missing)]) });
+      const stat = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).statFile("/d", "faction-supplies.json");
+      expect(stat).toBeNull();
+    }
+  });
+});
