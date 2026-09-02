@@ -545,12 +545,32 @@ both payload keys appear in `Index Cond` and none is left in a `Filter`. Verifie
 mutation — renaming `poleKey`, renaming `texture`, and changing the event type each fail
 it.
 
-## 26. Three residual gaps in the dormancy liveness guard
+## 26. Three residual gaps in the dormancy liveness guard — TWO OF THREE DONE 2026-09-02
+
+**Fixed:** the poisoned `dormant_since` and the silent suppression. A dark server now
+takes a `pause` transition that re-stamps `dormant_since` to now, so the disband
+countdown measures *observed* silence and restarts from the moment ingest recovered.
+`decide()` evaluates `revive` → `stamp` → `pause` → `disband`, with `pause` deliberately
+ahead of the due check — behind it, the clock still accrued on every not-yet-due tick,
+which was the whole defect. `dormancyTick` counts `paused` and the bot logs it at error
+level, naming it as an ingest problem, which is what makes the withholding visible.
+
+Spec amended at §3.3. Acceptance: `docs/acceptance/2026-09-02-dormancy-pause.md`.
+
+**Still open — the third bullet.** A genuinely dead game server never releases its
+flags, and the pause makes that indefinite *by construction* rather than incidentally:
+the countdown can no longer run out while nothing is watching. This is still the safe
+direction, and it is now loud rather than silent, but the scarce-pool reclamation has no
+path without manual intervention. A reaper would need a source of truth this system does
+not have — "the server is gone" as distinct from "we cannot currently reach it" — so it
+is deliberately not being guessed at.
+
+### Original writeup
 
 Disband refuses on a server whose newest `events` row is older than `dormantAfterMs`, so
 an ingest outage cannot mass-disband. Three things that guard does not cover:
 
-- **An outage can poison a `dormant_since` stamped during it.** Ingest down days 0-20,
+- ~~**An outage can poison a `dormant_since` stamped during it.**~~ Fixed above. Ingest down days 0-20,
   recovers on day 20 and backfills. A faction that genuinely raised on day 10 now reads
   11 days stale — not fresh, so no revive — while its `dormant_since` was stamped on day
   7 from evidence that did not exist yet. On day 21 the server is live, the gate opens,
@@ -558,10 +578,12 @@ an ingest outage cannot mass-disband. Three things that guard does not cover:
   the day 8-13 window are exposed; anything inside the last 7 days revives) and strictly
   better than the mass-disband it replaces, but the fix is to re-stamp `dormant_since`
   when the server was not live for the stamping interval.
-- **Suppression is silent.** When the gate blocks a disband, `decide()` returns null and
-  the tick counts nothing. No log line, no counter distinguishing "nothing was due" from
-  "disbands are being withheld because ingest is down". A `withheld` counter in
-  `dormancy-tick.ts` would make the outage visible from the bot's own logs.
+- ~~**Suppression is silent.**~~ Fixed above, though not with the `withheld` counter this
+  bullet imagined: because the clock is now paused rather than merely refused, "due but
+  withheld" stops being a reachable state. The observable is `paused` instead, which
+  carries the same operational meaning — a server with dormant factions is producing no
+  events — and fires from the first blind tick rather than only once something has been
+  due for 14 days.
 - **A genuinely dead game server never releases its flags.** No ADM lines means no
   events means the gate stays shut forever. Correct by design and the safe direction,
   but the scarce-pool reclamation then has no path without manual intervention.

@@ -181,9 +181,10 @@ faction's supplies. That is a decision, not a side effect.
 
 ### Known-open, in rough priority order
 
-1. Three residual gaps in dormancy, all recorded in the inbox: an outage can poison a
-   `dormant_since` stamped during it; withheld disbands are silent (no counter); a
-   genuinely dead server never releases its flags.
+1. A genuinely dead server never releases its flags — the last of inbox item 26's three
+   gaps. The disband countdown now pauses while a server is dark, which is the safe
+   direction and is logged loudly, but it means the pool cannot reclaim a flag from a
+   server that never comes back without manual intervention.
 2. `/faction roster` still lists any named faction's members to anyone. Deliberate per
    spec §6, but worth revisiting alongside the pole gating.
 3. `packages/domain/src/emotes.ts` claims every safe token "has been performed by a real

@@ -191,6 +191,44 @@ describe("PgDormancyStore", () => {
       expect(b!.dormantSince).toEqual(ago(5000));
     });
 
+    it("pauses a dormant row that HAS a timestamp, without touching one that has none", async () => {
+      // ⚠️ The exact complement of the stamp test above, and the pair is the
+      // point: stamp owns `dormant_since IS NULL` and pause owns IS NOT NULL,
+      // so neither can act on the other's row. If both guards ever matched the
+      // same row, a mis-routed transition would silently double-write.
+      const bare = await seedFaction({ tag: "CCC", poleKey: "3:3:3", status: "dormant", dormantSince: null });
+      const running = await seedFaction({ tag: "DDD", poleKey: "4:4:4", status: "dormant", dormantSince: ago(5000) });
+
+      expect(await store.pauseDormancyClock(bare.id, now)).toBe(false);
+      expect(await store.pauseDormancyClock(running.id, now)).toBe(true);
+
+      const [a] = await db.select().from(factions).where(eq(factions.id, bare.id));
+      const [b] = await db.select().from(factions).where(eq(factions.id, running.id));
+      expect(a!.dormantSince).toBeNull();
+      expect(b!.dormantSince).toEqual(now);
+    });
+
+    it("pauses only a dormant faction, never an active one", async () => {
+      // An active faction has no countdown to restart, and writing
+      // dormant_since onto one would hand the next tick a row whose status and
+      // timestamp disagree.
+      const f = await seedFaction({ status: "active" });
+      expect(await store.pauseDormancyClock(f.id, now)).toBe(false);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.dormantSince).toBeNull();
+    });
+
+    it("⚠️ a paused row is no longer disbandable at the old cutoff", async () => {
+      // The behaviour the whole change exists for, at the storage layer: the
+      // row was due, the pause moved its clock, and the same cutoff that would
+      // have disbanded it now refuses.
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
+      expect(await store.pauseDormancyClock(f.id, now)).toBe(true);
+      expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.status).toBe("dormant");
+    });
+
     it("disbands a faction dormant past the window", async () => {
       const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
       expect(await store.disbandDormant(f.id, ago(1000))).toBe(true);

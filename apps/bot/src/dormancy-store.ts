@@ -17,6 +17,17 @@ export interface DormancyStore {
   revive(factionId: number): Promise<boolean>;
   stampDormantSince(factionId: number, at: Date): Promise<boolean>;
   /**
+   * Restart the disband countdown on a dormant row whose clock is already
+   * running, because this tick could not observe the faction's server.
+   *
+   * ⚠️ The mirror of `stampDormantSince`, and the guards are complementary on
+   * purpose: that one requires `dormant_since IS NULL`, this one requires IS
+   * NOT NULL. Neither will touch a row the other owns, so `decide()` picking
+   * the wrong transition produces a no-op the tick reports honestly rather
+   * than a double write.
+   */
+  pauseDormancyClock(factionId: number, at: Date): Promise<boolean>;
+  /**
    * ⚠️ Does not check server liveness. The caller — `decide()` in
    * dormancy.ts, routed through dormancy-tick.ts — is responsible for
    * confirming the server's ingest hasn't gone silent before calling this.
@@ -120,6 +131,24 @@ export class PgDormancyStore implements DormancyStore {
         eq(factions.id, factionId),
         eq(factions.status, "dormant"),
         isNull(factions.dormantSince),
+      ))
+      .returning({ id: factions.id });
+    return rows.length > 0;
+  }
+
+  /**
+   * ⚠️ Guarded on `isNotNull`, the complement of `stampDormantSince`'s
+   * `isNull`. A row with no timestamp belongs to that method; matching it here
+   * too would let a mis-routed transition start a clock this method is only
+   * supposed to restart.
+   */
+  async pauseDormancyClock(factionId: number, at: Date): Promise<boolean> {
+    const rows = await this.db.update(factions)
+      .set({ dormantSince: at })
+      .where(and(
+        eq(factions.id, factionId),
+        eq(factions.status, "dormant"),
+        isNotNull(factions.dormantSince),
       ))
       .returning({ id: factions.id });
     return rows.length > 0;

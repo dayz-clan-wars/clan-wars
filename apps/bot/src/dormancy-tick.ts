@@ -36,6 +36,18 @@ export type DormancyTickResult = {
   revived: number;
   disbanded: number;
   stamped: number;
+  /**
+   * Dormant factions whose disband countdown was restarted because their
+   * server looked dark this tick.
+   *
+   * ⚠️ This is the outage signal, and it is the whole reason the suppression
+   * is no longer silent. A non-zero value here means "ingest is not producing
+   * events for a server that has dormant factions on it" — previously that
+   * state and "nothing was due" were both a null from `decide()` and both
+   * counted nothing, so an operator reading the bot's own logs could not tell
+   * a quiet week from a broken worker.
+   */
+  paused: number;
   notices: DormancyNotice[];
 };
 
@@ -57,7 +69,7 @@ export async function dormancyTick(
 ): Promise<DormancyTickResult> {
   const { now, windows } = opts;
   const out: DormancyTickResult = {
-    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, notices: [],
+    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, paused: 0, notices: [],
   };
 
   for (const clock of await store.clocks()) {
@@ -88,6 +100,14 @@ export async function dormancyTick(
 
         case "stamp":
           if (await store.stampDormantSince(clock.id, now)) out.stamped++;
+          break;
+
+        case "pause":
+          // No notice. The leader was already DMed when the faction went
+          // dormant, and a pause only ever moves their deadline further out —
+          // telling them "your server is being watched less well than we
+          // thought" is noise they cannot act on.
+          if (await store.pauseDormancyClock(clock.id, now)) out.paused++;
           break;
       }
     } catch (err) {

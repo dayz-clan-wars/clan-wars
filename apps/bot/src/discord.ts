@@ -1073,6 +1073,20 @@ export async function start(cfg: BotConfig): Promise<void> {
           `${d.disbanded} disbanded, ${d.stamped} stamped, of ${d.examined} examined`,
         );
       }
+      // ⚠️ Its own line, at error level, and deliberately not folded into the
+      // counts above. A paused clock means a server with dormant factions on
+      // it produced no events this tick — an ingest problem wearing dormancy's
+      // clothes. Folding it in with the routine transitions is how it stayed
+      // invisible: an operator cannot distinguish "nothing was due" from
+      // "disbands are being withheld because the worker is down" unless
+      // something says so out loud.
+      if (d.paused > 0) {
+        console.error(
+          `dormancy: disband countdown paused for ${d.paused} faction(s) — their server has ` +
+          `produced no events in ${cfg.dormantAfterMs}ms, so ingest is presumably down. ` +
+          "Supplies stay cut while dormant, but nothing will be disbanded until events resume.",
+        );
+      }
       await notifyDormancy(d.notices, send, (n, err) =>
         console.error(`dormancy DM failed for faction ${n.factionId}`, err));
     } catch (err) {

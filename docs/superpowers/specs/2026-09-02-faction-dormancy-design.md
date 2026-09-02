@@ -6,6 +6,7 @@ supplies, and eventually releasing its flag, tag and pole
 **Builds on:** faction supplies (the projection this gates), roster core
 (`factions` rows with a pole, a texture and a status), live ingest (a running
 worker writing `flag.raised` events)
+**Amended:** 2026-09-02 — §3 gains a `pause` transition; see §3.3
 
 ---
 
@@ -167,7 +168,8 @@ depend on tick timing, and the loss is irreversible.
 |---|---|---|---|
 | `dormant` | last raise within 7 days | `active` | `dormant_since` cleared, leader DMed |
 | `active` | no raise for 7 days | `dormant` | `dormant_since` stamped, leader DMed, supplies stop next sweep |
-| `dormant` | `dormant_since` older than 14 days | `disbanded` | flag, tag and pole released; roster cleared, invites revoked — see §3.2 |
+| `dormant` | `dormant_since` older than 14 days, **and the server is live** | `disbanded` | flag, tag and pole released; roster cleared, invites revoked — see §3.2 |
+| `dormant` | the server has produced no event for 7 days | `dormant` | `dormant_since` re-stamped to now — the countdown restarts; no DM. See §3.3 |
 
 `reserved` and `disbanded` factions are never examined.
 
@@ -215,6 +217,44 @@ check replaced by the dormancy condition — not a second implementation of it.
 records that this convention is a comment with no enforcement, and that a
 deadlock was already built once out of two separately-correct changes taking
 two tables in opposite orders. This is a third writer to the same three tables.
+
+### 3.3 The disband countdown measures OBSERVED silence (added 2026-09-02)
+
+The original design withheld a disband while the faction's server looked dark,
+which is necessary and was not sufficient. The countdown kept running through
+the blind window, so a `dormant_since` stamped during an ingest outage aged on
+evidence nobody had, and the first tick after recovery disbanded a faction that
+had been *watched* for less than the full 14 days. The inbox item 26 replay is
+concrete: ingest down days 0-20, a genuine raise on day 10 that nothing could
+see until the backfill, and a disband on day 21 backed by 11 days of anything
+observed.
+
+A dark server therefore now **re-stamps** `dormant_since` rather than merely
+refusing. The countdown restarts from the moment observation resumed, which is
+the only interval the 14-day window can honestly claim.
+
+Ordering inside `decide()` is load-bearing and tested at each boundary:
+
+1. `revive` — evidence beats the absence of evidence, exactly as it beats disband.
+2. `stamp` — a dormant row with no timestamp; guarded on `IS NULL` in the store.
+3. `pause` — server dark; guarded on `IS NOT NULL`, the complement of `stamp`.
+4. `disband` — due, on a live server.
+
+`pause` sits **ahead** of the due check, not after it. Behind it, the clock
+would still accrue on every tick that was not yet due, which is the whole
+defect.
+
+Going `active -> dormant` is deliberately still ungated: it is reversible, it
+only cuts supplies, and gating it would leave a faction fed at a decaying base
+for the length of an outage. The consequence — every faction on a dark server
+goes dormant together and loses supplies — is unchanged from the original
+design and is accepted for the same reason.
+
+**What this does not fix:** a genuinely dead game server still never releases
+its flags, because the pause is indefinite by construction. That remains inbox
+item 26's third bullet, and the pause at least makes it *loud*: the tick counts
+`paused` and the bot logs it at error level, so the state is visible from the
+bot's own logs rather than being indistinguishable from a quiet week.
 
 ## 4. Notifications
 

@@ -23,6 +23,7 @@ const fakeStore = (clocks: FactionClockRow[], over: Partial<DormancyStore> = {})
   goDormant: async () => true,
   revive: async () => true,
   stampDormantSince: async () => true,
+  pauseDormancyClock: async () => true,
   disbandDormant: async () => true,
   ...over,
 });
@@ -131,5 +132,76 @@ describe("dormancyTick", () => {
   it("counts what it looked at even when nothing changes", async () => {
     const r = await dormancyTick(fakeStore([row({}), row({ id: 2 })]), { now, windows });
     expect(r).toMatchObject({ examined: 2, dormant: 0, revived: 0, disbanded: 0, stamped: 0 });
+  });
+
+  describe("the paused disband clock (inbox 26)", () => {
+    // A faction due to disband, on a server that has gone silent.
+    const stranded = row({
+      status: "dormant",
+      lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 5),
+      dormantSince: ago(DEFAULT_DISBAND_AFTER_DORMANT_MS),
+      serverLastEventAt: ago(DEFAULT_DORMANT_AFTER_MS + 1),
+    });
+
+    it("restarts the countdown and counts it, instead of disbanding", async () => {
+      const pauseDormancyClock = vi.fn().mockResolvedValue(true);
+      const disbandDormant = vi.fn().mockResolvedValue(true);
+      const store = fakeStore([stranded], { pauseDormancyClock, disbandDormant });
+
+      const r = await dormancyTick(store, { now, windows });
+
+      expect(disbandDormant).not.toHaveBeenCalled();
+      expect(pauseDormancyClock).toHaveBeenCalledWith(1, now);
+      expect(r.paused).toBe(1);
+      expect(r.disbanded).toBe(0);
+    });
+
+    it("⚠️ emits no notice — a pause only moves the leader's deadline further out", async () => {
+      const r = await dormancyTick(fakeStore([stranded]), { now, windows });
+      expect(r.notices).toEqual([]);
+    });
+
+    it("counts nothing when the guarded update matched no row", async () => {
+      const store = fakeStore([stranded], { pauseDormancyClock: async () => false });
+      const r = await dormancyTick(store, { now, windows });
+      expect(r.paused).toBe(0);
+    });
+
+    it("does not pause a healthy server's clock", async () => {
+      const pauseDormancyClock = vi.fn().mockResolvedValue(true);
+      const disbandDormant = vi.fn().mockResolvedValue(true);
+      const store = fakeStore([row({
+        status: "dormant",
+        lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 5),
+        dormantSince: ago(DEFAULT_DISBAND_AFTER_DORMANT_MS),
+        serverLastEventAt: ago(1000),
+      })], { pauseDormancyClock, disbandDormant });
+
+      const r = await dormancyTick(store, { now, windows });
+
+      expect(pauseDormancyClock).not.toHaveBeenCalled();
+      expect(r.paused).toBe(0);
+      expect(r.disbanded).toBe(1);
+    });
+
+    it("⚠️ one faction's failure does not stop the rest of the sweep", async () => {
+      // Same per-faction isolation the other transitions get: a dark server
+      // usually means MANY dormant factions at once, so a throw on the first
+      // would leave every later one un-paused and still due to disband.
+      const onError = vi.fn();
+      const pauseDormancyClock = vi.fn()
+        .mockRejectedValueOnce(new Error("deadlock"))
+        .mockResolvedValue(true);
+      const store = fakeStore(
+        [{ ...stranded, id: 1 }, { ...stranded, id: 2 }],
+        { pauseDormancyClock },
+      );
+
+      const r = await dormancyTick(store, { now, windows, onError });
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(r.paused).toBe(1);
+      expect(r.examined).toBe(2);
+    });
   });
 });

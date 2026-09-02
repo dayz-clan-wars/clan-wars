@@ -94,7 +94,11 @@ describe("decide", () => {
     it("⚠️ a stale server disbands nothing, even a faction that is otherwise due", () => {
       // If the server itself has produced no event in dormantAfterMs, ingest
       // is presumably down and every faction on it reads as falsely stale.
-      expect(decide(due(ago(DEFAULT_DORMANT_AFTER_MS + 1)), now, W)).toBeNull();
+      //
+      // ⚠️ This used to return null — a silent refusal. It now returns
+      // "pause", which both withholds the disband AND stops the clock
+      // accruing time nobody was watching. See "the paused disband clock".
+      expect(decide(due(ago(DEFAULT_DORMANT_AFTER_MS + 1)), now, W)).toBe("pause");
     });
 
     it("a live server still disbands a faction that is due", () => {
@@ -104,13 +108,13 @@ describe("decide", () => {
     it("no server events at all (null) disbands nothing", () => {
       // Fresh ingest, or a worker that has never run for this server: every
       // faction on it must read as un-observed, not as abandoned.
-      expect(decide(due(null), now, W)).toBeNull();
+      expect(decide(due(null), now, W)).toBe("pause");
     });
 
     it("disbands exactly at the server-liveness boundary", () => {
       // Matches `fresh`'s own boundary convention: an event exactly
       // dormantAfterMs old no longer counts as live.
-      expect(decide(due(ago(DEFAULT_DORMANT_AFTER_MS)), now, W)).toBeNull();
+      expect(decide(due(ago(DEFAULT_DORMANT_AFTER_MS)), now, W)).toBe("pause");
       expect(decide(due(ago(DEFAULT_DORMANT_AFTER_MS - 1)), now, W)).toBe("disband");
     });
 
@@ -122,6 +126,126 @@ describe("decide", () => {
       expect(decide(clock({
         status: "dormant", lastRaiseAt: ago(10), dormantSince: ago(99999), serverLastEventAt: null,
       }), now, W)).toBe("revive");
+    });
+  });
+
+  describe("the paused disband clock", () => {
+    const DAY = 86_400_000;
+
+    it("pauses a dormant faction's clock while its server is dark, even when not yet due", () => {
+      // The clock measures OBSERVED silence. A tick that cannot see the server
+      // has observed nothing, so it must not let the clock advance — whether
+      // or not the row happens to be due yet.
+      expect(decide(clock({
+        status: "dormant",
+        lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 2),
+        dormantSince: ago(DAY),
+        serverLastEventAt: ago(DEFAULT_DORMANT_AFTER_MS + 1),
+      }), now, W)).toBe("pause");
+    });
+
+    it("does not pause while the server is live", () => {
+      expect(decide(clock({
+        status: "dormant",
+        lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 2),
+        dormantSince: ago(DAY),
+        serverLastEventAt: ago(1000),
+      }), now, W)).toBeNull();
+    });
+
+    it("⚠️ revive still beats pause", () => {
+      // A raise is evidence. A dark server is the absence of evidence. If we
+      // somehow have the former, it wins — the same reasoning that puts revive
+      // ahead of disband.
+      expect(decide(clock({
+        status: "dormant",
+        lastRaiseAt: ago(1000),
+        dormantSince: ago(DEFAULT_DISBAND_AFTER_DORMANT_MS),
+        serverLastEventAt: null,
+      }), now, W)).toBe("revive");
+    });
+
+    it("stamp still beats pause on a dormant row with no timestamp", () => {
+      // Both write dormant_since = now, but the store guards differ (IS NULL
+      // versus IS NOT NULL), so the tick must pick the one that will match.
+      expect(decide(clock({
+        status: "dormant", lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 2),
+        dormantSince: null, serverLastEventAt: null,
+      }), now, W)).toBe("stamp");
+    });
+
+    it("⚠️ the inbox-26 outage: a faction is not disbanded on 11 days of proven silence", () => {
+      // The scenario, replayed one tick per day. Ingest is down days 0-20 and
+      // backfills on day 20. The faction genuinely raised its flag on day 10,
+      // which nothing could observe until the backfill landed.
+      //
+      // Before the pause, dormant_since was stamped on day 7 from evidence
+      // that did not exist yet, kept ageing through the blind window, and the
+      // faction disbanded on day 21 — 14 days after a stamp backed by only 11
+      // days of anything anyone actually watched.
+      const t0 = new Date("2026-01-01T00:00:00Z");
+      const at = (day: number) => new Date(t0.getTime() + day * DAY);
+
+      let status = "active";
+      let dormantSince: Date | null = null;
+      let disbandedOn: number | null = null;
+
+      for (let day = 0; day <= 40 && disbandedOn === null; day++) {
+        const t = at(day);
+        // What the log can show us on this day. While ingest is down the
+        // newest event stays at day 0; from the backfill onwards the server is
+        // ingesting normally again, so its newest event tracks the present.
+        const serverLastEventAt = day < 20 ? at(0) : t;
+        // The faction's own last raise, as far as the ingested log knows. Its
+        // real day-10 raise is invisible until the backfill lands.
+        const lastRaiseAt = day < 20 ? at(0) : at(10);
+
+        switch (decide({ status, lastRaiseAt, dormantSince, serverLastEventAt }, t, W)) {
+          case "dormant": status = "dormant"; dormantSince = t; break;
+          case "revive": status = "active"; dormantSince = null; break;
+          case "stamp": case "pause": dormantSince = t; break;
+          case "disband": disbandedOn = day; break;
+          case null: break;
+        }
+      }
+
+      // It still disbands — the faction really did go quiet — but only after a
+      // full 14 days measured from the last tick that could see nothing.
+      // Dormant on day 7, paused each day through day 19, ingest back on day
+      // 20, so the countdown runs from day 19: 19 + 14 = 33.
+      expect(disbandedOn).toBe(33);
+      // The property that matters, stated independently of the arithmetic:
+      // strictly more than the 21 the old behaviour produced, and at least a
+      // full window after observation resumed on day 20.
+      expect(disbandedOn! - 20).toBeGreaterThanOrEqual(
+        DEFAULT_DISBAND_AFTER_DORMANT_MS / DAY - 1,
+      );
+    });
+
+    it("a healthy server's clock is never paused, so disband still lands at 14 days", () => {
+      // The control for the case above: same replay, ingest never down.
+      const t0 = new Date("2026-01-01T00:00:00Z");
+      const at = (day: number) => new Date(t0.getTime() + day * DAY);
+
+      let status = "active";
+      let dormantSince: Date | null = null;
+      let disbandedOn: number | null = null;
+
+      for (let day = 0; day <= 40 && disbandedOn === null; day++) {
+        const t = at(day);
+        switch (decide({
+          status, lastRaiseAt: at(0), dormantSince, serverLastEventAt: t,
+        }, t, W)) {
+          case "dormant": status = "dormant"; dormantSince = t; break;
+          case "revive": status = "active"; dormantSince = null; break;
+          case "stamp": case "pause": dormantSince = t; break;
+          case "disband": disbandedOn = day; break;
+          case null: break;
+        }
+      }
+
+      // Dormant on day 7, disbanded 14 days later.
+      expect(disbandedOn).toBe(21);
     });
   });
 });
