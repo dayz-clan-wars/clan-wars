@@ -1,0 +1,64 @@
+import { describe, it, expect, vi } from "vitest";
+import { formatDormancyDm, notifyDormancy } from "../src/dormancy-notify.js";
+import type { DormancyNotice } from "../src/dormancy-tick.js";
+
+const base: DormancyNotice = {
+  kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
+  disbandAt: new Date("2026-09-16T12:00:00Z"),
+};
+
+describe("formatDormancyDm", () => {
+  it("tells a dormant leader what happened, what to do, and the deadline", () => {
+    const msg = formatDormancyDm(base);
+    expect(msg).toMatch(/Bears/);
+    expect(msg).toMatch(/supplies/i);
+    expect(msg).toMatch(/raise/i);
+    expect(msg).toContain(`<t:${Math.floor(base.disbandAt.getTime() / 1000)}:R>`);
+  });
+
+  it("confirms a revival", () => {
+    const msg = formatDormancyDm({ ...base, kind: "revive" });
+    expect(msg).toMatch(/Bears/);
+    expect(msg).toMatch(/supplies/i);
+    expect(msg).not.toMatch(/returns to the pool/i);
+  });
+
+  it("⚠️ never includes pole coordinates", () => {
+    // A DM is screenshottable and the message does not need them. Same rule as
+    // /faction info's members-only pole line.
+    for (const kind of ["dormant", "revive"] as const) {
+      expect(formatDormancyDm({ ...base, kind })).not.toMatch(/\d+\.\d+:\d+\.\d+:\d+\.\d+/);
+    }
+  });
+});
+
+describe("notifyDormancy", () => {
+  it("⚠️ sends with an empty channel id, so there is no public fallback", async () => {
+    // `send` falls back to posting in a channel when a DM fails. For dormancy
+    // that fallback would announce whose base is undefended, so it must not be
+    // reachable: an empty channel id makes the fallback throw instead.
+    const send = vi.fn().mockResolvedValue(undefined);
+    await notifyDormancy([base], send);
+    expect(send).toHaveBeenCalledTimes(1);
+    expect(send.mock.calls[0]![0]).toMatchObject({ discordId: "d1", channelId: "" });
+  });
+
+  it("⚠️ a failed DM is reported and never retried", async () => {
+    // At-most-once, deliberately: the transition has already been written, so
+    // there is no state that would tell a later tick to try again — and
+    // re-deriving one would re-DM every dormant faction on every tick after
+    // any transient Discord failure.
+    const send = vi.fn().mockRejectedValue(new Error("DMs closed"));
+    const onError = vi.fn();
+    expect(await notifyDormancy([base], send, onError)).toBe(0);
+    expect(onError).toHaveBeenCalledTimes(1);
+  });
+
+  it("one unreachable leader does not stop the others being told", async () => {
+    const send = vi.fn()
+      .mockRejectedValueOnce(new Error("DMs closed"))
+      .mockResolvedValueOnce(undefined);
+    expect(await notifyDormancy([base, { ...base, factionId: 2, leaderDiscordId: "d2" }], send, vi.fn())).toBe(1);
+    expect(send).toHaveBeenCalledTimes(2);
+  });
+});
