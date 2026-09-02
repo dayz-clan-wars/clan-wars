@@ -4,7 +4,7 @@ import {
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
 import { createClient } from "@factions/db";
-import { CLAIMABLE_FLAGS } from "@factions/domain";
+import { CLAIMABLE_FLAGS, emoteLabel } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
 import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
@@ -32,6 +32,12 @@ import { PgRosterStore, type Membership } from "./roster-store.js";
 // name the reader never asks for, and getString would return null for every
 // /link, invisibly. Sharing this constant makes that class of bug impossible.
 export const LINK_GAMERTAG_OPTION = "gamertag";
+/**
+ * Asks /link for a DIFFERENT sequence rather than re-showing the live one.
+ * Shares a constant with the reader for the same reason as the option above:
+ * a typo at one end reads as null at the other, silently.
+ */
+export const LINK_NEW_SEQUENCE_OPTION = "new-sequence";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
@@ -40,7 +46,9 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
       .addStringOption((o) => o.setName(LINK_GAMERTAG_OPTION)
         .setDescription("Which character is yours")
         .setRequired(true)
-        .setAutocomplete(true)),
+        .setAutocomplete(true))
+      .addBooleanOption((o) => o.setName(LINK_NEW_SEQUENCE_OPTION)
+        .setDescription("Give me different emotes — I can't perform one of these")),
     new SlashCommandBuilder().setName("unlink")
       .setDescription("Remove the binding between your Discord account and your character"),
     new SlashCommandBuilder().setName("whoami")
@@ -133,6 +141,8 @@ export type InteractionLike = {
   channelId: string;
   /** The `character` option of /link — a UID. Absent for every other command. */
   targetDayzId?: string | null;
+  /** The `new-sequence` option of /link. Absent for every other command. */
+  newSequence?: boolean | null;
 };
 
 export async function routeInteraction(deps: CommandDeps, i: InteractionLike): Promise<Reply | null> {
@@ -153,7 +163,9 @@ export async function routeInteraction(deps: CommandDeps, i: InteractionLike): P
     if (!i.targetDayzId) {
       return { content: "Pick a character from the list when you run `/link`.", ephemeral: true };
     }
-    return handleLink(deps, { ...ctx, targetDayzId: i.targetDayzId });
+    return handleLink(deps, {
+      ...ctx, targetDayzId: i.targetDayzId, newSequence: i.newSequence === true,
+    });
   }
   if (i.commandName === "unlink") return handleUnlink(deps, i.userId, i.guildId);
   return handleWhoami(deps, i.userId);
@@ -575,7 +587,7 @@ export async function notifyCompleted(
         await send({
           discordId: c.discordId,
           channelId: c.channelId,
-          content: await lockedOutMessage(deps, c.targetDayzId),
+          content: await lockedOutMessage(deps, c),
         });
         await deps.store.markNotified(c.id, deps.now());
         loggedFailures.delete(c.id);
@@ -619,22 +631,48 @@ export async function notifyCompleted(
 /**
  * What a player is told when their challenge ran out of emote budget.
  *
- * The count is not mentioned as a number the player can act on: the budget is
- * the primary defence against the named target backing into its own sequence
- * by accident (see MAX_POOL_EMOTES_PER_ATTEMPT), and a player who reads it as
- * a target to optimise against has misunderstood what to do — perform the
- * three emotes, in order, without wandering the wheel.
+ * Names the emote they never reached, which is the difference between an
+ * apology and a diagnosis — see the comment on `stuckOn` below, and the
+ * `ORDINALS` note on why no count appears.
  */
-async function lockedOutMessage(deps: CommandDeps, targetDayzId: string): Promise<string> {
+async function lockedOutMessage(
+  deps: CommandDeps,
+  c: { targetDayzId: string; sequence: string[]; progressIndex: number },
+): Promise<string> {
   // Cosmetic only — a missing player row must not cost the player their
   // message, so fall back to the UID rather than letting this decide anything.
-  const name = (await deps.store.playerByDayzId(targetDayzId))?.gamertag ?? targetDayzId;
-  return (
+  const name = (await deps.store.playerByDayzId(c.targetDayzId))?.gamertag ?? c.targetDayzId;
+  const opening =
     `Your link challenge for **${name}** was canceled: too many emotes were performed ` +
-    "before the sequence was completed, so it can no longer be finished. " +
-    "Run `/link` again for a fresh sequence, and perform just those emotes, in order."
+    "before the sequence was completed, so it can no longer be finished.";
+  const retry = "Run `/link` again for a fresh sequence, and perform just those emotes, in order.";
+
+  // The emote they stopped at. A player at index 0 never managed the FIRST
+  // one, which is a different problem from fumbling the order — it usually
+  // means they could not find it on the wheel at all, the way EmoteSOS could
+  // not be found before it was demoted. Naming it is what makes this message
+  // actionable, and a run of lockouts stuck on one token is how the next
+  // unperformable emote in the safe pool becomes visible.
+  const stuckOn = c.sequence[c.progressIndex];
+  if (stuckOn === undefined) return `${opening} ${retry}`;
+  const label = emoteLabel(stuckOn) ?? stuckOn;
+
+  return (
+    `${opening} You never performed **${label}** — the ${ordinal(c.progressIndex)} of the ` +
+    `${c.sequence.length}. If you cannot find that one on the emote wheel, that is worth ` +
+    `saying in the channel: it may be an emote no one can perform.\n\n${retry}`
   );
 }
+
+/**
+ * ⚠️ Deliberately no count of emotes performed anywhere in the lockout
+ * message. The budget is the primary defence against the named target backing
+ * into its own sequence by accident (see MAX_POOL_EMOTES_PER_ATTEMPT), and a
+ * player who reads a number as a target to optimise against has misunderstood
+ * what to do. The missing EMOTE is the actionable fact; the count is not.
+ */
+const ORDINALS = ["first", "second", "third", "fourth", "fifth", "sixth"];
+const ordinal = (i: number): string => ORDINALS[i] ?? `${i + 1}th`;
 
 /** The subset of a discord.js `Client` a `NicknameApplier` needs. Structural so tests need no real client. */
 export type NicknameClientLike = { guilds: { fetch(guildId: string): Promise<RealGuildLike> } };
@@ -901,6 +939,7 @@ export async function start(cfg: BotConfig): Promise<void> {
           channelId: interaction.channelId,
           // Only /link declares it; getString returns null for the others.
           targetDayzId: interaction.options.getString(LINK_GAMERTAG_OPTION),
+          newSequence: interaction.options.getBoolean(LINK_NEW_SEQUENCE_OPTION),
         });
         if (!reply) return;
         await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });

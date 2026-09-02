@@ -147,6 +147,38 @@ describe("PgVerificationStore", () => {
     expect(await store.pendingNotifications()).toEqual([]);
   });
 
+  it("carries how far the target got into a budget-exhausted notification", async () => {
+    // ⚠️ What makes the lockout message diagnostic instead of merely apologetic.
+    // Wintershadow394 was locked out at progress 0 on 2026-09-01: he performed
+    // the second and third emotes of his sequence eight times and never the
+    // first, because he could not find it on the wheel. Without the progress
+    // index the notifier cannot name the emote that actually blocked him, and
+    // an unperformable token in the safe pool stays invisible.
+    const c = await issue("810", UID_A);
+    await store.upsertAttempt(c.id, UID_A, 0, 126, 8);
+    expect(await store.cancelChallenge(c.id, later, "budget-exhausted")).toBe(true);
+
+    const pending = await store.pendingNotifications();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ outcome: "budget-exhausted", progressIndex: 0 });
+  });
+
+  it("reports the progress of a target that got partway", async () => {
+    const c = await issue("811", UID_A);
+    await store.upsertAttempt(c.id, UID_A, 2, 130, 8);
+    await store.cancelChallenge(c.id, later, "budget-exhausted");
+    expect((await store.pendingNotifications())[0]).toMatchObject({ progressIndex: 2 });
+  });
+
+  it("reports zero progress when the target never performed a pool emote at all", async () => {
+    // No attempt row exists until the first safe-pool emote, so the join has
+    // nothing to find. Zero is the truthful answer, and a null here would
+    // reach the message formatter as a hole.
+    const c = await issue("812", UID_A);
+    await store.cancelChallenge(c.id, later, "budget-exhausted");
+    expect((await store.pendingNotifications())[0]).toMatchObject({ progressIndex: 0 });
+  });
+
   it("never notifies a cancellation that carries no reason", async () => {
     // ⚠️ The first-deploy flood guard. Keying the cancelled half of
     // pendingNotifications on `canceled_at` rather than on `cancel_reason`

@@ -67,6 +67,104 @@ describe("commands", () => {
     });
   });
 
+  describe("handleLink re-roll and draw cap", () => {
+    const UID_B = "B".repeat(40);
+    const seedB = () => db.insert(players).values({
+      dayzId: UID_B, gamertag: "Bianca", firstSeenAt: now, lastSeenAt: now,
+    });
+
+    it("re-shows the same sequence without newSequence, and draws a new one with it", async () => {
+      // ⚠️ The escape hatch. A player who cannot perform one of the three
+      // emotes (Wintershadow394, 2026-09-01) had no way to ask for different
+      // ones: /link re-shows the SAME sequence by design, so his only route
+      // was to burn the whole emote budget and wait to be locked out.
+      const first = await handleLink(deps, CTX);
+      const seq1 = [...(await store.findLiveChallenge("100", now))!.sequence];
+
+      const reshown = await handleLink(deps, CTX);
+      expect(reshown.content).toBe(first.content);
+      expect((await store.findLiveChallenge("100", now))!.sequence).toEqual(seq1);
+
+      await handleLink(deps, { ...CTX, newSequence: true });
+      const seq2 = (await store.findLiveChallenge("100", now))!.sequence;
+      expect(seq2).not.toEqual(seq1);
+    });
+
+    it("does not notify the player about a challenge they re-rolled themselves", async () => {
+      // The ephemeral reply already says it. A DM here would be the bot
+      // telling a player something they just did.
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, newSequence: true });
+      expect(await store.pendingNotifications()).toEqual([]);
+    });
+
+    it("⚠️ allows three draws per character per day and refuses the fourth", async () => {
+      // The cap is the security bound, not a nicety. Each fresh challenge
+      // carries a fresh emote budget, so MAX_POOL_EMOTES_PER_ATTEMPT's
+      // C(8,3)=0.46% accidental-completion figure is a per-CHALLENGE bound;
+      // unlimited re-draws make the per-day exposure unbounded.
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, newSequence: true });
+      await handleLink(deps, { ...CTX, newSequence: true });
+
+      const refused = await handleLink(deps, { ...CTX, newSequence: true });
+      expect(refused.content).toMatch(/too many/i);
+      const rows = await db.select().from(verificationChallenges)
+        .where(eq(verificationChallenges.targetDayzId, TARGET));
+      expect(rows).toHaveLength(3);
+    });
+
+    it("⚠️ counts a switch away and back as a draw, closing the existing bypass", async () => {
+      // This path predates the re-roll: naming a DIFFERENT character cancels
+      // and re-issues, so /link A -> /link B -> /link A already handed out a
+      // fresh sequence and a fresh budget for A, without limit. A cap that
+      // only counted explicit re-rolls would be bypassable by this in one
+      // extra command.
+      await seedB();
+      // Three draws for A, each one bought by bouncing off B rather than by
+      // asking for a re-roll. The cap must not care which route was taken.
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, targetDayzId: UID_B });
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, targetDayzId: UID_B });
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, targetDayzId: UID_B });
+
+      const refused = await handleLink(deps, CTX);
+      expect(refused.content).toMatch(/too many/i);
+    });
+
+    it("counts draws per account, so nobody can burn a stranger's", async () => {
+      // Per (account, character). A per-character cap would let one attacker
+      // spend a victim's three draws and lock them out of linking entirely.
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, newSequence: true });
+      await handleLink(deps, { ...CTX, newSequence: true });
+      expect((await handleLink(deps, { ...CTX, newSequence: true })).content).toMatch(/too many/i);
+
+      // Clear account 100's open challenge so the second account is not
+      // refused by verification_challenges_open_target_uniq instead — which
+      // would let this test pass without the cap being per-account at all.
+      const held = await store.findLiveChallenge("100", now);
+      expect(await store.cancelChallenge(held!.id, now)).toBe(true);
+
+      const other = await handleLink(deps, { ...CTX, discordId: "200" });
+      expect(other.content).not.toMatch(/too many/i);
+      expect(other.content).toMatch(/Link your account to Ronald/);
+    });
+
+    it("forgets draws older than the window", async () => {
+      await handleLink(deps, CTX);
+      await handleLink(deps, { ...CTX, newSequence: true });
+      await handleLink(deps, { ...CTX, newSequence: true });
+
+      const tomorrow = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+      const later = { ...deps, now: () => tomorrow };
+      const ok = await handleLink(later, { ...CTX, newSequence: true });
+      expect(ok.content).not.toMatch(/too many/i);
+    });
+  });
+
   describe("handleLink", () => {
     it("issues a challenge and replies ephemerally", async () => {
       const reply = await handleLink(deps, CTX);

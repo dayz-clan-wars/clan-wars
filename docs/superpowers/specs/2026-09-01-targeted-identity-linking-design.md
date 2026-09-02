@@ -215,6 +215,44 @@ stops advancing. With a 24-hour TTL that would leave a dead challenge occupying
 the player's one open slot for a day. It is cancelled with a message telling the
 player to run `/link` again.
 
+**The cancellation message names the emote the player never reached** (added
+2026-09-02). `challenge_attempts.progress_index` already records it;
+`pendingNotifications` left-joins it so the notifier can say *which* emote
+blocked them. A player stuck at index 0 never managed the FIRST emote, which is
+a different failure from fumbling the order — it usually means they could not
+find it on the wheel, the way `EmoteSOS` could not be found before it was
+demoted. No count of emotes performed appears in the message, for the reason
+§5.3 gives above: the budget is load-bearing, and a player optimising against a
+number has misunderstood the task.
+
+Prompted by a real lockout: Wintershadow394 (2026-09-01) was drawn
+`move → clap → taunt elbow`, performed clap and taunt elbow four times each,
+never produced `EmoteMove` at all — no such line exists in the raw ADM log — and
+spent the whole budget on the two he could do. The old message told him only
+that too many emotes were performed.
+
+### 5.4 Re-rolling a sequence, and the draw cap
+
+`/link` takes a `new-sequence` option that draws a different sequence instead of
+re-showing the live one. Without it a player who cannot perform one of the three
+emotes has no route out except spending the budget and waiting to be locked out.
+
+**Draws are capped at three per (account, character) per 24 hours**, counting
+every challenge issued regardless of outcome.
+
+The cap is a security bound, not a courtesy limit, and it closes a hole that
+predates the re-roll. §7's 0.46% is a *per-challenge* figure, and every draw is
+a new sequence with a fresh budget — so unlimited draws make the per-day
+exposure unbounded. Unlimited draws were already reachable: naming a different
+character cancels and re-issues, so `/link A → /link B → /link A` handed out a
+fresh sequence and a fresh budget for A as often as one liked. The cap is
+therefore checked on every path that issues for a character, not only on the
+explicit re-roll, and counting only explicit re-rolls would have been
+bypassable with one extra command.
+
+Per (account, character) rather than per character: a per-character cap would
+let one account spend a stranger's three draws and lock them out of linking.
+
 ---
 
 ## 6. The nickname
@@ -261,7 +299,9 @@ Three things bound it:
 
 - Only *unlinked* gamertags are offered, so a linked player is permanently immune
 - The 8-emote budget caps accidental completion at C(8,3)=56 of 12,144 ordered
-  sequences — **0.46%** per challenge, versus effectively unbounded without it
+  sequences — **0.46%** per challenge, versus effectively unbounded without it.
+  ⚠️ Per *challenge*: §5.4's three-draws-per-day cap is what makes this a bound
+  on exposure over time rather than a bound on one row
 - The safe list excludes the emotes that occur in natural play: `EmoteSitA` alone
   is 77% of all emote traffic in the production export
 

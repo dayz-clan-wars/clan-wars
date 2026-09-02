@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { PermissionFlagsBits } from "discord.js";
 import { PgVerificationStore } from "../src/store.js";
 import {
-  buildCommands, routeInteraction, notifyCompleted, guardedRunner,
+  buildCommands, routeInteraction, notifyCompleted, guardedRunner, LINK_NEW_SEQUENCE_OPTION,
   playerSuggestions, createNicknameApplier, type NicknameClientLike, type RealGuildLike,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
@@ -125,6 +125,19 @@ describe("discord wiring", () => {
       expect(await store.findLiveChallenge("100", now)).toBeNull();
     });
 
+    it("passes /link's new-sequence option through to the handler", async () => {
+      // ⚠️ The option has to exist at registration AND be read here. Wired at
+      // only one end, the re-roll is unreachable in Discord while every
+      // handler test still passes.
+      const registered = buildCommands().find((c) => c.name === "link") as { options?: { name: string }[] };
+      expect(registered.options?.map((o) => o.name)).toContain(LINK_NEW_SEQUENCE_OPTION);
+
+      await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: UID_A });
+      const first = (await store.findLiveChallenge("100", now))!.sequence;
+      await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: UID_A, newSequence: true });
+      expect((await store.findLiveChallenge("100", now))!.sequence).not.toEqual(first);
+    });
+
     it("routes /whoami", async () => {
       const r = await routeInteraction(deps, { ...base, commandName: "whoami" });
       expect(r?.content).toMatch(/not linked/i);
@@ -234,16 +247,54 @@ describe("discord wiring", () => {
       warned.mockRestore();
     });
 
-    const exhaust = async (discordId: string, uid: string) => {
+    const exhaust = async (discordId: string, uid: string, opts: { sequence?: string[]; progressIndex?: number } = {}) => {
       const c = await store.createChallenge({
         discordId, guildId: "g", channelId: "c",
-        sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        sequence: opts.sequence ?? ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
         targetDayzId: uid,
       });
       expect(c).not.toBeNull();
+      if (opts.progressIndex !== undefined) {
+        await store.upsertAttempt(c!.id, uid, opts.progressIndex, 1, 8);
+      }
       expect(await store.cancelChallenge(c!.id, now, "budget-exhausted")).toBe(true);
       return c!;
     };
+
+    it("names the emote a locked-out player never reached", async () => {
+      // ⚠️ The diagnostic half. Wintershadow394 (2026-09-01) performed the
+      // second and third emotes of his sequence eight times and never the
+      // first — he could not find "move" on the wheel. The old message told
+      // him only that too many emotes were performed, which reads as an
+      // accusation of fumbling and hides the emote that actually blocked him.
+      await exhaust("100", UID_A, { sequence: ["EmoteMove", "EmoteClap", "EmoteDance"], progressIndex: 0 });
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).toMatch(/\bmove\b/);
+      expect(content).toMatch(/first/i);
+    });
+
+    it("names the emote a partway player never reached", async () => {
+      await exhaust("100", UID_A, { sequence: ["EmoteMove", "EmoteClap", "EmoteDance"], progressIndex: 2 });
+      const send = vi.fn().mockResolvedValue(undefined);
+      await notifyCompleted(deps, send);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).toMatch(/\bdance\b/);
+      expect(content).not.toMatch(/first/i);
+    });
+
+    it("⚠️ never states the emote budget as a number", async () => {
+      // discord.ts documents why: the budget is the primary defence against a
+      // target backing into its own sequence, and a player who reads it as a
+      // target to optimise against has misunderstood the task. Naming the
+      // missing EMOTE is what is actionable; naming the count is not.
+      await exhaust("100", UID_A, { sequence: ["EmoteMove", "EmoteClap", "EmoteDance"], progressIndex: 0 });
+      const send = vi.fn().mockResolvedValue(undefined);
+      await notifyCompleted(deps, send);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).not.toMatch(/\b8\b|\beight\b/i);
+    });
 
     it("tells a player whose budget ran out to run /link again, exactly once", async () => {
       // Spec §5.3. The tick cancels the challenge; without this the player

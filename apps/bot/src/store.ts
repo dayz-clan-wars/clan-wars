@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
-import { and, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import type { Role } from "./roster-store.js";
 
@@ -34,7 +34,17 @@ export type CancelReason = "budget-exhausted";
  */
 export type PendingNotification = LiveChallenge & (
   | { outcome: "completed"; boundDayzId: string }
-  | { outcome: CancelReason; boundDayzId: null }
+  /**
+   * `progressIndex` is how far into the sequence the target actually got —
+   * the same value `challenge_attempts` holds, or 0 when no attempt row
+   * exists because they performed no safe-pool emote at all.
+   *
+   * Carried so the lockout message can name the emote that blocked them
+   * rather than only apologising. A player stuck at 0 could not perform the
+   * FIRST emote, which is a different problem from fumbling the order, and
+   * is how an unperformable token in the safe pool becomes visible.
+   */
+  | { outcome: CancelReason; boundDayzId: null; progressIndex: number }
 );
 
 export interface VerificationStore {
@@ -61,6 +71,16 @@ export interface VerificationStore {
    * demonstrably is.
    */
   findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null>;
+  /**
+   * How many challenges this account has drawn for this character since
+   * `since`, whatever their outcome.
+   *
+   * ⚠️ Counts DRAWS, not live challenges — a canceled or completed one still
+   * counts. Each draw carries its own fresh emote budget, so counting only
+   * live rows would bound nothing: the caller's cap exists precisely to stop
+   * an unlimited succession of short-lived challenges.
+   */
+  countDrawsSince(discordId: string, targetDayzId: string, since: Date): Promise<number>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
   createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
@@ -125,6 +145,15 @@ export class PgVerificationStore implements VerificationStore {
     const [row] = await this.db.select().from(verificationChallenges)
       .where(and(eq(verificationChallenges.discordId, discordId), liveWhere(now)));
     return row ? toLive(row) : null;
+  }
+
+  async countDrawsSince(discordId: string, targetDayzId: string, since: Date): Promise<number> {
+    const [row] = await this.db.select({ n: count() }).from(verificationChallenges).where(and(
+      eq(verificationChallenges.discordId, discordId),
+      eq(verificationChallenges.targetDayzId, targetDayzId),
+      gte(verificationChallenges.issuedAt, since),
+    ));
+    return row?.n ?? 0;
   }
 
   async findOpenChallengeByTarget(targetDayzId: string): Promise<{ discordId: string; expiresAt: Date } | null> {
@@ -294,21 +323,39 @@ export class PgVerificationStore implements VerificationStore {
    * only cancels written by this code, after this deploy, are ever notified.
    */
   async pendingNotifications(): Promise<PendingNotification[]> {
-    const rows = await this.db.select().from(verificationChallenges).where(and(
-      isNull(verificationChallenges.notifiedAt),
-      or(
-        isNotNull(verificationChallenges.completedAt),
-        isNotNull(verificationChallenges.cancelReason),
-      ),
-    ));
-    return rows.flatMap((r): PendingNotification[] => {
+    // ⚠️ LEFT join, keyed on the challenge's OWN target. An inner join would
+    // drop every cancellation whose target never performed a pool emote —
+    // no attempt row is written until the first one — and those are exactly
+    // the players most stuck, so they would silently go untold.
+    const rows = await this.db.select({
+      challenge: verificationChallenges,
+      progressIndex: challengeAttempts.progressIndex,
+    })
+      .from(verificationChallenges)
+      .leftJoin(challengeAttempts, and(
+        eq(challengeAttempts.challengeId, verificationChallenges.id),
+        eq(challengeAttempts.dayzId, verificationChallenges.targetDayzId),
+      ))
+      .where(and(
+        isNull(verificationChallenges.notifiedAt),
+        or(
+          isNotNull(verificationChallenges.completedAt),
+          isNotNull(verificationChallenges.cancelReason),
+        ),
+      ));
+    return rows.flatMap(({ challenge: r, progressIndex }): PendingNotification[] => {
       if (r.completedAt !== null) {
         // A completed row with no bound UID is unrepresentable
         // (verification_challenges_bound_requires_complete is the other half);
         // skip rather than assert so a notifier is never the thing that throws.
         return r.boundDayzId === null ? [] : [{ ...toLive(r), outcome: "completed" as const, boundDayzId: r.boundDayzId }];
       }
-      return [{ ...toLive(r), outcome: r.cancelReason as CancelReason, boundDayzId: null }];
+      return [{
+        ...toLive(r),
+        outcome: r.cancelReason as CancelReason,
+        boundDayzId: null,
+        progressIndex: progressIndex ?? 0,
+      }];
     });
   }
 

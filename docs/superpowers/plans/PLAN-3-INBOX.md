@@ -119,7 +119,7 @@ Needs a notification path for refusals, not just completions — which means a
 reason column or a second pending query, since "canceled" alone cannot
 distinguish this from an ordinary expiry.
 
-## 8. Tell the player when they are locked out of their own challenge
+## 8. ~~Tell the player when they are locked out of their own challenge~~ — DONE 2026-09-02
 
 Same class as item 7. When a UID exhausts `MAX_POOL_EMOTES_PER_ATTEMPT` on a
 challenge, the correct sequence stops working and `/link` re-shows the *same*
@@ -130,6 +130,27 @@ with no idea why.
 
 `handleLink`'s re-show path should detect an exhausted attempt and say so, or
 issuing a fresh challenge should reset it.
+
+**Resolved**, and the original writeup above understates it. A real lockout
+(Wintershadow394, 2026-09-01) showed the problem was not only silence: he was
+drawn `move → clap → taunt elbow`, never produced `EmoteMove` at all, and spent
+the whole budget performing the two emotes he COULD do — steps 2 and 3 of his
+own sequence, in order. Two changes, spec §5.3 and §5.4:
+
+- the lockout message now names the emote he never reached, so an unperformable
+  token in the safe pool becomes visible instead of reading as player error;
+- `/link new-sequence:true` re-rolls, capped at three draws per (account,
+  character) per day.
+
+⚠️ The obvious-looking fix — not charging budget for emotes that are IN the
+sequence — was considered and rejected. `tick.ts` is explicit that the budget is
+the primary defence against the target completing its own sequence by accident,
+and the accidental completion is MADE of in-sequence emotes, so exempting them
+removes the bound entirely.
+
+The draw cap also closed a pre-existing hole: `/link A → /link B → /link A`
+re-issued A with a fresh sequence and a fresh budget without limit, which made
+the documented 0.46% a per-challenge figure rather than a per-day one.
 
 ## 9. Document the ingest cadence the challenge TTL assumes
 

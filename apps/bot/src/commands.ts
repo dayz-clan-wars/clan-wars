@@ -33,7 +33,32 @@ export type CommandDeps = {
  */
 export type LinkContext = {
   discordId: string; guildId: string; channelId: string; targetDayzId: string;
+  /**
+   * Ask for a DIFFERENT sequence instead of being shown the live one again.
+   *
+   * The escape hatch for a player who cannot perform one of the three emotes:
+   * without it, /link re-shows the same sequence and their only route out is
+   * to spend the whole emote budget and wait to be locked out.
+   */
+  newSequence?: boolean;
 };
+
+/**
+ * ⚠️ Draws of a sequence for one character, by one account, per
+ * DRAW_WINDOW_MS. This is a security bound, not a courtesy limit.
+ *
+ * MAX_POOL_EMOTES_PER_ATTEMPT bounds accidental completion at C(8,3) ≈ 0.46%
+ * — but per CHALLENGE. Every new draw is a new sequence with a fresh budget,
+ * so without a cap on draws the per-day exposure is unbounded: an account that
+ * named someone else's character could re-draw until it got three emotes that
+ * character performs often, then wait.
+ *
+ * Three leaves a legitimate player the original plus two re-rolls, which is
+ * what the Wintershadow394 lockout (2026-09-01) needed. Lower it and ordinary
+ * players hit it; raise it and the bound above weakens in proportion.
+ */
+export const MAX_DRAWS_PER_TARGET = 3;
+export const DRAW_WINDOW_MS = 86_400_000;
 
 const ephemeral = (content: string): Reply => ({ content, ephemeral: true });
 
@@ -101,10 +126,28 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
 
   // Re-show rather than re-issue: a player who lost the ephemeral reply should
   // not have their in-progress sequence invalidated, and must see the SAME
-  // three emotes they already walked in game to perform.
+  // three emotes they already walked in game to perform. `newSequence` is the
+  // one way past this — a player who cannot perform one of the emotes is asking
+  // for different ones, not for the same ones again.
   const live = await deps.store.findLiveChallenge(ctx.discordId, now);
-  if (live && live.targetDayzId === target.dayzId) {
+  if (live && live.targetDayzId === target.dayzId && ctx.newSequence !== true) {
     return ephemeral(challengeMessage(live.sequence, live.expiresAt, target.gamertag));
+  }
+
+  // ⚠️ Checked here, on every path that goes on to ISSUE for this character —
+  // the explicit re-roll, a first /link, and the switch-away-and-back below,
+  // which handed out a fresh sequence and a fresh budget without limit before
+  // this existed. A cap that counted only explicit re-rolls would be
+  // bypassable with one extra command.
+  const drawn = await deps.store.countDrawsSince(
+    ctx.discordId, target.dayzId, new Date(now.getTime() - DRAW_WINDOW_MS),
+  );
+  if (drawn >= MAX_DRAWS_PER_TARGET) {
+    return ephemeral(
+      `You have asked for too many sequences for **${target.gamertag}** today. ` +
+      "Try again tomorrow — or, if there is an emote you cannot find on the wheel, " +
+      "say so in the channel rather than working around it.",
+    );
   }
 
   // Naming a different character switches, it does not re-show. An account
