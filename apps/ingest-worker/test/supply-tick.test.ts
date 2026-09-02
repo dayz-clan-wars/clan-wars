@@ -145,21 +145,17 @@ describe("supplyTick", () => {
     expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["COK"]);
   });
 
-  it("spawns the kit for a dormant faction too", async () => {
-    // ⚠️ dormant is the third HOLDING status and the only one no other test
-    // covers. Drop it from the inArray filter and every dormant faction's kit
-    // silently stops spawning — which is the whole projection design, since
-    // "disband and lapse fall out for free" only holds if the code filters by
-    // exactly the holding set.
+  it("does not spawn supplies for a dormant faction", async () => {
+    // ⚠️ dormant is a HOLDING status but not a SUPPLIED status. The identity
+    // projection (indexes) includes it to preserve the flag; the supply
+    // projection excludes it. A stale flag yields an empty file and no supply kit.
     await seedFaction({ tag: "DOR", texture: "Flag_Wolf", x: "100.50", y: "20.25", z: "300.75", status: "dormant" });
     const bodies: string[] = [];
     const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 1, uploaded: true });
+    expect(r).toEqual({ factions: 0, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toHaveLength(103);
-    expect(objects.every((o: any) => o.customString === "DOR")).toBe(true);
-    expect(objects.some((o: any) => o.name === "Flag_Wolf")).toBe(true);
+    expect(objects).toEqual([]);
   });
 
   it("emits factions in a stable tag order regardless of insertion order", async () => {
@@ -173,5 +169,33 @@ describe("supplyTick", () => {
     const tags = JSON.parse(bodies[0]!).Objects.map((o: any) => o.customString);
     expect(tags[0]).toBe("AAA");
     expect(tags[tags.length - 1]).toBe("ZZZ");
+  });
+
+  it("⚠️ omits a dormant faction — this is how a stale flag stops the kit", async () => {
+    // The bot sets the status; the worker only reads it. Nothing coordinates
+    // the two, which is why this filter is the whole mechanism.
+    const active = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "1", y: "2", z: "3", status: "active" });
+    await seedFaction({ tag: "DRM", texture: "Flag_Wolf", x: "4", y: "5", z: "6", status: "dormant" });
+    const bodies: string[] = [];
+    const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r.factions).toBe(1);
+    const tags = new Set(JSON.parse(bodies[0]!).Objects.map((o: any) => o.customString));
+    expect([...tags]).toEqual(["COK"]);
+    expect(active.status).toBe("active");
+  });
+
+  it("changes the hash when a faction goes dormant, so the file is re-uploaded", async () => {
+    // Without a hash change the tick short-circuits and the dormant faction's
+    // kit keeps respawning at every restart forever.
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "1", y: "2", z: "3", status: "active" });
+    const bodies: string[] = [];
+    const client = { uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    await db.update(factions).set({ status: "dormant" }).where(eq(factions.id, f.id));
+    await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(bodies).toHaveLength(2);
+    expect(JSON.parse(bodies[1]!)).toEqual({ Objects: [] });
   });
 });
