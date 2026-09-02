@@ -74,4 +74,17 @@ describe("loadConfig", () => {
     expect(cfg.cooldownMs).toBe(2000);
     expect(cfg.renameCooldownMs).toBe(3000);
   });
+
+  it("defaults the dormancy windows to 7 and 14 days", () => {
+    const cfg = loadConfig(OK);
+    expect(cfg.dormantAfterMs).toBe(604_800_000);
+    expect(cfg.disbandAfterDormantMs).toBe(1_209_600_000);
+  });
+
+  it("rejects a dormancy window Number() would silently reinterpret", () => {
+    for (const raw of ["7e3", " 10 ", "0x10", "soon", "0", "-5"]) {
+      expect(() => loadConfig({ ...OK, BOT_DORMANT_AFTER_MS: raw })).toThrow(/BOT_DORMANT_AFTER_MS/);
+      expect(() => loadConfig({ ...OK, BOT_DISBAND_AFTER_DORMANT_MS: raw })).toThrow(/BOT_DISBAND_AFTER_DORMANT_MS/);
+    }
+  });
 });
