@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
 import { factions, supplyUploads } from "@factions/db";
-import { HOLDING_STATUSES } from "@factions/domain";
+import { SUPPLIED_STATUSES } from "@factions/domain";
 import { and, eq, inArray, asc } from "drizzle-orm";
 import { generateSupplies, type SpawnObject, type SupplyFaction } from "./supplies.js";
 
@@ -34,12 +34,16 @@ export async function supplyTick(db: Database, deps: {
   }).from(factions)
     .where(and(
       eq(factions.serverId, deps.serverId),
-      inArray(factions.status, [...HOLDING_STATUSES]),
+      // ⚠️ SUPPLIED, not HOLDING. A dormant faction still holds its flag, tag
+      // and pole — that is what HOLDING means — but it does not get a kit.
+      // This one line is the whole supply half of faction dormancy.
+      inArray(factions.status, [...SUPPLIED_STATUSES]),
     ))
     // Stable order, or the bytes differ between ticks and we upload forever.
     // Total without a tie-break only because factions_holding_tag_uniq is
-    // UNIQUE(serverId, lower(tag)) over exactly these statuses. If that index
-    // loosens, add a second key or the hash flaps.
+    // UNIQUE(serverId, lower(tag)) over exactly these statuses. SUPPLIED is a
+    // subset of HOLDING, so that index still makes tag total here. If that
+    // index loosens, add a second key or the hash flaps.
     .orderBy(asc(factions.tag));
 
   // ⚠️ numeric columns arrive as STRINGS from Drizzle. Without Number() the

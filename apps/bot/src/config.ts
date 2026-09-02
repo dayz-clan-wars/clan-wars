@@ -1,3 +1,5 @@
+import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
+
 export type BotConfig = {
   token: string;
   applicationId: string;
@@ -9,6 +11,8 @@ export type BotConfig = {
   inviteTtlMs: number;
   cooldownMs: number;
   renameCooldownMs: number;
+  dormantAfterMs: number;
+  disbandAfterDormantMs: number;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -58,5 +62,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     cooldownMs: positiveInt(env, "BOT_COOLDOWN_MS", 259_200_000),
     // 7 days — spec §6 rename cooldown.
     renameCooldownMs: positiveInt(env, "BOT_RENAME_COOLDOWN_MS", 604_800_000),
+    // 7 days, matching the server's FlagRefreshMaxDuration. ⚠️ Copied by hand:
+    // change one and not the other and they diverge silently, either cutting
+    // supplies at a base that is fine or feeding one that has already decayed.
+    // The server's own value is readable from cfggameplay.json — see the
+    // dormancy design's §7 for why that is not wired up yet.
+    //
+    // The fallback itself comes from dormancy.ts, not a repeated literal:
+    // that constant is also what the test suite asserts against, so editing
+    // it here alone would leave production on the old value while every test
+    // stayed green.
+    dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", DEFAULT_DORMANT_AFTER_MS),
+    // 14 further days before the flag, tag and pole return to the 33-slot pool.
+    disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
   };
 }

@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
-import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
@@ -112,6 +112,62 @@ class RosterAbort extends Error {
  */
 const leaderIs = (factionId: number, discordId: string) =>
   sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId}) = 'leader'`;
+
+/** The transaction handle drizzle hands to `db.transaction`. */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * Everything disbanding a faction does, minus who is allowed to do it.
+ *
+ * ⚠️ Shared with the dormancy tick's auto-disband rather than reimplemented.
+ * The status write is the least of it: membership rows left behind point at a
+ * disbanded faction, invisible to their owners because the membership lookup
+ * filters on HOLDING_STATUSES, yet still able to collide with
+ * `faction_members_server_player_uniq` when those players join elsewhere.
+ *
+ * ⚠️ Lock order: `factions`, then `faction_members`, then `faction_invites`.
+ * Inbox item 19 records a deadlock built out of two separately-correct changes
+ * taking two of these tables in opposite orders. Any new writer to this set
+ * follows this order.
+ *
+ * `guard` is the caller's authority to do it — a leader check for
+ * `/faction disband`, a dormancy-window check for the tick.
+ *
+ * One transaction, three writes: the status update (carrying `guard` and a
+ * holding-status check), then the roster delete, then the outstanding
+ * invite revocation. §6 is explicit that disbanding is not betrayal — no
+ * cooldown is written for anyone, unlike `kick`/`leave`.
+ *
+ * The status update must land first and the delete must be conditioned on
+ * it succeeding: a bare `return false` after the update fails writes
+ * nothing, so that path is safe to return from directly. There is no
+ * non-boolean outcome to unwind here, so `RosterAbort` never comes into play
+ * — unlike `acceptInvite`, this function has nothing left to report once the
+ * update has matched a row.
+ */
+export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): Promise<boolean> {
+  const updated = await tx.update(factions)
+    .set({ status: "disbanded" })
+    .where(and(eq(factions.id, factionId), guard, inArray(factions.status, HOLDING)))
+    .returning({ id: factions.id });
+
+  if (!updated[0]) return false;
+
+  await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
+
+  // Outstanding offers die with the faction, for the reason spelled out
+  // on `pendingInvitesFor`.
+  await tx.update(factionInvites)
+    .set({ revokedAt: sql`now()` })
+    .where(and(
+      eq(factionInvites.factionId, factionId),
+      isNull(factionInvites.acceptedAt),
+      isNull(factionInvites.declinedAt),
+      isNull(factionInvites.revokedAt),
+    ));
+
+  return true;
+}
 
 export class PgRosterStore implements RosterStore {
   constructor(private readonly db: Database) {}
@@ -637,46 +693,15 @@ export class PgRosterStore implements RosterStore {
   }
 
   /**
-   * One transaction, two writes: the status update (guarded on leadership
-   * and a holding status, exactly like the other permission checks in this
-   * file) then the roster delete. §6 is explicit that disbanding is not
-   * betrayal — no cooldown is written for anyone, unlike `kick`/`leave`.
-   *
-   * The status update must land first and the delete must be conditioned on
-   * it succeeding: a bare `return "not-leader"` after the update fails
-   * writes nothing, so that path is safe to `return` from directly. But if
-   * the update succeeds, this transaction still has to run the delete
-   * before it can report "ok" — there is no non-"ok" outcome left to abort
-   * on at that point, so `RosterAbort` never comes into play here.
+   * The leader-only entry point. Everything disbanding actually does — the
+   * status write, the roster delete, the invite revocation, the lock order —
+   * lives in `disbandFactionTx` above, shared with the dormancy tick's
+   * auto-disband; this just supplies the leadership check as that function's
+   * `guard`.
    */
   async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader"> {
-    return this.db.transaction(async (tx) => {
-      const updated = await tx.update(factions)
-        .set({ status: "disbanded" })
-        .where(and(
-          eq(factions.id, factionId),
-          leaderIs(factionId, discordId),
-          inArray(factions.status, HOLDING),
-        ))
-        .returning({ id: factions.id });
-
-      if (!updated[0]) return "not-leader" as const;
-
-      await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
-
-      // Outstanding offers die with the faction, for the reason spelled out
-      // on `pendingInvitesFor`.
-      await tx.update(factionInvites)
-        .set({ revokedAt: sql`now()` })
-        .where(and(
-          eq(factionInvites.factionId, factionId),
-          isNull(factionInvites.acceptedAt),
-          isNull(factionInvites.declinedAt),
-          isNull(factionInvites.revokedAt),
-        ));
-
-      return "ok" as const;
-    });
+    return this.db.transaction(async (tx) =>
+      await disbandFactionTx(tx, factionId, leaderIs(factionId, discordId)) ? "ok" as const : "not-leader" as const);
   }
 
   /**

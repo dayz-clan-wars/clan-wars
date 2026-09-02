@@ -17,6 +17,9 @@ import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
+import { dormancyTick } from "./dormancy-tick.js";
+import { PgDormancyStore } from "./dormancy-store.js";
+import { notifyDormancy } from "./dormancy-notify.js";
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave, handleFactionPromote, handleFactionDemote,
@@ -765,6 +768,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     inviteTtlMs: cfg.inviteTtlMs, cooldownMs: cfg.cooldownMs, renameCooldownMs: cfg.renameCooldownMs,
   };
   const ceremonyStore = new PgCeremonyStore(db);
+  const dormancyStore = new PgDormancyStore(db);
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -1048,6 +1052,31 @@ export async function start(cfg: BotConfig): Promise<void> {
       await notifyCeremonies(db, send, () => new Date(), ceremonyFailures);
     } catch (err) {
       console.error("ceremony notify failed", err);
+    }
+
+    // ⚠️ Its own try/catch, like every other step in this job: a throw here
+    // must not stop verification or ceremony DMs. Runs last because nothing
+    // else depends on it — supplies are read from status by a different
+    // process on its own schedule.
+    try {
+      const d = await dormancyTick(dormancyStore, {
+        now: new Date(),
+        windows: {
+          dormantAfterMs: cfg.dormantAfterMs,
+          disbandAfterDormantMs: cfg.disbandAfterDormantMs,
+        },
+        onError: (factionId, err) => console.error(`dormancy failed for faction ${factionId}`, err),
+      });
+      if (d.dormant > 0 || d.revived > 0 || d.disbanded > 0 || d.stamped > 0) {
+        console.log(
+          `dormancy: ${d.dormant} dormant, ${d.revived} revived, ` +
+          `${d.disbanded} disbanded, ${d.stamped} stamped, of ${d.examined} examined`,
+        );
+      }
+      await notifyDormancy(d.notices, send, (n, err) =>
+        console.error(`dormancy DM failed for faction ${n.factionId}`, err));
+    } catch (err) {
+      console.error("dormancy tick failed", err);
     }
   });
 

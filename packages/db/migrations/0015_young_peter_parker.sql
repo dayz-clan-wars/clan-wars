@@ -1,0 +1,1 @@
+ALTER TABLE "factions" ADD COLUMN "dormant_since" timestamp with time zone;

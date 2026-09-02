@@ -42,6 +42,37 @@ describe("discord wiring", () => {
     await db.insert(players).values({ dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now });
   });
 
+  it("dormancy modules load and their signatures match how startBot calls them", async () => {
+    // ⚠️ This does NOT prove the tick is wired into the bot's guarded job.
+    // Deleting the dormancy block from `startBot`'s runner would leave this
+    // test green, because it only imports the modules and calls them exactly
+    // as it would if `discord.ts` never touched them at all. What it does
+    // prove: the modules load without throwing, and `dormancyTick`'s and
+    // `notifyDormancy`'s signatures still match the shape `startBot` calls
+    // them with, so a rename or a reordered argument fails here instead of
+    // silently at runtime. Actual wiring — that `startBot` really runs this
+    // every tick — can only be confirmed by a live deployment check.
+    const { dormancyTick } = await import("../src/dormancy-tick.js");
+    const { PgDormancyStore } = await import("../src/dormancy-store.js");
+    const { notifyDormancy } = await import("../src/dormancy-notify.js");
+    expect(typeof dormancyTick).toBe("function");
+    expect(typeof notifyDormancy).toBe("function");
+
+    const store = new PgDormancyStore(db);
+    const r = await dormancyTick(store, {
+      now: new Date("2026-09-02T12:00:00Z"),
+      windows: { dormantAfterMs: 604_800_000, disbandAfterDormantMs: 1_209_600_000 },
+    });
+    expect(r.examined).toBe(0);
+
+    // Actually invoke notifyDormancy too, not just typeof-check it: an empty
+    // notices array plus a stub sender still exercises its parameter shape,
+    // so a reordered (notices, send) signature fails here rather than only
+    // at runtime.
+    const sent = await notifyDormancy([], async () => {});
+    expect(sent).toBe(0);
+  });
+
   describe("buildCommands", () => {
     it("declares link, unlink, whoami and faction", () => {
       expect(buildCommands().map((c) => c.name).sort()).toEqual(["faction", "link", "unlink", "whoami"]);

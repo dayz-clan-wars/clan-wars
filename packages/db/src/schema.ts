@@ -446,6 +446,18 @@ export const factions = pgTable("factions", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
   reservedUntil: timestamp("reserved_until", { withTimezone: true }),
   activatedAt: timestamp("activated_at", { withTimezone: true }),
+  /**
+   * When this faction was OBSERVED to go dormant. Null for every other status.
+   *
+   * ⚠️ Stored rather than derived from the last flag raise, and the reason is
+   * the disband clock this feeds. A derived rule runs during periods when
+   * nothing was watching: after a three-week bot outage, or for a faction
+   * whose activating raise predates the ingested window, the first tick would
+   * disband factions that were never given a chance to refresh — releasing a
+   * flag, tag and pole with no human in the loop. This column makes "14 days
+   * dormant" mean fourteen days actually observed.
+   */
+  dormantSince: timestamp("dormant_since", { withTimezone: true }),
   /** Null means never renamed, so no cooldown applies. Set by `/faction rename`. */
   renamedAt: timestamp("renamed_at", { withTimezone: true }),
 }, (t) => ({
