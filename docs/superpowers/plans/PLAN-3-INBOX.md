@@ -588,7 +588,32 @@ an ingest outage cannot mass-disband. Three things that guard does not cover:
   events means the gate stays shut forever. Correct by design and the safe direction,
   but the scarce-pool reclamation then has no path without manual intervention.
 
-## 27. `emotes.ts` overclaims what the safe pool has been proven to do
+## 27. ~~`emotes.ts` overclaims what the safe pool has been proven to do~~ — DONE 2026-09-02
+
+Docstring corrected in `packages/domain/src/emotes.ts`, and the same false claim removed
+from `packages/domain/test/emotes.test.ts`, which had been repeating it. The set is now
+described as what it is: one-life's PUBLISHED list, adopted whole, never verified
+against this project's players.
+
+Measured rather than estimated. As of 2026-09-02, **12 of the 24** safe tokens have ever
+appeared in live data (95 emote events over two days): Heart, Thumb, Nod, Shake, Shrug,
+Timeout, Come, Move, Silent, Watching, Throat and RPSRandom have not. `EmoteMove` being
+among them corroborates the 2026-09-01 lockout directly.
+
+⚠️ Nothing was demoted, and the docs say why at length: observation and
+wheel-selectability are independent properties. `EmoteSOS` was observed and
+unperformable; a token absent from two days of a five-player server is absent for want
+of occasions. `EmoteMove` has more historical evidence (5 by 3) than `EmoteNod` (1 by 1)
+or `EmoteTimeout` (3 by 1), which are also in the pool, so demoting it on these counts
+would be guessing dressed as data. The lockout messages that now name the unreached
+emote are the evidence that will actually settle it.
+
+The query behind the numbers is checked in at `scripts/emote-evidence.md` so the snapshot
+can be regenerated rather than believed, and a test states the provenance so it is a fact
+the suite carries rather than a comment — comments are what got this wrong twice.
+
+### Original writeup
+
 
 `packages/domain/src/emotes.ts`'s docstring says the safe set is "one-life's list, every
 member of which has been performed by a real player completing a real `/link` in

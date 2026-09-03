@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { EMOTE_DICTIONARY, emoteToken, emoteLabel, safeVerificationEmotes } from "../src/emotes.js";
 
-// one-life's list, which is the empirically-working set: every token here has
-// been performed by a real player completing a real /link in production.
+// one-life's PUBLISHED list, adopted whole. ⚠️ Not an empirically-working set:
+// the same false claim used to sit here and in emotes.ts, and 12 of these 24
+// have never appeared in this project's live data — `EmoteMove` among them,
+// which blocked a real /link on 2026-09-01. See the docstring in emotes.ts for
+// what is and is not evidence here.
 const ONE_LIFE_SAFE = [
   "EmoteSalute", "EmoteSurrender", "EmoteGreeting", "EmoteClap", "EmoteHeart",
   "EmotePoint", "EmotePointSelf", "EmoteThumb", "EmoteThumbDown", "EmoteNod",
@@ -63,6 +66,30 @@ describe("emote dictionary", () => {
   it("offers exactly one-life's safe set", () => {
     expect(safeVerificationEmotes().map((e) => e.token).sort())
       .toEqual([...ONE_LIFE_SAFE].sort());
+  });
+
+  it("⚠️ the pool is one-life's list, adopted on trust rather than on local evidence", () => {
+    // This test exists to make the provenance a fact the suite states rather
+    // than a claim in a comment — comments are what got this wrong twice.
+    // Twelve of the 24 had never appeared in this project's live data as of
+    // 2026-09-02, so the pool cannot be described as locally verified.
+    //
+    // Deliberately NOT asserted against live data: the suite must not need a
+    // populated `events` table, and a token's absence from a small sample is
+    // not evidence against it. See emotes.ts for the query that regenerates
+    // the real counts.
+    const unverifiedLocally = [
+      "EmoteHeart", "EmoteThumb", "EmoteNod", "EmoteShake", "EmoteShrug",
+      "EmoteTimeout", "EmoteCome", "EmoteMove", "EmoteSilent", "EmoteWatching",
+      "EmoteThroat", "EmoteRPSRandom",
+    ];
+    const safe = safeVerificationEmotes().map((e) => e.token);
+    // They are all still offered — absence of evidence is not a demotion.
+    for (const token of unverifiedLocally) expect(safe).toContain(token);
+    // And they really are a strict subset, so the count in the docstring and
+    // the count here cannot silently disagree about which list is which.
+    expect(unverifiedLocally.length).toBe(12);
+    expect(safe.length).toBe(24);
   });
 
   it("never offers an emote that is not confirmed on the wheel", () => {
