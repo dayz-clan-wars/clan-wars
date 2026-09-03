@@ -1,3 +1,6 @@
+# ⚠️ Never `docker compose up -d` bare on this host. Name the services. There
+# is no second machine: postgres, ingest-worker and web all run here, and the
+# bot runs beside them under systemd (deploy/systemd/clan-wars-bot.service).
 services:
   postgres:
     image: postgres:16-alpine
@@ -5,7 +8,20 @@ services:
       POSTGRES_USER: factions
       POSTGRES_PASSWORD: factions
       POSTGRES_DB: factions
-    ports: ["5434:5432"]
+    # ⚠️ Loopback only — same reasoning as the `web` service below: Docker
+    # writes its own ACCEPT rules into the DOCKER iptables chain when a port
+    # is published, and that bypasses ufw entirely. A bare "5434:5432" here
+    # would listen on 0.0.0.0 with the credentials factions/factions on a
+    # public host regardless of what ufw allows. The test gate is unaffected —
+    # TEST_DATABASE_URL already points at localhost:5434.
+    ports: ["127.0.0.1:5434:5432"]
+    # ⚠️ Without this the whole stack fails to survive a reboot, silently from
+    # the bot's point of view: postgres.js connects lazily and every bot tick
+    # is individually try/caught, so the bot process itself never exits and
+    # keeps reporting `active (running)` under systemd with the entire data
+    # path dead. `web` and `ingest-worker` already carry this; postgres is the
+    # one that actually holds the data.
+    restart: unless-stopped
     volumes: ["factions-pg:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U factions"]
@@ -30,10 +46,6 @@ services:
       # value here was correct for exactly one server and silently wrong for
       # every other. It is resolved from each server's own Nitrado service
       # each sweep — see NitradoClient.missionCustomDir.
-  # ⚠️ This file also describes `postgres` and `ingest-worker`, which must NOT
-  # be started on the VPS. A bare `docker compose up -d` there would stand up a
-  # second, EMPTY Postgres that looks like a working database and holds none of
-  # the live data. On the VPS, name the services: `docker compose up -d web caddy`.
   # ⚠️ Image verified on linux/arm64 (native `docker compose build web` on the
   # dev machine) AND linux/amd64 (`docker build --platform linux/amd64`, under
   # QEMU emulation) on 2026-09-03 — see task-5-report.md. Both resolved and
@@ -46,19 +58,11 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
-    # ⚠️ No ports mapping. Caddy is the only thing that should reach it, and
-    # publishing 3000 would serve the site over plain HTTP alongside the
-    # TLS one.
-  caddy:
-    image: caddy:2-alpine
-    restart: unless-stopped
-    depends_on: [web]
-    ports: ["80:80", "443:443"]
-    volumes:
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
-      - caddy-data:/data
-      - caddy-config:/config
+    # ⚠️ Loopback only. The system nginx terminates TLS for dayzclanwars.com
+    # and proxies here; publishing 0.0.0.0 would serve the same site over
+    # plain HTTP on :3020 alongside the TLS one.
+    # 3020 is deliberately outside the 3000-3011 band the other projects on
+    # this host occupy (dayzonelife.com :3010, factory.eli5hq.com :3100).
+    ports: ["127.0.0.1:3020:3000"]
 volumes:
   factions-pg:
-  caddy-data:
-  caddy-config:
