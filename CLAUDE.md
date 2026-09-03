@@ -76,6 +76,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Designs (the authority) | `docs/superpowers/specs/` |
 | Implementation plans | `docs/superpowers/plans/` |
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
+| Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |

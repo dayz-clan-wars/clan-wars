@@ -655,3 +655,121 @@ migrates itself can never be. What is wanted is a checked-in `db:migrate` script
 its own deliberate step, with the `factions_live` guard and the
 `__drizzle_migrations`-vs-journal comparison from the runbook built in — the two checks
 that made applying `0015` by hand safe rather than lucky.
+
+---
+
+# Ideas from surveying other servers — 2026-09-02
+
+Source: **Hulk's Killfeed Support** (a commercial DayZ Discord bot, whose support server
+runs a full demo deployment — so its channel list and `#features` posts are a market
+survey) and **KarmaKrew - DayZ Modded** (a large live community across PC, Xbox and
+PlayStation on four maps, with no faction bot at all).
+
+Two findings frame everything below.
+
+**KarmaKrew arrived at this project's thesis independently.** Their announcements are
+explicitly about converting social rules into mechanics because tickets do not scale —
+code locks capped to the base's layer count, fence-kit logs made diggable by raiders,
+watchtower height limits. Same reasoning, applied in mods rather than a bot.
+
+**Hulk's `/link` has no verification at all.** Type a gamertag that has been seen on the
+server and you are linked to it — the exact lottery our targeted challenge exists to
+prevent. Worth knowing that the market's incumbent does not solve this. Their channel
+history also shows the opposite failure: one player failed six consecutive `/link`
+attempts against "gamertags are case-sensitive", which our autocomplete over
+recently-seen unlinked players already prevents.
+
+Items are ordered by fit with what already exists here, not by size.
+
+## 29. Faction size cap, enforced from the log
+
+KarmaKrew's rule: **maximum 6 players from one group playing at the same time.** The rule
+text is contorted — more than 6 may share a base as long as no more than 6 are online
+together, and substituting players mid-encounter is a bannable offence — and it is
+enforced entirely by honour, tickets and bans. It is their single largest enforcement
+burden.
+
+This is a concurrency rule over a roster, and it is the one idea in this survey that
+**only we can implement**: we hold the roster, and `player.position` events give us who
+was online when, at a measured 5-minute cadence (see the direction note). Nobody running
+a killfeed bot has the faction half; nobody running rules-in-Discord has either half
+mechanically.
+
+Open questions before this is a design: is the cap enforced (supplies cut? a warning?) or
+merely *reported* to the leader; how a 5-minute fix cadence handles a player who logs in
+for four minutes; and whether the cap is per faction or per server config. Reporting
+before enforcing is the obvious first step and needs no new invariant.
+
+## 30. Recruitment status, and a directory to read it from
+
+KarmaKrew's `#🤝-team-up` is unstructured prose on a 30-second slowmode, and essentially
+every post carries the same five fields: platform, map, timezone / play window, hours
+played, current group size, language. Players are also using Discord's own server tags
+(`[KK]`, `[DFZ]`, `[!TW]`) as clan tags, because nothing else gives them one — which is
+the need the 33-flag pool already answers better.
+
+Hulk's faction system carries a "recruitment status" flag for the same reason.
+
+Spec §11 already plans a public directory. A `recruiting` flag on the faction record plus
+those five fields turns a scrolling channel into a query, and it composes with the roster
+work already shipped: `/faction invite` exists, so the missing half is discovery.
+
+⚠️ Deliberately compatible with the pole invariant: a directory lists identity
+(name, tag, flag, recruiting, size), never coordinates.
+
+## 31. Faction leaderboards and combined stats
+
+Hulk's ships over 10 leaderboards plus "combined faction stats", auto-updated every 6
+hours. Spec §7 (raid credit and rankings) is the natural home, and a leaderboard is what
+gives the deliberate 33-flag scarcity something to be scarce *for* — ARMX's "Alpha
+Factions" re-ranked every raid weekend is the same idea, maintained by hand.
+
+We can already rank on things nobody else has: ceremony date, days held, dormancy
+survived, flag raises at own pole. None of that needs killfeed parsing.
+
+## 32. Bounties
+
+Hulk's: place a bounty on a player, alerts when the bounty "connects", auto-payout on
+kill, tracking, and **faction members cannot claim each other's bounties**.
+
+That last rule is the interesting part — it is the one clause their system can only
+approximate and ours could enforce properly, because we have real verified factions
+rather than a self-declared list.
+
+⚠️ The cost is real: this needs killfeed parsing, which this project does not do at all
+today. ADM kill lines are a new parser surface, with the same gamertag-injection hazards
+that `FLAG_CHANGE_RE` and the emote parser already had to be hardened against. Do not
+treat this as a small feature.
+
+## 33. Combat-log detection
+
+KarmaKrew bans combat logging with a 10-minute rule, adjudicated through tickets and
+video evidence. Hulk's bot emits "Rage Quit, Combat Log and Spawn Kill" notifications.
+
+ADM carries connect and disconnect lines, so the disconnect half is already parseable —
+but "in combat" is the hard half, and without kill/hit lines (item 32) the signal is
+weak. Sequenced after bounties, or dropped.
+
+## Deliberately NOT taken
+
+- **Economy, casino, shop, faction bank.** The master spec's non-goals reject exactly
+  this — taxes, stock markets, bonds, currency ladders — with DayZ Legions named as the
+  cautionary example. Hulk's ships all of it; that is a different product.
+- **Admin zones, player zones, heatmaps, admin search, wipe-stats commands.** Admin
+  surface, and "zero admin tickets in the normal lifecycle" is the goal this project is
+  organised around. Building admin tooling is conceding the premise.
+- **Nitrado restart / whitelist / ban tooling.** The supplies design already rejected
+  restarting the server on a claim: it kicks every player online for one faction's
+  benefit. That reasoning generalises.
+- **Managed dashboard for server settings.** Not our product. The website direction is
+  about *player* tools — see `docs/direction/2026-09-02-web-app-and-faction-map.md`.
+
+## Noted, with a conflict
+
+**"Where are you" — showing all online faction members on a map.** Hulk's has it as a
+Discord command. Rejected in that form: it would put player positions in a channel, and
+every reply here is ephemeral precisely because pole coordinates are a raid target.
+
+The objection is to the surface, not the idea. Authenticated and faction-scoped on the
+website it is the same feature done safely, and it is the centrepiece of the direction
+note above.
