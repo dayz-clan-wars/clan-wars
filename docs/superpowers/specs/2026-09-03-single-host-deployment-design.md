@@ -100,7 +100,7 @@ What Caddy did that nginx must now do explicitly, since it is no longer automati
 
 | Caddy behaviour | nginx replacement |
 |---|---|
-| ACME issuance + renewal | `certbot certonly --webroot`, renewed by the existing `certbot.timer` |
+| ACME issuance + renewal | `certbot certonly --nginx`, renewed by the existing `certbot.timer` |
 | `encode gzip` | `gzip on` in the vhost |
 | `header @flags Cache-Control` for `/flags/*` | `location /flags/ { add_header ... }` |
 | apex + www on one block | separate `www` → apex 301, matching `dayzonelife.com`'s vhost |
@@ -125,9 +125,13 @@ nginx answering the challenge. Two steps, in this order — the same two the
 `dayzonelife.com` vhost's header comment records:
 
 1. **Bootstrap vhost**: `listen 80` only, `server_name dayzclanwars.com
-   www.dayzclanwars.com`, serving `/.well-known/acme-challenge/` from a webroot. `nginx -t`
-   → reload.
-2. `certbot certonly --webroot -w <root> -d dayzclanwars.com -d www.dayzclanwars.com`.
+   www.dayzclanwars.com`. `nginx -t` → reload. Its only job is to give certbot's `nginx`
+   authenticator a server block matching the names.
+2. `certbot certonly --nginx -d dayzclanwars.com -d www.dayzclanwars.com`, after a
+   `--dry-run` against the staging server. ⚠️ All four existing certs on this host use
+   `authenticator = nginx` (`/etc/letsencrypt/renewal/*.conf`), so this follows the
+   established convention and the active `certbot.timer` already renews it. The dry run
+   has separate, generous rate limits — it is what makes a mistake here cheap.
 3. **Final vhost** replaces it: :80 → 301, www :443 → 301 to apex, apex :443 serving the
    proxy. `nginx -t` → reload.
 
