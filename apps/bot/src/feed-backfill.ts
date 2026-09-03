@@ -15,14 +15,27 @@
  *   set -a && . .env && set +a && npx tsx apps/bot/src/feed-backfill.ts
  */
 import { createClient, factions, factionEvents, type Database } from "@factions/db";
-import { asc, sql } from "drizzle-orm";
+import { asc, inArray, sql } from "drizzle-orm";
+import { HOLDING_STATUSES } from "@factions/domain";
+
+// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
+// tuple) so every faction/domain consumer gets full literal-type checking,
+// but drizzle's inArray() requires a plain mutable array.
+const HOLDING: string[] = [...HOLDING_STATUSES];
 
 export async function backfillFactionEvents(db: Database): Promise<{ inserted: number; skipped: number }> {
+  // ⚠️ Restricted to HOLDING_STATUSES (reserved/active/dormant), not every
+  // status. A `lapsed` or `disbanded` faction's flag, tag and pole are
+  // already back in the pool — backfilling its founding would announce a
+  // founding the feed never closes, since there is no lapse/disband row
+  // behind it to say the faction is gone. Sourced from the same constant
+  // that mirrors the three partial unique indexes, so this cannot drift from
+  // what "holds an identity" means everywhere else.
   const rows = await db.select({
     id: factions.id, serverId: factions.serverId,
     name: factions.name, tag: factions.tag, texture: factions.texture,
     createdAt: factions.createdAt, activatedAt: factions.activatedAt,
-  }).from(factions).orderBy(asc(factions.id));
+  }).from(factions).where(inArray(factions.status, HOLDING)).orderBy(asc(factions.id));
 
   let inserted = 0;
   let skipped = 0;

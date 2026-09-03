@@ -102,6 +102,36 @@ describe("identity changes write feed events", () => {
     expect(JSON.stringify(e!.payload)).not.toContain("9:9:9");
   });
 
+  it("⚠️ a dormant faction that rebinds writes rebound THEN revived", async () => {
+    // Top-to-bottom the channel must read as a complete story: the move
+    // happened (rebound), and its consequence is that the countdown is
+    // cancelled and supplies resume (revived). Order is id order, so
+    // rebound must be inserted first.
+    await db.update(factions).set({ status: "dormant", dormantSince: now })
+      .where(sql`${factions.id} = ${factionId}`);
+
+    const moved = await new PgRebindStore(db).rebind({
+      factionId, leaderDiscordId: "d1", expectedPoleKey: "1:2:3",
+      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      notBefore: new Date(now.getTime() - 604_800_000),
+    });
+    expect(moved).toBe(true);
+
+    const rows = await events();
+    expect(rows.map((r) => r.kind)).toEqual(["rebound", "revived"]);
+    expect(rows[1]!.payload).toMatchObject({ name: "Bears", tag: "BEAR", actor: "Racer" });
+  });
+
+  it("an active faction that rebinds writes only rebound", async () => {
+    const moved = await new PgRebindStore(db).rebind({
+      factionId, leaderDiscordId: "d1", expectedPoleKey: "1:2:3",
+      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      notBefore: new Date(now.getTime() - 604_800_000),
+    });
+    expect(moved).toBe(true);
+    expect((await events()).map((r) => r.kind)).toEqual(["rebound"]);
+  });
+
   it("writes no rebound row when the optimistic pole guard fails", async () => {
     expect(await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: "somewhere-else",

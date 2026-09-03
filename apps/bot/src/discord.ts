@@ -1103,6 +1103,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   const ceremonyFailures = createNotifyFailureLog();
   // One log per bot instance, for the life of that instance.
   const feedFailures = new Set<number>();
+  // ⚠️ Same purpose as feedFailures, for the "queue blocked" line below: a
+  // permanently blocked queue (deleted channel, revoked Embed Links) would
+  // otherwise write an identical multi-line error every tick interval
+  // forever. Tracks only the id currently reported blocked, not every id
+  // ever seen, so a later different blocking row is still reported once.
+  let lastReportedBlockedAt: number | null = null;
 
   let timer: NodeJS.Timeout | undefined;
 
@@ -1202,15 +1208,21 @@ export async function start(cfg: BotConfig): Promise<void> {
           },
         });
         if (f.posted > 0) console.log(`feed posted ${f.posted}`);
-        if (f.blockedAt !== null) {
+        if (f.blockedAt !== null && f.blockedAt !== lastReportedBlockedAt) {
           // ⚠️ Error level, and its own line. A blocked queue means NOTHING
           // after this row will post, ever, until it is resolved — a much
-          // louder condition than one failed message.
+          // louder condition than one failed message. Gated on
+          // lastReportedBlockedAt for the same reason feedFailures gates the
+          // per-row log above: a revoked permission or deleted channel is
+          // permanent, and without the guard this line repeats unchanged
+          // every tick interval forever, which is exactly the invisible-by-
+          // repetition failure the once-per-row log exists to prevent.
           console.error(
             `feed queue blocked at faction_events row ${f.blockedAt}; nothing behind it will post ` +
             `until this row succeeds. Check the bot's View Channel / Send Messages / Embed Links ` +
             `permission on ${cfg.feedChannelId}.`,
           );
+          lastReportedBlockedAt = f.blockedAt;
         }
       } catch (err) {
         console.error("feed tick failed", err);

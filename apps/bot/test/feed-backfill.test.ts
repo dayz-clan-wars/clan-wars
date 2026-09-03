@@ -53,6 +53,15 @@ describe("backfillFactionEvents", () => {
     expect((await events()).map((r) => r.kind)).toEqual(["founded"]);
   });
 
+  it("⚠️ does not backfill a disbanded faction", async () => {
+    // Its flag, tag and pole are already back in the pool; announcing its
+    // founding now would open a story the feed has no lapse/disband row to
+    // close.
+    await seed({ status: "disbanded" });
+    expect(await backfillFactionEvents(db)).toEqual({ inserted: 0, skipped: 0 });
+    expect(await events()).toHaveLength(0);
+  });
+
   it("⚠️ is a no-op on a second run", async () => {
     // Run twice by accident during a deploy and the channel gets every
     // founding announced a second time.

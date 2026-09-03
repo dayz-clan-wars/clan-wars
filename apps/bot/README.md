@@ -33,8 +33,14 @@ BOT_RESERVATION_TTL_MS=86400000
 BOT_INVITE_TTL_MS=604800000
 BOT_COOLDOWN_MS=259200000
 BOT_RENAME_COOLDOWN_MS=604800000
-BOT_FEED_CHANNEL_ID=000000000000000000
+BOT_FEED_CHANNEL_ID=1234567890123456789
 ```
+
+`BOT_FEED_CHANNEL_ID` above is a placeholder — replace it with your own
+channel's real id (Developer Mode → right-click the channel → Copy Channel
+ID). A run of zeros will not do: real snowflakes never start with a zero, and
+the config loader rejects one at startup rather than let it pass validation
+and block the feed queue at the first post.
 
 ## Creating the Discord application and inviting the bot
 

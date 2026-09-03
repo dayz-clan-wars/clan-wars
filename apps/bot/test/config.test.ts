@@ -126,5 +126,13 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, BOT_FEED_CHANNEL_ID: "#faction-feed" }))
         .toThrow(/BOT_FEED_CHANNEL_ID/u);
     });
+
+    it("⚠️ rejects a leading-zero value, the README's old placeholder shape", () => {
+      // "000000000000000000" is 18 digits and passed the old \d{17,20} regex
+      // cleanly — a copy-pasted example loaded without error and then failed
+      // every post. A real snowflake never starts with 0.
+      expect(() => loadConfig({ ...OK, BOT_FEED_CHANNEL_ID: "000000000000000000" }))
+        .toThrow(/BOT_FEED_CHANNEL_ID/u);
+    });
   });
 });

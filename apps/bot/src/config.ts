@@ -57,8 +57,12 @@ function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): num
   return n;
 }
 
-/** Discord snowflakes are 17-20 digits. */
-const SNOWFLAKE_RE = /^\d{17,20}$/u;
+// ⚠️ No leading zero: a real snowflake is a Twitter-epoch timestamp in its
+// high bits and is never 0 there, so `\d` here would accept a placeholder
+// like "000000000000000000" as valid. The README's example .env shipped
+// exactly that value and it passed this regex — a copy-paste config loaded
+// clean, then every post failed and blocked the queue at row one.
+const SNOWFLAKE_RE = /^[1-9]\d{16,19}$/u;
 
 /**
  * ⚠️ Validated at load, not at first post. An unset feed is silent by

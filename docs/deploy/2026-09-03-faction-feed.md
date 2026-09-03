@@ -2,7 +2,7 @@
 
 **Shipping:** an append-only `faction_events` log, written inside each transition's own
 transaction, and a tick that posts queued rows in `id` order as embeds to one configured
-public Discord channel. Merged to `main`, not yet running.
+public Discord channel. Built on `feat/faction-feed`, not yet merged to `main`, not yet deployed.
 
 **Migration:** `0019_nice_doomsday` — creates `faction_events`, with the
 `faction_events_no_coordinates` check constraint (this is the first table whose whole

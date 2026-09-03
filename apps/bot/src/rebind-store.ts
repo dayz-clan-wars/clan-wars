@@ -146,6 +146,13 @@ export class PgRebindStore implements RebindStore {
    */
   async rebind(a: RebindArgs): Promise<boolean> {
     return this.db.transaction(async (tx) => {
+      // Read before the update overwrites it, the way `rename` reads the
+      // previous name. This is a plain SELECT on the primary key that the
+      // update's own WHERE below also pins, so it cannot observe a row other
+      // than the one the update then touches (or fails to).
+      const [before] = await tx.select({ status: factions.status })
+        .from(factions).where(eq(factions.id, a.factionId));
+
       const [row] = await tx.update(factions)
         .set({
           poleKey: a.poleKey,
@@ -170,13 +177,28 @@ export class PgRebindStore implements RebindStore {
 
       if (!row) return false;
 
+      const actor = await actorGamertagTx(tx, a.leaderDiscordId);
+
       await appendFactionEventTx(tx, {
         serverId: row.serverId, factionId: row.id, kind: "rebound", occurredAt: a.at,
-        payload: {
-          name: row.name, tag: row.tag, texture: row.texture,
-          actor: await actorGamertagTx(tx, a.leaderDiscordId),
-        },
+        payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
       });
+
+      // ⚠️ A dormant faction that rebinds is also revived by this same
+      // update (status -> active, dormantSince -> null) — REBINDABLE
+      // includes "dormant" precisely so a faction can escape dormancy this
+      // way. Without this second row, the channel shows "gone dormant …"
+      // followed by "moved its base" and never says the countdown was
+      // cancelled or that supplies resume. Appended AFTER `rebound` — the
+      // move happened, and the revival is its consequence — so `id` order
+      // tells the story in the right sequence.
+      if (before?.status === "dormant") {
+        await appendFactionEventTx(tx, {
+          serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: a.at,
+          payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
+        });
+      }
+
       return true;
     });
   }
