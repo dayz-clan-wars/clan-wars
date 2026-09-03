@@ -3,6 +3,7 @@ import { factions, factionInvites, factionMembers, identityLinks, rosterCooldown
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
+import { actorGamertagTx } from "./feed-actor.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -733,19 +734,46 @@ export class PgRosterStore implements RosterStore {
    *
    * The follow-up read on zero rows only distinguishes "not the leader"
    * from "still on cooldown" for the message; it decides nothing.
+   *
+   * ⚠️ A transaction now, and the old name is read INSIDE it before the
+   * update. UPDATE ... RETURNING yields the new values, and the feed post is
+   * "X, formerly Y" — read Y at post time and both halves resolve to X. The
+   * read-then-write is not a race worth guarding: a second concurrent rename
+   * is barred by the 7-day cooldown, and the update's own guard rejects it
+   * regardless.
    */
   async rename(a: RenameArgs): Promise<RenameOutcome> {
-    const updated = await this.db.update(factions)
-      .set({ name: a.name, renamedAt: a.at })
-      .where(and(
-        eq(factions.id, a.factionId),
-        leaderIs(a.factionId, a.discordId),
-        inArray(factions.status, HOLDING),
-        or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
-      ))
-      .returning({ id: factions.id });
+    const outcome = await this.db.transaction(async (tx) => {
+      const [before] = await tx.select({ name: factions.name })
+        .from(factions).where(eq(factions.id, a.factionId));
 
-    if (updated[0]) return "ok" as const;
+      const [updated] = await tx.update(factions)
+        .set({ name: a.name, renamedAt: a.at })
+        .where(and(
+          eq(factions.id, a.factionId),
+          leaderIs(a.factionId, a.discordId),
+          inArray(factions.status, HOLDING),
+          or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
+        ))
+        .returning({
+          id: factions.id, serverId: factions.serverId,
+          tag: factions.tag, texture: factions.texture,
+        });
+
+      if (!updated) return null;
+
+      await appendFactionEventTx(tx, {
+        serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
+        payload: {
+          name: a.name, previousName: before?.name ?? a.name,
+          tag: updated.tag, texture: updated.texture,
+          actor: await actorGamertagTx(tx, a.discordId),
+        },
+      });
+      return "ok" as const;
+    });
+
+    if (outcome) return outcome;
 
     const [seat] = await this.db.select({ role: factionMembers.role }).from(factionMembers)
       .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.discordId)));
