@@ -135,4 +135,34 @@ describe("loadConfig", () => {
         .toThrow(/BOT_FEED_CHANNEL_ID/u);
     });
   });
+
+  describe("FLAG_IMAGE_BASE_URL", () => {
+    it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
+      // The feed shipped before any artwork existed and must keep working
+      // exactly as it does today for anyone who never sets this.
+      expect(loadConfig({ ...OK }).flagImageBaseUrl).toBeUndefined();
+    });
+
+    it("reads an https base URL", () => {
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com" }).flagImageBaseUrl)
+        .toBe("https://dayzclanwars.com");
+    });
+
+    it("treats an empty string as unset", () => {
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "" }).flagImageBaseUrl).toBeUndefined();
+    });
+
+    it("⚠️ rejects a malformed URL at load rather than at first post", () => {
+      // An unset base is silent by design, so a broken one would otherwise be
+      // indistinguishable from an unconfigured one until someone noticed the
+      // embeds had no thumbnails.
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "dayzclanwars.com" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a non-http scheme", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "file:///etc/passwd" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+  });
 });

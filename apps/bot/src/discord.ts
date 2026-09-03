@@ -32,6 +32,7 @@ import { handleFactionRebind, handleRebindConfirm, type RebindDeps } from "./reb
 import { PgRebindStore } from "./rebind-store.js";
 import { PgFeedStore, countUnposted } from "./feed-store.js";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
+import { flagImageResolver } from "./flag-image.js";
 
 // Registration (buildCommands) and reading (the interactionCreate handler)
 // live hundreds of lines apart in this file. A string literal duplicated at
@@ -1198,6 +1199,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       try {
         const f = await feedTick(feedStore, feedPoster, {
           now: new Date(),
+          flagImage: flagImageResolver(cfg.flagImageBaseUrl),
           onError: (id, err) => {
             // ⚠️ Once per row per bot instance. A deleted channel or a
             // revoked permission is permanent, and an identical error every
