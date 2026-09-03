@@ -100,12 +100,26 @@ Payload per kind:
 | `renamed` | `name` (new), `previousName`, `tag`, `texture`, `actor` |
 | `rebound` | `name`, `tag`, `texture`, `actor` |
 | `dormant` | `name`, `tag`, `texture`, `disbandAt` |
-| `revived` | `name`, `tag`, `texture`, `actor` |
+| `revived` | `name`, `tag`, `texture` |
 | `disbanded` | `name`, `tag`, `texture` |
 
-`dormant` and `disbanded` carry no actor. There is no protagonist — a clock did it — and
-inventing one would name whoever happened to be leader as the person who let the faction
-die.
+`dormant`, `revived` and `disbanded` carry no actor.
+
+For `dormant` and `disbanded` there is no protagonist — a clock did it — and inventing one
+would name whoever happened to be leader as the person who let the faction die.
+
+⚠️ `revived` has one in principle but not in reach. The dormancy clock observes a revival
+through `LAST_RAISE`, a `max(occurred_at)` subquery in `dormancy-store.ts`; it knows *when*
+the newest raise happened and never *who* made it. Recovering the actor means a second
+correlated lookup per faction per tick against the same index the dormancy design warns is
+the clock's whole performance story. Not worth it for one word in one embed.
+
+**`actor` is a gamertag, resolved at write time.** `activated` takes it straight from the
+`flag.raised` event being processed. The three command-driven kinds (`founded`, `renamed`,
+`rebound`) only know a Discord id, so they resolve it through `identity_links` to
+`players.gamertag` — the *current* name, since `identity_links.gamertag` is a label frozen
+at verification and its own schema comment warns that players rename. Null when the actor
+is somehow unlinked; the embed then omits the clause rather than printing "undefined".
 
 ### ⚠️ The coordinate check constraint
 
@@ -230,7 +244,7 @@ which is how a real problem becomes invisible.
 |---|---|---|
 | `founded` | green | founded by `actor` — the ritual completed |
 | `activated` | green | colors raised by `actor` — the faction is live |
-| `revived` | green | active again, flag raised by `actor` |
+| `revived` | green | active again — the flag is flying and supplies resume |
 | `renamed` | blue | was **previousName** |
 | `rebound` | blue | moved its base |
 | `dormant` | amber | dormant — supplies cut, disbands `<t:…:R>` |
@@ -300,9 +314,16 @@ Against `factions_live` today this is **two rows**, both for `COK`: founded
 - **Ordering**: a batch with a failing middle row posts the rows before it, stops, and
   leaves the rest unposted; the next tick resumes at the failed row.
 - **No duplicate on success**; **retry after failure**.
-- **Payload drift**: the keys each writer writes and the keys `feed-embed.ts` reads are
-  two statements of one fact. A test holds them together, in the manner of
-  `packages/db/test/holding-index-drift.test.ts`.
+- **Kind drift**: `FACTION_EVENT_KINDS` in TypeScript and the
+  `faction_events_kind_valid` check constraint in SQL are two statements of one fact, and
+  the compiler cannot see the second. A test enumerates both and compares, in the manner
+  of `packages/db/test/holding-index-drift.test.ts`. Drift here is nastier than most: the
+  insert is rejected *inside a transition's own transaction*, rolling the transition back
+  with it.
+
+  The payload keys need no such test — writers and `feed-embed.ts` share one exported
+  `FeedPayload` type, so the compiler holds them together. This is the shape to prefer
+  wherever it is available; a drift test is what you write when it is not.
 - **Coordinate constraint**: an insert whose payload carries `poleKey` is rejected.
 - **Same-transaction**: a transition whose surrounding transaction rolls back leaves no
   `faction_events` row.
