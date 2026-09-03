@@ -874,3 +874,16 @@ what stops a faction owning eight bases and being raidable at none of them.
 - `/faction rebind` (roster design) assumed one pole.
 - The supply file's `customString` carries the faction tag for provenance; with several
   bases it may want to say which.
+
+## 35. Two gaps the faction feed knowingly ships with
+
+`feed-embed.ts` has a resolver hook waiting for flag artwork — every embed posts without
+a thumbnail today, because no image exists anywhere in the repo for any of the 33 flag
+textures. Adding them is a design question (source the art, host it, wire the hook), not
+a code change to the feed itself.
+
+Separately, the feed tick posts in `id` order and stops at the first failure (deliberate —
+see CLAUDE.md's feed invariants), but nothing watches for that happening. `feed queue
+blocked at …` is an error-level log line and nothing else: a human has to be reading
+`bot.log`, or grepping for it, to notice the feed has stalled. Until something pages on
+it, a blocked queue is silent to everyone except whoever next thinks to check.
