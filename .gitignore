@@ -10,3 +10,8 @@ dist/
 # Git worktrees created for isolated feature work. Never commit their contents:
 # each is a full checkout of this repo.
 .claude/worktrees/
+
+# Backups of the env file — .env itself is ignored above, but a .env.bak written
+# during a deploy is not, and would be committable with live credentials in it.
+.env.*
+!.env.example

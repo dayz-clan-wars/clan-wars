@@ -2,7 +2,8 @@
 
 **Shipping:** an append-only `faction_events` log, written inside each transition's own
 transaction, and a tick that posts queued rows in `id` order as embeds to one configured
-public Discord channel. Built on `feat/faction-feed`, not yet merged to `main`, not yet deployed.
+public Discord channel. **Executed 2026-09-03.** Merged as `28ef923` (PR #3) and deployed. Acceptance record:
+`docs/acceptance/2026-09-03-faction-feed.md`.
 
 **Migration:** `0019_nice_doomsday` — creates `faction_events`, with the
 `faction_events_no_coordinates` check constraint (this is the first table whose whole
@@ -13,7 +14,8 @@ at the database layer, not just by convention).
 **Spec:** `docs/superpowers/specs/2026-09-03-faction-feed-design.md`
 **Backfill:** `scripts/backfill-faction-events.md`, script at `apps/bot/src/feed-backfill.ts`
 
-⚠️ This document is a runbook, not a report — it has not been executed. Follow
+⚠️ This document was a runbook and has now been run; the steps below are what was
+actually done. Follow
 CLAUDE.md's rules throughout: port 5434 only, never touch `factions_live` outside a
 deliberate step below, and confirm zero surviving bot processes before starting one.
 
@@ -96,9 +98,19 @@ player-visible bug, not just a data race.
 
 Start exactly one instance with the channel set:
 
+Put the channel id in `.env` rather than only on the command line:
+
+```
+BOT_FEED_CHANNEL_ID=1545142533603201184
+```
+
+⚠️ This is a correction to what this runbook first said. A command-line-only variable
+turns the feed off at the next restart with nothing saying so — rows keep accumulating
+unposted, and the only signal is a single warn line at startup. Every other `BOT_*`
+setting is configured this way for the same reason.
+
 ```bash
-set -a && . ./.env && set +a
-BOT_FEED_CHANNEL_ID=1545142533603201184 nohup pnpm --filter @factions/bot start > bot.log 2>&1 &
+set -a && . ./.env && set +a && nohup pnpm --filter @factions/bot start > bot.log 2>&1 &
 ```
 
 (`. ./.env`, not `. .env` — zsh's `.` searches `$PATH` for a slashless name and silently

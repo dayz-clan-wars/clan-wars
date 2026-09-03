@@ -198,17 +198,21 @@ Runbook: `docs/deploy/2026-09-03-faction-rebind.md`.
 vacuously true today — nothing publishes base coordinates — and becomes a real promise the
 day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
-**The faction feed is built on `feat/faction-feed`, not yet merged to `main` and not yet
-deployed.** `faction_events` is an append-only log, written inside each transition's own
-transaction, and a tick posts
-queued rows in `id` order as embeds to one configured public channel. Migration `0019`
-(`faction_events`, with the `faction_events_no_coordinates` check constraint) has not
-been applied to `factions_live`, and the running bot has neither the column nor
-`BOT_FEED_CHANNEL_ID` set, so it emits nothing today. The backfill
-(`apps/bot/src/feed-backfill.ts`) queues `founded` and `activated` rows for whatever
-factions already exist — `COK` today — so the feed's first posts read as a record rather
-than starting mid-story; it must run after `0019` and before the channel id is set.
-Runbook, written but not yet executed: `docs/deploy/2026-09-03-faction-feed.md`.
+**The faction feed is deployed** (2026-09-03). `faction_events` is an append-only log,
+written inside each transition's own transaction, and a tick posts queued rows in `id`
+order as embeds to `#🎌-faction-feed`. Migration `0019` applied to `factions_live` — 20 of
+20 journal entries — PR #3 merged as `28ef923`, and the bot restarted as a single
+instance. The backfill queued `COK`'s `founded` and `activated`; both posted on the first
+tick, carrying their real 2026-09-01 timestamps, and `posted_at is null` returns 0.
+Runbook: `docs/deploy/2026-09-03-faction-feed.md`. Acceptance:
+`docs/acceptance/2026-09-03-faction-feed.md`.
+
+⚠️ `BOT_FEED_CHANNEL_ID` lives in `.env`. Passing it only on the start command line turns
+the feed off at the next restart with nothing saying so — rows keep accumulating unposted
+and the only signal is one warn line at startup.
+
+⚠️ Only `founded` and `activated` have ever posted to a real channel, and both came from
+the backfill. The other five kinds are tested but have never run in production.
 
 Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
 package, `pnpm -r test` green for the first time, and the shared `factions` database no
