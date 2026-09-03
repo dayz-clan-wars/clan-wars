@@ -119,38 +119,46 @@ old pole is not remembered.
 The old pole stops being the faction's declaration immediately — they hold one
 declaration, and it has moved.
 
-⚠️ **But it does not become public immediately. It re-enters the 7-day grace window.**
+⚠️ **But it does not become public immediately. It gets a 3-day release grace.**
 A faction cannot teleport its loot: the whole point of moving is to carry everything from
 the old base to the new one, and publishing the old coordinates the instant the binding
 moves would hand rivals a map to a still-full base during precisely the days it is most
-vulnerable and least defended.
+vulnerable and least defended. Three days is two or three play sessions — enough to haul
+out, not enough to sit on.
 
 This generalises the grace rule rather than adding one. In the declaration design a pole is
 private for 7 days from when it is *first seen*; the underlying rule is better stated as:
 
-> **A pole enters a 7-day grace whenever it becomes undeclared.**
+> **A pole enters a grace window whenever it becomes undeclared: 7 days if nobody has ever
+> declared it, 3 days if its declaration was released.**
 
 A newly built pole becomes undeclared the moment we first see it. A moved-out pole becomes
-undeclared at the rebind. Both then have 7 days. One rule, two entrances, and it also
-covers the pole released by a lapse or a disband without needing a clause of its own.
+undeclared at the rebind, as does one released by a lapse or a disband. Two numbers, and
+the asymmetry has a reason: seven days to *establish* a base you have not declared yet,
+three to *clear out* of one you have given up.
 
 After the grace the old pole is public like any other undeclared base, and the faction has
 no further claim on ground it left — pretending otherwise would let a faction accumulate a
 trail of protected former bases, which is the exact hoarding the declaration rules exist to
 prevent.
 
-**The ping-pong equilibrium, stated and accepted.** Because the release grace (7 days) and
-the rebind cooldown (7 days) are equal, a diligent faction can alternate between two poles
-and keep both effectively private, rebinding the moment the cooldown expires. The cost is a
-correctly-timed ritual every week, forever, for one extra base. That is the same shape as
-the rebuild-cycling trade already accepted in the declaration design, and judged the same
-way. If it is abused, the lever is to make the release grace *shorter* than the rebind
-cooldown — at 3 days against a 7-day cooldown the old pole is publicly listed for four days
-of every cycle, which breaks the alternation without touching either headline number.
+⚠️ **The release grace MUST stay strictly shorter than the rebind cooldown, and that is
+the whole reason it is 3 and not 7.** At equal values a diligent faction could alternate
+between two poles and keep both permanently private, rebinding the moment the cooldown
+expired — one extra base for the price of a correctly-timed weekly ritual. At 3 against 7,
+each pole is publicly listed for four days of every cycle and the alternation buys nothing.
+
+This is a constant mirrored across two subsystems that the compiler cannot relate, which in
+this codebase means it needs a test that fails when they disagree — see §6 and
+`packages/db/test/holding-index-drift.test.ts` for the house pattern. Anyone raising the
+release grace, or lowering the rebind cooldown, must trip it.
 
 ### 2.5 A cooldown, and what it is actually for
 
 **7 days**, matching the rename cooldown and the flag cycle.
+
+⚠️ It must also stay strictly longer than the 3-day release grace (§2.4). Lowering this
+number is not a free knob — at 3 days it would reopen the ping-pong exploit.
 
 The risk is not rebinding too often for its own sake; it is rebinding *mid-raid*. Without
 a cooldown a faction under attack could relocate its identity the moment its walls come
@@ -212,8 +220,9 @@ reclaim an identity another faction may already hold.
    If none, the reply says what is missing.
 5. On confirm, one guarded write: pole columns move, status becomes `active`,
    `dormant_since` clears, `rebound_at` stamps the cooldown.
-6. The old pole is released and re-enters its own 7-day grace (§2.4), giving the faction a
-   week to move its loot before the coordinates become public.
+6. The old pole is released and gets a **3-day** release grace (§2.4), giving the faction
+   time to move its loot before the coordinates become public. Note the asymmetry with
+   step 1: the *new* pole is newly built, so it carries the 7-day new-build grace.
 
 ### 3.1 The rebind window
 
@@ -293,8 +302,14 @@ produce one move and one refusal, not two writes.
      finds the rebind raise at the new pole.
   2. A faction that rebinds and then **never** raises again still goes dormant 7 days
      later, counted from the rebind raise. Reviving must not disable the clock.
-- The old pole's grace: it is **not** published immediately after a rebind, and it **is**
-  published once its 7 days elapse (§2.4).
+- The old pole's release grace: it is **not** published immediately after a rebind, and it
+  **is** published once its 3 days elapse (§2.4).
+- ⚠️ **A drift test asserting `RELEASE_GRACE_MS < REBIND_COOLDOWN_MS`.** These are two
+  statements of one fact that the compiler cannot relate, and if they ever meet the
+  ping-pong exploit in §2.4 reopens silently — no error, no failing behaviour, just a
+  faction quietly holding two private bases. This is the same class as
+  `holding-index-drift.test.ts` and `dormancy-index-drift.test.ts`, and it is the single
+  most important test in this design.
 - Cooldown boundary, matching the rename cooldown's existing convention.
 
 ---

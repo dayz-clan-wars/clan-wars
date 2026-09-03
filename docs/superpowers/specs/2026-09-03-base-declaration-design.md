@@ -107,28 +107,40 @@ ceremony expensive to fake.
 
 ## 3. The grace window
 
-> **A pole enters a 7-day grace whenever it becomes undeclared. Declare it in that window,
-> or it becomes public.**
+> **A pole enters a grace window whenever it becomes undeclared: 7 days if nobody has ever
+> declared it, 3 days if its declaration was released. Declare it in that window, or it
+> becomes public.**
 
-There are three entrances to that state, and one rule covers all of them:
+Three entrances, two numbers:
 
-| How a pole becomes undeclared | Grace runs from |
-|---|---|
-| Newly built — we see it for the first time | the first `flag.raised` or flagpole event at that pole key, already stored |
-| Its faction **moved out** (`/faction rebind`) | the rebind |
-| Its faction **lapsed or disbanded** | the status transition |
+| How a pole becomes undeclared | Grace | Runs from |
+|---|---|---|
+| Newly built — we see it for the first time | **7 days** | the first `flag.raised` or flagpole event at that pole key, already stored |
+| Its faction **moved out** (`/faction rebind`) | **3 days** | the rebind |
+| Its faction **lapsed or disbanded** | **3 days** | the status transition |
 
-⚠️ The moved-out case is not a courtesy, it is load-bearing. A faction cannot teleport its
+The asymmetry has a reason worth stating in one line: **seven days to establish a base you
+have not declared yet, three to clear out of one you have given up.**
+
+⚠️ The 3-day release grace is also load-bearing in the other direction: it must stay
+**strictly shorter than the 7-day rebind cooldown**, or a faction can ping-pong between two
+poles and keep both permanently private. See the rebind design's §2.4 and the drift test in
+its §6.
+
+⚠️ The moved-out case is not a courtesy either. A faction cannot teleport its
 loot, so publishing the old coordinates the instant the binding moves would hand rivals a
 map to a still-full base during exactly the days it is most vulnerable and least defended —
 which would make moving so dangerous that nobody would, and rebind exists precisely so they
-can. See the rebind design's §2.4, including the ping-pong equilibrium this creates and why
-it is accepted.
+can. See the rebind design's §2.4.
 
-**7 days, reusing the existing constant.** It is DayZ's own `FlagRefreshMaxDuration` and
-our dormancy window, and it lands neatly: a base must be raised inside 7 days anyway or it
-decays, so the raise that saves the base is the same act that declares it. One cycle, one
-deadline, one number to explain to a player.
+**Why 7 for a new build:** it reuses an existing constant rather than inventing one. It is
+DayZ's own `FlagRefreshMaxDuration` and our dormancy window, and it lands neatly — a base
+must be raised inside 7 days anyway or it decays, so the raise that saves the base is the
+same act that declares it. One cycle, one deadline.
+
+**Why 3 for a release:** long enough to haul loot out over two or three sessions, and
+strictly shorter than the rebind cooldown, which is what stops the pole alternation
+described above.
 
 ### 3.1 Two things the grace window needs
 
