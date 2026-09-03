@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "../src/config.js";
+import { RELEASE_GRACE_MS } from "../src/rebind.js";
 
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
@@ -86,5 +87,21 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, BOT_DORMANT_AFTER_MS: raw })).toThrow(/BOT_DORMANT_AFTER_MS/);
       expect(() => loadConfig({ ...OK, BOT_DISBAND_AFTER_DORMANT_MS: raw })).toThrow(/BOT_DISBAND_AFTER_DORMANT_MS/);
     }
+  });
+
+  it("rejects a rebind cooldown at or below the release grace", () => {
+    // Boundary: exactly equal must throw — a faction could rebind back the
+    // instant its old pole's release grace expires.
+    expect(() =>
+      loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: String(RELEASE_GRACE_MS) }),
+    ).toThrow(/BOT_REBIND_COOLDOWN_MS/);
+    expect(() =>
+      loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: "1000" }),
+    ).toThrow(/BOT_REBIND_COOLDOWN_MS/);
+  });
+
+  it("accepts a rebind cooldown strictly greater than the release grace", () => {
+    const cfg = loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: String(RELEASE_GRACE_MS + 1) });
+    expect(cfg.rebindCooldownMs).toBe(RELEASE_GRACE_MS + 1);
   });
 });

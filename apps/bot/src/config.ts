@@ -1,5 +1,5 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
-import { REBIND_COOLDOWN_MS } from "./rebind.js";
+import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "./rebind.js";
 
 export type BotConfig = {
   token: string;
@@ -48,7 +48,7 @@ function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): num
 
 /** Env in, config out. Takes the environment as an argument so failure paths are testable. */
 export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
-  return {
+  const config: BotConfig = {
     token: required(env, "DISCORD_TOKEN"),
     applicationId: required(env, "DISCORD_APPLICATION_ID"),
     guildId: required(env, "DISCORD_GUILD_ID"),
@@ -77,10 +77,26 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", DEFAULT_DORMANT_AFTER_MS),
     // 14 further days before the flag, tag and pole return to the 33-slot pool.
     disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
-    // 7 days — spec §2.5. ⚠️ Must stay strictly LONGER than RELEASE_GRACE_MS
-    // (3 days) in rebind.ts, or a faction can alternate between two poles and
-    // keep both permanently private. apps/bot/test/rebind.test.ts pins the
-    // relationship; this env var can still break it at runtime.
+    // 7 days — spec §2.5. Validated below against RELEASE_GRACE_MS: this env
+    // var, not the RELEASE_GRACE_MS/REBIND_COOLDOWN_MS constants that
+    // apps/bot/test/rebind.test.ts pins, is what the handlers actually use.
     rebindCooldownMs: positiveInt(env, "BOT_REBIND_COOLDOWN_MS", REBIND_COOLDOWN_MS),
   };
+
+  // ⚠️ A cooldown at or below RELEASE_GRACE_MS lets a faction alternate
+  // between two poles and hold both permanently private — the pole it just
+  // left stays reserved to it through the release grace, and by the time
+  // that grace ends the cooldown has already expired, so it can rebind back.
+  // Nothing about a live bot would error if this were misconfigured; it
+  // would just quietly reopen the exploit dormancy and rebind.test.ts assume
+  // is closed.
+  if (config.rebindCooldownMs <= RELEASE_GRACE_MS) {
+    throw new Error(
+      `BOT_REBIND_COOLDOWN_MS must be strictly greater than RELEASE_GRACE_MS ` +
+      `(${RELEASE_GRACE_MS}), got ${config.rebindCooldownMs}: a cooldown at or ` +
+      `below the release grace lets a faction hold two private bases.`,
+    );
+  }
+
+  return config;
 }

@@ -83,6 +83,8 @@ describe("PgRebindStore", () => {
     expect(out).toHaveLength(1);
     expect(out[0]!.poleKey).toBe("9.00:8.00:7.00");
     expect(out[0]!.x).toBe(9);
+    expect(out[0]!.y).toBe(8);
+    expect(out[0]!.z).toBe(7);
   });
 
   it("⚠️ ignores a raise by someone who is not on the roster", async () => {
@@ -113,6 +115,12 @@ describe("PgRebindStore", () => {
     expect(await store.qualifyingRaises(await target(), ago(3_600_000))).toEqual([]);
   });
 
+  it("ignores a raise on another server", async () => {
+    const [other] = await db.insert(servers).values({ name: "Other", map: "livonia", clockOffsetMs: 0 }).returning();
+    await raiseAt({ poleKey: "9.00:8.00:7.00", serverIdOverride: other!.id });
+    expect(await store.qualifyingRaises(await target(), ago(3_600_000))).toEqual([]);
+  });
+
   const args = (over: Partial<Parameters<PgRebindStore["rebind"]>[0]> = {}) => ({
     factionId, leaderDiscordId: "leader",
     expectedPoleKey: "1.00:1.00:1.00",
@@ -130,6 +138,8 @@ describe("PgRebindStore", () => {
     const [row] = await db.select().from(factions).where(eq(factions.id, factionId));
     expect(row!.poleKey).toBe("9.00:8.00:7.00");
     expect(Number(row!.x)).toBe(9);
+    expect(Number(row!.y)).toBe(8);
+    expect(Number(row!.z)).toBe(7);
     expect(row!.status).toBe("active");
     expect(row!.dormantSince).toBeNull();
     expect(row!.reboundAt).toEqual(now);
