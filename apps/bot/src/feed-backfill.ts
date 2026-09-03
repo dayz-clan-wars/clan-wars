@@ -28,32 +28,47 @@ export async function backfillFactionEvents(db: Database): Promise<{ inserted: n
   let skipped = 0;
 
   for (const f of rows) {
-    // ⚠️ Idempotent per faction, not per row. Run twice by accident during a
-    // deploy and every founding is announced a second time — to a public
-    // channel, where it cannot be taken back.
-    const existing = await db.select({ n: sql<number>`count(*)::int` })
-      .from(factionEvents).where(sql`${factionEvents.factionId} = ${f.id}`);
-    if ((existing[0]?.n ?? 0) > 0) { skipped++; continue; }
+    // ⚠️ Per-faction transaction, not per-row. Without it, a crash between
+    // the `founded` insert and the `activated` insert leaves a faction with
+    // only half its history — and the idempotence check below then sees
+    // "this faction already has a row" on every future run and skips it
+    // forever. The missing `activated` row could never be recovered. Scoping
+    // the transaction to one faction (rather than the whole loop) means a
+    // crash only costs the faction it interrupted — factions already
+    // committed before it stay committed.
+    const result = await db.transaction(async (tx) => {
+      // ⚠️ Idempotent per faction, not per row. Run twice by accident during
+      // a deploy and every founding is announced a second time — to a public
+      // channel, where it cannot be taken back.
+      const existing = await tx.select({ n: sql<number>`count(*)::int` })
+        .from(factionEvents).where(sql`${factionEvents.factionId} = ${f.id}`);
+      if ((existing[0]?.n ?? 0) > 0) return { insertedHere: 0, skippedHere: 1 };
 
-    // ⚠️ No actor. The founder's identity is not on the factions row, and
-    // resolving `leader_discord_id` would name whoever holds the seat TODAY
-    // as the person who founded it — which for a faction that has since
-    // transferred leadership is simply false.
-    const payload = { name: f.name, tag: f.tag, texture: f.texture };
+      // ⚠️ No actor. The founder's identity is not on the factions row, and
+      // resolving `leader_discord_id` would name whoever holds the seat TODAY
+      // as the person who founded it — which for a faction that has since
+      // transferred leadership is simply false.
+      const payload = { name: f.name, tag: f.tag, texture: f.texture };
 
-    await db.insert(factionEvents).values({
-      serverId: f.serverId, factionId: f.id, kind: "founded",
-      occurredAt: f.createdAt, payload,
-    });
-    inserted++;
-
-    if (f.activatedAt) {
-      await db.insert(factionEvents).values({
-        serverId: f.serverId, factionId: f.id, kind: "activated",
-        occurredAt: f.activatedAt, payload,
+      await tx.insert(factionEvents).values({
+        serverId: f.serverId, factionId: f.id, kind: "founded",
+        occurredAt: f.createdAt, payload,
       });
-      inserted++;
-    }
+      let insertedHere = 1;
+
+      if (f.activatedAt) {
+        await tx.insert(factionEvents).values({
+          serverId: f.serverId, factionId: f.id, kind: "activated",
+          occurredAt: f.activatedAt, payload,
+        });
+        insertedHere++;
+      }
+
+      return { insertedHere, skippedHere: 0 };
+    });
+
+    inserted += result.insertedHere;
+    skipped += result.skippedHere;
   }
 
   return { inserted, skipped };

@@ -76,4 +76,22 @@ describe("backfillFactionEvents", () => {
       expect(JSON.stringify(row.payload)).not.toContain("1:2:");
     }
   });
+
+  it("⚠️ skips a faction that is already half-backfilled, rather than completing it", async () => {
+    // Simulates a run that crashed between the `founded` and `activated`
+    // inserts (the case the per-faction transaction now prevents from being
+    // CREATED). This is the honest boundary of the guarantee: the
+    // transaction stops a half-write from ever landing, but if one already
+    // exists — e.g. written before this fix shipped — the idempotence check
+    // still can't tell "half" from "complete" and skips it like any other
+    // faction that already has a row. It does not repair it.
+    const [f] = await seed();
+    await db.insert(factionEvents).values({
+      serverId, factionId: f!.id, kind: "founded",
+      occurredAt: created, payload: { name: f!.name, tag: f!.tag, texture: f!.texture },
+    });
+
+    expect(await backfillFactionEvents(db)).toEqual({ inserted: 0, skipped: 1 });
+    expect((await events()).map((r) => r.kind)).toEqual(["founded"]);
+  });
 });
