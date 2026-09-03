@@ -198,8 +198,9 @@ Runbook: `docs/deploy/2026-09-03-faction-rebind.md`.
 vacuously true today — nothing publishes base coordinates — and becomes a real promise the
 day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
-**The faction feed is built and merged to `main`, not yet deployed.** `faction_events` is
-an append-only log, written inside each transition's own transaction, and a tick posts
+**The faction feed is built on `feat/faction-feed`, not yet merged to `main` and not yet
+deployed.** `faction_events` is an append-only log, written inside each transition's own
+transaction, and a tick posts
 queued rows in `id` order as embeds to one configured public channel. Migration `0019`
 (`faction_events`, with the `faction_events_no_coordinates` check constraint) has not
 been applied to `factions_live`, and the running bot has neither the column nor
