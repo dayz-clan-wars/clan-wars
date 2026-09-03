@@ -53,6 +53,18 @@ describe("flag images match CLAIMABLE_FLAGS", () => {
     }
   });
 
+  it("⚠️ every image is landscape", async () => {
+    // The wiki also hosts portrait hanging/folded flag renders (~877x1027,
+    // ratio ~0.85) alongside the flat in-game textures we actually want
+    // (landscape, mostly exactly 512x256). We shipped the wrong ones once —
+    // this assertion is what should have caught it: it fails loudly on a
+    // portrait image instead of merely looking wrong in a Discord embed.
+    for (const f of files) {
+      const { width, height } = await sharp(join(FLAGS_DIR, f)).metadata();
+      expect(width ?? 0, `${f} width`).toBeGreaterThan(height ?? 0);
+    }
+  });
+
   it("⚠️ every image was actually resized to MAX_EDGE, not just under the byte ceiling", async () => {
     // The byte bound above cannot catch a skipped resize when the wiki's raw
     // source is already small — Flag_Sakhal's raw source is 18,152 bytes,

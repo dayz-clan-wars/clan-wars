@@ -94,41 +94,50 @@ The Fandom wiki at `dayz.fandom.com`. Direct page scraping is blocked — a plai
 
     https://dayz.fandom.com/api.php?action=parse&page=Flag&prop=images&format=json
 
-Verified 2026-09-03: 68 image entries, of which 33 match our textures.
+⚠️ **The wiki hosts two different galleries of the same flags, and an earlier version of
+this page used the wrong one.** One gallery is hanging/folded flag renders — portrait,
+around 877×1027, ratio ~0.85 — the kind of image you'd put on a wiki infobox. The other is
+the flat, in-game `_co` textures themselves — landscape, mostly exactly 512×256. We want
+the second: it is what the game actually renders on a pole, and it is what a Discord embed
+thumbnail should show. The first 33-image mapping this repo committed was built from the
+portrait gallery; it looked fine in isolation and was wrong. Corrected 2026-09-03.
 
-### ⚠️ Thirty-two of thirty-three map by rule; one does not
+### ⚠️ Essentially nothing maps by rule — the mapping is a complete 33-entry table
 
-`Flag_Wolf` → `Flag_Wolf.png`, and so on for 32 of the 33 in `CLAIMABLE_FLAGS`.
+The flat gallery names files after the abbreviation baked into each `_co` texture, not
+after our `Flag_X` names: `Flag_Wolf` is `Flag_wolf_co.png`, `Flag_Rooster` is
+`Flag_cock_co.png`, `Flag_Bohemia` (Bohemia Interactive) is `Flag_bi_co.png`, and so on.
+There is no transform from `Flag_X` to the wiki's name general enough to be worth writing —
+it would have to already know the in-game abbreviation, at which point it isn't a rule, it
+*is* the table. So `WIKI_FILENAME` in `apps/web/src/flag-images.ts` is 33 explicit entries,
+one per claimable texture, each verified against the MediaWiki API on 2026-09-03.
 
-**`Flag_Sakhal` is the exception.** The wiki file is `Sakhal_flag.PNG` — different word
-order, different capitalization, uppercase extension. A transform clever enough to derive
-that from `Flag_Sakhal` would also mangle names that are currently correct.
+**Two textures have no `_co` game texture on the wiki at all: `Flag_Chedaki` and
+`Flag_Sakhal`.** Both fall back to whatever flat image the wiki does have, and both are
+lower quality than the rest — `Flagchedaki1.jpg` is 360×234 and a JPEG, `Sakhalflag.PNG`
+is 475×249 — but both are still landscape and still the right *kind* of image. Do not
+"fix" these to invented `_co` names; none exist. And `Flag_Sakhal` maps to `Sakhalflag.PNG`
+— no underscore — not `Sakhal_flag.PNG` — with one — which is a different file: the
+portrait folded render from the gallery we are no longer using.
 
-So the mapping is a plain rule plus an explicit alias table holding exactly one entry,
-with a comment saying why it is there. The failure this prevents is the quiet one: 32
-working thumbnails and one faction whose embeds are subtly broken, noticed weeks later by
-whoever holds Sakhal.
+A texture not in `WIKI_FILENAME` throws, naming the texture, rather than guessing
+`<texture>.png` — a miss means the flag pool and this table have diverged, and that must be
+loud rather than a silently-broken embed discovered weeks later by whoever holds it.
 
 ### ⚠️ They must be resized, not merely downloaded
 
-`Flag_Wolf.png` on the wiki is **877×1027**. Its stored original is **1,455,515 bytes**
-(1.4 MB) — but the wiki's CDN content-negotiates, and serves `image/webp` at **283,250
-bytes** to a modern client. Those are two different numbers measuring two different
-things: the file as stored, and the file as actually transferred. ⚠️ An earlier version
-of this section conflated them, quoting only the 1.4 MB stored size and reasoning that
-committing 33 raw files would run "on the order of 35 MB" — the transferred-bytes total is
-nearer **9 MB**. The conclusion below is unchanged either way: normalizing is still right,
-and the committed result is smaller than both.
+The flat textures are already close to Discord's display size but still inconsistent
+across entries — most are exactly 512×256, some run to 1024×512, and the two fallback
+images are smaller and off-ratio. Each image is resized to fit 256px on its long edge and
+written as PNG: comfortably above what Discord displays, so a future use (a directory page,
+a larger card) is not immediately blocked by a too-small asset.
 
-The source sizes are also inconsistent — `Sakhal_flag.PNG` is 299×353 and 154 KB — so
-normalizing is not only about weight. Each image is resized to fit 256px on its long edge
-and written as PNG: comfortably above what Discord displays, so a future use (a directory
-page, a larger card) is not immediately blocked by a too-small asset.
-
-**Verified outcome (2026-09-03):** the 33 committed images total **3.8 MB**, well under
-either estimate above. The largest is `Flag_SSahrani.png` at **147,925 bytes** — the
-drift test's bound is 200,000 bytes per file, so there is headroom but not an enormous
-amount, worth remembering if `MAX_EDGE` is ever raised.
+**Verified outcome (2026-09-03, flat-texture swap):** the 33 committed images total
+**1.7 MB**. The largest is `Flag_Rooster.png` at **69,660 bytes** — well under the drift
+test's 200,000-byte-per-file bound, with plenty of headroom even if `MAX_EDGE` is raised.
+A landscape assertion was added to the drift test alongside the byte bound: every flat
+in-game texture is wider than it is tall, which is exactly the property the earlier
+portrait-gallery mistake violated and nothing previously checked.
 
 ### The fetch is a one-off script, and its output is committed
 
