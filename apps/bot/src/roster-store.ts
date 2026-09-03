@@ -109,8 +109,11 @@ class RosterAbort extends Error {
  *
  * A correlated subquery, not a pre-read: the check rides inside the
  * statement's own WHERE, the way `kick`'s does.
+ *
+ * Exported so `rebind-store.ts` guards on the same authority rather than
+ * writing a second leader check that could drift from this one.
  */
-const leaderIs = (factionId: number, discordId: string) =>
+export const leaderIs = (factionId: number, discordId: string) =>
   sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId}) = 'leader'`;
 
 /** The transaction handle drizzle hands to `db.transaction`. */
