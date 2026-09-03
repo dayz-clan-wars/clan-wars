@@ -1,0 +1,32 @@
+[Unit]
+# ⚠️ This unit exists to make "exactly one bot instance" enforceable.
+# notifyCompleted DMs before it marks, which is correct for one process and
+# at-least-once across two; a duplicate DM reached a real player on
+# 2026-09-01 because a `pkill -f` pattern failed to match.
+#
+# On this host the old procedure is worse than imprecise: ~15 dayzonelife.com
+# services match `src/main.ts`, so `pkill -f "src/main.ts"` is a site-outage
+# command that reads like a cleanup command. systemd's cgroup contains only
+# this unit's processes, so `systemctl stop clan-wars-bot` cannot reach them.
+Description=Clan Wars Discord bot
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=acab
+WorkingDirectory=/opt/clan-wars
+# ⚠️ BOT_FEED_CHANNEL_ID must come from the file, not a command line. Passing
+# it only on the start command turns the faction feed off at the next restart
+# with nothing saying so: faction_events rows keep accumulating unposted and
+# the only signal is one warn line at startup.
+EnvironmentFile=/opt/clan-wars/.env
+ExecStart=/home/acab/.local/bin/pnpm --filter @factions/bot start
+# ⚠️ on-failure, not always. A bot that exits deliberately should stay exited.
+Restart=on-failure
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
