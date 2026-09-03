@@ -10,6 +10,11 @@ node_modules
 **/.turbo
 dist
 **/dist
+# apps/web builds with Next; a developer machine's .next/ is hundreds of MB
+# and would otherwise be uploaded into every build context (this one and
+# ingest-worker's) only to be discarded, since neither Dockerfile reads it.
+.next
+**/.next
 .git
 .gitignore
 .env

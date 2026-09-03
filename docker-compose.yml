@@ -30,5 +30,28 @@ services:
       # value here was correct for exactly one server and silently wrong for
       # every other. It is resolved from each server's own Nitrado service
       # each sweep — see NitradoClient.missionCustomDir.
+  # ⚠️ This file also describes `postgres` and `ingest-worker`, which must NOT
+  # be started on the VPS. A bare `docker compose up -d` there would stand up a
+  # second, EMPTY Postgres that looks like a working database and holds none of
+  # the live data. On the VPS, name the services: `docker compose up -d web caddy`.
+  web:
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+    # ⚠️ No ports mapping. Caddy is the only thing that should reach it, and
+    # publishing 3000 would serve the site over plain HTTP alongside the
+    # TLS one.
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on: [web]
+    ports: ["80:80", "443:443"]
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
 volumes:
   factions-pg:
+  caddy-data:
+  caddy-config:
