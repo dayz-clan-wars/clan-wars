@@ -83,7 +83,7 @@ describe("discord wiring", () => {
       const names = (faction.options ?? []).map((o: any) => o.name).sort();
       expect(names).toEqual([
         "claim", "demote", "disband", "info", "invite", "invites",
-        "kick", "leave", "promote", "rename", "roster", "transfer",
+        "kick", "leave", "promote", "rebind", "rename", "roster", "transfer",
       ]);
     });
 

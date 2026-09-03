@@ -572,8 +572,11 @@ describe("every roster subcommand replies ephemerally", () => {
   };
 
   it("covers every roster subcommand the wiring registers", () => {
+    // "claim" and "rebind" are both handled by a deps object this test does
+    // not construct (FactionDeps and RebindDeps respectively) — "rebind" is
+    // covered directly by apps/bot/test/rebind-commands.test.ts instead.
     const registered = (buildCommands().find((c) => c.name === "faction") as { options: { name: string }[] })
-      .options.map((o) => o.name).filter((n) => n !== "claim");
+      .options.map((o) => o.name).filter((n) => n !== "claim" && n !== "rebind");
     expect(new Set(registered)).toEqual(new Set(Object.keys(invocations)));
   });
 

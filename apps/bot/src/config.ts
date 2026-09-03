@@ -1,4 +1,5 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
+import { REBIND_COOLDOWN_MS } from "./rebind.js";
 
 export type BotConfig = {
   token: string;
@@ -13,6 +14,7 @@ export type BotConfig = {
   renameCooldownMs: number;
   dormantAfterMs: number;
   disbandAfterDormantMs: number;
+  rebindCooldownMs: number;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -75,5 +77,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", DEFAULT_DORMANT_AFTER_MS),
     // 14 further days before the flag, tag and pole return to the 33-slot pool.
     disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
+    // 7 days — spec §2.5. ⚠️ Must stay strictly LONGER than RELEASE_GRACE_MS
+    // (3 days) in rebind.ts, or a faction can alternate between two poles and
+    // keep both permanently private. apps/bot/test/rebind.test.ts pins the
+    // relationship; this env var can still break it at runtime.
+    rebindCooldownMs: positiveInt(env, "BOT_REBIND_COOLDOWN_MS", REBIND_COOLDOWN_MS),
   };
 }

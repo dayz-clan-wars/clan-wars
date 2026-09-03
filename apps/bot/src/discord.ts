@@ -28,6 +28,8 @@ import {
   type RosterDeps, type RosterReply, type RosterPrompt,
 } from "./roster-commands.js";
 import { PgRosterStore, type Membership } from "./roster-store.js";
+import { handleFactionRebind, handleRebindConfirm, type RebindDeps } from "./rebind-commands.js";
+import { PgRebindStore } from "./rebind-store.js";
 
 // Registration (buildCommands) and reading (the interactionCreate handler)
 // live hundreds of lines apart in this file. A string literal duplicated at
@@ -94,6 +96,9 @@ export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
       .addSubcommand((s) => s.setName("rename")
         .setDescription("Rename your faction")
         .addStringOption((o) => o.setName("name").setDescription("New faction name").setRequired(true).setMaxLength(64))
+        .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
+      .addSubcommand((s) => s.setName("rebind")
+        .setDescription("Move your faction's base to a new flagpole")
         .addIntegerOption((o) => o.setName("server").setDescription("Which server, if you hold a faction on more than one").setAutocomplete(true)))
       .addSubcommand((s) => s.setName("roster")
         .setDescription("Show a faction's roster")
@@ -336,6 +341,30 @@ export const transferCustomId = (factionId: number, targetDiscordId: string): st
   `${TRANSFER_PREFIX}${factionId}:${targetDiscordId}`;
 export const disbandCustomId = (factionId: number): string => `${DISBAND_PREFIX}${factionId}`;
 
+export const REBIND_PREFIX = "rebind-confirm:";
+
+/**
+ * ⚠️ The pole key contains colons (`x:y:z`), so it goes LAST and is rejoined
+ * rather than split. A naive `split(":")` would truncate it to `x` and the
+ * confirm handler would look for a pole that does not exist — a button that
+ * silently never works.
+ */
+export const rebindCustomId = (factionId: number, poleKey: string): string =>
+  `${REBIND_PREFIX}${factionId}:${poleKey}`;
+
+export function parseRebindCustomId(customId: string): { factionId: number; poleKey: string } | null {
+  if (!customId.startsWith(REBIND_PREFIX)) return null;
+  const rest = customId.slice(REBIND_PREFIX.length);
+  const firstColon = rest.indexOf(":");
+  if (firstColon <= 0) return null;
+  const idPart = rest.slice(0, firstColon);
+  const poleKey = rest.slice(firstColon + 1);
+  // Decimal digits only — the same house rule config.ts and parseIdSuffix use,
+  // because Number("9e2") is 900.
+  if (!/^\d+$/u.test(idPart) || poleKey === "") return null;
+  return { factionId: Number(idPart), poleKey };
+}
+
 /**
  * A custom id suffix is decimal digits or it is nothing.
  *
@@ -442,6 +471,25 @@ export async function routeRosterButton(deps: RosterDeps, i: ButtonInteractionLi
   return false;
 }
 
+/**
+ * Routes the rebind confirm button. Kept as its own router rather than folded
+ * into `routeRosterButton` — that function takes a plain `RosterDeps` and
+ * several tests construct one directly; widening its signature to also carry
+ * a `RebindDeps` would break every one of those call sites for a button that
+ * is unrelated to them. `start()` calls this one second, only when
+ * `routeRosterButton` reports the id was not its own. Same false-without-
+ * deferring contract for a foreign id as `routeRosterButton` above.
+ */
+export async function routeRebindButton(deps: RebindDeps, i: ButtonInteractionLike): Promise<boolean> {
+  const rebind = parseRebindCustomId(i.customId);
+  if (rebind === null) return false;
+
+  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const reply = await handleRebindConfirm(deps, i.userId, rebind.factionId, rebind.poleKey);
+  await i.editReply({ content: reply.content });
+  return true;
+}
+
 function inviteButtons(inviteId: number): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(inviteAcceptCustomId(inviteId)).setLabel("Accept").setStyle(ButtonStyle.Success),
@@ -475,8 +523,14 @@ export function planRosterButtons(prompt: RosterPrompt | undefined): RosterButto
       { customId: inviteDeclineCustomId(inv.id), label: `Decline ${inv.tag}`, style: "danger" as const },
     ]);
   }
-  // Placeholder for prompt kinds whose button rendering lands in a later
-  // change (e.g. "confirm-rebind") — an empty row set here, not a bug.
+  if (prompt.kind === "confirm-rebind") {
+    return [[{
+      customId: rebindCustomId(prompt.factionId, prompt.poleKey),
+      label: "Move our base",
+      style: "danger",
+    }]];
+  }
+  // Placeholder for any future prompt kind's button rendering.
   return [];
 }
 
@@ -772,6 +826,12 @@ export async function start(cfg: BotConfig): Promise<void> {
     store: rosterStore, now: () => new Date(),
     inviteTtlMs: cfg.inviteTtlMs, cooldownMs: cfg.cooldownMs, renameCooldownMs: cfg.renameCooldownMs,
   };
+  const rebindDeps: RebindDeps = {
+    store: rosterStore,
+    rebindStore: new PgRebindStore(db),
+    now: () => new Date(),
+    rebindCooldownMs: cfg.rebindCooldownMs,
+  };
   const ceremonyStore = new PgCeremonyStore(db);
   const dormancyStore = new PgDormancyStore(db);
 
@@ -925,6 +985,9 @@ export async function start(cfg: BotConfig): Promise<void> {
             case "rename":
               reply = await handleFactionRename(rosterDeps, interaction.user.id, { serverId, name: interaction.options.getString("name", true) });
               break;
+            case "rebind":
+              reply = await handleFactionRebind(rebindDeps, interaction.user.id, serverId);
+              break;
             case "info":
               reply = await handleFactionInfo(rosterDeps, interaction.user.id, interaction.options.getString("name"), serverId);
               break;
@@ -985,12 +1048,14 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (interaction.isButton()) {
       try {
-        await routeRosterButton(rosterDeps, {
+        const buttonLike = {
           customId: interaction.customId,
           userId: interaction.user.id,
-          deferReply: (opts) => interaction.deferReply(opts),
-          editReply: (opts) => interaction.editReply(opts),
-        });
+          deferReply: (opts: { flags?: number }) => interaction.deferReply(opts),
+          editReply: (opts: { content: string }) => interaction.editReply(opts),
+        };
+        const handled = await routeRosterButton(rosterDeps, buttonLike);
+        if (!handled) await routeRebindButton(rebindDeps, buttonLike);
       } catch (err) {
         console.error(`component ${interaction.customId} failed`, err);
         // Same as above, and this is the path accept/decline/transfer/disband
