@@ -107,11 +107,23 @@ ceremony expensive to fake.
 
 ## 3. The grace window
 
-> **A newly seen base is private for its first 7 days. Declare it in that window, or it
-> becomes public.**
+> **A pole enters a 7-day grace whenever it becomes undeclared. Declare it in that window,
+> or it becomes public.**
 
-Measured from the **first event we observe at that pole key** — the first `flag.raised` or
-flagpole event — which is already stored.
+There are three entrances to that state, and one rule covers all of them:
+
+| How a pole becomes undeclared | Grace runs from |
+|---|---|
+| Newly built — we see it for the first time | the first `flag.raised` or flagpole event at that pole key, already stored |
+| Its faction **moved out** (`/faction rebind`) | the rebind |
+| Its faction **lapsed or disbanded** | the status transition |
+
+⚠️ The moved-out case is not a courtesy, it is load-bearing. A faction cannot teleport its
+loot, so publishing the old coordinates the instant the binding moves would hand rivals a
+map to a still-full base during exactly the days it is most vulnerable and least defended —
+which would make moving so dangerous that nobody would, and rebind exists precisely so they
+can. See the rebind design's §2.4, including the ping-pong equilibrium this creates and why
+it is accepted.
 
 **7 days, reusing the existing constant.** It is DayZ's own `FlagRefreshMaxDuration` and
 our dormancy window, and it lands neatly: a base must be raised inside 7 days anyway or it

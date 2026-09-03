@@ -65,38 +65,88 @@ requiring five people to re-convene punishes them twice."
 That reasoning is right and applies to the voluntary case too — a faction that wants to
 move is not proving anything new about itself. So:
 
-> **One roster member raises `Flag_White` at an unbound pole, and the leader confirms.**
+> **One roster member raises the faction's OWN flag at an unbound pole, and the leader
+> confirms.**
 
-Not a ceremony. One participant, and the ordinary `MIN_PARTICIPANTS` rule does not apply.
+Not a ceremony. One participant, and the ordinary `MIN_PARTICIPANTS` rule does not apply —
+the leader's confirmation is the second pair of hands, and a faction ground down to two
+active players must still be able to move.
+
+⚠️ Confirmation is a safety catch, not ceremony. Without it, a member raising a spare
+faction flag at some pole they happened to build would silently relocate the whole
+faction's base.
 
 ⚠️ The raiser must be **on the roster**, checked the way activation already checks it
 (`isRosterMember`), not merely linked. A rebind moves a faction's identity to coordinates
 of someone's choosing; letting a non-member's raise supply that target would let anyone
 relocate any faction to a pole they control.
 
-### 2.3 The new pole must be unbound, and White
-
-Both conditions come free from existing machinery and both are load-bearing.
+### 2.3 The new pole must be unbound — and the flag raised there is the faction's own
 
 **Unbound** — `factions_holding_pole_uniq` already refuses two holding factions at one
 pole. Rebinding onto an occupied pole would either violate that index or evict its owner;
 the former is an error surfaced to a player who did nothing wrong, the latter is a base
 takeover by Discord command.
 
-**White** — the pole must be flying `Flag_White`, i.e. nobody has claimed it. This is the
-same self-evidencing predicate the ceremony uses, and it is what makes "unbound" true in
-the world rather than only in our table.
+**Not `Flag_White`.** An earlier draft of this design required the rebind raise to be White,
+mirroring the ceremony. That was wrong on both counts.
+
+It was unnecessary: White's job in the ceremony is to make "nobody owns this pole"
+*self-evidencing*, but rebind already checks that against our own table, so the flag added
+nothing a query was not already doing.
+
+And it was actively harmful — see §2.6. Because the qualifying raise was White rather than
+the faction's texture, the dormancy clock could not see it, and the design needed a
+compensating write to avoid marking the faction dormant on the very next tick. Raising the
+faction's own colours removes the special case rather than patching it.
+
+It is also simply truer to what is happening. A faction moving house is not founding
+anything and is not proving anything new about itself; it is planting its own flag
+somewhere new.
+
+⚠️ **Interim limitation, closed by base declaration.** Until declarations ship, "unbound"
+can only mean "no *faction* holds this pole" — so a rebind could in principle target a pole
+belonging to an unlinked or solo player. In practice the pole must be physically reachable
+to raise a flag on it, so an occupied base has to be broken into first, and "took an
+undefended pole" is fair play here. When declarations land, "unbound" tightens to "declared
+to nobody" and covers solo holdings in the same check.
 
 ### 2.4 The old pole is released and becomes ordinary ground
 
 On a successful rebind the faction's `pole_key`, `x`, `y`, `z` become the new pole's. The
 old pole is not remembered.
 
-Under base declaration this has a consequence worth stating: the old pole stops being
-anyone's declaration and becomes public like any other undeclared base. That is correct.
-A faction that has moved out has no claim on the ground it left, and pretending otherwise
-would let a faction accumulate a trail of protected former bases — the exact hoarding the
-declaration rules exist to prevent.
+The old pole stops being the faction's declaration immediately — they hold one
+declaration, and it has moved.
+
+⚠️ **But it does not become public immediately. It re-enters the 7-day grace window.**
+A faction cannot teleport its loot: the whole point of moving is to carry everything from
+the old base to the new one, and publishing the old coordinates the instant the binding
+moves would hand rivals a map to a still-full base during precisely the days it is most
+vulnerable and least defended.
+
+This generalises the grace rule rather than adding one. In the declaration design a pole is
+private for 7 days from when it is *first seen*; the underlying rule is better stated as:
+
+> **A pole enters a 7-day grace whenever it becomes undeclared.**
+
+A newly built pole becomes undeclared the moment we first see it. A moved-out pole becomes
+undeclared at the rebind. Both then have 7 days. One rule, two entrances, and it also
+covers the pole released by a lapse or a disband without needing a clause of its own.
+
+After the grace the old pole is public like any other undeclared base, and the faction has
+no further claim on ground it left — pretending otherwise would let a faction accumulate a
+trail of protected former bases, which is the exact hoarding the declaration rules exist to
+prevent.
+
+**The ping-pong equilibrium, stated and accepted.** Because the release grace (7 days) and
+the rebind cooldown (7 days) are equal, a diligent faction can alternate between two poles
+and keep both effectively private, rebinding the moment the cooldown expires. The cost is a
+correctly-timed ritual every week, forever, for one extra base. That is the same shape as
+the rebuild-cycling trade already accepted in the declaration design, and judged the same
+way. If it is abused, the lever is to make the release grace *shorter* than the rebind
+cooldown — at 3 days against a 7-day cooldown the old pole is publicly listed for four days
+of every cycle, which breaks the alternation without touching either headline number.
 
 ### 2.5 A cooldown, and what it is actually for
 
@@ -114,7 +164,7 @@ found keeps losing. Making rebind unavailable during an active raid needs a noti
 "under raid" that this system does not have (there is no base-damage event in ADM; the
 flag-lower is the only raid signal at all). Recorded as a limitation, not solved.
 
-### 2.6 Rebind revives a dormant faction, and must re-stamp `activated_at`
+### 2.6 Rebind revives a dormant faction, and the clock takes care of itself
 
 A dormant faction that rebinds becomes `active`, with `dormant_since` cleared — the same
 write `revive` already performs.
@@ -124,20 +174,23 @@ flown for 7 days", and a member standing at a new pole raising a flag is exactly
 evidence that is no longer true. Requiring them to *also* raise at the new pole a second
 time to trigger the ordinary revive path would be a second ritual for one act.
 
-⚠️ **It must also set `activated_at` to the rebind instant, or the faction goes dormant
-again on the very next tick.** This is not obvious and it took a spec review to catch.
+✅ **And the dormancy clock needs no help.** This is worth spelling out, because an
+earlier draft of this design got it wrong in a way that would have shipped.
 
-The dormancy clock reads
-`coalesce(LAST_RAISE, activated_at, created_at)`, where `LAST_RAISE` is the newest raise of
-*this faction's texture* at *this faction's pole*. After a rebind the pole is new and the
-only raise there was `Flag_White`, not the faction's texture — so `LAST_RAISE` is null and
-the coalesce falls through to `activated_at`, which still holds the original activation,
-possibly months old. The faction reads as infinitely stale and is made dormant immediately.
+The clock reads `coalesce(LAST_RAISE, activated_at, created_at)`, where `LAST_RAISE` is the
+newest raise of *this faction's texture* at *this faction's pole*. After a rebind the pole
+is the new one — and the raise that qualified the rebind was the faction's own texture at
+exactly that pole. So `LAST_RAISE` finds it, and the clock is fresh with no extra write.
 
-Re-stamping `activated_at` is exactly what that fallback exists for: the schema comment
-describes it as covering "a faction whose activating raise predates the ingested window",
-and a freshly rebound pole is that case precisely. It gives the faction a full 7 days at
-the new pole to fly its own flag, which is the same grace a newly activated faction gets.
+When the rebind raise was `Flag_White` (the earlier draft, §2.3), `LAST_RAISE` found nothing
+at the new pole, the coalesce fell through to an `activated_at` that could be months old,
+the faction read as infinitely stale, and it was made dormant on the very next tick. The
+fix at the time was a compensating write to `activated_at`. Raising the faction's own
+colours makes that whole class of problem not exist.
+
+The ordinary consequence still holds: a faction that rebinds and then never raises its flag
+at the new pole goes dormant 7 days later, on the normal schedule, counted from the rebind
+raise.
 
 ⚠️ Rebind does **not** revive a `disbanded` or `lapsed` faction. Those are terminal, their
 flag and tag are back in the pool, and re-entering through rebind would let a faction
@@ -147,15 +200,20 @@ reclaim an identity another faction may already hold.
 
 ## 3. Flow
 
-1. A roster member raises `Flag_White` at an unbound pole. This is an ordinary
-   `flag.raised` event; no new parsing.
+1. A roster member erects a flagpole at the new site and raises **the faction's own flag**
+   on it. This is an ordinary `flag.raised` event; no new parsing. Nothing has changed in
+   the database yet — the faction is still bound to its old pole, and the new pole is
+   inside its own 7-day grace, so the move stays private while it happens.
 2. The leader runs `/faction rebind` (ephemeral, like every reply here).
-3. The command looks for a qualifying raise: `Flag_White`, at a pole bound to no holding
-   faction, by a current roster member, within the **rebind window**.
+3. The command looks for a qualifying raise: **the faction's own texture**, at a pole that
+   is neither its current pole nor bound to any holding faction, by a current roster
+   member, within the **rebind window**.
 4. If exactly one candidate, the leader confirms it with a button. If several, they pick.
    If none, the reply says what is missing.
-5. On confirm: pole columns move, status becomes `active`, `dormant_since` clears,
-   `rebound_at` stamps the cooldown.
+5. On confirm, one guarded write: pole columns move, status becomes `active`,
+   `dormant_since` clears, `rebound_at` stamps the cooldown.
+6. The old pole is released and re-enters its own 7-day grace (§2.4), giving the faction a
+   week to move its loot before the coordinates become public.
 
 ### 3.1 The rebind window
 
@@ -187,7 +245,7 @@ One new column:
 factions.rebound_at  timestamptz NULL   -- null means never rebound, so no cooldown
 ```
 
-Plus a write to the existing `activated_at` on every rebind — see §2.6.
+No write to `activated_at` is needed — see §2.6.
 
 Mirrors `renamed_at` exactly, including the nullable-means-no-cooldown convention.
 
@@ -207,7 +265,7 @@ or fails loudly.
 
 | Situation | Behaviour |
 |---|---|
-| No qualifying raise in the window | Reply naming all three requirements (White, unbound pole, roster member) rather than a bare "not found" |
+| No qualifying raise in the window | Reply naming all three requirements (the faction's own flag, a pole nobody holds, raised by a roster member) rather than a bare "not found" |
 | Raise found, but the pole was claimed between raise and confirm | Refuse; the unique index is the authority and the reply says the pole was taken |
 | Faction is `reserved` | Refuse — it has never activated; its 24h reservation lapse is the right path |
 | Faction is `disbanded` / `lapsed` | Refuse; terminal, see §2.6 |
@@ -228,14 +286,15 @@ produce one move and one refusal, not two writes.
 - Store tests against the real database for the guarded update, including the
   concurrent-confirm race and the `factions_holding_pole_uniq` collision.
 - A test that rebind clears `dormant_since` and sets `status = 'active'`.
-- ⚠️ **Two tests for the `activated_at` interaction in §2.6**, which is the non-obvious
-  part of this design and the one most likely to be got wrong:
-  1. A faction that rebinds is **not** dormant on the next tick. Without the re-stamp it
-     is, because `LAST_RAISE` at the new pole is null and the coalesce falls through to a
-     months-old `activated_at`.
-  2. A faction that rebinds and then **never** raises its own texture at the new pole
-     still goes dormant 7 days later. The re-stamp restarts the clock; it must not
-     disable it.
+- ⚠️ **Two tests for the dormancy interaction in §2.6.** The clock is correct by
+  construction now rather than by a compensating write, and these are what keep it that
+  way — a future change that reverts the rebind raise to `Flag_White` must fail here:
+  1. A faction that rebinds is **not** dormant on the next tick, because `LAST_RAISE`
+     finds the rebind raise at the new pole.
+  2. A faction that rebinds and then **never** raises again still goes dormant 7 days
+     later, counted from the rebind raise. Reviving must not disable the clock.
+- The old pole's grace: it is **not** published immediately after a rebind, and it **is**
+  published once its 7 days elapse (§2.4).
 - Cooldown boundary, matching the rename cooldown's existing convention.
 
 ---
