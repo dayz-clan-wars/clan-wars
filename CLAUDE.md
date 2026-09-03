@@ -45,22 +45,31 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 - **Postgres + ingest worker:** `docker compose up -d postgres ingest-worker` (reads
   `.env`). The worker runs from a built image, so a code change needs
-  `docker compose build ingest-worker`. ⚠️ Name the services. Since this branch added
-  `web` and `caddy` to the same compose file, a bare `up -d` on this machine also starts
-  Caddy, which binds `0.0.0.0:80`/`:443` and immediately begins ACME for
-  `dayzclanwars.com` — whose DNS points at the VPS, not here. The HTTP-01 challenge fails
-  and retries against Let's Encrypt's failed-validation rate limit, which can exhaust it
-  before the real deploy ever happens.
+  `docker compose build ingest-worker`. ⚠️ Name the services — a bare `up -d` also
+  starts `web`.
 - **Bot:** not containerised. `set -a && . ./.env && set +a && pnpm --filter @factions/bot start`.
   It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached. Use
   `. ./.env`, not `. .env` — in zsh, `.` searches `$PATH` for a slashless name and fails
   with `no such file or directory: .env`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
-  real player this way on 2026-09-01. Before starting one, confirm zero survivors:
-  `ps ax | grep "src/main.ts" | grep -v grep`. Kill with `pkill -f "src/main.ts"` —
-  a pattern that does not match the expanded `tsx` command line is what left the stale
-  process last time.
+  real player this way on 2026-09-01. The bot runs as a **systemd unit**, which is what
+  makes this enforceable: `systemctl status clan-wars-bot` is the authoritative instance
+  check — it shows the real count in the unit's cgroup — and `sudo systemctl stop
+  clan-wars-bot` cannot reach anything outside it.
+
+  ⚠️ **Never run `pkill -f "src/main.ts"` on this host, and never trust a bare `pgrep`
+  pattern as a survivor check — pattern matching is unreliable in both directions here.**
+  ~15 `dayzonelife.com` services (verifier, api, ingest-worker, projector, granter,
+  rebooter, enforcer, crier, newsdesk, notifier and more) match `src/main.ts`-style
+  patterns, so `pkill`/`ps | grep` reads like a cleanup command but is a site-outage
+  command. The inverse failure is just as real: `pgrep -af "filter @factions/bot"` was
+  tried as the safe replacement during this deploy and false-positived, matching a shell
+  command line that merely contained the pattern text rather than the bot process
+  itself. If `systemctl status clan-wars-bot` isn't available for some reason, the
+  dependable manual fallback is process **cwd**, not a command-line pattern: clan-wars
+  processes have `/proc/<pid>/cwd` under `/opt/clan-wars`; dayzonelife.com's are under
+  `/var/www/dayzonelife.com`.
 - **⚠️ Nothing applies migrations in production.** `runMigrations` is exported from
   `packages/db/src/migrate.ts` but is called *only from tests* — `apps/bot/src` never
   calls it, and there is no `db:migrate` script. A deploy that assumes "the bot migrates
@@ -74,9 +83,13 @@ turbo gate stays the gate, because it runs `typecheck` too.
 - **⚠️ Stop the bot before migrating** when a migration adds NOT NULL columns or
   constraints. Old code + new schema and new code + old schema both break; see
   `docs/deploy/2026-09-01-targeted-linking.md` for the incident.
-- **Web app:** `docker compose build web && docker compose up -d web caddy`. Not run on
-  this machine in normal operation — it is deployed to the VPS. `pnpm --filter
-  @factions/web dev` for local work.
+- **Web app:** `docker compose build web && docker compose up -d web`. It publishes
+  `127.0.0.1:3020` and the **system nginx** terminates TLS for `dayzclanwars.com` and
+  proxies to it. There is no Caddy: nginx owns :80/:443 on this host and serves three
+  other production sites (dayzonelife.com, manicdotes.com, regime.fi) from them. ⚠️ Every
+  `systemctl reload nginx` is a reload for all four — run `sudo nginx -t` first, and
+  `reload`, never `restart`. Vhost and unit files are version controlled in `deploy/`;
+  `/etc` holds symlinks. `pnpm --filter @factions/web dev` for local work.
 
 ---
 
@@ -191,53 +204,50 @@ there should be a test that fails when they disagree. See
 - **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
   `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
   thumbnail in a Discord channel, not as an error.
-- **⚠️ `docker-compose.yml` describes services the VPS must not start.** It carries
-  `postgres` and `ingest-worker` alongside `web` and `caddy`. On the VPS, always name the
-  services — `docker compose up -d web caddy` — because a bare `up -d` there stands up a
-  second, empty Postgres that looks like a working database.
+- **⚠️ There is no second machine.** Postgres, the ingest worker, the web app and the
+  bot all run on this host, alongside three unrelated production sites. Earlier deploy
+  documents describe a separate VPS holding only `web` and `caddy`; that machine does
+  not exist and never did on this deployment. Name compose services anyway — a bare
+  `up -d` starts more than you mean.
 
 ---
 
 ## Current state — 2026-09-03
 
-Faction dormancy is **deployed**. A faction that does not raise its own flag at its own
-pole for 7 days goes dormant and loses its supply kit; 14 further days disband it. Spec
-and plan are in `docs/superpowers/`.
+**This host was rebuilt today for the single-host deployment** (see
+`docs/deploy/2026-09-03-single-host-deployment.md`). `factions_live` is a **fresh**
+database — all 20 of 20 journal entries applied in one run during this deploy, not
+accreted across the dates below. It holds **one registered server** (`CW-TEST`,
+Livonia) and **zero factions**. Nothing below has been exercised against real player
+data on this deployment; the descriptions are of the code, which is unchanged and real,
+not of anything that has happened here yet.
 
-Live as of 2026-09-02: migrations `0015`, `0016` and `0017` applied to `factions_live`
-(18 of 18 journal entries), the bot restarted on the dormancy code as a single instance, and the
-ingest worker rebuilt and recreated. The acceptance check was run before and after —
-one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null, so the
-first tick transitioned nothing, which is what it had to do. Runbook:
-`docs/deploy/2026-09-02-dormancy.md`.
+Faction dormancy is **in the code and migrated in**. A faction that does not raise its
+own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further
+days disband it. Spec and plan are in `docs/superpowers/`. (Previously deployed and
+exercised against a now-gone database — see `docs/deploy/2026-09-02-dormancy.md` for
+that history; it does not describe this database.)
 
-**Faction rebind is deployed** (2026-09-03). A faction can move its base: a roster member
-raises the faction's OWN flag at a pole nobody holds, the leader confirms, and the binding
-moves in one guarded write. 7-day cooldown. Migration `0018` (nullable `factions.rebound_at`)
-applied to `factions_live` — 19 of 19 journal entries — and the bot restarted as a single
-instance. The dormancy pause fix (inbox 26) went live in the same restart. Before and after
-acceptance were identical: one active faction (`COK`), age ~1d19h, nothing transitioned.
-Runbook: `docs/deploy/2026-09-03-faction-rebind.md`.
+**Faction rebind is in the code and migrated in.** A faction can move its base: a
+roster member raises the faction's OWN flag at a pole nobody holds, the leader
+confirms, and the binding moves in one guarded write. 7-day cooldown. (Previously
+deployed and exercised against a now-gone database — see
+`docs/deploy/2026-09-03-faction-rebind.md` for that history.)
 
 ⚠️ `/faction rebind` tells a leader their old base "stays private for 3 days". That is
 vacuously true today — nothing publishes base coordinates — and becomes a real promise the
 day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
-**The faction feed is deployed** (2026-09-03). `faction_events` is an append-only log,
-written inside each transition's own transaction, and a tick posts queued rows in `id`
-order as embeds to `#🎌-faction-feed`. Migration `0019` applied to `factions_live` — 20 of
-20 journal entries — PR #3 merged as `28ef923`, and the bot restarted as a single
-instance. The backfill queued `COK`'s `founded` and `activated`; both posted on the first
-tick, carrying their real 2026-09-01 timestamps, and `posted_at is null` returns 0.
-Runbook: `docs/deploy/2026-09-03-faction-feed.md`. Acceptance:
-`docs/acceptance/2026-09-03-faction-feed.md`.
+**The faction feed is in the code and migrated in.** `faction_events` is an append-only
+log, written inside each transition's own transaction, and a tick posts queued rows in
+`id` order as embeds to `#🎌-faction-feed`. (Previously deployed and exercised against a
+now-gone database — see `docs/deploy/2026-09-03-faction-feed.md` and
+`docs/acceptance/2026-09-03-faction-feed.md` for that history.) On this database, no
+faction has ever existed, so no event of any kind has ever been queued or posted here.
 
 ⚠️ `BOT_FEED_CHANNEL_ID` lives in `.env`. Passing it only on the start command line turns
 the feed off at the next restart with nothing saying so — rows keep accumulating unposted
 and the only signal is one warn line at startup.
-
-⚠️ Only `founded` and `activated` have ever posted to a real channel, and both came from
-the backfill. The other five kinds are tested but have never run in production.
 
 Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
 package, `pnpm -r test` green for the first time, and the shared `factions` database no
@@ -257,6 +267,11 @@ The read-only acceptance check, to re-run before any future dormancy change:
 
 Any row with `age` over 7 days will be made dormant on the next tick, cutting a real
 faction's supplies. That is a decision, not a side effect.
+
+⚠️ The read-only acceptance check above returns **zero rows** on a fresh database. That
+is the same output it gives when "nothing will transition on the next tick" — identical
+text, opposite meanings. Read a zero-row result together with `select count(*) from
+factions`, or it proves nothing.
 
 ### Known-open, in rough priority order
 

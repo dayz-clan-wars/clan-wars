@@ -8,14 +8,15 @@ import { join } from "node:path";
 const ROOTS = [join(import.meta.dirname, "..", "app"), join(import.meta.dirname, "..", "src")];
 
 /**
- * ⚠️ The site is a surface, never a source of truth (spec §3). It is also
- * deployable today ONLY because it reads nothing — `factions_live` lives on a
- * different machine from the VPS, so a database import here would not fail at
- * review, it would fail at runtime in production.
+ * ⚠️ The site is a surface, never a source of truth (spec §3).
  *
- * This test is the cheap structural guard on both. It is not a substitute for
- * the design decision; it is what makes the decision expensive to reverse by
- * accident.
+ * This test used to be backed up by geography: the web app ran on a VPS with
+ * no route to the database. It no longer is — `factions_live` is on the same
+ * host now, one loopback port away. The container boundary and this test are
+ * the whole of what stands between a Next.js server and production data.
+ *
+ * It is not a substitute for the design decision; it is what makes the
+ * decision expensive to reverse by accident.
  */
 describe("the web app reads nothing", () => {
   const sources = ROOTS.filter((root) => existsSync(root)).flatMap((root) =>
