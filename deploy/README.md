@@ -31,3 +31,23 @@ only after that certificate exists — `nginx -t` fails on a missing
     journalctl -u clan-wars-bot -f
 
 ⚠️ Never `pkill -f "src/main.ts"` on this host. See the unit file's comment.
+
+## ⚠️ These symlinks point into a git working tree
+
+`/etc/nginx/sites-enabled/dayzclanwars.com` and `/etc/nginx/conf.d/00-default-server.conf`
+are symlinks into `/opt/clan-wars/deploy/nginx/`, which is a checked-out git tree. So a
+branch switch, a `git stash`, or a checkout of any commit predating this directory makes
+the nginx configuration **vanish from disk** while nginx is still running.
+
+Nothing fails at that moment — a running nginx holds its config in memory. The failure
+comes at the next `nginx -t` or reload, and the blast radius is every site on this host,
+not just this one:
+
+- `systemctl reload nginx` fails, leaving the OLD config live. Recoverable.
+- `systemctl restart nginx`, or a reboot, leaves nginx **down for all sites**.
+- `certbot.timer` runs daily and reloads nginx after a renewal. That is the realistic
+  way this bites: unattended, at 11:03, days after the checkout that caused it.
+
+⚠️ Before checking out any branch or commit on this host, know that you are editing live
+nginx configuration. After any checkout, run `sudo nginx -t`. If you need to work on an
+old commit, use a git worktree elsewhere rather than moving this one.
