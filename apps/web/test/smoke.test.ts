@@ -1,8 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync, readdirSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
-const APP = join(import.meta.dirname, "..", "app");
+// ⚠️ Every directory that can hold app code, not just `app/`. `src/` didn't
+// exist when this test was written; a directory added later that isn't
+// listed here is scanned by nothing, silently.
+const ROOTS = [join(import.meta.dirname, "..", "app"), join(import.meta.dirname, "..", "src")];
 
 /**
  * ⚠️ The site is a surface, never a source of truth (spec §3). It is also
@@ -15,9 +18,11 @@ const APP = join(import.meta.dirname, "..", "app");
  * accident.
  */
 describe("the web app reads nothing", () => {
-  const sources = readdirSync(APP, { recursive: true, encoding: "utf8" })
-    .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
-    .map((f) => ({ file: f, text: readFileSync(join(APP, f), "utf8") }));
+  const sources = ROOTS.filter((root) => existsSync(root)).flatMap((root) =>
+    readdirSync(root, { recursive: true, encoding: "utf8" })
+      .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
+      .map((f) => ({ file: join(root, f), text: readFileSync(join(root, f), "utf8") })),
+  );
 
   it("has source files to check", () => {
     expect(sources.length).toBeGreaterThan(0);

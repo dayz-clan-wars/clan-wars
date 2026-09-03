@@ -119,6 +119,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@factions/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
       next:
         specifier: ^16.3.4
         version: 16.3.4(@types/node@22.20.1)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
