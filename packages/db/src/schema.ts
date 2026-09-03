@@ -472,6 +472,17 @@ export const factions = pgTable("factions", {
   dormantSince: timestamp("dormant_since", { withTimezone: true }),
   /** Null means never renamed, so no cooldown applies. Set by `/faction rename`. */
   renamedAt: timestamp("renamed_at", { withTimezone: true }),
+  /**
+   * When this faction last moved its pole. Null means never rebound, so no
+   * cooldown applies — the same convention as `renamed_at` directly above.
+   *
+   * ⚠️ Nullable, with no default and no backfill. A `DEFAULT now()` would put
+   * every faction already in `factions_live` on a 7-day rebind cooldown the
+   * instant the migration applied, and nothing anywhere would report it — the
+   * only symptom is leaders being told "your faction moved too recently" about
+   * a move that never happened.
+   */
+  reboundAt: timestamp("rebound_at", { withTimezone: true }),
 }, (t) => ({
   statusValid: check("factions_status_valid",
     sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),

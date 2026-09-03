@@ -1,0 +1,1 @@
+ALTER TABLE "factions" ADD COLUMN "rebound_at" timestamp with time zone;
