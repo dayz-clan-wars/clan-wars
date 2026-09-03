@@ -24,7 +24,7 @@ function fakeStore(rows: QueuedFactionEvent[]): FeedStore & { posted: number[] }
 describe("feedTick", () => {
   it("posts every queued row and marks each", async () => {
     const store = fakeStore([row(1), row(2), row(3)]);
-    const post = vi.fn<[APIEmbed], Promise<void>>().mockResolvedValue(undefined);
+    const post = vi.fn<(embed: APIEmbed) => Promise<void>>().mockResolvedValue(undefined);
 
     const r = await feedTick(store, post, { now });
 
