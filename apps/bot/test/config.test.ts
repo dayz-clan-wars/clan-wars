@@ -104,4 +104,27 @@ describe("loadConfig", () => {
     const cfg = loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: String(RELEASE_GRACE_MS + 1) });
     expect(cfg.rebindCooldownMs).toBe(RELEASE_GRACE_MS + 1);
   });
+
+  describe("BOT_FEED_CHANNEL_ID", () => {
+    it("⚠️ is optional, so the feed is off unless deliberately turned on", () => {
+      // Required would force every existing deployment and test fixture to
+      // supply a channel id for a feature they do not use, and would let a
+      // staging bot inherit a live community channel from a copied .env.
+      expect(loadConfig({ ...OK }).feedChannelId).toBeUndefined();
+    });
+
+    it("reads the channel id when set", () => {
+      expect(loadConfig({ ...OK, BOT_FEED_CHANNEL_ID: "1545142533603201184" }).feedChannelId)
+        .toBe("1545142533603201184");
+    });
+
+    it("treats an empty string as unset rather than as a channel", () => {
+      expect(loadConfig({ ...OK, BOT_FEED_CHANNEL_ID: "" }).feedChannelId).toBeUndefined();
+    });
+
+    it("rejects a non-snowflake, rather than failing at the first post", () => {
+      expect(() => loadConfig({ ...OK, BOT_FEED_CHANNEL_ID: "#faction-feed" }))
+        .toThrow(/BOT_FEED_CHANNEL_ID/u);
+    });
+  });
 });
