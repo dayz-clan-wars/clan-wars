@@ -773,3 +773,92 @@ every reply here is ephemeral precisely because pole coordinates are a raid targ
 The objection is to the surface, not the idea. Authenticated and faction-scoped on the
 website it is the same feature done safely, and it is the centrepiece of the direction
 note above.
+
+---
+
+## 34. A faction should be able to hold multiple bases
+
+Requested 2026-09-02. Today a faction has exactly one pole, because the pole IS a set of
+columns on the faction row — `pole_key`, `x`, `y`, `z`, all NOT NULL. "One faction, one
+flag, one pole" was the smallest mechanic that still produced PvP stakes (spec §1), and it
+has held up; this is the first deliberate move away from it.
+
+⚠️ This is not a feature, it is a **schema and lifecycle change**, and it touches almost
+every invariant in the project. Written out so the size is visible before anyone starts.
+
+### What has to move
+
+**The pole becomes a child table.** `factions.pole_key/x/y/z` move to something like
+`faction_poles`, and `factions_holding_pole_uniq` — one of the three scarcity indexes —
+moves with them. That index is asserted against `HOLDING_STATUSES` by
+`packages/db/test/holding-index-drift.test.ts`, which exists precisely because a SQL
+predicate and a TypeScript constant are two statements of one fact. The drift test has to
+follow the index, and the `HOLDING_STATUSES` docstring ("holds flag, tag and pole") needs
+its wording changed with it.
+
+**A fourth table joins the lock order.** Currently `factions` → `faction_members` →
+`faction_invites`, a convention with no enforcement that has already produced one deadlock
+built from two separately-correct changes. `faction_poles` needs a defined position in
+that order before it has three writers too.
+
+**The dormancy clock's query shape changes, and this is the sharp edge.** `LAST_RAISE`
+keys on `factions.pole_key` AND `factions.texture` for a single pole. With N poles it
+becomes a join or an `IN`, and `events_raise_lookup_idx` is a partial index over
+`(server_id, payload->>'poleKey', payload->>'texture', occurred_at)` whose usability under
+the new shape is not obvious. CLAUDE.md records what is at stake: without a usable index
+the subquery filters every `flag.raised` row on the server once per faction per tick —
+352ms versus 0.41ms at a year of projected ingest — and **nothing errors**, because
+`guardedRunner` just skips overlapping runs and the clock silently stops keeping up.
+Whatever the new query is, measure it, and keep the drift test that ties the index's
+payload keys to the query's.
+
+**Supplies multiply, and that is a balance decision, not a technical one.** `supplyTick`
+reads one `(x, y, z)` per faction and emits one kit. N bases means N kits unless something
+says otherwise — and supplies are the scarce thing this economy hands out. Options worth
+weighing: a kit only at the founding pole; a kit per base; a kit per base but a smaller
+one. This should be decided in the spec, not discovered in the projection.
+
+### The question this actually forces
+
+**Dormancy currently conflates "the faction is alive" with "the base is maintained".**
+With one pole those are the same sentence. With several they come apart, and DayZ itself
+already treats them separately: `FlagRefreshMaxDuration` decays each base independently,
+so a faction with three bases genuinely can be maintaining one and letting two rot.
+
+Per-pole dormancy is the more faithful model — each base has its own 7-day clock, and
+losing a base is not losing the faction — but it is a substantially larger change than
+adding a table, and it turns `dormant` from a faction status into something closer to a
+per-pole state. The alternative, keeping dormancy per faction and resetting the clock on a
+raise at *any* of its poles, is much cheaper and means a faction with three bases only has
+to maintain one to keep all three, which partly defeats the point of the 7-day rule.
+
+Decide this first. Everything else follows from it.
+
+### Founding a second base
+
+The ceremony predicate is "≥3 distinct linked UIDs each raising `Flag_White` at the same
+**unbound** pole within 10 minutes", and it produces a faction. A second base wants the
+same ritual with a different outcome: attach to the claimant's existing faction rather
+than found a new one. That is a pleasing reuse — the physical act stays identical and only
+the claim step branches — but note it changes `/faction claim`'s meaning, and activation
+(`reservedFactionAt`) currently binds exactly one pole.
+
+Open: is there a cap on bases per faction, and does a second base cost something?
+
+### Counterpoint worth recording
+
+KarmaKrew's rules state flatly: **"Groups are only allowed to own 1 single base on the
+server."** A large live community across four maps arrived at the same restriction this
+project picked for different reasons, and theirs is anti-hoarding — one base is what keeps
+a group raidable and keeps the map contestable. See item 29's survey.
+
+That is not an argument against doing this. It is an argument for deciding, in the spec,
+what stops a faction owning eight bases and being raidable at none of them.
+
+### Smaller things that still have to change
+
+- `/faction info` shows pole coordinates — now a list, still gated to members.
+- Disband and lapse release "the pole"; they now release N.
+- `/faction rebind` (roster design) assumed one pole.
+- The supply file's `customString` carries the faction tag for provenance; with several
+  bases it may want to say which.
