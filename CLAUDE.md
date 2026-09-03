@@ -198,9 +198,13 @@ there should be a test that fails when they disagree. See
   and proved from the server's logs; nothing on `dayzclanwars.com` may create a faction,
   claim a flag, bind a pole or alter a roster. `apps/web/test/smoke.test.ts` pins the
   structural half of this — the app imports no database package and reads no
-  `DATABASE_URL`. That is also what makes it deployable at all: `factions_live` is on
-  this machine, not the VPS, so a database import there fails in production rather than
-  at review.
+  `DATABASE_URL`. ⚠️ That separation used to be enforced by distance — the web app ran
+  on a VPS with no route to the database, so an accidental import would have failed
+  loudly, in review or at worst in production. It no longer is: `factions_live` is on
+  this same host now, one loopback port away, so that same accidental import would
+  *succeed*, silently, against production data. The container boundary and
+  `smoke.test.ts` (see its docblock) are the whole of what stands between a Next.js
+  server and production data now.
 - **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
   `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
   thumbnail in a Discord channel, not as an error.
@@ -248,6 +252,12 @@ faction has ever existed, so no event of any kind has ever been queued or posted
 ⚠️ `BOT_FEED_CHANNEL_ID` lives in `.env`. Passing it only on the start command line turns
 the feed off at the next restart with nothing saying so — rows keep accumulating unposted
 and the only signal is one warn line at startup.
+
+⚠️ Only `founded` and `activated` have ever posted to a real channel, anywhere, and both
+came from the 2026-09-02 backfill on the now-gone database. The other five kinds are
+tested but have never run in production. This is a fact about code maturity, not about
+which database is live — it stays true regardless of the fresh, empty `factions_live`
+above.
 
 Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
 package, `pnpm -r test` green for the first time, and the shared `factions` database no

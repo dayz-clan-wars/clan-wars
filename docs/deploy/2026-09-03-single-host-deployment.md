@@ -64,9 +64,10 @@ No pre-existing `default_server` was found anywhere in the config (checked with
 - ⚠️ The guarded migration runner's guards were **proven before use**: it refused
   `.../factions` with "refusing: not factions_live" and refused an unset
   `DATABASE_URL`. Only after both refusals were confirmed was it pointed at production.
-- Migrations before this deploy: 0 applied (fresh database). After: **20 of 20**,
-  newest `created_at` `1788463371578`, 21 tables. The one-off runner was deleted after
-  use; tree clean.
+- Before this deploy: `drizzle.__drizzle_migrations` did not exist — the migration
+  journal itself had never been created, which is what a fresh database looks like,
+  not a count of zero applied migrations. After: **20 of 20**, newest `created_at`
+  `1788463371578`, 21 tables. The one-off runner was deleted after use; tree clean.
 
 ## Task 6 — server registration
 
