@@ -2,6 +2,8 @@ import type { Database } from "@factions/db";
 import { ceremonies, ceremonyParticipants, claimDrafts, factions, factionMembers } from "@factions/db";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
+import { appendFactionEventTx } from "./feed-store.js";
+import { actorGamertagTx } from "./feed-actor.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -150,6 +152,18 @@ export class PgFactionStore implements FactionStore {
           role: m.discordId === a.leaderDiscordId ? "leader" : "member",
           joinedAt: a.at,
         })));
+
+        // ⚠️ Inside this transaction, and last of the roster writes. Lock
+        // order: factions → faction_members → faction_invites →
+        // faction_events. A separate write would leave a founding that is
+        // never announced if this process died between the two.
+        await appendFactionEventTx(tx, {
+          serverId: a.serverId, factionId: f!.id, kind: "founded", occurredAt: a.at,
+          payload: {
+            name: a.name, tag: a.tag, texture: a.texture,
+            actor: await actorGamertagTx(tx, a.leaderDiscordId),
+          },
+        });
 
         await tx.delete(claimDrafts).where(eq(claimDrafts.ceremonyId, a.ceremonyId));
         return "ok" as const;

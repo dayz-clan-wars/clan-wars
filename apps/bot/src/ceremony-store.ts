@@ -3,6 +3,7 @@ import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionInvites
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
 import { HOLDING_STATUSES, parsePoleKey } from "@factions/domain";
 import { and, asc, eq, inArray, isNull, lte, max } from "drizzle-orm";
+import { appendFactionEventTx } from "./feed-store.js";
 
 export type PoleRef = { serverId: number; poleKey: string };
 export type RecordedRaise = PoleRef & {
@@ -28,7 +29,7 @@ export interface CeremonyStore {
   openCeremonyServers(): Promise<number[]>;
   reservedFactionAt(p: PoleRef, texture: string): Promise<{ id: number } | null>;
   isRosterMember(factionId: number, dayzId: string): Promise<boolean>;
-  activate(factionId: number, at: Date): Promise<boolean>;
+  activate(factionId: number, at: Date, actor?: string): Promise<boolean>;
   lapseReservations(serverId: number, cutoff: Date): Promise<number>;
   reservedServers(): Promise<number[]>;
 }
@@ -177,13 +178,32 @@ export class PgCeremonyStore implements CeremonyStore {
     return row !== undefined;
   }
 
-  /** Guarded on `reserved`: a concurrent lapse must not be overwritten. */
-  async activate(factionId: number, at: Date): Promise<boolean> {
-    const done = await this.db.update(factions)
-      .set({ status: "active", activatedAt: at, reservedUntil: null })
-      .where(and(eq(factions.id, factionId), eq(factions.status, "reserved")))
-      .returning({ id: factions.id });
-    return done.length > 0;
+  /**
+   * Guarded on `reserved`: a concurrent lapse must not be overwritten.
+   *
+   * ⚠️ Now a transaction, because the feed row must land with the status
+   * change or not at all. The `.returning()` carries the identity fields so
+   * the payload is frozen here rather than re-read at post time — by the
+   * time a late post ran, a rename could already have changed the name.
+   */
+  async activate(factionId: number, at: Date, actor?: string): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.update(factions)
+        .set({ status: "active", activatedAt: at, reservedUntil: null })
+        .where(and(eq(factions.id, factionId), eq(factions.status, "reserved")))
+        .returning({
+          id: factions.id, serverId: factions.serverId,
+          name: factions.name, tag: factions.tag, texture: factions.texture,
+        });
+
+      if (!row) return false;
+
+      await appendFactionEventTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "activated", occurredAt: at,
+        payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
+      });
+      return true;
+    });
   }
 
   /**
