@@ -67,12 +67,8 @@ one chosen before the thing that would justify it exists.
 
 ## 3. The page
 
-One route, `/`, statically rendered: the project name and a short statement of what Clan
-Wars is. No email capture, no countdown, no faction data.
-
-A link to the Discord is intentionally deferred — we do not have an invite URL yet, and a
-fabricated or placeholder one on a public page is worse than no link. Add it once a real
-invite exists; `apps/web/app/globals.css` already styles `a` for it.
+One route, `/`, statically rendered: the project name, a short statement of what Clan Wars
+is, and a link to the Discord. No email capture, no countdown, no faction data.
 
 It reads nothing. That is what makes it deployable today while the database sits on
 another machine, and it is why this design can ship without answering any of the direction

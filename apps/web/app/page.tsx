@@ -10,6 +10,9 @@ export default function Home() {
       <p>
         Everything is earned in game and proved from the server&rsquo;s own logs.
       </p>
+      <p>
+        <a href="https://discord.gg/TJu4XP25nr">Join the Discord</a> to follow along.
+      </p>
     </main>
   );
 }

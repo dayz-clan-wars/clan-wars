@@ -29,6 +29,6 @@ h1 {
 
 .tag { color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; }
 p { color: var(--muted); }
-/* No Discord link on the page yet — the invite URL hasn't been provided, and a
-   fabricated one is worse than none. Rule kept ready for when it lands. */
+/* Brighter than the muted `p` text it sits inside, so the invite reads as a
+   link rather than blending into the surrounding copy. */
 a { color: var(--fg); }
