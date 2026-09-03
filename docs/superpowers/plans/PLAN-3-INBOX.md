@@ -776,7 +776,19 @@ note above.
 
 ---
 
-## 34. A faction should be able to hold multiple bases
+## 34. ~~A faction should be able to hold multiple bases~~ — SUPERSEDED 2026-09-03
+
+Answered from the other end. `docs/superpowers/specs/2026-09-03-base-declaration-design.md`
+keeps one declared base per player and makes every *undeclared* base public, which solves
+the hoarding this item was really about without adding a table, a per-pole dormancy model,
+or a second supply kit. Reopen only if one base per faction proves too tight in play.
+
+The collision list below stands and is worth keeping: it is the same list a multiple-bases
+design would face, and §8 of the declaration spec takes the first step of it (moving the
+pole binding off `factions`) for its own reasons.
+
+### Original writeup
+
 
 Requested 2026-09-02. Today a faction has exactly one pole, because the pole IS a set of
 columns on the faction row — `pole_key`, `x`, `y`, `z`, all NOT NULL. "One faction, one
