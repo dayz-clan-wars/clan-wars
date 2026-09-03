@@ -1,5 +1,10 @@
 [Unit]
-# ⚠️ This unit exists to make "exactly one bot instance" enforceable.
+# ⚠️ This unit exists to make "exactly one bot instance" CHECKABLE and make
+# stopping it SAFE — not to make a second instance impossible. Someone can
+# still hand-start a second bot outside this unit (e.g. the old `pnpm
+# --filter @factions/bot start` procedure), and that second instance ships
+# duplicate DMs exactly as before. Not doing that remains a human discipline;
+# systemd only gives you an authoritative count and a stop that can't miss.
 # notifyCompleted DMs before it marks, which is correct for one process and
 # at-least-once across two; a duplicate DM reached a real player on
 # 2026-09-01 because a `pkill -f` pattern failed to match.
@@ -20,6 +25,15 @@ WorkingDirectory=/opt/clan-wars
 # it only on the start command turns the faction feed off at the next restart
 # with nothing saying so: faction_events rows keep accumulating unposted and
 # the only signal is one warn line at startup.
+# ⚠️ `.env` has three parsers now: this EnvironmentFile directive, `set -a &&
+# . ./.env` (bash), and docker compose's own env file reader. Today's file is
+# safe for all three, but that's not guaranteed by anything. systemd's parser
+# is the strictest of the three — it does not run a shell, so no command
+# substitution and no variable expansion happen, and quoting is handled
+# differently from bash. A value that works fine when sourced by bash can be
+# read differently (or truncated, or left with literal quote characters) by
+# systemd, and the divergence is silent — there's no error, just a wrong value
+# in the running bot.
 EnvironmentFile=/opt/clan-wars/.env
 ExecStart=/home/acab/.local/bin/pnpm --filter @factions/bot start
 # ⚠️ on-failure, not always. A bot that exits deliberately should stay exited.

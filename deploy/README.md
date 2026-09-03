@@ -4,9 +4,9 @@ Host configuration for `regime`, the machine running this stack. These files
 are the source of truth; `/etc/nginx/sites-enabled/` and `/etc/systemd/system/`
 hold symlinks to them.
 
-⚠️ This nginx serves four other production sites (dayzonelife.com,
-factory.eli5hq.com, manicdotes.com, regime.fi). Run `sudo nginx -t` before
-every reload, and `reload`, never `restart`.
+⚠️ This nginx serves three other production sites (dayzonelife.com,
+manicdotes.com, regime.fi). Run `sudo nginx -t` before every reload, and
+`reload`, never `restart`.
 
 ## Install
 

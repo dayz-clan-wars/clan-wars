@@ -12,8 +12,10 @@ const ROOTS = [join(import.meta.dirname, "..", "app"), join(import.meta.dirname,
  *
  * This test used to be backed up by geography: the web app ran on a VPS with
  * no route to the database. It no longer is — `factions_live` is on the same
- * host now, one loopback port away. The container boundary and this test are
- * the whole of what stands between a Next.js server and production data.
+ * host now, one loopback port away. This test is the ONLY thing guarding
+ * that now — the container is not a second guard: `web` and `postgres` share
+ * the compose default network, so a hardcoded DSN in the web app would
+ * connect fine regardless of the container boundary.
  *
  * It is not a substitute for the design decision; it is what makes the
  * decision expensive to reverse by accident.

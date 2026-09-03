@@ -53,10 +53,21 @@ turbo gate stays the gate, because it runs `typecheck` too.
   with `no such file or directory: .env`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
-  real player this way on 2026-09-01. The bot runs as a **systemd unit**, which is what
-  makes this enforceable: `systemctl status clan-wars-bot` is the authoritative instance
-  check — it shows the real count in the unit's cgroup — and `sudo systemctl stop
-  clan-wars-bot` cannot reach anything outside it.
+  real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
+  running count **checkable** and stopping it **safe**: `systemctl status clan-wars-bot`
+  shows the real count in the unit's cgroup, and `sudo systemctl stop clan-wars-bot`
+  cannot reach anything outside it. It does not make a second instance impossible —
+  someone can still hand-start a second bot outside the unit, and that second instance
+  ships duplicate DMs exactly as before. Not doing that remains a human discipline, not
+  something systemd enforces.
+
+  ⚠️ **`systemctl status clan-wars-bot` reporting `active (running)` answers exactly one
+  question: how many bot processes are running. It does not mean the bot is working.**
+  The bot holds no eager database connection — postgres.js connects lazily — and every
+  tick is individually try/caught, so a bot pointed at a dead database keeps running and
+  keeps reporting `active (running)` with the entire data path down. To know the data
+  path is actually alive, check that the `events` table is still growing and that
+  `docker compose ps` shows `postgres` healthy.
 
   ⚠️ **Never run `pkill -f "src/main.ts"` on this host, and never trust a bare `pgrep`
   pattern as a survivor check — pattern matching is unreliable in both directions here.**
@@ -202,9 +213,10 @@ there should be a test that fails when they disagree. See
   on a VPS with no route to the database, so an accidental import would have failed
   loudly, in review or at worst in production. It no longer is: `factions_live` is on
   this same host now, one loopback port away, so that same accidental import would
-  *succeed*, silently, against production data. The container boundary and
-  `smoke.test.ts` (see its docblock) are the whole of what stands between a Next.js
-  server and production data now.
+  *succeed*, silently, against production data. `smoke.test.ts` (see its docblock) is
+  the **only** thing guarding this now — the container is not a second guard, because
+  `web` and `postgres` share the compose default network, so a hardcoded DSN in the web
+  app would connect fine, container boundary or not.
 - **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
   `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
   thumbnail in a Discord channel, not as an error.

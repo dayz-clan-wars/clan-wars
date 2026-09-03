@@ -8,7 +8,20 @@ services:
       POSTGRES_USER: factions
       POSTGRES_PASSWORD: factions
       POSTGRES_DB: factions
-    ports: ["5434:5432"]
+    # ⚠️ Loopback only — same reasoning as the `web` service below: Docker
+    # writes its own ACCEPT rules into the DOCKER iptables chain when a port
+    # is published, and that bypasses ufw entirely. A bare "5434:5432" here
+    # would listen on 0.0.0.0 with the credentials factions/factions on a
+    # public host regardless of what ufw allows. The test gate is unaffected —
+    # TEST_DATABASE_URL already points at localhost:5434.
+    ports: ["127.0.0.1:5434:5432"]
+    # ⚠️ Without this the whole stack fails to survive a reboot, silently from
+    # the bot's point of view: postgres.js connects lazily and every bot tick
+    # is individually try/caught, so the bot process itself never exits and
+    # keeps reporting `active (running)` under systemd with the entire data
+    # path dead. `web` and `ingest-worker` already carry this; postgres is the
+    # one that actually holds the data.
+    restart: unless-stopped
     volumes: ["factions-pg:/var/lib/postgresql/data"]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U factions"]
