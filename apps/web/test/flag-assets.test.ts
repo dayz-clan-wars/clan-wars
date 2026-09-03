@@ -32,10 +32,15 @@ describe("flag images match CLAIMABLE_FLAGS", () => {
   });
 
   it("⚠️ no image is anywhere near the wiki's original weight", () => {
-    // Flag_Wolf.png is 877x1027 and 1.4MB at source, against a Discord embed
-    // thumbnail rendered near 80x80. This asserts the normalisation in
-    // scripts/fetch-flags.ts actually ran — committing the raw downloads
-    // would add ~35MB to the repo and nothing else would complain.
+    // Flag_Wolf's stored original is 877x1027 and ~1.4MB (per the MediaWiki
+    // API's own `size` field) — but the CDN content-negotiates, so a plain
+    // download can arrive as a smaller transcoded WebP instead. Neither form
+    // is a consistent, appropriately-sized asset for a Discord embed
+    // thumbnail rendered near 80x80, which is why normalisation happens
+    // regardless of which one the wiki hands back — sharp decodes whichever
+    // it receives. This asserts that normalisation in scripts/fetch-flags.ts
+    // actually ran — committing the raw downloads would add tens of MB to
+    // the repo and nothing else would complain.
     for (const f of files) {
       const bytes = statSync(join(FLAGS_DIR, f)).size;
       expect(bytes, `${f} is ${bytes} bytes`).toBeLessThan(200_000);

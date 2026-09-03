@@ -29,6 +29,31 @@ const MAX_EDGE = 256;
 /** The wiki serves these over a CDN that rejects requests without a UA. */
 const HEADERS = { "User-Agent": "clan-wars-flag-fetch/1.0 (private DayZ community server)" };
 
+/**
+ * ⚠️ Empirically, `static.wikia.nocookie.net` drops the connection out from
+ * under Node's fetch after roughly two dozen sequential downloads from the
+ * same process — `TypeError: terminated` / `SocketError: other side closed`,
+ * reproducible across multiple full runs, always partway through the 33.
+ * The same URL fetched in a fresh process (or via curl) succeeds immediately,
+ * so this is the CDN's keep-alive handling, not a bad file or a renamed one.
+ * Without a retry here the script fails partway with no obvious cause, and
+ * whoever hits it next has no way to tell that from a real 404. A few
+ * retries with a short backoff is cheap insurance against a CDN quirk that
+ * has nothing to do with correctness.
+ */
+async function withRetry<T>(fn: () => Promise<T>, attempts = 5, delayMs = 500): Promise<T> {
+  let lastErr: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastErr = err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+  throw lastErr;
+}
+
 async function imageUrl(wikiFilename: string): Promise<string> {
   const url = `${API}?action=query&titles=${encodeURIComponent(`File:${wikiFilename}`)}` +
     `&prop=imageinfo&iiprop=url&format=json`;
@@ -52,11 +77,12 @@ async function main(): Promise<void> {
 
   for (const texture of CLAIMABLE_FLAGS) {
     const wikiName = wikiFilenameFor(texture);
-    const src = await imageUrl(wikiName);
-    const res = await fetch(src, { headers: HEADERS });
-    if (!res.ok) throw new Error(`download ${wikiName}: HTTP ${res.status}`);
-
-    const raw = Buffer.from(await res.arrayBuffer());
+    const src = await withRetry(() => imageUrl(wikiName));
+    const raw = await withRetry(async () => {
+      const res = await fetch(src, { headers: HEADERS });
+      if (!res.ok) throw new Error(`download ${wikiName}: HTTP ${res.status}`);
+      return Buffer.from(await res.arrayBuffer());
+    });
     const out = await sharp(raw)
       .resize({ width: MAX_EDGE, height: MAX_EDGE, fit: "inside", withoutEnlargement: true })
       .png({ compressionLevel: 9 })
