@@ -30,6 +30,8 @@ import {
 import { PgRosterStore, type Membership } from "./roster-store.js";
 import { handleFactionRebind, handleRebindConfirm, type RebindDeps } from "./rebind-commands.js";
 import { PgRebindStore } from "./rebind-store.js";
+import { PgFeedStore, countUnposted } from "./feed-store.js";
+import { feedTick, type FeedPoster } from "./feed-tick.js";
 
 // Registration (buildCommands) and reading (the interactionCreate handler)
 // live hundreds of lines apart in this file. A string literal duplicated at
@@ -814,6 +816,21 @@ export function guardedRunner(job: () => Promise<void>): {
   };
 }
 
+/**
+ * ⚠️ Throws on every unreachable path rather than returning quietly. The feed
+ * tick marks a row posted only when this resolves, so a swallowed failure
+ * would mark it posted and lose the announcement permanently.
+ */
+export function createFeedPoster(client: Client, channelId: string): FeedPoster {
+  return async (embed) => {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isSendable()) {
+      throw new Error(`feed channel ${channelId} is missing or not sendable by this bot`);
+    }
+    await channel.send({ embeds: [embed] });
+  };
+}
+
 export async function start(cfg: BotConfig): Promise<void> {
   const db = createClient(cfg.databaseUrl);
   const store = new PgVerificationStore(db);
@@ -834,6 +851,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   };
   const ceremonyStore = new PgCeremonyStore(db);
   const dormancyStore = new PgDormancyStore(db);
+  const feedStore = new PgFeedStore(db);
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -854,6 +872,8 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   // Fetching one member and patching a nickname are plain REST calls — this
   // needs no gateway intent beyond the `Guilds` one already requested above.
+  const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
+
   const renameOnLink = createNicknameApplier(client);
   const deps: CommandDeps = {
     store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
@@ -1081,6 +1101,8 @@ export async function start(cfg: BotConfig): Promise<void> {
   // One log per bot instance, for the life of that instance.
   const notifyFailures = createNotifyFailureLog();
   const ceremonyFailures = createNotifyFailureLog();
+  // One log per bot instance, for the life of that instance.
+  const feedFailures = new Set<number>();
 
   let timer: NodeJS.Timeout | undefined;
 
@@ -1162,10 +1184,55 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       console.error("dormancy tick failed", err);
     }
+
+    // ⚠️ Its own try/catch, like every other step. Runs after dormancy so a
+    // transition and its announcement land in the same tick rather than the
+    // next one.
+    if (feedPoster) {
+      try {
+        const f = await feedTick(feedStore, feedPoster, {
+          now: new Date(),
+          onError: (id, err) => {
+            // ⚠️ Once per row per bot instance. A deleted channel or a
+            // revoked permission is permanent, and an identical error every
+            // 10 seconds forever is how a real problem becomes invisible.
+            if (feedFailures.has(id)) return;
+            feedFailures.add(id);
+            console.error(`feed post failed for faction_events row ${id}`, err);
+          },
+        });
+        if (f.posted > 0) console.log(`feed posted ${f.posted}`);
+        if (f.blockedAt !== null) {
+          // ⚠️ Error level, and its own line. A blocked queue means NOTHING
+          // after this row will post, ever, until it is resolved — a much
+          // louder condition than one failed message.
+          console.error(
+            `feed queue blocked at faction_events row ${f.blockedAt}; nothing behind it will post ` +
+            `until this row succeeds. Check the bot's View Channel / Send Messages / Embed Links ` +
+            `permission on ${cfg.feedChannelId}.`,
+          );
+        }
+      } catch (err) {
+        console.error("feed tick failed", err);
+      }
+    }
   });
 
   client.once("clientReady", () => {
     console.log(`bot ready as ${client.user?.tag}`);
+
+    // ⚠️ A feature that is off because of a missing env var looks exactly
+    // like one that is broken. Without this, "why is the feed not posting"
+    // is only answerable from a psql session.
+    if (!cfg.feedChannelId) {
+      void countUnposted(db)
+        .then((n) => console.warn(
+          `faction feed is OFF (BOT_FEED_CHANNEL_ID unset); ${n} event(s) queued. ` +
+          "They will post in order when a channel is configured.",
+        ))
+        .catch((err: unknown) => console.error("could not count the feed queue", err));
+    }
+
     timer = setInterval(() => runner.fire(), cfg.tickIntervalMs);
   });
 
