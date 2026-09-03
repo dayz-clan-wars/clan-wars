@@ -245,3 +245,7 @@ faction's supplies. That is a decision, not a side effect.
    33 flag textures has an image anywhere in the repo, so every embed ships without one.
    A blocked feed queue also has no alerting: `feed queue blocked at …` is an error-level
    log line and nothing else, so a human has to notice it. See inbox item 35.
+5. A lapsed reservation releases a flag with no feed event — `lapseReservations` returns
+   the flag to the pool 24 hours after claim if unactivated, but the prior `founded` event
+   is never retracted or closed. So the feed reads as if the faction still holds a flag
+   that is back on the market. See inbox item 36.
