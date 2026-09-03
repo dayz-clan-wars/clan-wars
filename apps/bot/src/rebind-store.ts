@@ -1,8 +1,14 @@
 import type { Database } from "@factions/db";
 import { factions, factionMembers, events } from "@factions/db";
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { HOLDING_STATUSES } from "@factions/domain";
 import { leaderIs } from "./roster-store.js";
 import type { QualifyingRaise } from "./rebind.js";
+
+// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
+// tuple) so every faction/domain consumer gets full literal-type checking,
+// but drizzle's inArray() requires a plain mutable array.
+const HOLDING: string[] = [...HOLDING_STATUSES];
 
 /**
  * The statuses a faction may rebind FROM.
@@ -105,7 +111,7 @@ export class PgRebindStore implements RebindStore {
       sql`not exists (select 1 from ${factions} f
                       where f.server_id = ${faction.serverId}
                         and f.pole_key = ${events.payload}->>'poleKey'
-                        and f.status in ('reserved','active','dormant'))`,
+                        and f.status in ${HOLDING})`,
     ));
 
     // ⚠️ jsonb text extraction yields strings. Without Number() the
