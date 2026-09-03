@@ -4,6 +4,7 @@ import { resolveServerContext } from "./roster-context.js";
 export type RosterPrompt =
   | { kind: "confirm-transfer"; factionId: number; targetDiscordId: string }
   | { kind: "confirm-disband"; factionId: number }
+  | { kind: "confirm-rebind"; factionId: number; poleKey: string }
   /**
    * §2.5: `/faction invites` carries "the same accept and decline buttons"
    * as the DM. `invites` is capped at `MAX_LISTED_INVITES` so the reply

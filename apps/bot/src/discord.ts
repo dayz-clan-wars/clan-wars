@@ -469,10 +469,15 @@ export function planRosterButtons(prompt: RosterPrompt | undefined): RosterButto
   if (prompt.kind === "confirm-disband") {
     return [[{ customId: disbandCustomId(prompt.factionId), label: "Confirm disband", style: "danger" }]];
   }
-  return prompt.invites.map((inv) => [
-    { customId: inviteAcceptCustomId(inv.id), label: `Accept ${inv.tag}`, style: "success" as const },
-    { customId: inviteDeclineCustomId(inv.id), label: `Decline ${inv.tag}`, style: "danger" as const },
-  ]);
+  if (prompt.kind === "list-invites") {
+    return prompt.invites.map((inv) => [
+      { customId: inviteAcceptCustomId(inv.id), label: `Accept ${inv.tag}`, style: "success" as const },
+      { customId: inviteDeclineCustomId(inv.id), label: `Decline ${inv.tag}`, style: "danger" as const },
+    ]);
+  }
+  // Placeholder for prompt kinds whose button rendering lands in a later
+  // change (e.g. "confirm-rebind") — an empty row set here, not a bug.
+  return [];
 }
 
 /** The subset of a discord.js `Client` this needs to attempt an invite DM. Structural so tests need no client. */
