@@ -156,7 +156,7 @@ there should be a test that fails when they disagree. See
 
 ---
 
-## Current state — 2026-09-02
+## Current state — 2026-09-03
 
 Faction dormancy is **deployed**. A faction that does not raise its own flag at its own
 pole for 7 days goes dormant and loses its supply kit; 14 further days disband it. Spec
@@ -168,6 +168,18 @@ ingest worker rebuilt and recreated. The acceptance check was run before and aft
 one active faction (`COK`), last flag raise ~21h ago, `dormant_since` still null, so the
 first tick transitioned nothing, which is what it had to do. Runbook:
 `docs/deploy/2026-09-02-dormancy.md`.
+
+**Faction rebind is deployed** (2026-09-03). A faction can move its base: a roster member
+raises the faction's OWN flag at a pole nobody holds, the leader confirms, and the binding
+moves in one guarded write. 7-day cooldown. Migration `0018` (nullable `factions.rebound_at`)
+applied to `factions_live` — 19 of 19 journal entries — and the bot restarted as a single
+instance. The dormancy pause fix (inbox 26) went live in the same restart. Before and after
+acceptance were identical: one active faction (`COK`), age ~1d19h, nothing transitioned.
+Runbook: `docs/deploy/2026-09-03-faction-rebind.md`.
+
+⚠️ `/faction rebind` tells a leader their old base "stays private for 3 days". That is
+vacuously true today — nothing publishes base coordinates — and becomes a real promise the
+day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
 Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
 package, `pnpm -r test` green for the first time, and the shared `factions` database no
