@@ -92,4 +92,25 @@ describe("feedTick", () => {
     const r = await feedTick(store, async () => {}, { now, batchSize: 2 });
     expect(r.posted).toBe(2);
   });
+
+  it("⚠️ stops if markPosted throws, preventing unbounded re-posts", async () => {
+    // If post succeeds but marking fails, the row stays queued; unguarded,
+    // the same embed re-posts every tick forever. Treat mark failures the same
+    // as post failures: report and block.
+    const store = fakeStore([row(1), row(2)]);
+    const post = vi.fn(async () => {});
+    let canMark = false;
+    store.markPosted = async (id) => {
+      if (!canMark) throw new Error("db connection reset");
+    };
+
+    const onError = vi.fn();
+    const r = await feedTick(store, post, { now, onError });
+
+    expect(r.posted).toBe(0);
+    expect(r.blockedAt).toBe(1);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(onError.mock.calls[0]![0]).toBe(1);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
 });

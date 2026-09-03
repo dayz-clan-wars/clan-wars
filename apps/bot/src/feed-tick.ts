@@ -53,12 +53,16 @@ export async function feedTick(
   for (const row of await store.readUnposted(opts.batchSize ?? FEED_BATCH_SIZE)) {
     try {
       await post(feedEmbed(row, opts.flagImage));
+      // ⚠️ Guard markPosted in the same block as post: if it fails, the row's
+      // postedAt stays null and re-posts on the next tick. An unguarded failure
+      // floods the channel with the same embed forever, which is worse than
+      // the blocked queue the design accepts — here, we report loudly and stop.
+      await store.markPosted(row.id, opts.now);
     } catch (err) {
       opts.onError?.(row.id, err);
       out.blockedAt = row.id;
       return out;
     }
-    await store.markPosted(row.id, opts.now);
     out.posted++;
   }
 
