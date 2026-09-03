@@ -29,4 +29,6 @@ h1 {
 
 .tag { color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; }
 p { color: var(--muted); }
+/* No Discord link on the page yet — the invite URL hasn't been provided, and a
+   fabricated one is worse than none. Rule kept ready for when it lands. */
 a { color: var(--fg); }

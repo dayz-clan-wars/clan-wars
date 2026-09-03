@@ -1,7 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { readdirSync, statSync } from "node:fs";
 import { join } from "node:path";
+import sharp from "sharp";
 import { CLAIMABLE_FLAGS } from "@factions/domain";
+
+// ⚠️ Must match MAX_EDGE in apps/web/scripts/fetch-flags.ts — two statements
+// of one fact, held together only by this test.
+const MAX_EDGE = 256;
 
 const FLAGS_DIR = join(import.meta.dirname, "..", "public", "flags");
 
@@ -45,6 +50,17 @@ describe("flag images match CLAIMABLE_FLAGS", () => {
       const bytes = statSync(join(FLAGS_DIR, f)).size;
       expect(bytes, `${f} is ${bytes} bytes`).toBeLessThan(200_000);
       expect(bytes, `${f} is suspiciously small`).toBeGreaterThan(0);
+    }
+  });
+
+  it("⚠️ every image was actually resized to MAX_EDGE, not just under the byte ceiling", async () => {
+    // The byte bound above cannot catch a skipped resize when the wiki's raw
+    // source is already small — Flag_Sakhal's raw source is 18,152 bytes,
+    // already under 200,000, so a pipeline that forgot to resize it would
+    // still pass that assertion. Checking pixel dimensions closes that gap.
+    for (const f of files) {
+      const { width, height } = await sharp(join(FLAGS_DIR, f)).metadata();
+      expect(Math.max(width ?? 0, height ?? 0), `${f} long edge`).toBe(MAX_EDGE);
     }
   });
 });

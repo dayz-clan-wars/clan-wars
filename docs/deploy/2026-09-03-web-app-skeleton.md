@@ -58,6 +58,10 @@ trusting this image there.
 docker compose up -d web caddy
 ```
 
+Compose interpolates the whole file regardless of which services you named, so this
+prints a `NITRADO_TOKEN is not set` warning. That's expected and harmless here — it comes
+from the `ingest-worker` service definition, which this command is not starting.
+
 ⚠️ **Never a bare `docker compose up -d` on the VPS.** `docker-compose.yml` also
 describes `postgres` and `ingest-worker` — a bare `up -d` there stands up a second,
 **empty** Postgres that looks like a working database and holds none of the live data.

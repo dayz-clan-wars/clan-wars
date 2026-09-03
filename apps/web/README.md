@@ -6,8 +6,12 @@ images the bot's Discord embeds use as thumbnails — nothing else.
 ## What this is today
 
 A Next.js 16 (App Router) app with a single statically rendered route, `/`:
-the project name, a short statement of what Clan Wars is, and a link to the
-Discord. No email capture, no countdown, no faction data.
+the project name and a short statement of what Clan Wars is. No email
+capture, no countdown, no faction data.
+
+No Discord link yet — deliberately deferred, because we don't have an invite
+URL and a fabricated or placeholder one on a public page is worse than no
+link. `apps/web/app/globals.css` already styles `a` for when it lands.
 
 **It reads no database.** `factions_live` is on a different machine from the
 VPS this app deploys to, so a data-driven page is not merely unspecced — it

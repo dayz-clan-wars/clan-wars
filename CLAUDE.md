@@ -43,10 +43,18 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 ## Running things
 
-- **Postgres + ingest worker:** `docker compose up -d` (reads `.env`). The worker
-  runs from a built image, so a code change needs `docker compose build ingest-worker`.
-- **Bot:** not containerised. `set -a && . .env && set +a && pnpm --filter @factions/bot start`.
-  It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached.
+- **Postgres + ingest worker:** `docker compose up -d postgres ingest-worker` (reads
+  `.env`). The worker runs from a built image, so a code change needs
+  `docker compose build ingest-worker`. ⚠️ Name the services. Since this branch added
+  `web` and `caddy` to the same compose file, a bare `up -d` on this machine also starts
+  Caddy, which binds `0.0.0.0:80`/`:443` and immediately begins ACME for
+  `dayzclanwars.com` — whose DNS points at the VPS, not here. The HTTP-01 challenge fails
+  and retries against Let's Encrypt's failed-validation rate limit, which can exhaust it
+  before the real deploy ever happens.
+- **Bot:** not containerised. `set -a && . ./.env && set +a && pnpm --filter @factions/bot start`.
+  It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached. Use
+  `. ./.env`, not `. .env` — in zsh, `.` searches `$PATH` for a slashless name and fails
+  with `no such file or directory: .env`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. Before starting one, confirm zero survivors:
