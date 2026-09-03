@@ -164,5 +164,36 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "file:///etc/passwd" }))
         .toThrow(/FLAG_IMAGE_BASE_URL/u);
     });
+
+    it("accepts a bare origin with a trailing slash", () => {
+      // The resolver's own trailing-slash strip exists for exactly this
+      // shape — tightening the validator must not break it.
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/" }).flagImageBaseUrl)
+        .toBe("https://dayzclanwars.com/");
+    });
+
+    it("⚠️ rejects a path, the reasonable-but-wrong value an operator would paste", () => {
+      // The resolver appends /flags/<texture>.png itself. A base that already
+      // includes /flags/ — the directory the operator was just looking at —
+      // would silently resolve to nothing, with no error here or at post
+      // time.
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/flags/" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a query string", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/foo?x=1" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a fragment", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com#frag" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("⚠️ rejects embedded credentials, which Discord's embed proxy would fetch", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://user:pass@dayzclanwars.com" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
   });
 });

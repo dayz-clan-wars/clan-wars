@@ -92,6 +92,17 @@ function optionalSnowflake(env: NodeJS.ProcessEnv, key: string): string | undefi
  * `optionalSnowflake` directly above. An unset base is silent by design, so a
  * malformed one would be indistinguishable from an unconfigured one until
  * somebody noticed the embeds had lost their thumbnails.
+ *
+ * ⚠️ Must be a bare origin — no path, query, fragment or credentials. The
+ * resolver appends `/flags/<texture>.png` itself, so anything already in the
+ * path (an operator pasting the flags directory URL they were just looking
+ * at, e.g. `https://dayzclanwars.com/flags/`) produces a URL that resolves to
+ * nothing, with no error here and none at post time either — Discord just
+ * renders the embed with no thumbnail, the exact silent failure this
+ * validator exists to prevent. Credentials are rejected for a different
+ * reason: `https://user:pass@host` would be preserved verbatim into a URL
+ * that Discord's embed proxy then fetches, leaking them somewhere we do not
+ * control.
  */
 function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefined {
   const raw = env[key];
@@ -104,6 +115,30 @@ function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefine
   }
   if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
     throw new Error(`${key} must be http or https, got ${JSON.stringify(parsed.protocol)}.`);
+  }
+  if (parsed.pathname !== "/" && parsed.pathname !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no path — got a path of ${JSON.stringify(parsed.pathname)}. ` +
+      `The bot appends /flags/<texture>.png itself; use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.search !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no query string — got ${JSON.stringify(parsed.search)}. ` +
+      `Use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.hash !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no fragment — got ${JSON.stringify(parsed.hash)}. ` +
+      `Use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no embedded credentials. ` +
+      `Use ${JSON.stringify(parsed.origin)} and put any auth elsewhere.`,
+    );
   }
   return raw;
 }
