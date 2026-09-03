@@ -74,7 +74,10 @@ export async function ceremonyTick(
       if (p.texture !== NEUTRAL_FLAG) {
         const reserved = await store.reservedFactionAt(pole, p.texture);
         if (reserved && await store.isRosterMember(reserved.id, p.dayzId)) {
-          if (await store.activate(reserved.id, ev.occurredAt)) out.activated++;
+          // The raiser is the protagonist, and this is the only place that
+          // knows them — the dormancy clock's revive path sees raises only
+          // through a max(occurred_at) subquery and never learns a name.
+          if (await store.activate(reserved.id, ev.occurredAt, p.gamertag)) out.activated++;
         }
         continue;
       }

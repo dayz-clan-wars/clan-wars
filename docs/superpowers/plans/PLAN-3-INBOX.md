@@ -874,3 +874,53 @@ what stops a faction owning eight bases and being raidable at none of them.
 - `/faction rebind` (roster design) assumed one pole.
 - The supply file's `customString` carries the faction tag for provenance; with several
   bases it may want to say which.
+
+## 35. Two gaps the faction feed knowingly ships with
+
+`feed-embed.ts` has a resolver hook waiting for flag artwork — every embed posts without
+a thumbnail today, because no image exists anywhere in the repo for any of the 33 flag
+textures. Adding them is a design question (source the art, host it, wire the hook), not
+a code change to the feed itself.
+
+Separately, the feed tick posts in `id` order and stops at the first failure (deliberate —
+see CLAUDE.md's feed invariants), but nothing watches for that happening. `feed queue
+blocked at …` is an error-level log line and nothing else: a human has to be reading
+`bot.log`, or grepping for it, to notice the feed has stalled. Until something pages on
+it, a blocked queue is silent to everyone except whoever next thinks to check.
+
+## 36. A lapsed reservation releases a flag with no event
+
+`apps/bot/src/ceremony-store.ts`'s `lapseReservations` sets `status: "lapsed"` when a
+claim's 24-hour TTL expires without activation. That releases the flag, tag, and pole
+back to the 33-slot pool, which is correct. But a `founded` event has already been posted
+to the feed, publicly announcing that the flag is reserved. Nothing is ever posted to say
+the reservation expired.
+
+So the feed permanently implies the faction holds a flag that is in fact available again —
+directly contradicting the feed's stated purpose (spec §1): making the pool's scarcity
+observable. This is the one path where a flag becomes claimable and nobody is told.
+
+It is a **spec gap, not an implementation deviation.** `docs/superpowers/specs/2026-09-03-faction-feed-design.md`
+§2 lists seven kinds — `founded`, `activated`, `renamed`, `rebound`, `dormant`, `revived`,
+`disbanded` — and omits `lapsed`. The code is faithful to the design and the design is
+what is incomplete.
+
+**Deliberately deferred from the feed branch.** Adding a `lapsed` kind means changing the
+SQL check constraint in migration `0019`, which means either editing the already-generated
+migration or adding a new one (`0020`) — scope growth at the merge gate. For a path that
+cannot fire on `factions_live` today: the one faction, `COK`, is active with no
+outstanding reservation, so lapsing factions do not exist yet.
+
+⚠️ It becomes live the first time a `/faction claim` is left unactivated past its 24-hour
+TTL, without warning. The reservation vanishes silently and the pool reclaims its flag,
+while the feed reads as if the faction still holds it. See inbox item 35 for the feed's
+other known gap.
+
+### Original reasoning, rejected
+
+The most literal fix — emit a `lapsed` event on every timeout — is wrong. A malicious
+claimant could reserve many flags with fake ceremonies and spam the feed as they expire,
+one every 24 hours. The event belongs to the attempt history, not the feed: log it to
+`events`, tag it with the attempt's own provenance, and keep it out of the public channel.
+That means a schema change outside `faction_events` and a different reconciliation, which
+is also scope at merge gate.

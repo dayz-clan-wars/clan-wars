@@ -83,12 +83,14 @@ export async function dormancyTick(
           }
           break;
 
-        case "dormant":
-          if (await store.goDormant(clock.id, now)) {
+        case "dormant": {
+          const disbandAt = new Date(now.getTime() + windows.disbandAfterDormantMs);
+          if (await store.goDormant(clock.id, now, disbandAt)) {
             out.dormant++;
             out.notices.push(notice("dormant", clock, now, windows));
           }
           break;
+        }
 
         case "disband":
           // No notice: the faction is gone and its roster was cleared by the

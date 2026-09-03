@@ -4,6 +4,8 @@ import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { leaderIs } from "./roster-store.js";
 import type { QualifyingRaise } from "./rebind.js";
+import { appendFactionEventTx } from "./feed-store.js";
+import { actorGamertagTx } from "./feed-actor.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -135,26 +137,69 @@ export class PgRebindStore implements RebindStore {
    * list was built against. Two leaders confirming two different candidates
    * concurrently must produce one move and one refusal — a read-then-write
    * would produce two moves, and the second would silently overwrite the first.
+   *
+   * ⚠️ Wrapped in a transaction so the feed row shares that guard, and the
+   * payload carries NO coordinates: a rebind post says a faction moved, never
+   * where from or to. `faction_events_no_coordinates` would reject them, but
+   * this is the one transition whose whole subject is a location, so it is
+   * also the one place the omission has to be deliberate.
    */
   async rebind(a: RebindArgs): Promise<boolean> {
-    const rows = await this.db.update(factions)
-      .set({
-        poleKey: a.poleKey,
-        x: a.x.toFixed(2), y: a.y.toFixed(2), z: a.z.toFixed(2),
-        status: "active",
-        dormantSince: null,
-        reboundAt: a.at,
-      })
-      .where(and(
-        eq(factions.id, a.factionId),
-        leaderIs(a.factionId, a.leaderDiscordId),
-        inArray(factions.status, REBINDABLE),
-        // Optimistic concurrency: the pole must still be the one the
-        // candidates were computed against.
-        eq(factions.poleKey, a.expectedPoleKey),
-        or(isNull(factions.reboundAt), lte(factions.reboundAt, a.notBefore)),
-      ))
-      .returning({ id: factions.id });
-    return rows.length > 0;
+    return this.db.transaction(async (tx) => {
+      // Read before the update overwrites it, the way `rename` reads the
+      // previous name. This is a plain SELECT on the primary key that the
+      // update's own WHERE below also pins, so it cannot observe a row other
+      // than the one the update then touches (or fails to).
+      const [before] = await tx.select({ status: factions.status })
+        .from(factions).where(eq(factions.id, a.factionId));
+
+      const [row] = await tx.update(factions)
+        .set({
+          poleKey: a.poleKey,
+          x: a.x.toFixed(2), y: a.y.toFixed(2), z: a.z.toFixed(2),
+          status: "active",
+          dormantSince: null,
+          reboundAt: a.at,
+        })
+        .where(and(
+          eq(factions.id, a.factionId),
+          leaderIs(a.factionId, a.leaderDiscordId),
+          inArray(factions.status, REBINDABLE),
+          // Optimistic concurrency: the pole must still be the one the
+          // candidates were computed against.
+          eq(factions.poleKey, a.expectedPoleKey),
+          or(isNull(factions.reboundAt), lte(factions.reboundAt, a.notBefore)),
+        ))
+        .returning({
+          id: factions.id, serverId: factions.serverId,
+          name: factions.name, tag: factions.tag, texture: factions.texture,
+        });
+
+      if (!row) return false;
+
+      const actor = await actorGamertagTx(tx, a.leaderDiscordId);
+
+      await appendFactionEventTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "rebound", occurredAt: a.at,
+        payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
+      });
+
+      // ⚠️ A dormant faction that rebinds is also revived by this same
+      // update (status -> active, dormantSince -> null) — REBINDABLE
+      // includes "dormant" precisely so a faction can escape dormancy this
+      // way. Without this second row, the channel shows "gone dormant …"
+      // followed by "moved its base" and never says the countdown was
+      // cancelled or that supplies resume. Appended AFTER `rebound` — the
+      // move happened, and the revival is its consequence — so `id` order
+      // tells the story in the right sequence.
+      if (before?.status === "dormant") {
+        await appendFactionEventTx(tx, {
+          serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: a.at,
+          payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
+        });
+      }
+
+      return true;
+    });
   }
 }

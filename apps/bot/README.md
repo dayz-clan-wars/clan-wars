@@ -18,6 +18,7 @@ in-game verification tick confirms it.
 | `BOT_INVITE_TTL_MS` | no (default `604800000`, 7 days) | How long a `/faction invite` stays pending before it expires. Plain decimal digits only. |
 | `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Plain decimal digits only. |
 | `BOT_RENAME_COOLDOWN_MS` | no (default `604800000`, 7 days) | The minimum time between two `/faction rename`s of the same faction. Plain decimal digits only. |
+| `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
 
 Example `.env` (placeholders only — never commit real values):
 
@@ -32,7 +33,14 @@ BOT_RESERVATION_TTL_MS=86400000
 BOT_INVITE_TTL_MS=604800000
 BOT_COOLDOWN_MS=259200000
 BOT_RENAME_COOLDOWN_MS=604800000
+BOT_FEED_CHANNEL_ID=1234567890123456789
 ```
+
+`BOT_FEED_CHANNEL_ID` above is a placeholder — replace it with your own
+channel's real id (Developer Mode → right-click the channel → Copy Channel
+ID). A run of zeros will not do: real snowflakes never start with a zero, and
+the config loader rejects one at startup rather than let it pass validation
+and block the feed queue at the first post.
 
 ## Creating the Discord application and inviting the bot
 

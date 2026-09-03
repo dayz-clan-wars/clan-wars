@@ -112,9 +112,26 @@ there should be a test that fails when they disagree. See
   and pole — and nothing else.** It is mirrored by three partial unique indexes in SQL.
   Do not narrow it to change behaviour; add a set. `SUPPLIED_STATUSES` (`reserved,
   active`) is the one that governs supply kits.
-- **Lock order for the roster tables: `factions` → `faction_members` → `faction_invites`.**
-  A deadlock was already built once from two separately-correct changes taking two of
-  them in opposite orders. There are three writers now.
+- **Lock order for the roster tables: `factions` → `faction_members` → `faction_invites`
+  → `faction_events`.** A deadlock was already built once from two separately-correct
+  changes taking two of them in opposite orders. There are four writers now.
+  `faction_events` is always last, and can safely be: it is insert-only and nothing
+  references it, so no writer ever needs it locked before touching the roster tables.
+- **`faction_events` rows are written in the SAME transaction as the transition they
+  describe.** The feed's whole correctness is "a row exists iff the transition happened",
+  and nothing anywhere reconciles the two — the transition's own evidence
+  (`dormant_since` nulled on revive, a name overwritten by a rename) is exactly what the
+  log preserves, so it is already gone by the time anyone could notice a missing row.
+  Append through `appendFactionEventTx`, which takes a `Tx` rather than a `Database`
+  precisely so this is hard to get wrong.
+- **The feed's payload is frozen at write time and carries no coordinates.** Re-reading
+  `factions` at post time would print today's name on a late rename post; a coordinate in
+  the payload is rejected by `faction_events_no_coordinates`, which exists because this is
+  the first table whose whole purpose is to be published.
+- **The feed posts in `id` order and stops at the first failure.** One stuck row blocks
+  the queue, loudly (`feed queue blocked at …` at error level). That is deliberate:
+  skipping ahead would let a retried older event land below newer ones, and a feed whose
+  order cannot be trusted is not a record of anything.
 - **The emote budget (`MAX_POOL_EMOTES_PER_ATTEMPT`) is the primary defence** against a
   `/link` target completing its own sequence by accident. Do not exempt in-sequence
   emotes from it — an accidental completion is *made* of in-sequence emotes.
@@ -181,6 +198,18 @@ Runbook: `docs/deploy/2026-09-03-faction-rebind.md`.
 vacuously true today — nothing publishes base coordinates — and becomes a real promise the
 day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
+**The faction feed is built on `feat/faction-feed`, not yet merged to `main` and not yet
+deployed.** `faction_events` is an append-only log, written inside each transition's own
+transaction, and a tick posts
+queued rows in `id` order as embeds to one configured public channel. Migration `0019`
+(`faction_events`, with the `faction_events_no_coordinates` check constraint) has not
+been applied to `factions_live`, and the running bot has neither the column nor
+`BOT_FEED_CHANNEL_ID` set, so it emits nothing today. The backfill
+(`apps/bot/src/feed-backfill.ts`) queues `founded` and `activated` rows for whatever
+factions already exist — `COK` today — so the feed's first posts read as a record rather
+than starting mid-story; it must run after `0019` and before the channel id is set.
+Runbook, written but not yet executed: `docs/deploy/2026-09-03-faction-feed.md`.
+
 Test-database isolation (inbox item 21) also landed on 2026-09-02: one database per
 package, `pnpm -r test` green for the first time, and the shared `factions` database no
 longer written to by any suite. Nothing about it reaches production — it is test
@@ -212,3 +241,11 @@ faction's supplies. That is a decision, not a side effect.
    2026-09-01.
 3. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.
+4. The faction feed's flag-image resolver hook has no artwork to resolve — none of the
+   33 flag textures has an image anywhere in the repo, so every embed ships without one.
+   A blocked feed queue also has no alerting: `feed queue blocked at …` is an error-level
+   log line and nothing else, so a human has to notice it. See inbox item 35.
+5. A lapsed reservation releases a flag with no feed event — `lapseReservations` returns
+   the flag to the pool 24 hours after claim if unactivated, but the prior `founded` event
+   is never retracted or closed. So the feed reads as if the faction still holds a flag
+   that is back on the market. See inbox item 36.

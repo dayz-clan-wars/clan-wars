@@ -15,6 +15,17 @@ export type BotConfig = {
   dormantAfterMs: number;
   disbandAfterDormantMs: number;
   rebindCooldownMs: number;
+  /**
+   * The faction feed's channel. Undefined means the feed is OFF: rows keep
+   * accumulating in `faction_events` and nothing posts.
+   *
+   * ⚠️ Optional rather than required, for two reasons. Required would make
+   * every existing deployment and test fixture supply a channel id for a
+   * feature they do not use — and, worse, a development or staging bot that
+   * inherited a copied `.env` would post into a live community channel.
+   * Silent by default is the safe direction.
+   */
+  feedChannelId: string | undefined;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -44,6 +55,30 @@ function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): num
     );
   }
   return n;
+}
+
+// ⚠️ No leading zero: a real snowflake is a Twitter-epoch timestamp in its
+// high bits and is never 0 there, so `\d` here would accept a placeholder
+// like "000000000000000000" as valid. The README's example .env shipped
+// exactly that value and it passed this regex — a copy-paste config loaded
+// clean, then every post failed and blocked the queue at row one.
+const SNOWFLAKE_RE = /^[1-9]\d{16,19}$/u;
+
+/**
+ * ⚠️ Validated at load, not at first post. An unset feed is silent by
+ * design, so a malformed id would be indistinguishable from an off feed
+ * until someone noticed the channel had been empty for a week.
+ */
+function optionalSnowflake(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const raw = env[key];
+  if (raw === undefined || raw === "") return undefined;
+  if (!SNOWFLAKE_RE.test(raw)) {
+    throw new Error(
+      `${key} must be a Discord channel id — 17 to 20 digits — got ${JSON.stringify(raw)}. ` +
+      "Copy it with Developer Mode enabled: right-click the channel, Copy Channel ID.",
+    );
+  }
+  return raw;
 }
 
 /** Env in, config out. Takes the environment as an argument so failure paths are testable. */
@@ -81,6 +116,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // var, not the RELEASE_GRACE_MS/REBIND_COOLDOWN_MS constants that
     // apps/bot/test/rebind.test.ts pins, is what the handlers actually use.
     rebindCooldownMs: positiveInt(env, "BOT_REBIND_COOLDOWN_MS", REBIND_COOLDOWN_MS),
+    feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
   };
 
   // ⚠️ A cooldown at or below RELEASE_GRACE_MS lets a faction alternate

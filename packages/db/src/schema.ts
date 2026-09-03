@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType } from "@factions/domain";
+import type { EventType, FactionEventKind } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -500,6 +500,54 @@ export const factions = pgTable("factions", {
   uniqPole: uniqueIndex("factions_holding_pole_uniq")
     .on(t.serverId, t.poleKey)
     .where(sql`${t.status} IN ('reserved','active','dormant')`),
+}));
+
+/**
+ * Every faction lifecycle transition, append-only, in the order they happened.
+ *
+ * The public feed's queue and, later, spec §11's web war log. Nothing updates
+ * a row here but `posted_at`; nothing deletes.
+ */
+export const factionEvents = pgTable("faction_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  kind: text("kind").$type<FactionEventKind>().notNull(),
+  /**
+   * When the transition happened — NOT when the row was written.
+   *
+   * ⚠️ The embed's timestamp comes from this column, and the backfill inserts
+   * rows for foundings days in the past. Defaulting it to now() would date
+   * every backfilled post to the moment of the deploy.
+   */
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  /**
+   * The display fields, FROZEN at write time.
+   *
+   * ⚠️ Never re-read from `factions` at post time. A rename that posts late
+   * would print today's name on both halves — "X renamed to X" — and a
+   * disband post would have to read a row whose identity has already been
+   * released to the pool. Same reasoning as `supply_uploads` storing the
+   * baseline the game server OBSERVED rather than recomputing it.
+   */
+  payload: jsonb("payload").notNull(),
+  /** Null means still queued. The feed tick's whole state. */
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+}, (t) => ({
+  kindValid: check("faction_events_kind_valid",
+    sql`${t.kind} IN ('founded','activated','renamed','rebound','dormant','revived','disbanded')`),
+  // ⚠️ The pole invariant, enforced by the database rather than by every
+  // author remembering it. This is the first table whose entire purpose is
+  // to be published; `poles.pole_key`'s own comment says a coordinate "must
+  // never reach a public read model", and once one is in a Discord channel
+  // it is in screenshots and cannot be recalled.
+  noCoordinates: check("faction_events_no_coordinates",
+    sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
+  // The feed's queue. Over `id` alone because the tick reads in id order and
+  // stops at the first failure — it never searches within the unposted set.
+  queue: index("faction_events_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
+  // Per-faction history, for spec §11's web war log.
+  byFaction: index("faction_events_faction_idx").on(t.factionId, t.occurredAt),
 }));
 
 /**
