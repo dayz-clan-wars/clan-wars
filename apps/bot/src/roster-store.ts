@@ -2,6 +2,7 @@ import type { Database } from "@factions/db";
 import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
+import { appendFactionEventTx } from "./feed-store.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -149,12 +150,15 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * update has matched a row.
  */
 export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): Promise<boolean> {
-  const updated = await tx.update(factions)
+  const [updated] = await tx.update(factions)
     .set({ status: "disbanded" })
     .where(and(eq(factions.id, factionId), guard, inArray(factions.status, HOLDING)))
-    .returning({ id: factions.id });
+    .returning({
+      id: factions.id, serverId: factions.serverId,
+      name: factions.name, tag: factions.tag, texture: factions.texture,
+    });
 
-  if (!updated[0]) return false;
+  if (!updated) return false;
 
   await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
 
@@ -168,6 +172,19 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
       isNull(factionInvites.declinedAt),
       isNull(factionInvites.revokedAt),
     ));
+
+  // ⚠️ Last, per the lock order this function documents. Identity is frozen
+  // here because by the time the post goes out the flag, tag and pole are
+  // back in the pool and may already belong to somebody else.
+  //
+  // ⚠️ In the SHARED function, not in its two callers. `/faction disband` and
+  // the dormancy tick's auto-disband both ride this; logging in one caller
+  // is how one path announces and the other goes silent.
+  await appendFactionEventTx(tx, {
+    serverId: updated.serverId, factionId: updated.id, kind: "disbanded",
+    occurredAt: new Date(),
+    payload: { name: updated.name, tag: updated.tag, texture: updated.texture },
+  });
 
   return true;
 }

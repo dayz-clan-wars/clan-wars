@@ -3,6 +3,7 @@ import { factions } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import { disbandFactionTx } from "./roster-store.js";
+import { appendFactionEventTx } from "./feed-store.js";
 
 export type FactionClockRow = FactionClock & {
   id: number;
@@ -13,7 +14,7 @@ export type FactionClockRow = FactionClock & {
 
 export interface DormancyStore {
   clocks(): Promise<FactionClockRow[]>;
-  goDormant(factionId: number, at: Date): Promise<boolean>;
+  goDormant(factionId: number, at: Date, disbandAt?: Date): Promise<boolean>;
   revive(factionId: number): Promise<boolean>;
   stampDormantSince(factionId: number, at: Date): Promise<boolean>;
   /**
@@ -103,21 +104,62 @@ export class PgDormancyStore implements DormancyStore {
    * whether it actually moved a row. That boolean is what makes the DM
    * at-most-once: only the tick that performed the transition sends, so two
    * overlapping ticks cannot both warn the same leader.
+   *
+   * ⚠️ A transaction now, so the feed row shares the guard. Without it two
+   * overlapping ticks could announce the same transition twice even though
+   * only one of them performed it.
    */
-  async goDormant(factionId: number, at: Date): Promise<boolean> {
-    const rows = await this.db.update(factions)
-      .set({ status: "dormant", dormantSince: at })
-      .where(and(eq(factions.id, factionId), eq(factions.status, "active")))
-      .returning({ id: factions.id });
-    return rows.length > 0;
+  async goDormant(factionId: number, at: Date, disbandAt?: Date): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.update(factions)
+        .set({ status: "dormant", dormantSince: at })
+        .where(and(eq(factions.id, factionId), eq(factions.status, "active")))
+        .returning({
+          id: factions.id, serverId: factions.serverId,
+          name: factions.name, tag: factions.tag, texture: factions.texture,
+        });
+      if (!row) return false;
+
+      await appendFactionEventTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "dormant", occurredAt: at,
+        // ISO 8601: jsonb has no timestamp type, and the embed parses it back.
+        payload: {
+          name: row.name, tag: row.tag, texture: row.texture,
+          ...(disbandAt ? { disbandAt: disbandAt.toISOString() } : {}),
+        },
+      });
+      return true;
+    });
   }
 
+  /**
+   * ⚠️ No actor. The clock observes a revival through `LAST_RAISE`, a
+   * max(occurred_at) subquery — it knows when the newest raise happened and
+   * never who made it. Recovering the name means a second correlated lookup
+   * per faction per tick against the index the dormancy design warns is the
+   * clock's whole performance story.
+   */
   async revive(factionId: number): Promise<boolean> {
-    const rows = await this.db.update(factions)
-      .set({ status: "active", dormantSince: null })
-      .where(and(eq(factions.id, factionId), eq(factions.status, "dormant")))
-      .returning({ id: factions.id });
-    return rows.length > 0;
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.update(factions)
+        .set({ status: "active", dormantSince: null })
+        .where(and(eq(factions.id, factionId), eq(factions.status, "dormant")))
+        .returning({
+          id: factions.id, serverId: factions.serverId,
+          name: factions.name, tag: factions.tag, texture: factions.texture,
+        });
+      if (!row) return false;
+
+      // The revival's own time is not recorded on the row, and the raise that
+      // caused it is what the feed is announcing — but the clock only knows
+      // it happened by this tick. `now` is the closest honest value, and it
+      // is what `dormancy-tick` passes as `at` elsewhere.
+      await appendFactionEventTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: new Date(),
+        payload: { name: row.name, tag: row.tag, texture: row.texture },
+      });
+      return true;
+    });
   }
 
   /**

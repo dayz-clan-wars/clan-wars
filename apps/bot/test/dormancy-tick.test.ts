@@ -34,7 +34,7 @@ describe("dormancyTick", () => {
     const store = fakeStore([row({ lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS + 1) })], { goDormant });
 
     const r = await dormancyTick(store, { now, windows });
-    expect(goDormant).toHaveBeenCalledWith(1, now);
+    expect(goDormant).toHaveBeenCalledWith(1, now, new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS));
     expect(r.dormant).toBe(1);
     expect(r.notices).toEqual([{
       kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
