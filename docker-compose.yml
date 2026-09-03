@@ -34,6 +34,13 @@ services:
   # be started on the VPS. A bare `docker compose up -d` there would stand up a
   # second, EMPTY Postgres that looks like a working database and holds none of
   # the live data. On the VPS, name the services: `docker compose up -d web caddy`.
+  # ⚠️ Image verified on linux/arm64 (native `docker compose build web` on the
+  # dev machine) AND linux/amd64 (`docker build --platform linux/amd64`, under
+  # QEMU emulation) on 2026-09-03 — see task-5-report.md. Both resolved and
+  # installed the correct platform-specific sharp binary from the lockfile
+  # (`@img/sharp-linuxmusl-arm64` / `-x64`), so neither architecture depends on
+  # an untested guess. If the VPS is some third architecture, rebuild and
+  # re-check before trusting this image there.
   web:
     build: { context: ., dockerfile: apps/web/Dockerfile }
     restart: unless-stopped
