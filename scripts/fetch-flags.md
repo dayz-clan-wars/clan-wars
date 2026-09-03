@@ -48,3 +48,17 @@ two things:
 - **`CLAIMABLE_FLAGS` and the wiki have genuinely diverged** — a texture that exists in
   the game pool has no corresponding wiki page. That is a finding to report, not a thing
   to route around.
+
+## If you re-run this and a filename doesn't change
+
+The Caddyfile serves `/flags/*` with `Cache-Control: public, max-age=604800, immutable` —
+7 days. That's fine for a file that never changes, but if you regenerate an image under
+the **same filename** with **different bytes** (a re-fetch after the wiki updated its
+source art, a `MAX_EDGE` change re-encoding the same texture), any browser that already
+cached the old bytes is stuck with them for up to a week — there's no content hash, query
+param, or versioned path in the URL to bust it. Discord caches thumbnails against its own
+CDN regardless of what Caddy sends, so this is a browser-only concern, not a Discord one.
+
+If that matters for a given change, the recovery is either a cache-busting query string
+on the URL where it's referenced, or a change to the Caddyfile's cache policy for
+`/flags/*` — not something this script or the drift test can do for you.
