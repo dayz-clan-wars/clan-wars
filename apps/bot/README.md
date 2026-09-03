@@ -19,6 +19,7 @@ in-game verification tick confirms it.
 | `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Plain decimal digits only. |
 | `BOT_RENAME_COOLDOWN_MS` | no (default `604800000`, 7 days) | The minimum time between two `/faction rename`s of the same faction. Plain decimal digits only. |
 | `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
+| `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 
 Example `.env` (placeholders only — never commit real values):
 
@@ -34,6 +35,7 @@ BOT_INVITE_TTL_MS=604800000
 BOT_COOLDOWN_MS=259200000
 BOT_RENAME_COOLDOWN_MS=604800000
 BOT_FEED_CHANNEL_ID=1234567890123456789
+FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 ```
 
 `BOT_FEED_CHANNEL_ID` above is a placeholder — replace it with your own

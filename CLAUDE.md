@@ -35,7 +35,7 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **20/20 tasks**. A cached pass proves nothing; check the count, not the exit code.
+Expect **22/22 tasks**. A cached pass proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.
 
@@ -43,10 +43,18 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 ## Running things
 
-- **Postgres + ingest worker:** `docker compose up -d` (reads `.env`). The worker
-  runs from a built image, so a code change needs `docker compose build ingest-worker`.
-- **Bot:** not containerised. `set -a && . .env && set +a && pnpm --filter @factions/bot start`.
-  It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached.
+- **Postgres + ingest worker:** `docker compose up -d postgres ingest-worker` (reads
+  `.env`). The worker runs from a built image, so a code change needs
+  `docker compose build ingest-worker`. ⚠️ Name the services. Since this branch added
+  `web` and `caddy` to the same compose file, a bare `up -d` on this machine also starts
+  Caddy, which binds `0.0.0.0:80`/`:443` and immediately begins ACME for
+  `dayzclanwars.com` — whose DNS points at the VPS, not here. The HTTP-01 challenge fails
+  and retries against Let's Encrypt's failed-validation rate limit, which can exhaust it
+  before the real deploy ever happens.
+- **Bot:** not containerised. `set -a && . ./.env && set +a && pnpm --filter @factions/bot start`.
+  It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached. Use
+  `. ./.env`, not `. .env` — in zsh, `.` searches `$PATH` for a slashless name and fails
+  with `no such file or directory: .env`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. Before starting one, confirm zero survivors:
@@ -66,6 +74,9 @@ turbo gate stays the gate, because it runs `typecheck` too.
 - **⚠️ Stop the bot before migrating** when a migration adds NOT NULL columns or
   constraints. Old code + new schema and new code + old schema both break; see
   `docs/deploy/2026-09-01-targeted-linking.md` for the incident.
+- **Web app:** `docker compose build web && docker compose up -d web caddy`. Not run on
+  this machine in normal operation — it is deployed to the VPS. `pnpm --filter
+  @factions/web dev` for local work.
 
 ---
 
@@ -170,6 +181,20 @@ there should be a test that fails when they disagree. See
   offset makes every tick see drift and re-upload forever. Both size and mtime are
   compared because neither subsumes the other: mtime catches a same-length edit, size
   catches a restore that preserved timestamps.
+- **The website is a surface, never a source of truth.** Faction state is earned in game
+  and proved from the server's logs; nothing on `dayzclanwars.com` may create a faction,
+  claim a flag, bind a pole or alter a roster. `apps/web/test/smoke.test.ts` pins the
+  structural half of this — the app imports no database package and reads no
+  `DATABASE_URL`. That is also what makes it deployable at all: `factions_live` is on
+  this machine, not the VPS, so a database import there fails in production rather than
+  at review.
+- **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
+  `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
+  thumbnail in a Discord channel, not as an error.
+- **⚠️ `docker-compose.yml` describes services the VPS must not start.** It carries
+  `postgres` and `ingest-worker` alongside `web` and `caddy`. On the VPS, always name the
+  services — `docker compose up -d web caddy` — because a bare `up -d` there stands up a
+  second, empty Postgres that looks like a working database.
 
 ---
 
@@ -245,10 +270,9 @@ faction's supplies. That is a decision, not a side effect.
    2026-09-01.
 3. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
    directory. `cfggameplay.json` does not load it; it is only confusing.
-4. The faction feed's flag-image resolver hook has no artwork to resolve — none of the
-   33 flag textures has an image anywhere in the repo, so every embed ships without one.
-   A blocked feed queue also has no alerting: `feed queue blocked at …` is an error-level
-   log line and nothing else, so a human has to notice it. See inbox item 35.
+4. A blocked feed queue has no alerting: `feed queue blocked at …` is an error-level log
+   line and nothing else, so a human has to notice it. See inbox item 35 (the artwork
+   half of that item closed 2026-09-03).
 5. A lapsed reservation releases a flag with no feed event — `lapseReservations` returns
    the flag to the pool 24 hours after claim if unactivated, but the prior `founded` event
    is never retracted or closed. So the feed reads as if the faction still holds a flag

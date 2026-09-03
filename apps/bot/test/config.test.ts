@@ -135,4 +135,65 @@ describe("loadConfig", () => {
         .toThrow(/BOT_FEED_CHANNEL_ID/u);
     });
   });
+
+  describe("FLAG_IMAGE_BASE_URL", () => {
+    it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
+      // The feed shipped before any artwork existed and must keep working
+      // exactly as it does today for anyone who never sets this.
+      expect(loadConfig({ ...OK }).flagImageBaseUrl).toBeUndefined();
+    });
+
+    it("reads an https base URL", () => {
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com" }).flagImageBaseUrl)
+        .toBe("https://dayzclanwars.com");
+    });
+
+    it("treats an empty string as unset", () => {
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "" }).flagImageBaseUrl).toBeUndefined();
+    });
+
+    it("⚠️ rejects a malformed URL at load rather than at first post", () => {
+      // An unset base is silent by design, so a broken one would otherwise be
+      // indistinguishable from an unconfigured one until someone noticed the
+      // embeds had no thumbnails.
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "dayzclanwars.com" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a non-http scheme", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "file:///etc/passwd" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("accepts a bare origin with a trailing slash", () => {
+      // The resolver's own trailing-slash strip exists for exactly this
+      // shape — tightening the validator must not break it.
+      expect(loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/" }).flagImageBaseUrl)
+        .toBe("https://dayzclanwars.com/");
+    });
+
+    it("⚠️ rejects a path, the reasonable-but-wrong value an operator would paste", () => {
+      // The resolver appends /flags/<texture>.png itself. A base that already
+      // includes /flags/ — the directory the operator was just looking at —
+      // would silently resolve to nothing, with no error here or at post
+      // time.
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/flags/" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a query string", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com/foo?x=1" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("rejects a fragment", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://dayzclanwars.com#frag" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+
+    it("⚠️ rejects embedded credentials, which Discord's embed proxy would fetch", () => {
+      expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://user:pass@dayzclanwars.com" }))
+        .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+  });
 });

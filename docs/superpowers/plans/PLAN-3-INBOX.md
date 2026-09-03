@@ -877,10 +877,15 @@ what stops a faction owning eight bases and being raidable at none of them.
 
 ## 35. Two gaps the faction feed knowingly ships with
 
-`feed-embed.ts` has a resolver hook waiting for flag artwork — every embed posts without
+~~`feed-embed.ts` has a resolver hook waiting for flag artwork — every embed posts without
 a thumbnail today, because no image exists anywhere in the repo for any of the 33 flag
 textures. Adding them is a design question (source the art, host it, wire the hook), not
-a code change to the feed itself.
+a code change to the feed itself.~~ — DONE 2026-09-03. `apps/web` fetches, normalizes and
+commits all 33 flag images and serves them from `dayzclanwars.com`; `FLAG_IMAGE_BASE_URL`
+fills the resolver hook. Spec: `docs/superpowers/specs/2026-09-03-web-app-skeleton-design.md`.
+Runbook: `docs/deploy/2026-09-03-web-app-skeleton.md`.
+
+The second gap below is still open.
 
 Separately, the feed tick posts in `id` order and stops at the first failure (deliberate —
 see CLAUDE.md's feed invariants), but nothing watches for that happening. `feed queue

@@ -111,14 +111,24 @@ whoever holds Sakhal.
 
 ### ⚠️ They must be resized, not merely downloaded
 
-`Flag_Wolf.png` on the wiki is **877×1027 and 1.4 MB**. Discord renders an embed thumbnail
-at roughly 80×80. Committing 33 files at that scale is on the order of 35 MB of repository
-to display postage stamps, on a repo whose largest artifact today is a migration.
+`Flag_Wolf.png` on the wiki is **877×1027**. Its stored original is **1,455,515 bytes**
+(1.4 MB) — but the wiki's CDN content-negotiates, and serves `image/webp` at **283,250
+bytes** to a modern client. Those are two different numbers measuring two different
+things: the file as stored, and the file as actually transferred. ⚠️ An earlier version
+of this section conflated them, quoting only the 1.4 MB stored size and reasoning that
+committing 33 raw files would run "on the order of 35 MB" — the transferred-bytes total is
+nearer **9 MB**. The conclusion below is unchanged either way: normalizing is still right,
+and the committed result is smaller than both.
 
 The source sizes are also inconsistent — `Sakhal_flag.PNG` is 299×353 and 154 KB — so
 normalizing is not only about weight. Each image is resized to fit 256px on its long edge
 and written as PNG: comfortably above what Discord displays, so a future use (a directory
 page, a larger card) is not immediately blocked by a too-small asset.
+
+**Verified outcome (2026-09-03):** the 33 committed images total **3.8 MB**, well under
+either estimate above. The largest is `Flag_SSahrani.png` at **147,925 bytes** — the
+drift test's bound is 200,000 bytes per file, so there is headroom but not an enormous
+amount, worth remembering if `MAX_EDGE` is ever raised.
 
 ### The fetch is a one-off script, and its output is committed
 
@@ -177,6 +187,15 @@ not on all. The loader strips it, and a test pins that.
 `next build`, and a slim runtime carrying only Next's `standalone` output plus
 `public/`. The existing `apps/ingest-worker/Dockerfile` is the pattern to follow for how
 this repo builds a workspace package in Docker.
+
+**Verified (2026-09-03) on both target architectures.** "Deployable" was the whole point,
+so both were checked rather than assumed: native `docker compose build web` on
+**linux/arm64** (the dev machine), and `docker build --platform linux/amd64` under QEMU
+emulation for **linux/amd64**. Both resolved and installed the correct
+platform-specific `sharp` binary from the lockfile (`@img/sharp-linuxmusl-arm64` /
+`@img/sharp-linuxmusl-x64`) with no Dockerfile workaround needed — neither architecture
+depends on an untested guess. If the eventual VPS is some third architecture, rebuild and
+re-check before trusting this image there.
 
 ### Compose
 

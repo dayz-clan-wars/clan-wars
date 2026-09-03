@@ -26,6 +26,12 @@ export type BotConfig = {
    * Silent by default is the safe direction.
    */
   feedChannelId: string | undefined;
+  /**
+   * Base URL the flag images are served from — `https://dayzclanwars.com`.
+   * Undefined means embeds post with no thumbnail, exactly as they did before
+   * any artwork existed.
+   */
+  flagImageBaseUrl: string | undefined;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -81,6 +87,62 @@ function optionalSnowflake(env: NodeJS.ProcessEnv, key: string): string | undefi
   return raw;
 }
 
+/**
+ * ⚠️ Validated at load, not at first use — the same reasoning as
+ * `optionalSnowflake` directly above. An unset base is silent by design, so a
+ * malformed one would be indistinguishable from an unconfigured one until
+ * somebody noticed the embeds had lost their thumbnails.
+ *
+ * ⚠️ Must be a bare origin — no path, query, fragment or credentials. The
+ * resolver appends `/flags/<texture>.png` itself, so anything already in the
+ * path (an operator pasting the flags directory URL they were just looking
+ * at, e.g. `https://dayzclanwars.com/flags/`) produces a URL that resolves to
+ * nothing, with no error here and none at post time either — Discord just
+ * renders the embed with no thumbnail, the exact silent failure this
+ * validator exists to prevent. Credentials are rejected for a different
+ * reason: `https://user:pass@host` would be preserved verbatim into a URL
+ * that Discord's embed proxy then fetches, leaking them somewhere we do not
+ * control.
+ */
+function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefined {
+  const raw = env[key];
+  if (raw === undefined || raw === "") return undefined;
+  let parsed: URL;
+  try {
+    parsed = new URL(raw);
+  } catch {
+    throw new Error(`${key} must be an absolute URL, got ${JSON.stringify(raw)}.`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`${key} must be http or https, got ${JSON.stringify(parsed.protocol)}.`);
+  }
+  if (parsed.pathname !== "/" && parsed.pathname !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no path — got a path of ${JSON.stringify(parsed.pathname)}. ` +
+      `The bot appends /flags/<texture>.png itself; use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.search !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no query string — got ${JSON.stringify(parsed.search)}. ` +
+      `Use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.hash !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no fragment — got ${JSON.stringify(parsed.hash)}. ` +
+      `Use ${JSON.stringify(parsed.origin)}.`,
+    );
+  }
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new Error(
+      `${key} must be a bare origin with no embedded credentials. ` +
+      `Use ${JSON.stringify(parsed.origin)} and put any auth elsewhere.`,
+    );
+  }
+  return raw;
+}
+
 /** Env in, config out. Takes the environment as an argument so failure paths are testable. */
 export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   const config: BotConfig = {
@@ -117,6 +179,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // apps/bot/test/rebind.test.ts pins, is what the handlers actually use.
     rebindCooldownMs: positiveInt(env, "BOT_REBIND_COOLDOWN_MS", REBIND_COOLDOWN_MS),
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
+    flagImageBaseUrl: optionalHttpUrl(env, "FLAG_IMAGE_BASE_URL"),
   };
 
   // ⚠️ A cooldown at or below RELEASE_GRACE_MS lets a faction alternate
