@@ -1,0 +1,15 @@
+[Unit]
+Description=Nightly factions_live backup
+
+[Timer]
+OnCalendar=*-*-* 04:17:00 UTC
+# ⚠️ Persistent so a backup missed while the host was off runs at next boot.
+# Without it, a machine that is down at 04:17 simply skips that night with
+# nothing saying so.
+Persistent=true
+# Spread off the exact minute: 04:17 already avoids the top of the hour, and
+# certbot.timer runs at 11:03, so these do not contend.
+RandomizedDelaySec=300
+
+[Install]
+WantedBy=timers.target

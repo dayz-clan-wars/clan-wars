@@ -1,0 +1,13 @@
+[Unit]
+# ⚠️ factions_live has no other copy. See the header of
+# deploy/backup/backup-factions-live.sh for what is unrecoverable without it.
+Description=Nightly logical backup of factions_live
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# ⚠️ Runs as root: it must docker exec into the postgres container and write
+# under /var/backups. The script itself refuses to rotate if the dump failed
+# its integrity check, so a failing run loses nothing that already exists.
+ExecStart=/opt/clan-wars/deploy/backup/backup-factions-live.sh
