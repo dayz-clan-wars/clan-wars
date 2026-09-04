@@ -1,17 +1,21 @@
 import { describe, it, expect } from "vitest";
 import { EncryptJWT } from "jose";
 import { sessionKey, encodeSession, decodeSession, type Session } from "../lib/auth/session";
+import { SESSION_MAX_AGE_SECONDS } from "../lib/auth/cookies";
 
 // 32 random bytes, base64 — the shape `openssl rand -base64 32` produces.
 const SECRET = "5S9y0kZ0Yb0k7t0mQ0nT0pV0sX0uZ0wA0yC0eF0gH0k=";
 const OTHER = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+
+const NOW = 1_800_000_000;
 
 const session: Session = {
   sub: "1545252643155353640",
   name: "SubatomicRacer",
   avatar: "a1b2c3",
   guild: true,
-  nextCheckAt: 1_800_000_000,
+  nextCheckAt: NOW,
+  authAt: NOW,
 };
 
 describe("sessionKey", () => {
@@ -65,5 +69,29 @@ describe("session round trip", () => {
       .setExpirationTime("7d")
       .encrypt(key);
     expect(await decodeSession(partial, key)).toBeNull();
+  });
+
+  // ⚠️ The bug this guards against: `setExpirationTime("7d")` resolves as
+  // "7 days from NOW", so re-encoding on every 15-minute recheck would slide
+  // the expiry forward forever and a weekly visitor would never re-authenticate.
+  // Anchoring on `authAt` instead means a re-encode cannot rescue an old session.
+  // Anchored on the REAL clock (not the fixed `NOW` fixture above) because
+  // decodeSession checks expiry against the actual system time.
+  it("expires 7 days after authAt, even when re-encoded right now", async () => {
+    const key = sessionKey(SECRET);
+    const realNow = Math.floor(Date.now() / 1000);
+    const eightDaysAgo = realNow - 8 * 24 * 60 * 60;
+    const stale: Session = { ...session, authAt: eightDaysAgo, nextCheckAt: realNow };
+    const token = await encodeSession(stale, key);
+    expect(await decodeSession(token, key)).toBeNull();
+  });
+
+  it("stays valid just under 7 days after authAt", async () => {
+    const key = sessionKey(SECRET);
+    const realNow = Math.floor(Date.now() / 1000);
+    const almostAWeekAgo = realNow - (SESSION_MAX_AGE_SECONDS - 60);
+    const fresh: Session = { ...session, authAt: almostAWeekAgo, nextCheckAt: realNow };
+    const token = await encodeSession(fresh, key);
+    expect(await decodeSession(token, key)).toEqual(fresh);
   });
 });

@@ -41,10 +41,29 @@ function base(baseUrl: string, maxAge: number): CookieAttributes {
   };
 }
 
-export function sessionCookieAttributes(baseUrl: string): CookieAttributes {
-  return base(baseUrl, SESSION_MAX_AGE_SECONDS);
+/**
+ * `maxAgeOverride` exists for the middleware re-issue path: a re-issued
+ * cookie must expire at the ORIGINAL login's 7-day mark, not 7 days from now,
+ * or a weekly visitor never re-authenticates. Pass the REMAINING life there,
+ * not the full `SESSION_MAX_AGE_SECONDS` — the fresh-login case (no override)
+ * is the only one that should get the full seven days.
+ */
+export function sessionCookieAttributes(baseUrl: string, maxAgeOverride?: number): CookieAttributes {
+  return base(baseUrl, maxAgeOverride ?? SESSION_MAX_AGE_SECONDS);
 }
 
 export function stateCookieAttributes(baseUrl: string): CookieAttributes {
   return base(baseUrl, STATE_MAX_AGE_SECONDS);
+}
+
+/**
+ * Remaining life of a session anchored at `authAt`, for the `maxAgeOverride`
+ * above. Floored at 0 — `decodeSession` already refuses anything past its
+ * `exp`, so this should never go negative in practice, but a negative
+ * `maxAge` is a real footgun (some browsers expire the cookie immediately,
+ * others reject the `Set-Cookie` header outright) and costs nothing to rule
+ * out here.
+ */
+export function remainingSessionSeconds(authAt: number, now: number): number {
+  return Math.max(0, authAt + SESSION_MAX_AGE_SECONDS - now);
 }
