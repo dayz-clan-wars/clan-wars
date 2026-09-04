@@ -4,6 +4,7 @@ import { SESSION_COOKIE, STATE_COOKIE, sessionCookieAttributes } from "@/lib/aut
 import { encodeSession, sessionKey, type Session } from "@/lib/auth/session";
 import { nextCheckAfter, outcomeForStatus } from "@/lib/auth/membership";
 import { safeNextPath, splitNextPath } from "@/lib/auth/next-path";
+import { siteUrl } from "@/lib/auth/site-url";
 
 type StateCookie = { state: string; mode: "login" | "join"; next: string };
 
@@ -19,9 +20,8 @@ function readState(raw: string | undefined): StateCookie | null {
 }
 
 function fail(req: NextRequest, reason: string): NextResponse {
-  const url = req.nextUrl.clone();
-  url.pathname = "/login";
-  url.search = `?error=${encodeURIComponent(reason)}`;
+  const origin = process.env.WEB_BASE_URL ?? req.nextUrl.origin;
+  const url = siteUrl(origin, "/login", `?error=${encodeURIComponent(reason)}`);
   const res = NextResponse.redirect(url);
   res.cookies.delete(STATE_COOKIE);
   return res;
@@ -86,7 +86,7 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     authAt: now,
   };
 
-  const url = req.nextUrl.clone();
+  const url = siteUrl(baseUrl, "/");
   if (session.guild) {
     // ⚠️ Split, never assigned whole: a next-path may carry a query, and
     // assigning it to `pathname` percent-encodes the "?" into the path.
