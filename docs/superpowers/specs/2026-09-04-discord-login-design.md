@@ -250,11 +250,19 @@ second source of truth that no transaction updates, and it will be wrong.
 ⚠️ `sameSite=lax`, not `strict`: the OAuth callback is a cross-site top-level navigation
 back from Discord, and `strict` would drop the cookie on exactly that redirect.
 
-### 4.3 State and PKCE
+### 4.3 State
 
-`arctic` generates the `state` and PKCE `code_verifier`; both are stored in short-lived
-(10 minute) `httpOnly` cookies and verified on callback. The `mode` (login or join) and
-the `next` path travel in the state cookie, not the URL.
+`arctic` generates the `state`, which is stored in a short-lived (10 minute) `httpOnly`
+cookie and compared against the `state` Discord returns. The `mode` (login or join) and
+the `next` path travel in that cookie, not the URL.
+
+⚠️ **No PKCE, deliberately — and not by omission.** PKCE exists for *public* clients that
+cannot keep a secret. This is a confidential client: the exchange happens server-side and
+is authenticated by `DISCORD_CLIENT_SECRET`, which a browser never sees. Arctic's Discord
+provider refuses a `codeVerifier` for confidential clients for exactly this reason
+(`createAuthorizationURL(state, null, scopes)`), so the state cookie is the whole CSRF
+defence and it therefore has to be right: an absent or mismatched `state` must refuse the
+callback outright rather than falling through to the exchange.
 
 ⚠️ `next` must be validated as a **site-relative path** before redirecting to it. An
 unchecked `?next=https://evil.example` turns the login endpoint into an open redirect.
