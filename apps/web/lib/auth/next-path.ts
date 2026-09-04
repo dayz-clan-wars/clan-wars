@@ -33,14 +33,35 @@ export function safeNextPath(raw: string | null | undefined): string {
  * `url.pathname`: a path carrying a query ("/mobile?tab=map") would have its
  * "?" percent-encoded INTO the path, and the redirect would 404 on a route
  * that exists. Re-validates its input, so callers may pass a raw value.
+ *
+ * ⚠️ A fragment ("/mobile#frag") has the exact same failure mode as a query —
+ * assigned into `url.pathname` it percent-encodes to `%23` and 404s. Fixed by
+ * DROPPING it rather than carrying it through: a fragment is never sent to
+ * the server, so the redirect target loses nothing a request could have used
+ * anyway, and there is nowhere else in a `{pathname, search}` pair to put it.
  */
 export function splitNextPath(next: string | null | undefined): {
   pathname: string;
   search: string;
 } {
   const safe = safeNextPath(next);
-  const q = safe.indexOf("?");
+  const hash = safe.indexOf("#");
+  const withoutHash = hash === -1 ? safe : safe.slice(0, hash);
+  const q = withoutHash.indexOf("?");
   return q === -1
-    ? { pathname: safe, search: "" }
-    : { pathname: safe.slice(0, q), search: safe.slice(q) };
+    ? { pathname: withoutHash, search: "" }
+    : { pathname: withoutHash.slice(0, q), search: withoutHash.slice(q) };
+}
+
+/**
+ * Guards the ONE place `next` is used as a landing page for someone who is
+ * ALREADY signed in with guild access (the early-exit branches of /login and
+ * /join). If `next` names an auth page itself, landing there re-enters the
+ * same check — `/login?next=/login` bounces a signed-in member back to
+ * /login instead of anywhere real. Refused once, here, rather than trusted to
+ * every call site that builds a redirect target from `next`.
+ */
+export function landingPath(target: string, authPages: readonly string[]): string {
+  const { pathname } = splitNextPath(target);
+  return authPages.includes(pathname) ? "/" : target;
 }

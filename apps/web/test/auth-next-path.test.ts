@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { safeNextPath, splitNextPath } from "../lib/auth/next-path";
+import { safeNextPath, splitNextPath, landingPath } from "../lib/auth/next-path";
+import { AUTH_PAGES } from "../lib/auth/gate";
 
 describe("safeNextPath", () => {
   it("keeps an ordinary site-relative path", () => {
@@ -85,5 +86,41 @@ describe("splitNextPath", () => {
 
   it("keeps everything after the first ? in the search", () => {
     expect(splitNextPath("/a?b=1?c=2")).toEqual({ pathname: "/a", search: "?b=1?c=2" });
+  });
+
+  // ⚠️ Same failure mode as the '?' bug this function already guards
+  // against: a fragment carried into `url.pathname` percent-encodes to
+  // `%23` and 404s on a route that exists. Dropped, not preserved — a
+  // fragment is never sent to the server, so nothing a request could use is
+  // lost by discarding it here.
+  it("drops a fragment rather than let it corrupt the pathname", () => {
+    expect(splitNextPath("/mobile#frag")).toEqual({ pathname: "/mobile", search: "" });
+  });
+
+  it("drops a fragment that comes after a query", () => {
+    expect(splitNextPath("/mobile?tab=map#frag")).toEqual({
+      pathname: "/mobile",
+      search: "?tab=map",
+    });
+  });
+});
+
+describe("landingPath", () => {
+  // ⚠️ `/login?next=/login` for a signed-in member: without this guard,
+  // `wanted` would be "/login" and the early-exit branch for /login would
+  // redirect a signed-in member right back to /login.
+  it("falls back to / when the target is an auth page", () => {
+    expect(landingPath("/login", AUTH_PAGES)).toBe("/");
+    expect(landingPath("/join", AUTH_PAGES)).toBe("/");
+  });
+
+  it("leaves an ordinary target alone", () => {
+    expect(landingPath("/mobile", AUTH_PAGES)).toBe("/mobile");
+    expect(landingPath("/", AUTH_PAGES)).toBe("/");
+  });
+
+  it("checks the pathname, not the raw string with its query", () => {
+    // A query naming /login is not itself /login — only the pathname counts.
+    expect(landingPath("/mobile?next=/login", AUTH_PAGES)).toBe("/mobile?next=/login");
   });
 });
