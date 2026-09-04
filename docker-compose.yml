@@ -58,6 +58,15 @@ services:
     restart: unless-stopped
     environment:
       NODE_ENV: production
+      # ⚠️ Discord login. All six are read at RUNTIME by server code only.
+      # None may ever be prefixed NEXT_PUBLIC_ — that inlines the value into
+      # the client bundle, which for the client secret means publishing it.
+      WEB_BASE_URL: ${WEB_BASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      DISCORD_CLIENT_ID: ${DISCORD_CLIENT_ID}
+      DISCORD_CLIENT_SECRET: ${DISCORD_CLIENT_SECRET}
+      DISCORD_JOIN_BOT_TOKEN: ${DISCORD_JOIN_BOT_TOKEN}
+      DISCORD_GUILD_ID: ${DISCORD_GUILD_ID}
     # ⚠️ Loopback only. The system nginx terminates TLS for dayzclanwars.com
     # and proxies here; publishing 0.0.0.0 would serve the same site over
     # plain HTTP on :3020 alongside the TLS one.

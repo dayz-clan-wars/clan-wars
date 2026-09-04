@@ -1,11 +1,22 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 // ⚠️ Every directory that can hold app code, not just `app/`. `src/` didn't
-// exist when this test was written; a directory added later that isn't
-// listed here is scanned by nothing, silently.
-const ROOTS = [join(import.meta.dirname, "..", "app"), join(import.meta.dirname, "..", "src")];
+// exist when this test was written; `lib/` and the package root didn't exist
+// when the auth code was added, and Next puts `middleware.ts` at the package
+// ROOT — outside every directory this used to scan. A directory added later
+// that isn't listed here is scanned by nothing, silently.
+const ROOTS = [
+  join(import.meta.dirname, "..", "app"),
+  join(import.meta.dirname, "..", "src"),
+  join(import.meta.dirname, "..", "lib"),
+];
+
+/** Root-level source files (middleware.ts, next.config.ts) — not a directory walk. */
+const ROOT_FILES = readdirSync(join(import.meta.dirname, ".."), { encoding: "utf8" })
+  .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts"))
+  .map((f) => join(import.meta.dirname, "..", f));
 
 /**
  * ⚠️ The site is a surface, never a source of truth (spec §3).
@@ -21,11 +32,14 @@ const ROOTS = [join(import.meta.dirname, "..", "app"), join(import.meta.dirname,
  * decision expensive to reverse by accident.
  */
 describe("the web app reads nothing", () => {
-  const sources = ROOTS.filter((root) => existsSync(root)).flatMap((root) =>
-    readdirSync(root, { recursive: true, encoding: "utf8" })
-      .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
-      .map((f) => ({ file: join(root, f), text: readFileSync(join(root, f), "utf8") })),
-  );
+  const sources = [
+    ...ROOTS.filter((root) => existsSync(root)).flatMap((root) =>
+      readdirSync(root, { recursive: true, encoding: "utf8" })
+        .filter((f) => f.endsWith(".tsx") || f.endsWith(".ts"))
+        .map((f) => join(root, f)),
+    ),
+    ...ROOT_FILES,
+  ].map((file) => ({ file, text: readFileSync(file, "utf8") }));
 
   it("has source files to check", () => {
     expect(sources.length).toBeGreaterThan(0);
@@ -41,5 +55,10 @@ describe("the web app reads nothing", () => {
   it("reads no DATABASE_URL", () => {
     const offenders = sources.filter((s) => s.text.includes("DATABASE_URL"));
     expect(offenders.map((o) => o.file)).toEqual([]);
+  });
+
+  it("scans lib/ and the package root, where the auth code lives", () => {
+    const scanned = sources.map((s) => s.file);
+    expect(scanned.some((f) => f.includes(`${sep}lib${sep}auth${sep}cookies.ts`))).toBe(true);
   });
 });

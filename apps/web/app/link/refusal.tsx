@@ -1,4 +1,4 @@
-import s from "./link.module.css";
+import s from "../auth.module.css";
 
 /**
  * One refusal notice.

@@ -1,4 +1,4 @@
-import s from "./link.module.css";
+import s from "../auth.module.css";
 
 /** State 06 — linked. The end of the ladder. */
 export function Verified({ gamertag, linkedOn }: { gamertag: string; linkedOn: string }) {

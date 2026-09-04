@@ -53,4 +53,26 @@ describe("compose matches the single-host deployment", () => {
     expect(COMPOSE).not.toMatch(/"[^"]*:80"/);
     expect(COMPOSE).not.toMatch(/"[^"]*:443"/);
   });
+
+  it("passes every auth secret to the web container", () => {
+    // ⚠️ A missing var does not fail the build — it fails at the first login,
+    // in production, as a 500 from `env()`. This is the only cheap place to
+    // catch a compose file that forgot one.
+    for (const key of [
+      "WEB_BASE_URL",
+      "SESSION_SECRET",
+      "DISCORD_CLIENT_ID",
+      "DISCORD_CLIENT_SECRET",
+      "DISCORD_JOIN_BOT_TOKEN",
+      "DISCORD_GUILD_ID",
+    ]) {
+      expect(COMPOSE).toContain(`${key}: \${${key}}`);
+    }
+  });
+
+  it("marks no auth secret NEXT_PUBLIC_", () => {
+    // ⚠️ NEXT_PUBLIC_ inlines a value into the client bundle. For
+    // DISCORD_CLIENT_SECRET that means publishing it.
+    expect(COMPOSE).not.toMatch(/NEXT_PUBLIC_[A-Z_]*(SECRET|TOKEN)/);
+  });
 });

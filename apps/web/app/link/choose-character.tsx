@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import s from "./link.module.css";
+import s from "../auth.module.css";
 import { CHARACTERS } from "./fixtures";
 import { Refusal } from "./refusal";
 import type { Character } from "./types";
