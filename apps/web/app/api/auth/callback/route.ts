@@ -62,6 +62,16 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     else if (status === 403) return fail(req, "banned");
   }
 
+  // ⚠️ Unlike middleware's last-known-good, LOGIN has no prior session to fall
+  // back on — "unknown" here has never meant "member" or "not a member", it
+  // means we don't know. Building a session from it would set guild:false and
+  // send an actual member to /join, where the button fires the guilds.join
+  // consent screen spec §2.3 exists to keep away from people already in the
+  // guild. Fail with the "discord unavailable" copy /login already has for
+  // this (spec §5) instead. Do NOT copy this into middleware: there,
+  // last-known-good is correct and deliberate.
+  if (outcome === "unknown") return fail(req, "discord");
+
   // ⚠️ The access token is used for nothing else and is not stored anywhere.
   // Everything after this point works from the user id alone.
   const now = Math.floor(Date.now() / 1000);
@@ -71,6 +81,9 @@ export async function GET(req: NextRequest): Promise<NextResponse> {
     avatar: user.avatar,
     guild: outcome === "member",
     nextCheckAt: nextCheckAfter(outcome, now),
+    // The anchor for the 7-day expiry — see session.ts. Set ONLY here, at a
+    // fresh login; middleware carries it through unchanged on every re-issue.
+    authAt: now,
   };
 
   const url = req.nextUrl.clone();

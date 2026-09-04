@@ -29,13 +29,20 @@ export function discordClient(): Discord {
  * is stored, so there is none to expire or leak.
  */
 export async function guildMemberStatus(userId: string): Promise<number | "network-error"> {
+  // ⚠️ Read OUTSIDE the try. A missing/misconfigured env var must throw, not
+  // be swallowed into "network-error" -> "unknown" -> last-known-good forever.
+  // Inside the try, a revoked token, a deleted guild id and a real Discord
+  // outage were all indistinguishable and all silent.
+  const guildId = env("DISCORD_GUILD_ID");
+  const token = env("DISCORD_JOIN_BOT_TOKEN");
   try {
-    const res = await fetch(`${API}/guilds/${env("DISCORD_GUILD_ID")}/members/${userId}`, {
-      headers: { Authorization: `Bot ${env("DISCORD_JOIN_BOT_TOKEN")}` },
+    const res = await fetch(`${API}/guilds/${guildId}/members/${userId}`, {
+      headers: { Authorization: `Bot ${token}` },
       cache: "no-store",
     });
     return res.status;
-  } catch {
+  } catch (err) {
+    console.error("guildMemberStatus: request to Discord failed", err);
     return "network-error";
   }
 }
@@ -54,17 +61,21 @@ export async function addGuildMember(
   userId: string,
   accessToken: string,
 ): Promise<number | "network-error"> {
+  // ⚠️ See guildMemberStatus above — read outside the try for the same reason.
+  const guildId = env("DISCORD_GUILD_ID");
+  const token = env("DISCORD_JOIN_BOT_TOKEN");
   try {
-    const res = await fetch(`${API}/guilds/${env("DISCORD_GUILD_ID")}/members/${userId}`, {
+    const res = await fetch(`${API}/guilds/${guildId}/members/${userId}`, {
       method: "PUT",
       headers: {
-        Authorization: `Bot ${env("DISCORD_JOIN_BOT_TOKEN")}`,
+        Authorization: `Bot ${token}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({ access_token: accessToken }),
     });
     return res.status;
-  } catch {
+  } catch (err) {
+    console.error("addGuildMember: request to Discord failed", err);
     return "network-error";
   }
 }
@@ -78,10 +89,14 @@ export async function currentUser(
       headers: { Authorization: `Bearer ${accessToken}` },
       cache: "no-store",
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      console.error(`currentUser: Discord returned ${res.status}`);
+      return null;
+    }
     const u = (await res.json()) as { id: string; username: string; avatar: string | null };
     return { id: u.id, username: u.username, avatar: u.avatar ?? null };
-  } catch {
+  } catch (err) {
+    console.error("currentUser: request to Discord failed", err);
     return null;
   }
 }
