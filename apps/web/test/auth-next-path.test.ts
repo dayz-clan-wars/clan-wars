@@ -37,6 +37,35 @@ describe("safeNextPath", () => {
     expect(safeNextPath("mobile")).toBe("/");
     expect(safeNextPath("javascript:alert(1)")).toBe("/");
   });
+
+  it("refuses control characters that URL parsing strips before parsing", () => {
+    expect(safeNextPath("/\t/evil.example")).toBe("/");
+    expect(safeNextPath("/\n/evil.example")).toBe("/");
+    expect(safeNextPath("/\r/evil.example")).toBe("/");
+    expect(safeNextPath("/mobile ")).toBe("/");
+  });
+
+  // ⚠️ The backstop that does not depend on enumerating attacks. Whatever the
+  // guard accepts must still resolve to OUR origin — enumerating bad prefixes
+  // is how the tab bypass got through in the first place.
+  it("resolves every accepted value to an on-site URL", () => {
+    const base = "https://dayzclanwars.com";
+    for (const probe of [
+      "/mobile",
+      "/mobile?tab=map",
+      "//evil.example",
+      "/\\evil.example",
+      "/\t/evil.example",
+      "/\n/evil.example",
+      "/\r/evil.example",
+      "https://evil.example",
+      "javascript:alert(1)",
+      "",
+      "/a?b=1?c=2",
+    ]) {
+      expect(new URL(safeNextPath(probe), base).origin).toBe(base);
+    }
+  });
 });
 
 describe("splitNextPath", () => {
