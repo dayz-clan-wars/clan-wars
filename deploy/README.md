@@ -65,9 +65,16 @@ elsewhere rather than moving this one.
 `factions_live` is dumped nightly by `clan-wars-backup.timer` (04:17 UTC, `Persistent=true`,
 5-minute jitter) to `/var/backups/clan-wars/`, gzipped, 14 kept.
 
-⚠️ This is a LOCAL backup. It protects against a bad migration, a dropped table or a
-wrong `DELETE`. It does **not** survive losing the machine — and losing the machine is
-what happened to the previous deployment of this project.
+This is a LOCAL backup, and it is the second of two layers: the host itself takes daily
+snapshots, which is what covers losing the machine. The two are not redundant. A snapshot
+restores the whole machine and is crash-consistent — restoring one is equivalent to
+pulling the power cord, which Postgres recovers from by replaying WAL at startup (safe
+here because the data lives in a single Docker volume; the hazard case is a data
+directory spread across volumes snapshotted at different moments). What a snapshot cannot
+do is give you one table back, or let you inspect a dump without touching production, or
+restore into a different Postgres version. That is what these dumps are for, and the
+failures they cover — a bad migration, a dropped table, a wrong `DELETE` — are the ones
+that actually happen.
 
 ⚠️ What is unrecoverable without it: `events` can be re-ingested from Nitrado's ADM logs,
 but `factions`, `faction_members`, `identity_links` and `faction_events` cannot. Losing
