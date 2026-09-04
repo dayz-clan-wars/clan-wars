@@ -52,8 +52,16 @@
   border-right: 1px solid var(--rule);
 }
 
-.mono { font-family: var(--font-space-mono), ui-monospace, monospace; }
-.display { font-family: var(--font-archivo-black), var(--font-archivo), sans-serif; }
+/*
+ * ⚠️ Scoped through `.page` to outrank `.tap`, which resets a button's UA font
+ * with `font: inherit`. At equal specificity `.tap` wins on source order alone,
+ * so every `.display` label on a BUTTON — the primary actions, the nav — used
+ * to render in Archivo rather than Archivo Black. It looked deliberate, which
+ * is why it survived a deploy. The extra class makes the outcome independent
+ * of the order these rules happen to appear in.
+ */
+.page .mono { font-family: var(--font-space-mono), ui-monospace, monospace; }
+.page .display { font-family: var(--font-archivo-black), var(--font-archivo), sans-serif; }
 
 /* Every tappable thing: a button reset plus the design's pressed state, which
    it expressed as `style-active`. */
