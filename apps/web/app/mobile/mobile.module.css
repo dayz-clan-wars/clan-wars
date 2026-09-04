@@ -1,0 +1,885 @@
+/*
+ * The mobile shell, ported from the `Clan Wars Mobile.dc.html` design canvas.
+ *
+ * The design expressed every rule as an inline style; they are collected here
+ * so the markup stays readable. The palette and the 44/52/56/64px touch
+ * minimums are the design's, unchanged — those minimums are what make a 5px
+ * tap target impossible to introduce by accident.
+ */
+
+.page {
+  --ink: #e8e2d4;
+  --ink-2: #b5afa4;
+  --muted: #8a857c;
+  --dim: #6e6a62;
+  --frame: #0b0b0a;
+  --surface: #131211;
+  --rule: #1a1917;
+  --rule-2: #2a2825;
+  --gold: #d9a03c;
+  --rust: #8c3a22;
+  --olive: #8fa36a;
+  --terrain: #111110;
+  /* ⚠️ The two bar heights the map region is measured against. Stated once so
+     the absolutely-positioned map cannot drift out from under the chrome —
+     a mismatch here is a silent sliver of terrain hidden behind a bar. */
+  --topbar: 60px;
+  --navbar: 64px;
+  /* The height the design was authored at (its canvas preview is 430x932).
+     Used only by the device-preview cap at the end of this file. */
+  --phone-height: 932px;
+
+  min-height: 100dvh;
+  background: #050505;
+  display: flex;
+  justify-content: center;
+  font-family: var(--font-archivo), system-ui, sans-serif;
+}
+
+.page * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/* The phone frame. A wider viewport gets the app centred in its own gutter
+   rather than stretched — this is a phone layout, not a responsive one. */
+.frame {
+  width: 100%;
+  max-width: 430px;
+  min-height: 100dvh;
+  background: var(--frame);
+  color: var(--ink);
+  position: relative;
+  overflow: hidden;
+  border-left: 1px solid var(--rule);
+  border-right: 1px solid var(--rule);
+}
+
+.mono { font-family: var(--font-space-mono), ui-monospace, monospace; }
+.display { font-family: var(--font-archivo-black), var(--font-archivo), sans-serif; }
+
+/* Every tappable thing: a button reset plus the design's pressed state, which
+   it expressed as `style-active`. */
+.tap {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tap:active { background: var(--rule); }
+.tapFade:active { opacity: 0.6; background: none; }
+
+/* ---------------- top bar ---------------- */
+
+.topbar {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  background: var(--frame);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--topbar);
+}
+
+.mark {
+  width: 32px;
+  height: 32px;
+  background: var(--gold);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  font-size: 13px;
+  line-height: 1;
+  color: var(--frame);
+  letter-spacing: -0.015em;
+}
+
+.topbarText { flex: 1 1 auto; min-width: 0; }
+
+.screenTitle {
+  font-size: 15px;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screenSub {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.inviteButton {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.inviteBadge {
+  background: var(--rust);
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  padding: 6px 9px;
+}
+
+/* ---------------- map ---------------- */
+
+/* Full-bleed between the two bars: terrain runs to every edge of the region,
+   and everything else on this screen floats over it. */
+.map {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: var(--topbar);
+  bottom: var(--navbar);
+  z-index: 10;
+  overflow: hidden;
+  background: var(--terrain);
+}
+
+/* ⚠️ A square world, scaled to COVER the region. Marker percentages are only
+   geometrically true against a square, so the square is what gets centred in
+   and cropped by the region — it must never be stretched to the region's own
+   aspect ratio, which would move every marker by a different amount. */
+.square {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  min-width: 100%;
+  min-height: 100%;
+  aspect-ratio: 1;
+}
+
+.terrain {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+/* Stands in for the terrain render, and looks like a missing asset on purpose —
+   plausible fake terrain under real marker positions would read as a working
+   map. */
+.terrainPlaceholder {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  text-align: center;
+  background: repeating-linear-gradient(135deg, var(--terrain) 0 11px, #161615 11px 22px);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--dim);
+  line-height: 1.8;
+}
+
+/* 12.5% cells — one cell is 1600m, which is what the scale bar states. */
+.grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(to right, rgba(232, 226, 212, 0.07) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(232, 226, 212, 0.07) 1px, transparent 1px);
+  background-size: 12.5% 12.5%;
+}
+
+.marker {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.basePlate {
+  width: 34px;
+  height: 34px;
+  border: 2px solid var(--gold);
+  background: rgba(11, 11, 10, 0.75);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.basePlate > span { width: 12px; height: 12px; background: var(--gold); }
+
+.baseLabel {
+  font-weight: 700;
+  font-size: 9px;
+  letter-spacing: 0.14em;
+  color: var(--gold);
+  text-transform: uppercase;
+  margin-top: 5px;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px var(--frame);
+}
+
+.dotOnline {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--ink);
+  border: 2px solid var(--frame);
+  box-shadow: 0 0 0 2px rgba(232, 226, 212, 0.35);
+}
+
+.dotOffline {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: transparent;
+  border: 2px solid var(--dim);
+}
+
+.markerLabel {
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  color: var(--ink);
+  margin-top: 4px;
+  white-space: nowrap;
+  text-shadow: 0 1px 3px var(--frame);
+}
+
+/* A state that costs only a line of text never covers the terrain. */
+.mapStrip {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  display: flex;
+  justify-content: center;
+  padding: 8px;
+  pointer-events: none;
+}
+
+.mapStripInner {
+  border: 1px solid var(--rule-2);
+  background: rgba(11, 11, 10, 0.92);
+  padding: 7px 11px;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-align: center;
+}
+
+.scale {
+  position: absolute;
+  left: 12px;
+  bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  pointer-events: none;
+}
+
+.scaleRow { display: flex; align-items: center; gap: 7px; }
+.scaleBar { height: 3px; background: var(--ink); }
+.scaleText { font-size: 10px; color: var(--ink); text-shadow: 0 1px 3px var(--frame); }
+
+.mapName {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-2);
+  text-shadow: 0 1px 3px var(--frame);
+}
+
+/* Thumb-reach, and backed so they survive pale terrain underneath. */
+.mapControls {
+  position: absolute;
+  right: 12px;
+  bottom: 14px;
+  display: flex;
+  gap: 8px;
+}
+
+.mapControl {
+  min-width: 52px;
+  min-height: 52px;
+  border: 1px solid var(--rule-2);
+  background: rgba(11, 11, 10, 0.92);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  line-height: 1;
+  color: var(--ink);
+}
+
+.rosterToggle {
+  min-height: 52px;
+  border: 1px solid var(--rule-2);
+  background: rgba(11, 11, 10, 0.92);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 15px;
+}
+.rosterToggleDot { width: 8px; height: 8px; border-radius: 50%; background: var(--ink); }
+.rosterToggleLabel {
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+}
+
+/* The roster list lives OVER the map, not under it — scrolling to a member must
+   never cost you sight of where they are. */
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 62%;
+  background: var(--frame);
+  border-top: 1px solid var(--rule-2);
+  display: flex;
+  flex-direction: column;
+}
+
+.sheetHead {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex: 0 0 auto;
+}
+
+.sheetTitle { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+
+.sheetClose {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: -10px -10px -10px 0;
+  font-size: 16px;
+  color: var(--ink-2);
+  line-height: 1;
+}
+
+.sheetBody { overflow-y: auto; flex: 1 1 auto; }
+
+.sheetRow {
+  background: var(--surface);
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+}
+
+.sheetDotOnline { width: 9px; height: 9px; border-radius: 50%; background: var(--ink); flex: 0 0 auto; }
+.sheetDotOffline { width: 9px; height: 9px; border-radius: 50%; border: 1px solid var(--dim); flex: 0 0 auto; }
+.sheetFix { font-size: 11px; color: var(--ink-2); flex: 0 0 auto; }
+
+/* ---------------- shared primitives ---------------- */
+
+/* ⚠️ The 1px gap between rows IS this background showing through. A hairline
+   rule that survives a row being added or removed, with no first/last-child
+   border dance to get wrong. */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  background: var(--rule);
+}
+
+/* Clears the fixed bottom nav. Without it the last row of every scrolling
+   screen sits under the bar and looks like the list simply ended. */
+.scroll { padding-bottom: 96px; }
+
+.screenPad { padding: 20px 16px 8px; }
+.grow { flex: 1 1 auto; min-width: 0; }
+
+.name {
+  font-size: 15px;
+  letter-spacing: -0.02em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.meta {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 4px;
+}
+
+.sectionLabel { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--muted); }
+
+.back {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 18px;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.flagTile {
+  border: 1px solid var(--rule-2);
+  flex: 0 0 auto;
+  background-color: var(--rule);
+  background-size: cover;
+  background-position: center;
+}
+
+.primary {
+  background: var(--gold);
+  padding: 20px 16px;
+  min-height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  font-size: 15px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--frame);
+}
+.primary:active { background: var(--gold); opacity: 0.85; }
+
+/* ---------------- faction ---------------- */
+
+.factionHead {
+  padding: 24px 16px;
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.factionFlag { width: 72px; height: 48px; object-fit: cover; border: 1px solid var(--rule-2); flex: 0 0 auto; }
+.factionName { font-size: 24px; line-height: 1.05; letter-spacing: -0.035em; text-transform: uppercase; }
+.factionTags { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+
+.tagChip {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  background: var(--gold);
+  color: var(--frame);
+  padding: 3px 7px;
+}
+
+.statusActive { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--olive); }
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px;
+  background: var(--rule);
+  border-bottom: 1px solid var(--rule);
+}
+
+.fact { background: var(--frame); padding: 16px; }
+.factKey { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.factValue { font-size: 13px; color: var(--ink); margin-top: 6px; }
+
+.callout {
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+  padding: 14px 16px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.rosterSection { padding: 22px 16px 8px; }
+.rosterHead { display: flex; align-items: baseline; justify-content: space-between; margin-bottom: 12px; }
+
+.rosterRow {
+  background: var(--surface);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 64px;
+}
+
+.manage {
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  border: 1px solid var(--rule-2);
+  font-size: 16px;
+  color: var(--ink-2);
+  line-height: 1;
+}
+
+.actions { padding: 20px 16px 8px; }
+
+.actionRow {
+  background: var(--surface);
+  padding: 18px 16px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.actionGold { background: var(--gold); color: var(--frame); }
+.actionGold:active { background: var(--gold); opacity: 0.85; }
+
+.actionTitle { font-size: 14px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--ink); }
+.actionTitleGold { font-size: 14px; letter-spacing: 0.02em; text-transform: uppercase; color: var(--frame); }
+.actionTitleDanger { font-size: 14px; letter-spacing: -0.01em; text-transform: uppercase; color: var(--rust); }
+.actionSub { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 4px; }
+.arrow { font-size: 14px; color: var(--muted); }
+.arrowDark { font-size: 14px; color: var(--frame); }
+
+/* ---------------- feed ---------------- */
+
+.tabs { display: flex; gap: 1px; background: var(--rule); margin-bottom: 20px; }
+
+.tab {
+  flex: 1 1 0;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+.tab:active { opacity: 0.7; background: var(--surface); }
+
+.tabOn {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+  border-bottom: 2px solid var(--gold);
+  padding-bottom: 3px;
+}
+
+.tabOff { font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+
+.feedRow { background: var(--surface); padding: 16px; display: flex; gap: 14px; align-items: flex-start; }
+.feedFlag { width: 44px; height: 30px; margin-top: 2px; }
+.feedKind { font-weight: 700; font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; margin-bottom: 7px; }
+.feedText { font-size: 15px; line-height: 1.5; color: var(--ink); text-wrap: pretty; }
+.feedTime { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); margin-top: 9px; }
+.feedEmpty { background: var(--surface); padding: 24px 16px; font-size: 11px; line-height: 1.7; color: var(--muted); }
+
+/* ---------------- directory ---------------- */
+
+.directoryNote {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  padding: 14px 16px;
+  margin-bottom: 20px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.directoryRow {
+  background: var(--surface);
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 72px;
+  width: 100%;
+}
+
+.directoryFlag { width: 52px; height: 34px; }
+
+.directoryName {
+  font-size: 15px;
+  letter-spacing: -0.025em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.directoryTag {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+  border: 1px solid var(--rule-2);
+  padding: 3px 6px;
+  flex: 0 0 auto;
+}
+
+.panel { padding: 22px 18px; border: 1px solid var(--rule-2); background: var(--frame); margin-top: 28px; }
+.panelGold { padding: 22px 18px; border: 1px solid var(--gold); background: var(--frame); width: 100%; }
+.panelGold:active { background: var(--surface); }
+.panelLabel { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.panelHeading { font-size: 19px; line-height: 1.15; letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 10px; }
+.panelHeadingSm { font-size: 20px; line-height: 1.1; letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 10px; }
+.panelBody { font-size: 14px; line-height: 1.6; color: var(--muted); }
+
+/* ---------------- me ---------------- */
+
+.identityCard { border: 1px solid var(--rule-2); background: var(--surface); padding: 20px; margin-bottom: 22px; }
+.identityName { font-size: 26px; line-height: 1.05; letter-spacing: -0.035em; text-transform: uppercase; }
+.identityRow { display: flex; align-items: center; gap: 8px; margin-top: 12px; }
+
+.verified {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--frame);
+  background: var(--olive);
+  padding: 3px 7px;
+}
+
+.linkedSince { font-size: 11px; color: var(--muted); }
+
+.settingRow {
+  background: var(--surface);
+  padding: 16px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+
+.settingKey { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-2); }
+.settingValue { font-size: 12px; color: var(--ink); }
+.settingDanger { font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--rust); }
+.settingSub { font-size: 10px; color: var(--muted); margin-top: 5px; }
+
+.footnote { font-size: 11px; line-height: 1.7; color: var(--dim); padding-bottom: 12px; }
+
+/* ---------------- invites ---------------- */
+
+.inviteList { display: flex; flex-direction: column; gap: 14px; }
+.inviteCard { border: 1px solid var(--rule-2); background: var(--surface); }
+.inviteBody { padding: 18px; display: flex; gap: 14px; align-items: flex-start; }
+.inviteFlag { width: 52px; height: 34px; }
+.inviteName { font-size: 16px; line-height: 1.1; letter-spacing: -0.025em; text-transform: uppercase; }
+.inviteMeta { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-top: 6px; }
+.inviteExpires { font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--gold); margin-top: 5px; }
+.inviteActions { display: flex; gap: 1px; background: var(--rule-2); }
+
+.accept {
+  flex: 1 1 0;
+  background: var(--gold);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--frame);
+}
+.accept:active { background: var(--gold); opacity: 0.85; }
+
+.decline {
+  flex: 1 1 0;
+  background: var(--surface);
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* ---------------- claim ---------------- */
+
+.ceremony {
+  background: var(--surface);
+  border-left: 2px solid var(--gold);
+  padding: 16px;
+  margin-bottom: 26px;
+  font-size: 11px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+.ceremony strong { color: var(--ink); }
+.clock { color: var(--gold); }
+
+.field {
+  border: 1px solid var(--rule-2);
+  background: var(--surface);
+  padding: 16px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+}
+
+.fieldValue { font-size: 17px; letter-spacing: -0.025em; text-transform: uppercase; color: var(--ink); }
+.tagRow { display: flex; gap: 10px; align-items: center; margin-bottom: 22px; }
+.tagField { width: 120px; flex: 0 0 auto; }
+.tagValue { font-weight: 700; font-size: 17px; letter-spacing: 0.1em; color: var(--ink); }
+.available { font-size: 11px; line-height: 1.6; color: var(--olive); }
+
+.flagGrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 26px; }
+
+.flagCell { position: relative; aspect-ratio: 3 / 2; width: 100%; }
+.flagCell:active { opacity: 0.7; background: none; }
+
+.flagCellImage {
+  width: 100%;
+  height: 100%;
+  border: 1px solid var(--rule-2);
+  display: block;
+  background-color: var(--rule);
+  background-size: cover;
+  background-position: center;
+}
+
+.flagPicked { position: absolute; inset: 0; border: 2px solid var(--gold); }
+
+.flagTaken {
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 11, 10, 0.78);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.flagTakenChip {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink);
+  background: var(--rust);
+  padding: 3px 6px;
+}
+
+/* ---------------- rebind ---------------- */
+
+.rebindTitle { font-size: 26px; line-height: 1.05; letter-spacing: -0.035em; text-transform: uppercase; margin-bottom: 14px; }
+.rebindLead { font-size: 15px; line-height: 1.65; color: var(--ink-2); margin-bottom: 26px; text-wrap: pretty; }
+.rebindLead strong { color: var(--ink); }
+
+.candidate { border: 1px solid var(--gold); background: var(--surface); padding: 18px; margin-bottom: 22px; }
+.candidateLabel { font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--gold); margin-bottom: 12px; }
+.candidateName { font-size: 18px; letter-spacing: -0.03em; text-transform: uppercase; margin-bottom: 10px; }
+.candidateMeta { font-size: 11px; line-height: 1.7; color: var(--muted); }
+.candidateMeta strong { color: var(--ink); }
+
+.terms { background: var(--surface); padding: 16px; font-size: 11px; line-height: 1.7; color: var(--ink-2); }
+.terms strong { color: var(--ink); }
+
+/* ---------------- bottom nav ---------------- */
+
+/* Fixed to the viewport, then re-constrained to the frame's width, so it stays
+   pinned on a tall desktop window instead of floating mid-page. */
+.navWrap {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 30;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.nav {
+  width: 100%;
+  max-width: 430px;
+  background: var(--frame);
+  border-top: 1px solid var(--rule);
+  display: flex;
+  pointer-events: auto;
+}
+
+.navItem {
+  flex: 1 1 0;
+  min-height: var(--navbar);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 8px 2px;
+}
+.navItem:active { background: var(--surface); }
+
+/* ⚠️ Drawn whether or not the tab is selected, transparent when it is not. An
+   item that only gained the rule when active would shift 2px on every tap. */
+.navRule { width: 18px; height: 2px; background: transparent; }
+.navRuleOn { background: var(--gold); }
+
+.navLabel { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.navLabelOn { font-weight: 700; color: var(--gold); }
+
+/* ---------------- device preview on a desktop-sized window ---------------- */
+
+/*
+ * ⚠️ The map is scaled to COVER the region between the two bars, so the region's
+ * aspect ratio decides how much of Livonia survives the crop. At the design's
+ * own 430x932 that leaves the base plate and most of the roster in frame; in a
+ * 1575px-tall browser window the region grows to ~1450px, the square grows with
+ * it, and the visible slice narrows to the middle 35-65% of the map — the base
+ * marker crops out entirely. Nothing errors, and the screen still looks
+ * deliberate, which is what makes it worth pinning.
+ *
+ * So above phone height, and only on a viewport too wide to be a phone, the
+ * frame stops growing and sits centred as a device preview. Both conditions
+ * matter: a tall phone (430x1000) must still fill its screen edge to edge, or
+ * the shell gains a dead band under the nav on a real device.
+ */
+@media (min-width: 480px) and (min-height: 960px) {
+  .page { align-items: center; }
+
+  .frame {
+    height: var(--phone-height);
+    min-height: 0;
+  }
+
+  /* ⚠️ With the frame no longer as tall as the viewport, the page has nothing
+     left to scroll — the content column has to become the scroll container
+     itself, or long screens are simply cut off at the frame's edge with no way
+     to reach the rest. `.scroll` keeps its bottom padding, which is what holds
+     the last row clear of the nav overlaying it. */
+  .scroll {
+    position: absolute;
+    inset: var(--topbar) 0 0 0;
+    overflow-y: auto;
+  }
+
+  /* ⚠️ Absolute, not fixed: fixed pins to the viewport, which in this mode is
+     taller than the frame — the nav would detach and float in the gap below the
+     phone. `.frame` is positioned, so this lands on the frame's own bottom. */
+  .navWrap { position: absolute; }
+}

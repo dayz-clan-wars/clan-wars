@@ -11,12 +11,20 @@
 body {
   margin: 0;
   min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 2rem;
   background: var(--bg);
   color: var(--fg);
   font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+/* ⚠️ The centring lives here rather than on `body` because /mobile is a
+   full-bleed phone layout on the same body: `place-items: center` plus 2rem of
+   body padding would inset its top bar and its fixed nav from the viewport
+   edges, and the result looks deliberate rather than broken. */
+.landing {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 2rem;
 }
 
 main { max-width: 34rem; text-align: center; }
