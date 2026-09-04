@@ -1,0 +1,491 @@
+/*
+ * The character-link flow, ported from the `Clan Wars Gamertag Link.dc.html`
+ * design canvas.
+ *
+ * The design expressed every rule as an inline style; they are collected here
+ * so the markup stays readable. The palette, the 390px card and the 44/52/56px
+ * touch minimums are the design's, unchanged.
+ *
+ * ⚠️ The custom properties below are shared with `../mobile/mobile.module.css`.
+ * They are two statements of one palette, and `test/palette-drift.test.ts`
+ * fails when they disagree — a drift here shows up as one screen in slightly
+ * the wrong gold, which nobody reports as a bug.
+ */
+
+.page {
+  --ink: #e8e2d4;
+  --ink-2: #b5afa4;
+  --muted: #8a857c;
+  --dim: #6e6a62;
+  --frame: #0b0b0a;
+  --surface: #131211;
+  --rule: #1a1917;
+  --rule-2: #2a2825;
+  --gold: #d9a03c;
+  --rust: #8c3a22;
+  --olive: #8fa36a;
+  --terrain: #111110;
+
+  min-height: 100dvh;
+  background: #050505;
+  color: var(--ink);
+  font-family: var(--font-archivo), system-ui, sans-serif;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 28px 16px 72px;
+}
+
+.page * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+/*
+ * ⚠️ Scoped through `.page` to outrank `.tap`, which resets a button's UA font
+ * with `font: inherit`. At equal specificity `.tap` wins on source order alone,
+ * and a `.display` label on a button silently renders in Archivo instead of
+ * Archivo Black — the design's loudest face, lost with nothing to show for it.
+ * The extra class is what makes that independent of the order rules appear in.
+ */
+.page .mono { font-family: var(--font-space-mono), ui-monospace, monospace; }
+.page .display { font-family: var(--font-archivo-black), var(--font-archivo), sans-serif; }
+
+/* Every tappable thing: a button reset plus the design's pressed state, which
+   it expressed as `style-active`. */
+.tap {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin: 0;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  width: 100%;
+}
+
+.tap:disabled { cursor: default; }
+
+/* ---------------- card ---------------- */
+
+.card {
+  width: 100%;
+  max-width: 390px;
+  background: var(--frame);
+  border: 1px solid var(--rule);
+  padding: 28px 20px 36px;
+}
+
+/* ⚠️ The rust underline marks a challenge that is outstanding — pending or
+   expired — and nothing else. The verified and signed-out cards must not carry
+   it: it is the one persistent cue that the player still owes the server
+   something, and putting it on a finished card empties it of meaning. */
+.cardOutstanding { border-bottom: 5px solid var(--rust); }
+
+.stepLabel {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 16px;
+}
+
+.stepLabelStrong { color: var(--gold); font-weight: 700; }
+
+.headline {
+  font-size: 34px;
+  line-height: 0.95;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  margin: 0 0 16px;
+}
+
+.headlineLg {
+  font-size: 44px;
+  line-height: 0.9;
+  letter-spacing: -0.045em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.headlineSm {
+  font-size: 31px;
+  line-height: 0.98;
+  letter-spacing: -0.04em;
+  text-transform: uppercase;
+  margin: 0 0 16px;
+}
+
+.body {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-2);
+  margin: 0 0 22px;
+}
+
+.bodyWide { margin-bottom: 26px; }
+
+.gamertag {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: 0.1em;
+  color: var(--gold);
+  margin: 12px 0 20px;
+}
+
+/* ---------------- primary action ---------------- */
+
+.primary {
+  background: var(--gold);
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 14px;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: var(--frame);
+}
+
+.primary:active { opacity: 0.85; }
+
+/* ⚠️ Dimmed AND disabled. The dim alone would leave a tap that lands and
+   silently does nothing — the refusal below it explains why it is off. */
+.primary:disabled { opacity: 0.4; }
+
+.footnote { font-size: 11px; line-height: 1.7; color: var(--dim); }
+
+/* ---------------- character picker ---------------- */
+
+.field {
+  border: 1px solid var(--ink);
+  background: var(--surface);
+  padding: 15px;
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 1px;
+}
+
+.fieldInput {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font-family: var(--font-space-mono), ui-monospace, monospace;
+  font-weight: 700;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  width: 100%;
+  padding: 0;
+}
+
+.fieldInput:focus { outline: none; }
+.fieldInput::placeholder { color: var(--muted); font-weight: 400; }
+
+.options {
+  border: 1px solid var(--rule-2);
+  border-top: 0;
+  background: var(--terrain);
+  margin-bottom: 20px;
+}
+
+.option {
+  padding: 14px 15px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-top: 1px solid var(--rule);
+}
+
+.option:first-child { border-top: 0; }
+.optionOn { background: var(--rule); }
+
+/* Unselectable characters keep their row but lose the affordance. */
+.optionBlocked { opacity: 0.5; cursor: default; }
+
+.optionName { font-size: 14px; color: var(--ink-2); }
+.optionNameOn { color: var(--ink); }
+
+.optionMeta {
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--dim);
+  white-space: nowrap;
+}
+
+.optionMetaOn { color: var(--muted); }
+.optionMetaBlocked { color: var(--rust); }
+
+.optionsEmpty {
+  padding: 14px 15px;
+  min-height: 52px;
+  display: flex;
+  align-items: center;
+  font-size: 14px;
+  color: var(--muted);
+}
+
+/* ---------------- the sequence ---------------- */
+
+.sequence {
+  list-style: none;
+  margin: 0 0 22px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/*
+ * ⚠️ An unconfirmed step is the DEFAULT and they are all identical. The design
+ * forbids a current-step pointer: the page cannot know which emote the player
+ * is about to perform, and a marker that guesses reads as broken the moment
+ * the tick lags — which it always does.
+ */
+.step {
+  background: var(--ink);
+  border: 2px dashed var(--frame);
+  padding: 18px;
+  min-height: 130px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  text-align: center;
+  position: relative;
+}
+
+/* Confirmed by the server, and only ever by the server. */
+.stepConfirmed {
+  border-style: solid;
+  padding: 16px 18px;
+  justify-content: flex-start;
+}
+
+.stepOrdinal {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--rust);
+}
+
+.stepOrdinalConfirmed { color: rgba(11, 11, 10, 0.45); }
+
+.stepName {
+  font-size: 38px;
+  line-height: 0.95;
+  letter-spacing: -0.035em;
+  text-transform: uppercase;
+  color: var(--frame);
+}
+
+.stepNameConfirmed { opacity: 0.45; }
+
+.stamp {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding-bottom: 8px;
+  pointer-events: none;
+}
+
+.stampInk {
+  transform: rotate(-6deg);
+  border: 2px solid var(--rust);
+  background: var(--ink);
+  padding: 2px 11px;
+  font-size: 15px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rust);
+}
+
+/* ---------------- the lag note ---------------- */
+
+.note {
+  border-left: 3px solid var(--gold);
+  padding: 2px 0 2px 16px;
+  margin-bottom: 24px;
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--ink-2);
+}
+
+.noteStrong { color: var(--gold); font-weight: 700; }
+
+.metaRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.expiry {
+  font-weight: 700;
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.metaLinks { display: flex; gap: 18px; }
+
+.metaLink {
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  text-decoration: underline;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  width: auto;
+}
+
+.metaLink:disabled { opacity: 0.4; text-decoration: none; }
+
+.drawNote { font-size: 10px; line-height: 1.7; color: var(--dim); margin-top: 10px; }
+
+/* ---------------- verified ---------------- */
+
+.linkedLabel {
+  font-size: 10px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--olive);
+  margin-bottom: 16px;
+}
+
+.badgeRow { display: flex; align-items: center; gap: 9px; margin-bottom: 24px; }
+
+.badge {
+  font-weight: 700;
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--frame);
+  background: var(--olive);
+  padding: 3px 7px;
+}
+
+.badgeDate { font-size: 11px; color: var(--muted); }
+
+.cta {
+  background: var(--surface);
+  border: 1px solid var(--rule-2);
+  padding: 16px;
+  min-height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 18px;
+}
+
+.cta:active { background: var(--rule); }
+
+.ctaLabel { font-size: 13px; letter-spacing: 0.01em; text-transform: uppercase; color: var(--ink); }
+.ctaArrow { font-size: 13px; color: var(--muted); }
+
+/* ---------------- refusals ---------------- */
+
+.refusal {
+  background: var(--frame);
+  border: 1px solid var(--rule);
+  padding: 20px;
+  margin-bottom: 14px;
+}
+
+.refusalLabel {
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rust);
+  margin-bottom: 10px;
+}
+
+/* The one refusal that is not a refusal — a switch is a thing that happened,
+   not a thing that was denied, so it does not borrow the rust. */
+.refusalLabelNeutral { color: var(--muted); }
+
+.refusalBody { font-size: 14px; line-height: 1.65; color: var(--ink-2); }
+.refusalStrong { color: var(--ink); }
+
+/* ---------------- prototype chrome ---------------- */
+
+/*
+ * ⚠️ Not part of the design. This route imitates a sign-in and a character
+ * claim, so the banner and the state switcher are what stop it reading as the
+ * real thing — the flow is fixtures end to end and links nothing.
+ */
+.banner {
+  width: 100%;
+  max-width: 390px;
+  border: 1px solid var(--rust);
+  background: var(--frame);
+  padding: 12px 14px;
+  margin-bottom: 20px;
+  font-size: 11px;
+  line-height: 1.6;
+  color: var(--ink-2);
+}
+
+.bannerLabel {
+  display: block;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--rust);
+  margin-bottom: 6px;
+}
+
+.switcher {
+  width: 100%;
+  max-width: 390px;
+  margin-bottom: 20px;
+}
+
+.switcherLabel {
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+.switcherRow { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.switcherItem {
+  width: auto;
+  border: 1px solid var(--rule-2);
+  background: var(--terrain);
+  color: var(--muted);
+  padding: 8px 10px;
+  min-height: 36px;
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.switcherItemOn { border-color: var(--gold); color: var(--gold); }
+
+/* Visually hidden, still announced. Used for the confirmed-count status node. */
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

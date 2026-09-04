@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import s from "./mobile.module.css";
-import { archivo, archivoBlack, spaceMono } from "./fonts";
+import { archivo, archivoBlack, spaceMono } from "../fonts";
 import { INVITES } from "./fixtures";
 import { NAV, TITLES, type Screen, type Tab } from "./types";
 import { MapScreen } from "./map-screen";
