@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 /**
  * ⚠️ The palette is stated twice — once in `app/mobile/mobile.module.css` and
- * once in `app/link/link.module.css` — because CSS modules are scoped and
+ * once in `app/auth.module.css` — because CSS modules are scoped and
  * neither route can see the other's custom properties.
  *
  * Two statements of one fact will drift. This is the test that fails when they
@@ -18,7 +18,7 @@ import { join } from "node:path";
  */
 const FILES = {
   mobile: join(import.meta.dirname, "..", "app", "mobile", "mobile.module.css"),
-  link: join(import.meta.dirname, "..", "app", "link", "link.module.css"),
+  link: join(import.meta.dirname, "..", "app", "auth.module.css"),
 };
 
 /** Every `--name: value;` declaration in a stylesheet, as a map. */

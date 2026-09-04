@@ -1,4 +1,4 @@
-import s from "./link.module.css";
+import s from "../auth.module.css";
 
 /** State 05 — the challenge timed out. A branch of pending, not a dead end. */
 export function Expired({

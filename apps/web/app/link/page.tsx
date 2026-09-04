@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import s from "./link.module.css";
+import s from "../auth.module.css";
 import { archivo, archivoBlack, spaceMono } from "../fonts";
 import {
   DRAWS_USED,

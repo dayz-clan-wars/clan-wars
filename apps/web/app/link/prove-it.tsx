@@ -1,6 +1,6 @@
 "use client";
 
-import s from "./link.module.css";
+import s from "../auth.module.css";
 import { SEQUENCE } from "./fixtures";
 import { Refusal } from "./refusal";
 
