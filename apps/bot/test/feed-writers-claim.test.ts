@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, factionEvents, factions, servers, ceremonies, identityLinks, players, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, admFiles, events as eventRows, factionEvents, factions, servers, ceremonies, identityLinks, players, type Database } from "@factions/db";
 import { asc, sql } from "drizzle-orm";
 import { PgFactionStore } from "../src/faction-store.js";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
+import { declareSolo, declarationForPlayer } from "../src/declaration-store.js";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");
@@ -117,6 +118,42 @@ describe("claim path writes feed events", () => {
     const rows = await events();
     expect(rows.at(-1)!.kind).toBe("activated");
     expect(rows.at(-1)!.payload).toMatchObject({ actor: "Racer", tag: "BEAR" });
+  });
+
+  describe("a solo already holding the ceremony's pole", () => {
+    /** A solo declaration at the claim's pole, evidenced by a raise the log holds. */
+    const soloAt = async (dayzId: string) => {
+      const [a] = await db.insert(admFiles).values({
+        serverId, filename: `${dayzId}.ADM`, bootAt: now, linesIngested: 0, complete: true,
+      }).returning();
+      await db.insert(eventRows).values({
+        serverId, admFileId: a!.id, lineIndex: 0, type: "flag.raised", occurredAt: now,
+        payload: {
+          dayzId, gamertag: "G", texture: "Flag_White", poleKey: "10000:2:10000",
+          pole: { x: 10000, y: 2, z: 10000 },
+        },
+      });
+      expect(await declareSolo(db, { serverId, dayzId, poleKey: "10000:2:10000", at: now }))
+        .toMatchObject({ ok: true });
+    };
+
+    it("releases the solo's declaration when they are on the roster", async () => {
+      // Spec §5.2: a solo who joins a clan releases their declaration — and
+      // Task 6 lets a ceremony at a solo-declared pole proceed when that solo
+      // is a participant. Without the release the founding would hit
+      // declarations_pole_uniq and be told the pole is taken by itself.
+      await soloAt("u1");
+      expect(await new PgFactionStore(db).reserve(args(ceremonyId))).toBe("ok");
+      expect(await declarationForPlayer(db, serverId, "u1")).toBeNull();
+    });
+
+    it("⚠️ leaves a stranger's declaration standing and refuses the claim", async () => {
+      // The release is only ever the roster's own. A solo who is not founding
+      // this clan keeps their pole; the claim is refused, not stolen.
+      await soloAt("stranger");
+      expect(await new PgFactionStore(db).reserve(args(ceremonyId))).toBe("pole-taken");
+      expect(await declarationForPlayer(db, serverId, "stranger")).toMatchObject({ poleKey: "10000:2:10000" });
+    });
   });
 
   it("⚠️ writes no activated row when the guarded update matches nothing", async () => {

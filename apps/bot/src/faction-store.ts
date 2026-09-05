@@ -1,10 +1,10 @@
 import type { Database } from "@factions/db";
-import { ceremonies, ceremonyParticipants, claimDrafts, factions, factionMembers } from "@factions/db";
-import { and, asc, eq, inArray } from "drizzle-orm";
+import { ceremonies, ceremonyParticipants, claimDrafts, declarations, factions, factionMembers } from "@factions/db";
+import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { declareTx } from "./declaration-store.js";
+import { declareTx, releaseTx } from "./declaration-store.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -153,6 +153,29 @@ export class PgFactionStore implements FactionStore {
           status: "reserved", leaderDiscordId: a.leaderDiscordId,
           ceremonyId: a.ceremonyId, createdAt: a.at, reservedUntil: a.reservedUntil,
         }).returning({ id: factions.id });
+
+        // ⚠️ A solo declaration at this very pole, held by someone founding
+        // this clan, is released first. Spec §5.2: a solo who joins a clan
+        // releases their declaration, and the ceremony rules let a ceremony
+        // at a solo-declared pole proceed when that solo is a participant —
+        // without this, the solo's own row would collide with the clan's on
+        // `declarations_pole_uniq` and the founding would be refused as
+        // "pole-taken" by itself. A declarant who is NOT on this roster keeps
+        // their pole: nothing is released, and declareTx refuses below, which
+        // is the right answer.
+        //
+        // Same transaction, and after the `factions` insert: lock order is
+        // `factions` then `declarations` (spec §4.12).
+        const [solo] = await tx.select({ dayzId: declarations.ownerDayzId })
+          .from(declarations)
+          .where(and(
+            eq(declarations.serverId, a.serverId),
+            eq(declarations.poleKey, a.poleKey),
+            isNotNull(declarations.ownerDayzId),
+          ));
+        if (solo?.dayzId && a.members.some((m) => m.dayzId === solo.dayzId)) {
+          await releaseTx(tx, { dayzId: solo.dayzId, serverId: a.serverId }, a.at);
+        }
 
         // The reservation holds the pole for its 24 h (guide ch. 3), so the
         // declaration is written here, not at activation — and the 200 m
