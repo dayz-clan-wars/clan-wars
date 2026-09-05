@@ -89,6 +89,6 @@ describe("the web app reads nothing", () => {
     // the site's half of the pin; packages/roster/test/exports.test.ts is
     // the package's. Both must change for an export to land.
     const roster = await import("@factions/roster");
-    expect(Object.keys(roster).sort()).toEqual(["viewerFor"]);
+    expect(Object.keys(roster).sort()).toEqual(["ISSUE_OUTCOME_KINDS", "cancelLink", "linkStatus", "searchGamertags", "startLink", "unlink", "viewerFor"]);
   });
 });

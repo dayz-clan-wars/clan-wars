@@ -9,7 +9,7 @@ import { describe, it, expect } from "vitest";
  * ⚠️ An allowlist, not a denylist. A denylist of forbidden names can be
  * dodged by a synonym; an allowlist cannot grow by accident.
  */
-export const ROSTER_EXPORTS = ["viewerFor"] as const;
+export const ROSTER_EXPORTS = ["ISSUE_OUTCOME_KINDS", "cancelLink", "linkStatus", "searchGamertags", "startLink", "unlink", "viewerFor"] as const;
 
 describe("@factions/roster exports exactly its allowlist", () => {
   it("matches", async () => {
