@@ -61,4 +61,15 @@ describe("the web app reads nothing", () => {
     const scanned = sources.map((s) => s.file);
     expect(scanned.some((f) => f.includes(`${sep}lib${sep}auth${sep}cookies.ts`))).toBe(true);
   });
+
+  it("⚠️ declarations cannot be written without evidence — the guard the capability rule will lean on", async () => {
+    // Pinned here, in the web app's own suite, because this is the constraint
+    // that makes "the site can never bind a pole from nothing" a property of
+    // the database rather than of the export list. See spec §4.1 and §14.
+    const sql = readFileSync(
+      join(import.meta.dirname, "..", "..", "..", "packages", "db", "migrations", "0020_declarations.sql"),
+      "utf8",
+    );
+    expect(sql).toContain('CONSTRAINT "declarations_one_evidence"');
+  });
 });
