@@ -12,7 +12,15 @@ import { join } from "node:path";
  */
 const ROOTS = [join(import.meta.dirname, "..", "app")];
 const MODULE_SPECIFIERS = /^\s*(?:import|export)\b[^;]*?\bfrom\s+["'][^"']+["'];?|^\s*import\s+["'][^"']+["'];?/gmu;
-const COMMENTS = /\/\*[\s\S]*?\*\/|\/\/[^\n]*|\{\/\*[\s\S]*?\*\/\}/gu;
+// A bare `//` inside a URL (`https://...`) is not a comment marker — it must
+// be at line start or preceded by whitespace to count as one, or a one-line
+// JSX with a URL and copy on the same line (`<a href="https://x">faction</a>`)
+// has everything after the URL's `//` silently deleted before the scan runs.
+const COMMENTS = /\/\*[\s\S]*?\*\/|(?:^|(?<=\s))\/\/[^\n]*|\{\/\*[\s\S]*?\*\/\}/gu;
+
+function strip(text: string): string {
+  return text.replace(MODULE_SPECIFIERS, "").replace(COMMENTS, "");
+}
 
 const files = ROOTS.filter(existsSync).flatMap((root) =>
   readdirSync(root, { recursive: true, encoding: "utf8" })
@@ -22,8 +30,17 @@ const files = ROOTS.filter(existsSync).flatMap((root) =>
 
 describe("site copy says clan, not faction", () => {
   it("has files to scan", () => expect(files.length).toBeGreaterThan(0));
+
+  it("does not treat a URL's // as a comment marker", () => {
+    expect(strip('<a href="https://x.y">Found a faction here</a>')).toContain("faction");
+  });
+
+  it("still strips a real line comment", () => {
+    expect(strip("const a = 1; // faction comment")).not.toContain("faction");
+  });
+
   it.each(files)("%s", (file) => {
-    const text = readFileSync(file, "utf8").replace(MODULE_SPECIFIERS, "").replace(COMMENTS, "");
+    const text = strip(readFileSync(file, "utf8"));
     const hits = [...text.matchAll(/[^\n]*faction[^\n]*/giu)].map((m) => m[0].trim());
     expect(hits).toEqual([]);
   });
