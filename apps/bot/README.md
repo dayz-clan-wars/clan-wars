@@ -13,11 +13,11 @@ in-game verification tick confirms it.
 | `DISCORD_GUILD_ID` | yes | The Discord server (guild) ID the bot's slash commands are registered to. Right-click the server icon with Developer Mode enabled to copy it. |
 | `DATABASE_URL` | yes | Postgres connection string for the `@factions/db` schema (identity links, verification challenges, event log). ⚠️ Use `factions_live`, not `factions`: the test suites truncate `factions`, and the bot must read the same event log the ingest worker writes or `/link` will never see a player's emotes. |
 | `BOT_TICK_INTERVAL_MS` | no (default `10000`) | How often the verification tick scans new emote events, in milliseconds. Plain decimal digits only. |
-| `BOT_CHALLENGE_TTL_MS` | no (default `86400000`) | How long an issued `/link` challenge stays live before it expires. 24 hours by default, matching one-life; safe because a challenge names the one character that can satisfy it. Plain decimal digits only. |
-| `BOT_RESERVATION_TTL_MS` | no (default `86400000`) | How long a `/faction claim` reservation holds a flag, tag and pole before it can be reclaimed. Plain decimal digits only. |
-| `BOT_INVITE_TTL_MS` | no (default `604800000`, 7 days) | How long a `/faction invite` stays pending before it expires. Plain decimal digits only. |
-| `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Plain decimal digits only. |
-| `BOT_RENAME_COOLDOWN_MS` | no (default `604800000`, 7 days) | The minimum time between two `/faction rename`s of the same faction. Plain decimal digits only. |
+| `BOT_CHALLENGE_TTL_MS` | no (default `86400000`, 24 hours) | How long an issued `/link` challenge stays live before it expires. This is the Discord flow's value (a player can run `/link` from anywhere, and an expired challenge's replacement counts against the daily draw cap) — the site flow lands in increment 2 with the guide's 10-minute default from `packages/domain/src/rules.ts` (`LINK_TTL_MS`). Plain decimal digits only. |
+| `BOT_RESERVATION_TTL_MS` | no (default `86400000`) | How long a `/faction claim` reservation holds a flag, tag and pole before it can be reclaimed. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
+| `BOT_INVITE_TTL_MS` | no (default `604800000`, 7 days) | How long a `/faction invite` stays pending before it expires. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
+| `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
+| `BOT_RENAME_COOLDOWN_MS` | no (default `2592000000`, 30 days) | The minimum time between two `/faction rename`s of the same faction. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
 | `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
 | `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 
@@ -33,7 +33,7 @@ BOT_CHALLENGE_TTL_MS=86400000
 BOT_RESERVATION_TTL_MS=86400000
 BOT_INVITE_TTL_MS=604800000
 BOT_COOLDOWN_MS=259200000
-BOT_RENAME_COOLDOWN_MS=604800000
+BOT_RENAME_COOLDOWN_MS=2592000000
 BOT_FEED_CHANNEL_ID=1234567890123456789
 FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 ```
