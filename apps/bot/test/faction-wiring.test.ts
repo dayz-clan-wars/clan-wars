@@ -338,7 +338,7 @@ describe("routeRosterButton", () => {
 
 describe("serverChoices", () => {
   const membership = (over: Partial<Membership> = {}): Membership => ({
-    factionId: 1, serverId: 1, serverName: "S1", factionName: "Bears", tag: "BEAR", role: "leader",
+    factionId: 1, serverId: 1, serverName: "S1", factionName: "Bears", tag: "BEAR", role: "leader", status: "full",
     ...over,
   });
 
@@ -546,11 +546,11 @@ describe("a store throw on a component path still answers the player", () => {
  */
 describe("every roster subcommand replies ephemerally", () => {
   const store = {
-    membershipsFor: async () => [{ factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader" as const }],
+    membershipsFor: async () => [{ factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader" as const, status: "full" as const }],
     linkFor: async () => null,
     factionByName: async () => ({
       id: 1, serverId: 1, serverName: "S", name: "Bears", tag: "BEAR", texture: "Flag_Bear",
-      status: "active", poleKey: "1:2:3", memberCount: 1, leaderDiscordId: "d1",
+      status: "active", poleKey: "1:2:3", memberCount: 1, pendingCount: 0, leaderDiscordId: "d1",
       createdAt: new Date("2026-08-31T12:00:00Z"),
     }),
     rosterOf: async () => [],

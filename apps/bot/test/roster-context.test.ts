@@ -4,7 +4,7 @@ import type { Membership } from "@factions/roster/internal";
 
 const m = (serverId: number, serverName: string): Membership => ({
   factionId: serverId * 10, serverId, serverName,
-  factionName: `F${serverId}`, tag: `T${serverId}`, role: "leader",
+  factionName: `F${serverId}`, tag: `T${serverId}`, role: "leader", status: "full",
 });
 
 describe("resolveServerContext", () => {

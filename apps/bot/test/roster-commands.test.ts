@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
 import type { RosterStore, Membership, PendingInvite, FactionCard, RosterEntry } from "@factions/roster/internal";
+import { CLAN_SIZE_CAP, JOIN_PRESENCE_RADIUS_M } from "@factions/domain";
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave,
@@ -13,7 +14,7 @@ import {
 const now = new Date("2026-08-31T12:00:00Z");
 
 const membership = (over: Partial<Membership> = {}): Membership => ({
-  factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader",
+  factionId: 1, serverId: 1, serverName: "S", factionName: "Bears", tag: "BEAR", role: "leader", status: "full",
   ...over,
 });
 
@@ -111,6 +112,17 @@ describe("handleFactionInvite", () => {
     expect(r.content).toMatch(/no longer active/i);
   });
 
+  it("reports cap distinctly, naming the cap", async () => {
+    const d = deps({
+      membershipsFor: async () => [membership()],
+      linkFor: async () => ({ dayzId: "P1", gamertag: "G" }),
+      createInvite: async () => ({ outcome: "cap" as const, inviteId: null }),
+    });
+    const r = await handleFactionInvite(d, "d1", { serverId: null, inviteeDiscordId: "d9" });
+    expect(r.content).toMatch(/full/i);
+    expect(r.content).toContain(String(CLAN_SIZE_CAP));
+  });
+
   it("succeeds and includes a DM to the invitee", async () => {
     const createInvite = vi.fn(async () => ({ outcome: "ok" as const, inviteId: 42 }));
     const d = deps({
@@ -191,12 +203,13 @@ describe("handleFactionInvites", () => {
 
 describe("handleInviteAccept", () => {
   it("maps every store outcome to a distinct reply", async () => {
-    const cases: Array<["ok" | "gone" | "already-member" | "cooldown" | "not-holding", RegExp]> = [
+    const cases: Array<["ok" | "gone" | "already-member" | "cooldown" | "not-holding" | "cap", RegExp]> = [
       ["ok", /joined/i],
       ["gone", /no longer available/i],
       ["already-member", /already in a faction/i],
       ["cooldown", /cooldown/i],
       ["not-holding", /no longer active/i],
+      ["cap", /full/i],
     ];
     const seen = new Set<string>();
     for (const [outcome, expected] of cases) {
@@ -207,6 +220,19 @@ describe("handleInviteAccept", () => {
       seen.add(r.content);
       expect(r.ephemeral).toBe(true);
     }
+  });
+
+  it("the success reply mentions pending and the presence radius", async () => {
+    const d = deps({ acceptInvite: async () => "ok" as const });
+    const r = await handleInviteAccept(d, "d9", 42);
+    expect(r.content).toMatch(/pending/i);
+    expect(r.content).toContain(String(JOIN_PRESENCE_RADIUS_M));
+  });
+
+  it("the cap reply names the cap", async () => {
+    const d = deps({ acceptInvite: async () => "cap" as const });
+    const r = await handleInviteAccept(d, "d9", 42);
+    expect(r.content).toContain(String(CLAN_SIZE_CAP));
   });
 });
 
@@ -484,12 +510,12 @@ describe("handleFactionRename", () => {
 const factionCard = (over: Partial<FactionCard> = {}): FactionCard => ({
   id: 1, serverId: 1, serverName: "S", name: "Bears", tag: "BEAR",
   texture: "Flag_Bears", status: "active", poleKey: "1.00:2.00:3.00",
-  memberCount: 3, leaderDiscordId: "d1", createdAt: now,
+  memberCount: 3, pendingCount: 0, leaderDiscordId: "d1", createdAt: now,
   ...over,
 });
 
 const rosterEntry = (over: Partial<RosterEntry> = {}): RosterEntry => ({
-  dayzId: "P1", discordId: "d1", gamertag: "Gamertag", role: "member", joinedAt: now,
+  dayzId: "P1", discordId: "d1", gamertag: "Gamertag", role: "member", joinedAt: now, status: "full",
   ...over,
 });
 

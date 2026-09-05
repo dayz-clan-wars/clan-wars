@@ -52,6 +52,16 @@ describe("solo declarations", () => {
     expect(await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: now })).toEqual({ ok: false, reason: "in-clan" });
   });
 
+  it("a PENDING member may still declare a solo base — promotion, not acceptance, is what releases it", async () => {
+    const [f] = await db.insert(factions).values({ serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf", status: "active", leaderDiscordId: "d1", createdAt: now }).returning();
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId, dayzId: "A", discordId: "d1", role: "member", joinedAt: now,
+      status: "pending", pendingSince: now,
+    });
+    await raise("A", ago(1000));
+    expect(await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: now })).toEqual({ ok: true, id: expect.any(Number) });
+  });
+
   it("lapses after 7 days without the declarant's raise, and only theirs", async () => {
     await raise("A", ago(SOLO_LAPSE_MS + 1));
     await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });

@@ -178,9 +178,14 @@ export class PgCeremonyStore implements CeremonyStore {
     return row ?? null;
   }
 
+  /** Activation counts a FULL member's raise only (spec §5.1). */
   async isRosterMember(factionId: number, dayzId: string): Promise<boolean> {
     const [row] = await this.db.select({ id: factionMembers.id }).from(factionMembers)
-      .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.dayzId, dayzId)));
+      .where(and(
+        eq(factionMembers.factionId, factionId),
+        eq(factionMembers.dayzId, dayzId),
+        eq(factionMembers.status, "full"),
+      ));
     return row !== undefined;
   }
 

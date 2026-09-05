@@ -155,6 +155,17 @@ describe("PgRebindStore", () => {
     expect(out.map((r) => r.poleKey)).not.toContain("9.00:8.00:7.00");
   });
 
+  it("⚠️ ignores a raise by a PENDING member", async () => {
+    // A pending member has not yet been seen at the base (spec §4.5); their
+    // raise elsewhere must not be able to move the clan's identity, exactly
+    // like a stranger's raise cannot.
+    await db.update(factionMembers)
+      .set({ status: "pending", pendingSince: ago(1000) })
+      .where(eq(factionMembers.dayzId, UID_MEMBER));
+    const out = await store.qualifyingRaises(await target(), ago(3_600_000));
+    expect(out.map((r) => r.poleKey)).not.toContain(P2_KEY);
+  });
+
   it("ignores a raise of a different texture", async () => {
     await raiseAt({ poleKey: "9.00:8.00:7.00", texture: "Flag_Wolf" });
     const out = await store.qualifyingRaises(await target(), ago(3_600_000));

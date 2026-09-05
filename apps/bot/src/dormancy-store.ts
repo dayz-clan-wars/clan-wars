@@ -58,7 +58,7 @@ export const LAST_RAISE = sql<Date | null>`(
     and e.payload->>'poleKey' = ${declarations.poleKey}
     and e.payload->>'texture' = ${factions.texture}
     and e.payload->>'dayzId' in (
-      select m.dayz_id from faction_members m where m.faction_id = ${factions.id}
+      select m.dayz_id from faction_members m where m.faction_id = ${factions.id} and m.status = 'full'
     )
 )`;
 

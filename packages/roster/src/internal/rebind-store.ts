@@ -126,9 +126,13 @@ export class PgRebindStore implements RebindStore {
       // ⚠️ Roster members only. This is the security boundary of the whole
       // command: a rebind moves the faction's identity to coordinates of
       // someone's choosing, so a stranger's raise must never supply one.
+      // Full members only: a pending member has not yet been seen at the
+      // base (spec §4.5), so their raise cannot supply a rebind target
+      // either.
       sql`exists (select 1 from ${factionMembers}
                   where ${factionMembers.factionId} = ${faction.id}
-                    and ${factionMembers.dayzId} = ${events.payload}->>'dayzId')`,
+                    and ${factionMembers.dayzId} = ${events.payload}->>'dayzId'
+                    and ${factionMembers.status} = 'full')`,
       // Not a pole ANYONE has declared — clan or solo alike. The pole
       // binding lives in `declarations` now, not on `factions`.
       sql`not exists (select 1 from ${declarations} d

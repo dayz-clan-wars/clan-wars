@@ -143,6 +143,32 @@ describe("PgRosterStore invites", () => {
     expect(r).toEqual({ outcome: "not-holding", inviteId: null });
   });
 
+  it("the cap counts full and pending: the 11th is refused at invite and at accept", async () => {
+    // The leader from beforeEach gives one. Add 8 full + 1 pending = 10 on the table.
+    for (let i = 0; i < 8; i++) {
+      await db.insert(factionMembers).values({
+        factionId, serverId, dayzId: `F${i}`.padEnd(40, "0"), discordId: `f${i}`, role: "member", joinedAt: t0,
+      });
+    }
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "Z".repeat(40), discordId: "z9", role: "member", joinedAt: t0,
+      status: "pending", pendingSince: t0,
+    });
+
+    expect((await store.createInvite(base)).outcome).toBe("cap");
+
+    // An invite issued while there was room, accepted after the clan filled
+    // up, is refused at accept.
+    await db.delete(factionMembers).where(eq(factionMembers.dayzId, "Z".repeat(40)));
+    const { inviteId } = await store.createInvite(base);
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: "Z".repeat(40), discordId: "z9", role: "member", joinedAt: t0,
+      status: "pending", pendingSince: t0,
+    });
+    expect(await store.acceptInvite(inviteId!, INVITEE_DISCORD, t1)).toBe("cap");
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.dayzId, INVITEE_DAYZ))).toEqual([]);
+  });
+
   describe("accept and decline", () => {
     let inviteId = 0;
 
@@ -215,6 +241,15 @@ describe("PgRosterStore invites", () => {
       await db.delete(identityLinks).where(eq(identityLinks.discordId, INVITEE_DISCORD));
       expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("link-changed");
       expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toHaveLength(1);
+    });
+
+    it("accepting an invite makes a PENDING member with pending_since, not a full one", async () => {
+      expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("ok");
+      const [m] = await db.select({
+        status: factionMembers.status, pendingSince: factionMembers.pendingSince, seen: factionMembers.seenAtBaseEventId,
+      }).from(factionMembers).where(eq(factionMembers.dayzId, INVITEE_DAYZ));
+      expect(m).toEqual({ status: "pending", pendingSince: t1, seen: null });
+      expect((await store.rosterOf(factionId)).find((r) => r.dayzId === INVITEE_DAYZ)?.status).toBe("pending");
     });
 
     it("declines a pending invite", async () => {

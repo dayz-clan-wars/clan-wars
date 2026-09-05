@@ -116,6 +116,18 @@ describe("PgCeremonyStore", () => {
     expect(await store.linkedDiscordId(UID_B)).toBeNull();
   });
 
+  it("⚠️ isRosterMember is false for a pending member — activation counts a FULL member's raise only (spec §5.1)", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear", status: "reserved",
+      leaderDiscordId: "100", createdAt: now, reservedUntil: new Date("2026-08-01T00:00:00Z"),
+    }).returning();
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId, dayzId: UID_A, discordId: "100", role: "leader", joinedAt: now,
+      status: "pending", pendingSince: now,
+    });
+    expect(await store.isRosterMember(f!.id, UID_A)).toBe(false);
+  });
+
   it("lists poles with unsettled raises", async () => {
     await record(UID_A, 0);
     expect(await store.polesWithPendingRaises()).toEqual([{ serverId, poleKey: POLE }]);

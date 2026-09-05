@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { declarations, factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
-import { HOLDING_STATUSES } from "@factions/domain";
+import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx } from "./feed-actor";
 import { releaseTx } from "@factions/declarations";
@@ -15,11 +15,11 @@ export type Role = "leader" | "officer" | "member";
 
 export type Membership = {
   factionId: number; serverId: number; serverName: string;
-  factionName: string; tag: string; role: Role;
+  factionName: string; tag: string; role: Role; status: MemberStatus;
 };
 
 export type RosterEntry = {
-  dayzId: string; discordId: string; gamertag: string | null; role: Role; joinedAt: Date;
+  dayzId: string; discordId: string; gamertag: string | null; role: Role; joinedAt: Date; status: MemberStatus;
 };
 
 export type FactionCard = {
@@ -31,20 +31,30 @@ export type FactionCard = {
    * `declarations`, not on the faction row, so it is legitimately absent.
    */
   poleKey: string | null;
-  memberCount: number; leaderDiscordId: string; createdAt: Date;
+  memberCount: number; pendingCount: number; leaderDiscordId: string; createdAt: Date;
 };
+
+/**
+ * "Full" is what a plain membership read means everywhere except uniqueness
+ * and the `/unlink` refusal (spec §4.5): a member has been SEEN AT THE BASE
+ * since accepting their invite, not merely rostered. Exported so other
+ * writers — `rebind-store`'s roster-membership subquery, the dormancy
+ * clock's `LAST_RAISE` — filter on the same predicate rather than a second
+ * one that could drift from it.
+ */
+export const FULL_MEMBER = sql`${factionMembers.status} = 'full'`;
 
 export type CreateInviteArgs = {
   factionId: number; serverId: number;
   inviteeDiscordId: string; inviteeDayzId: string; invitedByDiscordId: string;
   at: Date; expiresAt: Date;
 };
-export type CreateInviteOutcome = "ok" | "not-permitted" | "already-member" | "cooldown" | "not-holding";
+export type CreateInviteOutcome = "ok" | "not-permitted" | "already-member" | "cooldown" | "not-holding" | "cap";
 export type PendingInvite = {
   id: number; factionId: number; factionName: string; tag: string;
   serverId: number; serverName: string; expiresAt: Date;
 };
-export type AcceptInviteOutcome = "ok" | "gone" | "already-member" | "cooldown" | "not-holding" | "link-changed";
+export type AcceptInviteOutcome = "ok" | "gone" | "already-member" | "cooldown" | "not-holding" | "link-changed" | "cap";
 export type KickArgs = { factionId: number; actorDiscordId: string; targetDiscordId: string; at: Date; until: Date };
 export type KickOutcome = "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader";
 export type LeaveArgs = { factionId: number; discordId: string; at: Date; until: Date };
@@ -82,6 +92,10 @@ export interface RosterStore {
 
 // Leader, then officer, then member — matches the ordering rosterOf promises.
 const ROLE_ORDER = sql<number>`case ${factionMembers.role} when 'leader' then 0 when 'officer' then 1 else 2 end`;
+
+// Full before pending, within a role tier — 'full' < 'pending' alphabetically
+// is not the order we want, so this is explicit rather than a plain desc().
+const STATUS_ORDER = sql<number>`case ${factionMembers.status} when 'full' then 0 else 1 end`;
 
 /**
  * Thrown from inside `acceptInvite`'s transaction to abort it with a
@@ -209,6 +223,10 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
 export class PgRosterStore implements RosterStore {
   constructor(private readonly db: Database) {}
 
+  /**
+   * Any status — the bot's `/faction leave` and the site's pending banner
+   * both need to see a pending row, not just a full member's.
+   */
   async membershipsFor(discordId: string): Promise<Membership[]> {
     const rows = await this.db.select({
       factionId: factions.id,
@@ -217,6 +235,7 @@ export class PgRosterStore implements RosterStore {
       factionName: factions.name,
       tag: factions.tag,
       role: factionMembers.role,
+      status: factionMembers.status,
     }).from(factionMembers)
       .innerJoin(factions, eq(factionMembers.factionId, factions.id))
       .innerJoin(servers, eq(factions.serverId, servers.id))
@@ -225,7 +244,7 @@ export class PgRosterStore implements RosterStore {
         inArray(factions.status, HOLDING),
       ))
       .orderBy(asc(servers.name));
-    return rows.map((r) => ({ ...r, role: r.role as Role }));
+    return rows.map((r) => ({ ...r, role: r.role as Role, status: r.status as MemberStatus }));
   }
 
   async linkFor(discordId: string): Promise<{ dayzId: string; gamertag: string } | null> {
@@ -264,12 +283,15 @@ export class PgRosterStore implements RosterStore {
       discordId: factionMembers.discordId,
       gamertag: identityLinks.gamertag,
       role: factionMembers.role,
+      status: factionMembers.status,
       joinedAt: factionMembers.joinedAt,
     }).from(factionMembers)
       .leftJoin(identityLinks, eq(identityLinks.dayzId, factionMembers.dayzId))
       .where(eq(factionMembers.factionId, factionId))
-      .orderBy(ROLE_ORDER, asc(factionMembers.joinedAt));
-    return rows.map((r) => ({ ...r, gamertag: r.gamertag ?? null, role: r.role as Role }));
+      // Full members before pending ones, matching ROLE_ORDER's leader-first
+      // shape — a pending member sits at the bottom of their role tier.
+      .orderBy(ROLE_ORDER, STATUS_ORDER, asc(factionMembers.joinedAt));
+    return rows.map((r) => ({ ...r, gamertag: r.gamertag ?? null, role: r.role as Role, status: r.status as MemberStatus }));
   }
 
   async factionById(factionId: number): Promise<FactionCard | null> {
@@ -301,7 +323,8 @@ export class PgRosterStore implements RosterStore {
       poleKey: declarations.poleKey,
       leaderDiscordId: factions.leaderDiscordId,
       createdAt: factions.createdAt,
-      memberCount: sql<number>`count(${factionMembers.id})`,
+      memberCount: sql<number>`count(*) filter (where ${factionMembers.status} = 'full')`,
+      pendingCount: sql<number>`count(*) filter (where ${factionMembers.status} = 'pending')`,
     }).from(factions)
       .innerJoin(servers, eq(factions.serverId, servers.id))
       .leftJoin(factionMembers, eq(factionMembers.factionId, factions.id))
@@ -313,7 +336,7 @@ export class PgRosterStore implements RosterStore {
       .where(where)
       .groupBy(factions.id, servers.name, declarations.poleKey);
     if (!row) return null;
-    return { ...row, memberCount: Number(row.memberCount) };
+    return { ...row, memberCount: Number(row.memberCount), pendingCount: Number(row.pendingCount) };
   }
 
   /**
@@ -356,6 +379,13 @@ export class PgRosterStore implements RosterStore {
       const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)
         .where(and(eq(rosterCooldowns.serverId, a.serverId), eq(rosterCooldowns.dayzId, a.inviteeDayzId)));
       if (cd && cd.until > a.at) return { outcome: "cooldown" as const, inviteId: null };
+
+      // Advisory, like the checks above — the binding check is in
+      // `acceptInvite`, which re-counts at write time. The cap counts BOTH
+      // statuses (spec §4.5): a pending member still occupies a roster slot.
+      const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
+        .where(eq(factionMembers.factionId, a.factionId));
+      if (n!.n >= CLAN_SIZE_CAP) return { outcome: "cap" as const, inviteId: null };
 
       // ⚠️ The actor's leader-or-officer check rides in this statement, not in
       // the handler — §5: every write carries its own guard. A pre-read here
@@ -477,6 +507,13 @@ export class PgRosterStore implements RosterStore {
           .for("share");
         if (!f) return "not-holding" as const;
 
+        // Nothing has been written yet on this path — a bare return is safe,
+        // same reasoning as "not-holding" above. Both statuses count (spec
+        // §4.5): a pending member still occupies a roster slot.
+        const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
+          .where(eq(factionMembers.factionId, target.factionId));
+        if (n!.n >= CLAN_SIZE_CAP) return "cap" as const;
+
         const claimed = await tx.update(factionInvites)
           .set({ acceptedAt: at })
           .where(and(
@@ -507,8 +544,9 @@ export class PgRosterStore implements RosterStore {
         // `resolveServerContext` silently picks whichever came first.
         // Zero rows means the link moved (or is gone); roll the claim back.
         const inserted = await tx.execute(sql`
-          insert into faction_members (faction_id, server_id, dayz_id, discord_id, role, joined_at)
-          select ${inv.factionId}::bigint, ${inv.serverId}::integer, il.dayz_id, ${discordId}::text, 'member', ${at.toISOString()}::timestamptz
+          insert into faction_members (faction_id, server_id, dayz_id, discord_id, role, joined_at, status, pending_since)
+          select ${inv.factionId}::bigint, ${inv.serverId}::integer, il.dayz_id, ${discordId}::text, 'member', ${at.toISOString()}::timestamptz,
+                 'pending', ${at.toISOString()}::timestamptz
           from identity_links il
           where il.discord_id = ${discordId} and il.dayz_id = ${inv.inviteeDayzId}
           returning id
@@ -666,15 +704,18 @@ export class PgRosterStore implements RosterStore {
         eq(factionMembers.factionId, a.factionId),
         eq(factionMembers.discordId, a.targetDiscordId),
         ne(factionMembers.role, "leader"),
+        // The TARGET must be a full member — a pending member is not yet on
+        // the roster (spec §4.5).
+        eq(factionMembers.status, "full"),
         sql`${actorRole} = 'leader'`,
       ))
       .returning({ id: factionMembers.id });
 
     if (updated[0]) return "ok" as const;
 
-    const [target] = await this.db.select({ role: factionMembers.role }).from(factionMembers)
+    const [target] = await this.db.select({ role: factionMembers.role, status: factionMembers.status }).from(factionMembers)
       .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
-    if (!target) return "target-not-member" as const;
+    if (!target || target.status === "pending") return "target-not-member" as const;
     if (target.role === "leader") return "cannot-target-leader" as const;
     return "not-leader" as const;
   }
@@ -709,6 +750,10 @@ export class PgRosterStore implements RosterStore {
             eq(factionMembers.factionId, a.factionId),
             eq(factionMembers.discordId, a.toDiscordId),
             ne(factionMembers.role, "leader"),
+            // The TARGET must be a full member — a pending member is not yet
+            // on the roster (spec §4.5); zero rows here reports the same
+            // "target-not-member" outcome either way.
+            eq(factionMembers.status, "full"),
           ))
           .returning({ id: factionMembers.id });
         if (!promoted[0]) {

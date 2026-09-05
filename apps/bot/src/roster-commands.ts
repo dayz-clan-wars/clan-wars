@@ -1,4 +1,5 @@
 import type { FactionCard, RosterStore } from "@factions/roster/internal";
+import { CLAN_SIZE_CAP, JOIN_PRESENCE_RADIUS_M } from "@factions/domain";
 import { resolveServerContext } from "./roster-context.js";
 
 export type RosterPrompt =
@@ -103,6 +104,9 @@ export async function handleFactionInvite(
   if (outcome === "not-holding") {
     return reply("Your faction is no longer active enough to invite anyone.");
   }
+  if (outcome === "cap") {
+    return reply(`That clan is full — ${CLAN_SIZE_CAP} is the cap, pending members included.`);
+  }
   // The store re-checks the actor's role at write time, so this fires when
   // the actor was demoted between the membership read above and the insert.
   if (outcome === "not-permitted") {
@@ -173,10 +177,13 @@ export async function handleInviteAccept(deps: RosterDeps, discordId: string, in
   if (outcome === "already-member") return reply("You're already in a faction on that server.");
   if (outcome === "cooldown") return reply("You're on cooldown and can't join a faction there yet.");
   if (outcome === "not-holding") return reply("That faction is no longer active.");
+  if (outcome === "cap") {
+    return reply(`That clan is full — ${CLAN_SIZE_CAP} is the cap, pending members included.`);
+  }
   if (outcome === "link-changed") {
     return reply("The character you had linked when that invitation was sent is no longer the one you're linked to. Ask for a fresh invite.");
   }
-  return reply("You joined the faction.");
+  return reply(`You joined the faction. You are pending until the server log sees you at the clan's base — anything you do within ${JOIN_PRESENCE_RADIUS_M} m of the pole.`);
 }
 
 export async function handleInviteDecline(deps: RosterDeps, discordId: string, inviteId: number): Promise<RosterReply> {

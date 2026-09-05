@@ -187,10 +187,12 @@ export async function raisedPolesFor(db: Database | Tx, serverId: number, dayzId
  */
 export async function declareSoloTx(tx: Tx, a: { serverId: number; dayzId: string; poleKey: string; at: Date }):
   Promise<DeclareOutcome | { ok: false; reason: "no-raise" | "in-clan" }> {
-  // Rule 3: in a clan, your declaration is the clan's. Checked inside the
-  // transaction so an accept landing at the same instant cannot slip past.
+  // Rule 3: in a clan, your declaration is the clan's — once you are IN it.
+  // A pending member keeps their solo base until promotion (spec §5.3); the
+  // presence tick releases it then. Checked inside the transaction so an
+  // accept landing at the same instant cannot slip past.
   const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
-    .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.dayzId)));
+    .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.dayzId), eq(factionMembers.status, "full")));
   if (member) return { ok: false as const, reason: "in-clan" as const };
   const raise = (await raisedPolesFor(tx, a.serverId, a.dayzId)).find((r) => r.poleKey === a.poleKey);
   if (!raise) return { ok: false as const, reason: "no-raise" as const };

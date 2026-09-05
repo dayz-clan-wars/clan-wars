@@ -8,6 +8,7 @@ export type Role = "leader" | "officer" | "member";
 export type Viewer = {
   link: { dayzId: string; gamertag: string; verifiedAt: Date } | null;
   clan: { id: number; name: string; tag: string; texture: string; status: string; role: Role } | null;
+  pending: { id: number; name: string; tag: string } | null;
 };
 
 /**
@@ -15,9 +16,9 @@ export type Viewer = {
  * signed-in player hangs off this: `link` decides "linked", `clan` decides
  * "clan-level".
  *
- * ⚠️ Increment 2c adds `faction_members.status`; when it does, `clan` must
- * require `status = 'full'` — a pending member is not a clan-level viewer
- * (spec §10.1). Until then every roster row is a full member.
+ * `clan` requires `status = 'full'` — a pending member is not a clan-level
+ * viewer (spec §10.1). `pending` carries the holding clan they are waiting
+ * to be seen at instead, so the site can show the pending banner.
  */
 export async function viewerForDb(db: Database, discordId: string): Promise<Viewer> {
   const [link] = await db.select({
@@ -31,12 +32,29 @@ export async function viewerForDb(db: Database, discordId: string): Promise<View
     status: factions.status, role: factionMembers.role,
   }).from(factionMembers)
     .innerJoin(factions, eq(factions.id, factionMembers.factionId))
-    .where(and(eq(factionMembers.discordId, discordId), inArray(factions.status, [...HOLDING_STATUSES])))
+    .where(and(
+      eq(factionMembers.discordId, discordId),
+      inArray(factions.status, [...HOLDING_STATUSES]),
+      eq(factionMembers.status, "full"),
+    ))
+    .orderBy(asc(factions.id))
+    .limit(1);
+
+  const [pending] = await db.select({
+    id: factions.id, name: factions.name, tag: factions.tag,
+  }).from(factionMembers)
+    .innerJoin(factions, eq(factions.id, factionMembers.factionId))
+    .where(and(
+      eq(factionMembers.discordId, discordId),
+      inArray(factions.status, [...HOLDING_STATUSES]),
+      eq(factionMembers.status, "pending"),
+    ))
     .orderBy(asc(factions.id))
     .limit(1);
 
   return {
     link: link ?? null,
     clan: clan ? { ...clan, role: clan.role as Role } : null,
+    pending: pending ?? null,
   };
 }

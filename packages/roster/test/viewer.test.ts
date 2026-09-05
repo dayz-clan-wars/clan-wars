@@ -22,7 +22,7 @@ describe("viewerForDb", () => {
   });
 
   it("a stranger has no link and no clan", async () => {
-    expect(await viewerForDb(db, "d-nobody")).toEqual({ link: null, clan: null });
+    expect(await viewerForDb(db, "d-nobody")).toEqual({ link: null, clan: null, pending: null });
   });
 
   it("a linked solo has a link and no clan", async () => {
@@ -52,5 +52,19 @@ describe("viewerForDb", () => {
     }).returning();
     await db.insert(factionMembers).values({ factionId: f!.id, serverId, dayzId: "A".repeat(40), discordId: "d1", role: "member", joinedAt: now });
     expect((await viewerForDb(db, "d1")).clan).toBeNull();
+  });
+
+  it("a pending member has pending set and clan null — not a clan-level viewer", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now,
+    }).returning();
+    await db.insert(identityLinks).values({ discordId: "d1", dayzId: "A".repeat(40), gamertag: "Steve", verifiedAt: now });
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId, dayzId: "A".repeat(40), discordId: "d1", role: "member", joinedAt: now,
+      status: "pending", pendingSince: now,
+    });
+    const v = await viewerForDb(db, "d1");
+    expect(v.clan).toBeNull();
+    expect(v.pending).toEqual({ id: f!.id, name: "Bears", tag: "BEAR" });
   });
 });

@@ -121,6 +121,20 @@ describe("PgDormancyStore", () => {
       expect(clock!.lastRaiseAt).toEqual(ago(500_000));
     });
 
+    it("⚠️ ignores a raise by a PENDING member", async () => {
+      // A pending member has not been seen at the base yet (spec §4.5); their
+      // raise must not keep a faction's supplies alive any more than a
+      // stranger's would.
+      await seedFaction({ poleKey: "1:2:3", texture: "Flag_Bear", activatedAt: ago(500_000) });
+      await db.update(factionMembers)
+        .set({ status: "pending", pendingSince: ago(500_000) })
+        .where(eq(factionMembers.dayzId, "A"));
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(10) });
+
+      const [clock] = await store.clocks();
+      expect(clock!.lastRaiseAt).toEqual(ago(500_000));
+    });
+
     it("ignores a lowering", async () => {
       await seedFaction({ poleKey: "1:2:3", texture: "Flag_Bear", activatedAt: ago(500_000) });
       await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(10), type: "flag.lowered" });

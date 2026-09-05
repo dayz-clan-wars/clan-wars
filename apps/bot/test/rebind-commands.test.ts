@@ -10,7 +10,7 @@ const ago = (ms: number) => new Date(now.getTime() - ms);
 
 const membership: Membership = {
   factionId: 1, serverId: 1, serverName: "S1",
-  factionName: "Bears", tag: "BEAR", role: "leader",
+  factionName: "Bears", tag: "BEAR", role: "leader", status: "full",
 };
 
 const target: RebindTarget = {
