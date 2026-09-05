@@ -20,11 +20,14 @@ import {
   linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb,
   type LinkStatus, type LinkStep, type UnlinkOutcome,
 } from "./link";
+import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSoloOutcome, type DeclareSoloReason } from "./base";
+export { DECLARE_SOLO_REASONS } from "./base";
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
 export { ISSUE_OUTCOME_KINDS } from "@factions/verification";
 
 export type { Viewer, Role };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
+export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -48,4 +51,16 @@ export function unlink(discordId: string): Promise<UnlinkOutcome> {
 }
 export function searchGamertags(prefix: string): Promise<{ dayzId: string; gamertag: string }[]> {
   return searchGamertagsDb(db(), prefix);
+}
+
+/** /base's one read: your raises, your declaration. */
+export function baseFor(discordId: string): Promise<BaseView> {
+  return baseForDb(db(), discordId);
+}
+/** Declare a solo base at a pole you have raised at. Every rule is inside. */
+export function declareSolo(discordId: string, poleKey: string): Promise<DeclareSoloOutcome> {
+  return declareSoloDb(db(), discordId, poleKey, new Date());
+}
+export function releaseSolo(discordId: string): Promise<{ released: boolean }> {
+  return releaseSoloDb(db(), discordId, new Date());
 }
