@@ -54,7 +54,13 @@ export async function runPoleProjection(db: Database, opts: { batchSize?: number
       }
 
       const raised = ev.type === "flag.raised";
-      await db.insert(poles).values({
+      // ⚠️ `.returning()` and the row count, not an unconditional `++`. The
+      // `setWhere` below suppresses the update for an out-of-order event, and
+      // ON CONFLICT ... WHERE that matches nothing writes nothing — so
+      // counting every statement reported poles projected that were not, and
+      // the runbook's `pole projection: N poles` line would confirm a
+      // projection that had in fact skipped every row.
+      const written = await db.insert(poles).values({
         serverId: ev.serverId, map, poleKey: p.poleKey,
         x: p.pole.x.toFixed(2), y: p.pole.y.toFixed(2), z: p.pole.z.toFixed(2),
         currentTexture: p.texture, flagRaised: raised,
@@ -70,8 +76,8 @@ export async function runPoleProjection(db: Database, opts: { batchSize?: number
         // Cast explicitly: this raw comparison loses the column-type context that would
         // otherwise tell postgres.js how to encode a bare Date parameter.
         setWhere: sql`${poles.lastSeenAt} <= ${ev.occurredAt.toISOString()}::timestamptz`,
-      });
-      out.upserted++;
+      }).returning({ id: poles.id });
+      out.upserted += written.length;
     }
     await writeCursor(db, POLE_CONSUMER, cursor);
   }

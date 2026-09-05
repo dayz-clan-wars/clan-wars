@@ -138,7 +138,10 @@ describe("faction claim", () => {
     });
     await handleFactionClaim(deps, "100", input);
     const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
-    expect(r.content).toMatch(/pole already belongs to a clan/i);
+    // ⚠️ The holder here is a SOLO (ownerDayzId), so the refusal must not
+    // name a clan — see faction-commands.
+    expect(r.content).toMatch(/already someone else's declared base/i);
+    expect(r.content).not.toMatch(/belongs to a clan/i);
     // The ceremony must not be left claimed with no faction to show for it.
     const [f] = await db.select().from(factions).where(eq(factions.leaderDiscordId, "100"));
     expect(f).toBeUndefined();

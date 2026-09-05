@@ -1122,9 +1122,20 @@ export async function start(cfg: BotConfig): Promise<void> {
     // just been seen in game is unlinkable until it runs. A failure here
     // must not stop verification — a stale menu is survivable, a halted
     // tick is not.
+    // ⚠️ Its own try/catch, separate from the player projection below. The
+    // two share nothing but this tick, and one projection's failure must not
+    // silence the other: sharing a `try` meant a persistently failing pole
+    // projection — a bad payload, a missing server row — threw before
+    // `runPlayerProjection` was ever reached, so every player stayed
+    // unlinkable and the only log line named the pole failure.
     try {
       const poleRun = await runPoleProjection(db);
       if (poleRun.upserted > 0) console.log(`pole projection: ${poleRun.upserted} poles`);
+    } catch (err) {
+      console.error("pole projection failed", err);
+    }
+
+    try {
       const p = await runPlayerProjection(db);
       if (p.upserted > 0) console.log(`players projected ${p.upserted} of ${p.scanned} events`);
     } catch (err) {

@@ -89,7 +89,11 @@ export async function handleClaimConfirm(
   if (outcome === "ceremony-taken") return reply("That ceremony has already been claimed.");
   if (outcome === "flag-taken") return reply(`\`${draft.texture}\` was just taken by another faction. Run \`/faction claim\` again with a different flag.`);
   if (outcome === "tag-taken") return reply(`The tag \`${draft.tag}\` was just taken. Run \`/faction claim\` again with a different tag.`);
-  if (outcome === "pole-taken") return reply("That pole already belongs to a clan. Run `/faction claim` again once it lapses or disbands.");
+  // ⚠️ Not "belongs to a clan": the holder may be a SOLO, which is a
+  // legitimate outcome here — a founding roster that leaves out the pole's
+  // solo declarant gets refused by that solo's own row, and telling the
+  // leader a clan holds it sends them looking for a clan that does not exist.
+  if (outcome === "pole-taken") return reply("That pole is already someone else's declared base. Run `/faction claim` again once it lapses or is given up.");
   if (outcome === "too-close") {
     return reply(
       `That pole is too close to another declared base — bases must be ${MIN_BASE_SPACING_M} m apart. ` +
