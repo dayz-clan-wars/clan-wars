@@ -225,9 +225,14 @@ export const players = pgTable("players", {
 export const verificationChallenges = pgTable("verification_challenges", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   discordId: text("discord_id").notNull(),
-  guildId: text("guild_id").notNull(),
-  /** Where `/link` was run — the fallback reply target when a DM is closed. */
-  channelId: text("channel_id").notNull(),
+  /**
+   * The guild `/link` was run in. NULL when the SITE issued the challenge
+   * (increment 2b): there is no interaction to answer, so the notifier falls
+   * back to the configured guild for the nickname and DMs only.
+   */
+  guildId: text("guild_id"),
+  /** Where `/link` was run — the fallback reply target when a DM is closed. NULL for a site-issued challenge. */
+  channelId: text("channel_id"),
   sequence: text("sequence").array().notNull(),
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),

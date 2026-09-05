@@ -419,4 +419,23 @@ describe("PgVerificationStore", () => {
       expect((await store.latestChallenge("100"))!.id).not.toBe(first.id);
     });
   });
+
+  it("issues a challenge with no guild and no channel — the site's shape", async () => {
+    const c = await store.createChallenge({
+      discordId: "100", guildId: null, channelId: null, sequence: SEQ, issuedAt: now, expiresAt: later, targetDayzId: UID_A,
+    });
+    expect(c).toMatchObject({ guildId: null, channelId: null, targetDayzId: UID_A });
+  });
+
+  it("cancels with reason already-linked when the character belongs to another Discord account (inbox 7)", async () => {
+    await db.insert(identityLinks).values({ discordId: "200", dayzId: UID_A, gamertag: "Ronald", verifiedAt: now });
+    const c = await issue("100", UID_A);
+    expect(await store.completeChallenge(c.id, UID_A, "Ronald", later)).toBe(false);
+    const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, c.id));
+    expect(row!.canceledAt).not.toBeNull();
+    expect(row!.cancelReason).toBe("already-linked");
+    const pending = await store.pendingNotifications();
+    expect(pending).toHaveLength(1);
+    expect(pending[0]).toMatchObject({ id: c.id, outcome: "already-linked", boundDayzId: null });
+  });
 });

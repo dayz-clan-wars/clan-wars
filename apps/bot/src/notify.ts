@@ -1,4 +1,4 @@
-export type Notification = { discordId: string; channelId: string; content: string };
+export type Notification = { discordId: string; channelId: string | null; content: string };
 export type Sender = (n: Notification) => Promise<void>;
 
 // Retrying forever is correct — the binding is real, and the message should

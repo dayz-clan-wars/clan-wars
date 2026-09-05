@@ -102,7 +102,9 @@ Plan 2 records `guild_id` on challenges but builds no map scoping, because no
 command needs a map yet. Spec §16 fixes the topology: one guild, per-map
 channels, commands resolve their map from the channel they are run in.
 
-## 7. Tell the player when their UID belongs to another Discord account
+## 7. ~~Tell the player when their UID belongs to another Discord account~~ — DONE 2026-09-05
+
+Closed by increment 2b: `completeChallenge` cancels with `cancel_reason = 'already-linked'` and the notifier DMs it; the site's `/link` shows the same reason from `latestChallenge`.
 
 `PgVerificationStore.completeChallenge` (`apps/bot/src/store.ts`) cancels the
 challenge and returns false when the UID is already linked to a *different*

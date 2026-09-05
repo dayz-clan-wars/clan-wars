@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, players, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, players, identityLinks, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PermissionFlagsBits } from "discord.js";
 import { PgVerificationStore } from "@factions/verification";
@@ -373,6 +373,22 @@ describe("discord wiring", () => {
       expect(await notifyCompleted(deps, send)).toBe(1);
       expect(send.mock.calls[0]?.[0]?.content).not.toMatch(/nickname/i);
       expect(await store.pendingNotifications()).toHaveLength(0);
+    });
+
+    it("tells a player whose character is linked elsewhere, once (inbox 7)", async () => {
+      await db.insert(identityLinks).values({ discordId: "200", dayzId: TARGET, gamertag: "Ronald", verifiedAt: now });
+      const c = (await store.createChallenge({
+        discordId: "100", guildId: null, channelId: null,
+        sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        targetDayzId: TARGET,
+      }))!;
+      await store.completeChallenge(c.id, TARGET, "Ronald", now);
+      const sent: { discordId: string; channelId: string | null; content: string }[] = [];
+      const send = async (n: { discordId: string; channelId: string | null; content: string }) => { sent.push(n); };
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      expect(sent[0]!.content).toContain("already linked to another Discord account");
+      expect(sent[0]!.channelId).toBeNull();
+      expect(await notifyCompleted(deps, send)).toBe(0);
     });
   });
 

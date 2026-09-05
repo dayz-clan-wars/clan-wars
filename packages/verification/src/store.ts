@@ -12,7 +12,7 @@ export type Role = "leader" | "officer" | "member";
 const HOLDING: string[] = [...HOLDING_STATUSES];
 
 export type LiveChallenge = {
-  id: number; discordId: string; guildId: string; channelId: string;
+  id: number; discordId: string; guildId: string | null; channelId: string | null;
   sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
@@ -24,8 +24,12 @@ export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: n
  * `pendingNotifications`. Cancels the player already knows about (the
  * switch-cancel in `/link`, which says so in its own reply) and cancels
  * nobody is waiting on (`cancelExpired`) deliberately pass none.
+ *
+ * "already-linked" — the character was bound to another Discord account by
+ * the time the sequence completed (inbox 7). The issue-time check refuses
+ * this up front; this is the race it cannot see.
  */
-export type CancelReason = "budget-exhausted";
+export type CancelReason = "budget-exhausted" | "already-linked";
 
 /**
  * A challenge whose outcome the player has not been told about yet.
@@ -87,7 +91,7 @@ export interface VerificationStore {
    */
   countDrawsSince(discordId: string, targetDayzId: string, since: Date): Promise<number>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
-  createChallenge(input: { discordId: string; guildId: string; channelId: string; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
+  createChallenge(input: { discordId: string; guildId: string | null; channelId: string | null; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
@@ -196,7 +200,7 @@ export class PgVerificationStore implements VerificationStore {
    * may satisfy it, so a shared sequence binds nobody's account by accident.
    */
   async createChallenge(input: {
-    discordId: string; guildId: string; channelId: string;
+    discordId: string; guildId: string | null; channelId: string | null;
     sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
   }): Promise<LiveChallenge | null> {
     const [row] = await this.db.insert(verificationChallenges).values(input)
@@ -285,9 +289,9 @@ export class PgVerificationStore implements VerificationStore {
         isNull(verificationChallenges.canceledAt),
       );
 
-      const cancel = async () => {
+      const cancel = async (reason: CancelReason | null) => {
         await tx.update(verificationChallenges)
-          .set({ canceledAt: at })
+          .set({ canceledAt: at, cancelReason: reason })
           .where(stillOpen);
         return false;
       };
@@ -308,7 +312,9 @@ export class PgVerificationStore implements VerificationStore {
         // Already bound to THIS account: the player re-ran a challenge they had
         // already satisfied. Idempotent success, no insert needed.
         if (taken.discordId === challenge.discordId) return complete();
-        return cancel();
+        // Inbox 7: the player performed the sequence correctly and used to
+        // hear nothing. Carry the reason so the notifier tells them.
+        return cancel("already-linked");
       }
 
       // ⚠️ .returning() is load-bearing. Between the read above and this insert,
@@ -323,7 +329,14 @@ export class PgVerificationStore implements VerificationStore {
         .onConflictDoNothing()
         .returning();
 
-      if (inserted.length === 0) return cancel();
+      if (inserted.length === 0) {
+        // The insert lost to identity_links_dayz_uniq (someone else bound this
+        // character meanwhile — say so) or to identity_links_discord_uniq (this
+        // account bound something else meanwhile — they already know).
+        const [now_] = await tx.select({ discordId: identityLinks.discordId }).from(identityLinks)
+          .where(eq(identityLinks.dayzId, dayzId));
+        return cancel(now_ && now_.discordId !== challenge.discordId ? "already-linked" : null);
+      }
       return complete();
     });
   }

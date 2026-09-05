@@ -148,6 +148,13 @@
       "when": 1788626246140,
       "tag": "0020_declarations",
       "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788645099543,
+      "tag": "0021_site_challenges",
+      "breakpoints": true
     }
   ]
 }

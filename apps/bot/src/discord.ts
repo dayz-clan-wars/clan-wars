@@ -638,12 +638,16 @@ function nicknameOutcomeSuffix(outcome: RenameOutcome): string {
  * lands: no DM delivered, the row left pending, retried forever — silently
  * losing the notification over something that was only ever supposed to be
  * best-effort.
+ *
+ * `defaultGuildId` is used for the rename when the challenge carries no
+ * guild — a site-issued one. Without either, no rename is attempted.
  */
 export async function notifyCompleted(
   deps: CommandDeps,
   send: Sender,
   loggedFailures: NotifyFailureLog = createNotifyFailureLog(),
   renameOnLink?: NicknameApplier,
+  defaultGuildId?: string,
 ): Promise<number> {
   let sent = 0;
   for (const c of await deps.store.pendingNotifications()) {
@@ -655,7 +659,7 @@ export async function notifyCompleted(
         await send({
           discordId: c.discordId,
           channelId: c.channelId,
-          content: await lockedOutMessage(deps, c),
+          content: c.outcome === "already-linked" ? await alreadyLinkedMessage(deps, c) : await lockedOutMessage(deps, c),
         });
         await deps.store.markNotified(c.id, deps.now());
         loggedFailures.delete(c.id);
@@ -663,13 +667,14 @@ export async function notifyCompleted(
         continue;
       }
       let outcome: RenameOutcome = "not-attempted";
-      if (renameOnLink) {
+      const guildId = c.guildId ?? defaultGuildId;
+      if (renameOnLink && guildId) {
         try {
           // The link is already committed by the time a challenge appears
           // here, so this lookup exists only to get the gamertag to rename
           // to — it is not a gate on anything.
           const link = await deps.store.findLinkByDiscord(c.discordId);
-          if (link) outcome = await renameOnLink(c.guildId, c.discordId, link.gamertag);
+          if (link) outcome = await renameOnLink(guildId, c.discordId, link.gamertag);
         } catch (err) {
           console.warn(`nickname lookup/rename failed for ${c.discordId}`, err);
           outcome = "failed";
@@ -729,6 +734,16 @@ async function lockedOutMessage(
     `${opening} You never performed **${label}** — the ${ordinal(c.progressIndex)} of the ` +
     `${c.sequence.length}. If you cannot find that one on the emote wheel, that is worth ` +
     `saying in the channel: it may be an emote no one can perform.\n\n${retry}`
+  );
+}
+
+/** Inbox 7: the sequence was right, but the character already belongs to another account. */
+async function alreadyLinkedMessage(deps: CommandDeps, c: { targetDayzId: string }): Promise<string> {
+  const name = (await deps.store.playerByDayzId(c.targetDayzId))?.gamertag ?? c.targetDayzId;
+  return (
+    `Your link challenge for **${name}** was canceled: that character is already linked to another ` +
+    "Discord account, so this one cannot claim it. If that character is yours — you changed Discord " +
+    "accounts, say — ask an admin to move the link."
   );
 }
 
@@ -1096,6 +1111,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       const user = await client.users.fetch(n.discordId);
       await user.send(n.content);
     } catch {
+      if (n.channelId === null) throw new Error(`no reachable surface for ${n.discordId} (DMs closed, site-issued challenge)`);
       const channel = await client.channels.fetch(n.channelId);
       if (channel?.isSendable()) await channel.send(`<@${n.discordId}> ${n.content}`);
       else throw new Error(`no reachable surface for ${n.discordId}`);
@@ -1147,7 +1163,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (r.verified > 0 || r.alreadyLinked > 0) {
         console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
       }
-      await notifyCompleted(deps, send, notifyFailures, renameOnLink);
+      await notifyCompleted(deps, send, notifyFailures, renameOnLink, cfg.guildId);
     } catch (err) {
       // A thrown tick must not kill the interval and silently stop all verification.
       console.error("tick failed", err);
