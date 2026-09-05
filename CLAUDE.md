@@ -108,7 +108,9 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 | What | Where |
 |---|---|
-| Designs (the authority) | `docs/superpowers/specs/` |
+| The player's guide (the authority over every rule) | `../field-guide/` — published at dayzclanwars.com/guide |
+| The target state, guide → system | `docs/superpowers/specs/2026-09-04-clan-wars-target-state-design.md` — wins over every earlier spec where they differ |
+| Designs (per increment) | `docs/superpowers/specs/` |
 | Implementation plans | `docs/superpowers/plans/` |
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
 | Long-term direction (not designs) | `docs/direction/` |
