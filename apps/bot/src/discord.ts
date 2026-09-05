@@ -21,6 +21,7 @@ import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
 import { dormancyTick } from "./dormancy-tick.js";
 import { lapseSolos } from "@factions/declarations";
+import { releaseSoloBasesFor } from "./declaration-wiring.js";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
 import {
@@ -897,6 +898,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   const deps: CommandDeps = {
     store, rng: Math.random, now: () => new Date(), challengeTtlMs: cfg.challengeTtlMs,
     clearNickname: (guildId, discordId) => renameOnLink(guildId, discordId, null).then(() => undefined),
+    releaseBases: (dayzId) => releaseSoloBasesFor(db, dayzId, new Date()),
   };
 
   const renderFactionReply = async (

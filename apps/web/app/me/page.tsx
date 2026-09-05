@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { viewerFor } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
-import { LINK_TTL_MS } from "@factions/domain";
+import { LINK_TTL_MS, LINK_EMOTES } from "@factions/domain";
 import { UNLINK_COPY } from "@/lib/link-copy";
+import { lookupCopy } from "@/lib/copy-lookup";
 
 export const metadata: Metadata = {
   title: "Clan Wars — you",
@@ -14,7 +15,10 @@ export const dynamic = "force-dynamic";
 
 export default async function MePage({ searchParams }: { searchParams: Promise<{ unlink?: string }> }) {
   const { unlink: unlinkCode } = await searchParams;
-  const unlinkNotice = unlinkCode ? UNLINK_COPY[unlinkCode] : undefined;
+  // ⚠️ Looked up, never echoed: ?unlink= is attacker-supplied, including
+  // prototype keys like `__proto__`, so the lookup must miss on those rather
+  // than returning a value off Object.prototype.
+  const unlinkNotice = unlinkCode ? lookupCopy(UNLINK_COPY, unlinkCode) : undefined;
   const session = await currentSession();
   if (!session) {
     // The middleware admitted this request, so the cookie was valid a moment
@@ -52,7 +56,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           </>
         ) : (
           <p className="mt-2 text-ink-2">
-            Not linked yet. <a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> — three emotes in game, {LINK_TTL_MS / 60_000} minutes.
+            Not linked yet. <a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> — {LINK_EMOTES} emotes in game, {LINK_TTL_MS / 60_000} minutes.
           </p>
         )}
       </section>

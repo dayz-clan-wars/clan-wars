@@ -1,4 +1,5 @@
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/roster";
+import { LINK_EMOTES } from "@factions/domain";
 
 /** What /link says for each refusal. "issued" and "live" render the challenge card instead of a line. */
 export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome) => string> = {
@@ -15,8 +16,8 @@ export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome) => string> =
 
 /** What /link says about how the last challenge ended, from `LinkStatus.ended`. */
 export const ENDED_COPY = {
-  "expired": "Your last challenge expired before the three emotes were seen. Draw a new one when you are in game and ready.",
-  "budget-exhausted": "Your last challenge was canceled: too many emotes were performed before the sequence was completed. Draw a new one and perform just those three, in order. If one of them is not on your emote wheel, say so in the Discord — it may be an emote no one can perform.",
+  "expired": `Your last challenge expired before the ${LINK_EMOTES} emotes were seen. Draw a new one when you are in game and ready.`,
+  "budget-exhausted": `Your last challenge was canceled: too many emotes were performed before the sequence was completed. Draw a new one and perform just those ${LINK_EMOTES} emotes, in order. If one of them is not on your emote wheel, say so in the Discord — it may be an emote no one can perform.`,
   "already-linked": "Your last challenge was canceled: that character is already linked to another Discord account. If it is yours — you changed Discord accounts, say — ask an admin to move the link.",
 } as const;
 

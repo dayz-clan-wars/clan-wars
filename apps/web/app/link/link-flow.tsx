@@ -130,7 +130,7 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
         ))}
       </div>
       <button className={`mt-6 ${button}`} type="button" onClick={claim} disabled={busy || !query.trim()}>Claim it</button>
-      <div className="mt-4 font-mono text-xs leading-relaxed text-muted">One character per Discord account. You will prove it is you with three emotes in game.</div>
+      <div className="mt-4 font-mono text-xs leading-relaxed text-muted">One character per Discord account. You will prove it is you with {LINK_EMOTES} emotes in game.</div>
     </div>
   );
 }

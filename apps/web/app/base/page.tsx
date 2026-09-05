@@ -3,6 +3,7 @@ import { baseFor } from "@factions/roster";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/base-copy";
+import { lookupCopy } from "@/lib/copy-lookup";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -27,8 +28,10 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
     );
   }
   const params = await searchParams;
-  // ⚠️ Looked up, never echoed: ?result= is attacker-supplied.
-  const result = typeof params.result === "string" ? RESULT_COPY[params.result] : undefined;
+  // ⚠️ Looked up, never echoed: ?result= is attacker-supplied, including
+  // prototype keys like `__proto__`, so the lookup must miss on those rather
+  // than returning a value off Object.prototype.
+  const result = typeof params.result === "string" ? lookupCopy(RESULT_COPY, params.result) : undefined;
   const view = await baseFor(session.sub);
 
   return (

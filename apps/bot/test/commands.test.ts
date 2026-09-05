@@ -2,12 +2,16 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, players, verificationChallenges,
+  admFiles, events, poles, declarations,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
 import { PgVerificationStore } from "@factions/verification";
+import { declareSolo } from "@factions/declarations";
+import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
+import { releaseSoloBasesFor } from "../src/declaration-wiring.js";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
@@ -446,6 +450,34 @@ describe("commands", () => {
       expect(r.content).toMatch(/unlinked/i);
       expect(await store.findLinkByDiscord("d6")).toBeNull();
       warned.mockRestore();
+    });
+
+    it("releases a solo declaration and says so", async () => {
+      const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
+      const poleKey = "5000.00:100.00:5000.00";
+      await db.insert(poles).values({
+        serverId: s!.id, map: "sakhal", poleKey, x: "5000.00", y: "100.00", z: "5000.00",
+        currentTexture: "Flag_White", flagRaised: true, firstSeenAt: now, lastSeenAt: now, graceUntil: now,
+      });
+      const [a] = await db.insert(admFiles).values({
+        serverId: s!.id, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true,
+      }).returning();
+      await db.insert(events).values({
+        serverId: s!.id, admFileId: a!.id, lineIndex: 0, type: "flag.raised", occurredAt: now,
+        payload: { dayzId: UID_A, gamertag: "Steve", texture: "Flag_White", poleKey, pole: { x: 5000, y: 100, z: 5000 } },
+      });
+
+      const c = await store.createChallenge({ ...CTX, discordId: "d7", sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000), targetDayzId: UID_A });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Steve", now);
+      expect(await declareSolo(db, { serverId: s!.id, dayzId: UID_A, poleKey, at: now })).toEqual({ ok: true, id: expect.any(Number) });
+
+      const releaseBases = (dayzId: string) => releaseSoloBasesFor(db, dayzId, now);
+      const r = await handleUnlink({ ...deps, releaseBases }, "d7", "g");
+      expect(r.content).toContain("Your solo base has been released.");
+      expect(await db.select().from(declarations)).toHaveLength(0);
+      const [p] = await db.select().from(poles).where(eq(poles.poleKey, poleKey));
+      expect(p!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
     });
   });
 

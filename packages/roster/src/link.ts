@@ -85,11 +85,14 @@ export async function cancelLinkDb(db: Database, discordId: string, now: Date): 
  * and releases a solo declaration in the same transaction, so a base cannot
  * survive the link that owned it.
  *
- * Lock order (spec §4.12): `lockDeclarations` → `releaseTx` (declarations,
- * then poles) → identity_links, which is outside the ordered set. The
- * advisory lock is what serialises this against a concurrent `declareSolo`
- * for the same player (roster/base.ts takes it before reading the link), so
- * no declaration can be created for a link that is mid-delete.
+ * Order: the identity_links row `FOR UPDATE` first (so two unlinks of one
+ * account serialise), then `lockDeclarations` → `releaseTx` (declarations,
+ * then poles), then the row delete. identity_links is outside spec §4.12's
+ * ordered set; this is safe because no other writer takes an identity_links
+ * row lock before the declarations advisory lock — `declareSoloDb` reads the
+ * link with a plain SELECT after taking it — so no cycle exists. A future
+ * writer that row-locks identity_links must take it before
+ * `lockDeclarations`, as here.
  */
 export async function unlinkDb(db: Database, discordId: string, now: Date): Promise<UnlinkOutcome> {
   return db.transaction(async (tx) => {

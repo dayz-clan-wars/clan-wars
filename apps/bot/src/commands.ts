@@ -21,6 +21,14 @@ export type CommandDeps = {
    * unlink itself has already committed by the time this runs.
    */
   clearNickname?: (guildId: string, discordId: string) => Promise<void>;
+  /**
+   * Release the caller's solo declaration(s) before the link is deleted
+   * (spec §5.5: unlink releases a solo base). Optional so unit tests without
+   * a declarations fixture can omit it. Runs BEFORE `deleteLinkByDiscord` on
+   * purpose: a crash between the two leaves the link and no base — which the
+   * player can re-declare — rather than a base with no link.
+   */
+  releaseBases?: (dayzId: string) => Promise<boolean>;
 };
 
 /**
@@ -143,6 +151,10 @@ export async function handleUnlink(deps: CommandDeps, discordId: string, guildId
     );
   }
 
+  const link = await deps.store.findLinkByDiscord(discordId);
+  if (!link) return ephemeral("You are not linked to a character.");
+
+  const released = (await deps.releaseBases?.(link.dayzId)) ?? false;
   const removed = await deps.store.deleteLinkByDiscord(discordId);
   if (removed && deps.clearNickname) {
     // Best-effort and silent: the unlink already committed, and a Discord
@@ -156,7 +168,7 @@ export async function handleUnlink(deps: CommandDeps, discordId: string, guildId
   }
   return ephemeral(
     removed
-      ? "Unlinked. Run `/link` to bind a character again."
+      ? "Unlinked. Run `/link` to bind a character again." + (released ? " Your solo base has been released." : "")
       : "You are not linked to a character.",
   );
 }

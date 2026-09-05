@@ -186,9 +186,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   among the roster tables, and can safely be: it is insert-only and nothing references
   it, so no writer ever needs it locked before touching the roster tables.
   `packages/roster` is the fifth roster writer and the first outside the bot process. Its
-  first writes landed in 2b: `unlink` takes `lockDeclarations` → `releaseTx` →
-  `identity_links`; `declareSolo` takes `lockDeclarations` before reading the link, which
-  is what serialises the two (`packages/roster/test/base.test.ts` races them). 2c adds
+  first writes landed in 2b: `unlink` row-locks the identity link, then takes
+  `lockDeclarations` → `releaseTx`, then deletes the link; `declareSolo` takes
+  `lockDeclarations` before reading the link, which is what serialises the two
+  (`packages/roster/test/base.test.ts` races them). 2c adds
   the roster writes, every one appending its feed or notice row in the transition's own
   transaction.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
