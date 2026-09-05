@@ -9,6 +9,7 @@ import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } 
 import { PgVerificationStore } from "./store.js";
 import { verificationTick } from "./tick.js";
 import { runPlayerProjection } from "./player-tick.js";
+import { runPoleProjection } from "./pole-tick.js";
 import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
 import { applyNickname, type NicknameOutcome, type GuildLike } from "./nickname.js";
@@ -1120,6 +1121,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     // must not stop verification — a stale menu is survivable, a halted
     // tick is not.
     try {
+      const poleRun = await runPoleProjection(db);
+      if (poleRun.upserted > 0) console.log(`pole projection: ${poleRun.upserted} poles`);
       const p = await runPlayerProjection(db);
       if (p.upserted > 0) console.log(`players projected ${p.upserted} of ${p.scanned} events`);
     } catch (err) {
