@@ -45,7 +45,7 @@ function describe(kind: FactionEventKind, p: FeedPayload): string {
     case "founded":
       return `Founded${by(p.actor)}. The ritual is complete — the flag is reserved.`;
     case "activated":
-      return `Colors raised${by(p.actor)}. The faction is live.`;
+      return `Colors raised${by(p.actor)}. The clan is live.`;
     case "renamed":
       // previousName is written by the rename writer for every `renamed` row.
       // The `?? "its former name"` arm exists only so a hand-inserted or

@@ -20,7 +20,7 @@ export function formatCeremonyDm(c: {
     // came up short can work out who still needs to run /link.
     "If someone is missing from that list, they had not run `/link` when the ceremony was read.",
     "",
-    "Any one of you can found the faction with `/faction claim`.",
+    "Any one of you can found the clan with `/faction claim`.",
     `This expires <t:${Math.floor(c.expiresAt.getTime() / 1000)}:R>.`,
   ].join("\n");
 }
