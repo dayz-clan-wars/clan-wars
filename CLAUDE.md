@@ -193,8 +193,8 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   transaction.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
   query under a lock inside it, not an index; a second writer is a race. `declareTx`
-  lives in `packages/declarations` since 2b; `apps/bot` and `packages/roster` both
-  import it.
+  lives in `packages/declarations` since 2b; `apps/bot` calls it directly, and
+  `packages/roster` reaches it only through `declareSoloTx`.
 - **`poles` is filled by the bot's `pole-tick.ts`**, not by `apps/projector`, which does
   not run here. `grace_until` comes from it.
 - **`faction_events` rows are written in the SAME transaction as the transition they
