@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, ceremonies, ceremonyParticipants, factions, factionMembers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, ceremonies, ceremonyParticipants, factions, factionMembers, declarations, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgFactionStore } from "../src/faction-store.js";
+import { declarationForFaction } from "../src/declaration-store.js";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps } from "../src/faction-commands.js";
 
 const URL = requireTestDatabaseUrl();
@@ -28,8 +29,12 @@ describe("faction claim", () => {
     deps = { store: new PgFactionStore(db), now: () => now, reservationTtlMs: 86_400_000 };
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
+    // Coordinates well clear of HUB_POSITION (100, 93): tooClose checks the
+    // Hub unconditionally (spec §4.10), so a pole near the origin would fail
+    // every reserve with "too-close" before any of these tests reach the
+    // scarcity rule they mean to exercise.
     const [c] = await db.insert(ceremonies).values({
-      serverId, poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
+      serverId, poleKey: "10000.00:2.00:10000.00", x: "10000.00", y: "2.00", z: "10000.00",
       windowStart: now, windowEnd: now,
       status: "provisional", detectedAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
     }).returning();
@@ -61,8 +66,8 @@ describe("faction claim", () => {
 
   it("refuses a flag another faction holds", async () => {
     await db.insert(factions).values({
-      serverId, name: "Other", tag: "OTH", texture: "Flag_Bear", poleKey: "9:9:9",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "900", createdAt: now,
+      serverId, name: "Other", tag: "OTH", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "900", createdAt: now,
     });
     const r = await handleFactionClaim(deps, "100", input);
     expect(r.content).toMatch(/already taken/i);
@@ -75,9 +80,10 @@ describe("faction claim", () => {
     const [f] = await db.select().from(factions);
     expect(f?.status).toBe("reserved");
     expect(f?.reservedUntil).toEqual(new Date(now.getTime() + 86_400_000));
-    expect(f?.x).toBe("1.00");
-    expect(f?.y).toBe("2.00");
-    expect(f?.z).toBe("3.00");
+    const declared = await declarationForFaction(db, f!.id);
+    expect(declared?.x).toBe("10000.00");
+    expect(declared?.y).toBe("2.00");
+    expect(declared?.z).toBe("10000.00");
     const members = await db.select().from(factionMembers).where(eq(factionMembers.factionId, f!.id));
     expect(members).toHaveLength(3);
     expect(members.find((m) => m.discordId === "100")?.role).toBe("leader");
@@ -123,16 +129,16 @@ describe("faction claim", () => {
   });
 
   it("refuses to reserve at a pole another faction already holds", async () => {
-    // A ceremony can be settled at a pole a faction already holds — the
-    // third scarcity rule, factions_holding_pole_uniq, must surface as a
+    // A ceremony can be settled at a pole already bound in `declarations` —
+    // the third scarcity rule, now declarations_pole_uniq, must surface as a
     // sentence, not an unhandled exception.
-    await db.insert(factions).values({
-      serverId, name: "Holders", tag: "HOLD", texture: "Flag_Wolf", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "900", createdAt: now,
+    await db.insert(declarations).values({
+      serverId, poleKey: "10000.00:2.00:10000.00", x: "10000.00", y: "2.00", z: "10000.00",
+      ownerDayzId: "holder-dayz-id", evidenceCeremonyId: ceremonyId, declaredAt: now,
     });
     await handleFactionClaim(deps, "100", input);
     const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
-    expect(r.content).toMatch(/pole already belongs to a faction/i);
+    expect(r.content).toMatch(/pole already belongs to a clan/i);
     // The ceremony must not be left claimed with no faction to show for it.
     const [f] = await db.select().from(factions).where(eq(factions.leaderDiscordId, "100"));
     expect(f).toBeUndefined();
@@ -150,7 +156,7 @@ describe("faction claim", () => {
     // could pick the other one, hit the id mismatch, and tell the claimant
     // "already claimed or expired" — false, and reproducing on every retry.
     const [second] = await db.insert(ceremonies).values({
-      serverId, poleKey: "4:5:6", x: "4.00", y: "5.00", z: "6.00",
+      serverId, poleKey: "20000.00:5.00:20000.00", x: "20000.00", y: "5.00", z: "20000.00",
       windowStart: now, windowEnd: now,
       status: "provisional", detectedAt: now, expiresAt: new Date(now.getTime() + 86_400_000),
     }).returning();
@@ -168,7 +174,8 @@ describe("faction claim", () => {
     expect(r.content).toMatch(/reserved/i);
     const [f] = await db.select().from(factions);
     expect(f?.ceremonyId).toBe(second!.id);
-    expect(f?.poleKey).toBe("4:5:6");
+    const declared = await declarationForFaction(db, f!.id);
+    expect(declared?.poleKey).toBe("20000.00:5.00:20000.00");
   });
 
   it("refuses a confirm for a ceremony the caller did not attend", async () => {

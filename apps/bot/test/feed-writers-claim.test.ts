@@ -58,10 +58,14 @@ describe("claim path writes feed events", () => {
 
   const events = () => db.select().from(factionEvents).orderBy(asc(factionEvents.id));
 
+  // Well clear of HUB_POSITION (100, 93): declareTx checks the Hub
+  // unconditionally (spec §4.10), so a pole near the origin would fail every
+  // reserve with "too-close" before these tests reach the scarcity rule they
+  // mean to exercise.
   /** ceremonyId comes from the fixture; everything else is fixed here. */
   const args = (ceremonyId: number, over: Partial<{ tag: string; texture: string; poleKey: string }> = {}) => ({
     ceremonyId, serverId,
-    poleKey: over.poleKey ?? "1:2:3", x: "1", y: "2", z: "3",
+    poleKey: over.poleKey ?? "10000:2:10000", x: "10000", y: "2", z: "10000",
     name: "Bears", tag: over.tag ?? "BEAR", texture: over.texture ?? "Flag_Bear",
     leaderDiscordId: "d1",
     members: [{ dayzId: "u1", discordId: "d1" }],

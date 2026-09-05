@@ -4,6 +4,7 @@ import { and, asc, eq, inArray } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
+import { declareTx } from "./declaration-store.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -21,7 +22,7 @@ export interface FactionStore {
   textureHeld(serverId: number, texture: string): Promise<boolean>;
   saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void>;
   loadDraft(ceremonyId: number, discordId: string): Promise<{ name: string; tag: string; texture: string } | null>;
-  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken">;
+  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close">;
 }
 
 export type ReserveArgs = {
@@ -31,6 +32,11 @@ export type ReserveArgs = {
   members: { dayzId: string; discordId: string }[];
   at: Date; reservedUntil: Date;
 };
+
+/** Unwinds the transaction carrying a non-error outcome, the way roster-store's RosterAbort does. */
+class ReserveAbort extends Error {
+  constructor(readonly outcome: "too-close" | "pole-taken") { super(outcome); }
+}
 
 export class PgFactionStore implements FactionStore {
   constructor(private readonly db: Database) {}
@@ -125,13 +131,15 @@ export class PgFactionStore implements FactionStore {
    * `status = 'provisional'` in the WHERE clause and its `.returning()` decides
    * whether we won; a pre-read followed by an unconditional write is exactly
    * the defect Plan 2 had to fix twice. The unique-violation catch is the same
-   * story for flag, tag and pole: another transaction may commit between any
-   * read and this insert, so the index is the only thing that can decide. A
-   * ceremony can be settled at a pole a faction already holds (e.g. a lapsed
-   * reservation's pole re-used before this claim lands), so
-   * `factions_holding_pole_uniq` is caught alongside texture and tag.
+   * story for flag and tag: another transaction may commit between any read
+   * and this insert, so the index is the only thing that can decide. The pole
+   * itself is no longer bound here at all — `declareTx` writes the
+   * `declarations` row right after the `factions` insert (lock order: spec
+   * §4.12, `factions` then `declarations`), and its own outcome (`too-close`
+   * or `pole-taken`) is threaded back out through `ReserveAbort` so this
+   * transaction unwinds exactly the way a caught unique-violation does.
    */
-  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken"> {
+  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close"> {
     try {
       return await this.db.transaction(async (tx) => {
         const claimed = await tx.update(ceremonies)
@@ -142,10 +150,18 @@ export class PgFactionStore implements FactionStore {
 
         const [f] = await tx.insert(factions).values({
           serverId: a.serverId, name: a.name, tag: a.tag, texture: a.texture,
-          poleKey: a.poleKey, x: a.x, y: a.y, z: a.z,
           status: "reserved", leaderDiscordId: a.leaderDiscordId,
           ceremonyId: a.ceremonyId, createdAt: a.at, reservedUntil: a.reservedUntil,
         }).returning({ id: factions.id });
+
+        // The reservation holds the pole for its 24 h (guide ch. 3), so the
+        // declaration is written here, not at activation — and the 200 m
+        // refusal happens where the guide says it does: at the claim.
+        const declared = await declareTx(tx, {
+          serverId: a.serverId, poleKey: a.poleKey, x: Number(a.x), y: Number(a.y), z: Number(a.z),
+          owner: { factionId: f!.id }, evidence: { ceremonyId: a.ceremonyId }, at: a.at,
+        });
+        if (!declared.ok) throw new ReserveAbort(declared.reason === "too-close" ? "too-close" : "pole-taken");
 
         await tx.insert(factionMembers).values(a.members.map((m) => ({
           factionId: f!.id, serverId: a.serverId, dayzId: m.dayzId, discordId: m.discordId,
@@ -169,10 +185,10 @@ export class PgFactionStore implements FactionStore {
         return "ok" as const;
       });
     } catch (err) {
+      if (err instanceof ReserveAbort) return err.outcome;
       const msg = String(err);
       if (msg.includes("factions_holding_texture_uniq")) return "flag-taken";
       if (msg.includes("factions_holding_tag_uniq")) return "tag-taken";
-      if (msg.includes("factions_holding_pole_uniq")) return "pole-taken";
       throw err;
     }
   }

@@ -1,4 +1,4 @@
-import { isClaimableFlag } from "@factions/domain";
+import { isClaimableFlag, MIN_BASE_SPACING_M } from "@factions/domain";
 import type { Participant } from "./ceremony-store.js";
 import type { FactionStore } from "./faction-store.js";
 
@@ -89,7 +89,13 @@ export async function handleClaimConfirm(
   if (outcome === "ceremony-taken") return reply("That ceremony has already been claimed.");
   if (outcome === "flag-taken") return reply(`\`${draft.texture}\` was just taken by another faction. Run \`/faction claim\` again with a different flag.`);
   if (outcome === "tag-taken") return reply(`The tag \`${draft.tag}\` was just taken. Run \`/faction claim\` again with a different tag.`);
-  if (outcome === "pole-taken") return reply("That pole already belongs to a faction. Run `/faction claim` again once it lapses or disbands.");
+  if (outcome === "pole-taken") return reply("That pole already belongs to a clan. Run `/faction claim` again once it lapses or disbands.");
+  if (outcome === "too-close") {
+    return reply(
+      `That pole is too close to another declared base — bases must be ${MIN_BASE_SPACING_M} m apart. ` +
+        "The map can't show you private bases, so this refusal is your first warning. Choose another pole.",
+    );
+  }
 
   return reply([
     `**${draft.name}** [${draft.tag}] is **reserved**.`,

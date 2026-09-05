@@ -163,6 +163,17 @@ describe("claim-confirm interaction", () => {
     expect(i.editReply.mock.calls[0]?.[0]).toMatchObject({ content: expect.stringMatching(/reserved/i) });
   });
 
+  it("tells the claimant the pole is too close to another declared base", async () => {
+    const calls: string[] = [];
+    const stubTooClose = stub(calls);
+    stubTooClose.store.reserve = async () => { calls.push("reserve"); return "too-close"; };
+    const i = interaction(calls, claimCustomId(7));
+    await respondToClaimConfirm(stubTooClose, i);
+    expect(i.editReply.mock.calls[0]?.[0]).toMatchObject({
+      content: expect.stringContaining("too close to another declared base"),
+    });
+  });
+
   it("does not defer a component interaction that is not ours", async () => {
     // Discord delivers every component interaction in the guild; deferring one
     // we will not answer leaves someone else's menu showing "thinking".
