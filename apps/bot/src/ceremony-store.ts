@@ -1,9 +1,10 @@
 import type { Database } from "@factions/db";
-import { whiteRaises, ceremonies, ceremonyParticipants, factions, factionInvites, factionMembers, identityLinks, events } from "@factions/db";
+import { whiteRaises, ceremonies, ceremonyParticipants, declarations, factions, factionInvites, factionMembers, identityLinks, events } from "@factions/db";
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
-import { HOLDING_STATUSES, parsePoleKey } from "@factions/domain";
-import { and, asc, eq, inArray, isNull, lte, max } from "drizzle-orm";
+import { parsePoleKey } from "@factions/domain";
+import { and, asc, eq, inArray, isNotNull, isNull, lte, max } from "drizzle-orm";
 import { appendFactionEventTx } from "./feed-store.js";
+import { releaseTx } from "./declaration-store.js";
 
 export type PoleRef = { serverId: number; poleKey: string };
 export type RecordedRaise = PoleRef & {
@@ -12,14 +13,10 @@ export type RecordedRaise = PoleRef & {
 export type Participant = { dayzId: string; discordId: string; gamertag: string };
 export type CeremonyDraft = { detectedAt: Date; expiresAt: Date; participants: Participant[] };
 
-// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
-// tuple) so every faction/domain consumer gets full literal-type checking,
-// but drizzle's inArray() requires a plain mutable array.
-const HOLDING: string[] = [...HOLDING_STATUSES];
-
 export interface CeremonyStore {
   highWaterMark(serverId: number): Promise<Date | null>;
   isPoleBound(p: PoleRef): Promise<boolean>;
+  soloDeclarantAt(p: PoleRef): Promise<string | null>;
   linkedDiscordId(dayzId: string): Promise<string | null>;
   recordRaise(r: RecordedRaise): Promise<void>;
   polesWithPendingRaises(): Promise<PoleRef[]>;
@@ -48,14 +45,21 @@ export class PgCeremonyStore implements CeremonyStore {
     return row?.hw ?? null;
   }
 
+  /** Bound to a CLAN. A solo declaration does not bind a pole for ceremony purposes — see settlePole. */
   async isPoleBound(p: PoleRef): Promise<boolean> {
-    const [row] = await this.db.select({ id: factions.id }).from(factions)
+    const [row] = await this.db.select({ id: declarations.id }).from(declarations)
       .where(and(
-        eq(factions.serverId, p.serverId),
-        eq(factions.poleKey, p.poleKey),
-        inArray(factions.status, HOLDING),
+        eq(declarations.serverId, p.serverId),
+        eq(declarations.poleKey, p.poleKey),
+        isNotNull(declarations.ownerFactionId),
       ));
     return row !== undefined;
+  }
+
+  async soloDeclarantAt(p: PoleRef): Promise<string | null> {
+    const [row] = await this.db.select({ dayzId: declarations.ownerDayzId }).from(declarations)
+      .where(and(eq(declarations.serverId, p.serverId), eq(declarations.poleKey, p.poleKey)));
+    return row?.dayzId ?? null;
   }
 
   async linkedDiscordId(dayzId: string): Promise<string | null> {
@@ -163,9 +167,10 @@ export class PgCeremonyStore implements CeremonyStore {
 
   async reservedFactionAt(p: PoleRef, texture: string): Promise<{ id: number } | null> {
     const [row] = await this.db.select({ id: factions.id }).from(factions)
+      .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
       .where(and(
-        eq(factions.serverId, p.serverId),
-        eq(factions.poleKey, p.poleKey),
+        eq(declarations.serverId, p.serverId),
+        eq(declarations.poleKey, p.poleKey),
         eq(factions.texture, texture),
         eq(factions.status, "reserved"),
       ));
@@ -227,6 +232,13 @@ export class PgCeremonyStore implements CeremonyStore {
         .returning({ id: factions.id });
       if (done.length > 0) {
         const lapsed = done.map((d) => d.id);
+        // Lock order (spec §4.12): factions → declarations → faction_members
+        // → ... . The release must happen here, before the faction_members
+        // delete below, or this transaction takes declarations after members
+        // — the same ordering violation the controller ruled out for disband.
+        //
+        // Guide ch. 4: a lapsed pole gets the 3-day grace before going public.
+        for (const id of lapsed) await releaseTx(tx, { factionId: id }, cutoff);
         await tx.delete(factionMembers)
           .where(inArray(factionMembers.factionId, lapsed));
         // Outstanding offers die with the faction. Left open they keep

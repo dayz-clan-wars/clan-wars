@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, identityLinks, factions, factionMembers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionMembers, declarations, type Database } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
 import { sql, eq } from "drizzle-orm";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
@@ -39,12 +39,24 @@ describe("activation and lapse", () => {
     line = 0;
     await db.insert(identityLinks).values({ discordId: "100", dayzId: MEMBER, gamertag: "Steve", verifiedAt: T0 });
     const [fac] = await db.insert(factions).values({
-      serverId, name: "The Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "reserved", leaderDiscordId: "100",
+      serverId, name: "The Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "reserved", leaderDiscordId: "100",
       createdAt: T0, reservedUntil: new Date(T0.getTime() + 86_400_000),
     }).returning();
     factionId = fac!.id;
     await db.insert(factionMembers).values({ factionId, serverId, dayzId: MEMBER, discordId: "100", role: "leader", joinedAt: T0 });
+    // The reservation's hold on POLE lives in `declarations` now, not on
+    // `factions` — `reservedFactionAt` (activation's lookup) reads it there.
+    // Task 9's shared seed helper doesn't exist yet, so this is the minimal
+    // local fix.
+    const [ev] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, subIndex: 0,
+      type: "flag.raised", occurredAt: T0, payload: {},
+    }).returning();
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: factionId, evidenceEventId: ev!.id, declaredAt: T0,
+    });
   });
 
   const raise = (dayzId: string, minutes: number, texture: string, poleKey = POLE) =>
@@ -110,8 +122,8 @@ describe("activation and lapse", () => {
     await raise(MEMBER, 60 * 48, "Flag_Wolf");
     await tick(at(60 * 48));
     await expect(db.insert(factions).values({
-      serverId, name: "Other", tag: "OTH", texture: "Flag_Bear", poleKey: "9:9:9",
-      x: "1.00", y: "2.00", z: "3.00", status: "reserved", leaderDiscordId: "900",
+      serverId, name: "Other", tag: "OTH", texture: "Flag_Bear",
+      status: "reserved", leaderDiscordId: "900",
       createdAt: T0, reservedUntil: new Date(T0.getTime() + 86_400_000),
     })).resolves.toBeDefined();
   });

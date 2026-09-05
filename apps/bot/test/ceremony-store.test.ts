@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, declarations, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
 
@@ -51,11 +51,19 @@ describe("PgCeremonyStore", () => {
 
   const seedReservedFaction = async () => {
     const [f] = await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "reserved",
+      serverId, name: "N", tag: "N", texture: "Flag_Bear",
+      status: "reserved",
       leaderDiscordId: "100", createdAt: now,
       reservedUntil: new Date("2026-08-01T00:00:00Z"),
     }).returning();
+    // Task 9's shared seed helper doesn't exist yet, so this is a minimal
+    // local declaration: the faction's hold on POLE has to come from
+    // `declarations` now, and lapseReservations's release path depends on
+    // finding it there.
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: f!.id, evidenceEventId: await event(now), declaredAt: now,
+    });
     return f!.id;
   };
 
@@ -81,20 +89,22 @@ describe("PgCeremonyStore", () => {
     expect(await db.select().from(whiteRaises)).toHaveLength(1);
   });
 
-  it("finds a pole bound to a faction in a holding status", async () => {
-    await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "active",
+  it("finds a pole bound to a faction (a declaration with an owning faction)", async () => {
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear", status: "active",
       leaderDiscordId: "100", createdAt: now,
+    }).returning();
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: f!.id, evidenceEventId: await event(now), declaredAt: now,
     });
     expect(await store.isPoleBound({ serverId, poleKey: POLE })).toBe(true);
   });
 
-  it("does not treat a disbanded faction's pole as bound", async () => {
-    await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "disbanded",
-      leaderDiscordId: "100", createdAt: now,
+  it("does not treat a solo's declared pole as bound (isPoleBound means bound to a CLAN)", async () => {
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerDayzId: UID_A, evidenceEventId: await event(now), declaredAt: now,
     });
     expect(await store.isPoleBound({ serverId, poleKey: POLE })).toBe(false);
   });

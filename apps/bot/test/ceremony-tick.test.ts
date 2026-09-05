@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, identityLinks, factions, ceremonies, ceremonyParticipants, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, declarations, ceremonies, ceremonyParticipants, type Database } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and, asc } from "drizzle-orm";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
 import { ceremonyTick } from "../src/ceremony-tick.js";
 
@@ -49,9 +49,36 @@ describe("ceremonyTick", () => {
 
   const tick = (now = at(60)) => ceremonyTick(db, store, { batchSize: 100, now });
 
+  // The pole binding lives in `declarations`, not on `factions`, since this
+  // branch's schema change. `isPoleBound`/`reservedFactionAt` read it there —
+  // Task 9's shared seed helper doesn't exist yet, so this is the minimal
+  // local fixture for it.
+  const declareFor = async (owner: { factionId: number } | { dayzId: string }, poleKey = POLE, at_ = T0) => {
+    const [ev] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, subIndex: 0,
+      type: "flag.raised", occurredAt: at_, payload: {},
+    }).returning();
+    await db.insert(declarations).values({
+      serverId, poleKey, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: "factionId" in owner ? owner.factionId : null,
+      ownerDayzId: "dayzId" in owner ? owner.dayzId : null,
+      evidenceEventId: ev!.id, declaredAt: at_,
+    });
+  };
+
   const participantsOf = async (ceremonyId: number) =>
     (await db.select().from(ceremonyParticipants).where(eq(ceremonyParticipants.ceremonyId, ceremonyId)))
       .map((p) => p.dayzId).sort();
+
+  // For the solo-declarant tests: cite an actual seeded raise as the
+  // declaration's evidence, rather than inventing a fresh event — the CHECK
+  // constraint just wants an events row, but this keeps the fixture honest.
+  const firstRaiseEventId = async () => {
+    const [e] = await db.select({ id: events.id }).from(events)
+      .where(and(eq(events.serverId, serverId), eq(events.type, "flag.raised")))
+      .orderBy(asc(events.id));
+    return e!.id;
+  };
 
   it("detects three linked UIDs raising White at one pole", async () => {
     await raise(UIDS[0]!, 0);
@@ -62,6 +89,36 @@ describe("ceremonyTick", () => {
     expect(r.detected).toBe(1);
     const [c] = await db.select().from(ceremonies);
     expect(await participantsOf(c!.id)).toEqual([UIDS[0], UIDS[1], UIDS[2]].sort());
+  });
+
+  it("settles a ceremony at a pole declared to one of the participants", async () => {
+    await raise(UIDS[0]!, 0);
+    await raise(UIDS[1]!, 1);
+    await raise(UIDS[2]!, 2);
+    await raise(UIDS[0]!, 20); // advances the high-water mark past the window
+    // Declared to A, who stands among the three raisers below — a solo's own
+    // pole is eligible for a ceremony as long as the solo is present in it.
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerDayzId: UIDS[0]!, evidenceEventId: await firstRaiseEventId(), declaredAt: T0,
+    });
+    const r = await tick();
+    expect(r.detected).toBe(1);
+  });
+
+  it("⚠️ refuses a ceremony at a pole declared to someone absent — no takeover by ceremony", async () => {
+    await raise(UIDS[0]!, 0);
+    await raise(UIDS[1]!, 1);
+    await raise(UIDS[2]!, 2);
+    await raise(UIDS[0]!, 20); // advances the high-water mark past the window
+    // Declared to a solo who is NOT among the raisers below — three strangers
+    // must not be able to take a base from under its sleeping owner.
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerDayzId: "Z".repeat(40), evidenceEventId: await firstRaiseEventId(), declaredAt: T0,
+    });
+    const r = await tick();
+    expect(r.detected).toBe(0);
   });
 
   it("includes a fourth participant who arrives at minute nine", async () => {
@@ -97,10 +154,11 @@ describe("ceremonyTick", () => {
   });
 
   it("ignores a pole already bound to a faction", async () => {
-    await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "999", createdAt: T0,
-    });
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "999", createdAt: T0,
+    }).returning();
+    await declareFor({ factionId: f!.id });
     for (const [i, m] of [0, 1, 2].entries()) await raise(UIDS[i]!, m);
     await raise(UIDS[0]!, 20);
     expect((await tick()).recorded).toBe(0);
@@ -144,11 +202,12 @@ describe("ceremonyTick", () => {
 
     // Now the pole becomes bound — after the raises were already recorded as
     // pending, exactly as it would after a claim.
-    await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: POLE,
-      x: "1.00", y: "2.00", z: "3.00", status: "reserved", leaderDiscordId: "999", createdAt: T0,
+    const [f] = await db.insert(factions).values({
+      serverId, name: "N", tag: "N", texture: "Flag_Bear",
+      status: "reserved", leaderDiscordId: "999", createdAt: T0,
       reservedUntil: at(60 * 24),
-    });
+    }).returning();
+    await declareFor({ factionId: f!.id }, POLE, at(2));
     await raise(UIDS[0]!, 20); // advances the high-water mark past the window; skipped from recording, but that's fine — it only needs to move highWaterMark
     const second = await tick(at(20));
     expect(second.detected).toBe(0);
@@ -222,8 +281,8 @@ describe("ceremonyTick", () => {
 
   it("still expires and lapses when a pole key cannot be parsed", async () => {
     const [f] = await db.insert(factions).values({
-      serverId, name: "N", tag: "N", texture: "Flag_Bear", poleKey: "9:9:9",
-      x: "9.00", y: "9.00", z: "9.00", status: "reserved", leaderDiscordId: "999",
+      serverId, name: "N", tag: "N", texture: "Flag_Bear",
+      status: "reserved", leaderDiscordId: "999",
       createdAt: T0, reservedUntil: at(10),
     }).returning();
     const [c] = await db.insert(ceremonies).values({

@@ -171,8 +171,13 @@ async function settlePole(
     // `factions_holding_pole_uniq`. Bound poles are ineligible, full stop,
     // regardless of which check would have caught it first.
     const blocked = (await store.hasOpenCeremony(pole)) || (await store.isPoleBound(pole));
+    // Base-declaration §4: a pole declared to a solo is eligible only if that
+    // solo is standing in the ceremony. ⚠️ This is the clause that stops three
+    // strangers taking a base from under its sleeping owner.
+    const declarant = blocked ? null : await store.soloDeclarantAt(pole);
+    const declarantPresent = declarant === null || w.participants.includes(declarant);
     let draft = null;
-    if (!blocked && qualifies(w)) {
+    if (!blocked && declarantPresent && qualifies(w)) {
       const participants: Participant[] = [];
       for (const dayzId of w.participants) {
         const discordId = await store.linkedDiscordId(dayzId);
