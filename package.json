@@ -9,7 +9,8 @@
   "scripts": {
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
-    "ci": "turbo run typecheck test --concurrency=1"
+    "ci": "turbo run typecheck test --concurrency=1",
+    "guide:numbers": "tsx scripts/guide-numbers.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
