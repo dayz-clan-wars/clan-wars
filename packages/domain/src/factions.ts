@@ -1,13 +1,13 @@
 /**
  * The statuses in which a faction HOLDS its pole, flag and tag.
  *
- * ⚠️ This set means identity and NOTHING ELSE. It is mirrored by three
+ * ⚠️ This set means identity and NOTHING ELSE. It is mirrored by two
  * partial unique indexes (`factions_holding_texture_uniq`,
- * `factions_holding_tag_uniq`, `factions_holding_pole_uniq`), whose
- * predicates enumerate these same three statuses as SQL literals — see
- * `packages/db/test/holding-index-drift.test.ts`, which fails if they
- * diverge. `dormant` is here on purpose: being raided, or going quiet, must
- * never cost a faction its identity.
+ * `factions_holding_tag_uniq`), and by the existence of a `declarations`
+ * row, whose predicates and WHERE clauses enumerate these same statuses as
+ * SQL literals — see `packages/db/test/holding-index-drift.test.ts`, which
+ * fails if they diverge. `dormant` is here on purpose: being raided, or
+ * going quiet, must never cost a faction its identity.
  *
  * For "does this faction receive supplies", use SUPPLIED_STATUSES.
  */

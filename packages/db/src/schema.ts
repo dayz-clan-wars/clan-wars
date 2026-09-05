@@ -138,6 +138,16 @@ export const poles = pgTable("poles", {
   foldedAt: timestamp("folded_at", { withTimezone: true }),
   firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  /**
+   * When this pole becomes public if still undeclared (spec §4.2). Set to
+   * first sighting + NEW_POLE_GRACE_MS by the bot's pole projection, reset to
+   * release + RELEASED_POLE_GRACE_MS whenever a declaration on it is
+   * released, and stamped to launch + 7 d by the deploy runbook.
+   *
+   * ⚠️ Publication is a READ over this column, not a transition: a pole is
+   * public iff flag_raised, no declarations row, and grace_until < now.
+   */
+  graceUntil: timestamp("grace_until", { withTimezone: true }).notNull(),
 }, (t) => ({
   uniqPole: uniqueIndex("poles_tenant_key_uniq").on(t.serverId, t.map, t.poleKey),
 }));
@@ -447,10 +457,6 @@ export const factions = pgTable("factions", {
   name: text("name").notNull(),
   tag: text("tag").notNull(),
   texture: text("texture").notNull(),
-  poleKey: text("pole_key").notNull(),
-  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
-  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
-  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
   status: text("status").notNull(),
   leaderDiscordId: text("leader_discord_id").notNull(),
   /** Provenance: which ritual produced this faction. */
@@ -497,9 +503,39 @@ export const factions = pgTable("factions", {
   uniqTag: uniqueIndex("factions_holding_tag_uniq")
     .on(t.serverId, sql`lower(${t.tag})`)
     .where(sql`${t.status} IN ('reserved','active','dormant')`),
-  uniqPole: uniqueIndex("factions_holding_pole_uniq")
-    .on(t.serverId, t.poleKey)
-    .where(sql`${t.status} IN ('reserved','active','dormant')`),
+}));
+
+/**
+ * The pole binding, for clans and solos alike (spec §4.1; base-declaration
+ * design §8 option C). One row per declared pole.
+ *
+ * ⚠️ The two CHECKs are the guard, not the export list. `declarations_one_owner`
+ * is rule 3 made structural; `declarations_one_evidence` is what makes it
+ * impossible for anything — the site included — to bind a pole without
+ * citing a ceremony the detector wrote or a raise the log holds.
+ */
+export const declarations = pgTable("declarations", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  poleKey: text("pole_key").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  ownerFactionId: bigint("owner_faction_id", { mode: "number" }).references(() => factions.id),
+  ownerDayzId: text("owner_dayz_id"),
+  evidenceEventId: bigint("evidence_event_id", { mode: "number" }).references(() => events.id),
+  evidenceCeremonyId: bigint("evidence_ceremony_id", { mode: "number" }).references(() => ceremonies.id),
+  declaredAt: timestamp("declared_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  oneOwner: check("declarations_one_owner",
+    sql`(${t.ownerFactionId} IS NULL) <> (${t.ownerDayzId} IS NULL)`),
+  oneEvidence: check("declarations_one_evidence",
+    sql`(${t.evidenceEventId} IS NULL) <> (${t.evidenceCeremonyId} IS NULL)`),
+  uniqPole: uniqueIndex("declarations_pole_uniq").on(t.serverId, t.poleKey),
+  uniqFaction: uniqueIndex("declarations_faction_uniq").on(t.ownerFactionId)
+    .where(sql`${t.ownerFactionId} IS NOT NULL`),
+  uniqPlayer: uniqueIndex("declarations_player_uniq").on(t.serverId, t.ownerDayzId)
+    .where(sql`${t.ownerDayzId} IS NOT NULL`),
 }));
 
 /**

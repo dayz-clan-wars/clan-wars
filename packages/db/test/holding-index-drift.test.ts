@@ -7,9 +7,10 @@ const URL = requireTestDatabaseUrl();
 
 /**
  * ⚠️ HOLDING_STATUSES exists twice: once in TypeScript, once as a SQL literal
- * in each of three partial unique index predicates. They are two statements
- * of one fact and nothing but this test holds them together. Drift means a
- * faction keeps or loses its flag, tag or pole in a state nobody intended.
+ * in each of two partial unique index predicates, plus the `declarations`
+ * uniques. They are two statements of one fact and nothing but this test
+ * holds them together. Drift means a faction keeps or loses its flag, tag or
+ * pole in a state nobody intended.
  */
 describe("faction scarcity indexes match HOLDING_STATUSES", () => {
   let db: Database;
@@ -21,7 +22,6 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
   const INDEXES = [
     "factions_holding_texture_uniq",
     "factions_holding_tag_uniq",
-    "factions_holding_pole_uniq",
   ];
 
   it("enumerates exactly the holding statuses in every predicate", async () => {
@@ -36,5 +36,17 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
       const statuses = [...row.indexdef.matchAll(/'([a-z]+)'::text/g)].map((m) => m[1]);
       expect(new Set(statuses)).toEqual(new Set(HOLDING_STATUSES));
     }
+  });
+
+  it("the pole half of HOLDING is the existence of a declarations row", async () => {
+    // ⚠️ factions_holding_pole_uniq is gone on purpose (increment 1). A
+    // holding faction's pole is now declarations.owner_faction_id, unique on
+    // its own; a reader that reintroduces a pole column on factions has
+    // recreated the drift this test used to catch.
+    const rows = await db.execute(sql`
+      select indexname from pg_indexes where schemaname = 'public'
+        and indexname in ('declarations_pole_uniq','declarations_faction_uniq','declarations_player_uniq')
+    `);
+    expect(rows.length).toBe(3);
   });
 });

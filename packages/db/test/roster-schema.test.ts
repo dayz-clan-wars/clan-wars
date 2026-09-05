@@ -21,10 +21,10 @@ describe("roster schema", () => {
     }).returning();
     serverId = s!.id;
     const rows = await db.insert(factions).values([
-      { serverId, name: "One", tag: "ONE", texture: "Flag_Alpha", poleKey: "1.00:2.00:3.00",
-        x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: new Date() },
-      { serverId, name: "Two", tag: "TWO", texture: "Flag_Beta", poleKey: "4.00:5.00:6.00",
-        x: "4.00", y: "5.00", z: "6.00", status: "active", leaderDiscordId: "d2", createdAt: new Date() },
+      { serverId, name: "One", tag: "ONE", texture: "Flag_Alpha",
+        status: "active", leaderDiscordId: "d1", createdAt: new Date() },
+      { serverId, name: "Two", tag: "TWO", texture: "Flag_Beta",
+        status: "active", leaderDiscordId: "d2", createdAt: new Date() },
     ]).returning();
     f1 = rows[0]!.id;
     f2 = rows[1]!.id;

@@ -27,7 +27,6 @@ describe("faction schema", () => {
 
   const faction = (o: Record<string, unknown> = {}) => db.insert(factions).values({
     serverId, name: "The Bears", tag: "BEAR", texture: "Flag_Bear",
-    poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
     status: "reserved", leaderDiscordId: "100", createdAt: now,
     reservedUntil: new Date(now.getTime() + 86_400_000), ...o,
   }).returning();
@@ -43,7 +42,7 @@ describe("faction schema", () => {
 
   it("allows only one holder of a flag per server", async () => {
     await faction();
-    await expect(faction({ tag: "BR2", poleKey: "9:9:9" })).rejects.toThrow(/factions_holding_texture_uniq/);
+    await expect(faction({ tag: "BR2" })).rejects.toThrow(/factions_holding_texture_uniq/);
   });
 
   it("frees the flag when the holder disbands", async () => {
@@ -51,26 +50,20 @@ describe("faction schema", () => {
     // identity or a 33-slot pool starves permanently.
     const [f] = await faction();
     await db.update(factions).set({ status: "disbanded" }).where(sql`id = ${f!.id}`);
-    await expect(faction({ tag: "BR2", poleKey: "9:9:9" })).resolves.toBeDefined();
+    await expect(faction({ tag: "BR2" })).resolves.toBeDefined();
   });
 
   it("frees the flag when a reservation lapses", async () => {
     const [f] = await faction();
     await db.update(factions).set({ status: "lapsed" }).where(sql`id = ${f!.id}`);
-    await expect(faction({ tag: "BR2", poleKey: "9:9:9" })).resolves.toBeDefined();
+    await expect(faction({ tag: "BR2" })).resolves.toBeDefined();
   });
 
   it("treats tags case-insensitively", async () => {
     // BEAR and bear in channel names are the same tag to a human.
     await faction();
-    await expect(faction({ tag: "bear", texture: "Flag_Wolf", poleKey: "9:9:9" }))
+    await expect(faction({ tag: "bear", texture: "Flag_Wolf" }))
       .rejects.toThrow(/factions_holding_tag_uniq/);
-  });
-
-  it("allows only one faction per pole", async () => {
-    await faction();
-    await expect(faction({ tag: "WOLF", texture: "Flag_Wolf" }))
-      .rejects.toThrow(/factions_holding_pole_uniq/);
   });
 
   it("refuses a duplicate roster member", async () => {

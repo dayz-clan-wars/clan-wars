@@ -25,7 +25,7 @@ describe("faction_events", () => {
     serverId = s!.id;
     const [f] = await db.insert(factions).values({
       serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
-      poleKey: "1:2:3", x: "1", y: "2", z: "3", status: "active",
+      status: "active",
       leaderDiscordId: "d1", createdAt: now,
     }).returning();
     factionId = f!.id;

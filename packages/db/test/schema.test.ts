@@ -23,7 +23,7 @@ describe("schema", () => {
     const base = {
       serverId: srv!.id, map: "chernarus",
       poleKey: "1.00:2.00:3.00", x: "1.00", y: "2.00", z: "3.00",
-      firstSeenAt: new Date(), lastSeenAt: new Date(),
+      firstSeenAt: new Date(), lastSeenAt: new Date(), graceUntil: new Date(),
     };
     await db.insert(poles).values(base);
     await expect(db.insert(poles).values(base)).rejects.toThrow();
@@ -34,7 +34,7 @@ describe("schema", () => {
     const row = await db.insert(poles).values({
       serverId: srv!.id, map: "chernarus",
       poleKey: "1.00:2.00:3.00", x: "1.00", y: "2.00", z: "3.00",
-      firstSeenAt: new Date(), lastSeenAt: new Date(),
+      firstSeenAt: new Date(), lastSeenAt: new Date(), graceUntil: new Date(),
     }).returning();
     expect(row).toHaveLength(1);
   });
