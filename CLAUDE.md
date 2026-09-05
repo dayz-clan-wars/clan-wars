@@ -117,6 +117,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Deploy runbooks | `docs/deploy/` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
+| The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
 date and commit. Read it before proposing work — several entries record hazards that are
@@ -140,6 +141,11 @@ challenge that can never be completed.
 compiler cannot see — a SQL index predicate, an env var, a message that names a number —
 there should be a test that fails when they disagree. See
 `packages/db/test/holding-index-drift.test.ts`.
+
+**Every guide number lives in `packages/domain/src/rules.ts`.** `docs/guide-numbers.json`
+is a vendored copy of the guide's numbers table (`pnpm guide:numbers` regenerates it) and
+`packages/domain/test/guide-numbers-drift.test.ts` holds the two together. A new number
+goes in `rules.ts` and in the guide, never as a literal in the module that uses it.
 
 ---
 
