@@ -113,8 +113,28 @@ describe("supplyTick", () => {
     expect(calls).toBe(2);
   });
 
+  it("⚠️ omits a supplied clan that holds no declaration", async () => {
+    // The kit spawns at the clan's DECLARED pole. A supplied clan with none —
+    // after a wipe, or between a release and a re-claim — has nowhere for one
+    // to land, so it drops out of the file rather than having a place
+    // invented for it. The join is INNER for exactly this; a LEFT one would
+    // put every such clan's crate at (0, 0, 0).
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.insert(factions).values({
+      serverId, name: "Homeless", tag: "HML", texture: "Flag_Wolf",
+      status: "active", leaderDiscordId: "d2", createdAt: now,
+    });
+
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+
+    expect(r.factions).toBe(1);
+    expect(bodies[0]).not.toContain("Flag_Wolf");
+  });
+
   it("reads numeric coordinates as numbers, not strings", async () => {
-    // ⚠️ factions.x/y/z are Postgres numeric, which Drizzle returns as
+    // ⚠️ declarations.x/y/z are Postgres numeric, which Drizzle returns as
     // STRINGS. "5551.69" + 0.898 is "5551.690.898". Without Number() every
     // coordinate in the file is corrupt.
     await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });

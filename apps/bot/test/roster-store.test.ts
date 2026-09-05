@@ -82,6 +82,19 @@ describe("PgRosterStore", () => {
     expect(rows.map((r) => r.factionName)).toEqual(["Live", "Sleeping"]);
   });
 
+  it("⚠️ returns a card with a null poleKey for a clan that holds no declaration", async () => {
+    // A LEFT join, not an INNER one: a reservation before its claim, and a
+    // clan whose pole was released, both still have to have a card. An inner
+    // join would make `/faction info` answer "no such clan" for a clan that
+    // plainly exists.
+    const [f] = await db.insert(factions).values({
+      serverId, name: "Poleless", tag: "PLS", texture: "Flag_Poleless",
+      status: "active", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    }).returning();
+    const card = await store.factionById(f!.id);
+    expect(card).toMatchObject({ id: f!.id, name: "Poleless", poleKey: null });
+  });
+
   it("returns a roster entry with a null gamertag when the link is gone", async () => {
     // A left join, not an inner one: /unlink can remove the link, and the
     // roster must still render rather than silently losing a member.

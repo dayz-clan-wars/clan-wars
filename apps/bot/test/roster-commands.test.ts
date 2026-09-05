@@ -512,6 +512,19 @@ describe("handleFactionInfo", () => {
     expect(r.content).toMatch(/Pole: 1\.00:2\.00:3\.00/);
   });
 
+  it("prints no pole line for a member of a clan that has not declared one", async () => {
+    // The binding lives in `declarations`, so a clan can legitimately have
+    // none — a reservation before its claim, or a clan whose pole was
+    // released. `Pole: null` in the reply would read as a bug.
+    const d = deps({
+      membershipsFor: async () => [membership({ factionId: 1 })],
+      factionByName: async () => factionCard({ id: 1, poleKey: null }),
+    });
+    const r = await handleFactionInfo(d, "d1", "Bears");
+    expect(r.content).toMatch(/Bears/);
+    expect(r.content).not.toMatch(/Pole:/);
+  });
+
   it("⚠️ hides the pole from everyone else — it is the faction's base coordinates", async () => {
     // `/faction info name:<rival>` is the recon path: `info` takes a name and
     // does no membership check to find the card, so without this the pole of
