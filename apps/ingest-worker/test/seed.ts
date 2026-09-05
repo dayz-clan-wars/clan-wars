@@ -3,6 +3,12 @@ import { NEW_POLE_GRACE_MS } from "@factions/domain";
 
 export type SeedFactionArgs = {
   serverId: number; tag: string; texture: string; status?: string;
+  /**
+   * Defaults to the tag. Given explicitly by the tests that assert a clan's
+   * NAME travels somewhere its tag does not — the feed payloads, chiefly —
+   * which a name/tag collapse would silently stop covering.
+   */
+  name?: string;
   poleKey?: string; x?: number; y?: number; z?: number;
   leaderDiscordId?: string; createdAt: Date; activatedAt?: Date | null; dormantSince?: Date | null;
   reservedUntil?: Date | null; ceremonyId?: number | null; renamedAt?: Date | null; reboundAt?: Date | null;
@@ -27,7 +33,7 @@ export async function seedFaction(db: Database, a: SeedFactionArgs) {
   const poleKey = a.poleKey ?? "1:2:3";
   const [x, y, z] = [a.x ?? 1, a.y ?? 2, a.z ?? 3];
   const [f] = await db.insert(factions).values({
-    serverId: a.serverId, name: a.tag, tag: a.tag, texture: a.texture,
+    serverId: a.serverId, name: a.name ?? a.tag, tag: a.tag, texture: a.texture,
     status: a.status ?? "active", leaderDiscordId: a.leaderDiscordId ?? "d1",
     createdAt: a.createdAt, activatedAt: a.activatedAt ?? null, dormantSince: a.dormantSince ?? null,
     reservedUntil: a.reservedUntil ?? null, ceremonyId: a.ceremonyId ?? null,

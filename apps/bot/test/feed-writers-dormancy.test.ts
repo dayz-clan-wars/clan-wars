@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, factionEvents, factions, factionMembers, servers, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgDormancyStore } from "../src/dormancy-store.js";
 import { PgRosterStore } from "../src/roster-store.js";
 
@@ -17,15 +18,15 @@ describe("dormancy path writes feed events", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_events, faction_invites, faction_members, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_events, faction_invites, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
 
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
-    const [f] = await db.insert(factions).values({
-      serverId: s!.id, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1", y: "2", z: "3", status: "active", leaderDiscordId: "d1", createdAt: now,
-    }).returning();
-    factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId: s!.id, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: now,
+    });
+    factionId = f.id;
 
     await db.insert(factionMembers).values({
       factionId, serverId: s!.id, discordId: "d1", dayzId: "A".repeat(40), role: "leader", joinedAt: now,

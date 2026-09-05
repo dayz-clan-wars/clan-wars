@@ -2,9 +2,10 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, supplyUploads, type Database,
+  servers, supplyUploads, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction as seedFactionAndDeclaration } from "./seed.js";
 import { loadTemplate } from "../src/supplies.js";
 import { supplyTick } from "../src/supply-tick.js";
 
@@ -58,21 +59,17 @@ describe("supplyTick drift detection", () => {
   let db: Database;
   let serverId = 0;
 
-  const seedFaction = async (tag: string) => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: tag, tag, texture: `Flag_${tag}`,
-      poleKey: `${tag}:1:2`, x: "1", y: "2", z: "3",
-      status: "active", leaderDiscordId: "d1", createdAt: now,
-    }).returning();
-    return f!;
-  };
+  const seedFaction = async (tag: string) => seedFactionAndDeclaration(db, {
+    serverId, tag, texture: `Flag_${tag}`, status: "active",
+    poleKey: `${tag}:1:2`, x: 1, y: 2, z: 3, createdAt: now,
+  });
 
   beforeEach(async () => {
     db = createClient(DB_URL);
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table supply_uploads, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table supply_uploads, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;

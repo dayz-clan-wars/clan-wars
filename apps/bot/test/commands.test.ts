@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgVerificationStore } from "../src/store.js";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
 
@@ -31,7 +32,7 @@ describe("commands", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, factions, servers, players restart identity cascade`);
+      await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, faction_members, declarations, poles, events, adm_files, factions, servers, players restart identity cascade`);
     });
     store = new PgVerificationStore(db);
     deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
@@ -46,13 +47,16 @@ describe("commands", () => {
   /** Seeds a holding faction with one member row for `discordId`/`role`. */
   const seedMembership = async (discordId: string, role: "leader" | "officer" | "member", factionName = "Bears") => {
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
-    const [f] = await db.insert(factions).values({
+    const f = await seedFaction(db, {
       serverId: s!.id, name: factionName, tag: factionName.slice(0, 4).toUpperCase(),
-      texture: `Flag_${factionName}`, poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
+      texture: `Flag_${factionName}`,
+      // One declaration per pole per server (declarations_pole_uniq), so the
+      // key is derived from the clan's name rather than a shared constant.
+      poleKey: `${factionName}:2:3`,
       status: "active", leaderDiscordId: role === "leader" ? discordId : "someone-else", createdAt: now,
-    }).returning();
+    });
     await db.insert(factionMembers).values({
-      factionId: f!.id, serverId: s!.id, dayzId: "P".repeat(40), discordId, role, joinedAt: now,
+      factionId: f.id, serverId: s!.id, dayzId: "P".repeat(40), discordId, role, joinedAt: now,
     });
   };
 

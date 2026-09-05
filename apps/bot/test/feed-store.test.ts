@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgFeedStore, appendFactionEventTx, countUnposted } from "../src/feed-store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -16,16 +17,15 @@ describe("PgFeedStore", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_events, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_events, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
-    const [f] = await db.insert(factions).values({
+    const f = await seedFaction(db, {
       serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
-      poleKey: "1:2:3", x: "1", y: "2", z: "3", status: "active",
-      leaderDiscordId: "d1", createdAt: now,
-    }).returning();
-    factionId = f!.id;
+      status: "active", leaderDiscordId: "d1", createdAt: now,
+    });
+    factionId = f.id;
   });
 
   const append = (kind: "founded" | "disbanded", at: Date) =>

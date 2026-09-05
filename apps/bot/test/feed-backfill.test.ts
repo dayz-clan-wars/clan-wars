@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionEvents, type Database } from "@factions/db";
 import { asc, sql } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { backfillFactionEvents } from "../src/feed-backfill.js";
 
 const URL = requireTestDatabaseUrl();
@@ -16,23 +17,22 @@ describe("backfillFactionEvents", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_events, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_events, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
   });
 
   const seed = (over: Partial<{ activatedAt: Date | null; status: string; tag: string; texture: string }> = {}) =>
-    db.insert(factions).values({
-      serverId, name: "Cokehead Kings", tag: over.tag ?? "COK",
-      texture: over.texture ?? "Flag_Wolf",
-      poleKey: `1:2:${over.tag ?? "COK"}`, x: "1", y: "2", z: "3",
+    seedFaction(db, {
+      serverId, name: "Cokehead Kings", tag: over.tag ?? "COK", texture: over.texture ?? "Flag_Wolf",
+      poleKey: `1:2:${over.tag ?? "COK"}`,
       status: over.status ?? "active", leaderDiscordId: "d1",
       createdAt: created, activatedAt: over.activatedAt === undefined ? activated : over.activatedAt,
       // factions_reserved_has_deadline requires this whenever status is
       // "reserved"; irrelevant to what the backfill itself reads.
       reservedUntil: over.status === "reserved" ? new Date("2026-09-08T00:00:00Z") : null,
-    }).returning();
+    });
 
   const events = () => db.select().from(factionEvents).orderBy(asc(factionEvents.id));
 
@@ -94,10 +94,10 @@ describe("backfillFactionEvents", () => {
     // exists — e.g. written before this fix shipped — the idempotence check
     // still can't tell "half" from "complete" and skips it like any other
     // faction that already has a row. It does not repair it.
-    const [f] = await seed();
+    const f = await seed();
     await db.insert(factionEvents).values({
-      serverId, factionId: f!.id, kind: "founded",
-      occurredAt: created, payload: { name: f!.name, tag: f!.tag, texture: f!.texture },
+      serverId, factionId: f.id, kind: "founded",
+      occurredAt: created, payload: { name: f.name, tag: f.tag, texture: f.texture },
     });
 
     expect(await backfillFactionEvents(db)).toEqual({ inserted: 0, skipped: 1 });

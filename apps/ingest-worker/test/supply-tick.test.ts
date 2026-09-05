@@ -5,6 +5,7 @@ import {
   servers, factions, supplyUploads, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction as seedFactionAndDeclaration } from "./seed.js";
 import { loadTemplate } from "../src/supplies.js";
 import { supplyTick } from "../src/supply-tick.js";
 
@@ -24,26 +25,25 @@ describe("supplyTick", () => {
 
   const seedFaction = async (opts: {
     tag: string; texture: string; x: string; y: string; z: string; status: string; serverId?: number;
-  }) => {
-    const [f] = await db.insert(factions).values({
-      serverId: opts.serverId ?? serverId,
-      name: opts.tag, tag: opts.tag, texture: opts.texture,
-      poleKey: `${opts.x}:${opts.y}:${opts.z}`,
-      x: opts.x, y: opts.y, z: opts.z,
-      status: opts.status, leaderDiscordId: "d1", createdAt: now,
-      // The factions_reserved_has_deadline check rejects a reserved row
-      // without one.
-      reservedUntil: opts.status === "reserved" ? new Date("2026-09-08T12:00:00Z") : null,
-    }).returning();
-    return f!;
-  };
+  }) => seedFactionAndDeclaration(db, {
+    serverId: opts.serverId ?? serverId,
+    tag: opts.tag, texture: opts.texture, status: opts.status,
+    // The coordinates the kit spawns at now live on the declaration, so they
+    // travel through the helper rather than onto the faction row.
+    poleKey: `${opts.x}:${opts.y}:${opts.z}`,
+    x: Number(opts.x), y: Number(opts.y), z: Number(opts.z),
+    createdAt: now,
+    // The factions_reserved_has_deadline check rejects a reserved row
+    // without one.
+    reservedUntil: opts.status === "reserved" ? new Date("2026-09-08T12:00:00Z") : null,
+  });
 
   beforeEach(async () => {
     db = createClient(DB_URL);
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table supply_uploads, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table supply_uploads, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
     serverId = await seedServer("S");
   });
