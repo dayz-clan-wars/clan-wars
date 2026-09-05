@@ -204,4 +204,34 @@ describe("dormancyTick", () => {
       expect(r.examined).toBe(2);
     });
   });
+
+  describe("solo declarations", () => {
+    it("counts the solos the sweep released", async () => {
+      const lapseSolos = vi.fn().mockResolvedValue([
+        { dayzId: "A", poleKey: "1:2:3" },
+        { dayzId: "B", poleKey: "4:5:6" },
+      ]);
+      const r = await dormancyTick(fakeStore([]), { now, windows, lapseSolos });
+      expect(lapseSolos).toHaveBeenCalledWith(now);
+      expect(r.soloLapsed).toBe(2);
+    });
+
+    it("reports 0 when no sweep was wired in", async () => {
+      // Not "nothing lapsed" but "nothing was swept" — the same count either
+      // way, and the caller that wants the sweep is the one that passes it.
+      const r = await dormancyTick(fakeStore([]), { now, windows });
+      expect(r.soloLapsed).toBe(0);
+    });
+
+    it("⚠️ sweeps the solos even when a faction transition threw", async () => {
+      // Solo clocks are independent of every faction's; a faction deadlock
+      // must not cost a solo declaration its release for another whole tick.
+      const lapseSolos = vi.fn().mockResolvedValue([{ dayzId: "A", poleKey: "1:2:3" }]);
+      const store = fakeStore([row({ lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS + 1) })], {
+        goDormant: async () => { throw new Error("deadlock"); },
+      });
+      const r = await dormancyTick(store, { now, windows, lapseSolos, onError: () => {} });
+      expect(r.soloLapsed).toBe(1);
+    });
+  });
 });

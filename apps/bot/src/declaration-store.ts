@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
-import { declarations, poles } from "@factions/db";
-import { tooClose, RELEASED_POLE_GRACE_MS } from "@factions/domain";
-import { and, eq, isNull, lt, sql } from "drizzle-orm";
+import { declarations, events, factionMembers, poles } from "@factions/db";
+import { tooClose, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS } from "@factions/domain";
+import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -125,6 +125,92 @@ export async function declarationForPlayer(db: Database | Tx, serverId: number, 
   const [row] = await db.select(shape).from(declarations)
     .where(and(eq(declarations.serverId, serverId), eq(declarations.ownerDayzId, dayzId)));
   return row ?? null;
+}
+
+export type RaisedPole = { poleKey: string; x: number; y: number; z: number; eventId: number; occurredAt: Date };
+
+/**
+ * Poles the log has seen this player raise a flag at — the only ones a solo
+ * may declare (spec §5.2). Newest raise first, one row per pole: the newest
+ * raise is the evidence `declareSolo` cites, and offering the same pole twice
+ * would let the site show a player two identical choices.
+ *
+ * Takes `Database | Tx` because `declareSolo` re-reads it INSIDE its own
+ * transaction, so the raise it cites is the raise it checked.
+ */
+export async function raisedPolesFor(db: Database | Tx, serverId: number, dayzId: string): Promise<RaisedPole[]> {
+  const rows = await db.select({
+    poleKey: sql<string>`${events.payload}->>'poleKey'`,
+    x: sql<string>`${events.payload}->'pole'->>'x'`,
+    y: sql<string>`${events.payload}->'pole'->>'y'`,
+    z: sql<string>`${events.payload}->'pole'->>'z'`,
+    eventId: events.id, occurredAt: events.occurredAt,
+  }).from(events).where(and(
+    eq(events.serverId, serverId), eq(events.type, "flag.raised"),
+    sql`${events.payload}->>'dayzId' = ${dayzId}`,
+  )).orderBy(desc(events.occurredAt), desc(events.id));
+  const seen = new Set<string>();
+  return rows.filter((r) => (seen.has(r.poleKey) ? false : (seen.add(r.poleKey), true)))
+    .map((r) => ({ poleKey: r.poleKey, x: Number(r.x), y: Number(r.y), z: Number(r.z), eventId: r.eventId, occurredAt: r.occurredAt }));
+}
+
+/** A solo's declaration: the same pole binding a clan gets, evidenced by a raise. */
+export async function declareSolo(db: Database, a: { serverId: number; dayzId: string; poleKey: string; at: Date }):
+  Promise<DeclareOutcome | { ok: false; reason: "no-raise" | "in-clan" }> {
+  return db.transaction(async (tx) => {
+    // Rule 3: in a clan, your declaration is the clan's. Checked inside the
+    // transaction so an accept landing at the same instant cannot slip past.
+    const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
+      .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.dayzId)));
+    if (member) return { ok: false as const, reason: "in-clan" as const };
+    const raise = (await raisedPolesFor(tx, a.serverId, a.dayzId)).find((r) => r.poleKey === a.poleKey);
+    if (!raise) return { ok: false as const, reason: "no-raise" as const };
+    return declareTx(tx, {
+      serverId: a.serverId, poleKey: a.poleKey, x: raise.x, y: raise.y, z: raise.z,
+      owner: { dayzId: a.dayzId }, evidence: { eventId: raise.eventId }, at: a.at,
+    });
+  });
+}
+
+/**
+ * Rule 4 for solos: no raise by the declarant at the pole for SOLO_LAPSE_MS
+ * releases the declaration on the spot (guide ch. 4). Returns who lapsed so
+ * the caller can tell them — increment 3 queues the DM.
+ *
+ * ⚠️ The NOT EXISTS reads `events` by (server_id, poleKey, dayzId,
+ * occurred_at); `events_raise_lookup_idx` covers (server_id, poleKey,
+ * texture, occurred_at), so this is a partial-index walk plus a filter on
+ * `dayzId` rather than an index lookup. Acceptable for the handful of solo
+ * declarations a tick examines; it would not be for thousands.
+ */
+export async function lapseSolos(db: Database, serverId: number, now: Date): Promise<{ dayzId: string; poleKey: string }[]> {
+  const cutoff = new Date(now.getTime() - SOLO_LAPSE_MS);
+  const stale = await db.select({ dayzId: declarations.ownerDayzId, poleKey: declarations.poleKey })
+    .from(declarations)
+    .where(and(
+      eq(declarations.serverId, serverId),
+      isNotNull(declarations.ownerDayzId),
+      // ⚠️ The date is interpolated as an ISO string cast to timestamptz:
+      // binding a raw JS Date inside a drizzle sql`` template throws in
+      // postgres.js.
+      sql`not exists (
+        select 1 from events e
+        where e.type = 'flag.raised' and e.server_id = ${declarations.serverId}
+          and e.payload->>'poleKey' = ${declarations.poleKey}
+          and e.payload->>'dayzId' = ${declarations.ownerDayzId}
+          and e.occurred_at > ${cutoff.toISOString()}::timestamptz
+      )`,
+    ));
+  const lapsed: { dayzId: string; poleKey: string }[] = [];
+  for (const s of stale) {
+    // One transaction each: a release that deadlocks or loses a race to a
+    // concurrent release must not take the rest of the sweep with it, and
+    // `releaseTx` returning false is exactly that "someone else got there
+    // first" case — nobody to tell.
+    const done = await db.transaction((tx) => releaseTx(tx, { dayzId: s.dayzId!, serverId }, now));
+    if (done) lapsed.push({ dayzId: s.dayzId!, poleKey: s.poleKey });
+  }
+  return lapsed;
 }
 
 /**

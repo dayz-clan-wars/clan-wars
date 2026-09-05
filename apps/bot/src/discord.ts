@@ -3,7 +3,8 @@ import {
   SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle,
   type RESTPostAPIApplicationCommandsJSONBody, type InteractionEditReplyOptions,
 } from "discord.js";
-import { createClient } from "@factions/db";
+import { createClient, servers } from "@factions/db";
+import { eq } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, emoteLabel } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
 import { PgVerificationStore } from "./store.js";
@@ -19,6 +20,7 @@ import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
 import { dormancyTick } from "./dormancy-tick.js";
+import { lapseSolos } from "./declaration-store.js";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
 import {
@@ -1168,6 +1170,16 @@ export async function start(cfg: BotConfig): Promise<void> {
           disbandAfterDormantMs: cfg.disbandAfterDormantMs,
         },
         onError: (factionId, err) => console.error(`dormancy failed for faction ${factionId}`, err),
+        // Solo declarations lapse on the same clock the factions do, so they
+        // are swept by the same job — one sweep per active server.
+        lapseSolos: async (now) => {
+          const all: { dayzId: string; poleKey: string }[] = [];
+          for (const s of await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true))) {
+            all.push(...await lapseSolos(db, s.id, now));
+          }
+          for (const l of all) console.log(`solo declaration lapsed: ${l.dayzId} at ${l.poleKey}`);
+          return all;
+        },
       });
       if (d.dormant > 0 || d.revived > 0 || d.disbanded > 0 || d.stamped > 0) {
         console.log(

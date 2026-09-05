@@ -48,6 +48,12 @@ export type DormancyTickResult = {
    * a quiet week from a broken worker.
    */
   paused: number;
+  /**
+   * Solo declarations released this tick because the declarant had not raised
+   * their flag for SOLO_LAPSE_MS. Counted here rather than logged inside the
+   * store so the one job that sweeps the clocks reports every clock it swept.
+   */
+  soloLapsed: number;
   notices: DormancyNotice[];
 };
 
@@ -65,11 +71,22 @@ export type DormancyTickResult = {
  */
 export async function dormancyTick(
   store: DormancyStore,
-  opts: { now: Date; windows: DormancyWindows; onError?: (factionId: number, err: unknown) => void },
+  opts: {
+    now: Date;
+    windows: DormancyWindows;
+    onError?: (factionId: number, err: unknown) => void;
+    /**
+     * Releases solo declarations whose declarant has gone quiet, returning
+     * who lapsed. Optional so every existing caller and test keeps working;
+     * when it is absent `soloLapsed` is 0 because nothing was swept, which is
+     * the honest count.
+     */
+    lapseSolos?: (now: Date) => Promise<{ dayzId: string; poleKey: string }[]>;
+  },
 ): Promise<DormancyTickResult> {
   const { now, windows } = opts;
   const out: DormancyTickResult = {
-    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, paused: 0, notices: [],
+    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, paused: 0, soloLapsed: 0, notices: [],
   };
 
   for (const clock of await store.clocks()) {
@@ -116,6 +133,11 @@ export async function dormancyTick(
       opts.onError?.(clock.id, err);
     }
   }
+
+  // Last, and after the faction loop: solo clocks are independent of every
+  // faction's, so a faction that threw above must not cost the solos their
+  // sweep.
+  if (opts.lapseSolos) out.soloLapsed = (await opts.lapseSolos(now)).length;
 
   return out;
 }
