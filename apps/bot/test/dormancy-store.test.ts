@@ -198,6 +198,20 @@ describe("PgDormancyStore", () => {
       const [c] = await store.clocks();
       expect(c!.lastRaiseAt!.getTime()).toBe(ago(1000).getTime());
     });
+
+    it("⚠️ takes the newest MEMBER raise, not the newest raise", async () => {
+      // The mixed case is the one that matters: a stranger raising the
+      // faction's flag at its own pole MORE RECENTLY than any member must not
+      // wind the clock forward. A roster predicate that filtered nothing —
+      // or a max() taken before the filter — passes both single-actor tests
+      // above and fails only here, and the failure is silent: a dead faction
+      // that a passer-by keeps flying stays "active" forever.
+      await seedFaction({ tag: "BEAR" });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(1000), dayzId: "STRANGER" });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(2000), dayzId: "A" });
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt!.getTime()).toBe(ago(2000).getTime());
+    });
   });
 
   describe("transitions", () => {

@@ -26,8 +26,14 @@ export type SeedFactionArgs = {
  * distance rule has to go through `declareTx`/`reserve`/`rebind` instead.
  */
 export async function seedFaction(db: Database, a: SeedFactionArgs) {
-  const poleKey = a.poleKey ?? "1:2:3";
-  const [x, y, z] = [a.x ?? 1, a.y ?? 2, a.z ?? 3];
+  // ⚠️ Default well clear of the Hub at (100, 93): the old (1, 2, 3) default
+  // was ~134 m from it, inside the 200 m exclusion zone, so a fixture seeded
+  // at the default described a base `declareTx` would refuse to create. The
+  // seed bypasses declareTx, so nothing errored — the fixture was simply
+  // impossible, and any test that later fed it through the real path would
+  // have been testing a state the game cannot reach.
+  const poleKey = a.poleKey ?? "5000.00:100.00:5000.00";
+  const [x, y, z] = [a.x ?? 5000, a.y ?? 100, a.z ?? 5000];
   const [f] = await db.insert(factions).values({
     serverId: a.serverId, name: a.name ?? a.tag, tag: a.tag, texture: a.texture,
     status: a.status ?? "active", leaderDiscordId: a.leaderDiscordId ?? "d1",
