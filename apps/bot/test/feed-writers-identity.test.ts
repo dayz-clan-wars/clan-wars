@@ -6,8 +6,7 @@ import {
 } from "@factions/db";
 import { asc, sql } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
-import { PgRosterStore } from "../src/roster-store.js";
-import { PgRebindStore } from "../src/rebind-store.js";
+import { PgRosterStore, PgRebindStore } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");

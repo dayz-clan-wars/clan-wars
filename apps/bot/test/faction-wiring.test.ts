@@ -11,8 +11,7 @@ import {
 } from "../src/discord.js";
 import type { FactionDeps, FactionReply } from "../src/faction-commands.js";
 import type { Participant } from "../src/ceremony-store.js";
-import type { FactionStore, OpenCeremony } from "../src/faction-store.js";
-import type { RosterStore, Membership } from "../src/roster-store.js";
+import type { FactionStore, OpenCeremony, RosterStore, Membership } from "@factions/roster/internal";
 import type { RosterDeps, RosterReply, RosterPrompt } from "../src/roster-commands.js";
 import {
   handleFactionInvite, handleFactionInvites, handleFactionKick, handleFactionLeave,

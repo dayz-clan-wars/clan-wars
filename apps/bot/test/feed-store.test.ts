@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
-import { PgFeedStore, appendFactionEventTx, countUnposted } from "../src/feed-store.js";
+import { PgFeedStore, appendFactionEventTx, countUnposted } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");

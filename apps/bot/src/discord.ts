@@ -15,7 +15,6 @@ import type { BotConfig } from "./config.js";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
 import { applyNickname, type NicknameOutcome, type GuildLike } from "./nickname.js";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps, type FactionReply } from "./faction-commands.js";
-import { PgFactionStore } from "./faction-store.js";
 import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
@@ -31,10 +30,10 @@ import {
   handleFactionInfo, handleFactionRoster,
   type RosterDeps, type RosterReply, type RosterPrompt,
 } from "./roster-commands.js";
-import { PgRosterStore, type Membership } from "./roster-store.js";
 import { handleFactionRebind, handleRebindConfirm, type RebindDeps } from "./rebind-commands.js";
-import { PgRebindStore } from "./rebind-store.js";
-import { PgFeedStore, countUnposted } from "./feed-store.js";
+import {
+  PgFactionStore, PgRosterStore, type Membership, PgRebindStore, PgFeedStore, countUnposted,
+} from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
 

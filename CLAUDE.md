@@ -164,7 +164,7 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
 must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →
 `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless form
 legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
-`domain`, `declarations` and `verification`; adding a package to `transpilePackages` means converting it first, and
+`domain`, `declarations` and `verification` — including `packages/roster/src/internal/`, the bot's entry point; adding a package to `transpilePackages` means converting it first, and
 `apps/web/test/transpiled-imports.test.ts` fails until you do.
 
 ---

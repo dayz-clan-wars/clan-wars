@@ -1,10 +1,10 @@
 import type { Database } from "@factions/db";
 import { factions, factionMembers, events, declarations } from "@factions/db";
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { leaderIs } from "./roster-store.js";
-import type { QualifyingRaise } from "./rebind.js";
-import { appendFactionEventTx } from "./feed-store.js";
-import { actorGamertagTx } from "./feed-actor.js";
+import { leaderIs } from "./roster-store";
+import type { QualifyingRaise } from "./rebind";
+import { appendFactionEventTx } from "./feed-store";
+import { actorGamertagTx } from "./feed-actor";
 import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 
 /**

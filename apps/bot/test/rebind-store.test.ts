@@ -5,7 +5,7 @@ import {
 } from "@factions/db";
 import { RELEASED_POLE_GRACE_MS, parsePoleKey } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { PgRebindStore } from "../src/rebind-store.js";
+import { PgRebindStore } from "@factions/roster/internal";
 import { declarationForFaction } from "@factions/declarations";
 
 const URL = requireTestDatabaseUrl();

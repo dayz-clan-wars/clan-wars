@@ -6,8 +6,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
-import { PgRosterStore } from "../src/roster-store.js";
-import type { SetRoleArgs, TransferArgs } from "../src/roster-store.js";
+import { PgRosterStore, type SetRoleArgs, type TransferArgs } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const LEADER = "d1";

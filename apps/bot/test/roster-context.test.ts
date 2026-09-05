@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { resolveServerContext } from "../src/roster-context.js";
-import type { Membership } from "../src/roster-store.js";
+import type { Membership } from "@factions/roster/internal";
 
 const m = (serverId: number, serverName: string): Membership => ({
   factionId: serverId * 10, serverId, serverName,

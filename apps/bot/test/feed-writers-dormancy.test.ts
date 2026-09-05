@@ -3,7 +3,7 @@ import { createClient, runMigrations, requireTestDatabaseUrl, factionEvents, fac
 import { asc, eq, sql } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
 import { PgDormancyStore } from "../src/dormancy-store.js";
-import { PgRosterStore } from "../src/roster-store.js";
+import { PgRosterStore } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");

@@ -1,8 +1,9 @@
 import { describe, it, expect, vi } from "vitest";
 import { handleFactionRebind, handleRebindConfirm, type RebindDeps } from "../src/rebind-commands.js";
-import { REBIND_COOLDOWN_MS, type QualifyingRaise } from "../src/rebind.js";
-import type { RebindStore, RebindTarget } from "../src/rebind-store.js";
-import type { Membership, RosterStore } from "../src/roster-store.js";
+import {
+  REBIND_COOLDOWN_MS, type QualifyingRaise, type RebindStore, type RebindTarget,
+  type Membership, type RosterStore,
+} from "@factions/roster/internal";
 
 const now = new Date("2026-09-03T12:00:00Z");
 const ago = (ms: number) => new Date(now.getTime() - ms);

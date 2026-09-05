@@ -3,7 +3,7 @@ import {
   selectCandidates, cooldownRemainingMs,
   REBIND_COOLDOWN_MS, RELEASE_GRACE_MS, REBIND_WINDOW_MS,
   type QualifyingRaise,
-} from "../src/rebind.js";
+} from "@factions/roster/internal";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 
 const now = new Date("2026-09-03T12:00:00Z");

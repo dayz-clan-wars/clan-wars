@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import type { RosterStore, Membership, PendingInvite, FactionCard, RosterEntry } from "../src/roster-store.js";
+import type { RosterStore, Membership, PendingInvite, FactionCard, RosterEntry } from "@factions/roster/internal";
 import {
   handleFactionInvite, handleFactionInvites, handleInviteAccept, handleInviteDecline,
   handleFactionKick, handleFactionLeave,

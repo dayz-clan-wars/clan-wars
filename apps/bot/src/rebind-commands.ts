@@ -1,10 +1,9 @@
-import type { RosterStore } from "./roster-store.js";
 import type { RosterReply } from "./roster-commands.js";
 import { resolveServerContext } from "./roster-context.js";
-import type { RebindStore } from "./rebind-store.js";
 import {
+  type RosterStore, type RebindStore,
   selectCandidates, cooldownRemainingMs, REBIND_WINDOW_MS, RELEASE_GRACE_MS,
-} from "./rebind.js";
+} from "@factions/roster/internal";
 import { MIN_BASE_SPACING_M } from "@factions/domain";
 
 export type RebindDeps = {

@@ -14,6 +14,7 @@
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
     "@factions/event-log": "workspace:*",
+    "@factions/roster": "workspace:*",
     "@factions/verification": "workspace:*",
     "discord.js": "^14.27.0",
     "drizzle-orm": "^0.36.0"

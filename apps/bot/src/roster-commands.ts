@@ -1,4 +1,4 @@
-import type { FactionCard, RosterStore } from "./roster-store.js";
+import type { FactionCard, RosterStore } from "@factions/roster/internal";
 import { resolveServerContext } from "./roster-context.js";
 
 export type RosterPrompt =

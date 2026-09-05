@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, ceremonies, ceremonyParticipants, factions, factionMembers, declarations, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { PgFactionStore } from "../src/faction-store.js";
+import { PgFactionStore } from "@factions/roster/internal";
 import { declarationForFaction } from "@factions/declarations";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps } from "../src/faction-commands.js";
 

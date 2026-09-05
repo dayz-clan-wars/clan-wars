@@ -41,6 +41,9 @@ importers:
       '@factions/event-log':
         specifier: workspace:*
         version: link:../../packages/event-log
+      '@factions/roster':
+        specifier: workspace:*
+        version: link:../../packages/roster
       '@factions/verification':
         specifier: workspace:*
         version: link:../../packages/verification

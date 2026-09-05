@@ -3,7 +3,7 @@ import { whiteRaises, ceremonies, ceremonyParticipants, declarations, factions, 
 import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
 import { parsePoleKey } from "@factions/domain";
 import { and, asc, eq, inArray, isNotNull, isNull, lte, max } from "drizzle-orm";
-import { appendFactionEventTx } from "./feed-store.js";
+import { appendFactionEventTx } from "@factions/roster/internal";
 import { lockDeclarations, releaseTx } from "@factions/declarations";
 
 export type PoleRef = { serverId: number; poleKey: string };

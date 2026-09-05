@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "../src/config.js";
-import { RELEASE_GRACE_MS } from "../src/rebind.js";
+import { RELEASE_GRACE_MS } from "@factions/roster/internal";
 
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",

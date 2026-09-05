@@ -1,6 +1,6 @@
 import { isClaimableFlag, MIN_BASE_SPACING_M } from "@factions/domain";
 import type { Participant } from "./ceremony-store.js";
-import type { FactionStore } from "./faction-store.js";
+import type { FactionStore } from "@factions/roster/internal";
 
 export type ClaimDraftInput = { name: string; tag: string; texture: string };
 export type ClaimPrompt = {

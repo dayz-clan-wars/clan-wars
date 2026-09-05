@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { feedEmbed, flagLabel } from "../src/feed-embed.js";
-import type { QueuedFactionEvent } from "../src/feed-store.js";
+import type { QueuedFactionEvent } from "@factions/roster/internal";
 
 const at = new Date("2026-09-01T21:30:07Z");
 const base = { name: "Wolf Tang Clan", tag: "WTC", texture: "Flag_Wolf" };

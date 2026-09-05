@@ -1,5 +1,5 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
-import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "./rebind.js";
+import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "@factions/roster/internal";
 import {
   ACTIVATION_WINDOW_MS,
   PENDING_EXPIRY_MS,

@@ -6,7 +6,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { seedFaction as seedFactionAndDeclaration } from "./seed.js";
-import { PgRosterStore } from "../src/roster-store.js";
+import { PgRosterStore } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const PLAYER = "C".repeat(40);

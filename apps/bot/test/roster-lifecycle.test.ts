@@ -7,8 +7,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
-import { PgRosterStore } from "../src/roster-store.js";
-import type { RenameArgs } from "../src/roster-store.js";
+import { PgRosterStore, type RenameArgs } from "@factions/roster/internal";
 
 const URL = requireTestDatabaseUrl();
 const LEADER = "d1";

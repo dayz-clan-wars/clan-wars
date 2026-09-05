@@ -2,8 +2,8 @@ import type { Database } from "@factions/db";
 import { ceremonies, ceremonyParticipants, claimDrafts, declarations, factions, factionMembers } from "@factions/db";
 import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
-import { appendFactionEventTx } from "./feed-store.js";
-import { actorGamertagTx } from "./feed-actor.js";
+import { appendFactionEventTx } from "./feed-store";
+import { actorGamertagTx } from "./feed-actor";
 import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly

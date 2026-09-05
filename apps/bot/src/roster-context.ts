@@ -1,4 +1,4 @@
-import type { Membership } from "./roster-store.js";
+import type { Membership } from "@factions/roster/internal";
 
 export type ServerContext =
   | { kind: "ok"; membership: Membership }

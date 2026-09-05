@@ -84,6 +84,11 @@ describe("the web app reads nothing", () => {
     expect(sql).toContain('CONSTRAINT "declarations_one_evidence"');
   });
 
+  it("⚠️ never imports the roster's internal store — that entry point is the bot's (spec §5.4)", () => {
+    const offenders = sources.filter((s) => s.text.includes("@factions/roster/internal"));
+    expect(offenders.map((o) => o.file)).toEqual([]);
+  });
+
   it("⚠️ @factions/roster exports exactly the allowlist the site is permitted", async () => {
     // The capability rule (frontend rebuild §6; target spec §10.4). This is
     // the site's half of the pin; packages/roster/test/exports.test.ts is

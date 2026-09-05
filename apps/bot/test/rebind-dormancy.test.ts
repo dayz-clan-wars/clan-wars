@@ -4,7 +4,7 @@ import {
   servers, factions, factionMembers, events, admFiles, declarations, poles, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { PgRebindStore } from "../src/rebind-store.js";
+import { PgRebindStore } from "@factions/roster/internal";
 import { PgDormancyStore } from "../src/dormancy-store.js";
 import { decide, DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "../src/dormancy.js";
 

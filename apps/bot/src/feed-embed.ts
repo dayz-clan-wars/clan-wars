@@ -1,6 +1,6 @@
 import type { APIEmbed } from "discord.js";
 import type { FactionEventKind } from "@factions/domain";
-import type { QueuedFactionEvent, FeedPayload } from "./feed-store.js";
+import type { QueuedFactionEvent, FeedPayload } from "@factions/roster/internal";
 
 /**
  * Where a flag's artwork lives, if it lives anywhere.

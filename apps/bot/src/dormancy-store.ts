@@ -2,8 +2,7 @@ import type { Database } from "@factions/db";
 import { declarations, factions } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
-import { disbandFactionTx } from "./roster-store.js";
-import { appendFactionEventTx } from "./feed-store.js";
+import { disbandFactionTx, appendFactionEventTx } from "@factions/roster/internal";
 
 export type FactionClockRow = FactionClock & {
   id: number;

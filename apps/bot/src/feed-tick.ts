@@ -1,5 +1,5 @@
 import type { APIEmbed } from "discord.js";
-import type { FeedStore } from "./feed-store.js";
+import type { FeedStore } from "@factions/roster/internal";
 import { feedEmbed, type FlagImageResolver } from "./feed-embed.js";
 
 export type FeedPoster = (embed: APIEmbed) => Promise<void>;

@@ -6,7 +6,7 @@ import {
 } from "@factions/db";
 import { sql, eq, and } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
-import { PgRosterStore } from "../src/roster-store.js";
+import { PgRosterStore } from "@factions/roster/internal";
 
 /**
  * How many backends are parked on a heavyweight lock right now. This is

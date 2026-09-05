@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 import type { APIEmbed } from "discord.js";
 import { feedTick } from "../src/feed-tick.js";
-import type { FeedStore, QueuedFactionEvent } from "../src/feed-store.js";
+import type { FeedStore, QueuedFactionEvent } from "@factions/roster/internal";
 
 const now = new Date("2026-09-03T12:00:00Z");
 
