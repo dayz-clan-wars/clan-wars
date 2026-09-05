@@ -108,6 +108,10 @@ turbo gate stays the gate, because it runs `typecheck` too.
   increment 2a, the `web` service in `docker-compose.yml` also needs `DATABASE_URL`
   (pointed at `factions_live`); `apps/web` never reads it directly — only
   `@factions/roster` reads `DATABASE_URL`, and `apps/web` calls the package's exports.
+  Since 2b the roster package also writes: `startLink`/`cancelLink`/`unlink` and
+  `declareSolo`/`releaseSolo`, over `@factions/verification` and `@factions/declarations`
+  — the same stores the bot uses, moved out of `apps/bot` so neither side has its own
+  copy of a rule.
 
 ---
 
@@ -159,8 +163,8 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
 **Every package `apps/web` transpiles (`transpilePackages` in `apps/web/next.config.ts`)
 must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →
 `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless form
-legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db` and
-`domain`; adding a package to `transpilePackages` means converting it first, and
+legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
+`domain`, `declarations` and `verification`; adding a package to `transpilePackages` means converting it first, and
 `apps/web/test/transpiled-imports.test.ts` fails until you do.
 
 ---
@@ -181,11 +185,16 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db` 
   them in opposite orders. There are four writers now. `faction_events` is always last
   among the roster tables, and can safely be: it is insert-only and nothing references
   it, so no writer ever needs it locked before touching the roster tables.
-  `packages/roster` is the fifth roster writer and the first outside the bot process. It
-  holds no writes yet (increment 2a); 2b and 2c add them, every one appending its feed or
-  notice row in the transition's own transaction.
+  `packages/roster` is the fifth roster writer and the first outside the bot process. Its
+  first writes landed in 2b: `unlink` takes `lockDeclarations` → `releaseTx` →
+  `identity_links`; `declareSolo` takes `lockDeclarations` before reading the link, which
+  is what serialises the two (`packages/roster/test/base.test.ts` races them). 2c adds
+  the roster writes, every one appending its feed or notice row in the transition's own
+  transaction.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
-  query under a lock inside it, not an index; a second writer is a race.
+  query under a lock inside it, not an index; a second writer is a race. `declareTx`
+  lives in `packages/declarations` since 2b; `apps/bot` and `packages/roster` both
+  import it.
 - **`poles` is filled by the bot's `pole-tick.ts`**, not by `apps/projector`, which does
   not run here. `grace_until` comes from it.
 - **`faction_events` rows are written in the SAME transaction as the transition they
@@ -275,6 +284,9 @@ not of anything that has happened here yet.
 
 Increment 2a (site foundation) landed: Tailwind, `packages/roster` with `viewerFor`,
 `/me` from the database. No new player capability; the slash commands still run.
+Increment 2b landed: `/link` (autocomplete, three emotes, ten minutes, 5 s poll), unlink
+on `/me`, `/base` for solo declare and release; migration 0021; inbox 7 closed.
+Discord's `/link` still runs beside the page until 2c.
 
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further

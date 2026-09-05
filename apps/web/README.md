@@ -9,6 +9,14 @@ A Next.js 16 (App Router) app on Tailwind v4. Public: the landing page. Gated
 behind Discord login and guild membership (`lib/auth`, `middleware.ts`): `/me`,
 which shows the viewer's link and clan, read through `@factions/roster`.
 
+Since increment 2b, also gated: `/link` (start or cancel a challenge, unclaimed
+gamertag autocomplete, a 5 s status poll) and `/base` (declare or release a solo
+base at a pole the viewer raised at); `/me` gained an unlink form. Their API
+handlers are `/api/link/search`, `/api/link/start`, `/api/link/cancel`,
+`/api/link/status`, `/api/link/unlink`, `/api/base/declare` and
+`/api/base/release`. Every page that reads the viewer is `force-dynamic`; every
+personal JSON response is `Cache-Control: no-store, private`.
+
 **It imports no database package.** `packages/roster` owns the client and
 exports only the operations the site is allowed to perform — see the target-
 state spec §10.4 and the frontend rebuild spec §2–§3 for the boundary and why
