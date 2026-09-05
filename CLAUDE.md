@@ -15,6 +15,9 @@ pnpm workspace + turbo. TypeScript, vitest, drizzle-orm over postgres.js, discor
 port 5434. Nothing but a deliberate migration step or a read-only check should ever
 point at it.
 
+**Migration 0020 drops columns the running bot selects.** Stop `clan-wars-bot` before
+applying it; see `docs/deploy/2026-09-05-declarations.md`.
+
 **`TEST_DATABASE_URL` is a BASE URL, not a target.** Since 2026-09-02 (inbox item 21)
 only its host, port and credentials are used; the database it names is discarded, and
 each package derives its own `factions_test_<package>` — created by a shared vitest
@@ -152,14 +155,21 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
 ## Invariants worth knowing before you change them
 
 - **`HOLDING_STATUSES` (`reserved, active, dormant`) means identity — holds flag, tag
-  and pole — and nothing else.** It is mirrored by three partial unique indexes in SQL.
-  Do not narrow it to change behaviour; add a set. `SUPPLIED_STATUSES` (`reserved,
-  active`) is the one that governs supply kits.
-- **Lock order for the roster tables: `factions` → `faction_members` → `faction_invites`
-  → `faction_events`.** A deadlock was already built once from two separately-correct
-  changes taking two of them in opposite orders. There are four writers now.
-  `faction_events` is always last, and can safely be: it is insert-only and nothing
-  references it, so no writer ever needs it locked before touching the roster tables.
+  and pole — and nothing else.** It is mirrored by two partial unique indexes plus the
+  existence of a `declarations` row. Do not narrow it to change behaviour; add a set.
+  `SUPPLIED_STATUSES` (`reserved, active`) is the one that governs supply kits.
+- **Lock order (spec §4.12): `factions` → `declarations` → `faction_members` →
+  `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
+  → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
+  `clan_pins` → `guest_passes` → `faction_events` → `war_log_events` → `clan_notices`.**
+  A deadlock was already built once from two separately-correct changes taking two of
+  them in opposite orders. There are four writers now. `faction_events` is always last
+  among the roster tables, and can safely be: it is insert-only and nothing references
+  it, so no writer ever needs it locked before touching the roster tables.
+- **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
+  query under a lock inside it, not an index; a second writer is a race.
+- **`poles` is filled by the bot's `pole-tick.ts`**, not by `apps/projector`, which does
+  not run here. `grace_until` comes from it.
 - **`faction_events` rows are written in the SAME transaction as the transition they
   describe.** The feed's whole correctness is "a row exists iff the transition happened",
   and nothing anywhere reconciles the two — the transition's own evidence
@@ -262,6 +272,9 @@ deployed and exercised against a now-gone database — see
 vacuously true today — nothing publishes base coordinates — and becomes a real promise the
 day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
+Declarations (increment 1 of the target-state spec) are in the code and migrated in.
+Solo declare has a store and a lapse clock but no page and no DM yet (increments 2 and 3).
+
 **The faction feed is in the code and migrated in.** `faction_events` is an append-only
 log, written inside each transition's own transaction, and a tick posts queued rows in
 `id` order as embeds to `#🎌-faction-feed`. (Previously deployed and exercised against a
@@ -290,13 +303,17 @@ The read-only acceptance check, to re-run before any future dormancy change:
       select f.tag, f.status, f.dormant_since,
              now() - coalesce((select max(e.occurred_at) from events e
                where e.type='flag.raised' and e.server_id=f.server_id
-                 and e.payload->>'poleKey'=f.pole_key
-                 and e.payload->>'texture'=f.texture),
+                 and e.payload->>'poleKey'=d.pole_key
+                 and e.payload->>'texture'=f.texture
+                 and e.payload->>'dayzId' in (select dayz_id from faction_members where faction_id=f.id)),
                f.activated_at, f.created_at) as age
-      from factions f where f.status in ('active','dormant')"
+      from factions f left join declarations d on d.owner_faction_id = f.id
+      where f.status in ('active','dormant')"
 
 Any row with `age` over 7 days will be made dormant on the next tick, cutting a real
-faction's supplies. That is a decision, not a side effect.
+faction's supplies. That is a decision, not a side effect. The solo lapse clock is
+separate: for a solo declaration it starts at `declared_at`, or the declarant's last
+raise, whichever is later.
 
 ⚠️ The read-only acceptance check above returns **zero rows** on a fresh database. That
 is the same output it gives when "nothing will transition on the next tick" — identical
