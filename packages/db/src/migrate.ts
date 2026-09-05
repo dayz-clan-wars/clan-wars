@@ -1,7 +1,7 @@
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import type { Database } from "./client.js";
+import type { Database } from "./client";
 
 const here = dirname(fileURLToPath(import.meta.url));
 

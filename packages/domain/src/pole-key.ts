@@ -1,4 +1,4 @@
-import type { Vec3 } from "./vec3.js";
+import type { Vec3 } from "./vec3";
 
 /** Decimal places retained in a pole identity key. 2 == 1cm. */
 export const POLE_KEY_PRECISION = 2;

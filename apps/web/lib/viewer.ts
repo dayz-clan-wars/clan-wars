@@ -12,7 +12,9 @@ import { decodeSession, sessionKey, type Session } from "./auth/session";
  * test/request-time-rendering.test.ts pins the pairing.
  *
  * The middleware has already run: a null here means the cookie was tampered
- * with or the secret rotated, not that the visitor is anonymous.
+ * with or the secret rotated, not that the visitor is anonymous. With
+ * `SESSION_SECRET` unset, `sessionKey("")` throws instead (fail-loud), so a
+ * null return here never means the secret itself is missing.
  */
 export async function currentSession(): Promise<Session | null> {
   const jar = await cookies();

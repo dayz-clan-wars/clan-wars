@@ -12,8 +12,8 @@
  * faction_join_requests → … → faction_events. Every write appends its feed
  * or notice row in the transition's own transaction.
  */
-import { db } from "./client.js";
-import { viewerForDb, type Viewer, type Role } from "./viewer.js";
+import { db } from "./client";
+import { viewerForDb, type Viewer, type Role } from "./viewer";
 
 export type { Viewer, Role };
 

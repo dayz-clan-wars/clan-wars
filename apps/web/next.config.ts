@@ -15,15 +15,6 @@ const config: NextConfig = {
   // postgres.js is a Node driver with no browser build; keep it external to
   // the server bundle rather than letting Next try to compile it.
   serverExternalPackages: ["postgres"],
-
-  // ⚠️ Every @factions/* package's internal relative imports end in `.js`
-  // (the NodeNext convention) even though the files are `.ts` — fine for
-  // tsx/tsc, which map the extension, but neither Turbopack nor webpack do
-  // that by default, so an unaliased bundler fails on `./client.js` etc. the
-  // moment it has to compile these packages from source.
-  experimental: {
-    extensionAlias: { ".js": [".ts", ".tsx", ".js"] },
-  },
 };
 
 export default config;

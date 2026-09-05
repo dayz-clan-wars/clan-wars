@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
-import { createClient } from "./client.js";
-import { packageNameAt, testDatabaseNameFor, TEST_DATABASE_PREFIX } from "./test-database-url.js";
+import { createClient } from "./client";
+import { packageNameAt, testDatabaseNameFor, TEST_DATABASE_PREFIX } from "./test-database-url";
 
 /** Postgres `duplicate_database`. Two packages racing the same CREATE. */
 const DUPLICATE_DATABASE = "42P04";

@@ -75,4 +75,12 @@ describe("compose matches the single-host deployment", () => {
     // DISCORD_CLIENT_SECRET that means publishing it.
     expect(COMPOSE).not.toMatch(/NEXT_PUBLIC_[A-Z_]*(SECRET|TOKEN)/);
   });
+
+  it("points web's DATABASE_URL at factions_live, not factions", () => {
+    // ⚠️ Pointing web at `factions` would have the test suites truncate what
+    // the site shows — `factions` is truncated between every test run.
+    expect(COMPOSE).toMatch(
+      /web:[\s\S]*?DATABASE_URL: postgres:\/\/factions:factions@postgres:5432\/factions_live/,
+    );
+  });
 });

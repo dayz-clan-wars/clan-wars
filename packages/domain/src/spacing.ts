@@ -1,4 +1,4 @@
-import { HUB_POSITION, MIN_BASE_SPACING_M } from "./rules.js";
+import { HUB_POSITION, MIN_BASE_SPACING_M } from "./rules";
 
 export type Point2 = { x: number; z: number };
 
