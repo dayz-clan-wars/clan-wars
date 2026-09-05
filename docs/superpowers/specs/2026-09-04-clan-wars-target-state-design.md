@@ -168,6 +168,11 @@ join is rewritten; re-measure with `EXPLAIN ANALYZE` and keep
 
 A pole is **public** when `flag_raised`, no `declarations` row exists for it, and
 `grace_until < now`. That is a read, not a tick; §10.2's public-bases layer runs it.
+
+⚠️ `poles` is filled by **the bot**, from `events`, through its own consumer
+(`pole-tick.ts`, cursor `pole-projector-bot`). `apps/projector`, which used to fill it,
+does not run in production and holds zero rows there. The bot's fold writes `poles` only,
+never `flag_changes`, and sets `grace_until` on insert alone.
 ⚠️ A pole that is re-declared during grace and released again gets a fresh 3-day grace.
 That is the ping-pong the rebind spec's §2.4 guards against, and the 7-day rebind cooldown
 is what stops it; the drift test in the rebind spec's §6 stays.
