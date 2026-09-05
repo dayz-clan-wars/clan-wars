@@ -5,27 +5,20 @@ images the bot's Discord embeds use as thumbnails — nothing else.
 
 ## What this is today
 
-A Next.js 16 (App Router) app with a single statically rendered route, `/`:
-the project name, a short statement of what Clan Wars is, and a link to the
-Discord. No email capture, no countdown, no faction data.
+A Next.js 16 (App Router) app on Tailwind v4. Public: the landing page. Gated
+behind Discord login and guild membership (`lib/auth`, `middleware.ts`): `/me`,
+which shows the viewer's link and clan, read through `@factions/roster`.
 
-**It reads no database.** `factions_live` is on a different machine from the
-VPS this app deploys to, so a data-driven page is not merely unspecced — it
-is currently unreachable. `apps/web/test/smoke.test.ts` pins the structural
-half of that as an invariant: the app imports no database package and reads
-no `DATABASE_URL`. That's also what makes the app deployable at all — a
-database import here would fail in production rather than being caught at
-review.
+**It imports no database package.** `packages/roster` owns the client and
+exports only the operations the site is allowed to perform — see the target-
+state spec §10.4 and the frontend rebuild spec §2–§3 for the boundary and why
+it is a package rather than an HTTP service. `apps/web/test/smoke.test.ts`
+pins both halves: the app imports no `@factions/db`, and `@factions/roster`
+exports exactly its allowlist.
 
-Nothing on this site may create a faction, claim a flag, bind a pole, or
-alter a roster. The site renders history; it does not write it. See
-CLAUDE.md's "The website is a surface, never a source of truth" invariant.
-
-Everything else — a faction map, roster management, a public directory,
-authentication — is deliberately out of scope. See
-`docs/direction/2026-09-02-web-app-and-faction-map.md` for what's open, and
-`docs/superpowers/specs/2026-09-03-web-app-skeleton-design.md` for why this
-skeleton stops where it does.
+Rituals are earned in game; administration is not a ritual. The site will
+never create a clan, claim a flag or bind a pole. Roster chores land here in
+later increments.
 
 ## Running locally
 

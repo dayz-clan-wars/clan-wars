@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { SignInCard } from "../components/sign-in-card";
-import { archivo, archivoBlack, spaceMono } from "../fonts";
 import { safeNextPath } from "@/lib/auth/next-path";
-import s from "../auth.module.css";
 
 export const metadata: Metadata = {
   title: "Clan Wars — join the Discord",
@@ -18,7 +16,7 @@ export default async function JoinPage({
   const next = safeNextPath(typeof params.next === "string" ? params.next : null);
 
   return (
-    <div className={`${s.page} ${archivo.variable} ${archivoBlack.variable} ${spaceMono.variable}`}>
+    <div className="flex min-h-dvh flex-col items-center px-4 pb-18 pt-7">
       {/*
         ⚠️ The button is the consent. Discord will ask for "Join servers for
         you" on the round this starts, and that prompt should follow something

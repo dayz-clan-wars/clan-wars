@@ -1,8 +1,6 @@
 import type { Metadata } from "next";
 import { SignInCard } from "../components/sign-in-card";
-import { archivo, archivoBlack, spaceMono } from "../fonts";
 import { safeNextPath } from "@/lib/auth/next-path";
-import s from "../auth.module.css";
 
 export const metadata: Metadata = {
   title: "Clan Wars — sign in",
@@ -22,16 +20,15 @@ export default async function LoginPage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const params = await searchParams;
-  const rawNext = typeof params.next === "string" ? params.next : null;
-  const next = safeNextPath(rawNext);
+  const next = safeNextPath(typeof params.next === "string" ? params.next : null);
   const rawError = typeof params.error === "string" ? params.error : "";
 
   return (
-    <div className={`${s.page} ${archivo.variable} ${archivoBlack.variable} ${spaceMono.variable}`}>
+    <div className="flex min-h-dvh flex-col items-center px-4 pb-18 pt-7">
       <SignInCard
         step="Sign in"
         heading="Link your character"
-        body="Sign in with the Discord account you use on the server. Your faction, roster and map all hang off this one link."
+        body="Sign in with the Discord account you use on the server. Your clan, roster and map all hang off this one link."
         action="Continue with Discord"
         actionHref={`/api/auth/discord?next=${encodeURIComponent(next)}`}
         footnote="One character per account. You need to be in the Clan Wars Discord — we will offer to add you if you are not."
