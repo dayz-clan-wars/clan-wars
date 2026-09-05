@@ -178,22 +178,32 @@ export async function raisedPolesFor(db: Database | Tx, serverId: number, dayzId
     .map((r) => ({ poleKey: r.poleKey, x: Number(r.x), y: Number(r.y), z: Number(r.z), eventId: r.eventId, occurredAt: r.occurredAt }));
 }
 
+/**
+ * A solo's declaration, inside a transaction the CALLER owns. Use this when
+ * the same transaction must first take `lockDeclarations` and read something
+ * else — @factions/roster's `declareSolo` reads the caller's identity link
+ * under that lock so an `unlink` racing it cannot leave a declaration with no
+ * link behind it. Callers that need nothing else use `declareSolo` below.
+ */
+export async function declareSoloTx(tx: Tx, a: { serverId: number; dayzId: string; poleKey: string; at: Date }):
+  Promise<DeclareOutcome | { ok: false; reason: "no-raise" | "in-clan" }> {
+  // Rule 3: in a clan, your declaration is the clan's. Checked inside the
+  // transaction so an accept landing at the same instant cannot slip past.
+  const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
+    .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.dayzId)));
+  if (member) return { ok: false as const, reason: "in-clan" as const };
+  const raise = (await raisedPolesFor(tx, a.serverId, a.dayzId)).find((r) => r.poleKey === a.poleKey);
+  if (!raise) return { ok: false as const, reason: "no-raise" as const };
+  return declareTx(tx, {
+    serverId: a.serverId, poleKey: a.poleKey, x: raise.x, y: raise.y, z: raise.z,
+    owner: { dayzId: a.dayzId }, evidence: { eventId: raise.eventId }, at: a.at,
+  });
+}
+
 /** A solo's declaration: the same pole binding a clan gets, evidenced by a raise. */
 export async function declareSolo(db: Database, a: { serverId: number; dayzId: string; poleKey: string; at: Date }):
   Promise<DeclareOutcome | { ok: false; reason: "no-raise" | "in-clan" }> {
-  return db.transaction(async (tx) => {
-    // Rule 3: in a clan, your declaration is the clan's. Checked inside the
-    // transaction so an accept landing at the same instant cannot slip past.
-    const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
-      .where(and(eq(factionMembers.serverId, a.serverId), eq(factionMembers.dayzId, a.dayzId)));
-    if (member) return { ok: false as const, reason: "in-clan" as const };
-    const raise = (await raisedPolesFor(tx, a.serverId, a.dayzId)).find((r) => r.poleKey === a.poleKey);
-    if (!raise) return { ok: false as const, reason: "no-raise" as const };
-    return declareTx(tx, {
-      serverId: a.serverId, poleKey: a.poleKey, x: raise.x, y: raise.y, z: raise.z,
-      owner: { dayzId: a.dayzId }, evidence: { eventId: raise.eventId }, at: a.at,
-    });
-  });
+  return db.transaction((tx) => declareSoloTx(tx, a));
 }
 
 /**

@@ -4,7 +4,7 @@ import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "d
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { releaseTx } from "./declaration-store.js";
+import { releaseTx } from "@factions/declarations";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,

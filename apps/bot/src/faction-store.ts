@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { declareTx, lockDeclarations, releaseTx } from "./declaration-store.js";
+import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,

@@ -38,7 +38,7 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **24/24 tasks** (`packages/roster` adds `typecheck` and `test`). A cached pass
+Expect **26/26 tasks** (`packages/roster` and `packages/declarations` each add `typecheck` and `test`). A cached pass
 proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.

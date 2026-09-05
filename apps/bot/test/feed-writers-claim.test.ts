@@ -3,7 +3,7 @@ import { createClient, runMigrations, requireTestDatabaseUrl, admFiles, events a
 import { asc, sql } from "drizzle-orm";
 import { PgFactionStore } from "../src/faction-store.js";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
-import { declareSolo, declarationForPlayer } from "../src/declaration-store.js";
+import { declareSolo, declarationForPlayer } from "@factions/declarations";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");

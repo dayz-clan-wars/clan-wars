@@ -6,7 +6,7 @@ import {
 import { RELEASED_POLE_GRACE_MS, parsePoleKey } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { PgRebindStore } from "../src/rebind-store.js";
-import { declarationForFaction } from "../src/declaration-store.js";
+import { declarationForFaction } from "@factions/declarations";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");

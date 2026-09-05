@@ -5,7 +5,7 @@ import {
 } from "@factions/db";
 import { RELEASED_POLE_GRACE_MS, HUB_POSITION } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
-import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/declaration-store.js";
+import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/store";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-04T12:00:00Z");

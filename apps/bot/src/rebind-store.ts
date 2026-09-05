@@ -5,7 +5,7 @@ import { leaderIs } from "./roster-store.js";
 import type { QualifyingRaise } from "./rebind.js";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { declareTx, lockDeclarations, releaseTx } from "./declaration-store.js";
+import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 
 /**
  * The statuses a faction may rebind FROM.

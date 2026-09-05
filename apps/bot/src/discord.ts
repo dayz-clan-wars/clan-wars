@@ -20,7 +20,7 @@ import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
 import { dormancyTick } from "./dormancy-tick.js";
-import { lapseSolos } from "./declaration-store.js";
+import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
 import {

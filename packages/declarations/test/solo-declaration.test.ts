@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionMembers, events, admFiles, poles, type Database } from "@factions/db";
 import { SOLO_LAPSE_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { raisedPolesFor, declareSolo, lapseSolos, declarationForPlayer } from "../src/declaration-store.js";
+import { raisedPolesFor, declareSolo, lapseSolos, declarationForPlayer } from "../src/store";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-04T12:00:00Z");
