@@ -50,7 +50,7 @@ describe("handleFactionRebind", () => {
 
   it("refuses a player with no faction", async () => {
     const r = await handleFactionRebind(deps({ memberships: [] }), "nobody", null);
-    expect(r.content).toBe("You are not in a faction.");
+    expect(r.content).toBe("You are not in a clan.");
     expect(r.prompt).toBeUndefined();
   });
 

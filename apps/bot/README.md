@@ -18,6 +18,9 @@ in-game verification tick confirms it.
 | `BOT_INVITE_TTL_MS` | no (default `604800000`, 7 days) | How long a `/faction invite` stays pending before it expires. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
 | `BOT_COOLDOWN_MS` | no (default `259200000`, 3 days) | How long a kicked or departed player is barred from joining a faction on that server again. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
 | `BOT_RENAME_COOLDOWN_MS` | no (default `2592000000`, 30 days) | The minimum time between two `/faction rename`s of the same faction. Default from `packages/domain/src/rules.ts`. Plain decimal digits only. |
+| `BOT_DORMANT_AFTER_MS` | no (default `604800000`, 7 days) | How long without a member raising the clan's flag at its pole before the clan goes dormant. Default from `packages/domain/src/rules.ts` (`DORMANT_AFTER_MS`). Plain decimal digits only. |
+| `BOT_DISBAND_AFTER_DORMANT_MS` | no (default `1209600000`, 14 days) | How long a clan stays dormant before it is disbanded. Default from `packages/domain/src/rules.ts` (`DISBAND_AFTER_DORMANT_MS`). Plain decimal digits only. |
+| `BOT_REBIND_COOLDOWN_MS` | no (default `604800000`, 7 days) | The minimum time between two base moves of the same clan. Default from `packages/domain/src/rules.ts` (`REBIND_COOLDOWN_MS`). Plain decimal digits only. |
 | `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
 | `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 
@@ -34,6 +37,9 @@ BOT_RESERVATION_TTL_MS=86400000
 BOT_INVITE_TTL_MS=604800000
 BOT_COOLDOWN_MS=259200000
 BOT_RENAME_COOLDOWN_MS=2592000000
+BOT_DORMANT_AFTER_MS=604800000
+BOT_DISBAND_AFTER_DORMANT_MS=1209600000
+BOT_REBIND_COOLDOWN_MS=604800000
 BOT_FEED_CHANNEL_ID=1234567890123456789
 FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 ```

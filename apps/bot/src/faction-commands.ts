@@ -30,7 +30,7 @@ export async function handleFactionClaim(
   // §5: the claimant's linked UID must be among the participants. Because
   // participants are linked by construction, this is a lookup rather than a
   // trust decision.
-  if (!ceremony) return reply("You have no ceremony to claim. Only someone counted in a witnessed ceremony can found a faction.");
+  if (!ceremony) return reply("You have no ceremony to claim. Only someone counted in a witnessed ceremony can found a clan.");
 
   if (!isClaimableFlag(input.texture)) {
     return reply(`\`${input.texture}\` is not a claimable flag. The neutral flag is reserved, and only the 33 pool flags can be held.`);
@@ -87,7 +87,7 @@ export async function handleClaimConfirm(
   });
 
   if (outcome === "ceremony-taken") return reply("That ceremony has already been claimed.");
-  if (outcome === "flag-taken") return reply(`\`${draft.texture}\` was just taken by another faction. Run \`/faction claim\` again with a different flag.`);
+  if (outcome === "flag-taken") return reply(`\`${draft.texture}\` was just taken by another clan. Run \`/faction claim\` again with a different flag.`);
   if (outcome === "tag-taken") return reply(`The tag \`${draft.tag}\` was just taken. Run \`/faction claim\` again with a different tag.`);
   // ⚠️ Not "belongs to a clan": the holder may be a SOLO, which is a
   // legitimate outcome here — a founding roster that leaves out the pole's
@@ -104,7 +104,7 @@ export async function handleClaimConfirm(
   return reply([
     `**${draft.name}** [${draft.tag}] is **reserved**.`,
     "",
-    `Raise \`${draft.texture}\` at your pole to bring the faction to life. Any member of the roster can do it.`,
+    `Raise \`${draft.texture}\` at your pole to bring the clan to life. Any member of the roster can do it.`,
     // DayZ logs a raise only on the raise TRANSITION, so a flag left flying
     // produces no event and the faction silently never activates.
     "If a flag is already up on that pole, **lower it first** — only the act of raising is recorded.",

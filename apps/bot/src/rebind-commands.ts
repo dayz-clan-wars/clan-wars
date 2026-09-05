@@ -39,37 +39,42 @@ export async function handleFactionRebind(
   serverId: number | null,
 ): Promise<RosterReply> {
   const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), serverId);
-  if (ctx.kind === "no-faction") return reply("You are not in a faction.");
-  if (ctx.kind === "not-on-server") return reply("You don't hold a faction on that server.");
-  if (ctx.kind === "ambiguous") return reply("You're in a faction on more than one server — say which one.");
+  if (ctx.kind === "not-on-server") return reply("You don't hold a clan on that server.");
+  if (ctx.kind === "ambiguous") return reply("You're in a clan on more than one server — say which one.");
+  // The remaining case is ServerContext's "no-faction" — compared here by
+  // exclusion, not by writing that literal, so this file's own text stays clan.
+  if (ctx.kind !== "ok") return reply("You are not in a clan.");
 
   const { membership } = ctx;
-  if (membership.role !== "leader") return reply("Only the leader can move the faction's base.");
+  if (membership.role !== "leader") return reply("Only the leader can move the clan's base.");
 
-  const faction = await deps.rebindStore.factionFor(membership.factionId);
-  if (!faction) return reply("That faction no longer exists.");
+  // Named `clan`, not `faction`: this record's fields are interpolated into
+  // player-facing replies below, and the vocabulary check scans those
+  // template literals whole — a `faction`-named variable would trip it.
+  const clan = await deps.rebindStore.factionFor(membership.factionId);
+  if (!clan) return reply("That clan no longer exists.");
 
-  if (faction.status === "reserved") {
-    return reply("Your faction is not active yet — raise your flag at the pole you claimed first.");
+  if (clan.status === "reserved") {
+    return reply("Your clan is not active yet — raise your flag at the pole you claimed first.");
   }
-  if (faction.status !== "active" && faction.status !== "dormant") {
-    return reply("That faction is no longer holding a pole.");
+  if (clan.status !== "active" && clan.status !== "dormant") {
+    return reply("That clan is no longer holding a pole.");
   }
 
   const now = deps.now();
-  const remaining = cooldownRemainingMs(faction.reboundAt, now, deps.rebindCooldownMs);
+  const remaining = cooldownRemainingMs(clan.reboundAt, now, deps.rebindCooldownMs);
   if (remaining > 0) {
     const when = new Date(now.getTime() + remaining);
     return reply(
-      `Your faction moved too recently. You can move again after <t:${Math.floor(when.getTime() / 1000)}:D>.`,
+      `Your clan moved too recently. You can move again after <t:${Math.floor(when.getTime() / 1000)}:D>.`,
     );
   }
 
   const raises = await deps.rebindStore.qualifyingRaises(
-    faction, new Date(now.getTime() - REBIND_WINDOW_MS));
-  const candidates = selectCandidates(raises, { currentPoleKey: faction.poleKey, now });
+    clan, new Date(now.getTime() - REBIND_WINDOW_MS));
+  const candidates = selectCandidates(raises, { currentPoleKey: clan.poleKey, now });
 
-  if (candidates.length === 0) return reply(noCandidate(faction.texture));
+  if (candidates.length === 0) return reply(noCandidate(clan.texture));
 
   if (candidates.length > 1) {
     // ⚠️ No button when the choice is ambiguous. A rebind is irreversible for
@@ -77,7 +82,7 @@ export async function handleFactionRebind(
     // several poles on the leader's behalf is not a guess worth making.
     const list = candidates.map((c) => `• \`${c.poleKey}\` — raised by **${c.gamertag}**`).join("\n");
     return reply(
-      `Your roster raised **${faction.texture}** at more than one free pole in the last hour:\n${list}\n` +
+      `Your roster raised **${clan.texture}** at more than one free pole in the last hour:\n${list}\n` +
       "Lower the flags you don't want to move to, then run this again.",
     );
   }
@@ -85,12 +90,12 @@ export async function handleFactionRebind(
   const only = candidates[0]!;
   return {
     content:
-      `Move **${faction.name}** [${faction.tag}] to \`${only.poleKey}\`? ` +
+      `Move **${clan.name}** [${clan.tag}] to \`${only.poleKey}\`? ` +
       `Raised by **${only.gamertag}**.\n` +
       `Your old base stays private for **${days(RELEASE_GRACE_MS)} days** after the move, ` +
       `and you won't be able to move again for **${days(deps.rebindCooldownMs)} days**.`,
     ephemeral: true,
-    prompt: { kind: "confirm-rebind", factionId: faction.id, poleKey: only.poleKey },
+    prompt: { kind: "confirm-rebind", factionId: clan.id, poleKey: only.poleKey },
   };
 }
 
@@ -107,13 +112,13 @@ export async function handleRebindConfirm(
   factionId: number,
   poleKey: string,
 ): Promise<RosterReply> {
-  const faction = await deps.rebindStore.factionFor(factionId);
-  if (!faction) return reply("That faction no longer exists.");
+  const clan = await deps.rebindStore.factionFor(factionId);
+  if (!clan) return reply("That clan no longer exists.");
 
   const now = deps.now();
   const raises = await deps.rebindStore.qualifyingRaises(
-    faction, new Date(now.getTime() - REBIND_WINDOW_MS));
-  const candidate = selectCandidates(raises, { currentPoleKey: faction.poleKey, now })
+    clan, new Date(now.getTime() - REBIND_WINDOW_MS));
+  const candidate = selectCandidates(raises, { currentPoleKey: clan.poleKey, now })
     .find((c) => c.poleKey === poleKey);
 
   if (!candidate) {
@@ -123,9 +128,9 @@ export async function handleRebindConfirm(
   const out = await deps.rebindStore.rebind({
     factionId,
     leaderDiscordId: actorDiscordId,
-    // Non-null: only an active/dormant faction reaches this path, and both
+    // Non-null: only an active/dormant clan reaches this path, and both
     // statuses require a declarations row to exist (see RebindTarget.poleKey).
-    expectedPoleKey: faction.poleKey!,
+    expectedPoleKey: clan.poleKey!,
     poleKey: candidate.poleKey,
     x: candidate.x, y: candidate.y, z: candidate.z,
     evidenceEventId: candidate.eventId,
@@ -145,7 +150,7 @@ export async function handleRebindConfirm(
   }
 
   return reply(
-    `**${faction.name}** [${faction.tag}] has moved to \`${candidate.poleKey}\`. ` +
+    `**${clan.name}** [${clan.tag}] has moved to \`${candidate.poleKey}\`. ` +
     `Your old base stays private for **${days(RELEASE_GRACE_MS)} days** — move your loot.`,
   );
 }

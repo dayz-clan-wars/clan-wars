@@ -12,7 +12,12 @@ const src = (f: string) => readFileSync(resolve(here, "..", "src", f), "utf8");
  * literal in them must say clan. Identifiers may still say faction — the
  * check strips comments and looks inside quotes only.
  */
-const PLAYER_FACING = ["feed-embed.ts", "ceremony-notify.ts", "dormancy-notify.ts", "notify.ts"];
+const PLAYER_FACING = [
+  "feed-embed.ts", "ceremony-notify.ts", "dormancy-notify.ts", "notify.ts",
+  // Increment 2a: the claim and rebind command replies reach players too.
+  // roster-commands.ts is retired whole in increment 2c and is not swept.
+  "faction-commands.ts", "rebind-commands.ts",
+];
 
 const STRING_LITERALS = /(["'`])(?:\\.|(?!\1)[^\\])*\1/gsu;
 const COMMENTS = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu;

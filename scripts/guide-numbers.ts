@@ -1,7 +1,7 @@
 /**
  * Regenerate docs/guide-numbers.json from the field guide's numbers table.
  *
- *   pnpm guide:numbers            # reads ../field-guide/numbers.html
+ *   pnpm guide:numbers            # reads ../field-guide/numbers.html, relative to the repo root
  *   pnpm guide:numbers <path>     # any copy of numbers.html
  *
  * ⚠️ Commit the JSON. The drift test reads the JSON, not the guide, so the
@@ -10,9 +10,13 @@
  * vendoring it rather than reaching across repositories at test time.
  */
 import { readFileSync, writeFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const src = process.argv[2] ?? resolve(process.cwd(), "..", "field-guide", "numbers.html");
+// Repo root, from this file's own location — not from the cwd, which under
+// turbo, pnpm --filter and a worktree checkout is three different places.
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const src = process.argv[2] ?? resolve(ROOT, "..", "field-guide", "numbers.html");
 const html = readFileSync(src, "utf8");
 
 const ROW = /<tr><td>([^<]*)<\/td><td class="v">([^<]*)<\/td><\/tr>/gu;
@@ -25,5 +29,5 @@ if (rows.length < 40) {
 }
 
 const out = { source: "field-guide/numbers.html", generatedAt: new Date().toISOString(), rows };
-writeFileSync(resolve(process.cwd(), "docs", "guide-numbers.json"), JSON.stringify(out, null, 2) + "\n");
+writeFileSync(resolve(ROOT, "docs", "guide-numbers.json"), JSON.stringify(out, null, 2) + "\n");
 console.log(`${rows.length} rows → docs/guide-numbers.json`);
