@@ -38,6 +38,10 @@ export type Declaration = { id: number; poleKey: string; x: string; y: string; z
  * anything) before calling this. `declarations` comes second in the order
  * for that reason — this function must never be called while holding a lock
  * that comes after `declarations`.
+ *
+ * The own-pole exclusion below assumes `a.poleKey` and `a.x`/`a.y`/`a.z`
+ * describe the same point — the key IS the coordinate string (see
+ * `@factions/domain` pole-key.ts) — so callers must pass matching values.
  */
 export async function declareTx(tx: Tx, a: DeclareArgs): Promise<DeclareOutcome> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('declarations'), ${a.serverId})`);
@@ -127,7 +131,7 @@ export async function declarationForPlayer(db: Database | Tx, serverId: number, 
  * Rule 2: every raised, undeclared pole past its grace, with the flag flying
  * there (spec §4.2). Texture-agnostic on purpose — see the test.
  */
-export async function publicPoles(db: Database, serverId: number, now: Date) {
+export async function publicPoles(db: Database | Tx, serverId: number, now: Date) {
   return db.select({ poleKey: poles.poleKey, x: poles.x, y: poles.y, z: poles.z, texture: poles.currentTexture })
     .from(poles)
     .leftJoin(declarations, and(eq(declarations.serverId, poles.serverId), eq(declarations.poleKey, poles.poleKey)))
