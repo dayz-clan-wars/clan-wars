@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction as seedFactionAndDeclaration } from "./seed.js";
 import { PgRosterStore } from "../src/roster-store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -27,7 +28,7 @@ describe("PgRosterStore", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, factions, identity_links, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, declarations, poles, events, adm_files, factions, identity_links, servers restart identity cascade`);
     });
     store = new PgRosterStore(db);
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
@@ -35,12 +36,14 @@ describe("PgRosterStore", () => {
   });
 
   const seedFaction = async (opts: { status: string; name: string }) => {
-    const [f] = await db.insert(factions).values({
+    // The key is derived from the name: two clans on one server may not share
+    // a pole (declarations_pole_uniq), and several tests seed more than one.
+    const f = await seedFactionAndDeclaration(db, {
       serverId, name: opts.name, tag: opts.name.slice(0, 4), texture: `Flag_${opts.name}`,
-      poleKey: "1:2:3", x: "1.00", y: "2.00", z: "3.00",
+      poleKey: `${opts.name}:2:3`,
       status: opts.status, leaderDiscordId: LEADER_DISCORD, createdAt: now,
-    }).returning();
-    return f!.id;
+    });
+    return f.id;
   };
 
   const seedMembership = async (opts: { status: string; name: string }) => {
@@ -56,18 +59,20 @@ describe("PgRosterStore", () => {
     // not — so the status filter is doing real work, not duplicating that.
     await seedMembership({ status: "active", name: "Live" });
     const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
-    const goneFactionId = (await db.insert(factions).values({
-      serverId: s2!.id, name: "Gone", tag: "Gone", texture: "Flag_Gone", poleKey: "4:5:6",
-      x: "4.00", y: "5.00", z: "6.00", status: "disbanded", leaderDiscordId: LEADER_DISCORD, createdAt: now,
-    }).returning())[0]!.id;
+    const goneFactionId = (await seedFactionAndDeclaration(db, {
+      serverId: s2!.id, name: "Gone", tag: "Gone", texture: "Flag_Gone",
+      poleKey: "4:5:6", x: 4, y: 5, z: 6,
+      status: "disbanded", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    })).id;
     await db.insert(factionMembers).values({
       factionId: goneFactionId, serverId: s2!.id, dayzId: PLAYER, discordId: LEADER_DISCORD, role: "leader", joinedAt: now,
     });
     const [s3] = await db.insert(servers).values({ name: "S3", map: "chernarus", clockOffsetMs: 0 }).returning();
-    const dormantFactionId = (await db.insert(factions).values({
-      serverId: s3!.id, name: "Sleeping", tag: "SLP", texture: "Flag_Sleeping", poleKey: "7:8:9",
-      x: "7.00", y: "8.00", z: "9.00", status: "dormant", leaderDiscordId: LEADER_DISCORD, createdAt: now,
-    }).returning())[0]!.id;
+    const dormantFactionId = (await seedFactionAndDeclaration(db, {
+      serverId: s3!.id, name: "Sleeping", tag: "SLP", texture: "Flag_Sleeping",
+      poleKey: "7:8:9", x: 7, y: 8, z: 9,
+      status: "dormant", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    })).id;
     await db.insert(factionMembers).values({
       factionId: dormantFactionId, serverId: s3!.id, dayzId: PLAYER, discordId: LEADER_DISCORD, role: "leader", joinedAt: now,
     });
@@ -140,10 +145,11 @@ describe("PgRosterStore", () => {
     // name:Bears server:2` must not answer with server 1's Bears.
     const here = await seedFaction({ status: "active", name: "Bears" });
     const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
-    const there = (await db.insert(factions).values({
-      serverId: s2!.id, name: "Bears", tag: "BR2", texture: "Flag_Bears2", poleKey: "4:5:6",
-      x: "4.00", y: "5.00", z: "6.00", status: "active", leaderDiscordId: LEADER_DISCORD, createdAt: now,
-    }).returning())[0]!.id;
+    const there = (await seedFactionAndDeclaration(db, {
+      serverId: s2!.id, name: "Bears", tag: "BR2", texture: "Flag_Bears2",
+      poleKey: "4:5:6", x: 4, y: 5, z: 6,
+      status: "active", leaderDiscordId: LEADER_DISCORD, createdAt: now,
+    })).id;
 
     expect(await store.factionByName("bears", serverId)).toMatchObject({ id: here });
     expect(await store.factionByName("bears", s2!.id)).toMatchObject({ id: there });

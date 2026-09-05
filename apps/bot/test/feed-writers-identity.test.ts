@@ -1,18 +1,31 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, factionEvents,
-  factions, servers, factionMembers, identityLinks, players, type Database,
+  factions, servers, factionMembers, identityLinks, players, admFiles, events as eventLog,
+  type Database,
 } from "@factions/db";
 import { asc, sql } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgRosterStore } from "../src/roster-store.js";
 import { PgRebindStore } from "../src/rebind-store.js";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-03T12:00:00Z");
 
+// ⚠️ Both ≥ 200 m from the Hub at (100, 93) and from each other. The seed
+// helper's direct insert would tolerate anything, but `rebind` goes through
+// `declareTx`, which enforces MIN_BASE_SPACING_M — the old (1,2,3)/(9,9,9)
+// fixture sits ~124 m from the Hub and every rebind here would be refused.
+const HOME = { x: 10000, y: 100, z: 10000 };
+const AWAY = { x: 20000, y: 100, z: 20000 };
+const HOME_KEY = "10000.00:100.00:10000.00";
+const AWAY_KEY = "20000.00:100.00:20000.00";
+
 describe("identity changes write feed events", () => {
   let db: Database;
   let factionId = 0;
+  /** The `flag.raised` at AWAY that every rebind below cites as its evidence. */
+  let awayEventId = 0;
 
   beforeEach(async () => {
     db = createClient(URL);
@@ -23,7 +36,7 @@ describe("identity changes write feed events", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_events, players, identity_links, faction_members, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_events, players, identity_links, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
 
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
@@ -40,16 +53,27 @@ describe("identity changes write feed events", () => {
       dayzId: "u1", gamertag: "Racer", firstSeenAt: now, lastSeenAt: now,
     });
 
-    const [faction] = await db.insert(factions).values({
+    const faction = await seedFaction(db, {
       serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
-      poleKey: "1:2:3", x: "1", y: "2", z: "3", status: "active",
-      leaderDiscordId: "d1", createdAt: now, activatedAt: now,
-    }).returning();
-    factionId = faction!.id;
+      poleKey: HOME_KEY, x: HOME.x, y: HOME.y, z: HOME.z,
+      status: "active", leaderDiscordId: "d1", createdAt: now, activatedAt: now,
+    });
+    factionId = faction.id;
 
     await db.insert(factionMembers).values([
       { factionId, serverId, dayzId: "u1", discordId: "d1", role: "leader", joinedAt: now },
     ]);
+
+    // The raise at AWAY. `declareTx` requires real evidence for the new
+    // binding, so a rebind can no longer name a pole out of thin air.
+    const [adm] = await db.insert(admFiles).values({
+      serverId, filename: "away.ADM", bootAt: now,
+    }).returning();
+    const [raise] = await db.insert(eventLog).values({
+      serverId, admFileId: adm!.id, lineIndex: 0, type: "flag.raised", occurredAt: now,
+      payload: { dayzId: "u1", gamertag: "Racer", texture: "Flag_Bear", poleKey: AWAY_KEY, pole: AWAY },
+    }).returning();
+    awayEventId = raise!.id;
   });
 
   const events = () => db.select().from(factionEvents).orderBy(asc(factionEvents.id));
@@ -90,16 +114,17 @@ describe("identity changes write feed events", () => {
     // in the first place: rebind is the one transition whose whole subject
     // is a location.
     const moved = await new PgRebindStore(db).rebind({
-      factionId, leaderDiscordId: "d1", expectedPoleKey: "1:2:3",
-      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
+      poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
       notBefore: new Date(now.getTime() - 604_800_000),
     });
-    expect(moved).toBe(true);
+    expect(moved).toBe("ok");
 
     const [e] = await events();
     expect(e!.kind).toBe("rebound");
     expect(e!.payload).toMatchObject({ name: "Bears", tag: "BEAR", actor: "Racer" });
-    expect(JSON.stringify(e!.payload)).not.toContain("9:9:9");
+    expect(JSON.stringify(e!.payload)).not.toContain(AWAY_KEY);
+    expect(JSON.stringify(e!.payload)).not.toContain(HOME_KEY);
   });
 
   it("⚠️ a dormant faction that rebinds writes rebound THEN revived", async () => {
@@ -111,11 +136,11 @@ describe("identity changes write feed events", () => {
       .where(sql`${factions.id} = ${factionId}`);
 
     const moved = await new PgRebindStore(db).rebind({
-      factionId, leaderDiscordId: "d1", expectedPoleKey: "1:2:3",
-      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
+      poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
       notBefore: new Date(now.getTime() - 604_800_000),
     });
-    expect(moved).toBe(true);
+    expect(moved).toBe("ok");
 
     const rows = await events();
     expect(rows.map((r) => r.kind)).toEqual(["rebound", "revived"]);
@@ -124,20 +149,20 @@ describe("identity changes write feed events", () => {
 
   it("an active faction that rebinds writes only rebound", async () => {
     const moved = await new PgRebindStore(db).rebind({
-      factionId, leaderDiscordId: "d1", expectedPoleKey: "1:2:3",
-      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      factionId, leaderDiscordId: "d1", expectedPoleKey: HOME_KEY,
+      poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
       notBefore: new Date(now.getTime() - 604_800_000),
     });
-    expect(moved).toBe(true);
+    expect(moved).toBe("ok");
     expect((await events()).map((r) => r.kind)).toEqual(["rebound"]);
   });
 
   it("writes no rebound row when the optimistic pole guard fails", async () => {
     expect(await new PgRebindStore(db).rebind({
       factionId, leaderDiscordId: "d1", expectedPoleKey: "somewhere-else",
-      poleKey: "9:9:9", x: 9, y: 9, z: 9, at: now,
+      poleKey: AWAY_KEY, x: AWAY.x, y: AWAY.y, z: AWAY.z, evidenceEventId: awayEventId, at: now,
       notBefore: new Date(now.getTime() - 604_800_000),
-    })).toBe(false);
+    })).toBe("refused");
     expect(await events()).toHaveLength(0);
   });
 });

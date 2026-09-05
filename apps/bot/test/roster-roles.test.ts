@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgRosterStore } from "../src/roster-store.js";
 import type { SetRoleArgs, TransferArgs } from "../src/roster-store.js";
 
@@ -29,17 +30,17 @@ describe("PgRosterStore setRole and transfer", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, factions, identity_links, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, declarations, poles, events, adm_files, factions, identity_links, servers restart identity cascade`);
     });
     store = new PgRosterStore(db);
 
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: LEADER, createdAt: t0,
-    }).returning();
-    factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: LEADER, createdAt: t0,
+    });
+    factionId = f.id;
     await db.insert(factionMembers).values([
       { factionId, serverId, dayzId: "L".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0 },
       { factionId, serverId, dayzId: "O".repeat(40), discordId: OFFICER, role: "officer", joinedAt: t0 },

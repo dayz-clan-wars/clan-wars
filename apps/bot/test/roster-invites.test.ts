@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgRosterStore } from "../src/roster-store.js";
 import type { CreateInviteArgs } from "../src/roster-store.js";
 
@@ -31,17 +32,17 @@ describe("PgRosterStore invites", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, factions, identity_links, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, declarations, poles, events, adm_files, factions, identity_links, servers restart identity cascade`);
     });
     store = new PgRosterStore(db);
 
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: LEADER, createdAt: t0,
-    }).returning();
-    factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: LEADER, createdAt: t0,
+    });
+    factionId = f.id;
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: "L".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0,
     });
@@ -248,16 +249,19 @@ describe("PgRosterStore invites", () => {
     });
 
     it("lists only open, unexpired invites, soonest-expiring first", async () => {
-      const [f2] = await db.insert(factions).values({
-        serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf", poleKey: "4:5:6",
-        x: "4.00", y: "5.00", z: "6.00", status: "active", leaderDiscordId: LEADER, createdAt: t0,
-      }).returning();
+      // A second clan on the SAME server, so its pole key must differ:
+      // declarations_pole_uniq is (server_id, pole_key).
+      const f2 = await seedFaction(db, {
+        serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf",
+        poleKey: "4:5:6", x: 4, y: 5, z: 6,
+        status: "active", leaderDiscordId: LEADER, createdAt: t0,
+      });
       await db.insert(factionMembers).values({
-        factionId: f2!.id, serverId, dayzId: "M".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0,
+        factionId: f2.id, serverId, dayzId: "M".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0,
       });
 
       await store.createInvite({ ...base, expiresAt: new Date(t0.getTime() + 20_000) });
-      await store.createInvite({ ...base, factionId: f2!.id, expiresAt: new Date(t0.getTime() + 10_000) });
+      await store.createInvite({ ...base, factionId: f2.id, expiresAt: new Date(t0.getTime() + 10_000) });
 
       const rows = await store.pendingInvitesFor(INVITEE_DAYZ, t0);
       expect(rows.map((r) => r.factionName)).toEqual(["Wolves", "Bears"]);

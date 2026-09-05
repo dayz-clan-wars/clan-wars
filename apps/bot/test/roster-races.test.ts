@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq, and } from "drizzle-orm";
+import { seedFaction } from "./seed.js";
 import { PgRosterStore } from "../src/roster-store.js";
 
 /**
@@ -94,7 +95,7 @@ describe("PgRosterStore concurrency", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, factions, identity_links, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, declarations, poles, events, adm_files, factions, identity_links, servers restart identity cascade`);
     });
 
     dbA = createClient(URL);
@@ -107,14 +108,16 @@ describe("PgRosterStore concurrency", () => {
   });
 
   it("two factions' invites accepted at the same instant yield one membership", async () => {
-    const [f1] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "leader1", createdAt: t0,
-    }).returning();
-    const [f2] = await db.insert(factions).values({
-      serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf", poleKey: "4:5:6",
-      x: "4.00", y: "5.00", z: "6.00", status: "active", leaderDiscordId: "leader2", createdAt: t0,
-    }).returning();
+    const f1 = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "leader1", createdAt: t0,
+    });
+    // Same server, so a distinct pole key: declarations_pole_uniq.
+    const f2 = await seedFaction(db, {
+      serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf",
+      poleKey: "4:5:6", x: 4, y: 5, z: 6,
+      status: "active", leaderDiscordId: "leader2", createdAt: t0,
+    });
 
     const PLAYER_DAYZ = "P".repeat(40);
     const PLAYER_DISCORD = "d9";
@@ -126,12 +129,12 @@ describe("PgRosterStore concurrency", () => {
     });
 
     const [inv1] = await db.insert(factionInvites).values({
-      factionId: f1!.id, serverId,
+      factionId: f1.id, serverId,
       inviteeDiscordId: PLAYER_DISCORD, inviteeDayzId: PLAYER_DAYZ,
       invitedByDiscordId: "leader1", createdAt: t0, expiresAt,
     }).returning();
     const [inv2] = await db.insert(factionInvites).values({
-      factionId: f2!.id, serverId,
+      factionId: f2.id, serverId,
       inviteeDiscordId: PLAYER_DISCORD, inviteeDayzId: PLAYER_DAYZ,
       invitedByDiscordId: "leader2", createdAt: t0, expiresAt,
     }).returning();
@@ -149,11 +152,11 @@ describe("PgRosterStore concurrency", () => {
   });
 
   it("two simultaneous transfers cannot both succeed", async () => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
-    }).returning();
-    const factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
 
     await db.insert(factionMembers).values([
       { factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0 },
@@ -174,11 +177,11 @@ describe("PgRosterStore concurrency", () => {
   });
 
   it("a kick racing the target's own leave leaves one cooldown and no member", async () => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
-    }).returning();
-    const factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
     const TARGET_DAYZ = "T".repeat(40);
 
     await db.insert(factionMembers).values([
@@ -218,11 +221,11 @@ describe("PgRosterStore concurrency", () => {
    * where both land or where the loser's name is what sticks.
    */
   it("two renames inside the cooldown: one wins and its name is the stored one", async () => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
-    }).returning();
-    const factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
     });
@@ -264,11 +267,11 @@ describe("PgRosterStore concurrency", () => {
    * for it, so the DELETE always runs after the INSERT.
    */
   it("an accept racing a disband cannot strand a membership row", async () => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
-    }).returning();
-    const factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
 
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
@@ -339,11 +342,11 @@ describe("PgRosterStore concurrency", () => {
    * is the wrong gap entirely.
    */
   it("an accept and a disband cannot deadlock on faction versus invite", async () => {
-    const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d1", createdAt: t0,
-    }).returning();
-    const factionId = f!.id;
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0,
     });
