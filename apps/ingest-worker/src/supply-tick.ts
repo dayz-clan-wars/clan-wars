@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
-import { factions, supplyUploads } from "@factions/db";
+import { declarations, factions, supplyUploads } from "@factions/db";
 import { SUPPLIED_STATUSES } from "@factions/domain";
 import { and, eq, inArray, asc } from "drizzle-orm";
 import { generateSupplies, type SpawnObject, type SupplyFaction } from "./supplies.js";
@@ -44,8 +44,14 @@ export async function supplyTick(db: Database, deps: {
 }): Promise<SupplyTickResult> {
   const rows = await db.select({
     tag: factions.tag, texture: factions.texture,
-    x: factions.x, y: factions.y, z: factions.z,
+    x: declarations.x, y: declarations.y, z: declarations.z,
   }).from(factions)
+    // ⚠️ INNER on purpose. The kit spawns at the clan's declared pole, so a
+    // supplied clan with no declaration — after a wipe, or between release and
+    // re-claim — has nowhere for its kit to land. It drops out of the file
+    // rather than having a place invented for it; a LEFT join would put every
+    // such clan's crate at (0, 0, 0).
+    .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
     .where(and(
       eq(factions.serverId, deps.serverId),
       // ⚠️ SUPPLIED, not HOLDING. A dormant faction still holds its flag, tag

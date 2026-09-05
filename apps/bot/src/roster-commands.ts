@@ -455,7 +455,9 @@ export async function handleFactionInfo(
     `Flag: ${card.texture}`,
     `Status: ${card.status}`,
     `Members: ${card.memberCount}`,
-    ...(isMember ? [`Pole: ${card.poleKey}`] : []),
+    // ...and only when there IS one: a clan holding a reservation has not
+    // declared a pole yet, and `Pole: null` reads as a bug to the player.
+    ...(isMember && card.poleKey ? [`Pole: ${card.poleKey}`] : []),
     `Founded: ${founded}`,
   ].join("\n"));
 }

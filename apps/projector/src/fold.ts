@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { poles, flagChanges } from "@factions/db";
-import type { Vec3 } from "@factions/domain";
+import { NEW_POLE_GRACE_MS, type Vec3 } from "@factions/domain";
 import { and, eq } from "drizzle-orm";
 
 /** A player must stand at a pole to fold it, so 10m is generous. */
@@ -64,6 +64,13 @@ async function applyFlagChange(db: Database, map: string, ev: EventRow, p: FlagP
     flagRaised: raised,
     firstSeenAt: ev.occurredAt,
     lastSeenAt: ev.occurredAt,
+    // INSERT ONLY — deliberately absent from the `set` below. A pole's grace
+    // clock is owned by whoever last put it in play: a release resets it, the
+    // runbook stamps it, and the bot's `pole-tick.ts` is the production writer.
+    // Re-stamping it on every flag event would hand a raider a fresh week of
+    // immunity for free. On first sight we have no better answer than the
+    // event's own instant, so seed it here and never touch it again.
+    graceUntil: new Date(ev.occurredAt.getTime() + NEW_POLE_GRACE_MS),
   }).onConflictDoUpdate({
     target: [poles.serverId, poles.map, poles.poleKey],
     // foldedAt MUST be cleared here. A pole folded on Monday and rebuilt at the

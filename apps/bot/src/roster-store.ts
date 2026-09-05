@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
+import { declarations, factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
@@ -25,7 +25,13 @@ export type RosterEntry = {
 export type FactionCard = {
   id: number; serverId: number; serverName: string;
   name: string; tag: string; texture: string; status: string;
-  poleKey: string; memberCount: number; leaderDiscordId: string; createdAt: Date;
+  /**
+   * Null when the clan holds no declaration — a reservation that has not yet
+   * claimed a pole, or a clan whose pole was released. The binding lives in
+   * `declarations`, not on the faction row, so it is legitimately absent.
+   */
+  poleKey: string | null;
+  memberCount: number; leaderDiscordId: string; createdAt: Date;
 };
 
 export type CreateInviteArgs = {
@@ -292,15 +298,20 @@ export class PgRosterStore implements RosterStore {
       tag: factions.tag,
       texture: factions.texture,
       status: factions.status,
-      poleKey: factions.poleKey,
+      poleKey: declarations.poleKey,
       leaderDiscordId: factions.leaderDiscordId,
       createdAt: factions.createdAt,
       memberCount: sql<number>`count(${factionMembers.id})`,
     }).from(factions)
       .innerJoin(servers, eq(factions.serverId, servers.id))
       .leftJoin(factionMembers, eq(factionMembers.factionId, factions.id))
+      // LEFT, not INNER: a clan with no declaration (a fresh reservation, or
+      // one whose pole was released) must still have a card to show. An inner
+      // join would make `/faction info` answer "no such clan" for a clan that
+      // plainly exists.
+      .leftJoin(declarations, eq(declarations.ownerFactionId, factions.id))
       .where(where)
-      .groupBy(factions.id, servers.name);
+      .groupBy(factions.id, servers.name, declarations.poleKey);
     if (!row) return null;
     return { ...row, memberCount: Number(row.memberCount) };
   }
