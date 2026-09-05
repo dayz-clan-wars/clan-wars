@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, declarations, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, declarations, poles, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
 
 const URL = requireTestDatabaseUrl();
@@ -182,6 +183,28 @@ describe("PgCeremonyStore", () => {
     expect(lapsed).toBe(1);
     const rows = await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId));
     expect(rows).toEqual([]);
+  });
+
+  it("releases the declaration and starts the pole's grace when a reservation lapses", async () => {
+    // The whole point of routing lapse through `releaseTx` rather than a bare
+    // delete: a release whose grace write is silently skipped (e.g. no
+    // matching `poles` row) publishes the old base immediately — the exact
+    // outcome the grace exists to prevent. Seeding the `poles` row here is
+    // what makes this assertion able to catch that.
+    const factionId = await seedReservedFaction();
+    await db.insert(poles).values({
+      serverId, map: "sakhal", poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      firstSeenAt: now, lastSeenAt: now, graceUntil: now,
+    });
+    const cutoff = new Date("2026-08-01T00:00:00Z");
+
+    expect(await store.lapseReservations(serverId, cutoff)).toBe(1);
+
+    expect(await db.select().from(declarations)
+      .where(eq(declarations.ownerFactionId, factionId))).toEqual([]);
+    expect(await store.isPoleBound({ serverId, poleKey: POLE })).toBe(false);
+    const [pole] = await db.select().from(poles).where(eq(poles.poleKey, POLE));
+    expect(pole!.graceUntil.getTime()).toBe(cutoff.getTime() + RELEASED_POLE_GRACE_MS);
   });
 
   it("revokes outstanding invites when a reservation lapses", async () => {

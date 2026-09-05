@@ -169,6 +169,7 @@ export class PgCeremonyStore implements CeremonyStore {
     const [row] = await this.db.select({ id: factions.id }).from(factions)
       .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
       .where(and(
+        eq(factions.serverId, p.serverId),
         eq(declarations.serverId, p.serverId),
         eq(declarations.poleKey, p.poleKey),
         eq(factions.texture, texture),
