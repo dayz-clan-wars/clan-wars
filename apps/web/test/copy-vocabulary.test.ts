@@ -10,7 +10,14 @@ import { join } from "node:path";
  * left that says faction is player-facing copy or an identifier that leaked
  * into copy — either way, a finding.
  */
-const ROOTS = [join(import.meta.dirname, "..", "app")];
+// ⚠️ Same roots smoke.test.ts scans — src/ and lib/ can carry player-facing
+// copy too (see apps/web/src/flag-images.ts), and a directory left off this
+// list is scanned by nothing, silently.
+const ROOTS = [
+  join(import.meta.dirname, "..", "app"),
+  join(import.meta.dirname, "..", "src"),
+  join(import.meta.dirname, "..", "lib"),
+];
 const MODULE_SPECIFIERS = /^\s*(?:import|export)\b[^;]*?\bfrom\s+["'][^"']+["'];?|^\s*import\s+["'][^"']+["'];?/gmu;
 // A bare `//` inside a URL (`https://...`) is not a comment marker — it must
 // be at line start or preceded by whitespace to count as one, or a one-line

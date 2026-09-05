@@ -4,7 +4,7 @@ import {
   servers, factions, factionMembers, identityLinks, type Database,
 } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { viewerForDb } from "../src/viewer.js";
+import { viewerForDb } from "../src/viewer";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-05T12:00:00Z");

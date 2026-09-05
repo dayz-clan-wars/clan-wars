@@ -10,13 +10,24 @@ import { join } from "node:path";
  * that reads the viewer must opt out of static rendering.
  */
 const APP = join(import.meta.dirname, "..", "app");
+// ⚠️ layout.tsx too, not just page.tsx: a layout that reads the viewer needs
+// to opt out of static rendering exactly as much as a page does — Next
+// composes them, and a statically-rendered layout bakes its data into the
+// same shared chunk.
 const pages = readdirSync(APP, { recursive: true, encoding: "utf8" })
-  .filter((f) => f.endsWith("page.tsx"))
+  .filter((f) => f.endsWith("page.tsx") || f.endsWith("layout.tsx"))
   .map((f) => join(APP, f))
   .filter((f) => existsSync(f));
 
 describe("pages that depend on the viewer render at request time", () => {
-  const viewerPages = pages.filter((f) => readFileSync(f, "utf8").includes("currentSession("));
+  // ⚠️ viewerFor( too: `currentSession(` reads the auth cookie, but a page
+  // can go straight to `@factions/roster`'s `viewerFor` for clan/link data
+  // without ever calling `currentSession` itself — either one makes the
+  // page viewer-dependent.
+  const viewerPages = pages.filter((f) => {
+    const text = readFileSync(f, "utf8");
+    return text.includes("currentSession(") || text.includes("viewerFor(");
+  });
   it("finds at least /me", () => {
     expect(viewerPages.some((f) => f.endsWith(`${join("me", "page.tsx")}`))).toBe(true);
   });
