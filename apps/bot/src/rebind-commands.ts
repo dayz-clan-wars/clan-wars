@@ -39,11 +39,9 @@ export async function handleFactionRebind(
   serverId: number | null,
 ): Promise<RosterReply> {
   const ctx = resolveServerContext(await deps.store.membershipsFor(actorDiscordId), serverId);
+  if (ctx.kind === "no-faction") return reply("You are not in a clan.");
   if (ctx.kind === "not-on-server") return reply("You don't hold a clan on that server.");
   if (ctx.kind === "ambiguous") return reply("You're in a clan on more than one server — say which one.");
-  // The remaining case is ServerContext's "no-faction" — compared here by
-  // exclusion, not by writing that literal, so this file's own text stays clan.
-  if (ctx.kind !== "ok") return reply("You are not in a clan.");
 
   const { membership } = ctx;
   if (membership.role !== "leader") return reply("Only the leader can move the clan's base.");
