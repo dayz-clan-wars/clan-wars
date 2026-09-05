@@ -1,6 +1,6 @@
 {
   "source": "field-guide/numbers.html",
-  "generatedAt": "2026-09-05T00:49:11.736Z",
+  "generatedAt": "2026-09-05T19:10:30.139Z",
   "rows": [
     {
       "label": "Link: emotes to perform",
@@ -63,7 +63,7 @@
       "value": "7 days"
     },
     {
-      "label": "Raid credit dedup (raider clan → victim)",
+      "label": "Same clan raiding the same victim counts once per",
       "value": "24 h"
     },
     {
@@ -151,11 +151,11 @@
       "value": "until season end"
     },
     {
-      "label": "Rebind: confirm window",
+      "label": "Base move: confirm window",
       "value": "24 h"
     },
     {
-      "label": "Rebind: cooldown between moves",
+      "label": "Base move: cooldown between moves",
       "value": "7 days"
     },
     {
