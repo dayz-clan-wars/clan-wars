@@ -494,6 +494,14 @@ export const factions = pgTable("factions", {
    * a move that never happened.
    */
   reboundAt: timestamp("rebound_at", { withTimezone: true }),
+  /**
+   * The recruiting post (spec §4.3; guide ch. 8). `recruiting` turns on the
+   * directory's "Request to join" and is the only gate `requestJoin` checks.
+   */
+  recruiting: boolean("recruiting").notNull().default(false),
+  playWindow: text("play_window"),
+  language: text("language"),
+  pitch: text("pitch"),
 }, (t) => ({
   statusValid: check("factions_status_valid",
     sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),
@@ -658,9 +666,23 @@ export const factionMembers = pgTable("faction_members", {
   discordId: text("discord_id").notNull(),
   role: text("role").notNull(),
   joinedAt: timestamp("joined_at", { withTimezone: true }).notNull(),
+  /**
+   * `pending` from accept until the log sees the player within
+   * JOIN_PRESENCE_RADIUS_M of the clan's declaration; `full` after (spec
+   * §5.3). ⚠️ Every "is a member" read means `status = 'full'` (spec §4.5,
+   * §14) — a pending member is on this table and NOT on the roster. The cap
+   * counts both. Default `full` so every row that predates the column is a
+   * member exactly as it was.
+   */
+  status: text("status").notNull().default("full"),
+  /** Set at accept; the 7-day no-show clock runs from here. */
+  pendingSince: timestamp("pending_since", { withTimezone: true }),
+  /** The event that promoted them — evidence they stood at the base. */
+  seenAtBaseEventId: bigint("seen_at_base_event_id", { mode: "number" }).references(() => events.id),
 }, (t) => ({
   roleValid: check("faction_members_role_valid",
     sql`${t.role} IN ('leader','officer','member')`),
+  statusValid: check("faction_members_status_valid", sql`${t.status} IN ('pending','full')`),
   uniqMember: uniqueIndex("faction_members_uniq").on(t.factionId, t.dayzId),
   uniqServerPlayer: uniqueIndex("faction_members_server_player_uniq").on(t.serverId, t.dayzId),
   // Exactly one leader. Transfer is one transaction demoting and promoting;
@@ -721,6 +743,53 @@ export const rosterCooldowns = pgTable("roster_cooldowns", {
   until: timestamp("until", { withTimezone: true }).notNull(),
 }, (t) => ({
   pk: uniqueIndex("roster_cooldowns_pk").on(t.serverId, t.dayzId),
+}));
+
+/**
+ * Names and tags held until season end after a rename or a disband (spec
+ * §4.4; guide ch. 8). The uniqueness check at claim and rename consults
+ * holding factions AND rows here with `held_until > now()`.
+ *
+ * ⚠️ `held_until` is the sentinel `'infinity'` until the season closes; the
+ * wipe script (spec §8.5) rewrites it to the season's `ended_at`. Compare it
+ * in SQL, never in JS — postgres.js hands `infinity` back as an invalid Date.
+ * ⚠️ A lapsed reservation writes no hold: nothing was ever flown under it.
+ */
+export const identityHolds = pgTable("identity_holds", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  kind: text("kind").notNull(),
+  valueLower: text("value_lower").notNull(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  reason: text("reason").notNull(),
+  heldUntil: timestamp("held_until", { withTimezone: true }).notNull(),
+}, (t) => ({
+  kindValid: check("identity_holds_kind_valid", sql`${t.kind} IN ('name','tag')`),
+  reasonValid: check("identity_holds_reason_valid", sql`${t.reason} IN ('renamed','disbanded')`),
+  // One live hold per value; a later hold on the same value upserts.
+  uniqValue: uniqueIndex("identity_holds_uniq").on(t.serverId, t.kind, t.valueLower),
+}));
+
+/**
+ * The second door onto a roster (spec §4.5; guide ch. 8): a linked player asks
+ * a recruiting clan; an officer decides. Accepting inserts a PENDING member,
+ * exactly like an invite.
+ */
+export const factionJoinRequests = pgTable("faction_join_requests", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  dayzId: text("dayz_id").notNull(),
+  discordId: text("discord_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }),
+  decidedByDiscordId: text("decided_by_discord_id"),
+  decision: text("decision"),
+}, (t) => ({
+  decisionValid: check("faction_join_requests_decision_valid", sql`${t.decision} IS NULL OR ${t.decision} IN ('accepted','declined')`),
+  decisionWithDecided: check("faction_join_requests_decision_requires_decided", sql`(${t.decision} IS NULL) = (${t.decidedAt} IS NULL)`),
+  uniqOpen: uniqueIndex("faction_join_requests_open_uniq").on(t.factionId, t.dayzId).where(sql`${t.decidedAt} IS NULL`),
 }));
 
 /**

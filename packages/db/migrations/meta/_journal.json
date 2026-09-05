@@ -155,6 +155,13 @@
       "when": 1788645099543,
       "tag": "0021_site_challenges",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788650489302,
+      "tag": "0022_roster_membership",
+      "breakpoints": true
     }
   ]
 }

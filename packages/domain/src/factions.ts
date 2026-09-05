@@ -18,6 +18,10 @@
  */
 export const HOLDING_STATUSES = ["reserved", "active", "dormant"] as const;
 
+/** faction_members.status (spec §4.5). A pending member is on the table, not on the roster. */
+export const MEMBER_STATUSES = ["pending", "full"] as const;
+export type MemberStatus = (typeof MEMBER_STATUSES)[number];
+
 /**
  * The statuses in which a faction receives a supply kit.
  *
