@@ -12,9 +12,9 @@ import {
  * `LINK_TTL_MS` — that number was written for the site flow (target-state
  * spec §5.5), where the player is already in game. Here a player can run
  * `/link` from anywhere, and `commands.ts` counts an expired challenge's
- * replacement against `MAX_DRAWS_PER_TARGET`, so a 10-minute TTL would lock
- * an honest player out for a day. Retire this constant with the slash
- * commands (increment 2).
+ * replacement against `@factions/verification`'s `MAX_DRAWS_PER_TARGET`, so a
+ * 10-minute TTL would lock an honest player out for a day. Retire this
+ * constant with the slash commands (increment 2).
  */
 const DISCORD_LINK_TTL_MS = 86_400_000;
 

@@ -1,5 +1,5 @@
 import { emoteLabel } from "@factions/domain";
-import { generateSequence } from "@factions/verification";
+import { issueChallenge } from "@factions/verification";
 import type { VerificationStore } from "@factions/verification";
 
 /**
@@ -43,23 +43,6 @@ export type LinkContext = {
   newSequence?: boolean;
 };
 
-/**
- * ⚠️ Draws of a sequence for one character, by one account, per
- * DRAW_WINDOW_MS. This is a security bound, not a courtesy limit.
- *
- * MAX_POOL_EMOTES_PER_ATTEMPT bounds accidental completion at C(8,3) ≈ 0.46%
- * — but per CHALLENGE. Every new draw is a new sequence with a fresh budget,
- * so without a cap on draws the per-day exposure is unbounded: an account that
- * named someone else's character could re-draw until it got three emotes that
- * character performs often, then wait.
- *
- * Three leaves a legitimate player the original plus two re-rolls, which is
- * what the Wintershadow394 lockout (2026-09-01) needed. Lower it and ordinary
- * players hit it; raise it and the bound above weakens in proportion.
- */
-export const MAX_DRAWS_PER_TARGET = 3;
-export const DRAW_WINDOW_MS = 86_400_000;
-
 const ephemeral = (content: string): Reply => ({ content, ephemeral: true });
 
 /** Human labels, numbered. Players read an emote wheel, not a token list. */
@@ -88,170 +71,55 @@ function challengeMessage(sequence: string[], expiresAt: Date, gamertag: string)
 }
 
 export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<Reply> {
-  const now = deps.now();
-
-  const existing = await deps.store.findLinkByDiscord(ctx.discordId);
-  if (existing) {
-    return ephemeral(
-      `You are already linked to **${existing.gamertag}**. ` +
-      "Run `/unlink` first if you need to bind a different character.",
-    );
-  }
-
-  // ⚠️ Re-validating the autocomplete choice. Autocomplete is a suggestion,
-  // not a constraint — Discord submits whatever the user typed — so both the
-  // "unknown" and the "already taken" checks below have to exist server-side.
-  // They are a friendlier refusal, not the enforcement. The real guarantees
-  // behind a lost race are two database constraints:
-  // `verification_challenges_open_target_uniq` (one open challenge per
-  // character, whoever issued it) and `identity_links_dayz_uniq` (one link per
-  // character). There is deliberately NO foreign key from
-  // verification_challenges.target_dayz_id to players.dayz_id — the column is
-  // bare `text NOT NULL` — so an unknown UID reaching the insert is refused by
-  // nothing at all, and the lookup above is the only thing standing there.
-  const target = await deps.store.playerByDayzId(ctx.targetDayzId);
-  if (!target) {
-    return ephemeral(
-      "I have not seen that character on the server. Pick one from the list — " +
-      "only characters the event log has seen can be linked.",
-    );
-  }
-  const taken = await deps.store.findLinkByDayzId(target.dayzId);
-  if (taken) {
-    return ephemeral(
-      `**${target.gamertag}** is already linked to another Discord account. ` +
-      "If that character is yours, ask an admin.",
-    );
-  }
-
-  // Re-show rather than re-issue: a player who lost the ephemeral reply should
-  // not have their in-progress sequence invalidated, and must see the SAME
-  // three emotes they already walked in game to perform. `newSequence` is the
-  // one way past this — a player who cannot perform one of the emotes is asking
-  // for different ones, not for the same ones again.
-  const live = await deps.store.findLiveChallenge(ctx.discordId, now);
-  if (live && live.targetDayzId === target.dayzId && ctx.newSequence !== true) {
-    return ephemeral(challengeMessage(live.sequence, live.expiresAt, target.gamertag));
-  }
-
-  // ⚠️ Checked here, on every path that goes on to ISSUE for this character —
-  // the explicit re-roll, a first /link, and the switch-away-and-back below,
-  // which handed out a fresh sequence and a fresh budget without limit before
-  // this existed. A cap that counted only explicit re-rolls would be
-  // bypassable with one extra command.
-  const drawn = await deps.store.countDrawsSince(
-    ctx.discordId, target.dayzId, new Date(now.getTime() - DRAW_WINDOW_MS),
-  );
-  if (drawn >= MAX_DRAWS_PER_TARGET) {
-    return ephemeral(
-      `You have asked for too many sequences for **${target.gamertag}** today. ` +
-      "Try again tomorrow — or, if there is an emote you cannot find on the wheel, " +
-      "say so in the channel rather than working around it.",
-    );
-  }
-
-  // Naming a different character switches, it does not re-show. An account
-  // gets one open challenge (uniqOpenPerAccount) and a challenge now lives for
-  // 24 hours, so re-showing here would strand anyone who mis-picked out of the
-  // autocomplete for a full day — and would strand the abandoned character
-  // too, since its slot in verification_challenges_open_target_uniq stays
-  // held. Replacing the challenge steals nothing, for exactly the reason the
-  // TTL could be raised: a challenge names the one character that can satisfy
-  // it. The 24 hours comes from DISCORD_LINK_TTL_MS in config.ts — change the
-  // TTL there, not here.
-  let switchedFrom: string | null = null;
-  if (live) {
-    // ⚠️ Ordering, not decoration: the cancel must run BEFORE the insert
-    // below, or the new row collides with the row it replaces on
-    // uniqOpenPerAccount (and on verification_challenges_open_target_uniq when
-    // switching back to a character this account previously named). The
-    // ordering is the whole requirement — an UPDATE that sets canceled_at
-    // drops the row out of both partial indexes within its own transaction, so
-    // these two statements are correct either autocommitted, as here, or
-    // wrapped in one transaction. They are left autocommitted because the gap
-    // is self-healing: a crash between them leaves the old challenge canceled
-    // and both index slots free, so the next /link issues cleanly with neither
-    // character locked out.
-    //
-    // cancelChallenge is the guarded cancel — it touches only a row that is
-    // neither completed nor already canceled. False means the row closed under
-    // us; the only way it closes as COMPLETE is the tick binding the old
-    // target, so re-read the link before issuing anything.
-    const canceled = await deps.store.cancelChallenge(live.id, now);
-    if (!canceled) {
-      const justLinked = await deps.store.findLinkByDiscord(ctx.discordId);
-      if (justLinked) {
-        return ephemeral(
-          `You just finished linking to **${justLinked.gamertag}**. ` +
-          "Run `/unlink` first if you need to bind a different character.",
-        );
-      }
-    }
-    switchedFrom = await nameOf(deps, live.targetDayzId);
-  }
-
-  // Close out challenges that expired without completing, before issuing a new
-  // one: an expired row still occupies this account's one open-challenge slot
-  // (uniqOpenPerAccount), so without this the insert below would be refused.
-  await deps.store.cancelExpired(now);
-
-  const expiresAt = new Date(now.getTime() + deps.challengeTtlMs);
-  // One draw, no redraw loop. Sequences are no longer required to be unique
-  // across live challenges — the open-sequence index was retired because three
-  // emotes over the safe pool is only ~12k orderings, so live challenges would
-  // collide routinely and reject legitimate /link calls. A collision is
-  // harmless now that a challenge can only ever be satisfied by the character
-  // it names.
-  const sequence = generateSequence(deps.rng);
-  const challenge = await deps.store.createChallenge({
-    discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
-    sequence, issuedAt: now, expiresAt, targetDayzId: target.dayzId,
+  const out = await issueChallenge(deps.store, { rng: deps.rng, now: deps.now(), ttlMs: deps.challengeTtlMs }, {
+    discordId: ctx.discordId, targetDayzId: ctx.targetDayzId, guildId: ctx.guildId, channelId: ctx.channelId,
+    newSequence: ctx.newSequence,
   });
-  if (challenge) {
-    const body = challengeMessage(challenge.sequence, challenge.expiresAt, target.gamertag);
-    // Say the old sequence is dead. A player who switched must not go on
-    // performing emotes that can no longer bind anything.
-    return ephemeral(switchedFrom === null
-      ? body
-      : `Canceled your challenge for **${switchedFrom}** — that sequence no longer works.\n\n${body}`);
+  // The strings below are the ones this command has always said; the
+  // decisions behind them live in @factions/verification's issueChallenge,
+  // which the site's /link shares.
+  switch (out.kind) {
+    case "already-linked":
+    case "just-linked":
+      return ephemeral(
+        (out.kind === "just-linked" ? `You just finished linking to **${out.gamertag}**. ` : `You are already linked to **${out.gamertag}**. `) +
+        "Run `/unlink` first if you need to bind a different character.",
+      );
+    case "unknown-character":
+      return ephemeral(
+        "I have not seen that character on the server. Pick one from the list — " +
+        "only characters the event log has seen can be linked.",
+      );
+    case "taken":
+      return ephemeral(
+        `**${out.gamertag}** is already linked to another Discord account. ` +
+        "If that character is yours, ask an admin.",
+      );
+    case "live":
+      return ephemeral(challengeMessage(out.challenge.sequence, out.challenge.expiresAt, out.gamertag));
+    case "too-many-draws":
+      return ephemeral(
+        `You have asked for too many sequences for **${out.gamertag}** today. ` +
+        "Try again tomorrow — or, if there is an emote you cannot find on the wheel, " +
+        "say so in the channel rather than working around it.",
+      );
+    case "issued": {
+      const body = challengeMessage(out.challenge.sequence, out.challenge.expiresAt, out.gamertag);
+      // Say the old sequence is dead. A player who switched must not go on
+      // performing emotes that can no longer bind anything.
+      return ephemeral(out.switchedFrom === null
+        ? body
+        : `Canceled your challenge for **${out.switchedFrom}** — that sequence no longer works.\n\n${body}`);
+    }
+    case "held-by-other":
+      return ephemeral(
+        `Someone else is verifying **${out.gamertag}** right now, so I cannot issue a ` +
+        `challenge for that character yet. Their attempt ends <t:${Math.floor(out.expiresAt.getTime() / 1000)}:R> — ` +
+        "run `/link` again after that. If that character is yours, ask an admin.",
+      );
+    case "unavailable":
+      return ephemeral("Could not issue a challenge right now. Try again in a moment.");
   }
-
-  // A null insert means the row lost to one of the two partial unique
-  // indexes, and the two cases are told apart below because they mean
-  // completely different things to the player.
-
-  // uniqOpenPerAccount: a concurrent /link for this SAME account beat us to
-  // the one open-challenge slot. Show theirs rather than erroring — it is the
-  // same player, twice.
-  const concurrent = await deps.store.findLiveChallenge(ctx.discordId, now);
-  if (concurrent) {
-    return ephemeral(challengeMessage(concurrent.sequence, concurrent.expiresAt, await nameOf(deps, concurrent.targetDayzId)));
-  }
-
-  // ⚠️ uniqOpenTarget: ANOTHER Discord account is already verifying this
-  // character. This is not transient and must not be reported as one — that
-  // index's predicate carries no expiry term, and cancelExpired above will
-  // not touch the other account's unexpired row, so "try again in a moment"
-  // would be a lie for up to the full 24h TTL while the player retried into
-  // the same wall. Say what is true and when it ends.
-  //
-  // The other account's challenge is left strictly alone. Cancelling or
-  // stealing it would hand anyone a way to knock a rival off the character
-  // they are mid-way through verifying.
-  const holder = await deps.store.findOpenChallengeByTarget(target.dayzId);
-  if (holder && holder.discordId !== ctx.discordId) {
-    return ephemeral(
-      `Someone else is verifying **${target.gamertag}** right now, so I cannot issue a ` +
-      `challenge for that character yet. Their attempt ends <t:${Math.floor(holder.expiresAt.getTime() / 1000)}:R> — ` +
-      "run `/link` again after that. If that character is yours, ask an admin.",
-    );
-  }
-  return ephemeral("Could not issue a challenge right now. Try again in a moment.");
-}
-
-/** Gamertag for a UID, falling back to the UID so a message is never blank. */
-async function nameOf(deps: CommandDeps, dayzId: string): Promise<string> {
-  return (await deps.store.playerByDayzId(dayzId))?.gamertag ?? dayzId;
 }
 
 /**
