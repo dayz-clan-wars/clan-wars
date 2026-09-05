@@ -87,6 +87,16 @@ describe("roster base writes", () => {
     expect(await declareSoloDb(db, "d1", P1, now)).toEqual({ ok: false, reason: "in-clan" });
   });
 
+  it("⚠️ a PENDING member reads as not-in-clan — /base is still their solo view until promotion", async () => {
+    const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d1", createdAt: now }).returning();
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId, dayzId: UID_A, discordId: "d1", role: "member", joinedAt: now,
+      status: "pending", pendingSince: now,
+    });
+    const v = await baseForDb(db, "d1");
+    expect(v).toMatchObject({ linked: true, inClan: false });
+  });
+
   it("refuses too-close to another declared base — the 200 m rule runs inside the package", async () => {
     const near = key(5150, 5000);
     await pole(P1, 5000, 5000); await pole(near, 5150, 5000);

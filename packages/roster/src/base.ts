@@ -30,8 +30,16 @@ export async function baseForDb(db: Database, discordId: string): Promise<BaseVi
     .from(identityLinks).where(eq(identityLinks.discordId, discordId));
   if (!link) return { linked: false };
   const serverId = await activeServerId(db);
+  // Full members only (spec §4.5/§5.3): a pending member has not yet been
+  // seen at the clan's base, so they keep their solo base until promotion —
+  // `/base` must show them as not-in-clan, exactly like `declareSoloTx`'s
+  // guard does.
   const [member] = await db.select({ id: factionMembers.id }).from(factionMembers)
-    .where(and(eq(factionMembers.serverId, serverId), eq(factionMembers.dayzId, link.dayzId)));
+    .where(and(
+      eq(factionMembers.serverId, serverId),
+      eq(factionMembers.dayzId, link.dayzId),
+      eq(factionMembers.status, "full"),
+    ));
   const declaration = await declarationForPlayer(db, serverId, link.dayzId);
   const raised = await raisedPolesFor(db, serverId, link.dayzId);
   return {

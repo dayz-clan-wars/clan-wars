@@ -457,7 +457,7 @@ export class PgRosterStore implements RosterStore {
    * join a faction they were never offered.
    *
    * The faction-holding check runs BEFORE the invite is claimed — see the
-   * lock-order note on the `FOR SHARE` below, which is what keeps this path
+   * lock-order note on the `FOR UPDATE` below, which is what keeps this path
    * from deadlocking against `disband`/`lapseReservations`. Everything after
    * the claim (the cooldown floor, the identity-link equality) must abort via
    * `throw`, not `return`, or the claim just made would commit with no
@@ -475,8 +475,9 @@ export class PgRosterStore implements RosterStore {
           .from(factionInvites).where(eq(factionInvites.id, inviteId));
         if (!target) return "gone" as const;
 
-        // ⚠️ `FOR SHARE`, not a plain read, and it must come BEFORE the claim
-        // UPDATE below. Two separate reasons, both load-bearing:
+        // ⚠️ `FOR UPDATE`, not a plain read (and not `FOR SHARE` — see
+        // below), and it must come BEFORE the claim UPDATE. Three separate
+        // reasons, all load-bearing:
         //
         // 1. An unlocked SELECT is not a check at all under READ COMMITTED.
         //    `disband()` and `lapseReservations()` both UPDATE this row and
@@ -486,7 +487,7 @@ export class PgRosterStore implements RosterStore {
         //    the row outlives its faction. `faction_members_server_player_uniq`
         //    has no status predicate, so that row then bars the player from
         //    every future faction on the server and NO command can clear it
-        //    (§4.1). The share lock makes both writers wait for this
+        //    (§4.1). The row lock makes both writers wait for this
         //    transaction instead, so their DELETE always runs after this
         //    INSERT.
         //
@@ -500,11 +501,20 @@ export class PgRosterStore implements RosterStore {
         //    player who merely pressed Accept. Acquiring in the same order as
         //    the writers makes the deadlock impossible rather than rare.
         //
+        // 3. `FOR UPDATE`, not `FOR SHARE`: the cap count just below must be
+        //    serialized against a CONCURRENT accept for the SAME faction, not
+        //    just against disband/lapse. Two accepts both holding a shared
+        //    lock can both read the same count, both pass the cap check, and
+        //    both insert — overshooting CLAN_SIZE_CAP. An exclusive lock on
+        //    this row makes the second accept block here until the first has
+        //    committed its insert (or rolled back), so the second one's count
+        //    always sees the first one's member.
+        //
         // Nothing has been written at this point, which is why "not-holding"
         // can return directly instead of needing a `RosterAbort`.
         const [f] = await tx.select({ id: factions.id }).from(factions)
           .where(and(eq(factions.id, target.factionId), inArray(factions.status, HOLDING)))
-          .for("share");
+          .for("update");
         if (!f) return "not-holding" as const;
 
         // Nothing has been written yet on this path — a bare return is safe,

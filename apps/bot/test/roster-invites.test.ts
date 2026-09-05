@@ -5,6 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { CLAN_SIZE_CAP } from "@factions/domain";
 import { seedFaction } from "./seed.js";
 import { PgRosterStore, type CreateInviteArgs } from "@factions/roster/internal";
 
@@ -167,6 +168,39 @@ describe("PgRosterStore invites", () => {
     });
     expect(await store.acceptInvite(inviteId!, INVITEE_DISCORD, t1)).toBe("cap");
     expect(await db.select().from(factionMembers).where(eq(factionMembers.dayzId, INVITEE_DAYZ))).toEqual([]);
+  });
+
+  it("⚠️ concurrent accepts for the same faction serialize on the cap — exactly one wins", async () => {
+    // CLAN_SIZE_CAP - 1 on the table: the leader from beforeEach, plus
+    // CLAN_SIZE_CAP - 2 more. One more accept fits; a second, racing it,
+    // must not.
+    for (let i = 0; i < CLAN_SIZE_CAP - 2; i++) {
+      await db.insert(factionMembers).values({
+        factionId, serverId, dayzId: `R${i}`.padEnd(40, "0"), discordId: `r${i}`, role: "member", joinedAt: t0,
+      });
+    }
+
+    const SECOND_DISCORD = "d10";
+    const SECOND_DAYZ = "Y".repeat(40);
+    await db.insert(identityLinks).values({
+      discordId: SECOND_DISCORD, dayzId: SECOND_DAYZ, gamertag: "Ten", verifiedAt: t0,
+    });
+
+    const first = await store.createInvite(base);
+    const second = await store.createInvite({
+      ...base, inviteeDiscordId: SECOND_DISCORD, inviteeDayzId: SECOND_DAYZ,
+    });
+
+    const [r1, r2] = await Promise.all([
+      store.acceptInvite(first.inviteId!, INVITEE_DISCORD, t1),
+      store.acceptInvite(second.inviteId!, SECOND_DISCORD, t1),
+    ]);
+
+    const outcomes = [r1, r2].sort();
+    expect(outcomes).toEqual(["cap", "ok"]);
+
+    const rows = await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId));
+    expect(rows).toHaveLength(CLAN_SIZE_CAP);
   });
 
   describe("accept and decline", () => {
