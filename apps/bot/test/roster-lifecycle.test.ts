@@ -2,9 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, rosterCooldowns,
+  declarations, poles, events, admFiles,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { PgRosterStore } from "../src/roster-store.js";
 import type { RenameArgs } from "../src/roster-store.js";
 
@@ -13,6 +15,7 @@ const LEADER = "d1";
 const t0 = new Date("2026-08-31T12:00:00Z");
 const RENAME_COOLDOWN_MS = 604_800_000; // 7 days
 const past = new Date(t0.getTime() - RENAME_COOLDOWN_MS - 1);
+const POLE = "1:2:3";
 
 describe("PgRosterStore disband and rename", () => {
   let db: Database;
@@ -29,21 +32,35 @@ describe("PgRosterStore disband and rename", () => {
     // genuine warning is visible when one appears.
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, faction_members, factions, identity_links, servers restart identity cascade`);
+      await tx.execute(sql`truncate table faction_invites, roster_cooldowns, declarations, poles, faction_members, factions, events, raw_lines, adm_files, identity_links, servers restart identity cascade`);
     });
     store = new PgRosterStore(db);
 
     const [s] = await db.insert(servers).values({ name: "S", map: "sakhal", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     const [f] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-      x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: LEADER, createdAt: t0,
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: LEADER, createdAt: t0,
     }).returning();
     factionId = f!.id;
     await db.insert(factionMembers).values([
       { factionId, serverId, dayzId: "L".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0 },
       { factionId, serverId, dayzId: "M".repeat(40), discordId: "d3", role: "member", joinedAt: t0 },
     ]);
+
+    // Task 9's shared seed helper doesn't exist yet, so this is a minimal
+    // local declaration: the faction's hold on POLE now lives in
+    // `declarations` (the schema dropped factions.poleKey/x/y/z), and
+    // disband's releaseTx depends on finding it there.
+    const [admFile] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: t0 }).returning();
+    const [evidence] = await db.insert(events).values({
+      serverId, admFileId: admFile!.id, lineIndex: 0, type: "flag.raised",
+      occurredAt: t0, payload: {},
+    }).returning();
+    await db.insert(declarations).values({
+      serverId, poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: factionId, evidenceEventId: evidence!.id, declaredAt: t0,
+    });
   });
 
   describe("disband", () => {
@@ -55,15 +72,35 @@ describe("PgRosterStore disband and rename", () => {
     });
 
     it("disbanding releases flag, tag, pole and roster", async () => {
+      // The pole itself: disbandFactionTx's releaseTx call is what starts its
+      // 3-day grace, and that write is the assertion below.
+      const [pole] = await db.insert(poles).values({
+        serverId, map: "sakhal", poleKey: POLE, x: "1.00", y: "2.00", z: "3.00",
+        currentTexture: "Flag_Bear", flagRaised: true,
+        firstSeenAt: t0, lastSeenAt: t0, graceUntil: t0,
+      }).returning();
+
       expect(await store.disband(factionId, LEADER)).toBe("ok");
       const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
       expect(f!.status).toBe("disbanded");
       expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toEqual([]);
+
+      // The declaration is gone — disband released the pole, not just froze it.
+      expect(await db.select().from(declarations)
+        .where(eq(declarations.ownerFactionId, factionId))).toEqual([]);
+
+      // And the pole's grace was stamped to (disband's `new Date()`) + the
+      // released-pole grace window — checked within a few seconds since
+      // disband stamps its own `new Date()`, not `t0`.
+      const [after] = await db.select().from(poles).where(eq(poles.id, pole!.id));
+      const expectedGrace = Date.now() + RELEASED_POLE_GRACE_MS;
+      expect(Math.abs(after!.graceUntil.getTime() - expectedGrace)).toBeLessThan(5000);
+
       // The releasing indexes are partial over the holding statuses, so the
       // texture is immediately re-claimable by someone else.
       await db.insert(factions).values({
-        serverId, name: "Bears II", tag: "BEAR", texture: "Flag_Bear", poleKey: "1:2:3",
-        x: "1.00", y: "2.00", z: "3.00", status: "active", leaderDiscordId: "d9", createdAt: t0,
+        serverId, name: "Bears II", tag: "BEAR", texture: "Flag_Bear",
+        status: "active", leaderDiscordId: "d9", createdAt: t0,
       });
     });
 

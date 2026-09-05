@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, events, admFiles, type Database,
+  servers, factions, factionMembers, factionInvites, events, admFiles, declarations, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
@@ -35,26 +35,60 @@ describe("PgDormancyStore", () => {
     store = new PgDormancyStore(db);
   });
 
-  const seedFaction = async (o: Partial<{ tag: string; texture: string; poleKey: string; status: string; createdAt: Date; activatedAt: Date | null; dormantSince: Date | null }> = {}) => {
+  const seedFaction = async (o: Partial<{ tag: string; texture: string; poleKey: string; status: string; createdAt: Date; activatedAt: Date | null; dormantSince: Date | null; dayzId: string }> = {}) => {
     const [f] = await db.insert(factions).values({
       serverId, name: o.tag ?? "Bears", tag: o.tag ?? "BEAR",
       // Default derived from tag, not a fixed literal: tests that seed several
       // factions without overriding texture (e.g. distinct tags, default
       // status "active") would otherwise collide on factions_holding_texture_uniq.
-      texture: o.texture ?? `Flag_${o.tag ?? "Bear"}`, poleKey: o.poleKey ?? "1:2:3",
-      x: "1", y: "2", z: "3", status: o.status ?? "active",
+      // "BEAR" (the default tag, whether implicit or spelled out) is the one
+      // exception: it keeps the mixed-case "Flag_Bear" every raise-matching
+      // test in this file already hardcodes.
+      texture: o.texture ?? (o.tag === undefined || o.tag === "BEAR" ? "Flag_Bear" : `Flag_${o.tag}`),
+      status: o.status ?? "active",
       leaderDiscordId: "d1", createdAt: o.createdAt ?? ago(999_999_999),
       activatedAt: o.activatedAt ?? null, dormantSince: o.dormantSince ?? null,
       reservedUntil: (o.status ?? "active") === "reserved" ? now : null,
     }).returning();
+
+    const poleKey = o.poleKey ?? "1:2:3";
+    const declaredAt = o.createdAt ?? ago(999_999_999);
+    // Default "A", matching seedRaise's default dayzId — the common case is
+    // one faction per test. Multi-faction tests on the same server pass a
+    // distinct id to avoid faction_members_server_player_uniq.
+    const dayzId = o.dayzId ?? "A";
+
+    // Task 9's shared seed helper doesn't exist yet, so this is a minimal
+    // local declaration: the faction's hold on its pole now lives in
+    // `declarations` (the schema dropped factions.poleKey), and LAST_RAISE
+    // joins through it. The evidence event is a real flag.raised row (every
+    // declarations row needs exactly one) but deliberately keyed to a
+    // pole/texture/dayzId that never matches THIS faction, so it cannot
+    // itself count as the qualifying raise the tests below check for.
+    const [evidence] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: "flag.raised",
+      occurredAt: declaredAt,
+      payload: { dayzId: "SEED-EVIDENCE", gamertag: "Seed", texture: "Flag_Seed_Evidence", poleKey: "seed:evidence:0" },
+    }).returning();
+    await db.insert(declarations).values({
+      serverId, poleKey, x: "1.00", y: "2.00", z: "3.00",
+      ownerFactionId: f!.id, evidenceEventId: evidence!.id, declaredAt,
+    });
+
+    // A roster member so the member-raise predicate has someone to match.
+    // Direct inserts bypass the 200 m check, so a fixed pole key is fine here.
+    await db.insert(factionMembers).values({
+      factionId: f!.id, serverId, dayzId, discordId: "d1", role: "leader", joinedAt: declaredAt,
+    });
+
     return f!;
   };
 
-  const seedRaise = (o: { poleKey: string; texture: string; at: Date; type?: EventType }) =>
+  const seedRaise = (o: { poleKey: string; texture: string; at: Date; type?: EventType; dayzId?: string }) =>
     db.insert(events).values({
       serverId, admFileId, lineIndex: lineIndex++, type: o.type ?? "flag.raised",
       occurredAt: o.at,
-      payload: { dayzId: "A", gamertag: "G", texture: o.texture, poleKey: o.poleKey },
+      payload: { dayzId: o.dayzId ?? "A", gamertag: "G", texture: o.texture, poleKey: o.poleKey },
     });
 
   describe("clocks", () => {
@@ -96,8 +130,8 @@ describe("PgDormancyStore", () => {
     });
 
     it("falls back to activated_at, then created_at, when no raise was ingested", async () => {
-      await seedFaction({ tag: "AAA", poleKey: "1:1:1", activatedAt: ago(400), createdAt: ago(900) });
-      await seedFaction({ tag: "BBB", poleKey: "2:2:2", activatedAt: null, createdAt: ago(800) });
+      await seedFaction({ tag: "AAA", poleKey: "1:1:1", activatedAt: ago(400), createdAt: ago(900), dayzId: "AAA" });
+      await seedFaction({ tag: "BBB", poleKey: "2:2:2", activatedAt: null, createdAt: ago(800), dayzId: "BBB" });
 
       const clocks = await store.clocks();
       const byTag = Object.fromEntries(clocks.map((c) => [c.tag, c]));
@@ -106,10 +140,10 @@ describe("PgDormancyStore", () => {
     });
 
     it("examines only active and dormant factions", async () => {
-      await seedFaction({ tag: "ACT", poleKey: "1:1:1", status: "active" });
-      await seedFaction({ tag: "DRM", poleKey: "2:2:2", status: "dormant" });
-      await seedFaction({ tag: "RSV", poleKey: "3:3:3", status: "reserved" });
-      await seedFaction({ tag: "DSB", poleKey: "4:4:4", status: "disbanded" });
+      await seedFaction({ tag: "ACT", poleKey: "1:1:1", status: "active", dayzId: "ACT" });
+      await seedFaction({ tag: "DRM", poleKey: "2:2:2", status: "dormant", dayzId: "DRM" });
+      await seedFaction({ tag: "RSV", poleKey: "3:3:3", status: "reserved", dayzId: "RSV" });
+      await seedFaction({ tag: "DSB", poleKey: "4:4:4", status: "disbanded", dayzId: "DSB" });
 
       const clocks = await store.clocks();
       expect(clocks.map((c) => c.tag).sort()).toEqual(["ACT", "DRM"]);
@@ -127,8 +161,8 @@ describe("PgDormancyStore", () => {
       // Not scoped to this faction's own pole or texture: a server-wide crash
       // loop must be visible even to a faction whose own flag was never the
       // problem. A different faction's raise on the same server counts.
-      const a = await seedFaction({ tag: "AAA", poleKey: "1:1:1" });
-      await seedFaction({ tag: "BBB", poleKey: "2:2:2" });
+      const a = await seedFaction({ tag: "AAA", poleKey: "1:1:1", dayzId: "AAA" });
+      await seedFaction({ tag: "BBB", poleKey: "2:2:2", dayzId: "BBB" });
       await seedRaise({ poleKey: "2:2:2", texture: "Flag_BBB", at: ago(10) });
 
       const clocks = await store.clocks();
@@ -137,9 +171,32 @@ describe("PgDormancyStore", () => {
     });
 
     it("reports null server liveness when the server has no ingested events at all", async () => {
+      // seedFaction's own declaration evidence is a real event, so a true
+      // "never ingested anything" server needs a faction seeded by hand on a
+      // fresh server, with no declaration and no events at all.
+      const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+      const [f] = await db.insert(factions).values({
+        serverId: s2!.id, name: "BEAR", tag: "BEAR", texture: "Flag_Bear",
+        status: "active", leaderDiscordId: "d1", createdAt: ago(999_999_999),
+      }).returning();
+      const clocks = await store.clocks();
+      const clock = clocks.find((c) => c.id === f!.id)!;
+      expect(clock.serverLastEventAt).toBeNull();
+    });
+
+    it("⚠️ a non-member's raise does not wind the clock", async () => {
+      const f = await seedFaction({ tag: "BEAR" });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(1000), dayzId: "STRANGER" });
+      const [c] = await store.clocks();
+      // No member raise at all → coalesce falls through to created_at.
+      expect(c!.lastRaiseAt!.getTime()).toBe(f.createdAt.getTime());
+    });
+
+    it("a member's raise does", async () => {
       await seedFaction({ tag: "BEAR" });
-      const [clock] = await store.clocks();
-      expect(clock!.serverLastEventAt).toBeNull();
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(1000), dayzId: "A" });
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt!.getTime()).toBe(ago(1000).getTime());
     });
   });
 
@@ -179,8 +236,8 @@ describe("PgDormancyStore", () => {
     });
 
     it("stamps a dormant row that has no timestamp, without touching one that has", async () => {
-      const bare = await seedFaction({ tag: "AAA", poleKey: "1:1:1", status: "dormant", dormantSince: null });
-      const stamped = await seedFaction({ tag: "BBB", poleKey: "2:2:2", status: "dormant", dormantSince: ago(5000) });
+      const bare = await seedFaction({ tag: "AAA", poleKey: "1:1:1", status: "dormant", dormantSince: null, dayzId: "AAA" });
+      const stamped = await seedFaction({ tag: "BBB", poleKey: "2:2:2", status: "dormant", dormantSince: ago(5000), dayzId: "BBB" });
 
       expect(await store.stampDormantSince(bare.id, now)).toBe(true);
       expect(await store.stampDormantSince(stamped.id, now)).toBe(false);
@@ -196,8 +253,8 @@ describe("PgDormancyStore", () => {
       // point: stamp owns `dormant_since IS NULL` and pause owns IS NOT NULL,
       // so neither can act on the other's row. If both guards ever matched the
       // same row, a mis-routed transition would silently double-write.
-      const bare = await seedFaction({ tag: "CCC", poleKey: "3:3:3", status: "dormant", dormantSince: null });
-      const running = await seedFaction({ tag: "DDD", poleKey: "4:4:4", status: "dormant", dormantSince: ago(5000) });
+      const bare = await seedFaction({ tag: "CCC", poleKey: "3:3:3", status: "dormant", dormantSince: null, dayzId: "CCC" });
+      const running = await seedFaction({ tag: "DDD", poleKey: "4:4:4", status: "dormant", dormantSince: ago(5000), dayzId: "DDD" });
 
       expect(await store.pauseDormancyClock(bare.id, now)).toBe(false);
       expect(await store.pauseDormancyClock(running.id, now)).toBe(true);
@@ -281,10 +338,11 @@ describe("PgDormancyStore", () => {
       // filters on HOLDING_STATUSES — but still collide with
       // faction_members_server_player_uniq if those players join another faction
       // on the same server.
+      //
+      // seedFaction already seeds the leader row this test needs (dayzId
+      // "A"); a second explicit insert here would collide with it on
+      // faction_members_leader_uniq, one leader per faction.
       const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
-      await db.insert(factionMembers).values({
-        factionId: f.id, serverId, discordId: "d1", dayzId: "A".repeat(40), role: "leader", joinedAt: now,
-      });
       await db.insert(factionInvites).values({
         factionId: f.id, serverId, invitedByDiscordId: "d1", inviteeDiscordId: "d2",
         inviteeDayzId: "B".repeat(40), createdAt: now, expiresAt: new Date(now.getTime() + 1000),

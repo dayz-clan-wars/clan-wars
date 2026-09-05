@@ -1,7 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { createClient, runMigrations, factions, type Database } from "@factions/db";
-import { inArray } from "drizzle-orm";
-import { LAST_RAISE, EXAMINED } from "../src/dormancy-store.js";
+import { createClient, runMigrations, type Database } from "@factions/db";
+import { clockQuery } from "../src/dormancy-store.js";
 
 const URL = process.env.TEST_DATABASE_URL;
 if (!URL) throw new Error("TEST_DATABASE_URL is required");
@@ -29,11 +28,7 @@ describe("the dormancy clock's raise lookup is index-backed", () => {
   });
 
   it("resolves both payload keys through the index, not a filter", async () => {
-    const { sql: text, params } = db
-      .select({ id: factions.id, lastRaiseAt: LAST_RAISE })
-      .from(factions)
-      .where(inArray(factions.status, EXAMINED))
-      .toSQL();
+    const { sql: text, params } = clockQuery(db).toSQL();
 
     const client = (db as unknown as {
       $client: { unsafe: (q: string, p: unknown[]) => Promise<Record<string, string>[]> };
@@ -53,7 +48,12 @@ describe("the dormancy clock's raise lookup is index-backed", () => {
     expect(indexConds).toContain("payload ->> 'poleKey'");
     expect(indexConds).toContain("payload ->> 'texture'");
 
-    // Any payload comparison left as a Filter is a key the index no longer covers.
-    expect(lines.filter((l) => /Filter:.*payload/.test(l))).toEqual([]);
+    // The roster predicate is allowed as a Filter — it runs after the index
+    // has narrowed to one pole and one texture. poleKey and texture are not.
+    const payloadFilters = lines.filter((l) => /Filter:.*payload/.test(l));
+    for (const l of payloadFilters) {
+      expect(l).not.toContain("'poleKey'");
+      expect(l).not.toContain("'texture'");
+    }
   });
 });

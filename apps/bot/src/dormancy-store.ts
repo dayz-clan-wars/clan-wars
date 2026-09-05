@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { factions } from "@factions/db";
+import { declarations, factions } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import { disbandFactionTx } from "./roster-store.js";
@@ -43,14 +43,24 @@ export interface DormancyStore {
  * `flag_changes` does not run against the live database — it holds zero rows
  * there — so the read model would report every faction as never having raised
  * a flag. `ceremony-tick` reads the event log directly for the same reason.
+ *
+ * Joined to `declarations` for the pole, and — spec §5.1 — restricted to
+ * raises by someone on the roster. Base-declaration §7: without the member
+ * check any stranger could keep a dead clan's clock alive forever and its
+ * flag out of the pool. The member predicate is a Filter, not an index
+ * condition, and that is fine: the index has already narrowed to this pole
+ * and texture; see dormancy-index-drift.test.ts.
  */
 export const LAST_RAISE = sql<Date | null>`(
   select max(e.occurred_at)
   from events e
   where e.type = 'flag.raised'
     and e.server_id = ${factions.serverId}
-    and e.payload->>'poleKey' = ${factions.poleKey}
+    and e.payload->>'poleKey' = ${declarations.poleKey}
     and e.payload->>'texture' = ${factions.texture}
+    and e.payload->>'dayzId' in (
+      select m.dayz_id from faction_members m where m.faction_id = ${factions.id}
+    )
 )`;
 
 /**
@@ -68,25 +78,39 @@ const SERVER_LAST_EVENT = sql<Date | null>`(
 /** Statuses whose clock is worth reading. See dormancy.ts's decide(). */
 export const EXAMINED = ["active", "dormant"];
 
+/**
+ * The one query both `clocks()` and dormancy-index-drift.test.ts run. Sharing
+ * the builder is what makes the drift test's EXPLAIN mean anything — a
+ * hand-rolled copy in the test could drift from the real query and still
+ * pass.
+ */
+export function clockQuery(db: Database) {
+  return db.select({
+    id: factions.id,
+    name: factions.name,
+    tag: factions.tag,
+    leaderDiscordId: factions.leaderDiscordId,
+    status: factions.status,
+    dormantSince: factions.dormantSince,
+    // ⚠️ COALESCE, and the order matters. A faction is activated BY its flag
+    // going up, so a raise normally exists; activated_at covers one whose
+    // activating raise predates the ingested window, and created_at covers a
+    // row with neither. Without this a faction with no ingested raise reads
+    // as infinitely stale and is dormant on the first tick.
+    lastRaiseAt: sql<Date | null>`coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt})`,
+    serverLastEventAt: SERVER_LAST_EVENT,
+  }).from(factions)
+    // LEFT: a clan with no declaration (post-wipe, increment 4) still has a
+    // clock; its LAST_RAISE is simply null and the coalesce falls through.
+    .leftJoin(declarations, eq(declarations.ownerFactionId, factions.id))
+    .where(inArray(factions.status, EXAMINED));
+}
+
 export class PgDormancyStore implements DormancyStore {
   constructor(private readonly db: Database) {}
 
   async clocks(): Promise<FactionClockRow[]> {
-    const rows = await this.db.select({
-      id: factions.id,
-      name: factions.name,
-      tag: factions.tag,
-      leaderDiscordId: factions.leaderDiscordId,
-      status: factions.status,
-      dormantSince: factions.dormantSince,
-      // ⚠️ COALESCE, and the order matters. A faction is activated BY its flag
-      // going up, so a raise normally exists; activated_at covers one whose
-      // activating raise predates the ingested window, and created_at covers a
-      // row with neither. Without this a faction with no ingested raise reads
-      // as infinitely stale and is dormant on the first tick.
-      lastRaiseAt: sql<Date | null>`coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt})`,
-      serverLastEventAt: SERVER_LAST_EVENT,
-    }).from(factions).where(inArray(factions.status, EXAMINED));
+    const rows = await clockQuery(this.db);
 
     return rows.map((r) => ({
       ...r,

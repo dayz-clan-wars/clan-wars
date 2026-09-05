@@ -4,6 +4,7 @@ import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "d
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
+import { releaseTx } from "./declaration-store.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -130,20 +131,23 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * filters on HOLDING_STATUSES, yet still able to collide with
  * `faction_members_server_player_uniq` when those players join elsewhere.
  *
- * ⚠️ Lock order: `factions`, then `faction_members`, then `faction_invites`.
- * Inbox item 19 records a deadlock built out of two separately-correct changes
- * taking two of these tables in opposite orders. Any new writer to this set
- * follows this order.
+ * ⚠️ Lock order (spec §4.12): `factions`, then `declarations`, then
+ * `faction_members`, then `faction_invites`. Inbox item 19 records a
+ * deadlock built out of two separately-correct changes taking two of these
+ * tables in opposite orders. Any new writer to this set follows this order —
+ * which is why the pole release below runs BEFORE the roster delete, not
+ * after: `declarations` sits between `factions` and `faction_members` in the
+ * order, and `releaseTx` itself takes `declarations` then `poles`.
  *
  * `guard` is the caller's authority to do it — a leader check for
  * `/faction disband`, a dormancy-window check for the tick.
  *
- * One transaction, three writes: the status update (carrying `guard` and a
- * holding-status check), then the roster delete, then the outstanding
- * invite revocation. §6 is explicit that disbanding is not betrayal — no
- * cooldown is written for anyone, unlike `kick`/`leave`.
+ * One transaction, four writes: the status update (carrying `guard` and a
+ * holding-status check), then the pole release, then the roster delete,
+ * then the outstanding invite revocation. §6 is explicit that disbanding is
+ * not betrayal — no cooldown is written for anyone, unlike `kick`/`leave`.
  *
- * The status update must land first and the delete must be conditioned on
+ * The status update must land first and the rest must be conditioned on
  * it succeeding: a bare `return false` after the update fails writes
  * nothing, so that path is safe to return from directly. There is no
  * non-boolean outcome to unwind here, so `RosterAbort` never comes into play
@@ -160,6 +164,12 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
     });
 
   if (!updated) return false;
+
+  // Guide ch. 8: the base goes public after its 3-day grace. Released here,
+  // before the roster delete, per the lock order above (declarations comes
+  // between factions and faction_members) — not because releaseTx itself
+  // reads the roster.
+  await releaseTx(tx, { factionId }, new Date());
 
   await tx.delete(factionMembers).where(eq(factionMembers.factionId, factionId));
 
