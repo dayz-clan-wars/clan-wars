@@ -930,7 +930,7 @@ one every 24 hours. The event belongs to the attempt history, not the feed: log 
 That means a schema change outside `faction_events` and a different reconciliation, which
 is also scope at merge gate.
 
-## 37. `apps/web` player copy still says "faction"
+## 37. ~~`apps/web` player copy still says "faction"~~ — DONE 2026-09-05
 
 The target-state spec §1 covers site copy for the player-facing web app; this branch's
 vocabulary sweep only touched the bot's public strings.
@@ -938,3 +938,6 @@ vocabulary sweep only touched the bot's public strings.
 Deferred on purpose to increment 2, when the web frontend rebuild deletes and rewrites
 those screens anyway — noted here on 2026-09-04 so it reads as a decision rather than an
 oversight.
+
+Closed by increment 2a: the prototypes are deleted, the rebuilt pages say clan, and
+`apps/web/test/copy-vocabulary.test.ts` scans every file under `app/`.

@@ -38,7 +38,8 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **22/22 tasks**. A cached pass proves nothing; check the count, not the exit code.
+Expect **24/24 tasks** (`packages/roster` adds `typecheck` and `test`). A cached pass
+proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.
 
@@ -103,7 +104,10 @@ turbo gate stays the gate, because it runs `typecheck` too.
   other production sites (dayzonelife.com, manicdotes.com, regime.fi) from them. ⚠️ Every
   `systemctl reload nginx` is a reload for all four — run `sudo nginx -t` first, and
   `reload`, never `restart`. Vhost and unit files are version controlled in `deploy/`;
-  `/etc` holds symlinks. `pnpm --filter @factions/web dev` for local work.
+  `/etc` holds symlinks. `pnpm --filter @factions/web dev` for local work. Since
+  increment 2a, the `web` service in `docker-compose.yml` also needs `DATABASE_URL`
+  (pointed at `factions_live`); `apps/web` never reads it directly — only
+  `@factions/roster` reads `DATABASE_URL`, and `apps/web` calls the package's exports.
 
 ---
 
@@ -143,12 +147,18 @@ challenge that can never be completed.
 **Two statements of one fact will drift.** Where a constant is mirrored somewhere the
 compiler cannot see — a SQL index predicate, an env var, a message that names a number —
 there should be a test that fails when they disagree. See
-`packages/db/test/holding-index-drift.test.ts`.
+`packages/db/test/holding-index-drift.test.ts`. `apps/web/test/theme-tokens.test.ts` —
+the `@theme` block against the palette; a dropped token renders a browser default
+silently.
 
 **Every guide number lives in `packages/domain/src/rules.ts`.** `docs/guide-numbers.json`
 is a vendored copy of the guide's numbers table (`pnpm guide:numbers` regenerates it) and
 `packages/domain/test/guide-numbers-drift.test.ts` holds the two together. A new number
 goes in `rules.ts` and in the guide, never as a literal in the module that uses it.
+
+**Relative imports inside `packages/*/src` carry no extension.** Turbopack cannot map
+`.js` → `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless
+form legal, and tsx and vitest resolve it the same way.
 
 ---
 
@@ -168,6 +178,9 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
   them in opposite orders. There are four writers now. `faction_events` is always last
   among the roster tables, and can safely be: it is insert-only and nothing references
   it, so no writer ever needs it locked before touching the roster tables.
+  `packages/roster` is the fifth roster writer and the first outside the bot process. It
+  holds no writes yet (increment 2a); 2b and 2c add them, every one appending its feed or
+  notice row in the transition's own transaction.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
   query under a lock inside it, not an index; a second writer is a race.
 - **`poles` is filled by the bot's `pole-tick.ts`**, not by `apps/projector`, which does
@@ -225,18 +238,17 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
   offset makes every tick see drift and re-upload forever. Both size and mtime are
   compared because neither subsumes the other: mtime catches a same-length edit, size
   catches a restore that preserved timestamps.
-- **The website is a surface, never a source of truth.** Faction state is earned in game
-  and proved from the server's logs; nothing on `dayzclanwars.com` may create a faction,
-  claim a flag, bind a pole or alter a roster. `apps/web/test/smoke.test.ts` pins the
-  structural half of this — the app imports no database package and reads no
-  `DATABASE_URL`. ⚠️ That separation used to be enforced by distance — the web app ran
-  on a VPS with no route to the database, so an accidental import would have failed
-  loudly, in review or at worst in production. It no longer is: `factions_live` is on
-  this same host now, one loopback port away, so that same accidental import would
-  *succeed*, silently, against production data. `smoke.test.ts` (see its docblock) is
-  the **only** thing guarding this now — the container is not a second guard, because
-  `web` and `postgres` share the compose default network, so a hardcoded DSN in the web
-  app would connect fine, container boundary or not.
+- **The website is a surface, never a source of truth.** Rituals — founding, claiming a
+  flag, binding a pole — are earned in game and proved from the server's logs; nothing on
+  `dayzclanwars.com` may perform one. Administration is different: roster chores (the
+  `/me` read today; roster writes from increment 2c on) are permitted from the web, but
+  only through `packages/roster`. The boundary is that package's export allowlist —
+  `apps/web` may call only what `packages/roster` chooses to export — pinned by name in
+  both `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts`. Under
+  that allowlist, the `evidence_*` NOT NULL pair on `declarations` (target spec §16) is
+  the guard the export list leans on: even a permitted caller cannot write a declaration
+  without the evidence a ritual actually produces, because the columns refuse to accept
+  a row without it.
 - **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
   `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
   thumbnail in a Discord channel, not as an error.
@@ -257,6 +269,9 @@ accreted across the dates below. It holds **one registered server** (`CW-TEST`,
 Livonia) and **zero factions**. Nothing below has been exercised against real player
 data on this deployment; the descriptions are of the code, which is unchanged and real,
 not of anything that has happened here yet.
+
+Increment 2a (site foundation) landed: Tailwind, `packages/roster` with `viewerFor`,
+`/me` from the database. No new player capability; the slash commands still run.
 
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further

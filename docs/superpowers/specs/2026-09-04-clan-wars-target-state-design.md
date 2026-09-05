@@ -1088,18 +1088,20 @@ dependency, then by what players feel first.
 |---|---|---|---|
 | 0 | `rules.ts` + guide-numbers drift test; "clan" vocabulary sweep of existing strings | `2026-09-xx-rules-and-vocabulary.md` | — |
 | 1 | **Declarations**: the migration (§4.1–4.2), 200 m with the Hub, grace, raise attribution to full members, solo declare/lapse stores, launch-grace runbook. No UI beyond what the bot needs | `2026-09-xx-declarations.md` | 0 |
-| 2 | **The site as the tool**: `packages/roster` (§10.4) with the link flow, `/me`, `/claim`, `/base`, `/clan` roster with pending + presence + cap + requests, recruiting post, directory, clan page, rename/transfer/disband, `identity_holds`, `left_at`; retire the slash commands; Tailwind rebuild first increment folded in | `2026-09-xx-site-roster.md` | 1 |
-| 3 | **Raids and defense**: raid and defense consumers, flag-down clock, `dormant_reason`, `war_log_events`, `clan_notices` with the poster, per-clan voice channel, every §9 line that exists by now, `lapsed` feed event | `2026-09-xx-raids-and-notices.md` | 2 |
+| 2a | **Site foundation**: Tailwind + `@theme`; prototypes deleted; landing, `/login`, `/join` rebuilt; `packages/roster` (§10.4) with `viewerFor`; `/me` from the database; the deferred sweeps. No new capability for players | `2026-09-05-site-foundation.md` | 1 |
+| 2b | **Link and base**: `verification_challenges` nullable guild/channel (migration 0021); `startLink`/`cancelLink`/`unlink`; `/link` with autocomplete, 3 emotes, 10 min, 5 s poll; `/base` over `raisedPolesFor`/`declareSolo`/`releaseSolo`; inbox 7's refusal path | `2026-09-xx-site-link-and-base.md` | 2a |
+| 2c | **The site as the tool**: membership `status` pending/full, presence promotion, cap, `faction_join_requests`, `identity_holds`, recruiting columns (migration 0022); every roster write in `packages/roster`; `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; retire the slash commands in the same deploy; the `/faction` exclusion in `vocabulary.test.ts` removed with them | `2026-09-xx-site-roster.md` | 2b |
+| 3 | **Raids and defense**: raid and defense consumers, flag-down clock, `dormant_reason`, `war_log_events`, `clan_notices` with the poster, per-clan voice channel, every §9 line that exists by now, `lapsed` feed event | `2026-09-xx-raids-and-notices.md` | 2c |
 | 4 | **Scoring**: seasons, standings, points, week close, `@Alpha`, `/scoreboard`, `/alphas`, `/war-log`, `/seasons`, wipe script and runbook | `2026-09-xx-scoring-and-seasons.md` | 3 |
-| 5 | **The map**: positions consumer, `/map` with every layer, pins, intruders, public bases, travel points, base alerts (after checking the gate line against a live log) | `2026-09-xx-map.md` | 2, 3 (notices) |
-| 6 | **Player stats**: sessions and kills consumers, `/players`, profiles, boards, clan board | `2026-09-xx-player-stats.md` | 2 |
-| 7 | **Leadership and the vault**: succession, votes, guild-removal handler, vault, guest passes + `/guest`, `[TAG]` nicknames | `2026-09-xx-leadership-and-vault.md` | 2 |
+| 5 | **The map**: positions consumer, `/map` with every layer, pins, intruders, public bases, travel points, base alerts (after checking the gate line against a live log) | `2026-09-xx-map.md` | 2c, 3 (notices) |
+| 6 | **Player stats**: sessions and kills consumers, `/players`, profiles, boards, clan board | `2026-09-xx-player-stats.md` | 2c |
+| 7 | **Leadership and the vault**: succession, votes, guild-removal handler, vault, guest passes + `/guest`, `[TAG]` nicknames | `2026-09-xx-leadership-and-vault.md` | 2c |
 | 8 | **Launch**: raid-window runbook, stale file cleanup, launch grace stamp, `/guide`, acceptance against `factions_live` | `2026-09-xx-launch.md` | all |
 
-Increments 6 and 7 are independent of each other and of 3–5 once 2 has landed; 5 needs
+Increments 6 and 7 are independent of each other and of 3–5 once 2c has landed; 5 needs
 the notices queue from 3.
 
-⚠️ Increment 2 is the one that changes what players can do before it changes what the
+⚠️ Increment 2c is the one that changes what players can do before it changes what the
 system knows. The slash commands are retired **in the same deploy** as the pages that
 replace them, never before, so no capability is lost between two deploys.
 
