@@ -1,7 +1,7 @@
 # @factions/web
 
-The `dayzclanwars.com` website. Today it is one static page and the 33 flag
-images the bot's Discord embeds use as thumbnails — nothing else.
+The `dayzclanwars.com` website: the landing page, the gated `/me`, and the 33
+flag images the bot's Discord embeds use as thumbnails.
 
 ## What this is today
 
@@ -29,6 +29,11 @@ pnpm --filter @factions/web dev
 `pnpm --filter @factions/web build` produces `next-env.d.ts`, which is
 gitignored and required for `tsc --noEmit` to pass — run it once after a
 fresh clone if typecheck fails for that reason.
+
+`/me` needs `DATABASE_URL` in the environment — an `.env.local` in
+`apps/web` works; point it at the local `factions` database, never
+`factions_live`. Without it, `packages/roster` throws by design on the
+first `/me` request.
 
 ## The flag images
 

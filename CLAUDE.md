@@ -156,9 +156,12 @@ is a vendored copy of the guide's numbers table (`pnpm guide:numbers` regenerate
 `packages/domain/test/guide-numbers-drift.test.ts` holds the two together. A new number
 goes in `rules.ts` and in the guide, never as a literal in the module that uses it.
 
-**Relative imports inside `packages/*/src` carry no extension.** Turbopack cannot map
-`.js` → `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless
-form legal, and tsx and vitest resolve it the same way.
+**Every package `apps/web` transpiles (`transpilePackages` in `apps/web/next.config.ts`)
+must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →
+`.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless form
+legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db` and
+`domain`; adding a package to `transpilePackages` means converting it first, and
+`apps/web/test/transpiled-imports.test.ts` fails until you do.
 
 ---
 
@@ -245,10 +248,10 @@ form legal, and tsx and vitest resolve it the same way.
   only through `packages/roster`. The boundary is that package's export allowlist —
   `apps/web` may call only what `packages/roster` chooses to export — pinned by name in
   both `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts`. Under
-  that allowlist, the `evidence_*` NOT NULL pair on `declarations` (target spec §16) is
-  the guard the export list leans on: even a permitted caller cannot write a declaration
-  without the evidence a ritual actually produces, because the columns refuse to accept
-  a row without it.
+  that allowlist, the `declarations_one_evidence` CHECK (target spec §16) is the guard
+  the export list leans on — exactly one of `evidence_event_id` / `evidence_ceremony_id`
+  is set, so no row can exist without citing a ceremony or a raise, and even a permitted
+  caller cannot write a declaration without the evidence a ritual actually produces.
 - **The 33 flag images and `CLAIMABLE_FLAGS` are two statements of one fact.**
   `apps/web/test/flag-assets.test.ts` holds them together. Drift shows up as a missing
   thumbnail in a Discord channel, not as an error.
