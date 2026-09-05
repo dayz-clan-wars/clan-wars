@@ -4,7 +4,7 @@ import type { QualifyingRaise, SettledWindow } from "@factions/ceremony";
 import { parsePoleKey } from "@factions/domain";
 import { and, asc, eq, inArray, isNotNull, isNull, lte, max } from "drizzle-orm";
 import { appendFactionEventTx } from "./feed-store.js";
-import { releaseTx } from "./declaration-store.js";
+import { lockDeclarations, releaseTx } from "./declaration-store.js";
 
 export type PoleRef = { serverId: number; poleKey: string };
 export type RecordedRaise = PoleRef & {
@@ -239,6 +239,12 @@ export class PgCeremonyStore implements CeremonyStore {
         // — the same ordering violation the controller ruled out for disband.
         //
         // Guide ch. 4: a lapsed pole gets the 3-day grace before going public.
+        //
+        // ⚠️ Take the server's declaration lock before releasing more than one
+        // row. Without it, two lapses here (d1 then d2) against a concurrent
+        // declareTx whose FOR UPDATE scan holds d2 and waits on d1 is a
+        // deadlock — the advisory lock is what serialises us behind it.
+        if (lapsed.length > 0) await lockDeclarations(tx, serverId);
         for (const id of lapsed) await releaseTx(tx, { factionId: id }, cutoff);
         await tx.delete(factionMembers)
           .where(inArray(factionMembers.factionId, lapsed));
