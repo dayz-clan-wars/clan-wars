@@ -223,6 +223,23 @@ describe("dormancyTick", () => {
       expect(r.soloLapsed).toBe(0);
     });
 
+    it("⚠️ a throwing sweep still delivers the tick's notices", async () => {
+      // The faction transitions above are already committed and their guarded
+      // updates will not re-emit. If the solo sweep's throw escaped, the
+      // caller would log "dormancy tick failed" and every leader whose clan
+      // went dormant this tick would simply never be told.
+      const onError = vi.fn();
+      const store = fakeStore([row({ lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS + 1) })]);
+      const r = await dormancyTick(store, {
+        now, windows, onError,
+        lapseSolos: async () => { throw new Error("deadlock"); },
+      });
+      expect(r.notices).toHaveLength(1);
+      expect(r.dormant).toBe(1);
+      expect(r.soloLapsed).toBe(0);
+      expect(onError).toHaveBeenCalledTimes(1);
+    });
+
     it("⚠️ sweeps the solos even when a faction transition threw", async () => {
       // Solo clocks are independent of every faction's; a faction deadlock
       // must not cost a solo declaration its release for another whole tick.

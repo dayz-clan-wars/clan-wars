@@ -137,7 +137,21 @@ export async function dormancyTick(
   // Last, and after the faction loop: solo clocks are independent of every
   // faction's, so a faction that threw above must not cost the solos their
   // sweep.
-  if (opts.lapseSolos) out.soloLapsed = (await opts.lapseSolos(now)).length;
+  //
+  // ⚠️ Its own try/catch, for the same reason every faction has one — but the
+  // stakes here are the OTHER half of the tick. The faction transitions above
+  // are already committed and their guarded updates will not re-emit; if a
+  // throw from here escaped, the caller's catch would log "dormancy tick
+  // failed" and `out.notices` would never be delivered, leaving leaders whose
+  // clan went dormant with no warning and nothing to reconcile it.
+  if (opts.lapseSolos) {
+    try {
+      out.soloLapsed = (await opts.lapseSolos(now)).length;
+    } catch (err) {
+      // factionId 0 is the sentinel for "not a faction" — no row has it.
+      opts.onError?.(0, err);
+    }
+  }
 
   return out;
 }

@@ -62,6 +62,16 @@ describe("solo declarations", () => {
     expect(p!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
   });
 
+  it("⚠️ does not lapse a fresh declaration citing an old raise", async () => {
+    // The clock starts at declaring, not at the evidence. A solo may declare
+    // today from a raise the log recorded a month ago; lapsing them on the
+    // next tick would hand them a base that never existed.
+    await raise("A", ago(SOLO_LAPSE_MS * 4));
+    await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(1000) });
+    expect(await lapseSolos(db, serverId, now)).toEqual([]);
+    expect(await declarationForPlayer(db, serverId, "A")).toMatchObject({ poleKey: P });
+  });
+
   it("does not lapse a declarant who raised inside the window", async () => {
     await raise("A", ago(SOLO_LAPSE_MS + 1));
     await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });

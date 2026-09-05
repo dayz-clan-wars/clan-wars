@@ -173,9 +173,16 @@ export async function declareSolo(db: Database, a: { serverId: number; dayzId: s
 }
 
 /**
- * Rule 4 for solos: no raise by the declarant at the pole for SOLO_LAPSE_MS
- * releases the declaration on the spot (guide ch. 4). Returns who lapsed so
- * the caller can tell them — increment 3 queues the DM.
+ * Rule 4 for solos: a declaration whose declarant has not raised their flag at
+ * their own pole for SOLO_LAPSE_MS is released on the spot (guide ch. 4).
+ * Returns who lapsed so the caller can tell them — increment 3 queues the DM.
+ *
+ * ⚠️ The clock starts at DECLARING, not at the raise that evidenced it. A solo
+ * may declare today citing a raise the log recorded a month ago; releasing
+ * them on the next tick would give them a base that never existed. So a row
+ * lapses only when BOTH `declared_at` is older than the cutoff AND no raise by
+ * that declarant at that pole is newer than it — the clock runs from the later
+ * of the two.
  *
  * ⚠️ The NOT EXISTS reads `events` by (server_id, poleKey, dayzId,
  * occurred_at); `events_raise_lookup_idx` covers (server_id, poleKey,
@@ -185,29 +192,45 @@ export async function declareSolo(db: Database, a: { serverId: number; dayzId: s
  */
 export async function lapseSolos(db: Database, serverId: number, now: Date): Promise<{ dayzId: string; poleKey: string }[]> {
   const cutoff = new Date(now.getTime() - SOLO_LAPSE_MS);
+  // ⚠️ The date is interpolated as an ISO string cast to timestamptz: binding
+  // a raw JS Date inside a drizzle sql`` template throws in postgres.js.
+  const quietSince = sql`
+    ${declarations.declaredAt} <= ${cutoff.toISOString()}::timestamptz
+    and not exists (
+      select 1 from events e
+      where e.type = 'flag.raised' and e.server_id = ${declarations.serverId}
+        and e.payload->>'poleKey' = ${declarations.poleKey}
+        and e.payload->>'dayzId' = ${declarations.ownerDayzId}
+        and e.occurred_at > ${cutoff.toISOString()}::timestamptz
+    )`;
+
   const stale = await db.select({ dayzId: declarations.ownerDayzId, poleKey: declarations.poleKey })
     .from(declarations)
-    .where(and(
-      eq(declarations.serverId, serverId),
-      isNotNull(declarations.ownerDayzId),
-      // ⚠️ The date is interpolated as an ISO string cast to timestamptz:
-      // binding a raw JS Date inside a drizzle sql`` template throws in
-      // postgres.js.
-      sql`not exists (
-        select 1 from events e
-        where e.type = 'flag.raised' and e.server_id = ${declarations.serverId}
-          and e.payload->>'poleKey' = ${declarations.poleKey}
-          and e.payload->>'dayzId' = ${declarations.ownerDayzId}
-          and e.occurred_at > ${cutoff.toISOString()}::timestamptz
-      )`,
-    ));
+    .where(and(eq(declarations.serverId, serverId), isNotNull(declarations.ownerDayzId), quietSince));
+
   const lapsed: { dayzId: string; poleKey: string }[] = [];
   for (const s of stale) {
     // One transaction each: a release that deadlocks or loses a race to a
     // concurrent release must not take the rest of the sweep with it, and
     // `releaseTx` returning false is exactly that "someone else got there
     // first" case — nobody to tell.
-    const done = await db.transaction((tx) => releaseTx(tx, { dayzId: s.dayzId!, serverId }, now));
+    const done = await db.transaction(async (tx) => {
+      // ⚠️ The predicate is re-checked under FOR UPDATE before releasing. The
+      // sweep's select above is not the decision: a raise ingested between
+      // that select and this transaction makes the declarant live again, and
+      // releasing them anyway would take a base away from a player who was
+      // standing at their own flag — with nothing anywhere saying why.
+      const [still] = await tx.select({ id: declarations.id })
+        .from(declarations)
+        .where(and(
+          eq(declarations.serverId, serverId),
+          eq(declarations.ownerDayzId, s.dayzId!),
+          quietSince,
+        ))
+        .for("update");
+      if (!still) return false;
+      return releaseTx(tx, { dayzId: s.dayzId!, serverId }, now);
+    });
     if (done) lapsed.push({ dayzId: s.dayzId!, poleKey: s.poleKey });
   }
   return lapsed;

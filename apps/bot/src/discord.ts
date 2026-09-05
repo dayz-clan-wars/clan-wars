@@ -1175,7 +1175,14 @@ export async function start(cfg: BotConfig): Promise<void> {
         lapseSolos: async (now) => {
           const all: { dayzId: string; poleKey: string }[] = [];
           for (const s of await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true))) {
-            all.push(...await lapseSolos(db, s.id, now));
+            // ⚠️ Per server, like the tick's per-faction catch: one server's
+            // deadlock must not cost every later server its sweep, which
+            // would hold solo declarations open for another whole tick.
+            try {
+              all.push(...await lapseSolos(db, s.id, now));
+            } catch (err) {
+              console.error(`solo lapse failed for server ${s.id}`, err);
+            }
           }
           for (const l of all) console.log(`solo declaration lapsed: ${l.dayzId} at ${l.poleKey}`);
           return all;
