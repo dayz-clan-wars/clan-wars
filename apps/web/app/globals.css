@@ -1,42 +1,47 @@
-:root {
-  color-scheme: dark;
-  --bg: #0e1013;
-  --fg: #e8e6e3;
-  --muted: #8b9199;
-  --accent: #c9a227;
+/* apps/web/app/globals.css */
+@import "tailwindcss";
+
+/*
+ * The palette and faces, stated ONCE for the whole app (frontend rebuild §4).
+ * These came off the design canvas via auth.module.css / mobile.module.css,
+ * which stated them twice and needed palette-drift.test.ts to keep them
+ * honest. Under @theme every screen reads the same token, so that test is
+ * gone and theme-tokens.test.ts guards the new failure mode: a token dropped
+ * here is a screen rendering in a browser default, silently.
+ *
+ * ⚠️ --color-rust means an outstanding obligation — a challenge pending or
+ * expired — and nothing else. It is the one persistent cue that a player still
+ * owes the server something. Never use it as a generic "error" colour.
+ */
+@theme {
+  --color-ink: #e8e2d4;
+  --color-ink-2: #b5afa4;
+  --color-muted: #8a857c;
+  --color-dim: #6e6a62;
+  --color-frame: #0b0b0a;
+  --color-surface: #131211;
+  --color-rule: #1a1917;
+  --color-rule-2: #2a2825;
+  --color-gold: #d9a03c;
+  --color-rust: #8c3a22;
+  --color-olive: #8fa36a;
+  --color-terrain: #111110;
+  /* Page ground, below --color-frame, deliberately. */
+  --color-ground: #050505;
+
+  /* app/fonts.ts self-hosts these and sets the --font-archivo* variables on <html>. */
+  --font-display: var(--font-archivo-black), system-ui, sans-serif;
+  --font-sans: var(--font-archivo), system-ui, sans-serif;
+  --font-mono: var(--font-space-mono), ui-monospace, monospace;
 }
 
-* { box-sizing: border-box; }
+:root { color-scheme: dark; }
 
 body {
   margin: 0;
   min-height: 100dvh;
-  background: var(--bg);
-  color: var(--fg);
-  font: 16px/1.6 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  background: var(--color-ground);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-tap-highlight-color: transparent;
 }
-
-/* ⚠️ The centring lives here rather than on `body` because /mobile is a
-   full-bleed phone layout on the same body: `place-items: center` plus 2rem of
-   body padding would inset its top bar and its fixed nav from the viewport
-   edges, and the result looks deliberate rather than broken. */
-.landing {
-  min-height: 100dvh;
-  display: grid;
-  place-items: center;
-  padding: 2rem;
-}
-
-main { max-width: 34rem; text-align: center; }
-
-h1 {
-  margin: 0 0 0.5rem;
-  font-size: clamp(2rem, 6vw, 3rem);
-  letter-spacing: 0.02em;
-}
-
-.tag { color: var(--accent); text-transform: uppercase; letter-spacing: 0.18em; font-size: 0.8rem; }
-p { color: var(--muted); }
-/* Brighter than the muted `p` text it sits inside, so the invite reads as a
-   link rather than blending into the surrounding copy. */
-a { color: var(--fg); }

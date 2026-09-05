@@ -15,7 +15,9 @@ const ROOTS = [
 
 /** Root-level source files (middleware.ts, next.config.ts) — not a directory walk. */
 const ROOT_FILES = readdirSync(join(import.meta.dirname, ".."), { encoding: "utf8" })
-  .filter((f) => f.endsWith(".ts") && !f.endsWith(".d.ts"))
+  // ⚠️ .mjs too: postcss.config.mjs and any future tailwind/next config in
+  // that extension. This list has silently missed a new file twice already.
+  .filter((f) => (f.endsWith(".ts") || f.endsWith(".mjs")) && !f.endsWith(".d.ts"))
   .map((f) => join(import.meta.dirname, "..", f));
 
 /**
