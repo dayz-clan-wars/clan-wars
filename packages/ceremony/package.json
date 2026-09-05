@@ -8,6 +8,9 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
+  "dependencies": {
+    "@factions/domain": "workspace:*"
+  },
   "devDependencies": {
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"

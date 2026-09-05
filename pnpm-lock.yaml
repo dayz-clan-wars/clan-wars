@@ -171,6 +171,10 @@ importers:
         version: 2.1.9(@types/node@22.20.1)
 
   packages/ceremony:
+    dependencies:
+      '@factions/domain':
+        specifier: workspace:*
+        version: link:../domain
     devDependencies:
       typescript:
         specifier: ^5.6.0

@@ -1,3 +1,8 @@
+import {
+  CEREMONY_WINDOW_MS as RULE_CEREMONY_WINDOW_MS,
+  CEREMONY_MIN_PARTICIPANTS,
+} from "@factions/domain";
+
 /** A `flag.raised` that already passed every qualification check. */
 export type QualifyingRaise = {
   eventId: number;
@@ -15,8 +20,8 @@ export type SettledWindow = {
   participants: string[];
 };
 
-export const CEREMONY_WINDOW_MS = 600_000;
-export const MIN_PARTICIPANTS = 3;
+export const CEREMONY_WINDOW_MS = RULE_CEREMONY_WINDOW_MS;
+export const MIN_PARTICIPANTS = CEREMONY_MIN_PARTICIPANTS;
 
 /**
  * Group raises into settled, non-overlapping windows.

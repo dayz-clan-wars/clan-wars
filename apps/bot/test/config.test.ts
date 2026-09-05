@@ -1,7 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "../src/config.js";
 import { RELEASE_GRACE_MS } from "../src/rebind.js";
-import { LINK_TTL_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
 
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
@@ -17,7 +16,7 @@ describe("loadConfig", () => {
   it("defaults the tick interval and challenge TTL", () => {
     const cfg = loadConfig(OK);
     expect(cfg.tickIntervalMs).toBe(10_000);
-    expect(cfg.challengeTtlMs).toBe(LINK_TTL_MS);
+    expect(cfg.challengeTtlMs).toBe(86_400_000); // Discord flow: 24 h, see DISCORD_LINK_TTL_MS
   });
 
   it.each(["DISCORD_TOKEN", "DISCORD_APPLICATION_ID", "DISCORD_GUILD_ID", "DATABASE_URL"])(
@@ -62,7 +61,7 @@ describe("loadConfig", () => {
     const cfg = loadConfig(OK);
     expect(cfg.inviteTtlMs).toBe(604_800_000);
     expect(cfg.cooldownMs).toBe(259_200_000);
-    expect(cfg.renameCooldownMs).toBe(RENAME_COOLDOWN_MS);
+    expect(cfg.renameCooldownMs).toBe(2_592_000_000); // the guide's 30 days
   });
 
   it("accepts overridden roster durations", () => {

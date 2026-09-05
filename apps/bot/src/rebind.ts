@@ -1,6 +1,6 @@
 import { REBIND_COOLDOWN_MS as RULE_REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
 
-/** 7 days, matching the rename cooldown and DayZ's own flag cycle. */
+/** 7 days, matching DayZ's own flag refresh cycle (`FlagRefreshMaxDuration`). */
 export const REBIND_COOLDOWN_MS = RULE_REBIND_COOLDOWN_MS;
 
 /**

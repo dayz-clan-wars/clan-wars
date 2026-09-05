@@ -157,7 +157,8 @@ export async function handleLink(deps: CommandDeps, ctx: LinkContext): Promise<R
   // too, since its slot in verification_challenges_open_target_uniq stays
   // held. Replacing the challenge steals nothing, for exactly the reason the
   // TTL could be raised: a challenge names the one character that can satisfy
-  // it.
+  // it. The 24 hours comes from DISCORD_LINK_TTL_MS in config.ts — change the
+  // TTL there, not here.
   let switchedFrom: string | null = null;
   if (live) {
     // ⚠️ Ordering, not decoration: the cancel must run BEFORE the insert

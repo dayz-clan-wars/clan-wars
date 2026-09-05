@@ -1,12 +1,22 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
 import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "./rebind.js";
 import {
-  LINK_TTL_MS,
   ACTIVATION_WINDOW_MS,
   PENDING_EXPIRY_MS,
   ROSTER_COOLDOWN_MS,
   RENAME_COOLDOWN_MS,
 } from "@factions/domain";
+
+/**
+ * ⚠️ The Discord `/link` flow's challenge lifetime. NOT the guide's 10-minute
+ * `LINK_TTL_MS` — that number was written for the site flow (target-state
+ * spec §5.5), where the player is already in game. Here a player can run
+ * `/link` from anywhere, and `commands.ts` counts an expired challenge's
+ * replacement against `MAX_DRAWS_PER_TARGET`, so a 10-minute TTL would lock
+ * an honest player out for a day. Retire this constant with the slash
+ * commands (increment 2).
+ */
+const DISCORD_LINK_TTL_MS = 86_400_000;
 
 export type BotConfig = {
   token: string;
@@ -158,9 +168,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     guildId: required(env, "DISCORD_GUILD_ID"),
     databaseUrl: required(env, "DATABASE_URL"),
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
-    // The guide's 10 minutes; safe because a challenge names its target and
-    // cannot be stolen by another character performing the sequence.
-    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", LINK_TTL_MS),
+    // 24 hours for the Discord flow; see DISCORD_LINK_TTL_MS above for why
+    // this is not the guide's 10-minute LINK_TTL_MS.
+    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", DISCORD_LINK_TTL_MS),
     reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", ACTIVATION_WINDOW_MS),
     // spec §6 invite lifetime.
     inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", PENDING_EXPIRY_MS),
