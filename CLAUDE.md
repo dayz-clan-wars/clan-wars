@@ -158,10 +158,12 @@ goes in `rules.ts` and in the guide, never as a literal in the module that uses 
   and pole — and nothing else.** It is mirrored by two partial unique indexes plus the
   existence of a `declarations` row. Do not narrow it to change behaviour; add a set.
   `SUPPLIED_STATUSES` (`reserved, active`) is the one that governs supply kits.
-- **Lock order (spec §4.12): `factions` → `declarations` → `faction_members` →
-  `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
+- **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
+  `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `faction_events` → `war_log_events` → `clan_notices`.**
+  `poles` sits right after `declarations` because `releaseTx` takes both, in that
+  order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of
   them in opposite orders. There are four writers now. `faction_events` is always last
   among the roster tables, and can safely be: it is insert-only and nothing references

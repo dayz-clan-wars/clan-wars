@@ -4,7 +4,7 @@ import { and, asc, eq, inArray, isNotNull } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { declareTx, releaseTx } from "./declaration-store.js";
+import { declareTx, lockDeclarations, releaseTx } from "./declaration-store.js";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -153,6 +153,16 @@ export class PgFactionStore implements FactionStore {
           status: "reserved", leaderDiscordId: a.leaderDiscordId,
           ceremonyId: a.ceremonyId, createdAt: a.at, reservedUntil: a.reservedUntil,
         }).returning({ id: factions.id });
+
+        // ⚠️ Take the declaration lock BEFORE reading (and releasing) the
+        // solo's row. `releaseTx` deletes a `declarations` row and
+        // `declareTx` below takes this same advisory lock and then scans
+        // `declarations … FOR UPDATE`; deleting first would let two
+        // concurrent foundings deadlock — one holding a row lock and waiting
+        // for the advisory lock, the other the reverse. See
+        // `lockDeclarations`. Lock order (spec §4.12) is still
+        // `factions` → `declarations`: the `factions` insert above ran first.
+        await lockDeclarations(tx, a.serverId);
 
         // ⚠️ A solo declaration at this very pole, held by someone founding
         // this clan, is released first. Spec §5.2: a solo who joins a clan

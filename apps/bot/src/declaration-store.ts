@@ -19,6 +19,30 @@ export type DeclareOutcome =
 export type Declaration = { id: number; poleKey: string; x: string; y: string; z: string; declaredAt: Date };
 
 /**
+ * Take the server's declaration lock — the transaction-scoped advisory lock
+ * every declaration writer serialises on.
+ *
+ * ⚠️ Call this BEFORE `releaseTx` (or before reading a row you are about to
+ * release) in any transaction that later calls `declareTx`. `releaseTx`
+ * DELETEs a `declarations` row, which takes a row lock; `declareTx` takes the
+ * advisory lock first and then scans `declarations … FOR UPDATE`. Doing the
+ * delete first inverts those two: T1 deletes its row and then waits for the
+ * advisory lock, while T2 holds the advisory lock and its FOR UPDATE scan
+ * blocks on T1's uncommitted delete. Postgres breaks that cycle by aborting
+ * one of them with a raw driver error — not a `RebindAbort`/`ReserveAbort`,
+ * so the caller's outcome mapping never sees it and the player gets a crash
+ * instead of a refusal. Two concurrent rebinds on one server are enough.
+ *
+ * Advisory *xact* locks are re-entrant within a transaction, so `declareTx`
+ * keeps taking it unconditionally and a caller that already took it here pays
+ * nothing. Lock order (spec §4.12) is unchanged: callers still write
+ * `factions` first, so the chain is still `factions` → `declarations`.
+ */
+export async function lockDeclarations(tx: Tx, serverId: number): Promise<void> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('declarations'), ${serverId})`);
+}
+
+/**
  * The ONLY way a declarations row is written (spec §4.1, §14).
  *
  * ⚠️ Two layers guard the 200 m rule, for two different races:
@@ -44,7 +68,7 @@ export type Declaration = { id: number; poleKey: string; x: string; y: string; z
  * `@factions/domain` pole-key.ts) — so callers must pass matching values.
  */
 export async function declareTx(tx: Tx, a: DeclareArgs): Promise<DeclareOutcome> {
-  await tx.execute(sql`select pg_advisory_xact_lock(hashtext('declarations'), ${a.serverId})`);
+  await lockDeclarations(tx, a.serverId);
 
   const existing = await tx.select({ poleKey: declarations.poleKey, x: declarations.x, z: declarations.z })
     .from(declarations)

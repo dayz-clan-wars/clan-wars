@@ -396,7 +396,8 @@ The existing order is extended, never reordered. Every writer that touches two o
 takes them in this order:
 
 ```
-factions → declarations → faction_members → faction_invites → faction_join_requests
+factions → declarations → poles → faction_members → faction_invites
+  → faction_join_requests
   → faction_votes → faction_vote_ballots → succession_claims
   → season_standings → raids → defenses
   → vault_locks → clan_pins → guest_passes
@@ -404,7 +405,9 @@ factions → declarations → faction_members → faction_invites → faction_jo
 ```
 
 `declarations` sits immediately after `factions` because activation, rebind and disband
-hold the clan row and then touch its declaration. The queues are last and insert-only, so
+hold the clan row and then touch its declaration. `poles` follows `declarations` because
+`releaseTx` takes both, in that order — it deletes the declaration and then stamps the
+released pole's grace. The queues are last and insert-only, so
 no writer ever needs them locked first. ⚠️ Inbox 19 still stands: nothing enforces this
 order but review. Every new writer gets a staged race test (§13).
 

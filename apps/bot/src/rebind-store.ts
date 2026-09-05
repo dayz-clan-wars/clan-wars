@@ -5,7 +5,7 @@ import { leaderIs } from "./roster-store.js";
 import type { QualifyingRaise } from "./rebind.js";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-import { declareTx, releaseTx } from "./declaration-store.js";
+import { declareTx, lockDeclarations, releaseTx } from "./declaration-store.js";
 
 /**
  * The statuses a faction may rebind FROM.
@@ -197,6 +197,16 @@ export class PgRebindStore implements RebindStore {
         ))
         .returning({ id: factions.id, serverId: factions.serverId, name: factions.name, tag: factions.tag, texture: factions.texture });
       if (!row) return "refused";
+
+      // ⚠️ Take the declaration lock BEFORE `releaseTx`. The release DELETEs
+      // this clan's `declarations` row (a row lock) and `declareTx` below
+      // takes this same advisory lock and then scans `declarations … FOR
+      // UPDATE`; releasing first inverts the two, so two clans rebinding on
+      // one server at the same instant deadlock and Postgres aborts one with
+      // a raw driver error rather than a `RebindAbort`. See
+      // `lockDeclarations`. Lock order (spec §4.12) is still
+      // `factions` → `declarations`: the `factions` update above ran first.
+      await lockDeclarations(tx, row.serverId);
 
       // Release, then declare. ⚠️ Release first, or the clan's own old row
       // trips declarations_faction_uniq — and the 200 m check must not see

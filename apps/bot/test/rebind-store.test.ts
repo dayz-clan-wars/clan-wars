@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, events, admFiles, declarations, poles, type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, parsePoleKey } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { PgRebindStore } from "../src/rebind-store.js";
 import { declarationForFaction } from "../src/declaration-store.js";
@@ -96,23 +96,33 @@ describe("PgRebindStore", () => {
     p2EventId = p2Raise!.id;
   });
 
+  // ⚠️ The coordinates are DERIVED from the key, never given separately. The
+  // key IS the coordinate string, and `declareTx`'s own-pole exclusion (the
+  // "distance 0 to myself is pole-taken, not too-close" case) only holds when
+  // the two agree. A fixture whose payload said (9, 8, 7) under a key naming
+  // some other point produced a raise that cannot exist in the log, and the
+  // spacing check silently measured from the wrong place.
   const raiseAt = (o: {
     poleKey: string; texture?: string; dayzId?: string; occurredAt?: Date; serverIdOverride?: number;
-  }) => db.insert(events).values({
-    serverId: o.serverIdOverride ?? serverId,
-    admFileId,
-    lineIndex: lineIndex++,
-    subIndex: 0,
-    type: "flag.raised",
-    occurredAt: o.occurredAt ?? ago(1000),
-    payload: {
-      poleKey: o.poleKey,
-      texture: o.texture ?? "Flag_Bear",
-      dayzId: o.dayzId ?? UID_MEMBER,
-      gamertag: "Raiser",
-      pole: { x: 9, y: 8, z: 7 },
-    },
-  }).returning();
+  }) => {
+    const pole = parsePoleKey(o.poleKey);
+    if (!pole) throw new Error(`raiseAt: malformed poleKey ${o.poleKey}`);
+    return db.insert(events).values({
+      serverId: o.serverIdOverride ?? serverId,
+      admFileId,
+      lineIndex: lineIndex++,
+      subIndex: 0,
+      type: "flag.raised",
+      occurredAt: o.occurredAt ?? ago(1000),
+      payload: {
+        poleKey: o.poleKey,
+        texture: o.texture ?? "Flag_Bear",
+        dayzId: o.dayzId ?? UID_MEMBER,
+        gamertag: "Raiser",
+        pole,
+      },
+    }).returning();
+  };
 
   const target = async () => (await store.factionFor(factionId))!;
 
@@ -251,5 +261,100 @@ describe("PgRebindStore", () => {
   it("refuses a disbanded faction", async () => {
     await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, factionId));
     expect(await store.rebind(args())).toBe("refused");
+  });
+
+  it("⚠️ two clans rebinding at once on one server do not deadlock", async () => {
+    // The shape this pins: `rebind` calls `releaseTx` (which DELETEs a
+    // `declarations` row, taking a row lock) and then `declareTx` (whose
+    // first statement is the server's advisory lock, followed by
+    // `SELECT … FROM declarations FOR UPDATE`). Deleting before taking the
+    // advisory lock inverts those two, so T1 holds a row lock and waits for
+    // the advisory lock while T2 holds the advisory lock and blocks on T1's
+    // uncommitted delete. Postgres resolves that by ABORTING one of them
+    // with a raw driver error — not a `RebindAbort` — so it escapes the
+    // outcome mapping entirely and reaches a player as a crashed command.
+    // `lockDeclarations` before the release is what keeps the order the same
+    // for everyone. Every legitimate outcome is accepted here; a THROW is
+    // the failure.
+    const P3 = { x: 30000, y: 100, z: 30000 };
+    const P4 = { x: 40000, y: 100, z: 40000 };
+    const P3_KEY = "30000.00:100.00:30000.00";
+    const P4_KEY = "40000.00:100.00:40000.00";
+    const UID_WOLF = "W".repeat(40);
+
+    const [wolves] = await db.insert(factions).values({
+      serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf",
+      status: "active", leaderDiscordId: "wolf-leader",
+      createdAt: ago(999_999), activatedAt: ago(999_999),
+    }).returning();
+    await db.insert(factionMembers).values({
+      factionId: wolves!.id, serverId, dayzId: UID_WOLF,
+      discordId: "wolf-leader", role: "leader", joinedAt: ago(999_999),
+    });
+    const [wolfFounding] = await raiseAt({ poleKey: P3_KEY, texture: "Flag_Wolf", dayzId: UID_WOLF, occurredAt: ago(999_999) });
+    await db.insert(declarations).values({
+      serverId, poleKey: P3_KEY, x: P3.x.toFixed(2), y: P3.y.toFixed(2), z: P3.z.toFixed(2),
+      ownerFactionId: wolves!.id, evidenceEventId: wolfFounding!.id, declaredAt: ago(999_999),
+    });
+    await db.insert(poles).values([
+      {
+        serverId, map: "livonia", poleKey: P3_KEY,
+        x: P3.x.toFixed(2), y: P3.y.toFixed(2), z: P3.z.toFixed(2),
+        currentTexture: "Flag_Wolf", flagRaised: true,
+        firstSeenAt: ago(999_999), lastSeenAt: ago(999_999), graceUntil: now,
+      },
+      {
+        serverId, map: "livonia", poleKey: P4_KEY,
+        x: P4.x.toFixed(2), y: P4.y.toFixed(2), z: P4.z.toFixed(2),
+        currentTexture: null, flagRaised: false,
+        firstSeenAt: ago(999_999), lastSeenAt: ago(999_999), graceUntil: now,
+      },
+    ]);
+    const [wolfTarget] = await raiseAt({ poleKey: P4_KEY, texture: "Flag_Wolf", dayzId: UID_WOLF });
+
+    // Both rebinds are made to arrive INSIDE the same window on purpose: a
+    // third session holds the server's declaration lock while they start, so
+    // both reach the point where they want it, and only then is it handed
+    // over. Left to chance, two `Promise.all` rebinds finish too fast to
+    // overlap and the test passes with the bug present — it did, five runs
+    // out of five, before this gate was added.
+    const gate = createClient(URL);
+    let release!: () => void;
+    const released = new Promise<void>((r) => { release = r; });
+    const holding = gate.transaction(async (tx) => {
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext('declarations'), ${serverId})`);
+      await released;
+      // Read the declarations the way declareTx does, still holding the lock:
+      // this is the statement that blocks on an uncommitted delete when a
+      // rebind released before queueing for the advisory lock.
+      await tx.execute(sql`select 1 from declarations where server_id = ${serverId} for update`);
+    });
+
+    const running = Promise.all([
+      store.rebind(args()),
+      store.rebind({
+        factionId: wolves!.id, leaderDiscordId: "wolf-leader",
+        expectedPoleKey: P3_KEY,
+        poleKey: P4_KEY, x: P4.x, y: P4.y, z: P4.z,
+        evidenceEventId: wolfTarget!.id,
+        at: now, notBefore: ago(604_800_000),
+      }),
+    ]);
+    await new Promise((r) => setTimeout(r, 300));
+    release();
+    await holding;
+    const outcomes = await running;
+
+    for (const o of outcomes) expect(["ok", "too-close", "refused"]).toContain(o);
+
+    // Consistent afterwards: each clan holds exactly one declaration, and it
+    // is either where it started or where it was going — never both, never
+    // neither.
+    const bear = await declarationForFaction(db, factionId);
+    const wolf = await declarationForFaction(db, wolves!.id);
+    expect([P1_KEY, P2_KEY]).toContain(bear!.poleKey);
+    expect([P3_KEY, P4_KEY]).toContain(wolf!.poleKey);
+    const rows = await db.select({ id: declarations.id }).from(declarations);
+    expect(rows).toHaveLength(2);
   });
 });
