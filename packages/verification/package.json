@@ -9,7 +9,9 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@factions/domain": "workspace:*"
+    "@factions/db": "workspace:*",
+    "@factions/domain": "workspace:*",
+    "drizzle-orm": "^0.36.0"
   },
   "devDependencies": {
     "typescript": "^5.6.0",

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, players, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PermissionFlagsBits } from "discord.js";
-import { PgVerificationStore } from "../src/store.js";
+import { PgVerificationStore } from "@factions/verification";
 import {
   buildCommands, routeInteraction, notifyCompleted, guardedRunner, LINK_NEW_SEQUENCE_OPTION,
   playerSuggestions, createNicknameApplier, type NicknameClientLike, type RealGuildLike,

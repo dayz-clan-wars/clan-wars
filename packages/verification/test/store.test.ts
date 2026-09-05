@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, type Database } from "@factions/db";
 import { sql, and, eq, isNotNull } from "drizzle-orm";
-import { PgVerificationStore } from "../src/store.js";
+import { PgVerificationStore } from "../src/store";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
@@ -383,5 +383,40 @@ describe("PgVerificationStore", () => {
         lastSeenAt: new Date(Date.UTC(2026, 8, 1, 0, i)) });
     }
     expect(await store.recentUnlinkedPlayers(50)).toHaveLength(50);
+  });
+
+  describe("searchUnlinkedPlayers", () => {
+    it("matches a gamertag prefix case-insensitively, newest seen first, linked players excluded", async () => {
+      await seedPlayer({ dayzId: UID_A, gamertag: "Ronald", lastSeenAt: now });
+      await seedPlayer({ dayzId: UID_B, gamertag: "ronnie", lastSeenAt: later });
+      await seedPlayer({ dayzId: "C".repeat(40), gamertag: "Rodrigo", lastSeenAt: now });
+      await db.insert(identityLinks).values({ discordId: "9", dayzId: "C".repeat(40), gamertag: "Rodrigo", verifiedAt: now });
+      expect(await store.searchUnlinkedPlayers("RON", 10)).toEqual([
+        { dayzId: UID_B, gamertag: "ronnie" },
+        { dayzId: UID_A, gamertag: "Ronald" },
+      ]);
+      expect(await store.searchUnlinkedPlayers("ro", 1)).toHaveLength(1);
+    });
+
+    it("treats LIKE metacharacters in the prefix literally", async () => {
+      await seedPlayer({ dayzId: UID_A, gamertag: "Ronald", lastSeenAt: now });
+      await seedPlayer({ dayzId: UID_B, gamertag: "R%n", lastSeenAt: now });
+      expect(await store.searchUnlinkedPlayers("R%", 10)).toEqual([{ dayzId: UID_B, gamertag: "R%n" }]);
+      expect(await store.searchUnlinkedPlayers("_", 10)).toEqual([]);
+    });
+  });
+
+  describe("latestChallenge", () => {
+    it("returns the newest challenge for the account whatever its state, or null", async () => {
+      expect(await store.latestChallenge("100")).toBeNull();
+      const first = await issue("100", UID_A);
+      await store.cancelChallenge(first.id, now, "budget-exhausted");
+      const second = await store.createChallenge({
+        discordId: "100", guildId: "g", channelId: "c", sequence: SEQ, issuedAt: later, expiresAt: later, targetDayzId: UID_B,
+      });
+      const latest = await store.latestChallenge("100");
+      expect(latest).toMatchObject({ id: second!.id, targetDayzId: UID_B, completedAt: null, canceledAt: null, cancelReason: null });
+      expect((await store.latestChallenge("100"))!.id).not.toBe(first.id);
+    });
   });
 });

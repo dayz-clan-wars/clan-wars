@@ -1,2 +1,3 @@
-export { generateSequence, isExpired } from "./sequence.js";
-export { advance } from "./match.js";
+export { generateSequence, isExpired } from "./sequence";
+export { advance } from "./match";
+export * from "./store";

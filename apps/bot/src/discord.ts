@@ -7,7 +7,7 @@ import { createClient, servers } from "@factions/db";
 import { eq } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, emoteLabel } from "@factions/domain";
 import { handleLink, handleUnlink, handleWhoami, type CommandDeps, type Reply } from "./commands.js";
-import { PgVerificationStore } from "./store.js";
+import { PgVerificationStore } from "@factions/verification";
 import { verificationTick } from "./tick.js";
 import { runPlayerProjection } from "./player-tick.js";
 import { runPoleProjection } from "./pole-tick.js";

@@ -1,6 +1,6 @@
 import { emoteLabel } from "@factions/domain";
 import { generateSequence } from "@factions/verification";
-import type { VerificationStore } from "./store.js";
+import type { VerificationStore } from "@factions/verification";
 
 /**
  * ⚠️ Every reply is ephemeral. A challenge sequence posted publicly is a

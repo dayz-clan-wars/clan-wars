@@ -6,7 +6,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
-import { PgVerificationStore } from "../src/store.js";
+import { PgVerificationStore } from "@factions/verification";
 import { handleLink, handleUnlink, handleWhoami, formatSequence, type CommandDeps } from "../src/commands.js";
 
 const URL = requireTestDatabaseUrl();

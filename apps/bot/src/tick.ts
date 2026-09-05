@@ -1,8 +1,7 @@
 import type { Database } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { advance } from "@factions/verification";
+import { advance, type VerificationStore } from "@factions/verification";
 import { safeVerificationEmotes } from "@factions/domain";
-import type { VerificationStore } from "./store.js";
 
 const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
 

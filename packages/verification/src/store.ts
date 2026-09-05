@@ -1,8 +1,9 @@
 import type { Database } from "@factions/db";
 import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
-import { and, count, desc, eq, gte, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, gte, ilike, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
-import type { Role } from "./roster-store.js";
+/** A roster role, as `factionMembershipsFor` reports it. The bot's roster-store has the same three. */
+export type Role = "leader" | "officer" | "member";
 
 /** Statuses under which a faction still holds its flag and roster. */
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
@@ -32,6 +33,10 @@ export type CancelReason = "budget-exhausted";
  * `boundDayzId` is non-null exactly when `outcome` is "completed" — the
  * schema forbids a bound row that is not complete.
  */
+export type ChallengeRecord = LiveChallenge & {
+  completedAt: Date | null; canceledAt: Date | null; cancelReason: CancelReason | null;
+};
+
 export type PendingNotification = LiveChallenge & (
   | { outcome: "completed"; boundDayzId: string }
   /**
@@ -102,6 +107,19 @@ export interface VerificationStore {
   cancelChallenge(challengeId: number, at: Date, reason?: CancelReason): Promise<boolean>;
   /** The `limit` most recently seen players with no identity link, newest first. */
   recentUnlinkedPlayers(limit: number): Promise<{ dayzId: string; gamertag: string }[]>;
+  /**
+   * Players the event log has seen whose gamertag starts with `prefix`
+   * (case-insensitive) and who have no identity link — the site's `/link`
+   * autocomplete (spec §5.5 ⚠️: "gamertags the server has seen that nobody
+   * has claimed"). Most recently seen first.
+   */
+  searchUnlinkedPlayers(prefix: string, limit: number): Promise<{ dayzId: string; gamertag: string }[]>;
+  /**
+   * The newest challenge this account ever drew, in any state. The site
+   * derives "your last challenge expired" / "…was canceled because" from it;
+   * null means the account has never drawn one.
+   */
+  latestChallenge(discordId: string): Promise<ChallengeRecord | null>;
   /** One player by UID, or null if the event log has never seen them. */
   playerByDayzId(dayzId: string): Promise<{ dayzId: string; gamertag: string } | null>;
 }
@@ -409,6 +427,32 @@ export class PgVerificationStore implements VerificationStore {
       .orderBy(desc(players.lastSeenAt), desc(players.dayzId))
       .limit(limit);
     return rows;
+  }
+
+  async searchUnlinkedPlayers(prefix: string, limit: number) {
+    // ⚠️ Escape LIKE's metacharacters so a typed "%" or "_" matches itself.
+    // Postgres's default LIKE escape is the backslash.
+    const literal = prefix.replace(/[\\%_]/gu, (c) => `\\${c}`);
+    return this.db
+      .select({ dayzId: players.dayzId, gamertag: players.gamertag })
+      .from(players)
+      .leftJoin(identityLinks, eq(identityLinks.dayzId, players.dayzId))
+      .where(and(isNull(identityLinks.id), ilike(players.gamertag, `${literal}%`)))
+      .orderBy(desc(players.lastSeenAt), desc(players.dayzId))
+      .limit(limit);
+  }
+
+  async latestChallenge(discordId: string): Promise<ChallengeRecord | null> {
+    const [row] = await this.db.select().from(verificationChallenges)
+      .where(eq(verificationChallenges.discordId, discordId))
+      .orderBy(desc(verificationChallenges.issuedAt), desc(verificationChallenges.id))
+      .limit(1);
+    if (!row) return null;
+    return {
+      ...toLive(row),
+      completedAt: row.completedAt, canceledAt: row.canceledAt,
+      cancelReason: row.cancelReason as CancelReason | null,
+    };
   }
 
   async playerByDayzId(dayzId: string) {

@@ -9,6 +9,7 @@
     "@factions/declarations": "workspace:*",
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
+    "@factions/verification": "workspace:*",
     "drizzle-orm": "^0.36.0"
   },
   "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0" }

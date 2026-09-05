@@ -3,7 +3,7 @@ import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles,
 import { appendEvent } from "@factions/event-log";
 import { safeVerificationEmotes } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { PgVerificationStore } from "../src/store.js";
+import { PgVerificationStore } from "@factions/verification";
 import { verificationTick, CONSUMER } from "../src/tick.js";
 
 const URL = requireTestDatabaseUrl();
