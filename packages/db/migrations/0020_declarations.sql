@@ -55,7 +55,7 @@ WHERE f."status" IN ('reserved','active','dormant') AND f."ceremony_id" IS NOT N
 --> statement-breakpoint
 -- ⚠️ Refuse to drop a pole nobody moved. A holding faction without a ceremony_id is a
 --    backfilled row this migration cannot cite evidence for; it must be handled by hand
---    (see docs/deploy/2026-09-xx-declarations.md) before this runs. factions_live holds none.
+--    (see docs/deploy/2026-09-05-declarations.md) before this runs. factions_live holds none.
 DO $$ BEGIN
   IF EXISTS (SELECT 1 FROM "factions" WHERE "status" IN ('reserved','active','dormant') AND "ceremony_id" IS NULL) THEN
     RAISE EXCEPTION 'declarations: a holding faction has no ceremony_id; move its pole by hand first';
