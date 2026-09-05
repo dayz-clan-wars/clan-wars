@@ -122,6 +122,9 @@ importers:
       '@factions/domain':
         specifier: workspace:*
         version: link:../../packages/domain
+      '@factions/roster':
+        specifier: workspace:*
+        version: link:../../packages/roster
       arctic:
         specifier: 3.7.0
         version: 3.7.0

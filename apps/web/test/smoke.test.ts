@@ -47,9 +47,18 @@ describe("the web app reads nothing", () => {
     expect(sources.length).toBeGreaterThan(0);
   });
 
+  // ⚠️ next.config.ts must legitimately NAME @factions/db and postgres — in
+  // transpilePackages (roster pulls db in transitively; raw-TS packages need
+  // transpiling) and serverExternalPackages (postgres.js stays out of the
+  // server bundle) — without that counting as the app IMPORTING them. Strip
+  // just those two config-array declarations before scanning; an actual
+  // `import ... from "@factions/db"` anywhere else still trips the check.
+  const CONFIG_PACKAGE_LISTS = /\b(?:transpilePackages|serverExternalPackages)\s*:\s*\[[^\]]*\]/gu;
+  const scannable = sources.map((s) => ({ file: s.file, text: s.text.replace(CONFIG_PACKAGE_LISTS, "") }));
+
   it.each(["@factions/db", "drizzle-orm", "postgres"])(
     "imports no database package (%s)", (pkg) => {
-      const offenders = sources.filter((s) => s.text.includes(`"${pkg}`) || s.text.includes(`'${pkg}`));
+      const offenders = scannable.filter((s) => s.text.includes(`"${pkg}`) || s.text.includes(`'${pkg}`));
       expect(offenders.map((o) => o.file)).toEqual([]);
     },
   );
@@ -73,5 +82,13 @@ describe("the web app reads nothing", () => {
       "utf8",
     );
     expect(sql).toContain('CONSTRAINT "declarations_one_evidence"');
+  });
+
+  it("⚠️ @factions/roster exports exactly the allowlist the site is permitted", async () => {
+    // The capability rule (frontend rebuild §6; target spec §10.4). This is
+    // the site's half of the pin; packages/roster/test/exports.test.ts is
+    // the package's. Both must change for an export to land.
+    const roster = await import("@factions/roster");
+    expect(Object.keys(roster).sort()).toEqual(["viewerFor"]);
   });
 });

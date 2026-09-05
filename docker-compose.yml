@@ -56,8 +56,14 @@ services:
   web:
     build: { context: ., dockerfile: apps/web/Dockerfile }
     restart: unless-stopped
+    depends_on:
+      postgres: { condition: service_healthy }
     environment:
       NODE_ENV: production
+      # ⚠️ factions_live, NOT factions — the test suites truncate `factions`.
+      # Read ONLY through @factions/roster; apps/web itself never names this
+      # variable (smoke.test.ts). Same string the bot and worker use.
+      DATABASE_URL: postgres://factions:factions@postgres:5432/factions_live
       # ⚠️ Discord login. All six are read at RUNTIME by server code only.
       # None may ever be prefixed NEXT_PUBLIC_ — that inlines the value into
       # the client bundle, which for the client secret means publishing it.
