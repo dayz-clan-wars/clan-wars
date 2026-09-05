@@ -1,5 +1,12 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
 import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "./rebind.js";
+import {
+  LINK_TTL_MS,
+  ACTIVATION_WINDOW_MS,
+  PENDING_EXPIRY_MS,
+  ROSTER_COOLDOWN_MS,
+  RENAME_COOLDOWN_MS,
+} from "@factions/domain";
 
 export type BotConfig = {
   token: string;
@@ -151,16 +158,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     guildId: required(env, "DISCORD_GUILD_ID"),
     databaseUrl: required(env, "DATABASE_URL"),
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
-    // 24 hours, matching one-life; safe because a challenge names its target
-    // and cannot be stolen by another character performing the sequence.
-    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", 86_400_000),
-    reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", 86_400_000),
-    // 7 days — spec §6 invite lifetime.
-    inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", 604_800_000),
-    // 3 days — spec §6 kick/leave cooldown.
-    cooldownMs: positiveInt(env, "BOT_COOLDOWN_MS", 259_200_000),
-    // 7 days — spec §6 rename cooldown.
-    renameCooldownMs: positiveInt(env, "BOT_RENAME_COOLDOWN_MS", 604_800_000),
+    // The guide's 10 minutes; safe because a challenge names its target and
+    // cannot be stolen by another character performing the sequence.
+    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", LINK_TTL_MS),
+    reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", ACTIVATION_WINDOW_MS),
+    // spec §6 invite lifetime.
+    inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", PENDING_EXPIRY_MS),
+    // spec §6 kick/leave cooldown.
+    cooldownMs: positiveInt(env, "BOT_COOLDOWN_MS", ROSTER_COOLDOWN_MS),
+    // the guide's 30-day rename cooldown.
+    renameCooldownMs: positiveInt(env, "BOT_RENAME_COOLDOWN_MS", RENAME_COOLDOWN_MS),
     // 7 days, matching the server's FlagRefreshMaxDuration. ⚠️ Copied by hand:
     // change one and not the other and they diverge silently, either cutting
     // supplies at a base that is fine or feeding one that has already decayed.

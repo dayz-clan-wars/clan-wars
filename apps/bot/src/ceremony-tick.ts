@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { ceremonies } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { settleWindows, qualifies } from "@factions/ceremony";
-import { NEUTRAL_FLAG } from "@factions/domain";
+import { NEUTRAL_FLAG, CLAIM_WINDOW_MS } from "@factions/domain";
 import { and, eq, lte } from "drizzle-orm";
 import type { CeremonyStore, PoleRef, Participant } from "./ceremony-store.js";
 
@@ -14,7 +14,7 @@ import type { CeremonyStore, PoleRef, Participant } from "./ceremony-store.js";
  */
 export const CEREMONY_CONSUMER = "ceremony-detector";
 
-export const PROVISIONAL_TTL_MS = 86_400_000;
+export const PROVISIONAL_TTL_MS = CLAIM_WINDOW_MS;
 
 export type CeremonyTickResult = {
   /** flag.raised events examined. */

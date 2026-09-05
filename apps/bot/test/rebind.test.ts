@@ -4,6 +4,7 @@ import {
   REBIND_COOLDOWN_MS, RELEASE_GRACE_MS, REBIND_WINDOW_MS,
   type QualifyingRaise,
 } from "../src/rebind.js";
+import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 
 const now = new Date("2026-09-03T12:00:00Z");
 const ago = (ms: number) => new Date(now.getTime() - ms);
@@ -82,6 +83,6 @@ describe("the release grace and the rebind cooldown", () => {
 
   it("holds the documented values, so a silent edit to either is visible", () => {
     expect(REBIND_COOLDOWN_MS).toBe(604_800_000); // 7 days
-    expect(RELEASE_GRACE_MS).toBe(259_200_000); //  3 days
+    expect(RELEASE_GRACE_MS).toBe(RELEASED_POLE_GRACE_MS);
   });
 });

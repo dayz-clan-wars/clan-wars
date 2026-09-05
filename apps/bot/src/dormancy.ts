@@ -1,7 +1,8 @@
-/** 7 days — the server's FlagRefreshMaxDuration. See the design's §7. */
-export const DEFAULT_DORMANT_AFTER_MS = 604_800_000;
-/** 14 further days before the flag, tag and pole return to the pool. */
-export const DEFAULT_DISBAND_AFTER_DORMANT_MS = 1_209_600_000;
+import { DORMANT_AFTER_MS, DISBAND_AFTER_DORMANT_MS } from "@factions/domain";
+
+/** Re-exported under the names the bot has used since dormancy shipped; the value lives in rules.ts. */
+export const DEFAULT_DORMANT_AFTER_MS = DORMANT_AFTER_MS;
+export const DEFAULT_DISBAND_AFTER_DORMANT_MS = DISBAND_AFTER_DORMANT_MS;
 
 export type DormancyWindows = { dormantAfterMs: number; disbandAfterDormantMs: number };
 

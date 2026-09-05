@@ -1,5 +1,7 @@
+import { REBIND_COOLDOWN_MS as RULE_REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
+
 /** 7 days, matching the rename cooldown and DayZ's own flag cycle. */
-export const REBIND_COOLDOWN_MS = 604_800_000;
+export const REBIND_COOLDOWN_MS = RULE_REBIND_COOLDOWN_MS;
 
 /**
  * How long a pole stays private after its faction moves out of it.
@@ -18,7 +20,7 @@ export const REBIND_COOLDOWN_MS = 604_800_000;
  * is a consumer the two numbers will sit in different subsystems with nothing
  * relating them. See apps/bot/test/rebind.test.ts.
  */
-export const RELEASE_GRACE_MS = 259_200_000;
+export const RELEASE_GRACE_MS = RELEASED_POLE_GRACE_MS;
 
 /**
  * How far back `/faction rebind` looks for the raise that names the new pole.
