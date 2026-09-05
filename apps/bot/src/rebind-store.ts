@@ -1,16 +1,11 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, events } from "@factions/db";
+import { factions, factionMembers, events, declarations } from "@factions/db";
 import { and, eq, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
-import { HOLDING_STATUSES } from "@factions/domain";
 import { leaderIs } from "./roster-store.js";
 import type { QualifyingRaise } from "./rebind.js";
 import { appendFactionEventTx } from "./feed-store.js";
 import { actorGamertagTx } from "./feed-actor.js";
-
-// Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
-// tuple) so every faction/domain consumer gets full literal-type checking,
-// but drizzle's inArray() requires a plain mutable array.
-const HOLDING: string[] = [...HOLDING_STATUSES];
+import { declareTx, releaseTx } from "./declaration-store.js";
 
 /**
  * The statuses a faction may rebind FROM.
@@ -23,6 +18,18 @@ const HOLDING: string[] = [...HOLDING_STATUSES];
  */
 const REBINDABLE: string[] = ["active", "dormant"];
 
+/**
+ * The reason a `rebind` call unwinds without moving anything.
+ *
+ * ⚠️ Mirrors faction-store's `ReserveAbort`: the outcome (not just the
+ * failure) is threaded back out through the exception so this transaction
+ * unwinds exactly the way a caught unique-violation does, and the caller
+ * gets a decision rather than a generic throw.
+ */
+class RebindAbort extends Error {
+  constructor(readonly outcome: "refused" | "too-close") { super(outcome); }
+}
+
 /** The faction fields a rebind decision needs. */
 export type RebindTarget = {
   id: number;
@@ -30,7 +37,8 @@ export type RebindTarget = {
   name: string;
   tag: string;
   texture: string;
-  poleKey: string;
+  /** Null only if the faction somehow has no declaration — never true for active/dormant. */
+  poleKey: string | null;
   status: string;
   reboundAt: Date | null;
 };
@@ -44,6 +52,8 @@ export type RebindArgs = {
   x: number;
   y: number;
   z: number;
+  /** The `flag.raised` event that named this pole — declareTx's evidence. */
+  evidenceEventId: number;
   at: Date;
   /** `at - REBIND_COOLDOWN_MS`. A rebind is allowed when rebound_at <= this. */
   notBefore: Date;
@@ -52,18 +62,22 @@ export type RebindArgs = {
 export interface RebindStore {
   factionFor(factionId: number): Promise<RebindTarget | null>;
   qualifyingRaises(faction: RebindTarget, since: Date): Promise<QualifyingRaise[]>;
-  rebind(a: RebindArgs): Promise<boolean>;
+  rebind(a: RebindArgs): Promise<"ok" | "refused" | "too-close">;
 }
 
 export class PgRebindStore implements RebindStore {
   constructor(private readonly db: Database) {}
 
   async factionFor(factionId: number): Promise<RebindTarget | null> {
+    // Left-join: the pole binding lives in `declarations` now, not on
+    // `factions` itself (spec §4.1, base-declaration design §8 option C).
     const [row] = await this.db.select({
       id: factions.id, serverId: factions.serverId,
       name: factions.name, tag: factions.tag, texture: factions.texture,
-      poleKey: factions.poleKey, status: factions.status, reboundAt: factions.reboundAt,
-    }).from(factions).where(eq(factions.id, factionId));
+      poleKey: declarations.poleKey, status: factions.status, reboundAt: factions.reboundAt,
+    }).from(factions)
+      .leftJoin(declarations, eq(declarations.ownerFactionId, factions.id))
+      .where(eq(factions.id, factionId));
     return row ?? null;
   }
 
@@ -94,6 +108,7 @@ export class PgRebindStore implements RebindStore {
       y: sql<string>`${events.payload}->'pole'->>'y'`,
       z: sql<string>`${events.payload}->'pole'->>'z'`,
       occurredAt: events.occurredAt,
+      eventId: events.id,
     }).from(events).where(and(
       eq(events.type, "flag.raised"),
       eq(events.serverId, faction.serverId),
@@ -102,18 +117,23 @@ export class PgRebindStore implements RebindStore {
       // new, not founding something, so Flag_White is not involved.
       sql`${events.payload}->>'texture' = ${faction.texture}`,
       // Never the pole it already holds — see selectCandidates' comment.
-      sql`${events.payload}->>'poleKey' <> ${faction.poleKey}`,
+      // ⚠️ Conditional: `faction.poleKey` is null only when the faction has
+      // no declaration at all, which REBINDABLE factions never do in
+      // practice — but the type is nullable (left join), and `<> NULL` in
+      // SQL is never true, which would silently exclude EVERY raise rather
+      // than none, so a plain `sql\`true\`` here is the correct no-op.
+      faction.poleKey === null ? sql`true` : sql`${events.payload}->>'poleKey' <> ${faction.poleKey}`,
       // ⚠️ Roster members only. This is the security boundary of the whole
       // command: a rebind moves the faction's identity to coordinates of
       // someone's choosing, so a stranger's raise must never supply one.
       sql`exists (select 1 from ${factionMembers}
                   where ${factionMembers.factionId} = ${faction.id}
                     and ${factionMembers.dayzId} = ${events.payload}->>'dayzId')`,
-      // Not a pole any holding faction already owns.
-      sql`not exists (select 1 from ${factions} f
-                      where f.server_id = ${faction.serverId}
-                        and f.pole_key = ${events.payload}->>'poleKey'
-                        and f.status in ${HOLDING})`,
+      // Not a pole ANYONE has declared — clan or solo alike. The pole
+      // binding lives in `declarations` now, not on `factions`.
+      sql`not exists (select 1 from ${declarations} d
+                      where d.server_id = ${faction.serverId}
+                        and d.pole_key = ${events.payload}->>'poleKey')`,
     ));
 
     // ⚠️ jsonb text extraction yields strings. Without Number() the
@@ -126,6 +146,7 @@ export class PgRebindStore implements RebindStore {
       dayzId: r.dayzId,
       gamertag: r.gamertag,
       occurredAt: r.occurredAt,
+      eventId: r.eventId,
     }));
   }
 
@@ -143,8 +164,16 @@ export class PgRebindStore implements RebindStore {
    * where from or to. `faction_events_no_coordinates` would reject them, but
    * this is the one transition whose whole subject is a location, so it is
    * also the one place the omission has to be deliberate.
+   *
+   * ⚠️ The pole binding no longer lives on `factions` — it's a `declarations`
+   * row now, so a rebind is release-then-declare, not an UPDATE of columns
+   * here. The `factions` UPDATE below still carries every OTHER guard
+   * (leadership, status, cooldown, optimistic concurrency), and it runs
+   * FIRST — lock order (spec §4.12) is `factions` before `declarations`, and
+   * `declareTx`/`releaseTx` both assume the caller already holds `factions`
+   * if it holds anything.
    */
-  async rebind(a: RebindArgs): Promise<boolean> {
+  async rebind(a: RebindArgs): Promise<"ok" | "refused" | "too-close"> {
     return this.db.transaction(async (tx) => {
       // Read before the update overwrites it, the way `rename` reads the
       // previous name. This is a plain SELECT on the primary key that the
@@ -153,29 +182,37 @@ export class PgRebindStore implements RebindStore {
       const [before] = await tx.select({ status: factions.status })
         .from(factions).where(eq(factions.id, a.factionId));
 
+      // The guard rides the factions update (lock order: factions first).
       const [row] = await tx.update(factions)
-        .set({
-          poleKey: a.poleKey,
-          x: a.x.toFixed(2), y: a.y.toFixed(2), z: a.z.toFixed(2),
-          status: "active",
-          dormantSince: null,
-          reboundAt: a.at,
-        })
+        .set({ status: "active", dormantSince: null, reboundAt: a.at })
         .where(and(
           eq(factions.id, a.factionId),
           leaderIs(a.factionId, a.leaderDiscordId),
           inArray(factions.status, REBINDABLE),
-          // Optimistic concurrency: the pole must still be the one the
-          // candidates were computed against.
-          eq(factions.poleKey, a.expectedPoleKey),
           or(isNull(factions.reboundAt), lte(factions.reboundAt, a.notBefore)),
+          // Optimistic concurrency, now against the declaration the
+          // candidates were built from — the pole must still be the one the
+          // candidate list was computed against.
+          sql`exists (select 1 from ${declarations} d where d.owner_faction_id = ${factions.id} and d.pole_key = ${a.expectedPoleKey})`,
         ))
-        .returning({
-          id: factions.id, serverId: factions.serverId,
-          name: factions.name, tag: factions.tag, texture: factions.texture,
-        });
+        .returning({ id: factions.id, serverId: factions.serverId, name: factions.name, tag: factions.tag, texture: factions.texture });
+      if (!row) return "refused";
 
-      if (!row) return false;
+      // Release, then declare. ⚠️ Release first, or the clan's own old row
+      // trips declarations_faction_uniq — and the 200 m check must not see
+      // the old pole either, since a clan may move 150 m down the road.
+      await releaseTx(tx, { factionId: a.factionId }, a.at);
+      const declared = await declareTx(tx, {
+        serverId: row.serverId, poleKey: a.poleKey, x: a.x, y: a.y, z: a.z,
+        owner: { factionId: a.factionId }, evidence: { eventId: a.evidenceEventId }, at: a.at,
+      });
+      // ⚠️ owner-has-base is unreachable right here: releaseTx just deleted
+      // this faction's only declaration, and declareTx's own uniqueness
+      // check runs inside this same transaction, so there is nothing left
+      // for the clan to already own. pole-taken means another declarer won
+      // the target pole in the window between qualifyingRaises and this
+      // call — reported the same as any other refusal.
+      if (!declared.ok) throw new RebindAbort(declared.reason === "too-close" ? "too-close" : "refused");
 
       const actor = await actorGamertagTx(tx, a.leaderDiscordId);
 
@@ -199,7 +236,10 @@ export class PgRebindStore implements RebindStore {
         });
       }
 
-      return true;
+      return "ok";
+    }).catch((err) => {
+      if (err instanceof RebindAbort) return err.outcome;
+      throw err;
     });
   }
 }

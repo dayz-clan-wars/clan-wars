@@ -42,6 +42,8 @@ export type QualifyingRaise = {
   dayzId: string;
   gamertag: string;
   occurredAt: Date;
+  /** The event row itself — declareTx's evidence for the pole this names. */
+  eventId: number;
 };
 
 /**
@@ -52,7 +54,10 @@ export type QualifyingRaise = {
  */
 export function selectCandidates(
   raises: QualifyingRaise[],
-  opts: { currentPoleKey: string; now: Date; windowMs?: number },
+  // currentPoleKey is nullable: `RebindTarget.poleKey` comes from a left
+  // join onto `declarations` now, though an active/dormant faction always
+  // has one in practice.
+  opts: { currentPoleKey: string | null; now: Date; windowMs?: number },
 ): QualifyingRaise[] {
   const windowMs = opts.windowMs ?? REBIND_WINDOW_MS;
   const cutoff = opts.now.getTime() - windowMs;

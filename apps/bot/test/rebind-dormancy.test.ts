@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, events, admFiles, type Database,
+  servers, factions, factionMembers, events, admFiles, declarations, poles, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgRebindStore } from "../src/rebind-store.js";
@@ -17,6 +17,13 @@ const W = {
   disbandAfterDormantMs: DEFAULT_DISBAND_AFTER_DORMANT_MS,
 };
 
+// Both far from the Hub (100, 93) and far from each other — declareTx now
+// enforces 200 m, so these can no longer sit near (1,1,1)/(9,8,7).
+const P1 = { x: 10000, y: 100, z: 10000 };
+const P2 = { x: 20000, y: 100, z: 20000 };
+const P1_KEY = "10000.00:100.00:10000.00";
+const P2_KEY = "20000.00:100.00:20000.00";
+
 describe("rebind and the dormancy clock", () => {
   let db: Database;
   let rebindStore: PgRebindStore;
@@ -24,16 +31,18 @@ describe("rebind and the dormancy clock", () => {
   let serverId = 0;
   let admFileId = 0;
   let factionId = 0;
+  let lineIndex = 0;
 
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table events, raw_lines, adm_files, faction_members, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table events, raw_lines, adm_files, declarations, poles, faction_members, factions, servers restart identity cascade`);
     });
     rebindStore = new PgRebindStore(db);
     dormancyStore = new PgDormancyStore(db);
+    lineIndex = 0;
 
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
@@ -46,8 +55,7 @@ describe("rebind and the dormancy clock", () => {
     // Flag_White design fail: with no raise findable at the new pole, the
     // clock's coalesce fell through to this value and read as infinitely stale.
     const [faction] = await db.insert(factions).values({
-      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
-      poleKey: "1.00:1.00:1.00", x: "1", y: "1", z: "1", status: "active",
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active",
       leaderDiscordId: "leader", createdAt: ago(999_999_999), activatedAt: ago(999_999_999),
     }).returning();
     factionId = faction!.id;
@@ -55,15 +63,42 @@ describe("rebind and the dormancy clock", () => {
     await db.insert(factionMembers).values({
       factionId, serverId, dayzId: UID, discordId: "leader", role: "leader", joinedAt: ago(999_999_999),
     });
+
+    // The founding evidence for the faction's P1 declaration.
+    const [founding] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, subIndex: 0,
+      type: "flag.raised", occurredAt: ago(999_999_999),
+      payload: { poleKey: P1_KEY, texture: "Flag_Bear", dayzId: UID, gamertag: "Founder", pole: P1 },
+    }).returning();
+
+    await db.insert(declarations).values({
+      serverId, poleKey: P1_KEY, x: P1.x.toFixed(2), y: P1.y.toFixed(2), z: P1.z.toFixed(2),
+      ownerFactionId: factionId, evidenceEventId: founding!.id, declaredAt: ago(999_999_999),
+    });
+
+    await db.insert(poles).values([
+      {
+        serverId, map: "livonia", poleKey: P1_KEY,
+        x: P1.x.toFixed(2), y: P1.y.toFixed(2), z: P1.z.toFixed(2),
+        currentTexture: "Flag_Bear", flagRaised: true,
+        firstSeenAt: ago(999_999_999), lastSeenAt: ago(999_999_999), graceUntil: now,
+      },
+      {
+        serverId, map: "livonia", poleKey: P2_KEY,
+        x: P2.x.toFixed(2), y: P2.y.toFixed(2), z: P2.z.toFixed(2),
+        currentTexture: null, flagRaised: false,
+        firstSeenAt: ago(999_999_999), lastSeenAt: ago(999_999_999), graceUntil: now,
+      },
+    ]);
   });
 
   /** A raise of the faction's own texture at `poleKey`, plus a server heartbeat. */
-  const raise = (poleKey: string, occurredAt: Date, lineIndex: number) =>
+  const raise = (poleKey: string, occurredAt: Date, idx: number) =>
     db.insert(events).values({
-      serverId, admFileId, lineIndex, subIndex: 0,
+      serverId, admFileId, lineIndex: idx, subIndex: 0,
       type: "flag.raised", occurredAt,
-      payload: { poleKey, texture: "Flag_Bear", dayzId: UID, gamertag: "Leader", pole: { x: 9, y: 8, z: 7 } },
-    });
+      payload: { poleKey, texture: "Flag_Bear", dayzId: UID, gamertag: "Leader", pole: P2 },
+    }).returning();
 
   const clockFor = async (id: number) =>
     (await dormancyStore.clocks()).find((c) => c.id === id)!;
@@ -73,14 +108,15 @@ describe("rebind and the dormancy clock", () => {
     // the move the pole is the new one, and the raise that qualified the
     // rebind was this faction's own texture AT that pole, so the clock finds
     // it with no compensating write.
-    await raise("9.00:8.00:7.00", ago(60_000), 1);
+    const [ev] = await raise(P2_KEY, ago(60_000), 10);
     const target = (await rebindStore.factionFor(factionId))!;
     expect(await rebindStore.rebind({
       factionId, leaderDiscordId: "leader",
-      expectedPoleKey: target.poleKey,
-      poleKey: "9.00:8.00:7.00", x: 9, y: 8, z: 7,
+      expectedPoleKey: target.poleKey!,
+      poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
+      evidenceEventId: ev!.id,
       at: now, notBefore: ago(604_800_000),
-    })).toBe(true);
+    })).toBe("ok");
 
     const clock = await clockFor(factionId);
     expect(clock.status).toBe("active");
@@ -90,12 +126,13 @@ describe("rebind and the dormancy clock", () => {
 
   it("still goes dormant 7 days after the rebind if the flag never flies again", async () => {
     // Reviving must restart the clock, not disable it.
-    await raise("9.00:8.00:7.00", ago(60_000), 1);
+    const [ev] = await raise(P2_KEY, ago(60_000), 10);
     const target = (await rebindStore.factionFor(factionId))!;
     await rebindStore.rebind({
       factionId, leaderDiscordId: "leader",
-      expectedPoleKey: target.poleKey,
-      poleKey: "9.00:8.00:7.00", x: 9, y: 8, z: 7,
+      expectedPoleKey: target.poleKey!,
+      poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
+      evidenceEventId: ev!.id,
       at: now, notBefore: ago(604_800_000),
     });
 
@@ -109,13 +146,14 @@ describe("rebind and the dormancy clock", () => {
   it("a rebind out of dormancy clears dormant_since and revives", async () => {
     await db.update(factions).set({ status: "dormant", dormantSince: ago(86_400_000) })
       .where(eq(factions.id, factionId));
-    await raise("9.00:8.00:7.00", ago(60_000), 1);
+    const [ev] = await raise(P2_KEY, ago(60_000), 10);
 
     const target = (await rebindStore.factionFor(factionId))!;
     await rebindStore.rebind({
       factionId, leaderDiscordId: "leader",
-      expectedPoleKey: target.poleKey,
-      poleKey: "9.00:8.00:7.00", x: 9, y: 8, z: 7,
+      expectedPoleKey: target.poleKey!,
+      poleKey: P2_KEY, x: P2.x, y: P2.y, z: P2.z,
+      evidenceEventId: ev!.id,
       at: now, notBefore: ago(604_800_000),
     });
 

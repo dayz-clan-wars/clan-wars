@@ -11,7 +11,7 @@ const ago = (ms: number) => new Date(now.getTime() - ms);
 
 const raise = (o: Partial<QualifyingRaise>): QualifyingRaise => ({
   poleKey: "10.00:20.00:30.00", x: 10, y: 20, z: 30,
-  dayzId: "A".repeat(40), gamertag: "Someone", occurredAt: ago(1000), ...o,
+  dayzId: "A".repeat(40), gamertag: "Someone", occurredAt: ago(1000), eventId: 1, ...o,
 });
 
 describe("selectCandidates", () => {

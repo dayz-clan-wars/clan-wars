@@ -19,7 +19,7 @@ const target: RebindTarget = {
 
 const candidate: QualifyingRaise = {
   poleKey: "9.00:8.00:7.00", x: 9, y: 8, z: 7,
-  dayzId: "A".repeat(40), gamertag: "Scout", occurredAt: ago(60_000),
+  dayzId: "A".repeat(40), gamertag: "Scout", occurredAt: ago(60_000), eventId: 42,
 };
 
 const deps = (over: {
@@ -32,7 +32,7 @@ const deps = (over: {
   rebindStore: {
     factionFor: async () => (over.faction === undefined ? target : over.faction),
     qualifyingRaises: async () => over.raises ?? [candidate],
-    rebind: over.rebind ?? (async () => true),
+    rebind: over.rebind ?? (async () => "ok"),
   },
   now: () => now,
   rebindCooldownMs: REBIND_COOLDOWN_MS,
@@ -97,11 +97,12 @@ describe("handleFactionRebind", () => {
 
 describe("handleRebindConfirm", () => {
   it("moves the base and says so", async () => {
-    const rebind = vi.fn().mockResolvedValue(true);
+    const rebind = vi.fn().mockResolvedValue("ok" as const);
     const r = await handleRebindConfirm(deps({ rebind }), "leader", 1, "9.00:8.00:7.00");
     expect(rebind).toHaveBeenCalledWith(expect.objectContaining({
       factionId: 1, leaderDiscordId: "leader",
       expectedPoleKey: "1.00:1.00:1.00", poleKey: "9.00:8.00:7.00", x: 9, y: 8, z: 7,
+      evidenceEventId: 42,
     }));
     expect(r.content).toContain("moved");
     expect(r.content).toContain("3 days");
@@ -116,7 +117,14 @@ describe("handleRebindConfirm", () => {
   });
 
   it("reports a lost race without claiming success", async () => {
-    const r = await handleRebindConfirm(deps({ rebind: async () => false }), "leader", 1, "9.00:8.00:7.00");
+    const r = await handleRebindConfirm(deps({ rebind: async () => "refused" }), "leader", 1, "9.00:8.00:7.00");
     expect(r.content).toContain("could not be moved");
+  });
+
+  it("reports the 200 m spacing rule without a literal number", async () => {
+    const r = await handleRebindConfirm(deps({ rebind: async () => "too-close" }), "leader", 1, "9.00:8.00:7.00");
+    expect(r.content).toContain("too close");
+    expect(r.content).toContain("200 m");
+    expect(r.content).toContain("has not moved");
   });
 });

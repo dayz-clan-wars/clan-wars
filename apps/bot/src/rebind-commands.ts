@@ -5,6 +5,7 @@ import type { RebindStore } from "./rebind-store.js";
 import {
   selectCandidates, cooldownRemainingMs, REBIND_WINDOW_MS, RELEASE_GRACE_MS,
 } from "./rebind.js";
+import { MIN_BASE_SPACING_M } from "@factions/domain";
 
 export type RebindDeps = {
   store: RosterStore;
@@ -119,20 +120,27 @@ export async function handleRebindConfirm(
     return reply("That pole is no longer available to move to. Raise your flag there again and retry.");
   }
 
-  const moved = await deps.rebindStore.rebind({
+  const out = await deps.rebindStore.rebind({
     factionId,
     leaderDiscordId: actorDiscordId,
-    expectedPoleKey: faction.poleKey,
+    // Non-null: only an active/dormant faction reaches this path, and both
+    // statuses require a declarations row to exist (see RebindTarget.poleKey).
+    expectedPoleKey: faction.poleKey!,
     poleKey: candidate.poleKey,
     x: candidate.x, y: candidate.y, z: candidate.z,
+    evidenceEventId: candidate.eventId,
     at: now,
     notBefore: new Date(now.getTime() - deps.rebindCooldownMs),
   });
 
+  if (out === "too-close") {
+    return reply(`That pole is too close to another declared base — bases must be ${MIN_BASE_SPACING_M} m apart. Your base has not moved.`);
+  }
+
   // ⚠️ The store reports whether it actually moved a row, and this must not
-  // claim success when it did not — the guard catches a lost race, a
+  // claim success when it did not — "refused" covers a lost race, a
   // concurrent demotion, and the cooldown alike.
-  if (!moved) {
+  if (out === "refused") {
     return reply("Your base could not be moved — you may no longer be the leader, or another move just landed.");
   }
 
