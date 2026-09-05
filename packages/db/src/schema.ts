@@ -495,8 +495,16 @@ export const factions = pgTable("factions", {
   // A reservation with no deadline is a permanent hole in a 33-slot pool.
   reservedHasDeadline: check("factions_reserved_has_deadline",
     sql`${t.status} <> 'reserved' OR ${t.reservedUntil} IS NOT NULL`),
-  // The three scarcity rules. All partial over the HOLDING statuses, so a
-  // lapsed or disbanded faction releases flag, tag and pole in one transition.
+  // Two of the three scarcity rules. Both partial over the HOLDING statuses,
+  // so a lapsed or disbanded faction releases flag and tag on the status
+  // transition alone.
+  //
+  // ⚠️ The pole is NOT released this way. The pole binding lives in
+  // `declarations`, and `declarations_faction_uniq` has no status predicate —
+  // a disbanded faction's declarations row keeps holding its pole until
+  // something explicitly deletes it (a later task's releaseTx). Every
+  // transition out of HOLDING must release the pole itself, or it stays held
+  // silently.
   uniqTexture: uniqueIndex("factions_holding_texture_uniq")
     .on(t.serverId, t.texture)
     .where(sql`${t.status} IN ('reserved','active','dormant')`),

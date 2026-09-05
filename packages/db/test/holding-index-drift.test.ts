@@ -41,8 +41,9 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
   it("the pole half of HOLDING is the existence of a declarations row", async () => {
     // ⚠️ factions_holding_pole_uniq is gone on purpose (increment 1). A
     // holding faction's pole is now declarations.owner_faction_id, unique on
-    // its own; a reader that reintroduces a pole column on factions has
-    // recreated the drift this test used to catch.
+    // its own. This test only checks the three index names exist; the check
+    // that a pole column has NOT reappeared on factions lives in
+    // declarations.test.ts ("factions no longer carries pole columns").
     const rows = await db.execute(sql`
       select indexname from pg_indexes where schemaname = 'public'
         and indexname in ('declarations_pole_uniq','declarations_faction_uniq','declarations_player_uniq')
