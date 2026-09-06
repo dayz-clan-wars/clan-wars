@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, ceremonies, ceremonyParticipants, factions, factionMembers, declarations, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { PgFactionStore } from "@factions/roster/internal";
+import { PgFactionStore, PgRosterStore } from "@factions/roster/internal";
 import { declarationForFaction } from "@factions/declarations";
 import { handleFactionClaim, handleClaimConfirm, type FactionDeps } from "../src/faction-commands.js";
+import { seedFaction } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const UIDS = ["A", "B", "C"].map((c) => c.repeat(40));
@@ -213,5 +214,49 @@ describe("faction claim", () => {
     expect(r.content).toMatch(/reserved/i);
     const [f] = await db.select().from(factions);
     expect(f?.name).toBe("The Wolves");
+  });
+
+  describe("reserve refuses a held or taken identity", () => {
+    beforeEach(async () => {
+      // A clan named "Bears"/"BEAR" that then disbands: its old identity is
+      // held until season end, and a fresh claim on either must be refused.
+      const f = await seedFaction(db, {
+        serverId, tag: "BEAR", name: "Bears", texture: "Flag_Bear", createdAt: now,
+        poleKey: "1.00:2.00:3.00", x: 1, y: 2, z: 3,
+      });
+      await db.insert(factionMembers).values({
+        factionId: f.id, serverId, dayzId: "L".repeat(40), discordId: "d1", role: "leader", joinedAt: now,
+      });
+      expect(await new PgRosterStore(db).disband(f.id, "d1")).toBe("ok");
+    });
+
+    it("refuses a claim on the held name", async () => {
+      await handleFactionClaim(deps, "100", { ...input, name: "Bears" });
+      const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
+      expect(r.content).toMatch(/held until the season ends/i);
+      // Only the disbanded "Bears" fixture from the outer beforeEach exists —
+      // the reserve never inserted a second row.
+      expect(await db.select().from(factions)).toHaveLength(1);
+    });
+
+    it("refuses a claim on the held tag", async () => {
+      await handleFactionClaim(deps, "100", { ...input, name: "Cubs", tag: "bear" });
+      const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
+      expect(r.content).toMatch(/held until the season ends/i);
+      expect(await db.select().from(factions)).toHaveLength(1);
+    });
+
+    it("refuses a claim on a name a holding clan already uses", async () => {
+      await seedFaction(db, {
+        serverId, tag: "WOLF", name: "Wolves", texture: "Flag_Wolf", createdAt: now,
+        poleKey: "9000.00:100.00:9000.00", x: 9000, z: 9000,
+      });
+      await handleFactionClaim(deps, "100", { ...input, name: "wolves" });
+      const r = await handleClaimConfirm(deps, "100", ceremonyId, UIDS);
+      expect(r.content).toMatch(/already uses that name/i);
+      // The disbanded "Bears" fixture plus "Wolves" — the reserve never
+      // inserted a third row.
+      expect(await db.select().from(factions)).toHaveLength(2);
+    });
   });
 });

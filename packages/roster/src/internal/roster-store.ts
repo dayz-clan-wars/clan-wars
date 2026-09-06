@@ -5,6 +5,7 @@ import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/do
 import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx } from "./feed-actor";
 import { releaseTx } from "@factions/declarations";
+import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -63,8 +64,8 @@ export type SetRoleArgs = { factionId: number; actorDiscordId: string; targetDis
 export type SetRoleOutcome = "ok" | "not-leader" | "target-not-member" | "cannot-target-leader";
 export type TransferArgs = { factionId: number; fromDiscordId: string; toDiscordId: string; at: Date };
 export type TransferOutcome = "ok" | "not-leader" | "target-not-member";
-export type RenameArgs = { factionId: number; discordId: string; name: string; at: Date; notBefore: Date };
-export type RenameOutcome = "ok" | "not-leader" | "cooldown";
+export type RenameArgs = { factionId: number; discordId: string; name: string; tag?: string; at: Date; notBefore: Date };
+export type RenameOutcome = "ok" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged";
 
 export interface RosterStore {
   // Reads (Task 3)
@@ -162,10 +163,11 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
  * `guard` is the caller's authority to do it — a leader check for
  * `/faction disband`, a dormancy-window check for the tick.
  *
- * One transaction, four writes: the status update (carrying `guard` and a
- * holding-status check), then the pole release, then the roster delete,
- * then the outstanding invite revocation. §6 is explicit that disbanding is
- * not betrayal — no cooldown is written for anyone, unlike `kick`/`leave`.
+ * One transaction, five writes: the status update (carrying `guard` and a
+ * holding-status check), then the identity holds, then the pole release,
+ * then the roster delete, then the outstanding invite revocation. §6 is
+ * explicit that disbanding is not betrayal — no cooldown is written for
+ * anyone, unlike `kick`/`leave`.
  *
  * The status update must land first and the rest must be conditioned on
  * it succeeding: a bare `return false` after the update fails writes
@@ -184,6 +186,12 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
     });
 
   if (!updated) return false;
+
+  // Holds first (guide ch. 8: "so nobody can impersonate you") — before the
+  // release and the roster delete, per this function's own docblock. Nothing
+  // else references `identity_holds`, so it needs no place in the §4.12 lock
+  // order beyond "after factions".
+  await writeHoldsTx(tx, { serverId: updated.serverId, factionId: updated.id, name: updated.name, tag: updated.tag, reason: "disbanded" });
 
   // Guide ch. 8: the base goes public after its 3-day grace. Released here,
   // before the roster delete, per the lock order above (declarations comes
@@ -820,11 +828,23 @@ export class PgRosterStore implements RosterStore {
    */
   async rename(a: RenameArgs): Promise<RenameOutcome> {
     const outcome = await this.db.transaction(async (tx) => {
-      const [before] = await tx.select({ name: factions.name })
-        .from(factions).where(eq(factions.id, a.factionId));
+      const [before] = await tx.select({ name: factions.name, tag: factions.tag, serverId: factions.serverId })
+        .from(factions).where(eq(factions.id, a.factionId)).for("update");
+      if (!before) return "not-leader" as const;
+
+      const newTag = a.tag ?? before.tag;
+      if (before.name === a.name && before.tag === newTag) return "unchanged" as const;
+
+      // The identity lock (spec §4.4) before the taken/held check: names have
+      // no unique index, so this transaction and every other renamer or
+      // reserver on this server must serialise through it before either one
+      // reads a row. Lock order: right after the `factions` row lock above.
+      await lockIdentity(tx, before.serverId);
+      const taken = await identityTakenTx(tx, { serverId: before.serverId, name: a.name, tag: newTag, exceptFactionId: a.factionId });
+      if (taken) return taken;
 
       const [updated] = await tx.update(factions)
-        .set({ name: a.name, renamedAt: a.at })
+        .set({ name: a.name, tag: newTag, renamedAt: a.at })
         .where(and(
           eq(factions.id, a.factionId),
           leaderIs(a.factionId, a.discordId),
@@ -838,10 +858,15 @@ export class PgRosterStore implements RosterStore {
 
       if (!updated) return null;
 
+      // Hold what was given up (guide ch. 8: "so nobody can impersonate
+      // you"). `exceptFactionId` above already let this same clan rename
+      // back into a name or tag it once held itself.
+      await writeHoldsTx(tx, { serverId: updated.serverId, factionId: updated.id, name: before.name, tag: before.tag, reason: "renamed" });
+
       await appendFactionEventTx(tx, {
         serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
         payload: {
-          name: a.name, previousName: before?.name ?? a.name,
+          name: a.name, previousName: before.name,
           tag: updated.tag, texture: updated.texture,
           actor: await actorGamertagTx(tx, a.discordId),
         },

@@ -14,3 +14,4 @@ export * from "./rebind-store";
 export * from "./rebind";
 export * from "./feed-store";
 export * from "./feed-actor";
+export * from "./holds";

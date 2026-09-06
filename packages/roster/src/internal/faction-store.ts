@@ -5,6 +5,7 @@ import { HOLDING_STATUSES } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx } from "./feed-actor";
 import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
+import { identityTakenTx, lockIdentity } from "./holds";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -22,7 +23,7 @@ export interface FactionStore {
   textureHeld(serverId: number, texture: string): Promise<boolean>;
   saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void>;
   loadDraft(ceremonyId: number, discordId: string): Promise<{ name: string; tag: string; texture: string } | null>;
-  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close">;
+  reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close" | "name-taken" | "name-held" | "tag-held">;
 }
 
 export type ReserveArgs = {
@@ -35,7 +36,7 @@ export type ReserveArgs = {
 
 /** Unwinds the transaction carrying a non-error outcome, the way roster-store's RosterAbort does. */
 class ReserveAbort extends Error {
-  constructor(readonly outcome: "too-close" | "pole-taken") { super(outcome); }
+  constructor(readonly outcome: "too-close" | "pole-taken" | "name-taken" | "name-held" | "tag-held") { super(outcome); }
 }
 
 export class PgFactionStore implements FactionStore {
@@ -139,7 +140,7 @@ export class PgFactionStore implements FactionStore {
    * or `pole-taken`) is threaded back out through `ReserveAbort` so this
    * transaction unwinds exactly the way a caught unique-violation does.
    */
-  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close"> {
+  async reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close" | "name-taken" | "name-held" | "tag-held"> {
     try {
       return await this.db.transaction(async (tx) => {
         const claimed = await tx.update(ceremonies)
@@ -147,6 +148,24 @@ export class PgFactionStore implements FactionStore {
           .where(and(eq(ceremonies.id, a.ceremonyId), eq(ceremonies.status, "provisional")))
           .returning({ id: ceremonies.id });
         if (claimed.length === 0) return "ceremony-taken" as const;
+
+        // The identity lock (spec §4.4), right after the ceremony claim and
+        // before the `factions` insert — it sits with `factions` at the head
+        // of the §4.12 lock order. Names have no unique index, so this and
+        // every other reserver or renamer on this server must serialise
+        // through it before either one checks `identity_holds` or the
+        // holding clans.
+        //
+        // `tag-taken` is deliberately NOT forwarded here: the tag is also
+        // protected by `factions_holding_tag_uniq`, and that real unique
+        // violation — caught below — is what answers an exact tag collision
+        // with a holding clan. Forwarding it here would just race an
+        // advisory read against the index for no benefit.
+        await lockIdentity(tx, a.serverId);
+        const identityTaken = await identityTakenTx(tx, { serverId: a.serverId, name: a.name, tag: a.tag });
+        if (identityTaken === "name-taken" || identityTaken === "name-held" || identityTaken === "tag-held") {
+          throw new ReserveAbort(identityTaken);
+        }
 
         const [f] = await tx.insert(factions).values({
           serverId: a.serverId, name: a.name, tag: a.tag, texture: a.texture,

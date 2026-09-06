@@ -7,7 +7,8 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
-import { PgRosterStore, type RenameArgs } from "@factions/roster/internal";
+import { PgRosterStore, identityTakenTx, type RenameArgs } from "@factions/roster/internal";
+import { seedFaction } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const LEADER = "d1";
@@ -107,6 +108,19 @@ describe("PgRosterStore disband and rename", () => {
       await store.disband(factionId, LEADER);
       expect(await db.select().from(rosterCooldowns)).toEqual([]);
     });
+
+    it("disband holds the name and tag until season end; a new claim on either is refused", async () => {
+      expect(await store.disband(factionId, LEADER)).toBe("ok");
+      const holds = await db.execute(sql`select kind, value_lower, reason, held_until = 'infinity' as forever from identity_holds order by kind`);
+      expect(holds).toEqual([
+        { kind: "name", value_lower: "bears", reason: "disbanded", forever: true },
+        { kind: "tag", value_lower: "bear", reason: "disbanded", forever: true },
+      ]);
+      // The same identity, sought by a fresh claim — the tag is the check that fires first.
+      expect(await db.transaction((tx) => identityTakenTx(tx, { serverId, name: "Bears", tag: "BEAR" }))).toBe("name-held");
+      expect(await db.transaction((tx) => identityTakenTx(tx, { serverId, name: "Wolves", tag: "bear" }))).toBe("tag-held");
+      expect(await db.transaction((tx) => identityTakenTx(tx, { serverId, name: "Wolves", tag: "WOLF" }))).toBeNull();
+    });
   });
 
   /**
@@ -194,6 +208,21 @@ describe("PgRosterStore disband and rename", () => {
       expect(r).toBe("ok");
       const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
       expect(f!.name).toBe("Second");
+    });
+
+    it("rename holds the OLD name (and old tag when it changes) and refuses a held or taken identity", async () => {
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Grizzlies", tag: "GRIZ", at: t0, notBefore: past })).toBe("ok");
+      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
+      expect(holds).toEqual([{ kind: "name", value_lower: "bears", reason: "renamed" }, { kind: "tag", value_lower: "bear", reason: "renamed" }]);
+      // Renaming back to the held name is refused — even for the clan that held it? No: exceptFactionId frees your own holds.
+      await db.update(factions).set({ renamedAt: null }).where(eq(factions.id, factionId));
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", at: t0, notBefore: past })).toBe("ok");
+    });
+
+    it("rename refuses another holding clan's name or tag", async () => {
+      await seedFaction(db, { serverId, tag: "WOLF", name: "Wolves", texture: "Flag_Wolf", createdAt: t0, poleKey: "9000.00:100.00:9000.00", x: 9000, z: 9000 });
+      expect(await store.rename({ factionId, discordId: LEADER, name: "wolves", at: t0, notBefore: past })).toBe("name-taken");
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears2", tag: "wolf", at: t0, notBefore: past })).toBe("tag-taken");
     });
   });
 });

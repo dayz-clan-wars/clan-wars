@@ -247,6 +247,43 @@ describe("PgRosterStore concurrency", () => {
   });
 
   /**
+   * §4.4: names have no unique index, so two different clans racing to
+   * rename onto the SAME free name cannot be arbitrated by a row lock —
+   * each renamer locks its own faction's row, not the other one's. This is
+   * exactly what `lockIdentity`'s advisory lock in the identity namespace is
+   * for: both renames serialise through it before either one checks
+   * `identityTakenTx`, so the loser's check runs after the winner has
+   * already committed the name onto its own row.
+   */
+  it("two clans renaming to the same free name: exactly one succeeds, the other is refused", async () => {
+    const f1 = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "leader1", createdAt: t0,
+    });
+    const f2 = await seedFaction(db, {
+      serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf",
+      poleKey: "4:5:6", x: 4, y: 5, z: 6,
+      status: "active", leaderDiscordId: "leader2", createdAt: t0,
+    });
+    await db.insert(factionMembers).values([
+      { factionId: f1.id, serverId, dayzId: "1".repeat(40), discordId: "leader1", role: "leader", joinedAt: t0 },
+      { factionId: f2.id, serverId, dayzId: "2".repeat(40), discordId: "leader2", role: "leader", joinedAt: t0 },
+    ]);
+
+    const [r1, r2] = await Promise.all([
+      storeA.rename({ factionId: f1.id, discordId: "leader1", name: "Grizzlies", at: t0, notBefore: t0 }),
+      storeB.rename({ factionId: f2.id, discordId: "leader2", name: "Grizzlies", at: t0, notBefore: t0 }),
+    ]);
+
+    expect([r1, r2].filter((r) => r === "ok")).toHaveLength(1);
+    expect([r1, r2].filter((r) => r === "name-taken")).toHaveLength(1);
+
+    const names = (await db.select().from(factions)).map((f) => f.name);
+    expect(names.filter((n) => n === "Grizzlies")).toHaveLength(1);
+    expect(names.filter((n) => n === "Bears" || n === "Wolves")).toHaveLength(1);
+  });
+
+  /**
    * §4.1: a membership row must never outlive its faction's hold.
    * `faction_members_server_player_uniq` carries no status predicate, so a
    * stranded row bars that player from EVERY future faction on the server

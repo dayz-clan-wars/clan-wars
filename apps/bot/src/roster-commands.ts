@@ -398,6 +398,12 @@ export async function handleFactionRename(
 
   if (outcome === "not-leader") return reply("Only the leader can rename the faction.");
   if (outcome === "cooldown") return reply("Your faction was renamed too recently — try again later.");
+  if (outcome === "name-taken") return reply("Another clan already uses that name.");
+  if (outcome === "tag-taken") return reply("Another clan already uses that tag.");
+  if (outcome === "name-held" || outcome === "tag-held") {
+    return reply("That name/tag was given up this season and is held until the season ends.");
+  }
+  if (outcome === "unchanged") return reply("That is already your name and tag.");
 
   return reply(`Your faction is now named **${name}**.`);
 }

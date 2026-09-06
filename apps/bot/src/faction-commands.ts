@@ -89,6 +89,10 @@ export async function handleClaimConfirm(
   if (outcome === "ceremony-taken") return reply("That ceremony has already been claimed.");
   if (outcome === "flag-taken") return reply(`\`${draft.texture}\` was just taken by another clan. Run \`/faction claim\` again with a different flag.`);
   if (outcome === "tag-taken") return reply(`The tag \`${draft.tag}\` was just taken. Run \`/faction claim\` again with a different tag.`);
+  if (outcome === "name-taken") return reply("Another clan already uses that name.");
+  if (outcome === "name-held" || outcome === "tag-held") {
+    return reply("That name/tag was given up this season and is held until the season ends.");
+  }
   // ⚠️ Not "belongs to a clan": the holder may be a SOLO, which is a
   // legitimate outcome here — a founding roster that leaves out the pole's
   // solo declarant gets refused by that solo's own row, and telling the

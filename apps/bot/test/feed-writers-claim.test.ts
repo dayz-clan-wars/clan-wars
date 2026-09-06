@@ -64,10 +64,10 @@ describe("claim path writes feed events", () => {
   // reserve with "too-close" before these tests reach the scarcity rule they
   // mean to exercise.
   /** ceremonyId comes from the fixture; everything else is fixed here. */
-  const args = (ceremonyId: number, over: Partial<{ tag: string; texture: string; poleKey: string }> = {}) => ({
+  const args = (ceremonyId: number, over: Partial<{ name: string; tag: string; texture: string; poleKey: string }> = {}) => ({
     ceremonyId, serverId,
     poleKey: over.poleKey ?? "10000:2:10000", x: "10000", y: "2", z: "10000",
-    name: "Bears", tag: over.tag ?? "BEAR", texture: over.texture ?? "Flag_Bear",
+    name: over.name ?? "Bears", tag: over.tag ?? "BEAR", texture: over.texture ?? "Flag_Bear",
     leaderDiscordId: "d1",
     members: [{ dayzId: "u1", discordId: "d1" }],
     at: now, reservedUntil: new Date(now.getTime() + 86_400_000),
@@ -96,10 +96,12 @@ describe("claim path writes feed events", () => {
   it("writes no founded row when a unique index rejects the claim", async () => {
     // A tag collision throws out of the transaction; the event row goes
     // with it. `secondCeremonyId` is a second provisional ceremony at a
-    // different pole, seeded alongside the first.
+    // different pole, seeded alongside the first. A distinct name keeps this
+    // exercising the tag's unique index specifically, not the newer
+    // `identityTakenTx` name check, which now runs first.
     const store = new PgFactionStore(db);
     await store.reserve(args(ceremonyId));
-    expect(await store.reserve(args(secondCeremonyId, { poleKey: "4:5:6", texture: "Flag_Rex" })))
+    expect(await store.reserve(args(secondCeremonyId, { name: "Rex Pack", poleKey: "4:5:6", texture: "Flag_Rex" })))
       .toBe("tag-taken");
     expect(await events()).toHaveLength(1);
   });
