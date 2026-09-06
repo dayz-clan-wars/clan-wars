@@ -3,8 +3,9 @@ import { declarations, factionMembers, factions, raids, seasonStandings } from "
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { RAID_DEDUP_MS, pointsFor, weekStartOf } from "@factions/domain";
 import { appendWarLogTx, noticeClanTx, noticeFullMembersTx } from "@factions/roster/internal";
-import { and, desc, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
+import { rankedStandings } from "./standings.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const RAID_CONSUMER = "raid-consumer";
@@ -90,12 +91,8 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           return done("absorbed" as const);
         }
         // Points from the ladder at this moment (§8.1): ranked = active clans with points > 0 this season.
-        const ranked = await tx.select({ factionId: seasonStandings.factionId }).from(seasonStandings)
-          .innerJoin(factions, eq(factions.id, seasonStandings.factionId))
-          .where(and(eq(seasonStandings.seasonId, season.id), eq(factions.status, "active"), gt(seasonStandings.points, 0)))
-          .orderBy(desc(seasonStandings.points), asc(seasonStandings.timesRaided), asc(factions.activatedAt));
-        const idx = ranked.findIndex((r) => r.factionId === victim.id);
-        const rank = idx === -1 ? null : idx + 1;
+        const { ranked, rankOf } = await rankedStandings(tx, season.id);
+        const rank = rankOf(victim.id);
         const points = raiderFactionId === null ? 0 : pointsFor(rank, ranked.length);
         // Standings before raids, per §4.12's documented lock order.
         //

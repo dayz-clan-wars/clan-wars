@@ -10,7 +10,8 @@
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
     "ci": "turbo run typecheck test --concurrency=1",
-    "guide:numbers": "tsx scripts/guide-numbers.ts"
+    "guide:numbers": "tsx scripts/guide-numbers.ts",
+    "rebuild:standings": "tsx scripts/rebuild-standings.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -18,5 +19,8 @@
     "turbo": "^2.1.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
+  },
+  "dependencies": {
+    "@factions/db": "workspace:*"
   }
 }
