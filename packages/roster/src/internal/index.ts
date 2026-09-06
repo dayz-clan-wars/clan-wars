@@ -16,3 +16,4 @@ export * from "./feed-store";
 export * from "./feed-actor";
 export * from "./holds";
 export * from "./requests";
+export * from "./notices";
