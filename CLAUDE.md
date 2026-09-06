@@ -72,6 +72,14 @@ turbo gate stays the gate, because it runs `typecheck` too.
   `notice-tick.ts` (per-target order, three attempts then `failed_at`, a stuck target
   never blocks a different one) and `war-log-tick.ts` (one channel, stops at the first
   failure, same shape as the feed poster, gated on `WAR_LOG_CHANNEL_ID`).
+  `structure-tick.ts` (3b): a reconciler, not a queue — derives roles/channels/`@Linked`
+  from `factions`, `faction_members` (full only) and `identity_links`, diffs against the
+  guild cache, writes only differences; the only writer of `factions.discord_*_id`.
+  `guild.ts` is the only file that calls discord.js role/channel/member APIs. Since 3b
+  the bot also requires `CLAN_TEXT_CATEGORY_ID`, `CLAN_VOICE_CATEGORY_ID` and
+  `LINKED_ROLE_ID` (config load fails without all three) and the **Server Members
+  Intent** enabled on the Developer Portal → Bot page — see `apps/bot/README.md` for the
+  full env table.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -348,6 +356,15 @@ happens on the site. Not deployed until the runbook `docs/deploy/2026-09-05-site
 runs, together with 2b and 2c-a.
 
 **Increment 3a merged; not deployed until `docs/deploy/2026-09-05-raids-and-notices.md`.**
+
+**Increment 3b merged; not deployed until `docs/deploy/2026-09-06-discord-structure.md`.**
+
+⚠️ Hand-deleted clan channels are logged, not recreated; null the column to recreate. If
+an operator deletes a clan's role or channel by hand, `structure-tick.ts` logs
+`structure: missing:<id>` once per tick and leaves it gone — an operator's deletion is
+treated as a decision, not damage to repair. To force it back: `update factions set
+discord_text_channel_id = null where id = …;` (or `discord_voice_channel_id` /
+`discord_role_id`) — the next tick creates a fresh one.
 
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further
