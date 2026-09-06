@@ -27,7 +27,7 @@ export async function lockIdentity(tx: Tx, serverId: number): Promise<void> {
 }
 
 /**
- * Hold a clan's name and tag until season end (spec §4.4; guide ch. 8).
+ * Hold a clan's name and/or tag until season end (spec §4.4; guide ch. 8).
  *
  * `held_until` is `'infinity'` until the wipe script rewrites it to the
  * season's end (spec §8.5). Upsert: a value can be held again later by
@@ -35,12 +35,20 @@ export async function lockIdentity(tx: Tx, serverId: number): Promise<void> {
  * renames or disbands — right after the `factions` write, before anything
  * else (lock order §4.12: nothing references this table, so it needs no
  * place in the order beyond "after factions").
+ *
+ * `name`/`tag` are each nullable: `disband` gives up both, but `rename` only
+ * gives up the one that actually changed — a hold recorded for a value that
+ * was never relinquished would be a lie ("held" implies "somebody else's
+ * clan used to have this"), and it would needlessly block the very clan that
+ * still holds it via its own `factions` row from reusing it in a future
+ * rename.
  */
-export async function writeHoldsTx(tx: Tx, a: { serverId: number; factionId: number; name: string; tag: string; reason: HoldReason }): Promise<void> {
+export async function writeHoldsTx(tx: Tx, a: { serverId: number; factionId: number; name: string | null; tag: string | null; reason: HoldReason }): Promise<void> {
   const rows = [
-    { serverId: a.serverId, kind: "name", valueLower: a.name.toLowerCase(), factionId: a.factionId, reason: a.reason, heldUntil: sql`'infinity'::timestamptz` },
-    { serverId: a.serverId, kind: "tag", valueLower: a.tag.toLowerCase(), factionId: a.factionId, reason: a.reason, heldUntil: sql`'infinity'::timestamptz` },
-  ];
+    a.name === null ? null : { serverId: a.serverId, kind: "name", valueLower: a.name.toLowerCase(), factionId: a.factionId, reason: a.reason, heldUntil: sql`'infinity'::timestamptz` },
+    a.tag === null ? null : { serverId: a.serverId, kind: "tag", valueLower: a.tag.toLowerCase(), factionId: a.factionId, reason: a.reason, heldUntil: sql`'infinity'::timestamptz` },
+  ].filter((r): r is NonNullable<typeof r> => r !== null);
+  if (rows.length === 0) return;
   await tx.insert(identityHolds).values(rows).onConflictDoUpdate({
     target: [identityHolds.serverId, identityHolds.kind, identityHolds.valueLower],
     set: { factionId: sql`excluded.faction_id`, reason: sql`excluded.reason`, heldUntil: sql`excluded.held_until` },

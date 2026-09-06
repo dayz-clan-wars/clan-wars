@@ -56,7 +56,7 @@ export async function decideRequestDbFor(db: Database, now: Date, actorDiscordId
 }
 
 /** Any roster row may leave, pending included — actorFor's "pending" refusal is bypassed on purpose here. */
-export async function leaveDb(db: Database, now: Date, discordId: string): Promise<LeaveOutcome | "not-linked" | "not-in-clan"> {
+export async function leaveDb(db: Database, now: Date, discordId: string): Promise<LeaveOutcome | "not-in-clan"> {
   const [m] = await db.select({ factionId: factionMembers.factionId }).from(factionMembers).innerJoin(factions, eq(factions.id, factionMembers.factionId))
     .where(and(eq(factionMembers.discordId, discordId), inArray(factions.status, [...HOLDING_STATUSES]))).limit(1);
   if (!m) return "not-in-clan";

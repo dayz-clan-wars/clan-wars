@@ -183,7 +183,7 @@ export async function handleInviteAccept(deps: RosterDeps, discordId: string, in
   if (outcome === "link-changed") {
     return reply("The character you had linked when that invitation was sent is no longer the one you're linked to. Ask for a fresh invite.");
   }
-  return reply(`You joined the faction. You are pending until the server log sees you at the clan's base — anything you do within ${JOIN_PRESENCE_RADIUS_M} m of the pole.`);
+  return reply(`You joined the clan. You are pending until the server log sees you at the clan's base — anything you do within ${JOIN_PRESENCE_RADIUS_M} m of the pole.`);
 }
 
 export async function handleInviteDecline(deps: RosterDeps, discordId: string, inviteId: number): Promise<RosterReply> {

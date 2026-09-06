@@ -219,6 +219,18 @@ describe("PgRosterStore disband and rename", () => {
       expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", at: t0, notBefore: past })).toBe("ok");
     });
 
+    it("a name-only rename holds only the old name, not the unchanged tag", async () => {
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Grizzlies", at: t0, notBefore: past })).toBe("ok");
+      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
+      expect(holds).toEqual([{ kind: "name", value_lower: "bears", reason: "renamed" }]);
+    });
+
+    it("a tag-only rename holds only the old tag, not the unchanged name", async () => {
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", tag: "GRIZ", at: t0, notBefore: past })).toBe("ok");
+      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
+      expect(holds).toEqual([{ kind: "tag", value_lower: "bear", reason: "renamed" }]);
+    });
+
     it("rename refuses another holding clan's name or tag", async () => {
       await seedFaction(db, { serverId, tag: "WOLF", name: "Wolves", texture: "Flag_Wolf", createdAt: t0, poleKey: "9000.00:100.00:9000.00", x: 9000, z: 9000 });
       expect(await store.rename({ factionId, discordId: LEADER, name: "wolves", at: t0, notBefore: past })).toBe("name-taken");

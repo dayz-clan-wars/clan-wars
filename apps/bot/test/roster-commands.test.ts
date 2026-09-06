@@ -229,6 +229,15 @@ describe("handleInviteAccept", () => {
     expect(r.content).toContain(String(JOIN_PRESENCE_RADIUS_M));
   });
 
+  // User-facing copy says "clan", never "faction" (the internal name for the
+  // same thing) — this reply used to say the latter.
+  it("the success reply says clan, not faction", async () => {
+    const d = deps({ acceptInvite: async () => "ok" as const });
+    const r = await handleInviteAccept(d, "d9", 42);
+    expect(r.content).toMatch(/\bclan\b/i);
+    expect(r.content).not.toMatch(/\bfaction\b/i);
+  });
+
   it("the cap reply names the cap", async () => {
     const d = deps({ acceptInvite: async () => "cap" as const });
     const r = await handleInviteAccept(d, "d9", 42);

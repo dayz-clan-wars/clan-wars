@@ -46,6 +46,9 @@ export async function presenceTick(db: Database, opts: { batchSize?: number } = 
     const batch = await readEventBatch(db, cursor, batchSize);
     if (batch.length === 0) break;
     // One read per batch, not per event: who is pending right now, and where their base is.
+    // Inner join on `declarations`: a pending member of a clan with no
+    // declaration (no base to be present at) is deliberately excluded here
+    // and so can never be promoted — they simply expire after PENDING_EXPIRY_MS.
     const pending = new Map<string, Pending>();
     for (const row of await db.select({
       memberId: factionMembers.id, factionId: factionMembers.factionId, serverId: factionMembers.serverId, dayzId: factionMembers.dayzId,

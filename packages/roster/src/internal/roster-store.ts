@@ -141,7 +141,7 @@ class RosterAbort extends Error {
  * writing a second leader check that could drift from this one.
  */
 export const leaderIs = (factionId: number, discordId: string) =>
-  sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId}) = 'leader'`;
+  sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId} and status = 'full') = 'leader'`;
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -422,7 +422,7 @@ export class PgRosterStore implements RosterStore {
                ${a.inviteeDiscordId}::text, ${a.inviteeDayzId}::text, ${a.invitedByDiscordId}::text,
                ${a.at.toISOString()}::timestamptz, ${a.expiresAt.toISOString()}::timestamptz
         where (select role from faction_members
-               where faction_id = ${a.factionId}::bigint and discord_id = ${a.invitedByDiscordId}::text)
+               where faction_id = ${a.factionId}::bigint and discord_id = ${a.invitedByDiscordId}::text and status = 'full')
               in ('leader', 'officer')
         on conflict (faction_id, invitee_dayz_id)
           where accepted_at is null and declined_at is null and revoked_at is null
@@ -644,7 +644,7 @@ export class PgRosterStore implements RosterStore {
     if (a.actorDiscordId === a.targetDiscordId) return "cannot-kick-self";
 
     return this.db.transaction(async (tx) => {
-      const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId})`;
+      const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
 
       const deleted = await tx.delete(factionMembers)
         .where(and(
@@ -879,10 +879,17 @@ export class PgRosterStore implements RosterStore {
 
       if (!updated) return null;
 
-      // Hold what was given up (guide ch. 8: "so nobody can impersonate
-      // you"). `exceptFactionId` above already let this same clan rename
-      // back into a name or tag it once held itself.
-      await writeHoldsTx(tx, { serverId: updated.serverId, factionId: updated.id, name: before.name, tag: before.tag, reason: "renamed" });
+      // Hold only what was actually given up (guide ch. 8: "so nobody can
+      // impersonate you") — a rename that only changes the tag must not also
+      // stamp a hold on the unchanged name, and vice versa. `exceptFactionId`
+      // above already let this same clan rename back into a name or tag it
+      // once held itself.
+      await writeHoldsTx(tx, {
+        serverId: updated.serverId, factionId: updated.id,
+        name: before.name === a.name ? null : before.name,
+        tag: before.tag === newTag ? null : before.tag,
+        reason: "renamed",
+      });
 
       await appendFactionEventTx(tx, {
         serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
