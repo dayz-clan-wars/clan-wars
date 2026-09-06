@@ -22,6 +22,7 @@ in-game verification tick confirms it.
 | `CLAN_TEXT_CATEGORY_ID` | yes | The Discord category id the bot creates clan text channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
+| `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
 
 Example `.env` (placeholders only — never commit real values):
 
@@ -40,6 +41,7 @@ SITE_BASE_URL=https://dayzclanwars.com
 CLAN_TEXT_CATEGORY_ID=12345678901234567
 CLAN_VOICE_CATEGORY_ID=22345678901234567
 LINKED_ROLE_ID=32345678901234567
+ALPHA_ROLE_ID=42345678901234567
 ```
 
 `BOT_FEED_CHANNEL_ID` above is a placeholder — replace it with your own
@@ -58,7 +60,7 @@ and block the feed queue at the first post.
 
 ## Permissions and intents
 
-The bot needs **Manage Roles, Manage Channels, and Manage Nicknames** permissions guild-wide to create and manage clan roles and channels, and to rename members. Enable the **Server Members Intent** on the Developer Portal → Bot page; the gateway will refuse to connect without it once the intent is requested. The bot's own role must sit **above** every clan role it creates — Discord places new roles at the bottom by default, so this holds unless you manually reorder roles after the bot runs.
+The bot needs **Manage Roles, Manage Channels, and Manage Nicknames** permissions guild-wide to create and manage clan roles and channels, and to rename members. Enable the **Server Members Intent** on the Developer Portal → Bot page; the gateway will refuse to connect without it once the intent is requested. The bot's own role must sit **above** every clan role it creates — Discord places new roles at the bottom by default, so this holds unless you manually reorder roles after the bot runs. The bot's role must also sit above `@Alpha`, since it assigns and removes that role at each week's close.
 
 ## Command registration is per-guild, not global
 

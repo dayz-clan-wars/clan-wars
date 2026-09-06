@@ -169,6 +169,13 @@
       "when": 1788714186246,
       "tag": "0023_raids_and_queues",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788733270289,
+      "tag": "0024_seasons_close",
+      "breakpoints": true
     }
   ]
 }

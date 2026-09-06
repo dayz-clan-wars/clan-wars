@@ -5,6 +5,7 @@ const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
   DATABASE_URL: "postgres://x",
   CLAN_TEXT_CATEGORY_ID: "12345678901234567", CLAN_VOICE_CATEGORY_ID: "22345678901234567", LINKED_ROLE_ID: "32345678901234567",
+  ALPHA_ROLE_ID: "42345678901234567",
 };
 
 const env = () => OK;
@@ -191,7 +192,7 @@ describe("loadConfig", () => {
     });
   });
 
-  it.each(["CLAN_TEXT_CATEGORY_ID", "CLAN_VOICE_CATEGORY_ID", "LINKED_ROLE_ID"])(
+  it.each(["CLAN_TEXT_CATEGORY_ID", "CLAN_VOICE_CATEGORY_ID", "LINKED_ROLE_ID", "ALPHA_ROLE_ID"])(
     "⚠️ refuses to start without %s (spec §9.1)", (key) => {
       expect(() => loadConfig({ ...OK, [key]: undefined })).toThrow(key);
       expect(() => loadConfig({ ...OK, [key]: "" })).toThrow(key);
@@ -205,5 +206,8 @@ describe("loadConfig", () => {
     expect(loadConfig(OK)).toMatchObject({
       clanTextCategoryId: "12345678901234567", clanVoiceCategoryId: "22345678901234567", linkedRoleId: "32345678901234567",
     });
+  });
+  it("reads the @Alpha role id", () => {
+    expect(loadConfig(OK)).toMatchObject({ alphaRoleId: "42345678901234567" });
   });
 });

@@ -628,6 +628,14 @@ export const seasons = pgTable("seasons", {
   startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
   endedAt: timestamp("ended_at", { withTimezone: true }),
   championFactionId: bigint("champion_faction_id", { mode: "number" }).references(() => factions.id),
+  /**
+   * The week-close high-water mark (spec §7 vs §4.8 ruling, increment 4 task
+   * 1 brief): null means no week has been closed yet. Advanced in the same
+   * transaction as that week's `alpha_weeks` rows (compare-and-set on the
+   * previous value), including a scoreless week that writes zero rows —
+   * without this column the tick would re-examine that week forever.
+   */
+  weekClosedThrough: timestamp("week_closed_through", { withTimezone: true }),
 }, (t) => ({
   oneOpen: uniqueIndex("seasons_open_uniq").on(t.serverId).where(sql`${t.endedAt} IS NULL`),
   uniqNumber: uniqueIndex("seasons_number_uniq").on(t.serverId, t.number),
@@ -687,6 +695,36 @@ export const seasonStandings = pgTable("season_standings", {
   timesRaided: integer("times_raided").notNull().default(0),
   defenses: integer("defenses").notNull().default(0),
 }, (t) => ({ uniq: uniqueIndex("season_standings_uniq").on(t.seasonId, t.factionId) }));
+
+/** One faction's rank in the weekly @Alpha top 3 (spec §4.8, §7). Silence writes no row. */
+export const alphaWeeks = pgTable("alpha_weeks", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+  rank: integer("rank").notNull(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  points: integer("points").notNull(),
+}, (t) => ({
+  uniq: uniqueIndex("alpha_weeks_uniq").on(t.seasonId, t.weekStart, t.rank),
+  rankValid: check("alpha_weeks_rank_valid", sql`${t.rank} between 1 and 3`),
+}));
+
+/** A faction's final standing for a closed season (spec §8, §7). One row per faction per season. */
+export const seasonResults = pgTable("season_results", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  rank: integer("rank").notNull(),
+  points: integer("points").notNull(),
+  raids: integer("raids").notNull(),
+  timesRaided: integer("times_raided").notNull(),
+  defenses: integer("defenses").notNull(),
+  statusAtClose: text("status_at_close").notNull(),
+}, (t) => ({
+  uniq: uniqueIndex("season_results_uniq").on(t.seasonId, t.factionId),
+  statusValid: check("season_results_status_valid",
+    sql`${t.statusAtClose} in ('active','dormant','disbanded','lapsed','reserved')`),
+}));
 
 /**
  * The #war-log queue (spec §4.7, §9.2). Same no-coordinates invariant as

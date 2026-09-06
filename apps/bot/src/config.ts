@@ -52,6 +52,11 @@ export type BotConfig = {
    * only clan roles and channels inside them.
    */
   linkedRoleId: string;
+  /**
+   * Created by hand once (runbook); the bot never creates categories or
+   * `@Alpha`, only clan roles and channels inside them.
+   */
+  alphaRoleId: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -212,6 +217,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     clanTextCategoryId: requiredSnowflake(env, "CLAN_TEXT_CATEGORY_ID", "the category clan text channels are created in"),
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
+    alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
   };
 
   return config;
