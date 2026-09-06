@@ -111,6 +111,19 @@ describe("roster package writes", () => {
     expect(nobody).toEqual({ outcome: "invitee-not-linked", inviteId: null });
   });
 
+  it("prefers an exact-case gamertag match, and refuses when case-insensitive matches more than one", async () => {
+    const UID_O2 = "P".repeat(40);
+    await db.insert(identityLinks).values({ discordId: "d4", dayzId: UID_O2, gamertag: "otto", verifiedAt: now });
+
+    const exact = await inviteDb(db, now, "d1", { gamertag: "Otto" });
+    expect(exact.outcome).toBe("ok");
+    const [row] = await db.select().from(factionInvites).where(eq(factionInvites.id, exact.inviteId!));
+    expect(row!.inviteeDayzId).toBe(UID_O);
+
+    const ambiguous = await inviteDb(db, now, "d1", { gamertag: "OTTO" });
+    expect(ambiguous).toEqual({ outcome: "ambiguous-gamertag", inviteId: null });
+  });
+
   it("acceptInvite writes a pending row; leave removes it and stamps a cooldown", async () => {
     const { inviteId } = await inviteDb(db, now, "d1", { discordId: "d2" });
     expect(await acceptInviteDb(db, now, "d2", inviteId!)).toBe("ok");

@@ -17,17 +17,31 @@ const TAG_RE = /^[A-Za-z0-9]+$/u;
 export const validName = (s: string) => s.trim().length >= CLAN_NAME_LENGTH.min && s.trim().length <= CLAN_NAME_LENGTH.max;
 export const validTag = (s: string) => s.length >= CLAN_TAG_LENGTH.min && s.length <= CLAN_TAG_LENGTH.max && TAG_RE.test(s);
 
-export type InviteOutcome = CreateInviteOutcome | ActorRefusal | "not-permitted" | "invitee-not-linked";
+export type InviteOutcome = CreateInviteOutcome | ActorRefusal | "not-permitted" | "invitee-not-linked" | "ambiguous-gamertag";
 export type InviteeRef = { discordId: string } | { gamertag: string };
 export async function inviteDb(db: Database, now: Date, actorDiscordId: string, invitee: InviteeRef): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return { outcome: a, inviteId: null };
-  // The site invites by gamertag — it has no Discord user picker — and the
-  // link row is the ONLY place a gamertag maps to a Discord account.
-  const where = "discordId" in invitee
-    ? eq(identityLinks.discordId, invitee.discordId)
-    : sql`lower(${identityLinks.gamertag}) = lower(${invitee.gamertag})`;
-  const [link] = await db.select({ dayzId: identityLinks.dayzId, discordId: identityLinks.discordId }).from(identityLinks).where(where);
+  const cols = { dayzId: identityLinks.dayzId, discordId: identityLinks.discordId };
+  let link: { dayzId: string; discordId: string } | undefined;
+  if ("discordId" in invitee) {
+    [link] = await db.select(cols).from(identityLinks).where(eq(identityLinks.discordId, invitee.discordId));
+  } else {
+    // The site invites by gamertag — it has no Discord user picker — and the
+    // link row is the ONLY place a gamertag maps to a Discord account.
+    // gamertag has no unique index, so try an exact-case match first; only
+    // fall back to case-insensitive (and only there risk ambiguity) if the
+    // exact match misses.
+    const exact = await db.select(cols).from(identityLinks).where(eq(identityLinks.gamertag, invitee.gamertag)).limit(2);
+    if (exact.length === 1) {
+      link = exact[0];
+    } else {
+      const ci = await db.select(cols).from(identityLinks)
+        .where(sql`lower(${identityLinks.gamertag}) = lower(${invitee.gamertag})`).limit(2);
+      if (ci.length > 1) return { outcome: "ambiguous-gamertag", inviteId: null };
+      link = ci[0];
+    }
+  }
   if (!link) return { outcome: "invitee-not-linked", inviteId: null };
   return new PgRosterStore(db).createInvite({
     factionId: a.factionId, serverId: a.serverId, inviteeDiscordId: link.discordId, inviteeDayzId: link.dayzId, invitedByDiscordId: a.discordId,
