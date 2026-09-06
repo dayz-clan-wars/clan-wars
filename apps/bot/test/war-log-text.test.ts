@@ -25,11 +25,25 @@ describe("warLogText", () => {
     }, siteBaseUrl)).toBe("🛡️ **Bears** raised their colors again — 3h 15m under siege");
   });
 
-  it("renders week_closed from its payload", () => {
+  it("renders week_closed with three", () => {
     expect(warLogText({
       kind: "week_closed",
       payload: { first: "Bears", second: "Wolves", third: "Foxes", p1: 30, p2: 20, p3: 10 },
     }, siteBaseUrl)).toBe("🏆 Alphas this week: **Bears**, **Wolves**, **Foxes** — 30 / 20 / 10");
+  });
+
+  it("renders week_closed with two", () => {
+    expect(warLogText({
+      kind: "week_closed",
+      payload: { first: "Bears", second: "Wolves", third: null, p1: 300, p2: 200, p3: null },
+    }, siteBaseUrl)).toBe("🏆 Alphas this week: **Bears**, **Wolves** — 300 / 200");
+  });
+
+  it("renders week_closed with one", () => {
+    expect(warLogText({
+      kind: "week_closed",
+      payload: { first: "Bears", second: null, third: null, p1: 300, p2: null, p3: null },
+    }, siteBaseUrl)).toBe("🏆 Alphas this week: **Bears** — 300");
   });
 
   it("renders week_closed with nobody scoring", () => {

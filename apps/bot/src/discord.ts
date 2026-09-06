@@ -28,6 +28,7 @@ import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
 import { raidTick } from "./raid-tick.js";
 import { raiseTick } from "./raise-tick.js";
+import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
 import { createGuildGateway } from "./guild.js";
@@ -558,6 +559,20 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       console.error("raise tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, after the raise tick and before the posters: the
+    // week tick reads `raids` (raidTick's output) so it belongs after it,
+    // and its `#war-log` row must exist before warLogTick below can post it.
+    try {
+      const wk = await weekTick(db, {
+        now: new Date(),
+        onError: (seasonId, weekStart, err) =>
+          console.error(`week close failed for season ${seasonId} week ${weekStart.toISOString()}`, err),
+      });
+      if (wk.closed > 0) console.log(`weeks closed ${wk.closed}`);
+    } catch (err) {
+      console.error("week tick failed", err);
     }
 
     try {
