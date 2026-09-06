@@ -24,10 +24,24 @@ import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSol
 export { DECLARE_SOLO_REASONS } from "./base";
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
 export { ISSUE_OUTCOME_KINDS } from "@factions/verification";
+import {
+  inviteDb, revokeInviteDb, acceptInviteDb, declineInviteDb, requestJoinDbByTag, withdrawRequestDbFor, decideRequestDbFor,
+  leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb, claimCeremonyDb, confirmRebindDb,
+  type InviteOutcome, type ReserveOutcome,
+} from "./writes";
+import type {
+  CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome, SetRoleOutcome, TransferOutcome, RenameOutcome,
+  RequestJoinOutcome, DecideRequestOutcome,
+} from "./internal";
+import type { ActorRefusal } from "./actor";
 
 export type { Viewer, Role };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
+export type {
+  ActorRefusal, InviteOutcome, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
+};
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -63,4 +77,73 @@ export function declareSolo(discordId: string, poleKey: string): Promise<Declare
 }
 export function releaseSolo(discordId: string): Promise<{ released: boolean }> {
   return releaseSoloDb(db(), discordId, new Date());
+}
+
+/** Invite a linked player to your clan. Officer+ only; the invitee must already be linked. */
+export function invite(actorDiscordId: string, inviteeDiscordId: string): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
+  return inviteDb(db(), new Date(), actorDiscordId, inviteeDiscordId);
+}
+/** Withdraw an outstanding invite. Officer+ only. */
+export function revokeInvite(actorDiscordId: string, inviteId: number) {
+  return revokeInviteDb(db(), new Date(), actorDiscordId, inviteId);
+}
+/** Accept an invite sent to you. */
+export function acceptInvite(discordId: string, inviteId: number) {
+  return acceptInviteDb(db(), new Date(), discordId, inviteId);
+}
+/** Decline an invite sent to you. */
+export function declineInvite(discordId: string, inviteId: number) {
+  return declineInviteDb(db(), new Date(), discordId, inviteId);
+}
+/** Ask to join a recruiting clan by its tag. */
+export function requestJoin(discordId: string, tag: string) {
+  return requestJoinDbByTag(db(), new Date(), discordId, tag);
+}
+/** Withdraw your own join request. */
+export function withdrawRequest(discordId: string, requestId: number) {
+  return withdrawRequestDbFor(db(), new Date(), discordId, requestId);
+}
+/** Accept or decline a join request against your clan. Officer+ only. */
+export function decideRequest(actorDiscordId: string, requestId: number, decision: "accepted" | "declined") {
+  return decideRequestDbFor(db(), new Date(), actorDiscordId, requestId, decision);
+}
+/** Leave your clan. A pending member may leave too. */
+export function leave(discordId: string) {
+  return leaveDb(db(), new Date(), discordId);
+}
+/** Kick a member from your clan. Officer+ only. */
+export function kick(actorDiscordId: string, targetDiscordId: string) {
+  return kickDb(db(), new Date(), actorDiscordId, targetDiscordId);
+}
+/** Promote a member to officer. Leader only. */
+export function promote(actorDiscordId: string, targetDiscordId: string) {
+  return promoteDb(db(), actorDiscordId, targetDiscordId);
+}
+/** Demote an officer to member. Leader only. */
+export function demote(actorDiscordId: string, targetDiscordId: string) {
+  return demoteDb(db(), actorDiscordId, targetDiscordId);
+}
+/** Hand leadership to another full member. */
+export function transfer(actorDiscordId: string, targetDiscordId: string) {
+  return transferDb(db(), new Date(), actorDiscordId, targetDiscordId);
+}
+/** Disband your clan. Leader only. */
+export function disband(actorDiscordId: string) {
+  return disbandDb(db(), actorDiscordId);
+}
+/** Rename your clan, and optionally its tag. Leader only, on a cooldown. */
+export function rename(actorDiscordId: string, r: { name: string; tag?: string }) {
+  return renameDb(db(), new Date(), actorDiscordId, r);
+}
+/** Edit your clan's recruiting post. Officer+ only. */
+export function setRecruitingPost(actorDiscordId: string, post: { recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }) {
+  return setRecruitingPostDb(db(), actorDiscordId, post);
+}
+/** Claim a ceremony: name, tag, flag, and a roster pruned to real participants. */
+export function claimCeremony(discordId: string, ceremonyId: number, a: { name: string; tag: string; texture: string; memberDayzIds: string[] }) {
+  return claimCeremonyDb(db(), new Date(), discordId, ceremonyId, a);
+}
+/** Confirm moving your clan's base to a pole a member raised your flag at. Leader only. */
+export function confirmRebind(actorDiscordId: string, poleKey: string) {
+  return confirmRebindDb(db(), new Date(), actorDiscordId, poleKey);
 }
