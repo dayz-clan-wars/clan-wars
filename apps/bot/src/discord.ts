@@ -30,6 +30,9 @@ import { raidTick } from "./raid-tick.js";
 import { raiseTick } from "./raise-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
+import { createGuildGateway } from "./guild.js";
+import { PgStructureStore } from "./structure-store.js";
+import { structureTick } from "./structure-tick.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return RETIRED_COMMANDS.map((name) =>
@@ -372,16 +375,45 @@ export async function start(cfg: BotConfig): Promise<void> {
     process.exit(1);
   }
 
-  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  // GuildMembers is privileged: the runbook enables it on the developer
+  // portal. Without it `guild.members.fetch()` hangs forever and every role
+  // diff in structureTick sees an empty member cache.
+  const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMembers] });
 
-  // Fetching one member and patching a nickname are plain REST calls — this
-  // needs no gateway intent beyond the `Guilds` one already requested above.
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
   const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
   const noticeSender = createNoticeSender(client);
 
   const renameOnLink = createNicknameApplier(client);
   const deps: CommandDeps = { store, now: () => new Date() };
+
+  const guildGateway = createGuildGateway(client, {
+    guildId: cfg.guildId,
+    clanTextCategoryId: cfg.clanTextCategoryId,
+    clanVoiceCategoryId: cfg.clanVoiceCategoryId,
+  });
+  const structureStore = new PgStructureStore(db);
+  // Users the reconciler must not retry a nickname clear for this instance's
+  // lifetime (owner, outranked, no permission) — shared between the
+  // start-up pass and every tick pass so neither repeats the other's log.
+  const nicknameNoRetry = new Set<string>();
+  const runStructure = async (label: string): Promise<void> => {
+    const s = await structureTick(structureStore, guildGateway, {
+      linkedRoleId: cfg.linkedRoleId,
+      nicknameNoRetry,
+      onError: (what, err) => console.error(`structure: ${what}`, err),
+    });
+    const parts: string[] = [];
+    if (s.created) parts.push(`created ${s.created}`);
+    if (s.tornDown) parts.push(`tornDown ${s.tornDown}`);
+    if (s.renamed) parts.push(`renamed ${s.renamed}`);
+    if (s.roleAdds) parts.push(`roleAdds ${s.roleAdds}`);
+    if (s.roleRemoves) parts.push(`roleRemoves ${s.roleRemoves}`);
+    if (s.linkedAdds) parts.push(`linkedAdds ${s.linkedAdds}`);
+    if (s.linkedRemoves) parts.push(`linkedRemoves ${s.linkedRemoves}`);
+    if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
+    if (parts.length > 0) console.log(`structure ${label}: ${parts.join(", ")}`);
+  };
 
   client.on("interactionCreate", async (interaction) => {
     try {
@@ -468,6 +500,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (pr.promoted.length > 0) console.log(`presence: ${pr.promoted.length} member(s) now full`);
     } catch (err) {
       console.error("presence tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, right after presence and before the notice tick:
+    // a promotion this tick should hold its clan role before a `became_full`
+    // line posts, and a channel created this tick should already exist to
+    // receive the notices queued for it. structureTick never throws, but the
+    // runner's discipline is one try/catch per step regardless.
+    try {
+      await runStructure("tick");
+    } catch (err) {
+      console.error("structure tick failed", err);
     }
 
     // ⚠️ Its own try/catch, like every other step: a failure raiding or
@@ -691,7 +734,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
   });
 
-  client.once("clientReady", () => {
+  client.once("clientReady", async () => {
     console.log(`bot ready as ${client.user?.tag}`);
 
     // ⚠️ A feature that is off because of a missing env var looks exactly
@@ -713,6 +756,22 @@ export async function start(cfg: BotConfig): Promise<void> {
           "They will post in order when a channel is configured.",
         ))
         .catch((err: unknown) => console.error("could not count the war log queue", err));
+    }
+
+    // §9.1 "reconciled on start": populate the member cache and run one
+    // structure pass before the interval starts, each in its own try/catch —
+    // a failed fetch here logs and continues (a stale or empty member cache)
+    // rather than blocking the bot forever; the per-tick pass below retries.
+    try {
+      const memberCount = await guildGateway.fetchAllMembers();
+      console.log(`guild members fetched: ${memberCount}`);
+    } catch (err) {
+      console.error("guild member fetch failed", err);
+    }
+    try {
+      await runStructure("on start");
+    } catch (err) {
+      console.error("structure on-start pass failed", err);
     }
 
     timer = setInterval(() => runner.fire(), cfg.tickIntervalMs);

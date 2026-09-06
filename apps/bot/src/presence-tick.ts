@@ -37,7 +37,8 @@ function pointOf(type: string, payload: unknown): { dayzId: string; x: number; z
  * `lockDeclarations` → `releaseTx` (the joiner's solo base, if any — §5.3 ⚠️
  * "not at accept") → `faction_members` update. Lock order §4.12:
  * declarations → poles → faction_members. Notices (`became_full`): increment 3.
- * Discord role/channel grants: increment 3 (no ids exist yet).
+ * Discord role: the structure reconciler (`structure-tick.ts`) gives full
+ * members the clan role on its next pass.
  */
 export async function presenceTick(db: Database, opts: { batchSize?: number } = {}): Promise<PresenceResult> {
   const batchSize = opts.batchSize ?? 500;

@@ -73,6 +73,27 @@ describe("discord wiring", () => {
     expect(sent).toBe(0);
   });
 
+  it("structure modules load and their signatures match how startBot calls them", async () => {
+    // Same caveat as the dormancy test above: this proves the three modules
+    // load, compose, and still match the shapes `start()` calls them with —
+    // not that `start()`'s runner actually invokes `structureTick` every
+    // tick or on start-up.
+    const { structureTick } = await import("../src/structure-tick.js");
+    const { PgStructureStore } = await import("../src/structure-store.js");
+    const { FakeGuild } = await import("./fake-guild.js");
+    expect(typeof structureTick).toBe("function");
+
+    const guild = new FakeGuild();
+    guild.roles.set("1", { name: "Linked", members: new Set() });
+    const r = await structureTick(new PgStructureStore(db), guild, { linkedRoleId: "1" });
+    expect(r).toEqual({
+      created: 0, tornDown: 0, renamed: 0,
+      roleAdds: 0, roleRemoves: 0,
+      linkedAdds: 0, linkedRemoves: 0,
+      nicknamesCleared: 0, errors: 0,
+    });
+  });
+
   describe("buildCommands", () => {
     it("gives every command a description", () => {
       // Cast: RESTPostAPIApplicationCommandsJSONBody is a union that also covers
