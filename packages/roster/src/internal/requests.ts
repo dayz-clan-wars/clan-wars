@@ -2,6 +2,7 @@ import type { Database } from "@factions/db";
 import { factions, factionJoinRequests, factionMembers, identityLinks, players, rosterCooldowns } from "@factions/db";
 import { CLAN_SIZE_CAP, HOLDING_STATUSES } from "@factions/domain";
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
+import { countMembersTx } from "./roster-store";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
 
@@ -107,9 +108,7 @@ export async function decideRequestDb(db: Database, a: { requestId: number; acto
       if (!f) return "gone" as const;
       if (a.decision === "accepted" && !f.recruiting) return "not-recruiting" as const;
       if (a.decision === "accepted") {
-        const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
-          .where(eq(factionMembers.factionId, target.factionId));
-        if (n!.n >= CLAN_SIZE_CAP) return "cap" as const;
+        if ((await countMembersTx(tx, target.factionId)) >= CLAN_SIZE_CAP) return "cap" as const;
       }
       const actorRole = sql`(select role from faction_members where faction_id = ${target.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
       const [req] = await tx.update(factionJoinRequests)

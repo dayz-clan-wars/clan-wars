@@ -147,6 +147,19 @@ export const leaderIs = (factionId: number, discordId: string) =>
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 /**
+ * Roster slots in use — BOTH statuses (spec §4.5): a pending member still
+ * occupies a slot. Every cap check (invite, accept, request decision) runs
+ * this as its own statement AFTER the faction row lock, so a resumed lock
+ * waiter counts against a fresh snapshot rather than the one its lock
+ * statement started with.
+ */
+export async function countMembersTx(tx: Tx, factionId: number): Promise<number> {
+  const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
+    .where(eq(factionMembers.factionId, factionId));
+  return n!.n;
+}
+
+/**
  * Everything disbanding a faction does, minus who is allowed to do it.
  *
  * ⚠️ Shared with the dormancy tick's auto-disband rather than reimplemented.
@@ -394,9 +407,7 @@ export class PgRosterStore implements RosterStore {
       // Advisory, like the checks above — the binding check is in
       // `acceptInvite`, which re-counts at write time. The cap counts BOTH
       // statuses (spec §4.5): a pending member still occupies a roster slot.
-      const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
-        .where(eq(factionMembers.factionId, a.factionId));
-      if (n!.n >= CLAN_SIZE_CAP) return { outcome: "cap" as const, inviteId: null };
+      if ((await countMembersTx(tx, a.factionId)) >= CLAN_SIZE_CAP) return { outcome: "cap" as const, inviteId: null };
 
       // ⚠️ The actor's leader-or-officer check rides in this statement, not in
       // the handler — §5: every write carries its own guard. A pre-read here
@@ -531,9 +542,7 @@ export class PgRosterStore implements RosterStore {
         // Nothing has been written yet on this path — a bare return is safe,
         // same reasoning as "not-holding" above. Both statuses count (spec
         // §4.5): a pending member still occupies a roster slot.
-        const [n] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionMembers)
-          .where(eq(factionMembers.factionId, target.factionId));
-        if (n!.n >= CLAN_SIZE_CAP) return "cap" as const;
+        if ((await countMembersTx(tx, target.factionId)) >= CLAN_SIZE_CAP) return "cap" as const;
 
         const claimed = await tx.update(factionInvites)
           .set({ acceptedAt: at })
