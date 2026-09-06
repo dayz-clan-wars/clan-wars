@@ -1,4 +1,4 @@
-import { factions, declarations, poles, events, admFiles, type Database } from "@factions/db";
+import { factions, declarations, poles, events, admFiles, seasons, type Database } from "@factions/db";
 import { NEW_POLE_GRACE_MS } from "@factions/domain";
 
 export type SeedFactionArgs = {
@@ -47,4 +47,10 @@ export async function seedFaction(db: Database, a: SeedFactionArgs) {
     ownerFactionId: f!.id, evidenceEventId: ev!.id, declaredAt: a.createdAt,
   });
   return f!;
+}
+
+/** The one open season on a server, the way `apps/bot/test/seed.ts`'s `seedSeason` does. Number is always 1 — nothing here exercises a wipe rollover. */
+export async function seedSeason(db: Database, serverId: number, startedAt: Date) {
+  const [s] = await db.insert(seasons).values({ serverId, number: 1, startedAt }).returning();
+  return s!;
 }

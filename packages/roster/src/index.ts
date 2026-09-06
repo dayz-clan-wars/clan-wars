@@ -42,6 +42,10 @@ import {
   clanForDb, directoryDb, clanByTagDb, claimContextDb, myInvitesDb, myRequestsDb,
   type RosterRow, type ClanView, type DirectoryEntry, type ClanPage, type ClaimContext, type MyInvite, type MyRequest,
 } from "./reads";
+import {
+  scoreboardDb, alphasDb, seasonsDb, warLogDb,
+  type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry,
+} from "./scoring";
 
 export type { Viewer, Role };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
@@ -51,6 +55,7 @@ export type {
   SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
+export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -180,4 +185,21 @@ export function myInvites(discordId: string) {
 /** Your own outstanding join requests. */
 export function myRequests(discordId: string) {
   return myRequestsDb(db(), discordId, new Date());
+}
+
+/** The open season's table in §8.1 order: ranked clans first, then unranked, by name. */
+export function scoreboard(): Promise<Scoreboard> {
+  return scoreboardDb(db());
+}
+/** Every closed week of the open season, newest first. */
+export function alphas(): Promise<{ season: { number: number } | null; weeks: AlphaWeek[] }> {
+  return alphasDb(db());
+}
+/** Closed seasons, newest first, with their final standings and champion. */
+export function seasons(): Promise<SeasonSummary[]> {
+  return seasonsDb(db());
+}
+/** Raids and defenses of the open season, newest first. */
+export function warLog(limit?: number): Promise<WarLogEntry[]> {
+  return warLogDb(db(), limit);
 }

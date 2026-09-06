@@ -9,6 +9,7 @@ import {
   type JoinRequest, type Role,
 } from "./internal";
 import { activeServerId } from "./server";
+import { alphaWeekCountFor, clanStatsFor, latestAlphaFactionIds, placementsFor } from "./scoring";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
 
@@ -33,12 +34,19 @@ export type ClanView = {
 export type DirectoryEntry = {
   tag: string; name: string; texture: string; status: string; memberCount: number;
   recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null;
+  /** In the latest closed week's Alpha top three (spec §4.8, §7). */
+  alpha: boolean;
 };
 
 export type ClanPage = DirectoryEntry & {
   createdAt: Date;
   roster: { gamertag: string | null; role: Role }[];
   canRequest: "yes" | "not-linked" | "in-clan" | "not-recruiting" | "cooldown" | "cap" | "already-requested";
+  /** Finishes across closed seasons, newest first (season_results). */
+  placements: { season: number; rank: number; points: number }[];
+  /** Weeks, across every season, this clan has taken an Alpha rank. */
+  alphaWeeks: number;
+  stats: { raids: number; defenses: number; longestSiegeSeconds: number | null; daysHeld: number | null };
 };
 
 export type ClaimContext = {
@@ -118,7 +126,7 @@ export async function directoryDb(db: Database): Promise<{ clans: DirectoryEntry
   // to the JOINED table's own "id" column instead of the outer row's,
   // producing a wrong (but non-erroring) count for every clan.
   const rows = await db.select({
-    tag: factions.tag, name: factions.name, texture: factions.texture, status: factions.status,
+    id: factions.id, tag: factions.tag, name: factions.name, texture: factions.texture, status: factions.status,
     recruiting: factions.recruiting, playWindow: factions.playWindow, language: factions.language, pitch: factions.pitch,
     memberCount: sql<number>`count(*) filter (where ${factionMembers.status} = 'full')`,
   }).from(factions)
@@ -131,8 +139,10 @@ export async function directoryDb(db: Database): Promise<{ clans: DirectoryEntry
     .where(and(eq(factions.serverId, serverId), inArray(factions.status, HOLDING)));
   const taken = holdingRows.map((r) => r.texture);
 
+  const alphaIds = await latestAlphaFactionIds(db, serverId);
+
   return {
-    clans: rows.map((r) => ({ ...r, memberCount: Number(r.memberCount) })),
+    clans: rows.map(({ id, ...r }) => ({ ...r, memberCount: Number(r.memberCount), alpha: alphaIds.has(id) })),
     flags: { taken, free: CLAIMABLE_FLAGS.filter((f) => !taken.includes(f)) },
   };
 }
@@ -188,13 +198,21 @@ export async function clanByTagDb(db: Database, tag: string, viewerDiscordId: st
     .where(and(eq(factionMembers.factionId, row.id), eq(factionMembers.status, "full")));
 
   const canRequest = await canRequestFor(db, { id: row.id, recruiting: row.recruiting }, serverId, viewerDiscordId, now);
+  const alphaIds = await latestAlphaFactionIds(db, serverId);
+  const placements = await placementsFor(db, row.id);
+  const alphaWeeksCount = await alphaWeekCountFor(db, row.id);
+  const stats = await clanStatsFor(db, row.id, now);
 
   return {
     tag: row.tag, name: row.name, texture: row.texture, status: row.status, memberCount: Number(row.memberCount),
     recruiting: row.recruiting, playWindow: row.playWindow, language: row.language, pitch: row.pitch,
+    alpha: alphaIds.has(row.id),
     createdAt: row.createdAt,
     roster: rosterRows.map((r) => ({ gamertag: r.gamertag ?? null, role: r.role as Role })),
     canRequest,
+    placements,
+    alphaWeeks: alphaWeeksCount,
+    stats,
   };
 }
 
