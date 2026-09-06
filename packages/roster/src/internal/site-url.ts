@@ -6,7 +6,13 @@
  *
  * Reads the same `SITE_BASE_URL` variable the bot's own notices/links use —
  * one address for the whole deployment, not a second copy that could drift.
+ *
+ * ⚠️ Trailing slash(es) stripped, mirroring `apps/bot/src/config.ts`'s own
+ * handling of this exact variable. Without it, an operator setting
+ * `SITE_BASE_URL` with a trailing slash (a form the bot's own config
+ * anticipates and tests) turns `invited`'s link into `.../me` with a double
+ * slash.
  */
 export function siteBaseUrl(): string {
-  return process.env.SITE_BASE_URL ?? "https://dayzclanwars.com";
+  return (process.env.SITE_BASE_URL ?? "https://dayzclanwars.com").replace(/\/+$/u, "");
 }

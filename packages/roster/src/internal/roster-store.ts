@@ -63,7 +63,18 @@ export type KickArgs = { factionId: number; actorDiscordId: string; targetDiscor
 export type KickOutcome = "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader";
 export type LeaveArgs = { factionId: number; discordId: string; at: Date; until: Date };
 export type LeaveOutcome = "ok" | "not-member" | "leader-must-transfer";
-export type SetRoleArgs = { factionId: number; actorDiscordId: string; targetDiscordId: string; role: "officer" | "member" };
+export type SetRoleArgs = {
+  factionId: number; actorDiscordId: string; targetDiscordId: string; role: "officer" | "member";
+  /**
+   * The notice's `occurredAt`. Optional because neither current caller
+   * (`writes.ts`'s `promoteDb`/`demoteDb`) has a timestamp to hand in —
+   * unlike every other write in this file, which threads one through from a
+   * `now` its own caller already carries. Defaults to `new Date()` so this
+   * row's timestamp is still close to real time; pass one explicitly once a
+   * caller has one to give.
+   */
+  at?: Date;
+};
 export type SetRoleOutcome = "ok" | "not-leader" | "target-not-member" | "cannot-target-leader";
 export type TransferArgs = { factionId: number; fromDiscordId: string; toDiscordId: string; at: Date };
 export type TransferOutcome = "ok" | "not-leader" | "target-not-member";
@@ -777,7 +788,7 @@ export class PgRosterStore implements RosterStore {
       if (updated[0]) {
         await noticeClanTx(tx, {
           serverId: updated[0].serverId, factionId: a.factionId,
-          kind: a.role === "officer" ? "promoted" : "demoted", occurredAt: new Date(),
+          kind: a.role === "officer" ? "promoted" : "demoted", occurredAt: a.at ?? new Date(),
           payload: { gamertag: await gamertagOrId(tx, a.targetDiscordId) },
         });
         return "ok" as const;

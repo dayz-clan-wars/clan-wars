@@ -108,7 +108,7 @@ describe("PgRosterStore kick and leave", () => {
       const rows = await db.select().from(clanNotices);
       expect(rows).toHaveLength(2);
       expect(rows.find((r) => r.target === "channel")).toMatchObject({
-        kind: "kicked", payload: { gamertag: "Officer", officer: "Leader" },
+        discordTargetId: null, kind: "kicked", payload: { gamertag: "Officer", officer: "Leader" },
       });
       expect(rows.find((r) => r.target === "dm")).toMatchObject({
         kind: "kicked", discordTargetId: OFFICER, payload: { clan: "Bears", until: UNTIL.toISOString() },
@@ -183,7 +183,7 @@ describe("PgRosterStore kick and leave", () => {
     it("an ok leave queues a 'left' channel notice naming the leaver", async () => {
       expect(await store.leave(leaveArgs({ discordId: MEMBER }))).toBe("ok");
       const [n] = await db.select().from(clanNotices);
-      expect(n).toMatchObject({ target: "channel", kind: "left", payload: { gamertag: "Member" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, kind: "left", payload: { gamertag: "Member" } });
     });
 
     it("a refused leave (not a member) queues no notice", async () => {

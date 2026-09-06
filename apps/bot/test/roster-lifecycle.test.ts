@@ -192,7 +192,7 @@ describe("PgRosterStore disband and rename", () => {
     it("an ok rename queues a 'renamed' channel notice with the new name and tag", async () => {
       expect(await store.rename(renameArgs({ name: "First" }))).toBe("ok");
       const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "renamed"));
-      expect(n).toMatchObject({ target: "channel", payload: { name: "First", tag: "BEAR" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, payload: { name: "First", tag: "BEAR" } });
     });
 
     it("a refused rename (non-leader) queues no notice", async () => {

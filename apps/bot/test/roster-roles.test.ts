@@ -89,13 +89,13 @@ describe("PgRosterStore setRole and transfer", () => {
     it("an ok promotion queues a 'promoted' channel notice naming the target", async () => {
       expect(await store.setRole(setRoleArgs({ actorDiscordId: LEADER, targetDiscordId: MEMBER, role: "officer" }))).toBe("ok");
       const [n] = await db.select().from(clanNotices);
-      expect(n).toMatchObject({ target: "channel", kind: "promoted", payload: { gamertag: "Member" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, kind: "promoted", payload: { gamertag: "Member" } });
     });
 
     it("an ok demotion queues a 'demoted' channel notice naming the target", async () => {
       expect(await store.setRole(setRoleArgs({ actorDiscordId: LEADER, targetDiscordId: OFFICER, role: "member" }))).toBe("ok");
       const [n] = await db.select().from(clanNotices);
-      expect(n).toMatchObject({ target: "channel", kind: "demoted", payload: { gamertag: "Officer" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, kind: "demoted", payload: { gamertag: "Officer" } });
     });
 
     it("refuses when the target is not a member", async () => {
@@ -137,7 +137,7 @@ describe("PgRosterStore setRole and transfer", () => {
     it("an ok transfer queues a 'transferred' channel notice naming the new and old leader", async () => {
       expect(await store.transfer(transferArgs({ fromDiscordId: LEADER, toDiscordId: MEMBER }))).toBe("ok");
       const [n] = await db.select().from(clanNotices);
-      expect(n).toMatchObject({ target: "channel", kind: "transferred", payload: { gamertag: "Member", old: "Leader" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, kind: "transferred", payload: { gamertag: "Member", old: "Leader" } });
     });
 
     it("a refused transfer (non-leader actor) queues no notice", async () => {

@@ -87,7 +87,7 @@ describe("PgRosterStore join requests", () => {
     expect(await decideRequestDb(db, { requestId: requestId!, actorDiscordId: LEADER, decision: "accepted", at: now })).toBe("ok");
     const rows = await db.select().from(clanNotices);
     expect(rows).toHaveLength(2);
-    expect(rows.find((r) => r.target === "channel")).toMatchObject({ kind: "joined", payload: { gamertag: "Two Hundred" } });
+    expect(rows.find((r) => r.target === "channel")).toMatchObject({ discordTargetId: null, kind: "joined", payload: { gamertag: "Two Hundred" } });
     expect(rows.find((r) => r.target === "dm")).toMatchObject({ kind: "request_accepted", discordTargetId: "200", payload: { clan: "Bears" } });
   });
 

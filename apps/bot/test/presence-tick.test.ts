@@ -101,7 +101,7 @@ describe("presenceTick / expirePendingMembers", () => {
     await position(UID_B, 5000 + JOIN_PRESENCE_RADIUS_M - 1, 5000);
     expect((await presenceTick(db)).promoted).toHaveLength(1);
     const [n] = await db.select().from(clanNotices);
-    expect(n).toMatchObject({ target: "channel", kind: "became_full", payload: { gamertag: "Bee" } });
+    expect(n).toMatchObject({ target: "channel", discordTargetId: null, kind: "became_full", payload: { gamertag: "Bee" } });
   });
 
   it("a non-promotion (out of radius) queues no notice", async () => {

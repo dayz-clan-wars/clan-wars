@@ -308,7 +308,7 @@ describe("PgRosterStore invites", () => {
       expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("ok");
       // The invite's own 'invited' DM (queued at createInvite, in the outer beforeEach) is already there.
       const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "joined"));
-      expect(n).toMatchObject({ target: "channel", payload: { gamertag: "Nine" } });
+      expect(n).toMatchObject({ target: "channel", discordTargetId: null, payload: { gamertag: "Nine" } });
     });
 
     it("a refused accept (expired) queues no additional notice", async () => {
