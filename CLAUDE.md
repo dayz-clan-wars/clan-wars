@@ -80,6 +80,15 @@ turbo gate stays the gate, because it runs `typecheck` too.
   `LINKED_ROLE_ID` (config load fails without all three) and the **Server Members
   Intent** enabled on the Developer Portal → Bot page — see `apps/bot/README.md` for the
   full env table.
+  Since 4, `week-tick.ts` runs right after `raise-tick.ts` (it reads `raidTick`'s output,
+  so it belongs after it) and before the posters: it closes every ended week, in order,
+  under `seasons.week_closed_through`, inserting `alpha_weeks` and the `#war-log` row in
+  one transaction — `war-log-tick.ts` posts that row only after the commit.
+  `structure-tick.ts`'s reconciler gained an `@Alpha` step alongside its existing
+  role/channel/`@Linked` diffs: it gives the role to the full members of the latest
+  closed week's Alphas and takes it from everyone else. The bot now also requires
+  `ALPHA_ROLE_ID` (config load fails without it, same as the other three role/category
+  ids) — see `apps/bot/README.md`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -161,6 +170,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
+| The wipe, and a standings rebuild | `pnpm wipe --server <id> [--at <ISO>]` (`scripts/wipe.ts`), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — both refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
 date and commit. Read it before proposing work — several entries record hazards that are
@@ -293,6 +303,12 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   fact; `apps/bot/test/dormancy-index-drift.test.ts` holds them together. Do not
   "simplify" it to `(server_id, occurred_at)`: that form is *worse than no index* for a
   faction that has not raised in months, which is the only kind dormancy cares about.
+  Since increment 4, `clockQuery`'s coalesce also takes the `GREATEST` against the
+  server's open season's `started_at` (spec §5.1) — a wipe opens a fresh season, and a
+  clan's dormancy clock restarts with it even if its last raise was long before.
+- **`season_standings` is a projection; the drift test in `standings.test.ts` is what
+  keeps it honest** — edit it only through the consumers (the raid/raise ticks, the week
+  and season close) or `scripts/rebuild-standings.ts`, never by hand.
 - **Two entrances to `dormant`, one exit.** `dormant_reason` (`raided`/`inactive`) is a
   column, not a second status — a raid that goes 24 h without a defense and 7 days of no
   full-member raise both land on `status = 'dormant'`. Anything that switches on `status`
@@ -358,6 +374,8 @@ runs, together with 2b and 2c-a.
 **Increment 3a merged; not deployed until `docs/deploy/2026-09-05-raids-and-notices.md`.**
 
 **Increment 3b merged; not deployed until `docs/deploy/2026-09-06-discord-structure.md`.**
+
+**Increment 4 merged; not deployed until `docs/deploy/2026-09-06-scoring-and-seasons.md`.**
 
 ⚠️ Hand-deleted clan channels are logged, not recreated; null the column to recreate. If
 an operator deletes a clan's role or channel by hand, `structure-tick.ts` logs
