@@ -92,6 +92,27 @@ describe("PgRosterStore join requests", () => {
     expect(await openRequestsFor(db, factionId, new Date(later.getTime() + 1))).toEqual([]);
   });
 
+  it("an expired open request is refreshed by a new one; a live one still blocks", async () => {
+    await store.setRecruitingPost({ factionId, actorDiscordId: LEADER, recruiting: true, playWindow: null, language: null, pitch: null });
+    const first = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: now, expiresAt: later });
+    expect(first.outcome).toBe("ok");
+
+    // Still within the window: blocked, same row, unchanged expiry.
+    const blocked = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: now, expiresAt: later });
+    expect(blocked.outcome).toBe("already-requested");
+    const [stillOpen] = await db.select().from(factionJoinRequests).where(eq(factionJoinRequests.id, first.requestId!));
+    expect(stillOpen).toMatchObject({ expiresAt: later });
+
+    // Past expiry: the same open row is refreshed, not left stuck forever.
+    const afterExpiry = new Date(later.getTime() + 1);
+    const freshExpiry = new Date(afterExpiry.getTime() + 604_800_000);
+    const refreshed = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: afterExpiry, expiresAt: freshExpiry });
+    expect(refreshed.outcome).toBe("ok");
+    expect(refreshed.requestId).toBe(first.requestId);
+    const [rows] = await db.select().from(factionJoinRequests).where(eq(factionJoinRequests.dayzId, UID_B));
+    expect(rows).toMatchObject({ id: first.requestId, expiresAt: freshExpiry, decidedAt: null });
+  });
+
   it("an officer revokes an outstanding invite; a member cannot; invitesOut lists the rest", async () => {
     // `f0` must exist as a `member` row for the "a member cannot" assertion.
     await db.insert(factionMembers).values({ factionId, serverId, dayzId: "M0".padEnd(40, "0"), discordId: "f0", role: "member", joinedAt: now });

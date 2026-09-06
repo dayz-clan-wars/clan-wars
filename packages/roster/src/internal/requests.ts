@@ -35,10 +35,27 @@ export async function requestJoinDb(db: Database, a: { factionId: number; server
       .where(and(eq(rosterCooldowns.serverId, a.serverId), eq(rosterCooldowns.dayzId, a.dayzId)));
     if (cd && cd.until > a.at) return { outcome: "cooldown" as const, requestId: null };
     if (f.n >= CLAN_SIZE_CAP) return { outcome: "cap" as const, requestId: null };
-    const [row] = await tx.insert(factionJoinRequests)
-      .values({ factionId: a.factionId, serverId: a.serverId, dayzId: a.dayzId, discordId: a.discordId, createdAt: a.at, expiresAt: a.expiresAt })
-      .onConflictDoNothing().returning({ id: factionJoinRequests.id });
-    return row ? { outcome: "ok" as const, requestId: row.id } : { outcome: "already-requested" as const, requestId: null };
+    // Mirrors createInvite's upsert on its own partial index (roster-store.ts):
+    // the index has no expiry term, so a lapsed request still occupies the
+    // slot. Unlike an invite though, a *live* open request must keep blocking
+    // ("already-requested") — only an EXPIRED one should be refreshed. The
+    // `where` on DO UPDATE checks the EXISTING row's expiry; when it is still
+    // in the future the update (and the whole statement, for that row) is a
+    // no-op and RETURNING yields nothing, same as onConflictDoNothing would.
+    const rows = await tx.execute(sql`
+      insert into faction_join_requests
+        (faction_id, server_id, dayz_id, discord_id, created_at, expires_at)
+      values (${a.factionId}::bigint, ${a.serverId}::integer, ${a.dayzId}::text, ${a.discordId}::text,
+              ${a.at.toISOString()}::timestamptz, ${a.expiresAt.toISOString()}::timestamptz)
+      on conflict (faction_id, dayz_id) where decided_at is null
+      do update set discord_id = excluded.discord_id,
+                    created_at = excluded.created_at,
+                    expires_at = excluded.expires_at
+        where faction_join_requests.expires_at <= ${a.at.toISOString()}::timestamptz
+      returning id
+    `);
+    const row = (rows as unknown as { id: string | number }[])[0];
+    return row ? { outcome: "ok" as const, requestId: Number(row.id) } : { outcome: "already-requested" as const, requestId: null };
   });
 }
 
