@@ -3,7 +3,8 @@ import { declarations, factions, factionInvites, factionMembers, identityLinks, 
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store";
-import { actorGamertagTx } from "./feed-actor";
+import { actorGamertagTx, gamertagOrId } from "./feed-actor";
+import { noticeClanTx, noticeUserTx } from "./notices";
 import { releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
 
@@ -49,6 +50,8 @@ export type CreateInviteArgs = {
   factionId: number; serverId: number;
   inviteeDiscordId: string; inviteeDayzId: string; invitedByDiscordId: string;
   at: Date; expiresAt: Date;
+  /** For the `invited` DM's `link` — the site's own base URL. See `inviteDb`, which supplies it from `siteBaseUrl()`. */
+  siteBaseUrl: string;
 };
 export type CreateInviteOutcome = "ok" | "not-permitted" | "already-member" | "cooldown" | "not-holding" | "cap";
 export type PendingInvite = {
@@ -392,7 +395,7 @@ export class PgRosterStore implements RosterStore {
    */
   async createInvite(a: CreateInviteArgs): Promise<{ outcome: CreateInviteOutcome; inviteId: number | null }> {
     return this.db.transaction(async (tx) => {
-      const [f] = await tx.select({ id: factions.id }).from(factions)
+      const [f] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag }).from(factions)
         .where(and(eq(factions.id, a.factionId), inArray(factions.status, HOLDING)));
       if (!f) return { outcome: "not-holding" as const, inviteId: null };
 
@@ -433,6 +436,13 @@ export class PgRosterStore implements RosterStore {
       `);
       const row = (rows as unknown as { id: string | number }[])[0];
       if (!row) return { outcome: "not-permitted" as const, inviteId: null };
+
+      await noticeUserTx(tx, {
+        serverId: a.serverId, factionId: a.factionId, discordId: a.inviteeDiscordId,
+        kind: "invited", occurredAt: a.at,
+        payload: { clan: f.name, tag: f.tag, link: `${a.siteBaseUrl}/me` },
+      });
+
       return { outcome: "ok" as const, inviteId: Number(row.id) };
     });
   }
@@ -582,6 +592,12 @@ export class PgRosterStore implements RosterStore {
           returning id
         `);
         if ((inserted as unknown as unknown[]).length === 0) throw new RosterAbort("link-changed");
+
+        await noticeClanTx(tx, {
+          serverId: inv.serverId, factionId: inv.factionId, kind: "joined", occurredAt: at,
+          payload: { gamertag: await gamertagOrId(tx, discordId) },
+        });
+
         return "ok" as const;
       });
     } catch (err) {
@@ -677,6 +693,17 @@ export class PgRosterStore implements RosterStore {
           set: { until: sql`greatest(${rosterCooldowns.until}, excluded.until)` },
         });
 
+      const [clan] = await tx.select({ name: factions.name }).from(factions).where(eq(factions.id, a.factionId));
+
+      await noticeClanTx(tx, {
+        serverId: row.serverId, factionId: a.factionId, kind: "kicked", occurredAt: a.at,
+        payload: { gamertag: await gamertagOrId(tx, a.targetDiscordId), officer: await gamertagOrId(tx, a.actorDiscordId) },
+      });
+      await noticeUserTx(tx, {
+        serverId: row.serverId, factionId: a.factionId, discordId: a.targetDiscordId, kind: "kicked", occurredAt: a.at,
+        payload: { clan: clan?.name ?? "your clan", until: a.until.toISOString() },
+      });
+
       return "ok" as const;
     });
   }
@@ -713,6 +740,11 @@ export class PgRosterStore implements RosterStore {
           set: { until: sql`greatest(${rosterCooldowns.until}, excluded.until)` },
         });
 
+      await noticeClanTx(tx, {
+        serverId: row.serverId, factionId: a.factionId, kind: "left", occurredAt: a.at,
+        payload: { gamertag: await gamertagOrId(tx, a.discordId) },
+      });
+
       return "ok" as const;
     });
   }
@@ -728,26 +760,35 @@ export class PgRosterStore implements RosterStore {
   async setRole(a: SetRoleArgs): Promise<SetRoleOutcome> {
     const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
 
-    const updated = await this.db.update(factionMembers)
-      .set({ role: a.role })
-      .where(and(
-        eq(factionMembers.factionId, a.factionId),
-        eq(factionMembers.discordId, a.targetDiscordId),
-        ne(factionMembers.role, "leader"),
-        // The TARGET must be a full member — a pending member is not yet on
-        // the roster (spec §4.5).
-        eq(factionMembers.status, "full"),
-        sql`${actorRole} = 'leader'`,
-      ))
-      .returning({ id: factionMembers.id });
+    return this.db.transaction(async (tx) => {
+      const updated = await tx.update(factionMembers)
+        .set({ role: a.role })
+        .where(and(
+          eq(factionMembers.factionId, a.factionId),
+          eq(factionMembers.discordId, a.targetDiscordId),
+          ne(factionMembers.role, "leader"),
+          // The TARGET must be a full member — a pending member is not yet on
+          // the roster (spec §4.5).
+          eq(factionMembers.status, "full"),
+          sql`${actorRole} = 'leader'`,
+        ))
+        .returning({ id: factionMembers.id, serverId: factionMembers.serverId });
 
-    if (updated[0]) return "ok" as const;
+      if (updated[0]) {
+        await noticeClanTx(tx, {
+          serverId: updated[0].serverId, factionId: a.factionId,
+          kind: a.role === "officer" ? "promoted" : "demoted", occurredAt: new Date(),
+          payload: { gamertag: await gamertagOrId(tx, a.targetDiscordId) },
+        });
+        return "ok" as const;
+      }
 
-    const [target] = await this.db.select({ role: factionMembers.role, status: factionMembers.status }).from(factionMembers)
-      .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
-    if (!target || target.status === "pending") return "target-not-member" as const;
-    if (target.role === "leader") return "cannot-target-leader" as const;
-    return "not-leader" as const;
+      const [target] = await tx.select({ role: factionMembers.role, status: factionMembers.status }).from(factionMembers)
+        .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.targetDiscordId)));
+      if (!target || target.status === "pending") return "target-not-member" as const;
+      if (target.role === "leader") return "cannot-target-leader" as const;
+      return "not-leader" as const;
+    });
   }
 
   /**
@@ -780,7 +821,7 @@ export class PgRosterStore implements RosterStore {
             eq(factionMembers.role, "leader"),
             eq(factionMembers.status, "full"),
           ))
-          .returning({ id: factionMembers.id });
+          .returning({ id: factionMembers.id, serverId: factionMembers.serverId });
         // Nothing has been written yet on this path — a bare return is safe.
         if (!demoted[0]) return "not-leader" as const;
 
@@ -810,6 +851,11 @@ export class PgRosterStore implements RosterStore {
         await tx.update(factions)
           .set({ leaderDiscordId: a.toDiscordId })
           .where(eq(factions.id, a.factionId));
+
+        await noticeClanTx(tx, {
+          serverId: demoted[0].serverId, factionId: a.factionId, kind: "transferred", occurredAt: a.at,
+          payload: { gamertag: await gamertagOrId(tx, a.toDiscordId), old: await gamertagOrId(tx, a.fromDiscordId) },
+        });
 
         return "ok" as const;
       });
@@ -899,6 +945,10 @@ export class PgRosterStore implements RosterStore {
           tag: updated.tag, texture: updated.texture,
           actor: await actorGamertagTx(tx, a.discordId),
         },
+      });
+      await noticeClanTx(tx, {
+        serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
+        payload: { name: a.name, tag: updated.tag },
       });
       return "ok" as const;
     });

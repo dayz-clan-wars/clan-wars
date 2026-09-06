@@ -4,6 +4,7 @@ import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { distance2d, JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS, HOLDING_STATUSES } from "@factions/domain";
 import { lockDeclarations, releaseTx } from "@factions/declarations";
 import { and, eq, inArray, lte } from "drizzle-orm";
+import { noticeClanTx, noticeUserTx, gamertagOrId } from "@factions/roster/internal";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const PRESENCE_CONSUMER = "presence-promoter";
@@ -13,7 +14,7 @@ export type PresenceResult = {
   promoted: { factionId: number; dayzId: string; eventId: number; releasedSoloBase: boolean }[];
 };
 
-type Pending = { memberId: number; factionId: number; serverId: number; dayzId: string; poleX: number; poleZ: number };
+type Pending = { memberId: number; factionId: number; serverId: number; discordId: string; dayzId: string; poleX: number; poleZ: number };
 
 /** The point an event places its player at: `pos` when it has one; a flag event's pole otherwise. */
 function pointOf(type: string, payload: unknown): { dayzId: string; x: number; z: number } | null {
@@ -51,7 +52,8 @@ export async function presenceTick(db: Database, opts: { batchSize?: number } = 
     // and so can never be promoted — they simply expire after PENDING_EXPIRY_MS.
     const pending = new Map<string, Pending>();
     for (const row of await db.select({
-      memberId: factionMembers.id, factionId: factionMembers.factionId, serverId: factionMembers.serverId, dayzId: factionMembers.dayzId,
+      memberId: factionMembers.id, factionId: factionMembers.factionId, serverId: factionMembers.serverId,
+      discordId: factionMembers.discordId, dayzId: factionMembers.dayzId,
       poleX: declarations.x, poleZ: declarations.z,
     }).from(factionMembers)
       .innerJoin(factions, eq(factions.id, factionMembers.factionId))
@@ -74,7 +76,14 @@ export async function presenceTick(db: Database, opts: { batchSize?: number } = 
           .set({ status: "full", seenAtBaseEventId: ev.id })
           .where(and(eq(factionMembers.id, m.memberId), eq(factionMembers.status, "pending")))
           .returning({ id: factionMembers.id });
-        return rows.length > 0 ? { released } : null;
+        if (rows.length === 0) return null;
+
+        await noticeClanTx(tx, {
+          serverId: m.serverId, factionId: m.factionId, kind: "became_full", occurredAt: ev.occurredAt,
+          payload: { gamertag: await gamertagOrId(tx, m.discordId) },
+        });
+
+        return { released };
       });
       if (result) {
         out.promoted.push({ factionId: m.factionId, dayzId: m.dayzId, eventId: ev.id, releasedSoloBase: result.released });
@@ -89,10 +98,38 @@ export async function presenceTick(db: Database, opts: { batchSize?: number } = 
 /**
  * The reaper's pending half (spec §7): a pending member not seen at the base
  * within PENDING_EXPIRY_MS of accepting is removed. No cooldown — they never
- * joined. Returns who, so increment 3 can DM `pending_expired`.
+ * joined.
+ *
+ * ⚠️ A transaction now, so the `pending_expired` DM shares the delete's
+ * guard: only a row this call actually removed gets one. The clan name comes
+ * from a follow-up read inside the same transaction — `factions` is
+ * untouched by this delete, so nothing here needs a lock on it, only the
+ * name as it stands right now.
  */
 export async function expirePendingMembers(db: Database, now: Date): Promise<{ factionId: number; dayzId: string; discordId: string }[]> {
-  return db.delete(factionMembers)
-    .where(and(eq(factionMembers.status, "pending"), lte(factionMembers.pendingSince, new Date(now.getTime() - PENDING_EXPIRY_MS))))
-    .returning({ factionId: factionMembers.factionId, dayzId: factionMembers.dayzId, discordId: factionMembers.discordId });
+  return db.transaction(async (tx) => {
+    const deleted = await tx.delete(factionMembers)
+      .where(and(eq(factionMembers.status, "pending"), lte(factionMembers.pendingSince, new Date(now.getTime() - PENDING_EXPIRY_MS))))
+      .returning({
+        factionId: factionMembers.factionId, serverId: factionMembers.serverId,
+        dayzId: factionMembers.dayzId, discordId: factionMembers.discordId,
+      });
+    if (deleted.length === 0) return [];
+
+    const names = new Map<number, string>();
+    for (const factionId of new Set(deleted.map((r) => r.factionId))) {
+      const [f] = await tx.select({ name: factions.name }).from(factions).where(eq(factions.id, factionId));
+      if (f) names.set(factionId, f.name);
+    }
+
+    for (const row of deleted) {
+      await noticeUserTx(tx, {
+        serverId: row.serverId, factionId: row.factionId, discordId: row.discordId,
+        kind: "pending_expired", occurredAt: now,
+        payload: { clan: names.get(row.factionId) ?? "your clan" },
+      });
+    }
+
+    return deleted.map(({ factionId, dayzId, discordId }) => ({ factionId, dayzId, discordId }));
+  });
 }

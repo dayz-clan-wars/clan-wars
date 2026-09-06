@@ -6,7 +6,7 @@ import {
 } from "@factions/domain";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
-  PgRosterStore, PgFactionStore, PgRebindStore, selectCandidates, requestJoinDb, decideRequestDb, withdrawRequestDb,
+  PgRosterStore, PgFactionStore, PgRebindStore, selectCandidates, requestJoinDb, decideRequestDb, withdrawRequestDb, siteBaseUrl,
   type CreateInviteOutcome, type AcceptInviteOutcome, type KickOutcome, type LeaveOutcome, type SetRoleOutcome, type TransferOutcome, type RenameOutcome,
   type RequestJoinOutcome, type DecideRequestOutcome,
 } from "./internal";
@@ -45,7 +45,7 @@ export async function inviteDb(db: Database, now: Date, actorDiscordId: string, 
   if (!link) return { outcome: "invitee-not-linked", inviteId: null };
   return new PgRosterStore(db).createInvite({
     factionId: a.factionId, serverId: a.serverId, inviteeDiscordId: link.discordId, inviteeDayzId: link.dayzId, invitedByDiscordId: a.discordId,
-    at: now, expiresAt: new Date(now.getTime() + PENDING_EXPIRY_MS),
+    at: now, expiresAt: new Date(now.getTime() + PENDING_EXPIRY_MS), siteBaseUrl: siteBaseUrl(),
   });
 }
 export async function revokeInviteDb(db: Database, now: Date, actorDiscordId: string, inviteId: number) {

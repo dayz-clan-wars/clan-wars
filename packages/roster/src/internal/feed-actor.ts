@@ -31,3 +31,17 @@ export async function actorGamertagTx(tx: Tx, discordId: string): Promise<string
 
   return row?.current ?? row?.atVerification ?? undefined;
 }
+
+/**
+ * The name a `clan_notices` payload prints for someone the site can only
+ * name by their Discord id. `actorGamertagTx` returns undefined for a
+ * discord id with no `players` row yet (or none at all), but a notice's
+ * `gamertag`/`officer`/`old` field must always be a string — `NoticePayload`
+ * has no `undefined` arm. Falling back to the id itself, not a placeholder
+ * like "someone": the renderer (Task 7) prints an id in this shape as a
+ * Discord mention, `<@id>`, which still names the right person even with no
+ * gamertag on file.
+ */
+export async function gamertagOrId(tx: Tx, discordId: string): Promise<string> {
+  return (await actorGamertagTx(tx, discordId)) ?? discordId;
+}

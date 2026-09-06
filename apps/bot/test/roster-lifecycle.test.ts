@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, rosterCooldowns,
-  declarations, poles, events, admFiles,
+  declarations, poles, events, admFiles, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -187,6 +187,17 @@ describe("PgRosterStore disband and rename", () => {
       const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
       expect(f!.name).toBe("First");
       expect(f!.renamedAt).not.toBeNull();
+    });
+
+    it("an ok rename queues a 'renamed' channel notice with the new name and tag", async () => {
+      expect(await store.rename(renameArgs({ name: "First" }))).toBe("ok");
+      const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "renamed"));
+      expect(n).toMatchObject({ target: "channel", payload: { name: "First", tag: "BEAR" } });
+    });
+
+    it("a refused rename (non-leader) queues no notice", async () => {
+      expect(await store.rename(renameArgs({ discordId: "d3" }))).toBe("not-leader");
+      expect(await db.select().from(clanNotices)).toEqual([]);
     });
 
     it("a rename inside the cooldown is refused and changes nothing", async () => {

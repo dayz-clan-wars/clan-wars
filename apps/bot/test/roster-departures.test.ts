@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, rosterCooldowns,
+  servers, factions, factionMembers, rosterCooldowns, identityLinks, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq, and } from "drizzle-orm";
@@ -45,6 +45,11 @@ describe("PgRosterStore kick and leave", () => {
       { factionId, serverId, dayzId: "L".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0 },
       { factionId, serverId, dayzId: "O".repeat(40), discordId: OFFICER, role: "officer", joinedAt: t0 },
       { factionId, serverId, dayzId: "M".repeat(40), discordId: MEMBER, role: "member", joinedAt: t0 },
+    ]);
+    await db.insert(identityLinks).values([
+      { discordId: LEADER, dayzId: "L".repeat(40), gamertag: "Leader", verifiedAt: t0 },
+      { discordId: OFFICER, dayzId: "O".repeat(40), gamertag: "Officer", verifiedAt: t0 },
+      { discordId: MEMBER, dayzId: "M".repeat(40), gamertag: "Member", verifiedAt: t0 },
     ]);
   });
 
@@ -96,6 +101,23 @@ describe("PgRosterStore kick and leave", () => {
       const [row] = await db.select().from(rosterCooldowns)
         .where(and(eq(rosterCooldowns.serverId, serverId), eq(rosterCooldowns.dayzId, "O".repeat(40))));
       expect(row!.until.getTime()).toBe(UNTIL.getTime());
+    });
+
+    it("an ok kick queues a channel notice and a DM to the target", async () => {
+      expect(await store.kick(kickArgs({ actorDiscordId: LEADER, targetDiscordId: OFFICER }))).toBe("ok");
+      const rows = await db.select().from(clanNotices);
+      expect(rows).toHaveLength(2);
+      expect(rows.find((r) => r.target === "channel")).toMatchObject({
+        kind: "kicked", payload: { gamertag: "Officer", officer: "Leader" },
+      });
+      expect(rows.find((r) => r.target === "dm")).toMatchObject({
+        kind: "kicked", discordTargetId: OFFICER, payload: { clan: "Bears", until: UNTIL.toISOString() },
+      });
+    });
+
+    it("a refused kick (not permitted) queues no notice", async () => {
+      expect(await store.kick(kickArgs({ actorDiscordId: MEMBER, targetDiscordId: OFFICER }))).toBe("not-permitted");
+      expect(await db.select().from(clanNotices)).toEqual([]);
     });
 
     it("does not report ok or write a cooldown when the target is removed out from under the kick", async () => {
@@ -156,6 +178,17 @@ describe("PgRosterStore kick and leave", () => {
       expect(r).toBe("ok");
       const rows = await db.select().from(factionMembers).where(eq(factionMembers.discordId, MEMBER));
       expect(rows).toHaveLength(0);
+    });
+
+    it("an ok leave queues a 'left' channel notice naming the leaver", async () => {
+      expect(await store.leave(leaveArgs({ discordId: MEMBER }))).toBe("ok");
+      const [n] = await db.select().from(clanNotices);
+      expect(n).toMatchObject({ target: "channel", kind: "left", payload: { gamertag: "Member" } });
+    });
+
+    it("a refused leave (not a member) queues no notice", async () => {
+      expect(await store.leave(leaveArgs({ discordId: "nobody" }))).toBe("not-member");
+      expect(await db.select().from(clanNotices)).toEqual([]);
     });
 
     it("leaving writes the same cooldown a kick does", async () => {

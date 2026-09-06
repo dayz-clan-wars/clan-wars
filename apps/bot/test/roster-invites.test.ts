@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, identityLinks, rosterCooldowns,
+  servers, factions, factionMembers, factionInvites, identityLinks, rosterCooldowns, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -57,6 +57,7 @@ describe("PgRosterStore invites", () => {
       inviteeDiscordId: INVITEE_DISCORD, inviteeDayzId: INVITEE_DAYZ,
       invitedByDiscordId: LEADER,
       at: t0, expiresAt: new Date(t0.getTime() + 604_800_000),
+      siteBaseUrl: "https://example.test",
     };
   });
 
@@ -67,6 +68,23 @@ describe("PgRosterStore invites", () => {
     const rows = await db.select().from(factionInvites);
     expect(rows).toHaveLength(1);
     expect(rows[0]!.id).toBe(r.inviteId);
+  });
+
+  it("an ok createInvite queues an 'invited' DM to the invitee, carrying the site link", async () => {
+    expect((await store.createInvite(base)).outcome).toBe("ok");
+    const [n] = await db.select().from(clanNotices);
+    expect(n).toMatchObject({
+      target: "dm", discordTargetId: INVITEE_DISCORD, kind: "invited",
+      payload: { clan: "Bears", tag: "BEAR", link: "https://example.test/me" },
+    });
+  });
+
+  it("a refused createInvite (already a member) queues no notice", async () => {
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: INVITEE_DAYZ, discordId: INVITEE_DISCORD, role: "member", joinedAt: t0,
+    });
+    expect((await store.createInvite(base)).outcome).toBe("already-member");
+    expect(await db.select().from(clanNotices)).toEqual([]);
   });
 
   it("refreshes an expired offer rather than inserting a second", async () => {
@@ -284,6 +302,20 @@ describe("PgRosterStore invites", () => {
       }).from(factionMembers).where(eq(factionMembers.dayzId, INVITEE_DAYZ));
       expect(m).toEqual({ status: "pending", pendingSince: t1, seen: null });
       expect((await store.rosterOf(factionId)).find((r) => r.dayzId === INVITEE_DAYZ)?.status).toBe("pending");
+    });
+
+    it("an ok accept queues a 'joined' channel notice naming the accepter", async () => {
+      expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, t1)).toBe("ok");
+      // The invite's own 'invited' DM (queued at createInvite, in the outer beforeEach) is already there.
+      const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "joined"));
+      expect(n).toMatchObject({ target: "channel", payload: { gamertag: "Nine" } });
+    });
+
+    it("a refused accept (expired) queues no additional notice", async () => {
+      const before = await db.select().from(clanNotices);
+      await db.update(factionInvites).set({ expiresAt: t0 }).where(eq(factionInvites.id, inviteId));
+      expect(await store.acceptInvite(inviteId, INVITEE_DISCORD, new Date(t0.getTime() + 1))).toBe("gone");
+      expect(await db.select().from(clanNotices)).toEqual(before);
     });
 
     it("declines a pending invite", async () => {

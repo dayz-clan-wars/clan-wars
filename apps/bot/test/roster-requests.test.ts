@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionJoinRequests, identityLinks,
+  servers, factions, factionMembers, factionJoinRequests, identityLinks, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -81,6 +81,31 @@ describe("PgRosterStore join requests", () => {
     expect(await decideRequestDb(db, { requestId: first.requestId!, actorDiscordId: LEADER, decision: "accepted", at: now })).toBe("gone");
   });
 
+  it("an accepted decision queues a 'joined' channel notice and a 'request_accepted' DM", async () => {
+    await store.setRecruitingPost({ factionId, actorDiscordId: LEADER, recruiting: true, playWindow: null, language: null, pitch: null });
+    const { requestId } = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: now, expiresAt: later });
+    expect(await decideRequestDb(db, { requestId: requestId!, actorDiscordId: LEADER, decision: "accepted", at: now })).toBe("ok");
+    const rows = await db.select().from(clanNotices);
+    expect(rows).toHaveLength(2);
+    expect(rows.find((r) => r.target === "channel")).toMatchObject({ kind: "joined", payload: { gamertag: "Two Hundred" } });
+    expect(rows.find((r) => r.target === "dm")).toMatchObject({ kind: "request_accepted", discordTargetId: "200", payload: { clan: "Bears" } });
+  });
+
+  it("a declined decision queues only a 'request_declined' DM", async () => {
+    await store.setRecruitingPost({ factionId, actorDiscordId: LEADER, recruiting: true, playWindow: null, language: null, pitch: null });
+    const { requestId } = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: now, expiresAt: later });
+    expect(await decideRequestDb(db, { requestId: requestId!, actorDiscordId: LEADER, decision: "declined", at: now })).toBe("ok");
+    const rows = await db.select().from(clanNotices);
+    expect(rows).toEqual([expect.objectContaining({ target: "dm", kind: "request_declined", discordTargetId: "200", payload: { clan: "Bears" } })]);
+  });
+
+  it("a refused decision (not permitted) queues no notice", async () => {
+    await store.setRecruitingPost({ factionId, actorDiscordId: LEADER, recruiting: true, playWindow: null, language: null, pitch: null });
+    const { requestId } = await requestJoinDb(db, { factionId, serverId, dayzId: UID_B, discordId: "200", at: now, expiresAt: later });
+    expect(await decideRequestDb(db, { requestId: requestId!, actorDiscordId: "nobody", decision: "accepted", at: now })).toBe("not-permitted");
+    expect(await db.select().from(clanNotices)).toEqual([]);
+  });
+
   it("the cap refuses at request and at accept; an expired request is not offered", async () => {
     await store.setRecruitingPost({ factionId, actorDiscordId: LEADER, recruiting: true, playWindow: null, language: null, pitch: null });
     for (let i = 0; i < 9; i++) await db.insert(factionMembers).values({ factionId, serverId, dayzId: `F${i}`.padEnd(40, "0"), discordId: `f${i}`, role: "member", joinedAt: now });
@@ -116,7 +141,7 @@ describe("PgRosterStore join requests", () => {
   it("an officer revokes an outstanding invite; a member cannot; invitesOut lists the rest", async () => {
     // `f0` must exist as a `member` row for the "a member cannot" assertion.
     await db.insert(factionMembers).values({ factionId, serverId, dayzId: "M0".padEnd(40, "0"), discordId: "f0", role: "member", joinedAt: now });
-    const a = await store.createInvite({ factionId, serverId, inviteeDiscordId: "200", inviteeDayzId: UID_B, invitedByDiscordId: LEADER, at: now, expiresAt: later });
+    const a = await store.createInvite({ factionId, serverId, inviteeDiscordId: "200", inviteeDayzId: UID_B, invitedByDiscordId: LEADER, at: now, expiresAt: later, siteBaseUrl: "https://example.test" });
     expect((await store.invitesOut(factionId, now)).map((i) => i.inviteeDiscordId)).toEqual(["200"]);
     expect(await store.revokeInvite({ inviteId: a.inviteId!, factionId, actorDiscordId: "f0", at: now })).toBe("not-permitted");
     expect(await store.revokeInvite({ inviteId: a.inviteId!, factionId, actorDiscordId: LEADER, at: now })).toBe("ok");

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, admFiles, poles, events, factionMembers, type Database,
+  servers, admFiles, poles, events, factionMembers, identityLinks, clanNotices, type Database,
 } from "@factions/db";
 import { declareSolo, declarationForPlayer } from "@factions/declarations";
 import { JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
@@ -25,7 +25,7 @@ describe("presenceTick / expirePendingMembers", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table declarations, poles, faction_members, factions, events, raw_lines, adm_files, consumer_cursors, servers restart identity cascade`);
+    await db.execute(sql`truncate table declarations, poles, faction_members, factions, events, raw_lines, adm_files, consumer_cursors, identity_links, clan_notices, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
@@ -39,6 +39,7 @@ describe("presenceTick / expirePendingMembers", () => {
       factionId, serverId, dayzId: UID_B, discordId: "200", role: "member", joinedAt: now,
       status: "pending", pendingSince: now,
     });
+    await db.insert(identityLinks).values({ discordId: "200", dayzId: UID_B, gamertag: "Bee", verifiedAt: now });
   });
 
   const position = (dayzId: string, x: number, z: number, at = now) => db.insert(events).values({
@@ -94,5 +95,29 @@ describe("presenceTick / expirePendingMembers", () => {
     expect(await expirePendingMembers(db, new Date(now.getTime() + PENDING_EXPIRY_MS))).toEqual([{ factionId, dayzId: UID_B, discordId: "200" }]);
     expect(await db.select().from(factionMembers).where(eq(factionMembers.dayzId, UID_B))).toEqual([]);
     // Full members are never expired, whatever their pending_since says.
+  });
+
+  it("promotion queues a 'became_full' channel notice naming the promoted member", async () => {
+    await position(UID_B, 5000 + JOIN_PRESENCE_RADIUS_M - 1, 5000);
+    expect((await presenceTick(db)).promoted).toHaveLength(1);
+    const [n] = await db.select().from(clanNotices);
+    expect(n).toMatchObject({ target: "channel", kind: "became_full", payload: { gamertag: "Bee" } });
+  });
+
+  it("a non-promotion (out of radius) queues no notice", async () => {
+    await position(UID_B, 5000 + JOIN_PRESENCE_RADIUS_M + 1, 5000);
+    expect((await presenceTick(db)).promoted).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+  });
+
+  it("expiring a pending member queues a 'pending_expired' DM with the clan name", async () => {
+    expect(await expirePendingMembers(db, new Date(now.getTime() + PENDING_EXPIRY_MS))).toEqual([{ factionId, dayzId: UID_B, discordId: "200" }]);
+    const [n] = await db.select().from(clanNotices);
+    expect(n).toMatchObject({ target: "dm", kind: "pending_expired", discordTargetId: "200", payload: { clan: "WOLF" } });
+  });
+
+  it("expiring nobody (short of PENDING_EXPIRY_MS) queues no notice", async () => {
+    expect(await expirePendingMembers(db, new Date(now.getTime() + PENDING_EXPIRY_MS - 1))).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
   });
 });

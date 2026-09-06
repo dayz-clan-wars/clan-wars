@@ -3,6 +3,8 @@ import { factions, factionJoinRequests, factionMembers, identityLinks, players, 
 import { CLAN_SIZE_CAP, HOLDING_STATUSES } from "@factions/domain";
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { countMembersTx } from "./roster-store";
+import { gamertagOrId } from "./feed-actor";
+import { noticeClanTx, noticeUserTx } from "./notices";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
 
@@ -120,7 +122,7 @@ export async function decideRequestDb(db: Database, a: { requestId: number; acto
       // its own statement, strictly after the lock is granted, gives it a new
       // READ COMMITTED snapshot that includes whatever the lock holder just
       // committed.
-      const [f] = await tx.select({ recruiting: factions.recruiting }).from(factions)
+      const [f] = await tx.select({ recruiting: factions.recruiting, name: factions.name }).from(factions)
         .where(and(eq(factions.id, target.factionId), inArray(factions.status, HOLDING))).for("update");
       if (!f) return "gone" as const;
       if (a.decision === "accepted" && !f.recruiting) return "not-recruiting" as const;
@@ -137,7 +139,13 @@ export async function decideRequestDb(db: Database, a: { requestId: number; acto
           .where(and(eq(factionMembers.factionId, target.factionId), eq(factionMembers.discordId, a.actorDiscordId), eq(factionMembers.status, "full")));
         return actor && actor.role !== "member" ? ("gone" as const) : ("not-permitted" as const);
       }
-      if (a.decision === "declined") return "ok" as const;
+      if (a.decision === "declined") {
+        await noticeUserTx(tx, {
+          serverId: req.serverId, factionId: req.factionId, discordId: req.discordId,
+          kind: "request_declined", occurredAt: a.at, payload: { clan: f.name },
+        });
+        return "ok" as const;
+      }
       const [cd] = await tx.select({ until: rosterCooldowns.until }).from(rosterCooldowns)
         .where(and(eq(rosterCooldowns.serverId, req.serverId), eq(rosterCooldowns.dayzId, req.dayzId)));
       if (cd && cd.until > a.at) throw new RequestAbort("cooldown");
@@ -148,6 +156,15 @@ export async function decideRequestDb(db: Database, a: { requestId: number; acto
         from identity_links il where il.discord_id = ${req.discordId} and il.dayz_id = ${req.dayzId}
         returning id`);
       if ((inserted as unknown as unknown[]).length === 0) throw new RequestAbort("link-changed");
+
+      await noticeClanTx(tx, {
+        serverId: req.serverId, factionId: req.factionId, kind: "joined", occurredAt: a.at,
+        payload: { gamertag: await gamertagOrId(tx, req.discordId) },
+      });
+      await noticeUserTx(tx, {
+        serverId: req.serverId, factionId: req.factionId, discordId: req.discordId,
+        kind: "request_accepted", occurredAt: a.at, payload: { clan: f.name },
+      });
       return "ok" as const;
     });
   } catch (err) {

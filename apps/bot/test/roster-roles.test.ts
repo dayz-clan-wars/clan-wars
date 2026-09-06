@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers,
+  servers, factions, factionMembers, identityLinks, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -45,6 +45,11 @@ describe("PgRosterStore setRole and transfer", () => {
       { factionId, serverId, dayzId: "O".repeat(40), discordId: OFFICER, role: "officer", joinedAt: t0 },
       { factionId, serverId, dayzId: "M".repeat(40), discordId: MEMBER, role: "member", joinedAt: t0 },
     ]);
+    await db.insert(identityLinks).values([
+      { discordId: LEADER, dayzId: "L".repeat(40), gamertag: "Leader", verifiedAt: t0 },
+      { discordId: OFFICER, dayzId: "O".repeat(40), gamertag: "Officer", verifiedAt: t0 },
+      { discordId: MEMBER, dayzId: "M".repeat(40), gamertag: "Member", verifiedAt: t0 },
+    ]);
   });
 
   describe("setRole", () => {
@@ -81,9 +86,22 @@ describe("PgRosterStore setRole and transfer", () => {
       expect(row!.role).toBe("member");
     });
 
+    it("an ok promotion queues a 'promoted' channel notice naming the target", async () => {
+      expect(await store.setRole(setRoleArgs({ actorDiscordId: LEADER, targetDiscordId: MEMBER, role: "officer" }))).toBe("ok");
+      const [n] = await db.select().from(clanNotices);
+      expect(n).toMatchObject({ target: "channel", kind: "promoted", payload: { gamertag: "Member" } });
+    });
+
+    it("an ok demotion queues a 'demoted' channel notice naming the target", async () => {
+      expect(await store.setRole(setRoleArgs({ actorDiscordId: LEADER, targetDiscordId: OFFICER, role: "member" }))).toBe("ok");
+      const [n] = await db.select().from(clanNotices);
+      expect(n).toMatchObject({ target: "channel", kind: "demoted", payload: { gamertag: "Officer" } });
+    });
+
     it("refuses when the target is not a member", async () => {
       const r = await store.setRole(setRoleArgs({ targetDiscordId: "nobody" }));
       expect(r).toBe("target-not-member");
+      expect(await db.select().from(clanNotices)).toEqual([]);
     });
   });
 
@@ -114,6 +132,17 @@ describe("PgRosterStore setRole and transfer", () => {
       expect(r).toBe("target-not-member");
       const rows = await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId));
       expect(rows.find((row) => row.discordId === LEADER)!.role).toBe("leader");
+    });
+
+    it("an ok transfer queues a 'transferred' channel notice naming the new and old leader", async () => {
+      expect(await store.transfer(transferArgs({ fromDiscordId: LEADER, toDiscordId: MEMBER }))).toBe("ok");
+      const [n] = await db.select().from(clanNotices);
+      expect(n).toMatchObject({ target: "channel", kind: "transferred", payload: { gamertag: "Member", old: "Leader" } });
+    });
+
+    it("a refused transfer (non-leader actor) queues no notice", async () => {
+      expect(await store.transfer(transferArgs({ fromDiscordId: OFFICER, toDiscordId: MEMBER }))).toBe("not-leader");
+      expect(await db.select().from(clanNotices)).toEqual([]);
     });
   });
 });
