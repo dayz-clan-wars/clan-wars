@@ -4,8 +4,7 @@ import {
   declarationForPlayer, declareSoloTx, lockDeclarations, raisedPolesFor, releaseTx,
 } from "@factions/declarations";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
-import { and, eq, gt } from "drizzle-orm";
-import { sql } from "drizzle-orm";
+import { and, desc, eq, gt } from "drizzle-orm";
 import { activeServerId } from "./server";
 
 export const DECLARE_SOLO_REASONS = ["not-linked", "in-clan", "no-raise", "too-close", "pole-taken", "owner-has-base"] as const;
@@ -59,7 +58,11 @@ export async function baseForDb(db: Database, discordId: string): Promise<BaseVi
         eq(clanNotices.discordTargetId, discordId),
         gt(clanNotices.occurredAt, new Date(now.getTime() - RELEASED_POLE_GRACE_MS)),
       ))
-      .orderBy((t) => sql`${t.occurredAt} desc`)
+      // Newest first. ⚠️ No index serves this predicate (serverId, target,
+      // kind, discord_target_id) — `clan_notices_queue_idx` is partial on the
+      // unposted rows — so it is a filtered scan. Fine while the table is
+      // small; it needs its own index before `clan_notices` grows.
+      .orderBy(desc(clanNotices.occurredAt))
       .limit(1);
     if (notice) {
       lapsed = { at: notice.occurredAt };

@@ -230,8 +230,26 @@ export async function declareSolo(db: Database, a: { serverId: number; dayzId: s
  * (the pole account itself is enough evidence to declare — spec §5.2) still
  * lapses, they just have nobody to DM. The caller (increment 3's tick) skips
  * a null discordId rather than treating it as an error.
+ *
+ * ⚠️ `onLapsed` runs INSIDE each release's transaction, after the release and
+ * before the commit. The branch's Global Constraint (§4.7) is that every
+ * Discord post goes through a table written in the same transaction as the
+ * transition it describes, and the `solo_lapsed` DM is no exception: queued
+ * from the caller after this function returned, a crash in between would
+ * release the declaration and tell the player nothing (the `/base` banner
+ * reads the same `clan_notices` row, so it would be silent too). This package
+ * cannot import `@factions/roster/internal` without a cycle, so the caller
+ * supplies the write. A throwing callback rolls the lapse back — which is the
+ * correct direction: no notice, no release.
  */
-export async function lapseSolos(db: Database, serverId: number, now: Date): Promise<{ dayzId: string; poleKey: string; discordId: string | null }[]> {
+export type LapsedSolo = { dayzId: string; poleKey: string; discordId: string | null };
+
+export async function lapseSolos(
+  db: Database,
+  serverId: number,
+  now: Date,
+  onLapsed?: (tx: Tx, row: LapsedSolo) => Promise<void>,
+): Promise<LapsedSolo[]> {
   const cutoff = new Date(now.getTime() - SOLO_LAPSE_MS);
   // ⚠️ The date is interpolated as an ISO string cast to timestamptz: binding
   // a raw JS Date inside a drizzle sql`` template throws in postgres.js.
@@ -252,8 +270,9 @@ export async function lapseSolos(db: Database, serverId: number, now: Date): Pro
     .leftJoin(identityLinks, eq(identityLinks.dayzId, declarations.ownerDayzId))
     .where(and(eq(declarations.serverId, serverId), isNotNull(declarations.ownerDayzId), quietSince));
 
-  const lapsed: { dayzId: string; poleKey: string; discordId: string | null }[] = [];
+  const lapsed: LapsedSolo[] = [];
   for (const s of stale) {
+    const row: LapsedSolo = { dayzId: s.dayzId!, poleKey: s.poleKey, discordId: s.discordId };
     // One transaction each: a release that deadlocks or loses a race to a
     // concurrent release must not take the rest of the sweep with it, and
     // `releaseTx` returning false is exactly that "someone else got there
@@ -273,9 +292,12 @@ export async function lapseSolos(db: Database, serverId: number, now: Date): Pro
         ))
         .for("update");
       if (!still) return false;
-      return releaseTx(tx, { dayzId: s.dayzId!, serverId }, now);
+      const released = await releaseTx(tx, { dayzId: s.dayzId!, serverId }, now);
+      if (!released) return false;
+      await onLapsed?.(tx, row);
+      return true;
     });
-    if (done) lapsed.push({ dayzId: s.dayzId!, poleKey: s.poleKey, discordId: s.discordId });
+    if (done) lapsed.push(row);
   }
   return lapsed;
 }

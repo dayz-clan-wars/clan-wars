@@ -91,6 +91,32 @@ describe("decide", () => {
     expect(decide(clock({ status: "active", lastRaiseAt: ago(1000), flagDownSince: ago(FLAG_DOWN_MS - 1) }), now, W)).toBeNull();
   });
 
+  it("⚠️ dormant(raided) does not undo itself on the next tick: revive needs a raise AFTER dormant_since", () => {
+    // Tick 1: an active clan whose members were raising normally right up to
+    // the raid. The flag has been down for the full window.
+    const raided = clock({ status: "active", lastRaiseAt: ago(FLAG_DOWN_MS + 1000), flagDownSince: ago(FLAG_DOWN_MS) });
+    expect(decide(raided, now, W)).toBe("dormant-raided");
+
+    // Tick 2, on the row that transition produced: dormant, dormant_since =
+    // now, flag_down_since cleared, the same (recent, but earlier) lastRaiseAt.
+    // Nobody has raised anything, so nothing happens.
+    const afterwards = clock({
+      status: "dormant", lastRaiseAt: ago(FLAG_DOWN_MS + 1000), dormantSince: now, flagDownSince: null,
+    });
+    expect(decide(afterwards, now, W)).toBeNull();
+
+    // Tick 3, after a member actually raises the flag.
+    expect(decide({ ...afterwards, lastRaiseAt: new Date(now.getTime() + 1) }, now, W)).toBe("revive");
+  });
+
+  it("a raise exactly at dormant_since is not a revive; one millisecond later is", () => {
+    const since = ago(86_400_000);
+    expect(decide(clock({ status: "dormant", lastRaiseAt: since, dormantSince: since }), now, W)).toBeNull();
+    expect(decide(clock({
+      status: "dormant", lastRaiseAt: new Date(since.getTime() + 1), dormantSince: since,
+    }), now, W)).toBe("revive");
+  });
+
   it("warns once, DISBAND_WARNING_LEAD_MS before the disband, and not again", () => {
     const due = ago(W.disbandAfterDormantMs - DISBAND_WARNING_LEAD_MS);
     // Stale lastRaiseAt: this is a genuinely quiet dormant clan, not a

@@ -1,6 +1,6 @@
 import { MIN_BASE_SPACING_M, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import type { DeclareSoloReason } from "@factions/roster";
-import { days } from "./format";
+import { days, when } from "./format";
 
 export { days };
 
@@ -13,6 +13,10 @@ export const DECLARE_COPY: Record<DeclareSoloReason, string> = {
   "pole-taken": "That pole is already declared by someone else.",
   "owner-has-base": "You already have a declared base. Release it before declaring another.",
 };
+
+/** The banner /base shows when a solo declaration has lapsed but is still inside its grace. */
+export const lapsedCopy = (at: Date) =>
+  `Your declaration lapsed ${when(at)} — no raise in ${days(SOLO_LAPSE_MS)}. Raise your flag at the pole and declare it again below before it goes public.`;
 
 /** Every code the two route handlers can redirect with. */
 export const RESULT_COPY: Record<string, string> = {

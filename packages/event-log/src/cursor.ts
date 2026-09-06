@@ -8,7 +8,16 @@ export async function readCursor(db: Database, consumer: string): Promise<number
   return row?.lastEventId ?? 0;
 }
 
-export async function writeCursor(db: Database, consumer: string, lastEventId: number): Promise<void> {
+/** The transaction handle drizzle hands to `db.transaction`. */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * Takes a `Tx` as well as a `Database` on purpose. A consumer that commits its
+ * cursor in the same transaction as the event's effects cannot replay an
+ * already-applied event: either both land or neither does. Callers that write
+ * the cursor once per batch (the pre-existing pattern) pass the `Database`.
+ */
+export async function writeCursor(db: Database | Tx, consumer: string, lastEventId: number): Promise<void> {
   await db.insert(consumerCursors)
     .values({ consumerName: consumer, lastEventId, updatedAt: new Date() })
     .onConflictDoUpdate({

@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { baseFor } from "@factions/roster";
-import { WATCH_ZONE_RADIUS_M, SOLO_LAPSE_MS } from "@factions/domain";
+import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
-import { RESULT_COPY } from "@/lib/base-copy";
+import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when, days } from "@/lib/format";
+import { when } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -51,7 +51,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
       {view.linked && !view.inClan && (
         <>
           {view.lapsed && (
-            <p className="mt-6 rounded-md border border-gold bg-frame p-4 text-ink">Your declaration lapsed {when(view.lapsed.at)} — no raise in {days(SOLO_LAPSE_MS)}. Raise your flag at the pole and declare it again below before it goes public.</p>
+            <p className="mt-6 rounded-md border border-gold bg-frame p-4 text-ink">{lapsedCopy(view.lapsed.at)}</p>
           )}
 
           <section className="mt-8 rounded-lg border border-rule bg-frame p-5">

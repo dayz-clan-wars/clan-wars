@@ -127,9 +127,19 @@ export class PgNoticeStore implements NoticeStore {
       })
       .from(clanNotices)
       .leftJoin(factions, eq(factions.id, clanNotices.factionId))
-      .where(and(isNull(clanNotices.postedAt), isNull(clanNotices.failedAt)))
+      .where(
+        and(
+          isNull(clanNotices.postedAt),
+          isNull(clanNotices.failedAt),
+          // In SQL, not in JS: `limit` must count deliverable rows only, or a
+          // backlog of channel rows with no channel yet (the steady state until
+          // increment 3b) starves every DM queued behind it.
+          sql`coalesce(${clanNotices.discordTargetId}, ${factions.discordTextChannelId}) is not null`,
+        ),
+      )
       .orderBy(asc(clanNotices.id))
       .limit(limit);
+    // The filter is type narrowing only; the WHERE above already excludes them.
     return rows.filter((r) => r.discordTargetId !== null).map((r) => ({ ...r, payload: r.payload as NoticePayload }));
   }
 
@@ -142,6 +152,8 @@ export class PgNoticeStore implements NoticeStore {
       .update(clanNotices)
       .set({
         attempts: sql`${clanNotices.attempts} + 1`,
+        // The ::timestamptz cast is required: drizzle passes the parameter untyped
+        // inside a CASE, and Postgres cannot infer the branch type without it.
         failedAt: sql`case when ${clanNotices.attempts} + 1 >= ${NOTICE_MAX_ATTEMPTS} then ${at.toISOString()}::timestamptz else null end`,
       })
       .where(eq(clanNotices.id, id))

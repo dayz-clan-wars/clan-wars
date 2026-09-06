@@ -166,6 +166,41 @@ describe("raidTick", () => {
     expect(rows2[0]!.lowerCount).toBe(1);
   });
 
+  it("⚠️ a mid-batch failure does not re-apply the raids that already committed", async () => {
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await lower(S1, "Solo", "Flag_Bear", P1, new Date(now.getTime() + 7_200_000));
+
+    // Fail the SECOND raid's transaction, after the first has committed.
+    let started = 0;
+    const flaky = new Proxy(db, {
+      get(t, prop) {
+        if (prop === "transaction") {
+          return async (fn: unknown) => {
+            if (started++ >= 1) throw new Error("injected mid-batch failure");
+            return (t as Database).transaction(fn as never);
+          };
+        }
+        const v = Reflect.get(t as object, prop);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    }) as Database;
+
+    await expect(raidTick(flaky)).rejects.toThrow(/injected/u);
+    expect(await db.select().from(raids)).toHaveLength(1);
+    const notices1 = (await db.select().from(clanNotices)).length;
+    const warLog1 = (await db.select().from(warLogEvents)).length;
+
+    // The next tick resumes at the first event's committed cursor: it applies
+    // the second lower and nothing else.
+    await raidTick(db);
+    expect(await db.select().from(raids)).toHaveLength(2);
+    // The second lower lands while the flag is already down, so it adds a
+    // war-log line but no second flag_down burst — and, crucially, the first
+    // raid's own notices were not queued twice.
+    expect((await db.select().from(warLogEvents)).length).toBe(warLog1 + 1);
+    expect((await db.select().from(clanNotices)).length).toBe(notices1);
+  });
+
   it("a genuinely new raid by a different raider does not disturb an already-open flag-down episode", async () => {
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await lower(S1, "Solo", "Flag_Bear", P1, new Date(now.getTime() + 7_200_000));

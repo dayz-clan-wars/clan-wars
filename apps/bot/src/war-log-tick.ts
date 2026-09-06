@@ -16,6 +16,9 @@ export const WAR_LOG_BATCH_SIZE = 20;
  * `feedTick` over `WarLogStore` (see feed-tick.ts for the reasoning: post
  * then mark, and the first failure ends the run rather than skipping ahead,
  * so the channel stays a chronological record).
+ *
+ * ⚠️ At-least-once, like every poster here: post-then-mark means a crash
+ * between the two re-posts that row on the next start. See notice-tick.ts.
  */
 export async function warLogTick(
   store: WarLogStore,

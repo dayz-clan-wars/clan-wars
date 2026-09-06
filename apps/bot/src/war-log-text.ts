@@ -16,6 +16,11 @@ export function warLogText(e: { kind: WarLogKind; payload: NoticePayload }, site
         : `⚔️ **${p.raiderClan}** raided **${p.victimClan}** — flag lowered by ${p.gamertag}`;
     case "defense":
       return `🛡️ **${p.victimClan}** raised their colors again — ${duration(Number(p.durationSeconds))} under siege`;
+    // ⚠️ `week_closed` and `season_closed` have NO writer on this branch:
+    // increment 4's weekly/season close job is the other half of this
+    // contract. Until it lands, the payload shapes below (first/second/third +
+    // p1/p2/p3; number/clan/points) are pinned only by war-log-text.test.ts's
+    // hand-built payloads — that writer must match them or change both.
     case "week_closed":
       return p.first === null
         ? "🏆 No Alphas this week — nobody scored."

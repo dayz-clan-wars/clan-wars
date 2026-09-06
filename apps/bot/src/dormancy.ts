@@ -62,16 +62,25 @@ export function decide(c: FactionClock, now: Date, w: DormancyWindows): Transiti
     && c.lastRaiseAt.getTime() > now.getTime() - w.dormantAfterMs;
 
   if (c.status === "dormant") {
-    if (fresh) return "revive";
     // A dormant row with no timestamp cannot be aged. Start its clock now
     // rather than guessing, and let it disband 14 days from here.
     //
-    // ⚠️ Checked BEFORE the pause below, even though both write
-    // `dormant_since = now`. The store guards them differently — `stamp`
-    // requires IS NULL and `pause` requires IS NOT NULL — so choosing the
-    // wrong one produces an update that matches no row and a tick that
-    // reports having done something it did not.
+    // ⚠️ Checked BEFORE the revive and pause below. Revive now compares against
+    // `dormant_since`, so it needs the stamp to exist; and though `stamp` and
+    // `pause` both write `dormant_since = now`, the store guards them
+    // differently — `stamp` requires IS NULL and `pause` requires IS NOT NULL —
+    // so choosing the wrong one produces an update that matches no row and a
+    // tick that reports having done something it did not.
     if (c.dormantSince === null) return "stamp";
+
+    // ⚠️ A raise AFTER the clan went dormant, not merely a recent one. For the
+    // inactive entrance this is equivalent to "fresh": `dormant_since` is
+    // stamped precisely when `lastRaiseAt` went stale, so any newer raise
+    // satisfies it. For the raided entrance (§5.8) it is the whole point — a
+    // raided clan was, by construction, raising its flag right up to the raid,
+    // so "fresh" would revive it on the very next tick with nobody having
+    // raised anything.
+    if (c.lastRaiseAt !== null && c.lastRaiseAt.getTime() > c.dormantSince.getTime()) return "revive";
 
     // ⚠️ Liveness gate: disband is the one transition here that destroys
     // identity, and its only evidence of a faction's silence is rows in

@@ -543,25 +543,22 @@ export async function start(cfg: BotConfig): Promise<void> {
             // deadlock must not cost every later server its sweep, which
             // would hold solo declarations open for another whole tick.
             try {
-              const lapsed = await lapseSolos(db, s.id, now);
+              // ⚠️ The DM is queued INSIDE `lapseSolos`'s own per-row
+              // transaction (Global Constraint / §4.7: every Discord post goes
+              // through a table written in the same transaction as the
+              // transition it describes). `@factions/declarations` cannot
+              // import `@factions/roster/internal` without a cycle, so it
+              // takes the write as a callback and this is where it is
+              // supplied. A throw here rolls that one release back — the safe
+              // direction, since the next tick simply sweeps it again.
+              const lapsed = await lapseSolos(db, s.id, now, async (tx, l) => {
+                if (!l.discordId) return;
+                await noticeUserTx(tx, {
+                  serverId: s.id, factionId: null, discordId: l.discordId, kind: "solo_lapsed", occurredAt: now,
+                  payload: { link: `${cfg.siteBaseUrl}/base` },
+                });
+              });
               all.push(...lapsed);
-              // ⚠️ Written after `lapseSolos`'s own transaction commits, not
-              // inside it — `lapseSolos` owns its transaction per row, and a
-              // DM is not part of the release. A crash between the release
-              // and this loses one DM; the site's `/base` banner (Task 8)
-              // shows the same fact.
-              for (const l of lapsed) {
-                if (!l.discordId) continue;
-                const discordId = l.discordId;
-                try {
-                  await db.transaction((tx) => noticeUserTx(tx, {
-                    serverId: s.id, factionId: null, discordId, kind: "solo_lapsed", occurredAt: now,
-                    payload: { link: `${cfg.siteBaseUrl}/base` },
-                  }));
-                } catch (err) {
-                  console.error(`solo lapse DM failed for ${l.dayzId}`, err);
-                }
-              }
             } catch (err) {
               console.error(`solo lapse failed for server ${s.id}`, err);
             }

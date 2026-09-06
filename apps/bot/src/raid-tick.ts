@@ -43,17 +43,28 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
       if (!p) continue;
       out.scanned++;
       const result = await db.transaction(async (tx) => {
+        // ⚠️ Every exit from this transaction goes through `done`, which
+        // commits the consumer cursor in the SAME transaction as the event's
+        // effects. A mid-batch failure therefore rolls back an unfinished
+        // event and nothing else: the next tick resumes at the last event
+        // that fully committed, and an already-applied event can never be
+        // replayed. The unique/`last_lower_event_id` guards below stay as
+        // belt-and-braces (the log is at-least-once by contract).
+        const done = async <T,>(v: T): Promise<T> => {
+          await writeCursor(tx, RAID_CONSUMER, ev.id);
+          return v;
+        };
         // The victim: the ACTIVE clan whose declaration is this pole. FOR UPDATE on factions first (§4.12).
         const [victim] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, flagDownSince: factions.flagDownSince, activatedAt: factions.activatedAt })
           .from(factions).innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
           .where(and(eq(factions.serverId, ev.serverId), eq(declarations.poleKey, p.poleKey), eq(factions.status, "active")))
           .for("update", { of: factions });
-        if (!victim) return "no-raid" as const;
+        if (!victim) return done("no-raid" as const);
         const [member] = await tx.select({ id: factionMembers.id }).from(factionMembers)
           .where(and(eq(factionMembers.factionId, victim.id), eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full")));
-        if (member) return "no-raid" as const; // upkeep, not a raid
+        if (member) return done("no-raid" as const); // upkeep, not a raid
         const season = await openSeason(tx, ev.serverId);
-        if (!season) return "no-season" as const;
+        if (!season) return done("no-season" as const);
         // The raider's clan, if any (full membership on this server).
         const [raider] = await tx.select({ factionId: factionMembers.factionId, name: factions.name, tag: factions.tag }).from(factionMembers)
           .innerJoin(factions, eq(factions.id, factionMembers.factionId))
@@ -76,7 +87,7 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           if (ev.id > open.lastLowerEventId) {
             await tx.update(raids).set({ lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: sql`${raids.lowerCount} + 1` }).where(eq(raids.id, open.id));
           }
-          return "absorbed" as const;
+          return done("absorbed" as const);
         }
         // Points from the ladder at this moment (§8.1): ranked = active clans with points > 0 this season.
         const ranked = await tx.select({ factionId: seasonStandings.factionId }).from(seasonStandings)
@@ -87,11 +98,20 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const rank = idx === -1 ? null : idx + 1;
         const points = raiderFactionId === null ? 0 : pointsFor(rank, ranked.length);
         // Standings before raids, per §4.12's documented lock order.
-        await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: victim.id, timesRaided: 1 })
-          .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { timesRaided: sql`${seasonStandings.timesRaided} + 1` } });
-        if (raiderFactionId !== null) {
-          await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: raiderFactionId, points, raids: 1 })
-            .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { points: sql`${seasonStandings.points} + ${points}`, raids: sql`${seasonStandings.raids} + 1` } });
+        //
+        // ⚠️ The two rows are upserted in `faction_id` order, not
+        // victim-then-raider. §4.12 fixes the order BETWEEN tables and is
+        // silent WITHIN one; two simultaneous raids with swapped roles (A
+        // raids B while B raids A) would otherwise take the same two
+        // `season_standings` rows in opposite orders and deadlock. Sorting by
+        // a stable key is free and removes the cycle.
+        const standings = [
+          { factionId: victim.id, values: { seasonId: season.id, factionId: victim.id, timesRaided: 1 }, set: { timesRaided: sql`${seasonStandings.timesRaided} + 1` } },
+          ...(raiderFactionId === null ? [] : [{ factionId: raiderFactionId, values: { seasonId: season.id, factionId: raiderFactionId, points, raids: 1 }, set: { points: sql`${seasonStandings.points} + ${points}`, raids: sql`${seasonStandings.raids} + 1` } }]),
+        ].sort((a, b) => a.factionId - b.factionId);
+        for (const u of standings) {
+          await tx.insert(seasonStandings).values(u.values)
+            .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: u.set });
         }
         await tx.insert(raids).values({
           seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
@@ -99,6 +119,10 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: weekStartOf(ev.occurredAt),
         });
         // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
+        //
+        // `factions` after `raids` reads as out of §4.12 order, but no new
+        // lock is taken: this row has been held FOR UPDATE since the victim
+        // lookup at the top of the transaction.
         if (victim.flagDownSince === null) {
           await tx.update(factions).set({ flagDownSince: ev.occurredAt, flagDownByDayzId: p.dayzId }).where(eq(factions.id, victim.id));
         }
@@ -109,7 +133,7 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           await noticeClanTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_down", occurredAt: ev.occurredAt, payload: notice });
           await noticeFullMembersTx(tx, { serverId: ev.serverId, factionId: victim.id, kind: "flag_down", occurredAt: ev.occurredAt, payload: notice });
         }
-        return "raid" as const;
+        return done("raid" as const);
       });
       if (result === "raid") out.raids++;
       else if (result === "absorbed") out.absorbed++;
@@ -118,6 +142,10 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         if (!warned.has(ev.serverId)) { warned.add(ev.serverId); opts.onNoSeason?.(ev.serverId); }
       }
     }
+    // The tail: events this consumer skipped outright (wrong type, unparseable
+    // payload) opened no transaction, so nothing has advanced the cursor past
+    // them. They have no effects, so replaying them is free — this write just
+    // saves the next tick from re-reading them.
     await writeCursor(db, RAID_CONSUMER, cursor);
   }
   return out;

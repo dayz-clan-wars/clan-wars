@@ -6,6 +6,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { FLAG_DOWN_MS } from "@factions/domain";
 import { raiseTick } from "../src/raise-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
 
@@ -137,6 +138,80 @@ describe("raiseTick", () => {
     expect(r.noticed).toBe(1);
     const [n] = await db.select({ kind: clanNotices.kind, target: clanNotices.target, to: clanNotices.discordTargetId, payload: clanNotices.payload }).from(clanNotices);
     expect(n).toMatchObject({ kind: "solo_non_member_raise", target: "dm", to: "dS1", payload: { gamertag: "Wolfie" } });
+  });
+
+  it("⚠️ a raise exactly FLAG_DOWN_MS after the lower is NOT a defense and leaves the clock for the dormancy tick", async () => {
+    await db.update(factions).set({ flagDownSince: ago(FLAG_DOWN_MS), flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+    await raise(B1, "Bear1", "Flag_Bear", P1, now);
+    const r = await raiseTick(db, { siteBaseUrl: SITE });
+    expect(r.defenses).toBe(0);
+    expect(await db.select().from(defenses)).toEqual([]);
+    expect(await db.select().from(warLogEvents)).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+    const [bear] = await db.select({ f: factions.flagDownSince, b: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
+    // Untouched: dormancy-tick converts the clan to dormant(raided) and this
+    // same raise revives it through the dormant branch on a later tick (§5.8).
+    expect(bear).toEqual({ f: ago(FLAG_DOWN_MS), b: W1 });
+  });
+
+  it("one millisecond inside FLAG_DOWN_MS is still a defense", async () => {
+    await db.update(factions).set({ flagDownSince: ago(FLAG_DOWN_MS - 1), flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+    await raise(B1, "Bear1", "Flag_Bear", P1, now);
+    expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ defenses: 1 });
+    const [bear] = await db.select({ f: factions.flagDownSince }).from(factions).where(eq(factions.id, BEAR));
+    expect(bear!.f).toBeNull();
+  });
+
+  it("⚠️ a mid-batch failure does not re-apply the events that already committed", async () => {
+    // Two notice-only events (non_member_raise): the branch with no unique key
+    // of its own, where only the per-event cursor prevents a duplicate notice.
+    await raise(W1, "Wolfie", "Flag_Bear", P1, now);
+    await raise(S1, "Solo", "Flag_Bear", P1, new Date(now.getTime() + 1000));
+
+    // Fail the SECOND event's transaction, after the first has committed.
+    let started = 0;
+    const flaky = new Proxy(db, {
+      get(t, prop) {
+        if (prop === "transaction") {
+          return async (fn: unknown) => {
+            if (started++ >= 1) throw new Error("injected mid-batch failure");
+            return (t as Database).transaction(fn as never);
+          };
+        }
+        const v = Reflect.get(t as object, prop);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    }) as Database;
+
+    await expect(raiseTick(flaky, { siteBaseUrl: SITE })).rejects.toThrow(/injected/u);
+    expect(await db.select().from(clanNotices)).toHaveLength(1);
+
+    // The next tick resumes at the first event's committed cursor: it applies
+    // the second event and nothing else. Two notices in total, not three.
+    await raiseTick(db, { siteBaseUrl: SITE });
+    const notices = await db.select({ p: clanNotices.payload }).from(clanNotices).orderBy(clanNotices.id);
+    expect(notices).toEqual([{ p: { gamertag: "Wolfie" } }, { p: { gamertag: "Solo" } }]);
+  });
+
+  it("⚠️ a replayed defense event does not double-count standings or cancel a fresh siege", async () => {
+    await db.update(factions).set({ flagDownSince: ago(3_600_000), flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+    await raise(B1, "Bear1", "Flag_Bear", P1, now);
+    await raiseTick(db, { siteBaseUrl: SITE });
+    expect((await db.select({ d: seasonStandings.defenses }).from(seasonStandings))[0]).toEqual({ d: 1 });
+
+    // A second, real raid lowers the flag again before the replay.
+    const fresh = new Date(now.getTime() + 60_000);
+    await db.update(factions).set({ flagDownSince: fresh, flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+    await db.execute(sql`update consumer_cursors set last_event_id = ${cursorAfterSetup} where consumer_name = 'raise-consumer'`);
+    await raiseTick(db, { siteBaseUrl: SITE });
+
+    expect(await db.select().from(defenses)).toHaveLength(1);
+    expect((await db.select({ d: seasonStandings.defenses }).from(seasonStandings))[0]).toEqual({ d: 1 });
+    expect(await db.select().from(warLogEvents)).toHaveLength(1);
+    expect(await db.select().from(clanNotices)).toHaveLength(1);
+    // The in-progress siege survives the replay.
+    const [bear] = await db.select({ f: factions.flagDownSince }).from(factions).where(eq(factions.id, BEAR));
+    expect(bear!.f).toEqual(fresh);
   });
 
   it("is idempotent: rerunning from cursor 0 writes no second defense (defenses_event_uniq) and no second notice", async () => {

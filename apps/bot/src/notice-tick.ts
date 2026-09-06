@@ -21,6 +21,13 @@ export type NoticeTickResult = { posted: number; failed: number; blockedTargets:
  * row does not block the rows behind it forever: only the CURRENT tick's
  * attempt blocks that target, so a later, healthy row for the same target
  * posts on the next tick.
+ *
+ * ⚠️ Delivery is AT-LEAST-ONCE, not exactly-once. The row is posted and THEN
+ * marked, so a crash between `send()` and `markPosted` re-posts that row on
+ * the next start. Discord has no idempotency key we could use, and the same
+ * discipline is what `feedTick` has always had — a duplicate line is a much
+ * smaller harm than a silently dropped one — but the queue is not a
+ * guarantee of exactly one message.
  */
 export async function noticeTick(
   store: NoticeStore,

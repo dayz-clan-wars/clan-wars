@@ -61,6 +61,31 @@ describe("roster package notices", () => {
     expect(q).toMatchObject({ id: row!.id, discordTargetId: "chan-1" });
   });
 
+  it("readUnposted does not let a null-target channel backlog starve the DMs behind it", async () => {
+    // Three channel rows for a clan with no channel yet (the steady state until
+    // increment 3b), then two DMs. limit 2 must return the two DMs, not nothing.
+    for (const gamertag of ["A", "B", "C"]) {
+      await db.transaction((tx) => noticeClanTx(tx, { serverId, factionId, kind: "joined", occurredAt: now, payload: { gamertag } }));
+    }
+    for (const discordId of ["d1", "d2"]) {
+      await db.transaction((tx) => noticeUserTx(tx, { serverId, factionId, discordId, kind: "solo_lapsed", occurredAt: now, payload: {} }));
+    }
+    const q = await new PgNoticeStore(db).readUnposted(2);
+    expect(q.map((r) => r.discordTargetId)).toEqual(["d1", "d2"]);
+    expect(q.map((r) => r.id)).toEqual([...q.map((r) => r.id)].sort((a, b) => a - b));
+  });
+
+  it("readUnposted returns deliverable rows in id order and stops at the limit", async () => {
+    for (const discordId of ["d1", "d2", "d3", "d4"]) {
+      await db.transaction((tx) => noticeUserTx(tx, { serverId, factionId, discordId, kind: "solo_lapsed", occurredAt: now, payload: {} }));
+    }
+    const store = new PgNoticeStore(db);
+    const first = await store.readUnposted(2);
+    expect(first.map((r) => r.discordTargetId)).toEqual(["d1", "d2"]);
+    for (const r of first) await store.markPosted(r.id, now);
+    expect((await store.readUnposted(10)).map((r) => r.discordTargetId)).toEqual(["d3", "d4"]);
+  });
+
   it("noticeFullMembersTx DMs every full member and no pending one", async () => {
     const n = await db.transaction((tx) => noticeFullMembersTx(tx, { serverId, factionId, kind: "flag_down", occurredAt: now, payload: { gamertag: "Raider" } }));
     expect(n).toBe(2);

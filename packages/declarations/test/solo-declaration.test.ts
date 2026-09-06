@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionMembers, events, admFiles, poles, identityLinks, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionMembers, events, admFiles, poles, identityLinks, declarations, type Database } from "@factions/db";
 import { SOLO_LAPSE_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raisedPolesFor, declareSolo, lapseSolos, declarationForPlayer } from "../src/store";
@@ -89,6 +89,37 @@ describe("solo declarations", () => {
     await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(1000) });
     expect(await lapseSolos(db, serverId, now)).toEqual([]);
     expect(await declarationForPlayer(db, serverId, "A")).toMatchObject({ poleKey: P });
+  });
+
+  it("onLapsed runs inside the release's transaction, after the release", async () => {
+    await raise("A", ago(SOLO_LAPSE_MS + 1));
+    await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });
+    const seen: { dayzId: string; releasedAlready: boolean }[] = [];
+    const lapsed = await lapseSolos(db, serverId, now, async (tx, row) => {
+      // Inside the transaction, the release has already happened: the
+      // declaration is gone as far as this transaction can see.
+      const rows = await tx.select().from(declarations).where(eq(declarations.ownerDayzId, row.dayzId));
+      seen.push({ dayzId: row.dayzId, releasedAlready: rows.length === 0 });
+    });
+    expect(lapsed).toEqual([{ dayzId: "A", poleKey: P, discordId: null }]);
+    expect(seen).toEqual([{ dayzId: "A", releasedAlready: true }]);
+  });
+
+  it("⚠️ a throwing onLapsed rolls the lapse back — no notice, no release", async () => {
+    // The Global Constraint (§4.7) works in both directions: the DM cannot be
+    // lost after a release, and a release that could not be announced is not
+    // committed either. The next tick simply sweeps the declaration again.
+    await raise("A", ago(SOLO_LAPSE_MS + 1));
+    await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });
+    await expect(lapseSolos(db, serverId, now, async () => { throw new Error("notice write failed"); }))
+      .rejects.toThrow(/notice write failed/u);
+    expect(await declarationForPlayer(db, serverId, "A")).toMatchObject({ poleKey: P });
+    // The release's own grace stamp was rolled back with it.
+    const [p] = await db.select().from(poles).where(eq(poles.poleKey, P));
+    expect(p!.graceUntil?.getTime()).not.toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+
+    // And the sweep works normally on the next tick.
+    expect(await lapseSolos(db, serverId, now)).toEqual([{ dayzId: "A", poleKey: P, discordId: null }]);
   });
 
   it("does not lapse a declarant who raised inside the window", async () => {

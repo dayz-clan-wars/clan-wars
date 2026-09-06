@@ -85,7 +85,7 @@ export async function dormancyTick(
      * when it is absent `soloLapsed` is 0 because nothing was swept, which is
      * the honest count.
      */
-    lapseSolos?: (now: Date) => Promise<{ dayzId: string; poleKey: string }[]>;
+    lapseSolos?: (now: Date) => Promise<{ dayzId: string; poleKey: string; discordId: string | null }[]>;
   },
 ): Promise<DormancyTickResult> {
   const { now, windows } = opts;
