@@ -85,11 +85,13 @@ describe("discord wiring", () => {
 
     const guild = new FakeGuild();
     guild.roles.set("1", { name: "Linked", members: new Set() });
-    const r = await structureTick(new PgStructureStore(db), guild, { linkedRoleId: "1" });
+    guild.roles.set("2", { name: "Alpha", members: new Set() });
+    const r = await structureTick(new PgStructureStore(db), guild, { linkedRoleId: "1", alphaRoleId: "2" });
     expect(r).toEqual({
       created: 0, tornDown: 0, renamed: 0,
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
+      alphaAdds: 0, alphaRemoves: 0,
       nicknamesCleared: 0, noticesFailed: 0, errors: 0,
     });
   });

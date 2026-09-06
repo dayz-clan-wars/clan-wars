@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, identityLinks, clanNotices } from "@factions/db";
+import { factions, factionMembers, identityLinks, clanNotices, seasons, alphaWeeks } from "@factions/db";
 import { and, eq, isNull, isNotNull, inArray, or, asc } from "drizzle-orm";
 
 export type StructureRow = {
@@ -25,6 +25,18 @@ export interface StructureStore {
   setVoiceChannelId(factionId: number, id: string | null): Promise<void>;
   /** factionId → discord ids of FULL members, for every clan with a role id. */
   fullMembersByClan(): Promise<Map<number, string[]>>;
+  /**
+   * factionId → discord ids of FULL members, for exactly the given factions —
+   * independent of whether the clan has a Discord role id yet, so a
+   * brand-new Alpha faction with no structure still gets its members read.
+   */
+  fullMembersOf(factionIds: number[]): Promise<Map<number, string[]>>;
+  /**
+   * The faction ids ranked in `alpha_weeks` for the latest closed week
+   * (`seasons.week_closed_through`) of every open season. Empty when no
+   * week has closed yet for any open season.
+   */
+  currentAlphaFactionIds(): Promise<Set<number>>;
   /** Every identity_links.discord_id. */
   linkedDiscordIds(): Promise<Set<string>>;
   /**
@@ -150,6 +162,39 @@ export class PgStructureStore implements StructureStore {
         result.set(row.factionId, []);
       }
       result.get(row.factionId)!.push(row.discordId);
+    }
+    return result;
+  }
+
+  async fullMembersOf(factionIds: number[]): Promise<Map<number, string[]>> {
+    const result = new Map<number, string[]>();
+    if (factionIds.length === 0) return result;
+    const rows = await this.db
+      .select({ factionId: factionMembers.factionId, discordId: factionMembers.discordId })
+      .from(factionMembers)
+      .where(and(inArray(factionMembers.factionId, factionIds), eq(factionMembers.status, "full")))
+      .orderBy(asc(factionMembers.factionId), asc(factionMembers.discordId));
+    for (const row of rows) {
+      if (!result.has(row.factionId)) {
+        result.set(row.factionId, []);
+      }
+      result.get(row.factionId)!.push(row.discordId);
+    }
+    return result;
+  }
+
+  async currentAlphaFactionIds(): Promise<Set<number>> {
+    const openSeasons = await this.db
+      .select({ id: seasons.id, weekClosedThrough: seasons.weekClosedThrough })
+      .from(seasons)
+      .where(and(isNull(seasons.endedAt), isNotNull(seasons.weekClosedThrough)));
+    const result = new Set<number>();
+    for (const season of openSeasons) {
+      const rows = await this.db
+        .select({ factionId: alphaWeeks.factionId })
+        .from(alphaWeeks)
+        .where(and(eq(alphaWeeks.seasonId, season.id), eq(alphaWeeks.weekStart, season.weekClosedThrough!)));
+      for (const row of rows) result.add(row.factionId);
     }
     return result;
   }

@@ -10,6 +10,8 @@ export type StructureTickResult = {
   roleRemoves: number;
   linkedAdds: number;
   linkedRemoves: number;
+  alphaAdds: number;
+  alphaRemoves: number;
   nicknamesCleared: number;
   /** Channel notices stamped `failed_at` because their clan's channel was torn down. */
   noticesFailed: number;
@@ -18,6 +20,7 @@ export type StructureTickResult = {
 
 export type StructureTickOpts = {
   linkedRoleId: string;
+  alphaRoleId: string;
   onError?: (what: string, err: unknown) => void;
   /** Users whose nickname the bot cannot change (owner, outranked, no permission): logged once per instance, never retried. Owned by the caller. */
   nicknameNoRetry?: Set<string>;
@@ -44,6 +47,8 @@ export async function structureTick(
     roleRemoves: 0,
     linkedAdds: 0,
     linkedRemoves: 0,
+    alphaAdds: 0,
+    alphaRemoves: 0,
     nicknamesCleared: 0,
     noticesFailed: 0,
     errors: 0,
@@ -221,6 +226,35 @@ export async function structureTick(
     await step(`linked-add:${id}`, async () => {
       await guild.addRole(id, opts.linkedRoleId);
       out.linkedAdds++;
+    });
+  }
+
+  // 6. @Alpha — full members of the latest closed week's Alpha factions hold
+  // it, nobody else. No nickname touched here; that's @Linked's business.
+  let desiredAlpha = new Set<string>();
+  let actualAlpha = new Set<string>();
+  await step("alpha-read", async () => {
+    const alphaFactionIds = [...(await store.currentAlphaFactionIds())];
+    const membersByFaction = await store.fullMembersOf(alphaFactionIds);
+    const members = new Set<string>();
+    for (const ids of membersByFaction.values()) for (const id of ids) members.add(id);
+    desiredAlpha = new Set([...members].filter((id) => guild.isMember(id)));
+    actualAlpha = guild.roleMembers(opts.alphaRoleId);
+  });
+
+  for (const id of actualAlpha) {
+    if (desiredAlpha.has(id)) continue;
+    await step(`alpha-remove:${id}`, async () => {
+      await guild.removeRole(id, opts.alphaRoleId);
+      out.alphaRemoves++;
+    });
+  }
+
+  for (const id of desiredAlpha) {
+    if (actualAlpha.has(id)) continue;
+    await step(`alpha-add:${id}`, async () => {
+      await guild.addRole(id, opts.alphaRoleId);
+      out.alphaAdds++;
     });
   }
 

@@ -8,6 +8,8 @@ import {
   factionMembers,
   identityLinks,
   clanNotices,
+  seasons,
+  alphaWeeks,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -34,7 +36,7 @@ describe("structureTick", () => {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(
-        sql`truncate table clan_notices, identity_links, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`,
+        sql`truncate table clan_notices, alpha_weeks, seasons, identity_links, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`,
       );
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
@@ -56,11 +58,12 @@ describe("structureTick", () => {
 
     guild = new FakeGuild();
     guild.roles.set("linked", { name: "Linked", members: new Set() });
+    guild.roles.set("alpha", { name: "Alpha", members: new Set() });
     for (const id of ["d1", "d2", "d3", "d4"]) guild.members.set(id, { nickname: null });
   });
 
   it("creates role, text and voice channel for an active clan and records the ids", async () => {
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     const [row] = await store.clansWithStructure();
     expect(row).toMatchObject({ id: BEAR });
@@ -71,29 +74,29 @@ describe("structureTick", () => {
 
   it("⚠️ resumes a half-created clan without duplicating the role", async () => {
     guild.failNext.add("createTextChannel");
-    let r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 0, errors: 1 });
     const [half] = await store.clansNeedingStructure();
     expect(half).toMatchObject({ roleId: expect.any(String), textChannelId: null });
-    r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     expect(guild.calls.filter((c) => c.startsWith("createRole"))).toHaveLength(1);
   });
 
   it("does not create structures for a reserved clan (§5.1: at activation)", async () => {
     await db.update(factions).set({ status: "reserved", reservedUntil: new Date(now.getTime() + 86400000) }).where(eq(factions.id, BEAR));
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 0, errors: 0 });
     expect(await store.clansWithStructure()).toEqual([]);
     expect(guild.calls.filter((c) => c.startsWith("create"))).toEqual([]);
   });
 
   it("tears a disbanded clan down, channels before the role, and nulls the ids", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, BEAR));
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ tornDown: 1 });
-    expect(guild.roles.size).toBe(1); // only Linked remains
+    expect(guild.roles.size).toBe(2); // only Linked and Alpha remain
     expect(guild.channels.size).toBe(0);
     const [f] = await db.select({ r: factions.discordRoleId, t: factions.discordTextChannelId, v: factions.discordVoiceChannelId }).from(factions).where(eq(factions.id, BEAR));
     expect(f).toEqual({ r: null, t: null, v: null });
@@ -102,20 +105,20 @@ describe("structureTick", () => {
   });
 
   it("tolerates an object already deleted by hand during teardown", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     const [row] = await store.clansWithStructure();
     guild.channels.delete(row!.textChannelId!);
     await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, BEAR));
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ tornDown: 1, errors: 0 });
     const [f] = await db.select({ r: factions.discordRoleId, t: factions.discordTextChannelId, v: factions.discordVoiceChannelId }).from(factions).where(eq(factions.id, BEAR));
     expect(f).toEqual({ r: null, t: null, v: null });
   });
 
   it("renames the role and channels after a clan rename", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     await db.update(factions).set({ name: "Day Bears", tag: "DAYB" }).where(eq(factions.id, BEAR));
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ renamed: 1 });
     const [row] = await store.clansWithStructure();
     expect(guild.roles.get(row!.roleId!)!.name).toBe("Day Bears");
@@ -124,22 +127,22 @@ describe("structureTick", () => {
   });
 
   it("gives the clan role to full members only, and takes it back after a leave", async () => {
-    let r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     const [row] = await store.clansWithStructure();
     expect([...guild.roleMembers(row!.roleId!)].sort()).toEqual(["d1", "d2"]); // d3 is pending
     expect(r.roleAdds).toBe(2);
     await db.delete(factionMembers).where(eq(factionMembers.discordId, "d2"));
-    r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r.roleRemoves).toBe(1);
     expect([...guild.roleMembers(row!.roleId!)]).toEqual(["d1"]);
   });
 
   it("gives a clan's stale role holders back even after its last full member left (inner-join gap)", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     await db.delete(factionMembers).where(eq(factionMembers.factionId, BEAR));
     const [row] = await store.clansWithStructure();
     expect([...guild.roleMembers(row!.roleId!)].sort()).toEqual(["d1", "d2"]);
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r.roleRemoves).toBe(2);
     expect(guild.roleMembers(row!.roleId!).size).toBe(0);
   });
@@ -148,7 +151,7 @@ describe("structureTick", () => {
     await db.insert(factionMembers).values({
       factionId: BEAR, serverId, dayzId: "U9", discordId: "d9", role: "member", joinedAt: now, status: "full",
     });
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r.errors).toBe(0);
     expect(guild.calls.filter((c) => c.includes("d9"))).toEqual([]);
     const [row] = await store.clansWithStructure();
@@ -157,11 +160,11 @@ describe("structureTick", () => {
 
   it("gives @Linked to every link row and, on unlink, clears the nickname THEN removes the role", async () => {
     guild.members.get("d4")!.nickname = "Four";
-    let r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect([...guild.roleMembers("linked")].sort()).toEqual(["d1", "d2", "d4"]);
     expect(r.linkedAdds).toBe(3);
     await db.delete(identityLinks).where(eq(identityLinks.discordId, "d4")); // what unlinkDb does
-    r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ linkedRemoves: 1, nicknamesCleared: 1 });
     expect(guild.members.get("d4")!.nickname).toBeNull();
     const i = guild.calls.indexOf("setNickname d4 null");
@@ -170,20 +173,20 @@ describe("structureTick", () => {
   });
 
   it("⚠️ an unrenamable user is logged once, never retried, and still loses the role", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     guild.nicknameOutcome = "outranked";
     const noRetry = new Set<string>();
     const onError = vi.fn();
     await db.delete(identityLinks).where(eq(identityLinks.discordId, "d4"));
-    await structureTick(store, guild, { linkedRoleId: "linked", nicknameNoRetry: noRetry, onError });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", nicknameNoRetry: noRetry, onError });
     expect(noRetry.has("d4")).toBe(true);
     expect(guild.roleMembers("linked").has("d4")).toBe(false);
     expect(onError).toHaveBeenCalledTimes(1);
     // a second unlink of the same user (relinked in between) must not log again
     await db.insert(identityLinks).values({ discordId: "d4", dayzId: "U4", gamertag: "Four", verifiedAt: now });
-    await structureTick(store, guild, { linkedRoleId: "linked", nicknameNoRetry: noRetry, onError });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", nicknameNoRetry: noRetry, onError });
     await db.delete(identityLinks).where(eq(identityLinks.discordId, "d4"));
-    await structureTick(store, guild, { linkedRoleId: "linked", nicknameNoRetry: noRetry, onError });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", nicknameNoRetry: noRetry, onError });
     expect(onError).toHaveBeenCalledTimes(1);
     expect(guild.calls.filter((c) => c === "setNickname d4 null")).toHaveLength(1);
   });
@@ -191,7 +194,7 @@ describe("structureTick", () => {
   it("one Discord failure does not stop the rest of the pass, and the tick never throws", async () => {
     guild.failNext.add("addRole");
     const onError = vi.fn();
-    const r = await structureTick(store, guild, { linkedRoleId: "linked", onError });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", onError });
     expect(r.errors).toBe(1);
     expect(onError).toHaveBeenCalledTimes(1);
     expect(r.created).toBe(1); // the create step before it ran
@@ -199,10 +202,10 @@ describe("structureTick", () => {
   });
 
   it("is a no-op on a second pass with nothing changed", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     guild.calls.length = 0;
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
-    expect(r).toEqual({ created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0, nicknamesCleared: 0, noticesFailed: 0, errors: 0 });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(r).toEqual({ created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0, alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, noticesFailed: 0, errors: 0 });
     expect(guild.calls).toEqual([]);
   });
 
@@ -210,7 +213,7 @@ describe("structureTick", () => {
     await db.transaction((tx) => noticeClanTx(tx, { serverId, factionId: BEAR, kind: "joined", occurredAt: now, payload: { gamertag: "Two" } }));
     const notices = new PgNoticeStore(db);
     expect(await notices.readUnposted(10)).toEqual([]);
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     const [row] = await store.clansWithStructure();
     const [n] = await notices.readUnposted(10);
     expect(n).toMatchObject({ kind: "joined", target: "channel", discordTargetId: row!.textChannelId });
@@ -219,7 +222,7 @@ describe("structureTick", () => {
     // The shape of a create whose column write was lost: the object exists, no
     // clan owns it, and the name matches exactly.
     guild.roles.set("stray", { name: "Night Bears", members: new Set() });
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     const [row] = await store.clansWithStructure();
     expect(row!.roleId).toBe("stray");
@@ -235,25 +238,27 @@ describe("structureTick", () => {
       setTextChannelId: (id, v) => store.setTextChannelId(id, v),
       setVoiceChannelId: (id, v) => store.setVoiceChannelId(id, v),
       fullMembersByClan: () => store.fullMembersByClan(),
+      fullMembersOf: (ids) => store.fullMembersOf(ids),
+      currentAlphaFactionIds: () => store.currentAlphaFactionIds(),
       linkedDiscordIds: () => store.linkedDiscordIds(),
       failChannelNotices: (id, at) => store.failChannelNotices(id, at),
     };
     for (let i = 0; i < 3; i++) {
-      const r = await structureTick(broken, guild, { linkedRoleId: "linked" });
+      const r = await structureTick(broken, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
       expect(r).toMatchObject({ created: 0, errors: 1 });
     }
     // One role, adopted by name on every tick after the first, not three.
     expect(guild.calls.filter((c) => c.startsWith("createRole"))).toHaveLength(1);
-    expect(guild.roles.size).toBe(2); // Linked + the one clan role
+    expect(guild.roles.size).toBe(3); // Linked + Alpha + the one clan role
   });
 
   it("⚠️ a role deleted by hand is reported once, not recreated, and step 4 stops diffing against it", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     const [row] = await store.clansWithStructure();
     guild.roles.delete(row!.roleId!);
     guild.calls.length = 0;
     const onError = vi.fn();
-    const r = await structureTick(store, guild, { linkedRoleId: "linked", onError });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", onError });
     expect(onError.mock.calls.map((c) => c[0])).toEqual([`missing:${row!.roleId}`]);
     expect(guild.calls.filter((c) => c.startsWith("createRole"))).toEqual([]);
     // Without the skip this is one guaranteed-10011 addRole per full member, per tick, forever.
@@ -262,13 +267,13 @@ describe("structureTick", () => {
   });
 
   it("⚠️ teardown fails the clan's queued channel notices before the channel column goes null", async () => {
-    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     await db.transaction((tx) => noticeClanTx(tx, { serverId, factionId: BEAR, kind: "joined", occurredAt: now, payload: { gamertag: "Two" } }));
     const notices = new PgNoticeStore(db);
     expect(await notices.readUnposted(10)).toHaveLength(1);
 
     await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, BEAR));
-    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ tornDown: 1, noticesFailed: 1, errors: 0 });
 
     // Without the stamp this row matches neither readUnposted (the channel
@@ -301,14 +306,58 @@ describe("structureTick", () => {
       setNickname: (u, n) => guild.setNickname(u, n),
     };
     const onError = vi.fn();
-    const r = await structureTick(store, blind, { linkedRoleId: "linked", onError });
+    const r = await structureTick(store, blind, { linkedRoleId: "linked", alphaRoleId: "alpha", onError });
     expect(r).toEqual({
       created: 1, tornDown: 0, renamed: 0,
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
+      alphaAdds: 0, alphaRemoves: 0,
       nicknamesCleared: 0, noticesFailed: 0,
-      errors: 2, // step 4's isMember, step 5's read — the pass still finishes
+      errors: 3, // step 4's isMember, step 5's read, step 6's read — the pass still finishes
     });
-    expect(onError.mock.calls.map((c) => c[0])).toEqual([`roles:${BEAR}`, "linked-read"]);
+    expect(onError.mock.calls.map((c) => c[0])).toEqual([`roles:${BEAR}`, "linked-read", "alpha-read"]);
+  });
+
+  describe("@Alpha", () => {
+    let WOLF = 0;
+    const week1 = new Date("2026-08-24T00:00:00Z");
+    const week2 = new Date("2026-08-31T00:00:00Z");
+
+    beforeEach(async () => {
+      const wolf = await seedFaction(db, { serverId, name: "Wolf Pack", tag: "WOLF", texture: "Flag_Wolf", status: "active", createdAt: now, poleKey: "2.00:1.00:2.00" });
+      WOLF = wolf.id;
+      await db.insert(factionMembers).values([
+        { factionId: WOLF, serverId, dayzId: "U5", discordId: "d5", role: "leader", joinedAt: now, status: "full" },
+        { factionId: WOLF, serverId, dayzId: "U6", discordId: "d6", role: "member", joinedAt: now, status: "pending" },
+      ]);
+      guild.members.set("d5", { nickname: null });
+      guild.members.set("d6", { nickname: null });
+    });
+
+    it("gives @Alpha to the full members of this week's Alphas and takes it from last week's", async () => {
+      const [season] = await db.insert(seasons).values({
+        serverId, number: 1, startedAt: week1, weekClosedThrough: week1,
+      }).returning();
+      await db.insert(alphaWeeks).values({ seasonId: season!.id, weekStart: week1, rank: 1, factionId: BEAR, points: 10 });
+      let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+      expect([...guild.roleMembers("alpha")].sort()).toEqual(["d1", "d2"]); // BEAR's full members
+      expect(r.alphaAdds).toBe(2);
+
+      await db.update(seasons).set({ weekClosedThrough: week2 }).where(eq(seasons.id, season!.id));
+      await db.insert(alphaWeeks).values({ seasonId: season!.id, weekStart: week2, rank: 1, factionId: WOLF, points: 20 });
+      r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+      expect([...guild.roleMembers("alpha")].sort()).toEqual(["d5"]); // WOLF's full member only; d6 is pending
+      expect(r.alphaAdds).toBe(1);
+      expect(r.alphaRemoves).toBe(2);
+    });
+
+    it("no closed week means nobody holds @Alpha", async () => {
+      await db.insert(seasons).values({ serverId, number: 1, startedAt: week1, weekClosedThrough: null });
+      guild.roles.get("alpha")!.members.add("d5"); // stale holder from a prior tick
+      const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+      expect(guild.roleMembers("alpha")).toEqual(new Set());
+      expect(r.alphaRemoves).toBe(1);
+      expect(r.alphaAdds).toBe(0);
+    });
   });
 });

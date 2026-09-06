@@ -419,6 +419,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!membersFetched) await tryFetchMembers();
     const s = await structureTick(structureStore, guildGateway, {
       linkedRoleId: cfg.linkedRoleId,
+      alphaRoleId: cfg.alphaRoleId,
       nicknameNoRetry,
       onError: (what, err) => console.error(`structure: ${what}`, err),
     });
@@ -430,6 +431,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (s.roleRemoves) parts.push(`roleRemoves ${s.roleRemoves}`);
     if (s.linkedAdds) parts.push(`linkedAdds ${s.linkedAdds}`);
     if (s.linkedRemoves) parts.push(`linkedRemoves ${s.linkedRemoves}`);
+    if (s.alphaAdds) parts.push(`alphaAdds ${s.alphaAdds}`);
+    if (s.alphaRemoves) parts.push(`alphaRemoves ${s.alphaRemoves}`);
     if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
     if (s.noticesFailed) parts.push(`noticesFailed ${s.noticesFailed}`);
     // ⚠️ Included, or a pass that did nothing but fail prints nothing at all —
