@@ -19,6 +19,7 @@ import { PgCeremonyStore } from "./ceremony-store.js";
 import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
 import { dormancyTick } from "./dormancy-tick.js";
+import { presenceTick, expirePendingMembers } from "./presence-tick.js";
 import { lapseSolos } from "@factions/declarations";
 import { releaseSoloBasesFor } from "./declaration-wiring.js";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -1159,6 +1160,16 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("player projection failed", err);
     }
 
+    // ⚠️ Its own try/catch, separate from every other step: a pending
+    // member's promotion must not wait on verification, ceremony or
+    // dormancy, and a throw here must not stop any of them.
+    try {
+      const pr = await presenceTick(db);
+      if (pr.promoted.length > 0) console.log(`presence: ${pr.promoted.length} member(s) now full`);
+    } catch (err) {
+      console.error("presence tick failed", err);
+    }
+
     try {
       const r = await verificationTick(db, store);
       if (r.verified > 0 || r.alreadyLinked > 0) {
@@ -1240,6 +1251,16 @@ export async function start(cfg: BotConfig): Promise<void> {
         console.error(`dormancy DM failed for faction ${n.factionId}`, err));
     } catch (err) {
       console.error("dormancy tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, beside dormancy's: a pending member who never
+    // showed up at the base is the reaper's other half, and a throw here
+    // must not cost the faction sweep above its transitions.
+    try {
+      const expired = await expirePendingMembers(db, new Date());
+      if (expired.length > 0) console.log(`pending expiry: ${expired.length} member(s) dropped`);
+    } catch (err) {
+      console.error("pending expiry failed", err);
     }
 
     // ⚠️ Its own try/catch, like every other step. Runs after dormancy so a

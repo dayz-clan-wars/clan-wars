@@ -90,3 +90,8 @@ This single-process guard is not a distributed lock: if you ever run more
 than one bot instance against the same database, add a Postgres advisory
 lock keyed on the verification consumer name to serialize ticks across
 processes — this codebase does not implement one.
+
+The presence tick promotes a pending member on the first log line that
+places them within 50 m of their clan's base (the guide's number lives in
+`rules.ts`); the pending-expiry sweep removes a pending member unseen for 7
+days. Both are silent in Discord until increment 3's notices.
