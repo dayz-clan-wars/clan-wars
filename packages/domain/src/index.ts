@@ -7,3 +7,4 @@ export * from "./flags";
 export * from "./factions";
 export * from "./rules";
 export * from "./spacing";
+export * from "./scoring";

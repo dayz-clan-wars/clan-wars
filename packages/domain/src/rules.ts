@@ -49,6 +49,8 @@ export const RAID_WINDOW = { openDow: 5, closeDow: 1 } as const;
 export const FLAG_DOWN_MS = 24 * HOUR;
 export const DORMANT_AFTER_MS = 7 * DAY;
 export const DISBAND_AFTER_DORMANT_MS = 14 * DAY;
+/** The guide's "4 days until this clan is disbanded" warning, measured back from DISBAND_AFTER_DORMANT_MS. */
+export const DISBAND_WARNING_LEAD_MS = 4 * DAY;
 
 // The scoreboard
 export const POINTS_TOP = 200;

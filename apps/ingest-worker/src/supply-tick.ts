@@ -1,8 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
 import { declarations, factions, supplyUploads } from "@factions/db";
-import { SUPPLIED_STATUSES } from "@factions/domain";
-import { and, eq, inArray, asc } from "drizzle-orm";
+import { and, eq, isNull, asc } from "drizzle-orm";
 import { generateSupplies, type SpawnObject, type SupplyFaction } from "./supplies.js";
 
 /** What the game server reports about a file it holds. */
@@ -54,16 +53,21 @@ export async function supplyTick(db: Database, deps: {
     .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
     .where(and(
       eq(factions.serverId, deps.serverId),
-      // ⚠️ SUPPLIED, not HOLDING. A dormant faction still holds its flag, tag
-      // and pole — that is what HOLDING means — but it does not get a kit.
-      // This one line is the whole supply half of faction dormancy.
-      inArray(factions.status, [...SUPPLIED_STATUSES]),
+      // ⚠️ SUPPLIED, not HOLDING: the predicate is "status = 'active' and
+      // flag_down_since is null" (@factions/domain's SUPPLIED_PREDICATE,
+      // spec §4.3). A dormant faction still holds its flag, tag and pole —
+      // that is what HOLDING means — but it does not get a kit. A raided
+      // faction stays 'active' for its 24 h clock and drops out the moment
+      // its flag goes down. This is the whole supply half of both mechanisms.
+      eq(factions.status, "active"),
+      isNull(factions.flagDownSince),
     ))
     // Stable order, or the bytes differ between ticks and we upload forever.
     // Total without a tie-break only because factions_holding_tag_uniq is
-    // UNIQUE(serverId, lower(tag)) over exactly these statuses. SUPPLIED is a
-    // subset of HOLDING, so that index still makes tag total here. If that
-    // index loosens, add a second key or the hash flaps.
+    // UNIQUE(serverId, lower(tag)) over the holding statuses, and SUPPLIED
+    // (active with no flag down) is a subset of HOLDING, so that index still
+    // makes tag total here. If that index loosens, add a second key or the
+    // hash flaps.
     .orderBy(asc(factions.tag));
 
   // ⚠️ numeric columns arrive as STRINGS from Drizzle. Without Number() the

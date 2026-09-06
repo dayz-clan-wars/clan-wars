@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -502,12 +502,25 @@ export const factions = pgTable("factions", {
   playWindow: text("play_window"),
   language: text("language"),
   pitch: text("pitch"),
+  /** Spec §5.8: set by a non-member's lower at the declared pole while active; cleared by a member's raise (defense) or the dormancy transition. */
+  flagDownSince: timestamp("flag_down_since", { withTimezone: true }),
+  flagDownByDayzId: text("flag_down_by_dayz_id"),
+  /** Non-null iff dormant, by convention; the runbook stamps 'inactive' on any dormant row from before this column. */
+  dormantReason: text("dormant_reason").$type<DormantReason>(),
+  /** The day-10 warning was queued. Cleared by revive. */
+  disbandWarnedAt: timestamp("disband_warned_at", { withTimezone: true }),
+  /** Filled by increment 3b at activation; null until then. clan_notices with target 'channel' post only once this is set. */
+  discordRoleId: text("discord_role_id"),
+  discordTextChannelId: text("discord_text_channel_id"),
+  discordVoiceChannelId: text("discord_voice_channel_id"),
 }, (t) => ({
   statusValid: check("factions_status_valid",
     sql`${t.status} IN ('reserved','active','dormant','lapsed','disbanded')`),
   // A reservation with no deadline is a permanent hole in a 33-slot pool.
   reservedHasDeadline: check("factions_reserved_has_deadline",
     sql`${t.status} <> 'reserved' OR ${t.reservedUntil} IS NOT NULL`),
+  dormantReasonValid: check("factions_dormant_reason_valid",
+    sql`${t.dormantReason} IS NULL OR ${t.dormantReason} IN ('raided','inactive')`),
   // Two of the three scarcity rules. Both partial over the HOLDING statuses,
   // so a lapsed or disbanded faction releases flag and tag on the status
   // transition alone.
@@ -592,7 +605,7 @@ export const factionEvents = pgTable("faction_events", {
   postedAt: timestamp("posted_at", { withTimezone: true }),
 }, (t) => ({
   kindValid: check("faction_events_kind_valid",
-    sql`${t.kind} IN ('founded','activated','renamed','rebound','dormant','revived','disbanded')`),
+    sql`${t.kind} IN ('founded','activated','lapsed','renamed','rebound','dormant','revived','disbanded')`),
   // ⚠️ The pole invariant, enforced by the database rather than by every
   // author remembering it. This is the first table whose entire purpose is
   // to be published; `poles.pole_key`'s own comment says a coordinate "must
@@ -605,6 +618,112 @@ export const factionEvents = pgTable("faction_events", {
   queue: index("faction_events_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
   // Per-faction history, for spec §11's web war log.
   byFaction: index("faction_events_faction_idx").on(t.factionId, t.occurredAt),
+}));
+
+/** One season per server, wipe to wipe. At most one open (endedAt null) at a time. */
+export const seasons = pgTable("seasons", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  number: integer("number").notNull(),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  championFactionId: bigint("champion_faction_id", { mode: "number" }).references(() => factions.id),
+}, (t) => ({
+  oneOpen: uniqueIndex("seasons_open_uniq").on(t.serverId).where(sql`${t.endedAt} IS NULL`),
+  uniqNumber: uniqueIndex("seasons_number_uniq").on(t.serverId, t.number),
+}));
+
+/** A raid: the first lower of a raiding streak against a victim, scored once and never recomputed (spec §8.1). */
+export const raids = pgTable("raids", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  victimFactionId: bigint("victim_faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  raiderDayzId: text("raider_dayz_id").notNull(),
+  raiderFactionId: bigint("raider_faction_id", { mode: "number" }).references(() => factions.id),
+  firstLowerEventId: bigint("first_lower_event_id", { mode: "number" }).notNull().references(() => events.id),
+  firstLowerAt: timestamp("first_lower_at", { withTimezone: true }).notNull(),
+  lastLowerAt: timestamp("last_lower_at", { withTimezone: true }).notNull(),
+  lowerCount: integer("lower_count").notNull().default(1),
+  /** Spec §8.1: recorded at write time, never recomputed. */
+  points: integer("points").notNull(),
+  victimRankAtLower: integer("victim_rank_at_lower"),
+  rankedCountAtLower: integer("ranked_count_at_lower").notNull(),
+  weekStart: timestamp("week_start", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniqFirstLower: uniqueIndex("raids_first_lower_uniq").on(t.firstLowerEventId),
+  byVictimOpen: index("raids_victim_recent_idx").on(t.victimFactionId, t.firstLowerAt),
+  byWeek: index("raids_week_idx").on(t.seasonId, t.weekStart),
+}));
+
+/** A successful defense: a member's raise that ends a flag-down clock (spec §5.8). */
+export const defenses = pgTable("defenses", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  raisedByDayzId: text("raised_by_dayz_id").notNull(),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+  flagDownSince: timestamp("flag_down_since", { withTimezone: true }).notNull(),
+  defendedAt: timestamp("defended_at", { withTimezone: true }).notNull(),
+  siegeSeconds: integer("siege_seconds").notNull(),
+}, (t) => ({ uniqEvent: uniqueIndex("defenses_event_uniq").on(t.eventId) }));
+
+/** Season scoreboard row, one per faction per season (spec §8). */
+export const seasonStandings = pgTable("season_standings", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  points: integer("points").notNull().default(0),
+  raids: integer("raids").notNull().default(0),
+  timesRaided: integer("times_raided").notNull().default(0),
+  defenses: integer("defenses").notNull().default(0),
+}, (t) => ({ uniq: uniqueIndex("season_standings_uniq").on(t.seasonId, t.factionId) }));
+
+/**
+ * The #war-log queue (spec §4.7, §9.2). Same no-coordinates invariant as
+ * `faction_events`, for the same reason: this table's whole purpose is to be
+ * published.
+ */
+export const warLogEvents = pgTable("war_log_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  kind: text("kind").$type<WarLogKind>().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+}, (t) => ({
+  kindValid: check("war_log_events_kind_valid", sql`${t.kind} IN ('raid','defense','week_closed','season_closed')`),
+  noCoordinates: check("war_log_events_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
+  queue: index("war_log_events_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
+}));
+
+/**
+ * The clan notices queue (spec §9.3, §9.4): a channel post or a DM, per
+ * faction or per player. Same no-coordinates invariant as `faction_events`
+ * and `war_log_events`.
+ */
+export const clanNotices = pgTable("clan_notices", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  factionId: bigint("faction_id", { mode: "number" }).references(() => factions.id),
+  target: text("target").$type<NoticeTarget>().notNull(),
+  /**
+   * The user id for a DM. For a channel notice: the clan's text channel id,
+   * or NULL when the clan has none yet — increment 3b creates channels; until
+   * it does, channel rows wait here (posted_at null, never failed) and the
+   * poster resolves the id from factions.discord_text_channel_id at post time.
+   */
+  discordTargetId: text("discord_target_id"),
+  kind: text("kind").$type<ClanNoticeKind>().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+  failedAt: timestamp("failed_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+}, (t) => ({
+  targetValid: check("clan_notices_target_valid", sql`${t.target} IN ('channel','dm')`),
+  noCoordinates: check("clan_notices_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
+  queue: index("clan_notices_queue_idx").on(t.discordTargetId, t.id).where(sql`${t.postedAt} IS NULL AND ${t.failedAt} IS NULL`),
 }));
 
 /**

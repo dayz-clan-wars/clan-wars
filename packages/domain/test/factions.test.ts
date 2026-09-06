@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { HOLDING_STATUSES, SUPPLIED_STATUSES } from "../src/factions.js";
+import { HOLDING_STATUSES, SUPPLIED_PREDICATE } from "../src/factions.js";
 
 describe("faction status sets", () => {
   it("holds identity for reserved, active and dormant", () => {
@@ -8,14 +8,9 @@ describe("faction status sets", () => {
     expect([...HOLDING_STATUSES]).toEqual(["reserved", "active", "dormant"]);
   });
 
-  it("supplies reserved and active only", () => {
-    // Dormant is the whole point: a faction whose flag stopped flying keeps
-    // its identity and loses its kit.
-    expect([...SUPPLIED_STATUSES]).toEqual(["reserved", "active"]);
-  });
-
-  it("every supplied status also holds its pole", () => {
-    // A faction receiving supplies at a pole it does not hold is incoherent.
-    for (const s of SUPPLIED_STATUSES) expect(HOLDING_STATUSES).toContain(s);
+  it("supplied is a predicate, not a status list: active with the flag up", () => {
+    // Dormant is excluded because it isn't 'active'; a raided-but-active clan
+    // keeps its 24h clock and loses its kit the moment flag_down_since is set.
+    expect(SUPPLIED_PREDICATE).toBe("status = 'active' and flag_down_since is null");
   });
 });

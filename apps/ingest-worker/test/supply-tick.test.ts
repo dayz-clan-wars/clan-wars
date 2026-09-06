@@ -49,7 +49,7 @@ describe("supplyTick", () => {
   });
 
   it("uploads the kit for a holding faction", async () => {
-    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     const uploads: { dir: string; name: string; body: string }[] = [];
     const client = { statFile: async () => null, uploadFile: async (dir: string, name: string, body: string) => { uploads.push({ dir, name, body }); } };
 
@@ -64,7 +64,7 @@ describe("supplyTick", () => {
   });
 
   it("does not upload again when nothing changed", async () => {
-    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     let calls = 0;
     const client = { statFile: async () => null, uploadFile: async () => { calls++; } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
@@ -75,7 +75,7 @@ describe("supplyTick", () => {
   });
 
   it("uploads again when a faction's texture changes", async () => {
-    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     let calls = 0;
     const client = { statFile: async () => null, uploadFile: async () => { calls++; } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
@@ -85,7 +85,7 @@ describe("supplyTick", () => {
   });
 
   it("drops a faction that stopped holding", async () => {
-    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
@@ -101,7 +101,7 @@ describe("supplyTick", () => {
     // Nitrado outage would leave the server permanently missing supplies
     // with nothing to retry it. Delete the success-only hash write and this
     // test must go red.
-    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     let calls = 0;
     const failing = { statFile: async () => null, uploadFile: async () => { calls++; throw new Error("nitrado down"); } };
     await expect(supplyTick(db, { serverId, client: failing, offsets, remoteDir: "/d", fileName: "f.json", now })).rejects.toThrow(/nitrado down/);
@@ -137,7 +137,7 @@ describe("supplyTick", () => {
     // ⚠️ declarations.x/y/z are Postgres numeric, which Drizzle returns as
     // STRINGS. "5551.69" + 0.898 is "5551.690.898". Without Number() every
     // coordinate in the file is corrupt.
-    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
@@ -155,7 +155,7 @@ describe("supplyTick", () => {
     // Both servers hold a faction, so this pins "ours kept, theirs dropped"
     // rather than the weaker "an otherwise-empty file stays empty".
     const other = await seedServer("other");
-    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     await seedFaction({ tag: "OTH", texture: "Flag_Wolf", x: "1", y: "2", z: "3", status: "active", serverId: other });
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
@@ -170,6 +170,20 @@ describe("supplyTick", () => {
     // projection (indexes) includes it to preserve the flag; the supply
     // projection excludes it. A stale flag yields an empty file and no supply kit.
     await seedFaction({ tag: "DOR", texture: "Flag_Wolf", x: "100.50", y: "20.25", z: "300.75", status: "dormant" });
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 0, uploaded: true });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects).toEqual([]);
+  });
+
+  it("⚠️ omits an active clan whose flag is down", async () => {
+    // Supplied is a predicate, not a status list: "status = 'active' and
+    // flag_down_since is null" (spec §4.3). A raided clan keeps `active` for
+    // its 24h clock but loses its kit the instant flag_down_since is set.
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.update(factions).set({ flagDownSince: now }).where(eq(factions.id, f.id));
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });

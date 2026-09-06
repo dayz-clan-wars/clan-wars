@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
 import { HOLDING_STATUSES } from "@factions/domain";
 import { sql } from "drizzle-orm";
@@ -49,5 +51,12 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
         and indexname in ('declarations_pole_uniq','declarations_faction_uniq','declarations_player_uniq')
     `);
     expect(rows.length).toBe(3);
+  });
+
+  it("the supplied predicate is 'active and flag_down_since is null', spelled in the worker's query", () => {
+    const worker = readFileSync(join(import.meta.dirname, "..", "..", "..", "apps", "ingest-worker", "src", "supply-tick.ts"), "utf8");
+    expect(worker).toMatch(/eq\(factions\.status, "active"\)/u);
+    expect(worker).toMatch(/isNull\(factions\.flagDownSince\)/u);
+    expect(worker).not.toMatch(/SUPPLIED_STATUSES/u);
   });
 });

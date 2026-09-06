@@ -23,7 +23,7 @@ const RED = 0xed4245;
 const COLOR: Record<FactionEventKind, number> = {
   founded: GREEN, activated: GREEN, revived: GREEN,
   renamed: BLUE, rebound: BLUE,
-  dormant: AMBER,
+  dormant: AMBER, lapsed: AMBER,
   disbanded: RED,
 };
 
@@ -72,6 +72,8 @@ function describe(kind: FactionEventKind, p: FeedPayload): string {
       return "Active again — the flag is flying and supplies resume at the next restart.";
     case "disbanded":
       return "Disbanded. Its flag, tag and pole return to the pool.";
+    case "lapsed":
+      return `Never raised their flag. ${flagLabel(p.texture)} is back in the pool.`;
   }
 }
 

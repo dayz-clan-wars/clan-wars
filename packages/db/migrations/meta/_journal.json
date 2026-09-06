@@ -162,6 +162,13 @@
       "when": 1788650489302,
       "tag": "0022_roster_membership",
       "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788714186246,
+      "tag": "0023_raids_and_queues",
+      "breakpoints": true
     }
   ]
 }
