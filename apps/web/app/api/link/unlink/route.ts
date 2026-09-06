@@ -12,8 +12,8 @@ import { siteUrl } from "@/lib/auth/site-url";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const origin = process.env.WEB_BASE_URL ?? req.nextUrl.origin;
   const session = await currentSession();
-  if (!session) return NextResponse.redirect(siteUrl(origin, "/login?next=/me"), { status: 303 });
+  if (!session) return NextResponse.redirect(siteUrl(origin, "/login", "?next=/me"), { status: 303 });
   const out = await unlink(session.sub);
   const code = out.ok ? "ok" : out.reason;
-  return NextResponse.redirect(siteUrl(origin, `/me?unlink=${code}`), { status: 303 });
+  return NextResponse.redirect(siteUrl(origin, "/me", `?unlink=${code}`), { status: 303 });
 }

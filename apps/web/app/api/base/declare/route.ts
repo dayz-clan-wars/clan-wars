@@ -7,12 +7,12 @@ import { siteUrl } from "@/lib/auth/site-url";
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const origin = process.env.WEB_BASE_URL ?? req.nextUrl.origin;
   const session = await currentSession();
-  if (!session) return NextResponse.redirect(siteUrl(origin, "/login?next=/base"), { status: 303 });
+  if (!session) return NextResponse.redirect(siteUrl(origin, "/login", "?next=/base"), { status: 303 });
   const form = await req.formData();
   const poleKey = form.get("poleKey");
   if (typeof poleKey !== "string" || poleKey.length === 0 || poleKey.length > 64) {
-    return NextResponse.redirect(siteUrl(origin, "/base?result=no-raise"), { status: 303 });
+    return NextResponse.redirect(siteUrl(origin, "/base", "?result=no-raise"), { status: 303 });
   }
   const out = await declareSolo(session.sub, poleKey);
-  return NextResponse.redirect(siteUrl(origin, `/base?result=${out.ok ? "declared" : out.reason}`), { status: 303 });
+  return NextResponse.redirect(siteUrl(origin, "/base", `?result=${out.ok ? "declared" : out.reason}`), { status: 303 });
 }
