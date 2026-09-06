@@ -1,8 +1,8 @@
 import { MIN_BASE_SPACING_M, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import type { DeclareSoloReason } from "@factions/roster";
+import { days } from "./format";
 
-const DAY = 86_400_000;
-export const days = (ms: number) => `${Math.round(ms / DAY)} day${Math.round(ms / DAY) === 1 ? "" : "s"}`;
+export { days };
 
 /** What /base says for each `declareSolo` refusal. The guide's wording (ch. 4) for the 200 m rule. */
 export const DECLARE_COPY: Record<DeclareSoloReason, string> = {

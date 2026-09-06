@@ -10,11 +10,11 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans"]);
   });
 
   it("pins the public prefixes", () => {
-    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/"]);
+    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/"]);
   });
 
   it("pins the auth pages", () => {
@@ -48,5 +48,13 @@ describe("pathIsPublic", () => {
   it("is not fooled by a prefix that only looks like one", () => {
     expect(pathIsPublic("/api/authorise-me")).toBe(false);
     expect(pathIsPublic("/flagsomething")).toBe(false);
+  });
+
+  it("lets the clan directory and clan pages through, but not the member's own clan", () => {
+    expect(pathIsPublic("/clans")).toBe(true);
+    expect(pathIsPublic("/clans/BEAR")).toBe(true);
+    expect(pathIsPublic("/clan")).toBe(false);
+    expect(pathIsPublic("/clan/settings")).toBe(false);
+    expect(pathIsPublic("/clansomething")).toBe(false);
   });
 });

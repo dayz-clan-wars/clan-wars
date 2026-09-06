@@ -4,6 +4,7 @@ import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { when } from "@/lib/format";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -14,7 +15,6 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
-const when = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 /** Metres, whole. These are the viewer's own raises; nobody else's pole reaches this page. */
 const at = (x: number, z: number) => `${Math.round(x)}, ${Math.round(z)}`;
 

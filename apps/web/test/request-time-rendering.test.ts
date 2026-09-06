@@ -26,7 +26,7 @@ describe("pages that depend on the viewer render at request time", () => {
   // page viewer-dependent.
   const viewerPages = pages.filter((f) => {
     const text = readFileSync(f, "utf8");
-    return text.includes("currentSession(") || text.includes("viewerFor(");
+    return text.includes("currentSession(") || text.includes("viewerFor(") || text.includes('from "@factions/roster"');
   });
   it("finds at least /me", () => {
     expect(viewerPages.some((f) => f.endsWith(`${join("me", "page.tsx")}`))).toBe(true);

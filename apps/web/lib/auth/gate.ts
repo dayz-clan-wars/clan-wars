@@ -5,8 +5,8 @@
  * exactly, so adding an entry is a deliberate act that fails a test naming it.
  */
 
-/** The landing page, and only the landing page. */
-export const PUBLIC_PATHS = ["/"] as const;
+/** The landing page and the clan directory (spec §10.2: public). */
+export const PUBLIC_PATHS = ["/", "/clans"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
@@ -14,8 +14,10 @@ export const PUBLIC_PATHS = ["/"] as const;
  *
  * Static flags stay public on purpose — they are the same 33 images the bot
  * already posts publicly, and gating them would break caching for every page.
+ * `/clans/` is the public clan pages (`/clans/{tag}`); `/clan` (singular,
+ * the member's own) is gated.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should
