@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, events, admFiles, declarations, poles, type Database,
+  servers, factions, factionMembers, events, admFiles, declarations, poles, clanNotices, type Database,
 } from "@factions/db";
 import { RELEASED_POLE_GRACE_MS, parsePoleKey } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
@@ -37,7 +37,7 @@ describe("PgRebindStore", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table declarations, poles, events, raw_lines, adm_files, faction_members, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table clan_notices, declarations, poles, events, raw_lines, adm_files, faction_members, factions, servers restart identity cascade`);
     });
     store = new PgRebindStore(db);
     lineIndex = 0;
@@ -215,6 +215,12 @@ describe("PgRebindStore", () => {
     expect(await declarationForFaction(db, factionId)).toMatchObject({ poleKey: P2_KEY });
     const [old] = await db.select().from(poles).where(eq(poles.poleKey, P1_KEY));
     expect(old!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+  });
+
+  it("queues a rebind_confirmed clan notice alongside the rebound feed row", async () => {
+    expect(await store.rebind(args())).toBe("ok");
+    const [n] = await db.select({ kind: clanNotices.kind, target: clanNotices.target, factionId: clanNotices.factionId, payload: clanNotices.payload }).from(clanNotices);
+    expect(n).toMatchObject({ kind: "rebind_confirmed", target: "channel", factionId, payload: {} });
   });
 
   it("refuses a target within 200 m of another declaration", async () => {

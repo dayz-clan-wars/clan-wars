@@ -5,6 +5,7 @@ import { leaderIs } from "./roster-store";
 import type { QualifyingRaise } from "./rebind";
 import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx } from "./feed-actor";
+import { noticeClanTx } from "./notices";
 import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 
 /**
@@ -233,6 +234,10 @@ export class PgRebindStore implements RebindStore {
       await appendFactionEventTx(tx, {
         serverId: row.serverId, factionId: row.id, kind: "rebound", occurredAt: a.at,
         payload: { name: row.name, tag: row.tag, texture: row.texture, actor },
+      });
+
+      await noticeClanTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "rebind_confirmed", occurredAt: a.at, payload: {},
       });
 
       // ⚠️ A dormant faction that rebinds is also revived by this same
