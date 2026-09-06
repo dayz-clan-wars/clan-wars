@@ -726,7 +726,7 @@ export class PgRosterStore implements RosterStore {
    * pick which failure message to show.
    */
   async setRole(a: SetRoleArgs): Promise<SetRoleOutcome> {
-    const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId})`;
+    const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
 
     const updated = await this.db.update(factionMembers)
       .set({ role: a.role })
@@ -778,6 +778,7 @@ export class PgRosterStore implements RosterStore {
             eq(factionMembers.factionId, a.factionId),
             eq(factionMembers.discordId, a.fromDiscordId),
             eq(factionMembers.role, "leader"),
+            eq(factionMembers.status, "full"),
           ))
           .returning({ id: factionMembers.id });
         // Nothing has been written yet on this path — a bare return is safe.

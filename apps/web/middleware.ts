@@ -39,7 +39,10 @@ function redirectTo(req: NextRequest, target: string, next?: string): NextRespon
   url.pathname = pathname;
   // A `next` to remember replaces the target's own query; otherwise keep it.
   url.search = next ? `?next=${encodeURIComponent(next)}` : search;
-  return NextResponse.redirect(url);
+  // ⚠️ 303, not the default 307: an anonymous POST to a gated route (e.g. a
+  // form submit) must not be re-POSTed to /login — a GET is what /login
+  // wants, and 303 is the status that forces that method change.
+  return NextResponse.redirect(url, { status: 303 });
 }
 
 export async function middleware(req: NextRequest): Promise<NextResponse> {

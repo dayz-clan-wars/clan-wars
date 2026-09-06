@@ -1,4 +1,3 @@
-import { emoteLabel } from "@factions/domain";
 import type { VerificationStore } from "@factions/verification";
 
 /**
@@ -12,8 +11,3 @@ export type CommandDeps = {
   store: VerificationStore;
   now: () => Date;
 };
-
-/** Human labels, numbered. Players read an emote wheel, not a token list. */
-export function formatSequence(sequence: string[]): string {
-  return sequence.map((token, i) => `${i + 1}. **${emoteLabel(token) ?? token}**`).join("\n");
-}
