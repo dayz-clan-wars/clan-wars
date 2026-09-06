@@ -15,7 +15,7 @@
 | Plan | Ships | Player-visible change |
 |---|---|---|
 | **2c-a** (this file) `2026-09-05-roster-package.md` | Migration 0022; the stores in `packages/roster`; `status` pending/full everywhere; cap; presence promotion + pending expiry ticks; `identity_holds` written and consulted; join requests and the recruiting post in the store; the package's roster writes and reads exported and pinned | One: accepting an invite makes you **pending** until the log sees you at the base. The slash commands keep working over the moved store and say so |
-| **2c-b** `2026-09-xx-site-roster.md` | `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; `/me` shows pending and invites; the slash commands retired in the same deploy (one line and a link); the `/faction` exclusion in `vocabulary.test.ts` removed with them; the bot's 1 h rebind window retired with the command | The site becomes the tool |
+| **2c-b** `2026-09-05-site-roster.md` | `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; `/me` shows pending and invites; the slash commands retired in the same deploy (one line and a link); the `/faction` exclusion in `vocabulary.test.ts` removed with them; the bot's 1 h rebind window retired with the command | The site becomes the tool |
 
 Spec §15's ⚠️ still holds: commands are retired only in the deploy that ships the pages, which is 2c-b. Nothing here removes a command.
 
@@ -1428,7 +1428,7 @@ PENDING member until the log sees them at the base.
 
 `apps/bot/README.md`: the `BOT_INVITE_TTL_MS` row's description gains "Accepting makes the player *pending* until the log sees them within 50 m of the base (`JOIN_PRESENCE_RADIUS_M`); see the presence tick under Running." `docs/superpowers/specs/2026-09-04-clan-wars-target-state-design.md` §15: replace row 2c with two rows —
 `| 2c-a | **Roster package**: migration 0022 (member status, join requests, identity holds, recruiting); the stores in `packages/roster/src/internal` shared with the bot; every membership read `status = 'full'`; cap; presence promotion + pending expiry ticks; the package's roster writes and reads exported | `2026-09-05-roster-package.md` | 2b |`
-`| 2c-b | **The site as the tool**: `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; `/me` shows pending and invites; retire the slash commands in the same deploy; the `/faction` exclusion in `vocabulary.test.ts` and the bot's 1 h rebind window removed with them | `2026-09-xx-site-roster.md` | 2c-a |`
+`| 2c-b | **The site as the tool**: `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; `/me` shows pending and invites; retire the slash commands in the same deploy; the `/faction` exclusion in `vocabulary.test.ts` and the bot's 1 h rebind window removed with them | `2026-09-05-site-roster.md` | 2c-a |`
 and every later row's "Depends on" that said `2c` now says `2c-b`. In `PLAN-3-INBOX.md`, if an open item describes the cap, pending membership or join requests as missing, mark it DONE 2026-09-05 with a one-line pointer; otherwise add nothing.
 
 - [ ] **Step 4: Gate and commit**

@@ -111,7 +111,14 @@ turbo gate stays the gate, because it runs `typecheck` too.
   Since 2b the roster package also writes: `startLink`/`cancelLink`/`unlink` and
   `declareSolo`/`releaseSolo`, over `@factions/verification` and `@factions/declarations`
   — the same stores the bot uses, moved out of `apps/bot` so neither side has its own
-  copy of a rule.
+  copy of a rule. Since 2c-b the site is the tool: `/clans`, `/clans/{tag}`, `/clan`,
+  `/clan/settings`, `/claim/{ceremony}` and `/me` call the package's 34 exports through
+  form POSTs to `apps/web/app/api/**` (`lib/form.ts`; codes looked up in
+  `lib/clan-copy.ts`). Every Discord slash command is retired and answers with one line
+  and a link (`apps/bot/src/retired-commands.ts`, `SITE_BASE_URL`). A page may never
+  reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`
+  bans the substring in web source, identifiers included) — the package maps the
+  page-facing fields at that boundary, e.g. `reads.ts`'s `clanId`/`clanName`.
 
 ---
 
@@ -230,11 +237,11 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **`flag_changes` holds zero rows in `factions_live`.** The projector that fills it does
   not run there. Read the `events` log directly, as `ceremony-tick` and the dormancy
   clock do.
-- **Pole coordinates are a raid target.** They are gated to faction members in
-  `/faction info` and kept out of DMs. Every Discord command reply is ephemeral
-  (`RosterReply.ephemeral` is the literal `true`, so a public one will not compile).
-- **Roster membership is PUBLIC, on purpose — do not "fix" it.** `/faction roster
-  name:<rival>` listing another faction's members to anyone is the intended product
+- **Pole coordinates are a raid target.** They are gated to the viewer's own `/base`;
+  no clan page, DM or feed row carries one (`rebindCandidates` carry pole keys in
+  hidden form fields, never rendered).
+- **Roster membership is PUBLIC, on purpose — do not "fix" it.** `/clans/{tag}`
+  listing any clan's members (gamertag and rank) to anyone is the intended product
   behaviour (confirmed 2026-09-02), not an oversight inherited from spec §6. Knowing who
   flies which flag is the point of flying one; it is what makes an identity worth
   holding and a rivalry legible. This is deliberately NOT the same rule as the pole
@@ -270,8 +277,8 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   catches a restore that preserved timestamps.
 - **The website is a surface, never a source of truth.** Rituals — founding, claiming a
   flag, binding a pole — are earned in game and proved from the server's logs; nothing on
-  `dayzclanwars.com` may perform one. Administration is different: roster chores (the
-  `/me` read, and since 2c-a every roster write, through `packages/roster`) are permitted
+  `dayzclanwars.com` may perform one. Administration is different: roster chores (every
+  roster read and write, since 2c-b from the pages themselves) are permitted
   from the web, but only through `packages/roster`. The boundary is that package's export allowlist —
   `apps/web` may call only what `packages/roster` chooses to export — pinned by name in
   both `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts`. Under
@@ -310,6 +317,10 @@ with presence promotion and the cap, join requests, identity holds, the recruiti
 and the package's roster writes and reads exported for 2c-b's pages. Slash commands still
 run.
 
+**Increment 2c-b is merged.** The slash commands are retired; roster administration
+happens on the site. Not deployed until the runbook `docs/deploy/2026-09-05-site-roster.md`
+runs, together with 2b and 2c-a.
+
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further
 days disband it. Spec and plan are in `docs/superpowers/`. (Previously deployed and
@@ -322,9 +333,11 @@ confirms, and the binding moves in one guarded write. 7-day cooldown. (Previousl
 deployed and exercised against a now-gone database — see
 `docs/deploy/2026-09-03-faction-rebind.md` for that history.)
 
-⚠️ `/faction rebind` tells a leader their old base "stays private for 3 days". That is
-vacuously true today — nothing publishes base coordinates — and becomes a real promise the
-day base declaration ships. See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
+⚠️ The disband and base-release copy tells a leaving clan or player their old base "stays
+private for 3 days" (`apps/web/lib/clan-copy.ts`'s `DISBAND`, `apps/web/lib/base-copy.ts`'s
+`released`; both `RELEASED_POLE_GRACE_MS`). That promise is real now, not vacuous: no clan
+page, DM or feed row carries a base's coordinates (see the pole-coordinates bullet above).
+See `docs/superpowers/specs/2026-09-03-base-declaration-design.md`.
 
 Declarations (increment 1 of the target-state spec) are in the code and migrated in.
 Solo declare has a store and a lapse clock but no page and no DM yet (increments 2 and 3).
