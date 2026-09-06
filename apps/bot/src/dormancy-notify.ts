@@ -3,8 +3,8 @@ import type { DormancyNotice } from "./dormancy-tick.js";
 
 /**
  * ⚠️ No pole coordinates. The leader is entitled to them, but a DM is
- * screenshottable and this message does not need them — same rule as
- * `/faction info`'s members-only pole line.
+ * screenshottable and this message does not need them — same rule as the
+ * clan info page's members-only pole line.
  */
 export function formatDormancyDm(n: DormancyNotice): string {
   if (n.kind === "revive") {

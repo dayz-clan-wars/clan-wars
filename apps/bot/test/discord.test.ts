@@ -4,8 +4,8 @@ import { sql } from "drizzle-orm";
 import { PermissionFlagsBits } from "discord.js";
 import { PgVerificationStore } from "@factions/verification";
 import {
-  buildCommands, routeInteraction, notifyCompleted, guardedRunner, LINK_NEW_SEQUENCE_OPTION,
-  playerSuggestions, createNicknameApplier, type NicknameClientLike, type RealGuildLike,
+  buildCommands, notifyCompleted, guardedRunner,
+  createNicknameApplier, type NicknameClientLike, type RealGuildLike,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
 import type { NicknameOutcome } from "../src/nickname.js";
@@ -37,7 +37,7 @@ describe("discord wiring", () => {
       await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players, faction_members, factions, servers restart identity cascade`);
     });
     store = new PgVerificationStore(db);
-    deps = { store, rng: Math.random, now: () => now, challengeTtlMs: 600_000 };
+    deps = { store, now: () => now };
     // Fixture clock, not new Date(): the whole suite reasons about `now`.
     await db.insert(players).values({ dayzId: TARGET, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now });
   });
@@ -74,39 +74,6 @@ describe("discord wiring", () => {
   });
 
   describe("buildCommands", () => {
-    it("declares link, unlink, whoami and faction", () => {
-      expect(buildCommands().map((c) => c.name).sort()).toEqual(["faction", "link", "unlink", "whoami"]);
-    });
-
-    it("registers every roster subcommand", () => {
-      const faction = buildCommands().find((c) => c.name === "faction")!;
-      const names = (faction.options ?? []).map((o: any) => o.name).sort();
-      expect(names).toEqual([
-        "claim", "demote", "disband", "info", "invite", "invites",
-        "kick", "leave", "promote", "rebind", "rename", "roster", "transfer",
-      ]);
-    });
-
-    it("registers /link with a required autocompleting gamertag option", () => {
-      const link = buildCommands().find((c) => c.name === "link")!;
-      const opt = (link.options ?? [])[0] as any;
-      expect(opt.name).toBe("gamertag");
-      expect(opt.required).toBe(true);
-      expect(opt.autocomplete).toBe(true);
-    });
-
-    it("truncates a choice name to Discord's 100-character limit", () => {
-      // ⚠️ Discord rejects a choice whose name exceeds 100 characters, and a
-      // rejected autocomplete response renders as an EMPTY field rather than
-      // an error — the player simply cannot pick anyone. Nothing constrains
-      // `players.gamertag` to a sane length, so clamp here.
-      const long = "x".repeat(140);
-      const [choice] = playerSuggestions([{ dayzId: "1", gamertag: long }], "x");
-      expect(choice!.name.length).toBe(100);
-      // The UID is what the submit path uses, so it must survive intact.
-      expect(choice!.value).toBe("1");
-    });
-
     it("gives every command a description", () => {
       // Cast: RESTPostAPIApplicationCommandsJSONBody is a union that also covers
       // context-menu and primary-entry-point commands, neither of which carries
@@ -115,78 +82,6 @@ describe("discord wiring", () => {
       for (const c of buildCommands()) {
         expect((c as { description?: string }).description?.length).toBeGreaterThan(0);
       }
-    });
-  });
-
-  describe("playerSuggestions", () => {
-    it("returns at most Discord's 25 choices", () => {
-      // ⚠️ Discord rejects an autocomplete response with more than 25 choices,
-      // and the field then shows nothing at all. The candidate POOL is 50.
-      const many = Array.from({ length: 50 }, (_, i) => ({ dayzId: `${i}`, gamertag: `P${i}` }));
-      expect(playerSuggestions(many, "")).toHaveLength(25);
-    });
-
-    it("filters case-insensitively on the typed query", () => {
-      const ps = [{ dayzId: "1", gamertag: "RonaldRaygun552" }, { dayzId: "2", gamertag: "Someone" }];
-      expect(playerSuggestions(ps, "ronald")).toEqual([{ name: "RonaldRaygun552", value: "1" }]);
-    });
-
-    it("carries the UID as the value, not the gamertag", () => {
-      // Two characters can share a display name; the UID disambiguates and
-      // means the submit path never re-resolves a name.
-      const ps = [{ dayzId: "abc", gamertag: "Twin" }, { dayzId: "def", gamertag: "Twin" }];
-      expect(playerSuggestions(ps, "twin").map((c) => c.value)).toEqual(["abc", "def"]);
-    });
-  });
-
-  describe("routeInteraction", () => {
-    const base = { userId: "100", guildId: "g", channelId: "c" };
-
-    it("routes /link", async () => {
-      const r = await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: TARGET });
-      expect(r?.ephemeral).toBe(true);
-      expect(await store.findLiveChallenge("100", now)).toMatchObject({ targetDayzId: TARGET });
-    });
-
-    it("refuses /link with no character chosen", async () => {
-      // Registration makes the option required, so this only happens to a
-      // stale command — and an untargeted challenge is the bug this removes.
-      const r = await routeInteraction(deps, { ...base, commandName: "link" });
-      expect(r?.content).toMatch(/pick a character/i);
-      expect(await store.findLiveChallenge("100", now)).toBeNull();
-    });
-
-    it("passes /link's new-sequence option through to the handler", async () => {
-      // ⚠️ The option has to exist at registration AND be read here. Wired at
-      // only one end, the re-roll is unreachable in Discord while every
-      // handler test still passes.
-      const registered = buildCommands().find((c) => c.name === "link") as { options?: { name: string }[] };
-      expect(registered.options?.map((o) => o.name)).toContain(LINK_NEW_SEQUENCE_OPTION);
-
-      await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: UID_A });
-      const first = (await store.findLiveChallenge("100", now))!.sequence;
-      await routeInteraction(deps, { ...base, commandName: "link", targetDayzId: UID_A, newSequence: true });
-      expect((await store.findLiveChallenge("100", now))!.sequence).not.toEqual(first);
-    });
-
-    it("routes /whoami", async () => {
-      const r = await routeInteraction(deps, { ...base, commandName: "whoami" });
-      expect(r?.content).toMatch(/not linked/i);
-    });
-
-    it("routes /unlink", async () => {
-      const r = await routeInteraction(deps, { ...base, commandName: "unlink" });
-      expect(r?.content).toMatch(/not linked/i);
-    });
-
-    it("returns null for an unknown command", async () => {
-      expect(await routeInteraction(deps, { ...base, commandName: "nope" })).toBeNull();
-    });
-
-    it("refuses a command run outside a guild", async () => {
-      const r = await routeInteraction(deps, { ...base, guildId: null, commandName: "link" });
-      expect(r?.content).toMatch(/server/i);
-      expect(await store.findLiveChallenge("100", now)).toBeNull();
     });
   });
 

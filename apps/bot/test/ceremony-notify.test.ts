@@ -39,36 +39,38 @@ describe("ceremony notification", () => {
     return c!.id;
   };
 
+  const SITE = "https://dayzclanwars.com";
+
   it("states how many linked UIDs were counted", () => {
     // The only feedback available for the invisible near-miss: an unlinked
     // participant has no Discord id, so the group has to work out who is
     // missing from the count.
     const text = formatCeremonyDm({
-      poleKey: "1:2:3", participants: [{ gamertag: "A" }, { gamertag: "B" }, { gamertag: "C" }], expiresAt,
-    });
+      id: 7, poleKey: "1:2:3", participants: [{ gamertag: "A" }, { gamertag: "B" }, { gamertag: "C" }], expiresAt,
+    }, SITE);
     expect(text).toMatch(/3 linked/i);
     expect(text).toContain("A");
-    expect(text).toContain("/faction claim");
+    expect(text).toContain("https://dayzclanwars.com/claim/7");
   });
 
   it("DMs every participant exactly once", async () => {
     await detected(3);
     const send = vi.fn().mockResolvedValue(undefined);
-    expect(await notifyCeremonies(db, send, () => now)).toBe(1);
+    expect(await notifyCeremonies(db, send, () => now, SITE)).toBe(1);
     expect(send).toHaveBeenCalledTimes(3);
-    expect(await notifyCeremonies(db, send, () => now)).toBe(0);
+    expect(await notifyCeremonies(db, send, () => now, SITE)).toBe(0);
     expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("delivers to the reachable participants even when one has closed DMs", async () => {
     // One closed DM must not silence the rest of the founding group: the
-    // whole point of the DM is that any one of them can run /faction claim.
+    // whole point of the DM is that any one of them can claim on the site.
     await detected(3);
     const send = vi.fn(async (n: { discordId: string }) => {
       if (n.discordId === "101") throw new Error("DMs closed");
     });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    await notifyCeremonies(db, send, () => now);
+    await notifyCeremonies(db, send, () => now, SITE);
     expect(send.mock.calls.map((c) => c[0].discordId).sort()).toEqual(["100", "101", "102"]);
     logged.mockRestore();
   });
@@ -82,10 +84,10 @@ describe("ceremony notification", () => {
       if (n.discordId === "101") throw new Error("DMs closed");
     });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    await notifyCeremonies(db, send, () => now);
+    await notifyCeremonies(db, send, () => now, SITE);
     send.mockClear();
     send.mockResolvedValue(undefined);
-    await notifyCeremonies(db, send, () => now);
+    await notifyCeremonies(db, send, () => now, SITE);
     expect(send.mock.calls.map((c) => c[0].discordId)).toEqual(["101"]);
     logged.mockRestore();
   });
@@ -96,13 +98,13 @@ describe("ceremony notification", () => {
       if (n.discordId === "101") throw new Error("DMs closed");
     });
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await notifyCeremonies(db, send, () => now)).toBe(0);
+    expect(await notifyCeremonies(db, send, () => now, SITE)).toBe(0);
     expect((await db.select().from(ceremonies))[0]?.notifiedAt).toBeNull();
     const marked = await db.select().from(ceremonyParticipants).orderBy(asc(ceremonyParticipants.id));
     expect(marked.map((p) => p.notifiedAt !== null)).toEqual([true, false, true]);
 
     send.mockResolvedValue(undefined);
-    expect(await notifyCeremonies(db, send, () => now)).toBe(1);
+    expect(await notifyCeremonies(db, send, () => now, SITE)).toBe(1);
     expect((await db.select().from(ceremonies))[0]?.notifiedAt).toEqual(now);
     logged.mockRestore();
   });
@@ -113,7 +115,7 @@ describe("ceremony notification", () => {
     await detected(3);
     const send = vi.fn().mockRejectedValue(new Error("DMs closed"));
     const logged = vi.spyOn(console, "error").mockImplementation(() => {});
-    expect(await notifyCeremonies(db, send, () => now)).toBe(0);
+    expect(await notifyCeremonies(db, send, () => now, SITE)).toBe(0);
     const [c] = await db.select().from(ceremonies);
     expect(c?.notifiedAt).toBeNull();
     logged.mockRestore();

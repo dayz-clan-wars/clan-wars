@@ -4,10 +4,11 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
 
 export function formatCeremonyDm(c: {
+  id: number;
   poleKey: string;
   participants: { gamertag: string }[];
   expiresAt: Date;
-}): string {
+}, siteBaseUrl: string): string {
   const names = c.participants.map((p) => `**${p.gamertag}**`).join(", ");
   return [
     "**A ceremony was witnessed**",
@@ -18,9 +19,9 @@ export function formatCeremonyDm(c: {
     // The near-miss is otherwise invisible: an unlinked participant has no
     // Discord account to write to, so the count is the only way a group that
     // came up short can work out who still needs to run /link.
-    "If someone is missing from that list, they had not run `/link` when the ceremony was read.",
+    "If someone is missing from that list, they had not linked on the site when the ceremony was read.",
     "",
-    "Any one of you can found the clan with `/faction claim`.",
+    `Any one of you can found the clan on the site: ${siteBaseUrl}/claim/${c.id}`,
     `This expires <t:${Math.floor(c.expiresAt.getTime() / 1000)}:R>.`,
   ].join("\n");
 }
@@ -48,6 +49,7 @@ export async function notifyCeremonies(
   db: Database,
   send: Sender,
   now: () => Date,
+  siteBaseUrl: string,
   logged: NotifyFailureLog = createNotifyFailureLog(),
 ): Promise<number> {
   const pending = await db.select().from(ceremonies)
@@ -62,7 +64,7 @@ export async function notifyCeremonies(
     if (participants.length === 0) continue;
     // The DM names everyone counted, including those already delivered — the
     // count is the near-miss signal and must not shrink on a retry.
-    const content = formatCeremonyDm({ poleKey: c.poleKey, participants, expiresAt: c.expiresAt });
+    const content = formatCeremonyDm({ id: c.id, poleKey: c.poleKey, participants, expiresAt: c.expiresAt }, siteBaseUrl);
 
     let failed = false;
     for (const p of participants) {

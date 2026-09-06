@@ -254,9 +254,9 @@ export class PgCeremonyStore implements CeremonyStore {
         await tx.delete(factionMembers)
           .where(inArray(factionMembers.factionId, lapsed));
         // Outstanding offers die with the faction. Left open they keep
-        // appearing in `/faction invites` with buttons that can only ever
-        // answer "no longer active", and — capped at MAX_LISTED_INVITES —
-        // they crowd live invites out of the list.
+        // appearing in the invitee's pending-invites list as offers that can
+        // only ever answer "no longer active", and — capped at
+        // MAX_LISTED_INVITES — they crowd live invites out of the list.
         await tx.update(factionInvites)
           .set({ revokedAt: cutoff })
           .where(and(

@@ -14,9 +14,8 @@ const src = (f: string) => readFileSync(resolve(here, "..", "src", f), "utf8");
  */
 const PLAYER_FACING = [
   "feed-embed.ts", "ceremony-notify.ts", "dormancy-notify.ts", "notify.ts",
-  // Increment 2a: the claim and rebind command replies reach players too.
-  // roster-commands.ts is retired whole in increment 2c and is not swept.
-  "faction-commands.ts", "rebind-commands.ts",
+  // Increment 2c-b: the one reply every retired command gives.
+  "retired-commands.ts",
 ];
 
 const STRING_LITERALS = /(["'`])(?:\\.|(?!\1)[^\\])*\1/gsu;
@@ -25,10 +24,6 @@ const COMMENTS = /\/\*[\s\S]*?\*\/|\/\/[^\n]*/gu;
 // module specifier (including bare side-effect imports) before scanning, so
 // "@factions/domain" and "@factions/db" don't count as player-facing text.
 const MODULE_SPECIFIERS = /^\s*(?:import|export)\b[^;]*?\bfrom\s+["'][^"']+["'];?|^\s*import\s+["'][^"']+["'];?/gmu;
-// A slash-command name is an identifier too: `/faction …` stays until the
-// commands are retired (increment 2 of the target-state spec), and this
-// exclusion goes with them.
-const SLASH_COMMAND = /\/faction\b/gu;
 // A template literal's `${…}` holds code, not copy — e.g. `${faction.name}`
 // interpolates an identifier, and the raw literal text (backtick to
 // backtick) includes it verbatim, so it must be stripped before judging
@@ -51,7 +46,7 @@ export function offendersIn(code: string): string[] {
   return [...stripped.matchAll(STRING_LITERALS)]
     .map((m) => m[0])
     .filter((raw) => {
-      const text = raw.replace(INTERPOLATION, "").replace(SLASH_COMMAND, "");
+      const text = raw.replace(INTERPOLATION, "");
       return /faction/iu.test(text) && PROSE_SHAPE.test(text);
     });
 }

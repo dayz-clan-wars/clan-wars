@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { loadConfig } from "../src/config.js";
-import { RELEASE_GRACE_MS } from "@factions/roster/internal";
 
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
   DATABASE_URL: "postgres://x",
 };
+
+const env = () => OK;
 
 describe("loadConfig", () => {
   it("reads a complete environment", () => {
@@ -13,10 +14,9 @@ describe("loadConfig", () => {
     expect(cfg).toMatchObject({ token: "t", applicationId: "a", guildId: "g", databaseUrl: "postgres://x" });
   });
 
-  it("defaults the tick interval and challenge TTL", () => {
+  it("defaults the tick interval", () => {
     const cfg = loadConfig(OK);
     expect(cfg.tickIntervalMs).toBe(10_000);
-    expect(cfg.challengeTtlMs).toBe(86_400_000); // Discord flow: 24 h, see DISCORD_LINK_TTL_MS
   });
 
   it.each(["DISCORD_TOKEN", "DISCORD_APPLICATION_ID", "DISCORD_GUILD_ID", "DATABASE_URL"])(
@@ -49,33 +49,6 @@ describe("loadConfig", () => {
     },
   );
 
-  it("accepts an overridden challenge TTL", () => {
-    expect(loadConfig({ ...OK, BOT_CHALLENGE_TTL_MS: "300000" }).challengeTtlMs).toBe(300_000);
-  });
-
-  it("defaults the reservation window to 24 hours", () => {
-    expect(loadConfig(OK).reservationTtlMs).toBe(86_400_000);
-  });
-
-  it("defaults the roster durations", () => {
-    const cfg = loadConfig(OK);
-    expect(cfg.inviteTtlMs).toBe(604_800_000);
-    expect(cfg.cooldownMs).toBe(259_200_000);
-    expect(cfg.renameCooldownMs).toBe(2_592_000_000); // the guide's 30 days
-  });
-
-  it("accepts overridden roster durations", () => {
-    const cfg = loadConfig({
-      ...OK,
-      BOT_INVITE_TTL_MS: "1000",
-      BOT_COOLDOWN_MS: "2000",
-      BOT_RENAME_COOLDOWN_MS: "3000",
-    });
-    expect(cfg.inviteTtlMs).toBe(1000);
-    expect(cfg.cooldownMs).toBe(2000);
-    expect(cfg.renameCooldownMs).toBe(3000);
-  });
-
   it("defaults the dormancy windows to 7 and 14 days", () => {
     const cfg = loadConfig(OK);
     expect(cfg.dormantAfterMs).toBe(604_800_000);
@@ -87,22 +60,6 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, BOT_DORMANT_AFTER_MS: raw })).toThrow(/BOT_DORMANT_AFTER_MS/);
       expect(() => loadConfig({ ...OK, BOT_DISBAND_AFTER_DORMANT_MS: raw })).toThrow(/BOT_DISBAND_AFTER_DORMANT_MS/);
     }
-  });
-
-  it("rejects a rebind cooldown at or below the release grace", () => {
-    // Boundary: exactly equal must throw — a faction could rebind back the
-    // instant its old pole's release grace expires.
-    expect(() =>
-      loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: String(RELEASE_GRACE_MS) }),
-    ).toThrow(/BOT_REBIND_COOLDOWN_MS/);
-    expect(() =>
-      loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: "1000" }),
-    ).toThrow(/BOT_REBIND_COOLDOWN_MS/);
-  });
-
-  it("accepts a rebind cooldown strictly greater than the release grace", () => {
-    const cfg = loadConfig({ ...OK, BOT_REBIND_COOLDOWN_MS: String(RELEASE_GRACE_MS + 1) });
-    expect(cfg.rebindCooldownMs).toBe(RELEASE_GRACE_MS + 1);
   });
 
   describe("BOT_FEED_CHANNEL_ID", () => {
@@ -194,6 +151,14 @@ describe("loadConfig", () => {
     it("⚠️ rejects embedded credentials, which Discord's embed proxy would fetch", () => {
       expect(() => loadConfig({ ...OK, FLAG_IMAGE_BASE_URL: "https://user:pass@dayzclanwars.com" }))
         .toThrow(/FLAG_IMAGE_BASE_URL/u);
+    });
+  });
+
+  describe("SITE_BASE_URL", () => {
+    it("defaults to the production site", () => { expect(loadConfig(env()).siteBaseUrl).toBe("https://dayzclanwars.com"); });
+    it("accepts a bare origin and rejects a path", () => {
+      expect(loadConfig({ ...env(), SITE_BASE_URL: "http://localhost:3000" }).siteBaseUrl).toBe("http://localhost:3000");
+      expect(() => loadConfig({ ...env(), SITE_BASE_URL: "https://x.y/clan" })).toThrow(/bare origin/u);
     });
   });
 });

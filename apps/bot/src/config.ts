@@ -1,22 +1,4 @@
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
-import { REBIND_COOLDOWN_MS, RELEASE_GRACE_MS } from "@factions/roster/internal";
-import {
-  ACTIVATION_WINDOW_MS,
-  PENDING_EXPIRY_MS,
-  ROSTER_COOLDOWN_MS,
-  RENAME_COOLDOWN_MS,
-} from "@factions/domain";
-
-/**
- * ⚠️ The Discord `/link` flow's challenge lifetime. NOT the guide's 10-minute
- * `LINK_TTL_MS` — that number was written for the site flow (target-state
- * spec §5.5), where the player is already in game. Here a player can run
- * `/link` from anywhere, and `commands.ts` counts an expired challenge's
- * replacement against `@factions/verification`'s `MAX_DRAWS_PER_TARGET`, so a
- * 10-minute TTL would lock an honest player out for a day. Retire this
- * constant with the slash commands (increment 2).
- */
-const DISCORD_LINK_TTL_MS = 86_400_000;
 
 export type BotConfig = {
   token: string;
@@ -24,14 +6,8 @@ export type BotConfig = {
   guildId: string;
   databaseUrl: string;
   tickIntervalMs: number;
-  challengeTtlMs: number;
-  reservationTtlMs: number;
-  inviteTtlMs: number;
-  cooldownMs: number;
-  renameCooldownMs: number;
   dormantAfterMs: number;
   disbandAfterDormantMs: number;
-  rebindCooldownMs: number;
   /**
    * The faction feed's channel. Undefined means the feed is OFF: rows keep
    * accumulating in `faction_events` and nothing posts.
@@ -49,6 +25,11 @@ export type BotConfig = {
    * any artwork existed.
    */
   flagImageBaseUrl: string | undefined;
+  /**
+   * Bare origin of the site — `https://dayzclanwars.com`. Every retired
+   * slash command's reply and the ceremony DM point players here.
+   */
+  siteBaseUrl: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -136,7 +117,7 @@ function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefine
   if (parsed.pathname !== "/" && parsed.pathname !== "") {
     throw new Error(
       `${key} must be a bare origin with no path — got a path of ${JSON.stringify(parsed.pathname)}. ` +
-      `The bot appends /flags/<texture>.png itself; use ${JSON.stringify(parsed.origin)}.`,
+      `The bot appends the page path itself; use ${JSON.stringify(parsed.origin)}.`,
     );
   }
   if (parsed.search !== "") {
@@ -168,16 +149,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     guildId: required(env, "DISCORD_GUILD_ID"),
     databaseUrl: required(env, "DATABASE_URL"),
     tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
-    // 24 hours for the Discord flow; see DISCORD_LINK_TTL_MS above for why
-    // this is not the guide's 10-minute LINK_TTL_MS.
-    challengeTtlMs: positiveInt(env, "BOT_CHALLENGE_TTL_MS", DISCORD_LINK_TTL_MS),
-    reservationTtlMs: positiveInt(env, "BOT_RESERVATION_TTL_MS", ACTIVATION_WINDOW_MS),
-    // spec §6 invite lifetime.
-    inviteTtlMs: positiveInt(env, "BOT_INVITE_TTL_MS", PENDING_EXPIRY_MS),
-    // spec §6 kick/leave cooldown.
-    cooldownMs: positiveInt(env, "BOT_COOLDOWN_MS", ROSTER_COOLDOWN_MS),
-    // the guide's 30-day rename cooldown.
-    renameCooldownMs: positiveInt(env, "BOT_RENAME_COOLDOWN_MS", RENAME_COOLDOWN_MS),
     // 7 days, matching the server's FlagRefreshMaxDuration. ⚠️ Copied by hand:
     // change one and not the other and they diverge silently, either cutting
     // supplies at a base that is fine or feeding one that has already decayed.
@@ -191,28 +162,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     dormantAfterMs: positiveInt(env, "BOT_DORMANT_AFTER_MS", DEFAULT_DORMANT_AFTER_MS),
     // 14 further days before the flag, tag and pole return to the 33-slot pool.
     disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
-    // 7 days — spec §2.5. Validated below against RELEASE_GRACE_MS: this env
-    // var, not the RELEASE_GRACE_MS/REBIND_COOLDOWN_MS constants that
-    // apps/bot/test/rebind.test.ts pins, is what the handlers actually use.
-    rebindCooldownMs: positiveInt(env, "BOT_REBIND_COOLDOWN_MS", REBIND_COOLDOWN_MS),
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
     flagImageBaseUrl: optionalHttpUrl(env, "FLAG_IMAGE_BASE_URL"),
+    siteBaseUrl: optionalHttpUrl(env, "SITE_BASE_URL") ?? "https://dayzclanwars.com",
   };
-
-  // ⚠️ A cooldown at or below RELEASE_GRACE_MS lets a faction alternate
-  // between two poles and hold both permanently private — the pole it just
-  // left stays reserved to it through the release grace, and by the time
-  // that grace ends the cooldown has already expired, so it can rebind back.
-  // Nothing about a live bot would error if this were misconfigured; it
-  // would just quietly reopen the exploit dormancy and rebind.test.ts assume
-  // is closed.
-  if (config.rebindCooldownMs <= RELEASE_GRACE_MS) {
-    throw new Error(
-      `BOT_REBIND_COOLDOWN_MS must be strictly greater than RELEASE_GRACE_MS ` +
-      `(${RELEASE_GRACE_MS}), got ${config.rebindCooldownMs}: a cooldown at or ` +
-      `below the release grace lets a faction hold two private bases.`,
-    );
-  }
 
   return config;
 }
