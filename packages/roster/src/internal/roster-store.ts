@@ -763,6 +763,15 @@ export class PgRosterStore implements RosterStore {
   async transfer(a: TransferArgs): Promise<TransferOutcome> {
     try {
       return await this.db.transaction(async (tx) => {
+        // Lock order (spec §4.12): `factions` before `faction_members`. This
+        // `FOR UPDATE` exists purely for that ordering — nothing here reads
+        // the row's columns — so a concurrent `disband`/dormancy-tick, which
+        // takes `factions` first too, cannot interleave with this
+        // transaction's own `faction_members` writes below and deadlock
+        // against it (the same reasoning as `acceptInvite`'s note on lock
+        // order).
+        await tx.execute(sql`select id from factions where id = ${a.factionId}::bigint for update`);
+
         const demoted = await tx.update(factionMembers)
           .set({ role: "officer" })
           .where(and(

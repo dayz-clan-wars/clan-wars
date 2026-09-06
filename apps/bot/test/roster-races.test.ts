@@ -431,4 +431,66 @@ describe("PgRosterStore concurrency", () => {
     expect(after!.revokedAt).not.toBeNull();
     expect(await db.select().from(factionMembers).where(eq(factionMembers.serverId, serverId))).toEqual([]);
   });
+
+  /**
+   * LOCK ORDER, not a data race. `transfer` used to demote-then-promote in
+   * `faction_members` before touching `factions` — the reverse of §4.12's
+   * `factions` before `faction_members`, and of `disbandFactionTx`, which
+   * updates `factions` first and only then deletes the roster. Two backends
+   * taking those two tables in opposite orders is exactly Item 19's deadlock
+   * shape: Postgres resolves the cycle with 40P01, a raw serialization
+   * failure surfacing to whichever caller pressed the button.
+   *
+   * Staged the same way as the accept-vs-disband deadlock test above: a
+   * third connection holds `FOR UPDATE` on the leader's own membership row,
+   * which parks `disband` between its `UPDATE factions` (faction row now
+   * locked) and its roster `DELETE`. `transfer` then arrives at that same
+   * faction row. Under the broken order `transfer` would already be holding
+   * the leader's membership row from its own demote UPDATE, so when the
+   * held lock releases and `disband`'s DELETE reaches that row the cycle
+   * closes. Under the fixed order `transfer` takes `factions` FIRST (this
+   * change's `FOR UPDATE`) and holds nothing `disband` needs, so `disband`
+   * always finishes first and `transfer` simply finds the leader gone.
+   */
+  it("a transfer and a disband cannot deadlock on factions versus faction_members", async () => {
+    const f = await seedFaction(db, {
+      serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear",
+      status: "active", leaderDiscordId: "d1", createdAt: t0,
+    });
+    const factionId = f.id;
+
+    await db.insert(factionMembers).values([
+      { factionId, serverId, dayzId: "1".repeat(40), discordId: "d1", role: "leader", joinedAt: t0 },
+      { factionId, serverId, dayzId: "2".repeat(40), discordId: "d2", role: "officer", joinedAt: t0 },
+    ]);
+
+    let transferring!: Promise<string>;
+    let disbanding!: Promise<string>;
+    await holdingLock(
+      sql`select id from faction_members where faction_id = ${factionId} and discord_id = 'd1' for update`,
+      async () => {
+        // The disband takes the faction row, then parks on the held leader row.
+        disbanding = storeB.disband(factionId, "d1");
+        await until("the disband parked on the leader row", async () => await blockedBackends(db) >= 1);
+
+        // The transfer now arrives at that same faction row.
+        transferring = storeA.transfer({ factionId, fromDiscordId: "d1", toDiscordId: "d2", at: t0 });
+        await until("the transfer parked on the faction row", async () => await blockedBackends(db) >= 2);
+      },
+    );
+
+    // Neither may reject. A 40P01 deadlock abort throws out of the store —
+    // `transfer`'s catch rethrows anything that is not a `RosterAbort`, and
+    // `disband` has no catch at all — so both settling IS the assertion that
+    // no deadlock occurred.
+    const [transferOutcome, disbandOutcome] = await Promise.all([transferring, disbanding]);
+    expect(disbandOutcome).toBe("ok");
+    // Deterministic: the transfer was waiting on the faction row, so it only
+    // reaches the roster after the disband has already deleted it.
+    expect(transferOutcome).toBe("not-leader");
+
+    const [after] = await db.select().from(factions).where(eq(factions.id, factionId));
+    expect(after!.status).toBe("disbanded");
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.factionId, factionId))).toEqual([]);
+  });
 });
