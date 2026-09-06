@@ -93,6 +93,31 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("WAR_LOG_CHANNEL_ID", () => {
+    it("⚠️ is optional, so the war log is off unless deliberately turned on", () => {
+      expect(loadConfig({ ...OK }).warLogChannelId).toBeUndefined();
+    });
+
+    it("reads the channel id when set", () => {
+      expect(loadConfig({ ...OK, WAR_LOG_CHANNEL_ID: "1545142533603201184" }).warLogChannelId)
+        .toBe("1545142533603201184");
+    });
+
+    it("treats an empty string as unset rather than as a channel", () => {
+      expect(loadConfig({ ...OK, WAR_LOG_CHANNEL_ID: "" }).warLogChannelId).toBeUndefined();
+    });
+
+    it("rejects a non-snowflake, rather than failing at the first post", () => {
+      expect(() => loadConfig({ ...OK, WAR_LOG_CHANNEL_ID: "#war-log" }))
+        .toThrow(/WAR_LOG_CHANNEL_ID/u);
+    });
+
+    it("⚠️ rejects a leading-zero value, the README's old placeholder shape", () => {
+      expect(() => loadConfig({ ...OK, WAR_LOG_CHANNEL_ID: "000000000000000000" }))
+        .toThrow(/WAR_LOG_CHANNEL_ID/u);
+    });
+  });
+
   describe("FLAG_IMAGE_BASE_URL", () => {
     it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
       // The feed shipped before any artwork existed and must keep working

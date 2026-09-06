@@ -16,6 +16,7 @@ in-game verification tick confirms it.
 | `BOT_DORMANT_AFTER_MS` | no (default `604800000`, 7 days) | How long without a member raising the clan's flag at its pole before the clan goes dormant. Default from `packages/domain/src/rules.ts` (`DORMANT_AFTER_MS`). Plain decimal digits only. |
 | `BOT_DISBAND_AFTER_DORMANT_MS` | no (default `1209600000`, 14 days) | How long a clan stays dormant before it is disbanded. Default from `packages/domain/src/rules.ts` (`DISBAND_AFTER_DORMANT_MS`). Plain decimal digits only. |
 | `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
+| `WAR_LOG_CHANNEL_ID` | no (unset means the war log is off) | The Discord channel id `#war-log` posts to — raids, defenses, and (later) week and season closes (`war_log_events`, spec §9.2). Unset by default: rows still accumulate, nothing posts. The bot needs **View Channel and Send Messages** in that channel. |
 | `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 | `SITE_BASE_URL` | no (default `https://dayzclanwars.com`) | Bare origin of the site. Every retired slash command and the ceremony DM point players here. |
 
@@ -30,6 +31,7 @@ BOT_TICK_INTERVAL_MS=10000
 BOT_DORMANT_AFTER_MS=604800000
 BOT_DISBAND_AFTER_DORMANT_MS=1209600000
 BOT_FEED_CHANNEL_ID=1234567890123456789
+WAR_LOG_CHANNEL_ID=1234567890123456789
 FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 SITE_BASE_URL=https://dayzclanwars.com
 ```
@@ -85,4 +87,18 @@ processes — this codebase does not implement one.
 The presence tick promotes a pending member on the first log line that
 places them within 50 m of their clan's base (the guide's number lives in
 `rules.ts`); the pending-expiry sweep removes a pending member unseen for 7
-days. Both are silent in Discord until increment 3's notices.
+days.
+
+Each tick also runs the raid and raise consumers (`raid-tick.ts`,
+`raise-tick.ts`) — every `flag.lowered`/`flag.raised` event that scores a
+raid, records a defense, revives a dormant clan, or notices a non-member
+raise, colors-elsewhere, or a rebind proposal — followed by the two posters
+that turn those consumers' queued rows into Discord messages: `war-log-tick.ts`
+posts `war_log_events` rows to `#war-log` (spec §9.2, gated on
+`WAR_LOG_CHANNEL_ID` the same way the feed is gated on `BOT_FEED_CHANNEL_ID`)
+and `notice-tick.ts` posts `clan_notices` rows — a clan channel message or a
+DM, rendered by `notice-text.ts` (spec §9.3/§9.4) — always, since a DM needs
+no channel configuration at all. A `clan_notices` row that fails three times
+is marked failed and stops being retried; a row behind it for the SAME
+target waits only for the current tick, and posts on the next one once the
+failing target is no longer blocking it.

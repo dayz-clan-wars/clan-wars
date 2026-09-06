@@ -20,6 +20,13 @@ export type BotConfig = {
    */
   feedChannelId: string | undefined;
   /**
+   * The war log's channel (spec §9.2's #war-log). Undefined means it is OFF:
+   * `war_log_events` rows keep accumulating and nothing posts. Optional for
+   * the same reason `feedChannelId` is: every existing deployment and test
+   * fixture would otherwise need a channel id for a feature it does not use.
+   */
+  warLogChannelId: string | undefined;
+  /**
    * Base URL the flag images are served from — `https://dayzclanwars.com`.
    * Undefined means embeds post with no thumbnail, exactly as they did before
    * any artwork existed.
@@ -163,6 +170,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // 14 further days before the flag, tag and pole return to the 33-slot pool.
     disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
+    warLogChannelId: optionalSnowflake(env, "WAR_LOG_CHANNEL_ID"),
     flagImageBaseUrl: optionalHttpUrl(env, "FLAG_IMAGE_BASE_URL"),
     // ⚠️ Stripped of any trailing slash here, unlike FLAG_IMAGE_BASE_URL just
     // above — that resolver strips its own trailing slash at the point it

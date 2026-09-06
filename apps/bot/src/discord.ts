@@ -23,9 +23,13 @@ import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
 import { RETIRED_COMMANDS, RETIRED_DESCRIPTION, retiredReply } from "./retired-commands.js";
-import { PgFeedStore, countUnposted, noticeUserTx } from "@factions/roster/internal";
+import { PgFeedStore, PgNoticeStore, PgWarLogStore, countUnposted, countUnpostedWarLog, noticeUserTx } from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
+import { raidTick } from "./raid-tick.js";
+import { raiseTick } from "./raise-tick.js";
+import { noticeTick, type NoticeSender } from "./notice-tick.js";
+import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return RETIRED_COMMANDS.map((name) =>
@@ -306,12 +310,52 @@ export function createFeedPoster(client: Client, channelId: string): FeedPoster 
   };
 }
 
+/**
+ * ⚠️ Same shape and reasoning as `createFeedPoster`: throws on every
+ * unreachable path rather than returning quietly, because `warLogTick`
+ * marks a row posted only when this resolves — a swallowed failure would
+ * mark it posted and lose the announcement permanently.
+ */
+export function createChannelPoster(client: Client, channelId: string): WarLogPoster {
+  return async (content) => {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isSendable()) {
+      throw new Error(`channel ${channelId} is missing or not sendable by this bot`);
+    }
+    await channel.send({ content });
+  };
+}
+
+/**
+ * `channel` → `client.channels.fetch`; `dm` → `client.users.fetch(id).send`.
+ * Neither falls back to the other — a clan_notices row already carries the
+ * discord target its writer decided on, and a DM row with closed DMs is
+ * exactly what the three-attempt/failed discipline in `noticeTick` and
+ * `PgNoticeStore.markAttempt` exists for.
+ */
+export function createNoticeSender(client: Client): NoticeSender {
+  return async (target, discordTargetId, content) => {
+    if (target === "dm") {
+      const user = await client.users.fetch(discordTargetId);
+      await user.send(content);
+      return;
+    }
+    const channel = await client.channels.fetch(discordTargetId);
+    if (!channel?.isSendable()) {
+      throw new Error(`notice channel ${discordTargetId} is missing or not sendable by this bot`);
+    }
+    await channel.send({ content });
+  };
+}
+
 export async function start(cfg: BotConfig): Promise<void> {
   const db = createClient(cfg.databaseUrl);
   const store = new PgVerificationStore(db);
   const ceremonyStore = new PgCeremonyStore(db);
   const dormancyStore = new PgDormancyStore(db);
   const feedStore = new PgFeedStore(db);
+  const noticeStore = new PgNoticeStore(db);
+  const warLogStore = new PgWarLogStore(db);
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -333,6 +377,8 @@ export async function start(cfg: BotConfig): Promise<void> {
   // Fetching one member and patching a nickname are plain REST calls — this
   // needs no gateway intent beyond the `Guilds` one already requested above.
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
+  const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
+  const noticeSender = createNoticeSender(client);
 
   const renameOnLink = createNicknameApplier(client);
   const deps: CommandDeps = { store, now: () => new Date() };
@@ -382,6 +428,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   // forever. Tracks only the id currently reported blocked, not every id
   // ever seen, so a later different blocking row is still reported once.
   let lastReportedBlockedAt: number | null = null;
+  // One log per bot instance, mirroring feedFailures/lastReportedBlockedAt above.
+  const warLogFailures = new Set<number>();
+  let lastReportedWarLogBlockedAt: number | null = null;
 
   let timer: NodeJS.Timeout | undefined;
 
@@ -419,6 +468,31 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (pr.promoted.length > 0) console.log(`presence: ${pr.promoted.length} member(s) now full`);
     } catch (err) {
       console.error("presence tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, like every other step: a failure raiding or
+    // raising a flag must not stop verification, ceremony or dormancy.
+    try {
+      const raided = await raidTick(db, {
+        onNoSeason: (serverId) => console.error(`raid tick: no open season for server ${serverId}`),
+      });
+      if (raided.raids > 0 || raided.absorbed > 0) {
+        console.log(`raids: ${raided.raids} new, ${raided.absorbed} absorbed, ${raided.skippedNoSeason} skipped (no season)`);
+      }
+    } catch (err) {
+      console.error("raid tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, separate from raidTick above: the two consumers
+    // share nothing but the events they scan, and one's failure must not
+    // silence the other.
+    try {
+      const raised = await raiseTick(db, { siteBaseUrl: cfg.siteBaseUrl });
+      if (raised.defenses > 0 || raised.revived > 0 || raised.noticed > 0) {
+        console.log(`raises: ${raised.defenses} defended, ${raised.revived} revived, ${raised.noticed} noticed`);
+      }
+    } catch (err) {
+      console.error("raise tick failed", err);
     }
 
     try {
@@ -570,6 +644,54 @@ export async function start(cfg: BotConfig): Promise<void> {
         console.error("feed tick failed", err);
       }
     }
+
+    // ⚠️ Its own try/catch, beside the feed's, and gated the same way: only
+    // when a channel is configured. Off by default for the same reason the
+    // feed is — every existing deployment and test fixture would otherwise
+    // need a war-log channel id for a feature it does not use.
+    if (warLogPoster) {
+      try {
+        const w = await warLogTick(warLogStore, warLogPoster, {
+          now: new Date(),
+          siteBaseUrl: cfg.siteBaseUrl,
+          onError: (id, err) => {
+            if (warLogFailures.has(id)) return;
+            warLogFailures.add(id);
+            console.error(`war log post failed for war_log_events row ${id}`, err);
+          },
+        });
+        if (w.posted > 0) console.log(`war log posted ${w.posted}`);
+        if (w.blockedAt !== null && w.blockedAt !== lastReportedWarLogBlockedAt) {
+          console.error(
+            `war log queue blocked at war_log_events row ${w.blockedAt}; nothing behind it will post ` +
+            `until this row succeeds. Check the bot's View Channel / Send Messages permission on ${cfg.warLogChannelId}.`,
+          );
+          lastReportedWarLogBlockedAt = w.blockedAt;
+        }
+      } catch (err) {
+        console.error("war log tick failed", err);
+      }
+    }
+
+    // ⚠️ Its own try/catch, always run — unlike the feed and war log, a
+    // clan_notices row can be a DM, which needs no channel at all, so this
+    // step is never gated on a config flag.
+    try {
+      const n = await noticeTick(noticeStore, noticeSender, {
+        now: new Date(),
+        onError: (id, attempts, err) => {
+          // Logged once per attempt, capped at NOTICE_MAX_ATTEMPTS: a row
+          // failing for the third time is worth a distinct line from the
+          // first two, since it stops being retried after this.
+          console.error(`notice post failed for clan_notices row ${id} (attempt ${attempts})`, err);
+        },
+      });
+      if (n.posted > 0 || n.failed > 0) {
+        console.log(`notices posted ${n.posted}, ${n.failed} permanently failed`);
+      }
+    } catch (err) {
+      console.error("notice tick failed", err);
+    }
   });
 
   client.once("clientReady", () => {
@@ -585,6 +707,15 @@ export async function start(cfg: BotConfig): Promise<void> {
           "They will post in order when a channel is configured.",
         ))
         .catch((err: unknown) => console.error("could not count the feed queue", err));
+    }
+
+    if (!cfg.warLogChannelId) {
+      void countUnpostedWarLog(db)
+        .then((n) => console.warn(
+          `war log is OFF (WAR_LOG_CHANNEL_ID unset); ${n} event(s) queued. ` +
+          "They will post in order when a channel is configured.",
+        ))
+        .catch((err: unknown) => console.error("could not count the war log queue", err));
     }
 
     timer = setInterval(() => runner.fire(), cfg.tickIntervalMs);
