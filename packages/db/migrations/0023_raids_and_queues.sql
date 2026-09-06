@@ -36,6 +36,7 @@ CREATE TABLE IF NOT EXISTS "raids" (
 	"first_lower_event_id" bigint NOT NULL,
 	"first_lower_at" timestamp with time zone NOT NULL,
 	"last_lower_at" timestamp with time zone NOT NULL,
+	"last_lower_event_id" bigint NOT NULL,
 	"lower_count" integer DEFAULT 1 NOT NULL,
 	"points" integer NOT NULL,
 	"victim_rank_at_lower" integer,
@@ -137,6 +138,12 @@ END $$;
 --> statement-breakpoint
 DO $$ BEGIN
  ALTER TABLE "raids" ADD CONSTRAINT "raids_first_lower_event_id_events_id_fk" FOREIGN KEY ("first_lower_event_id") REFERENCES "public"."events"("id") ON DELETE no action ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;
+--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "raids" ADD CONSTRAINT "raids_last_lower_event_id_events_id_fk" FOREIGN KEY ("last_lower_event_id") REFERENCES "public"."events"("id") ON DELETE no action ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;

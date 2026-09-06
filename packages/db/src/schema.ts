@@ -644,6 +644,15 @@ export const raids = pgTable("raids", {
   firstLowerEventId: bigint("first_lower_event_id", { mode: "number" }).notNull().references(() => events.id),
   firstLowerAt: timestamp("first_lower_at", { withTimezone: true }).notNull(),
   lastLowerAt: timestamp("last_lower_at", { withTimezone: true }).notNull(),
+  /**
+   * The id of the highest `flag.lowered` event folded into this raid so far.
+   * ⚠️ This, not `last_lower_at`, is the absorb path's true idempotency
+   * guard: a replayed event (any at-least-once redelivery, not only a crash)
+   * carries an id no greater than this column, so the raid consumer treats
+   * `ev.id <= lastLowerEventId` as already-applied and skips the update
+   * rather than double-counting `lower_count`.
+   */
+  lastLowerEventId: bigint("last_lower_event_id", { mode: "number" }).notNull().references(() => events.id),
   lowerCount: integer("lower_count").notNull().default(1),
   /** Spec §8.1: recorded at write time, never recomputed. */
   points: integer("points").notNull(),

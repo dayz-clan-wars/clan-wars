@@ -67,13 +67,13 @@ describe("migration 0023", () => {
     await db.insert(raids).values({
       seasonId: season!.id, serverId, victimFactionId: factionId,
       raiderDayzId: "RAIDER1", firstLowerEventId: ev1!.id,
-      firstLowerAt: now, lastLowerAt: now, points: 150,
+      firstLowerAt: now, lastLowerAt: now, lastLowerEventId: ev1!.id, points: 150,
       rankedCountAtLower: 1, weekStart: now,
     });
     await expect(db.insert(raids).values({
       seasonId: season!.id, serverId, victimFactionId: factionId,
       raiderDayzId: "RAIDER1", firstLowerEventId: ev1!.id,
-      firstLowerAt: now, lastLowerAt: now, points: 150,
+      firstLowerAt: now, lastLowerAt: now, lastLowerEventId: ev1!.id, points: 150,
       rankedCountAtLower: 1, weekStart: now,
     })).rejects.toThrow(/raids_first_lower_uniq/u);
 

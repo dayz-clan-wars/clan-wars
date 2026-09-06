@@ -154,9 +154,35 @@ describe("raidTick", () => {
   it("is idempotent across a crash between the raid insert and the cursor write", async () => {
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await raidTick(db);
-    expect(await db.select().from(raids)).toHaveLength(1);
+    const rows1 = await db.select().from(raids);
+    expect(rows1).toHaveLength(1);
+    expect(rows1[0]!.lowerCount).toBe(1);
     await db.execute(sql`update consumer_cursors set last_event_id = 0 where consumer_name = 'raid-consumer'`);
     await raidTick(db);
-    expect(await db.select().from(raids)).toHaveLength(1);
+    const rows2 = await db.select().from(raids);
+    expect(rows2).toHaveLength(1);
+    // ⚠️ The replayed event must not inflate lower_count: it is the exact
+    // same first-lower event, not a genuinely new lower inside the window.
+    expect(rows2[0]!.lowerCount).toBe(1);
+  });
+
+  it("a genuinely new raid by a different raider does not disturb an already-open flag-down episode", async () => {
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await lower(S1, "Solo", "Flag_Bear", P1, new Date(now.getTime() + 7_200_000));
+    const r = await raidTick(db);
+    expect(r).toMatchObject({ raids: 2, absorbed: 0 });
+    const rows = await db.select().from(raids).orderBy(raids.id);
+    expect(rows).toHaveLength(2);
+    const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
+    // The clock still reads W1's first lower — a second, different raider's
+    // new raid does not restart or move it.
+    expect(bear).toEqual({ f: now, by: W1 });
+    const notices = await db.select({ kind: clanNotices.kind, target: clanNotices.target }).from(clanNotices);
+    const flagDownNotices = notices.filter((n) => n.kind === "flag_down");
+    // Exactly one channel row and one DM (to B1), not two of each — the
+    // flag was already down when the second raid landed.
+    expect(flagDownNotices).toHaveLength(2);
+    expect(flagDownNotices.filter((n) => n.target === "channel")).toHaveLength(1);
+    expect(flagDownNotices.filter((n) => n.target === "dm")).toHaveLength(1);
   });
 });

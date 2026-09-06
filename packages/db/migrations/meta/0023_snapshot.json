@@ -2653,6 +2653,12 @@
           "primaryKey": false,
           "notNull": true
         },
+        "last_lower_event_id": {
+          "name": "last_lower_event_id",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true
+        },
         "lower_count": {
           "name": "lower_count",
           "type": "integer",
@@ -2803,6 +2809,19 @@
           "tableTo": "events",
           "columnsFrom": [
             "first_lower_event_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "raids_last_lower_event_id_events_id_fk": {
+          "name": "raids_last_lower_event_id_events_id_fk",
+          "tableFrom": "raids",
+          "tableTo": "events",
+          "columnsFrom": [
+            "last_lower_event_id"
           ],
           "columnsTo": [
             "id"

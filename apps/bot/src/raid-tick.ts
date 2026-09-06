@@ -23,9 +23,10 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
  * The raid consumer (spec §5.8, §7, §8.2). A `flag.lowered` at a declared
  * ACTIVE clan pole by someone who is not a full member of that clan is a
  * raid: one row per (raider clan, victim) per 24 h from the first lower;
- * later lowers inside the window update `last_lower_at`/`lower_count` and
- * score nothing. Everything happens under the victim's `factions` row lock,
- * then the standings, then the war-log row and the notices — last, per §4.12.
+ * later lowers inside the window update `last_lower_at`/`last_lower_event_id`/
+ * `lower_count` and score nothing. Everything happens under the victim's
+ * `factions` row lock, then `season_standings`, then `raids`, then the
+ * war-log row and the notices — last, per §4.12.
  */
 export async function raidTick(db: Database, opts: { batchSize?: number; onNoSeason?: (serverId: number) => void } = {}): Promise<RaidTickResult> {
   const batchSize = opts.batchSize ?? 500;
@@ -60,12 +61,21 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const raiderFactionId = raider?.factionId ?? null;
         // Dedup under the victim's lock (§8.2).
         const since = new Date(ev.occurredAt.getTime() - RAID_DEDUP_MS);
-        const [open] = await tx.select({ id: raids.id }).from(raids).where(and(
+        const [open] = await tx.select({ id: raids.id, lastLowerEventId: raids.lastLowerEventId }).from(raids).where(and(
           eq(raids.victimFactionId, victim.id), gt(raids.firstLowerAt, since),
           raiderFactionId === null ? and(isNull(raids.raiderFactionId), eq(raids.raiderDayzId, p.dayzId))! : eq(raids.raiderFactionId, raiderFactionId),
         )).orderBy(desc(raids.firstLowerAt)).limit(1);
         if (open) {
-          await tx.update(raids).set({ lastLowerAt: ev.occurredAt, lowerCount: sql`${raids.lowerCount} + 1` }).where(eq(raids.id, open.id));
+          // ⚠️ `ev.id` is the true idempotency guard here, not `lastLowerAt`.
+          // A redelivery of an event already folded into this raid (any
+          // at-least-once replay, not only a crash — see raid-tick.ts's
+          // header) carries an id no greater than `lastLowerEventId`; taking
+          // the absorb branch again for it would double-count `lower_count`.
+          // Only a genuinely new lower (`ev.id` strictly greater) advances
+          // the row; an already-applied replay is a no-op.
+          if (ev.id > open.lastLowerEventId) {
+            await tx.update(raids).set({ lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: sql`${raids.lowerCount} + 1` }).where(eq(raids.id, open.id));
+          }
           return "absorbed" as const;
         }
         // Points from the ladder at this moment (§8.1): ranked = active clans with points > 0 this season.
@@ -76,18 +86,18 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const idx = ranked.findIndex((r) => r.factionId === victim.id);
         const rank = idx === -1 ? null : idx + 1;
         const points = raiderFactionId === null ? 0 : pointsFor(rank, ranked.length);
-        await tx.insert(raids).values({
-          seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
-          firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lowerCount: 1,
-          points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: weekStartOf(ev.occurredAt),
-        });
-        // Standings: victim times_raided; raider points + raids.
+        // Standings before raids, per §4.12's documented lock order.
         await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: victim.id, timesRaided: 1 })
           .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { timesRaided: sql`${seasonStandings.timesRaided} + 1` } });
         if (raiderFactionId !== null) {
           await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: raiderFactionId, points, raids: 1 })
             .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { points: sql`${seasonStandings.points} + ${points}`, raids: sql`${seasonStandings.raids} + 1` } });
         }
+        await tx.insert(raids).values({
+          seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
+          firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
+          points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: weekStartOf(ev.occurredAt),
+        });
         // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
         if (victim.flagDownSince === null) {
           await tx.update(factions).set({ flagDownSince: ev.occurredAt, flagDownByDayzId: p.dayzId }).where(eq(factions.id, victim.id));
