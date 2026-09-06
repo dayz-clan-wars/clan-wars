@@ -59,4 +59,11 @@ describe("warLogText", () => {
       payload: { number: 1, clan: "Bears", points: 150 },
     }, siteBaseUrl)).toBe("🏁 Season 1 is over. Champion: **Bears** with 150. Full table: https://dayzclanwars.com/seasons");
   });
+
+  it("renders season_closed with no champion", () => {
+    expect(warLogText({
+      kind: "season_closed",
+      payload: { number: 1, clan: null, points: null },
+    }, siteBaseUrl)).toBe("🏁 Season 1 is over. Nobody scored. Full table: https://dayzclanwars.com/seasons");
+  });
 });

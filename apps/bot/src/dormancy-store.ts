@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, factions } from "@factions/db";
+import { declarations, factions, seasons } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import type { DormantReason } from "@factions/domain";
@@ -163,7 +163,19 @@ export function clockQuery(db: Database) {
     // activating raise predates the ingested window, and created_at covers a
     // row with neither. Without this a faction with no ingested raise reads
     // as infinitely stale and is dormant on the first tick.
-    lastRaiseAt: sql<Date | null>`coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt})`,
+    //
+    // ⚠️ GREATEST against the server's open season's `started_at` (§5.1,
+    // §8.5): the wipe clears every declaration but does not touch the clock
+    // otherwise, so without this a clan whose last raise predates the wipe
+    // would read as stale by the wipe's own age the instant the season
+    // opens — dormant on day one of a new season through no fault of its
+    // own. `greatest()` ignores nulls, so a server with no open season (or a
+    // faction whose season hasn't started yet) falls straight through to the
+    // coalesce, unchanged. A LEFT JOIN on `seasons`, not a correlated
+    // subquery, per dormancy-index-drift.test.ts — that test's EXPLAIN
+    // pins LAST_RAISE's own index usage, and a second correlated subquery
+    // sitting next to it in the select list is a needless risk to that plan.
+    lastRaiseAt: sql<Date | null>`greatest(coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt}), ${seasons.startedAt})`,
     serverLastEventAt: SERVER_LAST_EVENT,
     flagDownSince: factions.flagDownSince,
     disbandWarnedAt: factions.disbandWarnedAt,
@@ -171,6 +183,10 @@ export function clockQuery(db: Database) {
     // LEFT: a clan with no declaration (post-wipe, increment 4) still has a
     // clock; its LAST_RAISE is simply null and the coalesce falls through.
     .leftJoin(declarations, eq(declarations.ownerFactionId, factions.id))
+    // LEFT: a server with no open season yet (before the runbook opens
+    // season 1) still has a clock; seasons.started_at is simply null and
+    // greatest() falls through to the coalesce.
+    .leftJoin(seasons, and(eq(seasons.serverId, factions.serverId), isNull(seasons.endedAt)))
     .where(inArray(factions.status, EXAMINED));
 }
 

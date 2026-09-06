@@ -1,11 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, events, admFiles, declarations, clanNotices, type Database,
+  servers, factions, factionMembers, factionInvites, events, admFiles, declarations, clanNotices, seasons, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
+import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS, decide } from "../src/dormancy.js";
 import { PgDormancyStore } from "../src/dormancy-store.js";
+
+const W = { dormantAfterMs: DEFAULT_DORMANT_AFTER_MS, disbandAfterDormantMs: DEFAULT_DISBAND_AFTER_DORMANT_MS };
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-02T12:00:00Z");
@@ -225,6 +228,29 @@ describe("PgDormancyStore", () => {
       await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(2000), dayzId: "A" });
       const [c] = await store.clocks();
       expect(c!.lastRaiseAt!.getTime()).toBe(ago(2000).getTime());
+    });
+
+    it("⚠️ the open season's start floors lastRaiseAt — a wipe does not read as dormancy", async () => {
+      // §5.1, §8.5: the wipe clears every declaration but the clock itself
+      // ticks on. Without the floor, a clan whose last raise predates a wipe
+      // by more than the dormancy window would go dormant on day one of the
+      // new season through no fault of its own.
+      await seedFaction({ tag: "BEAR" });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(20 * 86_400_000), dayzId: "A" });
+      await db.insert(seasons).values({ serverId, number: 1, startedAt: ago(86_400_000) });
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(86_400_000));
+      expect(decide(c!, now, W)).toBeNull();
+    });
+
+    it("with no open season, the old behaviour holds — a raise 20 days old is dormant", async () => {
+      await seedFaction({ tag: "BEAR" });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(20 * 86_400_000), dayzId: "A" });
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(20 * 86_400_000));
+      expect(decide(c!, now, W)).toBe("dormant");
     });
   });
 

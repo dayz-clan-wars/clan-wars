@@ -11,7 +11,8 @@
     "typecheck": "turbo run typecheck",
     "ci": "turbo run typecheck test --concurrency=1",
     "guide:numbers": "tsx scripts/guide-numbers.ts",
-    "rebuild:standings": "tsx scripts/rebuild-standings.ts"
+    "rebuild:standings": "tsx scripts/rebuild-standings.ts",
+    "wipe": "tsx scripts/wipe.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
