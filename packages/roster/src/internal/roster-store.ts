@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, factions, factionInvites, factionMembers, identityLinks, rosterCooldowns, servers } from "@factions/db";
+import { declarations, factions, factionInvites, factionMembers, identityLinks, players, rosterCooldowns, servers } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store";
@@ -89,6 +89,9 @@ export interface RosterStore {
   transfer(a: TransferArgs): Promise<TransferOutcome>;
   disband(factionId: number, discordId: string): Promise<"ok" | "not-leader">;
   rename(a: RenameArgs): Promise<RenameOutcome>;
+  revokeInvite(a: { inviteId: number; factionId: number; actorDiscordId: string; at: Date }): Promise<"ok" | "not-permitted" | "gone">;
+  invitesOut(factionId: number, at: Date): Promise<(PendingInvite & { inviteeDiscordId: string; inviteeGamertag: string | null })[]>;
+  setRecruitingPost(a: { factionId: number; actorDiscordId: string; recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }): Promise<"ok" | "not-permitted">;
 }
 
 // Leader, then officer, then member — matches the ordering rosterOf promises.
@@ -880,5 +883,43 @@ export class PgRosterStore implements RosterStore {
       .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.discordId)));
     if (seat?.role !== "leader") return "not-leader" as const;
     return "cooldown" as const;
+  }
+
+  /** Officer+ withdraws an outstanding offer. The role check rides in the UPDATE's WHERE. */
+  async revokeInvite(a: { inviteId: number; factionId: number; actorDiscordId: string; at: Date }): Promise<"ok" | "not-permitted" | "gone"> {
+    const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
+    const rows = await this.db.update(factionInvites).set({ revokedAt: a.at })
+      .where(and(eq(factionInvites.id, a.inviteId), eq(factionInvites.factionId, a.factionId),
+        isNull(factionInvites.acceptedAt), isNull(factionInvites.declinedAt), isNull(factionInvites.revokedAt),
+        sql`${actorRole} in ('leader','officer')`))
+      .returning({ id: factionInvites.id });
+    if (rows.length > 0) return "ok";
+    const [actor] = await this.db.select({ role: factionMembers.role }).from(factionMembers)
+      .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.actorDiscordId), eq(factionMembers.status, "full")));
+    return actor && actor.role !== "member" ? "gone" : "not-permitted";
+  }
+
+  /** Open, unexpired invites this clan has out — the officer's view. */
+  async invitesOut(factionId: number, at: Date) {
+    return this.db.select({
+      id: factionInvites.id, factionId: factionInvites.factionId, factionName: factions.name, tag: factions.tag,
+      serverId: factionInvites.serverId, serverName: servers.name, expiresAt: factionInvites.expiresAt,
+      inviteeDiscordId: factionInvites.inviteeDiscordId, inviteeGamertag: players.gamertag,
+    }).from(factionInvites)
+      .innerJoin(factions, eq(factions.id, factionInvites.factionId))
+      .innerJoin(servers, eq(servers.id, factionInvites.serverId))
+      .leftJoin(players, eq(players.dayzId, factionInvites.inviteeDayzId))
+      .where(and(eq(factionInvites.factionId, factionId), isNull(factionInvites.acceptedAt), isNull(factionInvites.declinedAt), isNull(factionInvites.revokedAt), gt(factionInvites.expiresAt, at)))
+      .orderBy(asc(factionInvites.expiresAt));
+  }
+
+  /** Officer+ edits the recruiting post (guide ch. 8). One guarded UPDATE. */
+  async setRecruitingPost(a: { factionId: number; actorDiscordId: string; recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }): Promise<"ok" | "not-permitted"> {
+    const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
+    const rows = await this.db.update(factions)
+      .set({ recruiting: a.recruiting, playWindow: a.playWindow, language: a.language, pitch: a.pitch })
+      .where(and(eq(factions.id, a.factionId), inArray(factions.status, HOLDING), sql`${actorRole} in ('leader','officer')`))
+      .returning({ id: factions.id });
+    return rows.length > 0 ? "ok" : "not-permitted";
   }
 }
