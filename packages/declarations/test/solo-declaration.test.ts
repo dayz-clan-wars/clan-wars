@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionMembers, events, admFiles, poles, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, factions, factionMembers, events, admFiles, poles, identityLinks, type Database } from "@factions/db";
 import { SOLO_LAPSE_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raisedPolesFor, declareSolo, lapseSolos, declarationForPlayer } from "../src/store";
@@ -15,7 +15,7 @@ describe("solo declarations", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table declarations, poles, faction_members, factions, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table declarations, poles, faction_members, factions, identity_links, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
@@ -66,10 +66,19 @@ describe("solo declarations", () => {
     await raise("A", ago(SOLO_LAPSE_MS + 1));
     await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });
     await raise("STRANGER", ago(1000));
-    expect(await lapseSolos(db, serverId, now)).toEqual([{ dayzId: "A", poleKey: P }]);
+    expect(await lapseSolos(db, serverId, now)).toEqual([{ dayzId: "A", poleKey: P, discordId: null }]);
     expect(await declarationForPlayer(db, serverId, "A")).toBeNull();
     const [p] = await db.select().from(poles).where(eq(poles.poleKey, P));
     expect(p!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+  });
+
+  it("returns the linked discord id for a lapsed declarant, and null for an unlinked one", async () => {
+    await db.insert(identityLinks).values({
+      discordId: "d-A", dayzId: "A", gamertag: "Steve", verifiedAt: now,
+    });
+    await raise("A", ago(SOLO_LAPSE_MS + 1));
+    await declareSolo(db, { serverId, dayzId: "A", poleKey: P, at: ago(SOLO_LAPSE_MS + 1) });
+    expect(await lapseSolos(db, serverId, now)).toEqual([{ dayzId: "A", poleKey: P, discordId: "d-A" }]);
   });
 
   it("⚠️ does not lapse a fresh declaration citing an old raise", async () => {

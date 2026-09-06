@@ -49,6 +49,10 @@ export type DormancyTickResult = {
    */
   paused: number;
   /**
+   * Dormant factions warned that disband is `DISBAND_WARNING_LEAD_MS` away.
+   */
+  warned: number;
+  /**
    * Solo declarations released this tick because the declarant had not raised
    * their flag for SOLO_LAPSE_MS. Counted here rather than logged inside the
    * store so the one job that sweeps the clocks reports every clock it swept.
@@ -86,7 +90,7 @@ export async function dormancyTick(
 ): Promise<DormancyTickResult> {
   const { now, windows } = opts;
   const out: DormancyTickResult = {
-    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, paused: 0, soloLapsed: 0, notices: [],
+    examined: 0, dormant: 0, revived: 0, disbanded: 0, stamped: 0, paused: 0, warned: 0, soloLapsed: 0, notices: [],
   };
 
   for (const clock of await store.clocks()) {
@@ -102,12 +106,29 @@ export async function dormancyTick(
 
         case "dormant": {
           const disbandAt = new Date(now.getTime() + windows.disbandAfterDormantMs);
-          if (await store.goDormant(clock.id, now, disbandAt)) {
+          if (await store.goDormant(clock.id, now, "inactive", disbandAt)) {
             out.dormant++;
             out.notices.push(notice("dormant", clock, now, windows));
           }
           break;
         }
+
+        case "dormant-raided": {
+          // Same disbandAt as the ordinary dormant path — the countdown is
+          // identical, only the reason differs. The leader DM (notifyDormancy)
+          // stays the same for both dormant kinds; only the channel notice's
+          // kind differs, and that lives in the store.
+          const disbandAt = new Date(now.getTime() + windows.disbandAfterDormantMs);
+          if (await store.goDormant(clock.id, now, "raided", disbandAt)) {
+            out.dormant++;
+            out.notices.push(notice("dormant", clock, now, windows));
+          }
+          break;
+        }
+
+        case "warn":
+          if (await store.warnDisband(clock.id, now)) out.warned++;
+          break;
 
         case "disband":
           // No notice: the faction is gone and its roster was cleared by the

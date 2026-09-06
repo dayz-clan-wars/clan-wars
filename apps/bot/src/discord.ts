@@ -23,7 +23,7 @@ import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
 import { RETIRED_COMMANDS, RETIRED_DESCRIPTION, retiredReply } from "./retired-commands.js";
-import { PgFeedStore, countUnposted } from "@factions/roster/internal";
+import { PgFeedStore, countUnposted, noticeUserTx } from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
 
@@ -463,13 +463,31 @@ export async function start(cfg: BotConfig): Promise<void> {
         // Solo declarations lapse on the same clock the factions do, so they
         // are swept by the same job — one sweep per active server.
         lapseSolos: async (now) => {
-          const all: { dayzId: string; poleKey: string }[] = [];
+          const all: { dayzId: string; poleKey: string; discordId: string | null }[] = [];
           for (const s of await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true))) {
             // ⚠️ Per server, like the tick's per-faction catch: one server's
             // deadlock must not cost every later server its sweep, which
             // would hold solo declarations open for another whole tick.
             try {
-              all.push(...await lapseSolos(db, s.id, now));
+              const lapsed = await lapseSolos(db, s.id, now);
+              all.push(...lapsed);
+              // ⚠️ Written after `lapseSolos`'s own transaction commits, not
+              // inside it — `lapseSolos` owns its transaction per row, and a
+              // DM is not part of the release. A crash between the release
+              // and this loses one DM; the site's `/base` banner (Task 8)
+              // shows the same fact.
+              for (const l of lapsed) {
+                if (!l.discordId) continue;
+                const discordId = l.discordId;
+                try {
+                  await db.transaction((tx) => noticeUserTx(tx, {
+                    serverId: s.id, factionId: null, discordId, kind: "solo_lapsed", occurredAt: now,
+                    payload: { link: `${cfg.siteBaseUrl}/base` },
+                  }));
+                } catch (err) {
+                  console.error(`solo lapse DM failed for ${l.dayzId}`, err);
+                }
+              }
             } catch (err) {
               console.error(`solo lapse failed for server ${s.id}`, err);
             }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, factionInvites, events, admFiles, declarations, type Database,
+  servers, factions, factionMembers, factionInvites, events, admFiles, declarations, clanNotices, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import type { EventType } from "@factions/domain";
@@ -229,25 +229,45 @@ describe("PgDormancyStore", () => {
   });
 
   describe("transitions", () => {
-    it("goes dormant and stamps the timestamp", async () => {
+    it("goes dormant and stamps the timestamp, and a reason", async () => {
       const f = await seedFaction({ status: "active" });
-      expect(await store.goDormant(f.id, now)).toBe(true);
+      expect(await store.goDormant(f.id, now, "inactive")).toBe(true);
       const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
       expect(row!.status).toBe("dormant");
       expect(row!.dormantSince).toEqual(now);
+      expect(row!.dormantReason).toBe("inactive");
+    });
+
+    it("goDormant(id, now, 'raided') sets dormant_reason 'raided', clears flag_down_since, and queues a dormant_raided channel notice", async () => {
+      const f = await seedFaction({ status: "active" });
+      await db.update(factions).set({ flagDownSince: ago(1000), flagDownByDayzId: "X" }).where(eq(factions.id, f.id));
+      expect(await store.goDormant(f.id, now, "raided")).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.dormantReason).toBe("raided");
+      expect(row!.flagDownSince).toBeNull();
+      expect(row!.flagDownByDayzId).toBeNull();
+      const [notice] = await db.select().from(clanNotices).where(eq(clanNotices.factionId, f.id));
+      expect(notice).toMatchObject({ kind: "dormant_raided", payload: {} });
+    });
+
+    it("goDormant(id, now, 'inactive') queues a dormant_inactive channel notice", async () => {
+      const f = await seedFaction({ status: "active" });
+      expect(await store.goDormant(f.id, now, "inactive")).toBe(true);
+      const [notice] = await db.select().from(clanNotices).where(eq(clanNotices.factionId, f.id));
+      expect(notice).toMatchObject({ kind: "dormant_inactive", payload: {} });
     });
 
     it("⚠️ only the transition that actually happened reports true", async () => {
       // This is what makes the DM at-most-once. A second tick that races the
       // first must not send a duplicate warning.
       const f = await seedFaction({ status: "active" });
-      expect(await store.goDormant(f.id, now)).toBe(true);
-      expect(await store.goDormant(f.id, now)).toBe(false);
+      expect(await store.goDormant(f.id, now, "inactive")).toBe(true);
+      expect(await store.goDormant(f.id, now, "inactive")).toBe(false);
     });
 
     it("refuses to make a reserved faction dormant", async () => {
       const f = await seedFaction({ status: "reserved" });
-      expect(await store.goDormant(f.id, now)).toBe(false);
+      expect(await store.goDormant(f.id, now, "inactive")).toBe(false);
     });
 
     it("revives, clearing the timestamp", async () => {
@@ -261,6 +281,13 @@ describe("PgDormancyStore", () => {
     it("revives only from dormant, and only once", async () => {
       const f = await seedFaction({ status: "active" });
       expect(await store.revive(f.id)).toBe(false);
+    });
+
+    it("revive() queues a 'revived' notice with no gamertag", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(1000) });
+      expect(await store.revive(f.id)).toBe(true);
+      const [notice] = await db.select().from(clanNotices).where(eq(clanNotices.factionId, f.id));
+      expect(notice).toMatchObject({ kind: "revived", payload: {} });
     });
 
     it("⚠️ clears dormant_reason, disband_warned_at and the flag-down clock too, not just dormant_since — reviveFactionTx is shared with raise-tick's fuller revive, and a raid/dormancy cycle can leave any of these set", async () => {
@@ -325,6 +352,22 @@ describe("PgDormancyStore", () => {
       expect(await store.disbandDormant(f.id, ago(1000))).toBe(false);
       const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
       expect(row!.status).toBe("dormant");
+    });
+
+    it("warnDisband is true once, then false, and queues one disband_warning notice", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(2000) });
+      expect(await store.warnDisband(f.id, now)).toBe(true);
+      expect(await store.warnDisband(f.id, now)).toBe(false);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row!.disbandWarnedAt).toEqual(now);
+      const notices = await db.select().from(clanNotices).where(eq(clanNotices.factionId, f.id));
+      expect(notices).toHaveLength(1);
+      expect(notices[0]).toMatchObject({ kind: "disband_warning", payload: { days: 4 } });
+    });
+
+    it("warnDisband refuses an active faction", async () => {
+      const f = await seedFaction({ status: "active" });
+      expect(await store.warnDisband(f.id, now)).toBe(false);
     });
 
     it("disbands a faction dormant past the window", async () => {

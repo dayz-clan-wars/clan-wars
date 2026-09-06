@@ -2,7 +2,12 @@ import type { Database } from "@factions/db";
 import { declarations, factions } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
-import { disbandFactionTx, appendFactionEventTx } from "@factions/roster/internal";
+import type { DormantReason } from "@factions/domain";
+import { DISBAND_WARNING_LEAD_MS } from "@factions/domain";
+import { disbandFactionTx, appendFactionEventTx, noticeClanTx } from "@factions/roster/internal";
+
+/** `DISBAND_WARNING_LEAD_MS`, in whole days — the number the warning DM names. */
+const DAY_MS = 86_400_000;
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -34,6 +39,13 @@ export type ReviveActor = { dayzId: string; gamertag: string };
  * Without one, the payload is exactly what the dormancy clock's own path
  * always produced: the clock observes a revival through `LAST_RAISE`, a
  * max(occurred_at) subquery, and never learns who made it.
+ *
+ * ⚠️ Also queues exactly one `revived` clan_notices row — moved here from
+ * raise-tick's own call so the two callers (the dormancy clock's `revive()`
+ * and raise-tick's dormant-clan raise path) cannot each queue one and
+ * double-notify. The notice's payload carries `gamertag` only when an actor
+ * is given, mirroring the feed row: the clock's own path has no name to
+ * offer, and the renderer (Task 7) omits the name clause when it's absent.
  */
 export async function reviveFactionTx(tx: Tx, factionId: number, at: Date, actor?: ReviveActor): Promise<void> {
   const [row] = await tx.update(factions)
@@ -46,6 +58,10 @@ export async function reviveFactionTx(tx: Tx, factionId: number, at: Date, actor
     serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: at,
     payload: { name: row.name, tag: row.tag, texture: row.texture, ...(actor ? { actor: actor.gamertag } : {}) },
   });
+  await noticeClanTx(tx, {
+    serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: at,
+    payload: actor ? { gamertag: actor.gamertag } : {},
+  });
 }
 
 export type FactionClockRow = FactionClock & {
@@ -57,9 +73,16 @@ export type FactionClockRow = FactionClock & {
 
 export interface DormancyStore {
   clocks(): Promise<FactionClockRow[]>;
-  goDormant(factionId: number, at: Date, disbandAt?: Date): Promise<boolean>;
+  goDormant(factionId: number, at: Date, reason: DormantReason, disbandAt?: Date): Promise<boolean>;
   revive(factionId: number): Promise<boolean>;
   stampDormantSince(factionId: number, at: Date): Promise<boolean>;
+  /**
+   * The guide's "4 days until disband" warning, once. Guarded on
+   * `status = 'dormant' and disband_warned_at is null` so a second tick
+   * (or a revive-then-re-dormant cycle that left the flag set) cannot
+   * re-send it.
+   */
+  warnDisband(factionId: number, at: Date): Promise<boolean>;
   /**
    * Restart the disband countdown on a dormant row whose clock is already
    * running, because this tick could not observe the faction's server.
@@ -142,6 +165,8 @@ export function clockQuery(db: Database) {
     // as infinitely stale and is dormant on the first tick.
     lastRaiseAt: sql<Date | null>`coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt})`,
     serverLastEventAt: SERVER_LAST_EVENT,
+    flagDownSince: factions.flagDownSince,
+    disbandWarnedAt: factions.disbandWarnedAt,
   }).from(factions)
     // LEFT: a clan with no declaration (post-wipe, increment 4) still has a
     // clock; its LAST_RAISE is simply null and the coalesce falls through.
@@ -176,10 +201,17 @@ export class PgDormancyStore implements DormancyStore {
    * overlapping ticks could announce the same transition twice even though
    * only one of them performed it.
    */
-  async goDormant(factionId: number, at: Date, disbandAt?: Date): Promise<boolean> {
+  async goDormant(factionId: number, at: Date, reason: DormantReason, disbandAt?: Date): Promise<boolean> {
     return this.db.transaction(async (tx) => {
       const [row] = await tx.update(factions)
-        .set({ status: "dormant", dormantSince: at })
+        .set({
+          status: "dormant", dormantSince: at, dormantReason: reason,
+          // §5.8: a raided clan can go dormant with the raided flag-down
+          // clock still running (the raid consumer sets it, and nothing else
+          // clears it once the 24h-down window has already fired). Clearing
+          // it here means a later revive is not carrying a stale siege.
+          flagDownSince: null, flagDownByDayzId: null,
+        })
         .where(and(eq(factions.id, factionId), eq(factions.status, "active")))
         .returning({
           id: factions.id, serverId: factions.serverId,
@@ -187,6 +219,7 @@ export class PgDormancyStore implements DormancyStore {
         });
       if (!row) return false;
 
+      // Lock order (§4.12): faction_events before clan_notices.
       await appendFactionEventTx(tx, {
         serverId: row.serverId, factionId: row.id, kind: "dormant", occurredAt: at,
         // ISO 8601: jsonb has no timestamp type, and the embed parses it back.
@@ -194,6 +227,36 @@ export class PgDormancyStore implements DormancyStore {
           name: row.name, tag: row.tag, texture: row.texture,
           ...(disbandAt ? { disbandAt: disbandAt.toISOString() } : {}),
         },
+      });
+      await noticeClanTx(tx, {
+        serverId: row.serverId, factionId: row.id,
+        kind: reason === "raided" ? "dormant_raided" : "dormant_inactive",
+        occurredAt: at, payload: {},
+      });
+      return true;
+    });
+  }
+
+  /**
+   * ⚠️ Guarded on `status = 'dormant' and disband_warned_at is null`, so only
+   * the tick that actually sets the flag queues the notice — the same
+   * at-most-once shape as every other transition here.
+   */
+  async warnDisband(factionId: number, at: Date): Promise<boolean> {
+    return this.db.transaction(async (tx) => {
+      const [row] = await tx.update(factions)
+        .set({ disbandWarnedAt: at })
+        .where(and(
+          eq(factions.id, factionId),
+          eq(factions.status, "dormant"),
+          isNull(factions.disbandWarnedAt),
+        ))
+        .returning({ id: factions.id, serverId: factions.serverId });
+      if (!row) return false;
+
+      await noticeClanTx(tx, {
+        serverId: row.serverId, factionId: row.id, kind: "disband_warning", occurredAt: at,
+        payload: { days: Math.round(DISBAND_WARNING_LEAD_MS / DAY_MS) },
       });
       return true;
     });

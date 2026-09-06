@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
+import { DISBAND_WARNING_LEAD_MS } from "@factions/domain";
 import { dormancyTick } from "../src/dormancy-tick.js";
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "../src/dormancy.js";
 import type { DormancyStore, FactionClockRow } from "../src/dormancy-store.js";
@@ -14,8 +15,10 @@ const row = (o: Partial<FactionClockRow>): FactionClockRow => ({
   id: 1, name: "Bears", tag: "BEAR", leaderDiscordId: "d1",
   // serverLastEventAt defaults to "now" — live — so existing cases keep
   // exercising the branch they always did; the liveness gate itself is
-  // covered in dormancy.test.ts and dormancy-store.test.ts.
-  status: "active", lastRaiseAt: now, dormantSince: null, serverLastEventAt: now, ...o,
+  // covered in dormancy.test.ts and dormancy-store.test.ts. flagDownSince and
+  // disbandWarnedAt default to null — no siege, no warning sent.
+  status: "active", lastRaiseAt: now, dormantSince: null, serverLastEventAt: now,
+  flagDownSince: null, disbandWarnedAt: null, ...o,
 });
 
 const fakeStore = (clocks: FactionClockRow[], over: Partial<DormancyStore> = {}): DormancyStore => ({
@@ -25,6 +28,7 @@ const fakeStore = (clocks: FactionClockRow[], over: Partial<DormancyStore> = {})
   stampDormantSince: async () => true,
   pauseDormancyClock: async () => true,
   disbandDormant: async () => true,
+  warnDisband: async () => true,
   ...over,
 });
 
@@ -34,13 +38,34 @@ describe("dormancyTick", () => {
     const store = fakeStore([row({ lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS + 1) })], { goDormant });
 
     const r = await dormancyTick(store, { now, windows });
-    expect(goDormant).toHaveBeenCalledWith(1, now, new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS));
+    expect(goDormant).toHaveBeenCalledWith(1, now, "inactive", new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS));
     expect(r.dormant).toBe(1);
     expect(r.notices).toEqual([{
       kind: "dormant", factionId: 1, leaderDiscordId: "d1", name: "Bears", tag: "BEAR",
       dormantAfterMs: DEFAULT_DORMANT_AFTER_MS,
       disbandAt: new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS),
     }]);
+  });
+
+  it("a raided flag-down makes an active clan dormant (raided), same disbandAt", async () => {
+    const goDormant = vi.fn().mockResolvedValue(true);
+    const store = fakeStore([row({ flagDownSince: ago(DEFAULT_DORMANT_AFTER_MS) })], { goDormant });
+
+    const r = await dormancyTick(store, { now, windows });
+    expect(goDormant).toHaveBeenCalledWith(1, now, "raided", new Date(now.getTime() + DEFAULT_DISBAND_AFTER_DORMANT_MS));
+    expect(r.dormant).toBe(1);
+  });
+
+  it("warns a dormant faction whose disband is DISBAND_WARNING_LEAD_MS away, and counts it", async () => {
+    const warnDisband = vi.fn().mockResolvedValue(true);
+    const due = ago(DEFAULT_DISBAND_AFTER_DORMANT_MS - DISBAND_WARNING_LEAD_MS);
+    const store = fakeStore([row({
+      status: "dormant", lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 2), dormantSince: due,
+    })], { warnDisband });
+
+    const r = await dormancyTick(store, { now, windows });
+    expect(warnDisband).toHaveBeenCalledWith(1, now);
+    expect(r.warned).toBe(1);
   });
 
   it("⚠️ emits no notice when the transition did not happen", async () => {

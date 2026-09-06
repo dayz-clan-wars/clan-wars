@@ -1,4 +1,4 @@
-import { DORMANT_AFTER_MS, DISBAND_AFTER_DORMANT_MS } from "@factions/domain";
+import { DORMANT_AFTER_MS, DISBAND_AFTER_DORMANT_MS, FLAG_DOWN_MS, DISBAND_WARNING_LEAD_MS } from "@factions/domain";
 
 /** Re-exported under the names the bot has used since dormancy shipped; the value lives in rules.ts. */
 export const DEFAULT_DORMANT_AFTER_MS = DORMANT_AFTER_MS;
@@ -21,6 +21,15 @@ export type FactionClock = {
    * un-ingested. See the disband gate below.
    */
   serverLastEventAt: Date | null;
+  /**
+   * §5.8: when this faction's own flag was last observed down at its own
+   * pole, `null` when it is currently up (or was never observed down). The
+   * raid consumer starts this clock; the raise consumer (a defense) and the
+   * dormancy store's own transitions (goDormant, revive) clear it.
+   */
+  flagDownSince: Date | null;
+  /** When the "N days until disband" warning was sent, `null` if it hasn't been. */
+  disbandWarnedAt: Date | null;
 };
 
 /**
@@ -33,7 +42,7 @@ export type FactionClock = {
  * proven silence than the window promises — see the inbox-26 replay in
  * dormancy.test.ts, which disbanded on 11 days rather than 14.
  */
-export type Transition = "revive" | "dormant" | "disband" | "stamp" | "pause" | null;
+export type Transition = "revive" | "dormant" | "dormant-raided" | "warn" | "disband" | "stamp" | "pause" | null;
 
 /**
  * What should happen to one faction, given its clock.
@@ -88,16 +97,30 @@ export function decide(c: FactionClock, now: Date, w: DormancyWindows): Transiti
     // rows, and only while something is already badly wrong.
     if (!serverLive) return "pause";
 
+    const age = now.getTime() - c.dormantSince.getTime();
     // >=, matching `fresh`'s boundary convention: the store's own guard uses
     // the same operator (`lte`), so a row exactly at the cutoff is not left
     // in limbo — counted as due here but refused there for one extra tick.
-    const due = now.getTime() - c.dormantSince.getTime() >= w.disbandAfterDormantMs;
-    return due ? "disband" : null;
+    if (age >= w.disbandAfterDormantMs) return "disband";
+    // The guide's "4 days until…" warning, once. Same liveness gate as
+    // disband: an unobserved week must not warn early, because the age we're
+    // measuring is only as trustworthy as the server proving it's still
+    // watched (checked above).
+    if (c.disbandWarnedAt === null && age >= w.disbandAfterDormantMs - DISBAND_WARNING_LEAD_MS) return "warn";
+    return null;
   }
 
   // `reserved` has its own 24h reservation lapse and has not raised a flag by
   // definition; `disbanded` and `lapsed` are terminal.
   if (c.status !== "active") return null;
+
+  // ⚠️ The raided entrance first (spec §5.8): a flag down for FLAG_DOWN_MS is
+  // dormant even if the 7-day clock is fresh. Checked before `fresh` is
+  // consulted below, because a raid can knock a flag down well inside a
+  // week of otherwise-normal upkeep raises.
+  if (c.flagDownSince !== null && now.getTime() - c.flagDownSince.getTime() >= FLAG_DOWN_MS) {
+    return "dormant-raided";
+  }
 
   return fresh ? null : "dormant";
 }

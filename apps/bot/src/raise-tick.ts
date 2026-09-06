@@ -88,9 +88,10 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
             // round 1) — see dormancy-store.ts's reviveFactionTx for what it
             // clears and why. The SELECT … FOR UPDATE above already
             // established `status === "dormant"` inside this transaction, so
-            // no further guard is needed here.
+            // no further guard is needed here. reviveFactionTx itself queues
+            // the "revived" notice (with the gamertag, since an actor is
+            // given here) — a second one here would double-notify.
             await reviveFactionTx(tx, clan.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
-            await noticeClanTx(tx, { serverId: ev.serverId, factionId: clan.id, kind: "revived", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag } });
             return "revived" as const;
           }
           return null; // an ordinary upkeep raise: the dormancy clock reads it through LAST_RAISE

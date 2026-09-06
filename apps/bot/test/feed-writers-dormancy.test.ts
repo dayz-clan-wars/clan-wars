@@ -36,7 +36,7 @@ describe("dormancy path writes feed events", () => {
   const events = () => db.select().from(factionEvents).orderBy(asc(factionEvents.id));
 
   it("writes dormant with the disband deadline, and no actor", async () => {
-    expect(await new PgDormancyStore(db).goDormant(factionId, now, disbandAt)).toBe(true);
+    expect(await new PgDormancyStore(db).goDormant(factionId, now, "inactive", disbandAt)).toBe(true);
     const [e] = await events();
     expect(e!.kind).toBe("dormant");
     expect(e!.payload).toMatchObject({ name: "Bears", tag: "BEAR", disbandAt: disbandAt.toISOString() });
@@ -48,14 +48,14 @@ describe("dormancy path writes feed events", () => {
     // reports whether it moved a row; that boolean is what makes the DM
     // at-most-once. The feed row must obey the same guard.
     const store = new PgDormancyStore(db);
-    await store.goDormant(factionId, now, disbandAt);
-    expect(await store.goDormant(factionId, now, disbandAt)).toBe(false);
+    await store.goDormant(factionId, now, "inactive", disbandAt);
+    expect(await store.goDormant(factionId, now, "inactive", disbandAt)).toBe(false);
     expect(await events()).toHaveLength(1);
   });
 
   it("writes revived with no actor", async () => {
     const store = new PgDormancyStore(db);
-    await store.goDormant(factionId, now, disbandAt);
+    await store.goDormant(factionId, now, "inactive", disbandAt);
     expect(await store.revive(factionId)).toBe(true);
     const rows = await events();
     expect(rows.at(-1)!.kind).toBe("revived");

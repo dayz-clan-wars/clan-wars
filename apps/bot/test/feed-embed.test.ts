@@ -75,8 +75,14 @@ describe("feedEmbed", () => {
     expect(rendered).not.toContain("1:2:3");
   });
 
+  it("renders 'lapsed' with the flag label and colours it AMBER, same as 'dormant'", () => {
+    const e = feedEmbed(ev("lapsed"));
+    expect(e.description).toBe("Never raised their flag. Wolf is back in the pool.");
+    expect(e.color).toBe(feedEmbed(ev("dormant")).color);
+  });
+
   it("covers every kind", () => {
-    for (const kind of ["founded", "activated", "renamed", "rebound", "dormant", "revived", "disbanded"] as const) {
+    for (const kind of ["founded", "activated", "lapsed", "renamed", "rebound", "dormant", "revived", "disbanded"] as const) {
       const e = feedEmbed(ev(kind, { previousName: "Old", disbandAt: "2026-09-15T00:00:00.000Z" }));
       expect(e.description).toBeTruthy();
       expect(e.color).toBeTypeOf("number");

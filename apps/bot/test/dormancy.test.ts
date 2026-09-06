@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { FLAG_DOWN_MS, DISBAND_WARNING_LEAD_MS } from "@factions/domain";
 import {
   decide, DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS,
   type FactionClock,
@@ -13,8 +14,13 @@ const ago = (ms: number) => new Date(now.getTime() - ms);
 const clock = (o: Partial<FactionClock>): FactionClock =>
   // serverLastEventAt defaults to "now" — live — so every existing test that
   // doesn't care about server liveness keeps exercising the branch it always
-  // did rather than tripping the new gate by accident.
-  ({ status: "active", lastRaiseAt: now, dormantSince: null, serverLastEventAt: now, ...o });
+  // did rather than tripping the new gate by accident. flagDownSince and
+  // disbandWarnedAt default to null — no siege, no warning sent — so every
+  // existing test keeps exercising the branch it always did.
+  ({
+    status: "active", lastRaiseAt: now, dormantSince: null, serverLastEventAt: now,
+    flagDownSince: null, disbandWarnedAt: null, ...o,
+  });
 
 describe("decide", () => {
   it("leaves an active faction alone while its flag is fresh", () => {
@@ -51,6 +57,10 @@ describe("decide", () => {
     expect(decide(clock({
       status: "dormant", lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 2),
       dormantSince: ago(DEFAULT_DISBAND_AFTER_DORMANT_MS - 1),
+      // Already warned — this row also sits inside the warning window (see
+      // "warns once…" below), and this test's own concern is disband, not
+      // the warning.
+      disbandWarnedAt: now,
     }), now, W)).toBeNull();
   });
 
@@ -73,6 +83,22 @@ describe("decide", () => {
     for (const status of ["reserved", "disbanded", "lapsed"]) {
       expect(decide(clock({ status, lastRaiseAt: ago(DEFAULT_DORMANT_AFTER_MS * 10) }), now, W)).toBeNull();
     }
+  });
+
+  it("a flag down for FLAG_DOWN_MS makes an active clan dormant (raided), before the 7-day rule is consulted", () => {
+    const c = clock({ status: "active", lastRaiseAt: ago(1000), flagDownSince: ago(FLAG_DOWN_MS) });
+    expect(decide(c, now, W)).toBe("dormant-raided");
+    expect(decide(clock({ status: "active", lastRaiseAt: ago(1000), flagDownSince: ago(FLAG_DOWN_MS - 1) }), now, W)).toBeNull();
+  });
+
+  it("warns once, DISBAND_WARNING_LEAD_MS before the disband, and not again", () => {
+    const due = ago(W.disbandAfterDormantMs - DISBAND_WARNING_LEAD_MS);
+    // Stale lastRaiseAt: this is a genuinely quiet dormant clan, not a
+    // revive — clock()'s own default lastRaiseAt is "now" (fresh), which
+    // would make revive win before warn is ever consulted.
+    const stale = ago(DEFAULT_DORMANT_AFTER_MS * 2);
+    expect(decide(clock({ status: "dormant", lastRaiseAt: stale, dormantSince: due, disbandWarnedAt: null, serverLastEventAt: now }), now, W)).toBe("warn");
+    expect(decide(clock({ status: "dormant", lastRaiseAt: stale, dormantSince: due, disbandWarnedAt: now, serverLastEventAt: now }), now, W)).toBeNull();
   });
 
   it("treats a faction with no raise at all as stale", () => {
@@ -200,12 +226,12 @@ describe("decide", () => {
         // real day-10 raise is invisible until the backfill lands.
         const lastRaiseAt = day < 20 ? at(0) : at(10);
 
-        switch (decide({ status, lastRaiseAt, dormantSince, serverLastEventAt }, t, W)) {
-          case "dormant": status = "dormant"; dormantSince = t; break;
+        switch (decide({ status, lastRaiseAt, dormantSince, serverLastEventAt, flagDownSince: null, disbandWarnedAt: null }, t, W)) {
+          case "dormant": case "dormant-raided": status = "dormant"; dormantSince = t; break;
           case "revive": status = "active"; dormantSince = null; break;
           case "stamp": case "pause": dormantSince = t; break;
           case "disband": disbandedOn = day; break;
-          case null: break;
+          case "warn": case null: break;
         }
       }
 
@@ -235,11 +261,13 @@ describe("decide", () => {
         const t = at(day);
         switch (decide({
           status, lastRaiseAt: at(0), dormantSince, serverLastEventAt: t,
+          flagDownSince: null, disbandWarnedAt: null,
         }, t, W)) {
-          case "dormant": status = "dormant"; dormantSince = t; break;
+          case "dormant": case "dormant-raided": status = "dormant"; dormantSince = t; break;
           case "revive": status = "active"; dormantSince = null; break;
           case "stamp": case "pause": dormantSince = t; break;
           case "disband": disbandedOn = day; break;
+          case "warn": break;
           case null: break;
         }
       }

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, declarations, poles, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, identityLinks, factions, factionInvites, factionMembers, ceremonies, whiteRaises, declarations, poles, factionEvents, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { PgCeremonyStore } from "../src/ceremony-store.js";
@@ -179,6 +179,19 @@ describe("PgCeremonyStore", () => {
     expect(await store.settle(p, window, null)).toBeNull();
     expect(await store.pendingRaises(p)).toHaveLength(0);
     expect(await db.select().from(ceremonies)).toHaveLength(0);
+  });
+
+  it("appends a 'lapsed' faction_events row with the frozen name/tag/texture", async () => {
+    const factionId = await seedReservedFaction();
+    const cutoff = new Date("2026-08-01T00:00:00Z");
+
+    expect(await store.lapseReservations(serverId, cutoff)).toBe(1);
+
+    const [row] = await db.select().from(factionEvents).where(eq(factionEvents.factionId, factionId));
+    expect(row).toMatchObject({
+      kind: "lapsed", occurredAt: cutoff,
+      payload: { name: "N", tag: "N", texture: "Flag_Bear" },
+    });
   });
 
   it("releases the roster when a reservation lapses", async () => {

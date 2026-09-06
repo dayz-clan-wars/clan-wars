@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, events, factionMembers, poles } from "@factions/db";
+import { declarations, events, factionMembers, identityLinks, poles } from "@factions/db";
 import { tooClose, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS } from "@factions/domain";
 import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
@@ -225,8 +225,13 @@ export async function declareSolo(db: Database, a: { serverId: number; dayzId: s
  * texture, occurred_at), so this is a partial-index walk plus a filter on
  * `dayzId` rather than an index lookup. Acceptable for the handful of solo
  * declarations a tick examines; it would not be for thousands.
+ *
+ * ⚠️ `discordId` is a LEFT join to `identity_links`: an unlinked declarant
+ * (the pole account itself is enough evidence to declare — spec §5.2) still
+ * lapses, they just have nobody to DM. The caller (increment 3's tick) skips
+ * a null discordId rather than treating it as an error.
  */
-export async function lapseSolos(db: Database, serverId: number, now: Date): Promise<{ dayzId: string; poleKey: string }[]> {
+export async function lapseSolos(db: Database, serverId: number, now: Date): Promise<{ dayzId: string; poleKey: string; discordId: string | null }[]> {
   const cutoff = new Date(now.getTime() - SOLO_LAPSE_MS);
   // ⚠️ The date is interpolated as an ISO string cast to timestamptz: binding
   // a raw JS Date inside a drizzle sql`` template throws in postgres.js.
@@ -240,11 +245,14 @@ export async function lapseSolos(db: Database, serverId: number, now: Date): Pro
         and e.occurred_at > ${cutoff.toISOString()}::timestamptz
     )`;
 
-  const stale = await db.select({ dayzId: declarations.ownerDayzId, poleKey: declarations.poleKey })
+  const stale = await db.select({
+    dayzId: declarations.ownerDayzId, poleKey: declarations.poleKey, discordId: identityLinks.discordId,
+  })
     .from(declarations)
+    .leftJoin(identityLinks, eq(identityLinks.dayzId, declarations.ownerDayzId))
     .where(and(eq(declarations.serverId, serverId), isNotNull(declarations.ownerDayzId), quietSince));
 
-  const lapsed: { dayzId: string; poleKey: string }[] = [];
+  const lapsed: { dayzId: string; poleKey: string; discordId: string | null }[] = [];
   for (const s of stale) {
     // One transaction each: a release that deadlocks or loses a race to a
     // concurrent release must not take the rest of the sweep with it, and
@@ -267,7 +275,7 @@ export async function lapseSolos(db: Database, serverId: number, now: Date): Pro
       if (!still) return false;
       return releaseTx(tx, { dayzId: s.dayzId!, serverId }, now);
     });
-    if (done) lapsed.push({ dayzId: s.dayzId!, poleKey: s.poleKey });
+    if (done) lapsed.push({ dayzId: s.dayzId!, poleKey: s.poleKey, discordId: s.discordId });
   }
   return lapsed;
 }

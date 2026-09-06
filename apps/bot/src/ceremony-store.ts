@@ -235,7 +235,11 @@ export class PgCeremonyStore implements CeremonyStore {
           eq(factions.status, "reserved"),
           lte(factions.reservedUntil, cutoff),
         ))
-        .returning({ id: factions.id });
+        // name/tag/texture frozen here, at the moment of the transition —
+        // the same reasoning as activate()'s and goDormant()'s own
+        // .returning(): a late-posted feed row must not pick up a rename
+        // that happened after the fact.
+        .returning({ id: factions.id, serverId: factions.serverId, name: factions.name, tag: factions.tag, texture: factions.texture });
       if (done.length > 0) {
         const lapsed = done.map((d) => d.id);
         // Lock order (spec §4.12): factions → declarations → faction_members
@@ -265,6 +269,15 @@ export class PgCeremonyStore implements CeremonyStore {
             isNull(factionInvites.declinedAt),
             isNull(factionInvites.revokedAt),
           ));
+        // Lock order (§4.12): faction_events last, after every roster write
+        // above. The frozen name/tag/texture came off the update's own
+        // .returning(), so a rename racing this transaction cannot leak in.
+        for (const f of done) {
+          await appendFactionEventTx(tx, {
+            serverId: f.serverId, factionId: f.id, kind: "lapsed", occurredAt: cutoff,
+            payload: { name: f.name, tag: f.tag, texture: f.texture },
+          });
+        }
       }
       return done.length;
     });
