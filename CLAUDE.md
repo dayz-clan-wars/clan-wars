@@ -191,7 +191,18 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `lockDeclarations` before reading the link, which is what serialises the two
   (`packages/roster/test/base.test.ts` races them). 2c adds
   the roster writes, every one appending its feed or notice row in the transition's own
-  transaction.
+  transaction. Since 2c-a the store itself lives in `packages/roster/src/internal/`;
+  `apps/bot` imports `@factions/roster/internal`, which `apps/web` may never import
+  (`smoke.test.ts`). New writers there: `requestJoinDb`/`decideRequestDb` (`factions →
+  faction_join_requests → faction_members`; `decideRequestDb`'s cap check takes the
+  `factions` row `FOR UPDATE`, then runs the member count as a SEPARATE statement so it
+  sees a fresh snapshot after the lock wait — the same shape as `acceptInvite`'s cap
+  check, and for the same reason: `FOR SHARE` would not bar a second reader from taking
+  the same shared lock and reading the same stale count), `presenceTick`
+  (`lockDeclarations → releaseTx → faction_members`), `writeHoldsTx` (right after the
+  `factions` write). `lockIdentity(tx, serverId)` — `pg_advisory_xact_lock(hashtext('identity'), serverId)`
+  — serialises name/tag uniqueness in `rename` and `reserve`, since names have no unique
+  index.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
   query under a lock inside it, not an index; a second writer is a race. `declareTx`
   lives in `packages/declarations` since 2b; `apps/bot` calls it directly, and
@@ -230,6 +241,12 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   coordinates above: who someone is is public, where their base is is not. Gating the
   roster would also break the one lookup a player has for deciding who they are looking
   at. A past version of this file listed it as a gap "worth revisiting"; it is not.
+- **A pending member is on `faction_members` and not on the roster** (spec §4.5, §14).
+  `status = 'full'` is part of every membership read — dormancy attribution, activation,
+  rebind, `viewerFor.clan`, `declareSoloTx`'s in-clan refusal, `isRosterMember`. The cap
+  counts both statuses. A pending member keeps their solo base until the presence tick
+  promotes them and releases it in the same transaction. Unlink is refused with ANY
+  roster row.
 - **The dormancy clock's raise lookup depends on `events_raise_lookup_idx`** — a partial
   index over `(server_id, payload->>'poleKey', payload->>'texture', occurred_at)` where
   `type = 'flag.raised'`. Without it the subquery filters every `flag.raised` row on the
@@ -254,8 +271,8 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **The website is a surface, never a source of truth.** Rituals — founding, claiming a
   flag, binding a pole — are earned in game and proved from the server's logs; nothing on
   `dayzclanwars.com` may perform one. Administration is different: roster chores (the
-  `/me` read today; roster writes from increment 2c on) are permitted from the web, but
-  only through `packages/roster`. The boundary is that package's export allowlist —
+  `/me` read, and since 2c-a every roster write, through `packages/roster`) are permitted
+  from the web, but only through `packages/roster`. The boundary is that package's export allowlist —
   `apps/web` may call only what `packages/roster` chooses to export — pinned by name in
   both `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts`. Under
   that allowlist, the `declarations_one_evidence` CHECK (target spec §16) is the guard
@@ -287,7 +304,11 @@ Increment 2a (site foundation) landed: Tailwind, `packages/roster` with `viewerF
 `/me` from the database. No new player capability; the slash commands still run.
 Increment 2b landed: `/link` (autocomplete, three emotes, ten minutes, 5 s poll), unlink
 on `/me`, `/base` for solo declare and release; migration 0021; inbox 7 closed.
-Discord's `/link` still runs beside the page until 2c.
+Discord's `/link` still runs beside the page until 2c-b.
+Increment 2c-a landed: the roster store in `packages/roster`, pending/full membership
+with presence promotion and the cap, join requests, identity holds, the recruiting post,
+and the package's roster writes and reads exported for 2c-b's pages. Slash commands still
+run.
 
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further
