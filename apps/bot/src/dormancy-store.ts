@@ -4,6 +4,50 @@ import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import { disbandFactionTx, appendFactionEventTx } from "@factions/roster/internal";
 
+/** The transaction handle drizzle hands to `db.transaction`. */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+export type ReviveActor = { dayzId: string; gamertag: string };
+
+/**
+ * The dormant → active transition itself, shared by the dormancy clock's own
+ * `PgDormancyStore.revive()` and raise-tick's "a full member raises at a
+ * dormant clan's declaration" path (Task 4 brief, spec §7). Unconditional: it
+ * does not check or lock `status` itself — the caller has already
+ * established, inside the SAME transaction, that this faction is dormant
+ * (`revive()` with a `SELECT … FOR UPDATE` immediately before calling this;
+ * raise-tick with the `SELECT … FOR UPDATE` that read `status === "dormant"`
+ * moments earlier in its own transaction). A `factionId` that doesn't exist
+ * or isn't dormant by the time this runs is a caller bug, not a case to
+ * silently ignore — hence no guard and no boolean return here; that decision
+ * belongs entirely to the caller, which already made it.
+ *
+ * ⚠️ Clears every field a raid/dormancy cycle could have set: `dormantSince`
+ * (the only thing the pre-Task-4 `revive()` cleared), plus `dormantReason`,
+ * `disbandWarnedAt` and the flag-down clock (spec §5.8) — a raise-tick revive
+ * can arrive with any of those set, and leaving one behind would corrupt the
+ * clan's next lifecycle (a stale `disband_warned_at` suppressing a real future
+ * warning, a stale `flag_down_since` reporting a siege that already ended).
+ *
+ * ⚠️ `actor` is optional and, when given, is spread into the `revived`
+ * feed payload as `actor: <gamertag>` — exactly the raise path's shape.
+ * Without one, the payload is exactly what the dormancy clock's own path
+ * always produced: the clock observes a revival through `LAST_RAISE`, a
+ * max(occurred_at) subquery, and never learns who made it.
+ */
+export async function reviveFactionTx(tx: Tx, factionId: number, at: Date, actor?: ReviveActor): Promise<void> {
+  const [row] = await tx.update(factions)
+    .set({ status: "active", dormantSince: null, dormantReason: null, disbandWarnedAt: null, flagDownSince: null, flagDownByDayzId: null })
+    .where(eq(factions.id, factionId))
+    .returning({ id: factions.id, serverId: factions.serverId, name: factions.name, tag: factions.tag, texture: factions.texture });
+  if (!row) return;
+
+  await appendFactionEventTx(tx, {
+    serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: at,
+    payload: { name: row.name, tag: row.tag, texture: row.texture, ...(actor ? { actor: actor.gamertag } : {}) },
+  });
+}
+
 export type FactionClockRow = FactionClock & {
   id: number;
   name: string;
@@ -161,26 +205,23 @@ export class PgDormancyStore implements DormancyStore {
    * never who made it. Recovering the name means a second correlated lookup
    * per faction per tick against the index the dormancy design warns is the
    * clock's whole performance story.
+   *
+   * The guard (only a genuinely `dormant` row revives, and only once) is a
+   * `SELECT … FOR UPDATE` in this same transaction, immediately before the
+   * unconditional `reviveFactionTx` — the lock plus the status check IS the
+   * guard `reviveFactionTx` itself deliberately does not perform.
    */
   async revive(factionId: number): Promise<boolean> {
     return this.db.transaction(async (tx) => {
-      const [row] = await tx.update(factions)
-        .set({ status: "active", dormantSince: null })
-        .where(and(eq(factions.id, factionId), eq(factions.status, "dormant")))
-        .returning({
-          id: factions.id, serverId: factions.serverId,
-          name: factions.name, tag: factions.tag, texture: factions.texture,
-        });
-      if (!row) return false;
+      const [row] = await tx.select({ status: factions.status }).from(factions)
+        .where(eq(factions.id, factionId)).for("update");
+      if (!row || row.status !== "dormant") return false;
 
       // The revival's own time is not recorded on the row, and the raise that
       // caused it is what the feed is announcing — but the clock only knows
       // it happened by this tick. `now` is the closest honest value, and it
       // is what `dormancy-tick` passes as `at` elsewhere.
-      await appendFactionEventTx(tx, {
-        serverId: row.serverId, factionId: row.id, kind: "revived", occurredAt: new Date(),
-        payload: { name: row.name, tag: row.tag, texture: row.texture },
-      });
+      await reviveFactionTx(tx, factionId, new Date());
       return true;
     });
   }

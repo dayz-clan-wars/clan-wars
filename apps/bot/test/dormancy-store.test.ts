@@ -263,6 +263,19 @@ describe("PgDormancyStore", () => {
       expect(await store.revive(f.id)).toBe(false);
     });
 
+    it("⚠️ clears dormant_reason, disband_warned_at and the flag-down clock too, not just dormant_since — reviveFactionTx is shared with raise-tick's fuller revive, and a raid/dormancy cycle can leave any of these set", async () => {
+      const f = await seedFaction({ status: "dormant", dormantSince: ago(1000) });
+      await db.update(factions).set({
+        dormantReason: "inactive", disbandWarnedAt: ago(500), flagDownSince: ago(200), flagDownByDayzId: "X",
+      }).where(eq(factions.id, f.id));
+      expect(await store.revive(f.id)).toBe(true);
+      const [row] = await db.select().from(factions).where(eq(factions.id, f.id));
+      expect(row).toMatchObject({
+        status: "active", dormantSince: null, dormantReason: null, disbandWarnedAt: null,
+        flagDownSince: null, flagDownByDayzId: null,
+      });
+    });
+
     it("stamps a dormant row that has no timestamp, without touching one that has", async () => {
       const bare = await seedFaction({ tag: "AAA", poleKey: "1:1:1", status: "dormant", dormantSince: null, dayzId: "AAA" });
       const stamped = await seedFaction({ tag: "BBB", poleKey: "2:2:2", status: "dormant", dormantSince: ago(5000), dayzId: "BBB" });

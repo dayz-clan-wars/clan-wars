@@ -160,5 +160,8 @@ describe("loadConfig", () => {
       expect(loadConfig({ ...env(), SITE_BASE_URL: "http://localhost:3000" }).siteBaseUrl).toBe("http://localhost:3000");
       expect(() => loadConfig({ ...env(), SITE_BASE_URL: "https://x.y/clan" })).toThrow(/bare origin/u);
     });
+    it("⚠️ strips a trailing slash, unlike FLAG_IMAGE_BASE_URL: every siteBaseUrl consumer concatenates its own path with no strip of its own, so an unstripped trailing slash would double up", () => {
+      expect(loadConfig({ ...env(), SITE_BASE_URL: "https://dayzclanwars.com/" }).siteBaseUrl).toBe("https://dayzclanwars.com");
+    });
   });
 });

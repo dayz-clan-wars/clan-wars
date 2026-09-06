@@ -1,9 +1,10 @@
 import type { Database } from "@factions/db";
 import { declarations, defenses, factionMembers, factions, identityLinks, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { appendFactionEventTx, appendWarLogTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
+import { appendWarLogTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
 import { and, eq, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
+import { reviveFactionTx } from "./dormancy-store.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const RAISE_CONSUMER = "raise-consumer";
@@ -26,6 +27,14 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
  *   1. the pole is a clan's declaration → member/non-member branch
  *   2. else the pole is a solo declaration → non-member DM
  *   3. else, if the texture belongs to a clan → proposal or colors elsewhere
+ *
+ * ⚠️ Lock order (§4.12): `factions` FOR UPDATE first, then declarations,
+ * poles, faction_members, … `season_standings` BEFORE `defenses`, then
+ * faction_events, war_log_events, clan_notices last. The spec fixes
+ * `season_standings → raids → defenses` as an order that is "extended, never
+ * reordered" — `raid-tick.ts` writes standings before its `raids` row for the
+ * same reason, and the defense branch below writes standings before
+ * `defenses` to match.
  */
 export async function raiseTick(db: Database, opts: { batchSize?: number; siteBaseUrl: string }): Promise<RaiseTickResult> {
   const batchSize = opts.batchSize ?? 500;
@@ -62,18 +71,25 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
             const season = await openSeason(tx, ev.serverId);
             if (!season) return null;
             const siege = Math.max(0, Math.floor((ev.occurredAt.getTime() - clan.flagDownSince.getTime()) / 1000));
+            // Standings before defenses, per §4.12's documented lock order
+            // ("extended, never reordered") — the same order raid-tick.ts
+            // writes standings before its raids row.
+            await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: clan.id, defenses: 1 })
+              .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { defenses: sql`${seasonStandings.defenses} + 1` } });
             await tx.insert(defenses).values({ factionId: clan.id, seasonId: season.id, raisedByDayzId: p.dayzId, eventId: ev.id, flagDownSince: clan.flagDownSince, defendedAt: ev.occurredAt, siegeSeconds: siege })
               .onConflictDoNothing({ target: defenses.eventId });
             await tx.update(factions).set({ flagDownSince: null, flagDownByDayzId: null }).where(eq(factions.id, clan.id));
-            await tx.insert(seasonStandings).values({ seasonId: season.id, factionId: clan.id, defenses: 1 })
-              .onConflictDoUpdate({ target: [seasonStandings.seasonId, seasonStandings.factionId], set: { defenses: sql`${seasonStandings.defenses} + 1` } });
             await appendWarLogTx(tx, { serverId: ev.serverId, kind: "defense", occurredAt: ev.occurredAt, payload: { victimClan: clan.name, victimTag: clan.tag, gamertag: p.gamertag, durationSeconds: siege } });
             await noticeClanTx(tx, { serverId: ev.serverId, factionId: clan.id, kind: "defended", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, durationSeconds: siege } });
             return "defense" as const;
           }
           if (clan.status === "dormant") {
-            await tx.update(factions).set({ status: "active", dormantSince: null, dormantReason: null, disbandWarnedAt: null, flagDownSince: null, flagDownByDayzId: null }).where(eq(factions.id, clan.id));
-            await appendFactionEventTx(tx, { serverId: ev.serverId, factionId: clan.id, kind: "revived", occurredAt: ev.occurredAt, payload: { name: clan.name, tag: clan.tag, texture: clan.texture, actor: p.gamertag } });
+            // Shared with the dormancy clock's own revive() (Major #3, review
+            // round 1) — see dormancy-store.ts's reviveFactionTx for what it
+            // clears and why. The SELECT … FOR UPDATE above already
+            // established `status === "dormant"` inside this transaction, so
+            // no further guard is needed here.
+            await reviveFactionTx(tx, clan.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
             await noticeClanTx(tx, { serverId: ev.serverId, factionId: clan.id, kind: "revived", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag } });
             return "revived" as const;
           }
