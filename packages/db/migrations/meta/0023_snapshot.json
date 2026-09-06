@@ -643,6 +643,10 @@
           "name": "clan_notices_target_valid",
           "value": "\"clan_notices\".\"target\" IN ('channel','dm')"
         },
+        "clan_notices_dm_has_target": {
+          "name": "clan_notices_dm_has_target",
+          "value": "\"clan_notices\".\"target\" <> 'dm' OR \"clan_notices\".\"discord_target_id\" IS NOT NULL"
+        },
         "clan_notices_no_coordinates": {
           "name": "clan_notices_no_coordinates",
           "value": "NOT (\"clan_notices\".\"payload\" ? 'poleKey' OR \"clan_notices\".\"payload\" ? 'x' OR \"clan_notices\".\"payload\" ? 'y' OR \"clan_notices\".\"payload\" ? 'z')"

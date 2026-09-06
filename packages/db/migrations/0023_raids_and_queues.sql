@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS "clan_notices" (
 	"failed_at" timestamp with time zone,
 	"attempts" integer DEFAULT 0 NOT NULL,
 	CONSTRAINT "clan_notices_target_valid" CHECK ("clan_notices"."target" IN ('channel','dm')),
+	CONSTRAINT "clan_notices_dm_has_target" CHECK ("clan_notices"."target" <> 'dm' OR "clan_notices"."discord_target_id" IS NOT NULL),
 	CONSTRAINT "clan_notices_no_coordinates" CHECK (NOT ("clan_notices"."payload" ? 'poleKey' OR "clan_notices"."payload" ? 'x' OR "clan_notices"."payload" ? 'y' OR "clan_notices"."payload" ? 'z'))
 );
 --> statement-breakpoint

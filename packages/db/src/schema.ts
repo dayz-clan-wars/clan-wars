@@ -722,6 +722,7 @@ export const clanNotices = pgTable("clan_notices", {
   attempts: integer("attempts").notNull().default(0),
 }, (t) => ({
   targetValid: check("clan_notices_target_valid", sql`${t.target} IN ('channel','dm')`),
+  dmHasTarget: check("clan_notices_dm_has_target", sql`${t.target} <> 'dm' OR ${t.discordTargetId} IS NOT NULL`),
   noCoordinates: check("clan_notices_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
   queue: index("clan_notices_queue_idx").on(t.discordTargetId, t.id).where(sql`${t.postedAt} IS NULL AND ${t.failedAt} IS NULL`),
 }));

@@ -30,7 +30,14 @@ describe("migration 0023", () => {
 
   it("the queue tables refuse a coordinate in the payload", async () => {
     await expect(db.execute(sql`insert into war_log_events (server_id, kind, occurred_at, payload) values (${serverId}, 'raid', now(), '{"x": 1}')`)).rejects.toThrow(/no_coordinates/u);
-    await expect(db.execute(sql`insert into clan_notices (server_id, target, kind, occurred_at, payload) values (${serverId}, 'dm', 'kicked', now(), '{"poleKey": "1:2:3"}')`)).rejects.toThrow(/no_coordinates/u);
+    // ⚠️ A dm row must ALSO satisfy clan_notices_dm_has_target, so this row
+    // supplies a discord_target_id — the assertion is about no_coordinates,
+    // not about the dm/target invariant (that's the next test).
+    await expect(db.execute(sql`insert into clan_notices (server_id, target, discord_target_id, kind, occurred_at, payload) values (${serverId}, 'dm', 'discord-user-1', 'kicked', now(), '{"poleKey": "1:2:3"}')`)).rejects.toThrow(/no_coordinates/u);
+  });
+
+  it("a dm notice without a discord_target_id is rejected", async () => {
+    await expect(db.execute(sql`insert into clan_notices (server_id, target, kind, occurred_at, payload) values (${serverId}, 'dm', 'kicked', now(), '{}')`)).rejects.toThrow(/dm_has_target/u);
   });
 
   it("one open season per server", async () => {

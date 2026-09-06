@@ -178,6 +178,18 @@ describe("supplyTick", () => {
     expect(objects).toEqual([]);
   });
 
+  it("⚠️ omits a reserved faction — SUPPLIED_PREDICATE narrows the old status list", async () => {
+    // Under the old SUPPLIED_STATUSES a reserved clan was supplied; under the
+    // new predicate ("status = 'active' and flag_down_since is null") it is
+    // not. This pins that narrowing so it cannot silently widen back.
+    await seedFaction({ tag: "RSV", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 0, uploaded: true });
+    expect(JSON.parse(bodies[0]!)).toEqual({ Objects: [] });
+  });
+
   it("⚠️ omits an active clan whose flag is down", async () => {
     // Supplied is a predicate, not a status list: "status = 'active' and
     // flag_down_since is null" (spec §4.3). A raided clan keeps `active` for
