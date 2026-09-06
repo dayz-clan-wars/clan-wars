@@ -22,17 +22,6 @@ export const REBIND_COOLDOWN_MS = RULE_REBIND_COOLDOWN_MS;
  */
 export const RELEASE_GRACE_MS = RELEASED_POLE_GRACE_MS;
 
-/**
- * How far back `/faction rebind` looks for the raise that names the new pole.
- *
- * Short enough that a raise from a previous session cannot be reused as a
- * surprise relocation target; long enough that the member who raised it can
- * walk somewhere safe and message their leader first. Not a security boundary
- * — the roster-membership check in the store is — so it does not need to be
- * tight.
- */
-export const REBIND_WINDOW_MS = 3_600_000;
-
 /** A `flag.raised` of the faction's own texture that could name a new pole. */
 export type QualifyingRaise = {
   poleKey: string;
@@ -51,16 +40,18 @@ export type QualifyingRaise = {
  *
  * Pure so every boundary is testable without a database, and so the store
  * fetches while this decides — the same split as `decide()` in dormancy.ts.
+ *
+ * The lookback window is the caller's to set — the site passes
+ * `REBIND_CONFIRM_MS`.
  */
 export function selectCandidates(
   raises: QualifyingRaise[],
   // currentPoleKey is nullable: `RebindTarget.poleKey` comes from a left
   // join onto `declarations` now, though an active/dormant faction always
   // has one in practice.
-  opts: { currentPoleKey: string | null; now: Date; windowMs?: number },
+  opts: { currentPoleKey: string | null; now: Date; windowMs: number },
 ): QualifyingRaise[] {
-  const windowMs = opts.windowMs ?? REBIND_WINDOW_MS;
-  const cutoff = opts.now.getTime() - windowMs;
+  const cutoff = opts.now.getTime() - opts.windowMs;
 
   const fresh = raises.filter((r) =>
     // >= so a raise exactly at the window edge still counts; the boundary

@@ -90,21 +90,29 @@ describe("roster package writes", () => {
   });
 
   it("invite: the leader may, a member may not, and an unlinked invitee is refused", async () => {
-    const invited = await inviteDb(db, now, "d1", "d2");
+    const invited = await inviteDb(db, now, "d1", { discordId: "d2" });
     expect(invited.outcome).toBe("ok");
     expect(invited.inviteId).not.toBeNull();
     const [row] = await db.select().from(factionInvites).where(eq(factionInvites.id, invited.inviteId!));
     expect(row!.expiresAt.getTime()).toBe(now.getTime() + PENDING_EXPIRY_MS);
 
-    const byMember = await inviteDb(db, now, "d3", "d2");
+    const byMember = await inviteDb(db, now, "d3", { discordId: "d2" });
     expect(byMember.outcome).toBe("not-permitted");
 
-    const toUnlinked = await inviteDb(db, now, "d1", "d-ghost");
+    const toUnlinked = await inviteDb(db, now, "d1", { discordId: "d-ghost" });
     expect(toUnlinked.outcome).toBe("invitee-not-linked");
   });
 
+  it("invites by gamertag, case-insensitively, and refuses a gamertag nobody has linked", async () => {
+    const byTag = await inviteDb(db, now, "d1", { gamertag: "otto" });
+    expect(byTag.outcome).toBe("ok");
+    expect(byTag.inviteId).not.toBeNull();
+    const nobody = await inviteDb(db, now, "d1", { gamertag: "NoSuchPlayer" });
+    expect(nobody).toEqual({ outcome: "invitee-not-linked", inviteId: null });
+  });
+
   it("acceptInvite writes a pending row; leave removes it and stamps a cooldown", async () => {
-    const { inviteId } = await inviteDb(db, now, "d1", "d2");
+    const { inviteId } = await inviteDb(db, now, "d1", { discordId: "d2" });
     expect(await acceptInviteDb(db, now, "d2", inviteId!)).toBe("ok");
     const [pending] = await db.select().from(factionMembers).where(eq(factionMembers.discordId, "d2"));
     expect(pending).toMatchObject({ status: "pending" });
@@ -146,7 +154,7 @@ describe("roster package writes", () => {
     expect(await kickDb(db, now, "d3", "d1")).toBe("ok");
     expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, "d1"))).toEqual([]);
 
-    const { inviteId } = await inviteDb(db, now, "d3", "d2");
+    const { inviteId } = await inviteDb(db, now, "d3", { discordId: "d2" });
     await acceptInviteDb(db, now, "d2", inviteId!);
     expect(await transferDb(db, now, "d3", "d2")).toBe("target-not-member");
   });

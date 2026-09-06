@@ -2,8 +2,11 @@ import type { RosterReply } from "./roster-commands.js";
 import { resolveServerContext } from "./roster-context.js";
 import {
   type RosterStore, type RebindStore,
-  selectCandidates, cooldownRemainingMs, REBIND_WINDOW_MS, RELEASE_GRACE_MS,
+  selectCandidates, cooldownRemainingMs, RELEASE_GRACE_MS,
 } from "@factions/roster/internal";
+
+// Deleted with this file in Task 8.
+const REBIND_WINDOW_LOCAL = 3_600_000;
 import { MIN_BASE_SPACING_M } from "@factions/domain";
 
 export type RebindDeps = {
@@ -68,8 +71,8 @@ export async function handleFactionRebind(
   }
 
   const raises = await deps.rebindStore.qualifyingRaises(
-    clan, new Date(now.getTime() - REBIND_WINDOW_MS));
-  const candidates = selectCandidates(raises, { currentPoleKey: clan.poleKey, now });
+    clan, new Date(now.getTime() - REBIND_WINDOW_LOCAL));
+  const candidates = selectCandidates(raises, { currentPoleKey: clan.poleKey, now, windowMs: REBIND_WINDOW_LOCAL });
 
   if (candidates.length === 0) return reply(noCandidate(clan.texture));
 
@@ -114,8 +117,8 @@ export async function handleRebindConfirm(
 
   const now = deps.now();
   const raises = await deps.rebindStore.qualifyingRaises(
-    clan, new Date(now.getTime() - REBIND_WINDOW_MS));
-  const candidate = selectCandidates(raises, { currentPoleKey: clan.poleKey, now })
+    clan, new Date(now.getTime() - REBIND_WINDOW_LOCAL));
+  const candidate = selectCandidates(raises, { currentPoleKey: clan.poleKey, now, windowMs: REBIND_WINDOW_LOCAL })
     .find((c) => c.poleKey === poleKey);
 
   if (!candidate) {

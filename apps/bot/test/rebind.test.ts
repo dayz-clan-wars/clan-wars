@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import {
   selectCandidates, cooldownRemainingMs,
-  REBIND_COOLDOWN_MS, RELEASE_GRACE_MS, REBIND_WINDOW_MS,
+  REBIND_COOLDOWN_MS, RELEASE_GRACE_MS,
   type QualifyingRaise,
 } from "@factions/roster/internal";
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 
 const now = new Date("2026-09-03T12:00:00Z");
+const WINDOW_MS = 3_600_000;
 const ago = (ms: number) => new Date(now.getTime() - ms);
 
 const raise = (o: Partial<QualifyingRaise>): QualifyingRaise => ({
@@ -15,7 +16,7 @@ const raise = (o: Partial<QualifyingRaise>): QualifyingRaise => ({
 });
 
 describe("selectCandidates", () => {
-  const opts = { currentPoleKey: "1.00:1.00:1.00", now };
+  const opts = { currentPoleKey: "1.00:1.00:1.00", now, windowMs: WINDOW_MS };
 
   it("accepts a recent raise at a different pole", () => {
     expect(selectCandidates([raise({})], opts)).toHaveLength(1);
@@ -29,11 +30,11 @@ describe("selectCandidates", () => {
   });
 
   it("drops raises older than the window", () => {
-    expect(selectCandidates([raise({ occurredAt: ago(REBIND_WINDOW_MS + 1) })], opts)).toEqual([]);
+    expect(selectCandidates([raise({ occurredAt: ago(WINDOW_MS + 1) })], opts)).toEqual([]);
   });
 
   it("keeps a raise exactly at the window edge", () => {
-    expect(selectCandidates([raise({ occurredAt: ago(REBIND_WINDOW_MS) })], opts)).toHaveLength(1);
+    expect(selectCandidates([raise({ occurredAt: ago(WINDOW_MS) })], opts)).toHaveLength(1);
   });
 
   it("collapses repeated raises at one pole to the newest", () => {

@@ -18,13 +18,19 @@ export const validName = (s: string) => s.trim().length >= CLAN_NAME_LENGTH.min 
 export const validTag = (s: string) => s.length >= CLAN_TAG_LENGTH.min && s.length <= CLAN_TAG_LENGTH.max && TAG_RE.test(s);
 
 export type InviteOutcome = CreateInviteOutcome | ActorRefusal | "not-permitted" | "invitee-not-linked";
-export async function inviteDb(db: Database, now: Date, actorDiscordId: string, inviteeDiscordId: string): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
+export type InviteeRef = { discordId: string } | { gamertag: string };
+export async function inviteDb(db: Database, now: Date, actorDiscordId: string, invitee: InviteeRef): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return { outcome: a, inviteId: null };
-  const [invitee] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks).where(eq(identityLinks.discordId, inviteeDiscordId));
-  if (!invitee) return { outcome: "invitee-not-linked", inviteId: null };
+  // The site invites by gamertag — it has no Discord user picker — and the
+  // link row is the ONLY place a gamertag maps to a Discord account.
+  const where = "discordId" in invitee
+    ? eq(identityLinks.discordId, invitee.discordId)
+    : sql`lower(${identityLinks.gamertag}) = lower(${invitee.gamertag})`;
+  const [link] = await db.select({ dayzId: identityLinks.dayzId, discordId: identityLinks.discordId }).from(identityLinks).where(where);
+  if (!link) return { outcome: "invitee-not-linked", inviteId: null };
   return new PgRosterStore(db).createInvite({
-    factionId: a.factionId, serverId: a.serverId, inviteeDiscordId, inviteeDayzId: invitee.dayzId, invitedByDiscordId: a.discordId,
+    factionId: a.factionId, serverId: a.serverId, inviteeDiscordId: link.discordId, inviteeDayzId: link.dayzId, invitedByDiscordId: a.discordId,
     at: now, expiresAt: new Date(now.getTime() + PENDING_EXPIRY_MS),
   });
 }
@@ -125,11 +131,10 @@ export async function claimCeremonyDb(db: Database, now: Date, discordId: string
 
 /**
  * The leader confirms a move (guide ch. 8: within 24 h of the raise —
- * REBIND_CONFIRM_MS, not the bot command's shorter REBIND_WINDOW_MS). The
- * same window is passed to `selectCandidates` as `qualifyingRaises` is
- * fetched with, so the freshness filter inside `selectCandidates` (whose
- * own default is the bot's 1 h window) does not silently re-narrow the 24 h
- * the site promises.
+ * REBIND_CONFIRM_MS, not the bot command's shorter 1 h window). The same
+ * window is passed to `selectCandidates` as `qualifyingRaises` is fetched
+ * with, so the freshness filter inside `selectCandidates` does not silently
+ * re-narrow the 24 h the site promises.
  */
 export async function confirmRebindDb(db: Database, now: Date, actorDiscordId: string, poleKey: string): Promise<"ok" | "refused" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal> {
   const a = await actorFor(db, actorDiscordId);

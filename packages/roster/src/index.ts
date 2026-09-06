@@ -31,7 +31,7 @@ export { ISSUE_OUTCOME_KINDS } from "@factions/verification";
 import {
   inviteDb, revokeInviteDb, acceptInviteDb, declineInviteDb, requestJoinDbByTag, withdrawRequestDbFor, decideRequestDbFor,
   leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb, claimCeremonyDb, confirmRebindDb,
-  type InviteOutcome, type ReserveOutcome,
+  type InviteOutcome, type InviteeRef, type ReserveOutcome,
 } from "./writes";
 import type {
   CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome, SetRoleOutcome, TransferOutcome, RenameOutcome,
@@ -47,7 +47,7 @@ export type { Viewer, Role };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
-  ActorRefusal, InviteOutcome, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
+  ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
   SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext };
@@ -88,9 +88,9 @@ export function releaseSolo(discordId: string): Promise<{ released: boolean }> {
   return releaseSoloDb(db(), discordId, new Date());
 }
 
-/** Invite a linked player to your clan. Officer+ only; the invitee must already be linked. */
-export function invite(actorDiscordId: string, inviteeDiscordId: string): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
-  return inviteDb(db(), new Date(), actorDiscordId, inviteeDiscordId);
+/** Invite a linked player to your clan, by Discord id or by gamertag. Officer+ only; the invitee must already be linked. */
+export function invite(actorDiscordId: string, invitee: InviteeRef): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
+  return inviteDb(db(), new Date(), actorDiscordId, invitee);
 }
 /** Withdraw an outstanding invite. Officer+ only. */
 export function revokeInvite(actorDiscordId: string, inviteId: number) {
