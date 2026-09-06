@@ -4,8 +4,9 @@ import { clanByTag, type ClanPage } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when } from "@/lib/format";
+import { when, days } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
+import { ALPHA_BADGE, duration } from "@/lib/scoring-copy";
 
 export const metadata: Metadata = { title: "Clan Wars — clan" };
 /** ⚠️ Public but viewer-aware (canRequest), so per request. See lib/viewer.ts. */
@@ -36,7 +37,7 @@ export default async function ClanPage({ params, searchParams }: { params: Promi
       <div className="flex items-center gap-4">
         <img src={`/${flagImagePath(clan.texture)}`} alt="" width={64} height={64} className="h-16 w-16 object-contain" />
         <div>
-          <p className={label}>[{clan.tag}] · {clan.status}</p>
+          <p className={label}>[{clan.tag}] · {clan.status}{clan.alpha && <> · <span className="text-gold">{ALPHA_BADGE}</span></>}</p>
           <h1 className="mt-1 font-display text-3xl text-ink">{clan.name}</h1>
           <p className="mt-1 text-sm text-ink-2">Founded {when(clan.createdAt)} · {clan.memberCount} members</p>
         </div>
@@ -64,6 +65,34 @@ export default async function ClanPage({ params, searchParams }: { params: Promi
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+        <h2 className={label}>This season</h2>
+        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-ink-2">
+          <dt className={label}>Raids</dt><dd>{clan.stats.raids}</dd>
+          <dt className={label}>Defenses</dt><dd>{clan.stats.defenses}</dd>
+          <dt className={label}>Longest siege</dt>
+          <dd>{clan.stats.longestSiegeSeconds !== null ? duration(clan.stats.longestSiegeSeconds) : "—"}</dd>
+          <dt className={label}>Days held</dt><dd>{clan.stats.daysHeld !== null ? days(clan.stats.daysHeld * 86_400_000) : "—"}</dd>
+        </dl>
+      </section>
+
+      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+        <h2 className={label}>Placements</h2>
+        <p className="mt-1 text-xs text-ink-2">Alpha weeks: {clan.alphaWeeks}</p>
+        {clan.placements.length === 0 ? (
+          <p className="mt-2 text-sm text-ink-2">No season finished yet.</p>
+        ) : (
+          <ul className="mt-2 flex flex-col gap-1">
+            {clan.placements.map((p) => (
+              <li key={p.season} className="flex justify-between text-sm text-ink">
+                <span className="font-mono">Season {p.season}</span>
+                <span className="font-mono text-ink-2">#{p.rank} · {p.points} pts</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       <section className="mt-4">

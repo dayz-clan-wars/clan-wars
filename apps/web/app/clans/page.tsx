@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { directory } from "@factions/roster";
 import { FLAG_POOL_SIZE } from "@factions/domain";
 import { flagImagePath } from "@/src/flag-images";
+import { ALPHA_BADGE } from "@/lib/scoring-copy";
 
 export const metadata: Metadata = { title: "Clan Wars — clans" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -51,6 +52,7 @@ export default async function ClansPage() {
                 <span className="font-display text-ink">{c.name}</span>
                 <span className="font-mono text-sm text-ink-2">[{c.tag}]</span>
                 {c.status === "dormant" && <span className="font-mono text-xs uppercase text-muted">dormant</span>}
+                {c.alpha && <span className="font-mono text-xs uppercase text-gold">{ALPHA_BADGE}</span>}
                 <span className="ml-auto font-mono text-xs text-muted">{c.memberCount}</span>
               </a>
             </li>

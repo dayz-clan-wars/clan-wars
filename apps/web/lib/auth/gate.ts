@@ -5,8 +5,8 @@
  * exactly, so adding an entry is a deliberate act that fails a test naming it.
  */
 
-/** The landing page and the clan directory (spec §10.2: public). */
-export const PUBLIC_PATHS = ["/", "/clans"] as const;
+/** The landing page, the clan directory, and the scoring pages (spec §10.2: public). */
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
