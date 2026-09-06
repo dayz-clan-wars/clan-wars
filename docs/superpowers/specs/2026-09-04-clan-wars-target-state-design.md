@@ -1092,15 +1092,16 @@ dependency, then by what players feel first.
 | 2b | **Link and base**: `verification_challenges` nullable guild/channel (migration 0021); `startLink`/`cancelLink`/`unlink`; `/link` with autocomplete, 3 emotes, 10 min, 5 s poll; `/base` over `raisedPolesFor`/`declareSolo`/`releaseSolo`; inbox 7's refusal path; `@factions/declarations` and the challenge store in `@factions/verification` shared by bot and roster | `2026-09-05-site-link-and-base.md` | 2a |
 | 2c-a | **Roster package**: migration 0022 (member status, join requests, identity holds, recruiting); the stores in `packages/roster/src/internal` shared with the bot; every membership read `status = 'full'`; cap; presence promotion + pending expiry ticks; the package's roster writes and reads exported | `2026-09-05-roster-package.md` | 2b |
 | 2c-b | **The site as the tool**: `/clan`, `/clans`, `/clans/{tag}`, `/claim/{ceremony}`, `/clan/settings`; `/me` shows pending and invites; retire the slash commands in the same deploy; the `/faction` exclusion in `vocabulary.test.ts` and the bot's 1 h rebind window removed with them | `2026-09-05-site-roster.md` | 2c-a |
-| 3 | **Raids and defense**: raid and defense consumers, flag-down clock, `dormant_reason`, `war_log_events`, `clan_notices` with the poster, per-clan voice channel, every §9 line that exists by now, `lapsed` feed event; `@Linked` role on link/unlink and the nickname clear on a site unlink (deferred from 2b — both need the bot to react to a site write, i.e. this queue); the `/base` "your declaration lapsed — raise and re-declare" copy (needs the `lapsed` notice) | `2026-09-xx-raids-and-notices.md` | 2c-b |
-| 4 | **Scoring**: seasons, standings, points, week close, `@Alpha`, `/scoreboard`, `/alphas`, `/war-log`, `/seasons`, wipe script and runbook | `2026-09-xx-scoring-and-seasons.md` | 3 |
-| 5 | **The map**: positions consumer, `/map` with every layer, pins, intruders, public bases, travel points, base alerts (after checking the gate line against a live log) | `2026-09-xx-map.md` | 2c-b, 3 (notices) |
+| 3a | **Raids and notices**: raid and defense consumers, flag-down clock, `dormant_reason`, `war_log_events`, `clan_notices` with the poster, every §9 line that exists by now, `lapsed`, the `/base` lapsed copy | `2026-09-05-raids-and-notices.md` | 2c-b |
+| 3b | **Discord structure**: per-clan role, text and voice channel at activation, deleted at disband, reconciled on start; `@Linked` role on link/unlink; nickname clear on a site unlink; the channel target for queued notices | `2026-09-xx-discord-structure.md` | 3a |
+| 4 | **Scoring**: seasons, standings, points, week close, `@Alpha`, `/scoreboard`, `/alphas`, `/war-log`, `/seasons`, wipe script and runbook | `2026-09-xx-scoring-and-seasons.md` | 3a |
+| 5 | **The map**: positions consumer, `/map` with every layer, pins, intruders, public bases, travel points, base alerts (after checking the gate line against a live log) | `2026-09-xx-map.md` | 2c-b, 3a (notices), 3b (channel delivery) |
 | 6 | **Player stats**: sessions and kills consumers, `/players`, profiles, boards, clan board | `2026-09-xx-player-stats.md` | 2c-b |
 | 7 | **Leadership and the vault**: succession, votes, guild-removal handler, vault, guest passes + `/guest`, `[TAG]` nicknames | `2026-09-xx-leadership-and-vault.md` | 2c-b |
 | 8 | **Launch**: raid-window runbook, stale file cleanup, launch grace stamp, `/guide`, acceptance against `factions_live` | `2026-09-xx-launch.md` | all |
 
-Increments 6 and 7 are independent of each other and of 3–5 once 2c-b has landed; 5 needs
-the notices queue from 3.
+Increments 6 and 7 are independent of each other and of 3a–5 once 2c-b has landed; 5 needs
+the notices queue from 3a and channel delivery from 3b.
 
 ⚠️ Increment 2c-b is the one that changes what players can do before it changes what the
 system knows. The slash commands are retired **in the same deploy** as the pages that

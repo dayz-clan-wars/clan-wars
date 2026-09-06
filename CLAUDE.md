@@ -30,6 +30,15 @@ effect, by design. That is what makes a typo unable to truncate live player data
 more. `TEST_DATABASE_FRESH=1` drops and recreates a package's database — the right
 response to *editing* a migration rather than adding one.
 
+⚠️ **0023 was hand-edited on this branch** (`clan_notices_dm_has_target`,
+`raids.last_lower_event_id`) after it was first generated. A `factions_test_<package>`
+created before that edit carries the stale 0023 and will not pick up the fix — drop it
+once so the migration re-applies. `TEST_DATABASE_FRESH=1` does not help through
+`turbo run test`: `turbo.json`'s `test` task only declares `TEST_DATABASE_URL` and
+`DATABASE_URL` in its `env`, so `TEST_DATABASE_FRESH` does not reach the child process.
+Run the affected package's `vitest` directly with `TEST_DATABASE_FRESH=1` set, or drop
+the specific `factions_test_<package>` database by hand — never touch `factions_live`.
+
 **Port 5434 only.** 5432 and 5433 belong to other projects on this machine — never
 stop, remove, or repoint their containers.
 
@@ -55,6 +64,14 @@ turbo gate stays the gate, because it runs `typecheck` too.
   It needs the env sourced; `nohup … > bot.log 2>&1 &` if you want it detached. Use
   `. ./.env`, not `. .env` — in zsh, `.` searches `$PATH` for a slashless name and fails
   with `no such file or directory: .env`.
+  Since 3a, `discord.ts`'s `start()` also runs `raid-tick.ts` and `raise-tick.ts` each
+  interval, right after presence and before verification/dormancy — every
+  `flag.lowered`/`flag.raised` that scores a raid, records a defense, revives a dormant
+  clan, or notices a non-member raise/colors-elsewhere/rebind proposal — and, after the
+  feed poster, two more posters that turn those consumers' queued rows into messages:
+  `notice-tick.ts` (per-target order, three attempts then `failed_at`, a stuck target
+  never blocks a different one) and `war-log-tick.ts` (one channel, stops at the first
+  failure, same shape as the feed poster, gated on `WAR_LOG_CHANNEL_ID`).
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -181,7 +198,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **`HOLDING_STATUSES` (`reserved, active, dormant`) means identity — holds flag, tag
   and pole — and nothing else.** It is mirrored by two partial unique indexes plus the
   existence of a `declarations` row. Do not narrow it to change behaviour; add a set.
-  `SUPPLIED_STATUSES` (`reserved, active`) is the one that governs supply kits.
+  Supply kits are governed by a predicate, not a status set: `status = 'active' and
+  flag_down_since is null` (`SUPPLIED_PREDICATE` in `packages/domain`, spelled in SQL by
+  the worker and pinned by `holding-index-drift.test.ts`) — a raided clan keeps
+  `status = 'active'` but loses its kit the moment its flag comes down.
 - **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
@@ -191,7 +211,9 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   A deadlock was already built once from two separately-correct changes taking two of
   them in opposite orders. There are four writers now. `faction_events` is always last
   among the roster tables, and can safely be: it is insert-only and nothing references
-  it, so no writer ever needs it locked before touching the roster tables.
+  it, so no writer ever needs it locked before touching the roster tables. All three
+  queues are insert-only and always last; a channel notice with no channel yet waits
+  with a null target (3b fills it).
   `packages/roster` is the fifth roster writer and the first outside the bot process. Its
   first writes landed in 2b: `unlink` row-locks the identity link, then takes
   `lockDeclarations` → `releaseTx`, then deletes the link; `declareSolo` takes
@@ -263,6 +285,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   fact; `apps/bot/test/dormancy-index-drift.test.ts` holds them together. Do not
   "simplify" it to `(server_id, occurred_at)`: that form is *worse than no index* for a
   faction that has not raised in months, which is the only kind dormancy cares about.
+- **Two entrances to `dormant`, one exit.** `dormant_reason` (`raided`/`inactive`) is a
+  column, not a second status — a raid that goes 24 h without a defense and 7 days of no
+  full-member raise both land on `status = 'dormant'`. Anything that switches on `status`
+  alone is correct; anything that assumes `dormant` means "inactive" is wrong.
 - **The supply spawner file is a projection of the factions table.** The worker
   regenerates it every sweep, hashes it, and uploads only on a change. The hash advances
   only on a successful upload. Nothing coordinates the bot and the worker — status is
@@ -320,6 +346,8 @@ run.
 **Increment 2c-b is merged.** The slash commands are retired; roster administration
 happens on the site. Not deployed until the runbook `docs/deploy/2026-09-05-site-roster.md`
 runs, together with 2b and 2c-a.
+
+**Increment 3a merged; not deployed until `docs/deploy/2026-09-05-raids-and-notices.md`.**
 
 Faction dormancy is **in the code and migrated in**. A faction that does not raise its
 own flag at its own pole for 7 days goes dormant and loses its supply kit; 14 further
