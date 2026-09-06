@@ -4,8 +4,12 @@
  * `apps/web` imports this and never @factions/db. The export list below IS
  * the permission list; test/exports.test.ts pins it by name and so does
  * apps/web/test/smoke.test.ts. It holds the link flow (`startLink`,
- * `cancelLink`, `unlink`, `linkStatus`, `searchGamertags`) as its first
- * writes. Nothing here may ever set a clan active or dormant, write a raid
+ * `cancelLink`, `unlink`, `linkStatus`, `searchGamertags`), the solo base
+ * (`declareSolo`, `releaseSolo`, `baseFor`) and the roster writes — invites
+ * and join requests both ways, `leave`/`kick`/`promote`/`demote`/`transfer`,
+ * `rename`/`setRecruitingPost`/`disband`, `claimCeremony` and
+ * `confirmRebind`. Every write names the ACTOR's Discord id first and
+ * resolves their clan itself. Nothing here may ever set a clan active or dormant, write a raid
  * or a defense, insert a declaration without citing evidence the log
  * already holds, or create a faction without a ceremony.
  *
