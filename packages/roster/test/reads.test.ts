@@ -225,7 +225,7 @@ describe("the roster package's page reads", () => {
       });
       const invites = await myInvitesDb(db, "d2", now);
       expect(invites).toHaveLength(1);
-      expect(invites[0]!.factionId).toBe(factionId);
+      expect(invites[0]!.clanId).toBe(factionId);
 
       await setRecruiting(factionId, true);
       const other = await seedFaction(db, {
@@ -238,7 +238,7 @@ describe("the roster package's page reads", () => {
       });
       const requests = await myRequestsDb(db, "d2", now);
       expect(requests).toHaveLength(1);
-      expect(requests[0]!.factionId).toBe(other.id);
+      expect(requests[0]!.clanId).toBe(other.id);
     });
 
     it("a stranger has neither", async () => {

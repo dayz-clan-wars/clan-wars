@@ -40,7 +40,7 @@ import type {
 import type { ActorRefusal } from "./actor";
 import {
   clanForDb, directoryDb, clanByTagDb, claimContextDb, myInvitesDb, myRequestsDb,
-  type RosterRow, type ClanView, type DirectoryEntry, type ClanPage, type ClaimContext,
+  type RosterRow, type ClanView, type DirectoryEntry, type ClanPage, type ClaimContext, type MyInvite, type MyRequest,
 } from "./reads";
 
 export type { Viewer, Role };
@@ -50,7 +50,7 @@ export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
   SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
-export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext };
+export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {

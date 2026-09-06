@@ -6,7 +6,7 @@ import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, CLAN_SIZE_CAP, HOLDING_STATUSES, REBIND_CONFIRM_MS, type MemberStatus } from "@factions/domain";
 import {
   PgFactionStore, PgRebindStore, PgRosterStore, openRequestsFor, requestsBy, selectCandidates,
-  type JoinRequest, type PendingInvite, type Role,
+  type JoinRequest, type Role,
 } from "./internal";
 import { activeServerId } from "./server";
 
@@ -213,16 +213,30 @@ export async function claimContextDb(db: Database, discordId: string): Promise<C
   };
 }
 
+/**
+ * /me's shape for an invite: the same row `pendingInvitesFor` returns,
+ * relabeled to `clanId`/`clanName` — apps/web never spells the internal
+ * store's "faction" field names (copy-vocabulary.test.ts scans identifiers,
+ * not just strings), so the rename happens here, at the package boundary,
+ * rather than leaking `PendingInvite`'s own field names into the site.
+ */
+export type MyInvite = { id: number; clanId: number; clanName: string; tag: string; serverId: number; serverName: string; expiresAt: Date };
+
 /** /invites's one read: offers still open to you. */
-export async function myInvitesDb(db: Database, discordId: string, now: Date = new Date()): Promise<PendingInvite[]> {
+export async function myInvitesDb(db: Database, discordId: string, now: Date = new Date()): Promise<MyInvite[]> {
   const [link] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks).where(eq(identityLinks.discordId, discordId));
   if (!link) return [];
-  return new PgRosterStore(db).pendingInvitesFor(link.dayzId, now);
+  const rows = await new PgRosterStore(db).pendingInvitesFor(link.dayzId, now);
+  return rows.map((r) => ({ id: r.id, clanId: r.factionId, clanName: r.factionName, tag: r.tag, serverId: r.serverId, serverName: r.serverName, expiresAt: r.expiresAt }));
 }
 
+/** /me's shape for one of the viewer's own join requests — see `MyInvite`'s note on the rename. */
+export type MyRequest = { id: number; clanId: number; clanName: string; tag: string; createdAt: Date; expiresAt: Date };
+
 /** Your own outstanding join requests, across every clan. */
-export async function myRequestsDb(db: Database, discordId: string, now: Date = new Date()): Promise<Awaited<ReturnType<typeof requestsBy>>> {
+export async function myRequestsDb(db: Database, discordId: string, now: Date = new Date()): Promise<MyRequest[]> {
   const [link] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks).where(eq(identityLinks.discordId, discordId));
   if (!link) return [];
-  return requestsBy(db, link.dayzId, now);
+  const rows = await requestsBy(db, link.dayzId, now);
+  return rows.map((r) => ({ id: r.id, clanId: r.factionId, clanName: r.factionName, tag: r.tag, createdAt: r.createdAt, expiresAt: r.expiresAt }));
 }
