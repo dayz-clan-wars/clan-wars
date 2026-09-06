@@ -7,6 +7,7 @@ import {
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { FLAG_DOWN_MS } from "@factions/domain";
+import { declarationForFaction } from "@factions/declarations";
 import { raiseTick } from "../src/raise-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
 
@@ -28,6 +29,9 @@ describe("raiseTick", () => {
   const P1 = "1000.00:100.00:1000.00";
   const P3 = "3000.00:100.00:3000.00";
   const P4 = "4000.00:100.00:4000.00";
+  const P9 = "9000.00:100.00:9000.00";
+  const WOLF_POLE = "5000.00:100.00:5000.00";
+  const WOLF_NEAR = "5100.00:100.00:5000.00";
 
   beforeEach(async () => {
     db = createClient(URL);
@@ -64,10 +68,19 @@ describe("raiseTick", () => {
     await db.execute(sql`insert into consumer_cursors (consumer_name, last_event_id, updated_at) values ('raise-consumer', ${n}, now())`);
   });
 
+  // ⚠️ Derived from the poleKey, not a fixed (1, 2, 3): declareTx requires
+  // the poleKey and its coordinates to describe the same point (§4.1's
+  // own-pole exclusion and the 200 m spacing check both key off x/z), so any
+  // test exercising a bind or a too-close refusal needs real coordinates.
+  const poleXYZ = (poleKey: string) => {
+    const [x, y, z] = poleKey.split(":").map(Number);
+    return { x, y, z };
+  };
+
   const raise = (dayzId: string, gamertag: string, texture: string, poleKey: string, at: Date) =>
     db.insert(events).values({
       serverId, admFileId, lineIndex: lineIndex++, type: "flag.raised", occurredAt: at,
-      payload: { dayzId, gamertag, texture, poleKey, pole: { x: 1, y: 2, z: 3 } },
+      payload: { dayzId, gamertag, texture, poleKey, pole: poleXYZ(poleKey) },
     });
 
   const declareSolo = async (poleKey: string, dayzId: string) => {
@@ -228,5 +241,67 @@ describe("raiseTick", () => {
     await raiseTick(db, { siteBaseUrl: SITE });
     expect(await db.select().from(defenses)).toHaveLength(1);
     expect(await db.select().from(clanNotices)).toHaveLength(1);
+  });
+
+  describe("post-wipe bind (§8.5)", () => {
+    it("a full member's raise of the clan's texture at any free pole binds the base with the raise as evidence", async () => {
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+      await raise(B1, "Bear1", "Flag_Bear", P9, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+      const d = await declarationForFaction(db, BEAR);
+      expect(d).toMatchObject({ poleKey: P9 });
+      expect((await db.select().from(factionEvents)).at(-1)).toMatchObject({ kind: "rebound", factionId: BEAR, payload: { name: "BEAR", tag: "BEAR", texture: "Flag_Bear" } });
+      expect(await db.select().from(clanNotices)).toEqual([]);
+    });
+
+    it("a dormant clan's bind also revives it", async () => {
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+      await db.update(factions).set({ status: "dormant", dormantSince: ago(86_400_000), dormantReason: "inactive", disbandWarnedAt: ago(1000) }).where(eq(factions.id, BEAR));
+      await raise(B1, "Bear1", "Flag_Bear", P9, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+      const [bear] = await db.select({ s: factions.status, r: factions.dormantReason, w: factions.disbandWarnedAt, d: factions.dormantSince }).from(factions).where(eq(factions.id, BEAR));
+      expect(bear).toEqual({ s: "active", r: null, w: null, d: null });
+      const rows = await db.select().from(factionEvents).orderBy(factionEvents.id);
+      expect(rows.map((r) => r.kind)).toEqual(["rebound", "revived"]);
+      expect(rows.at(-1)).toMatchObject({ kind: "revived", payload: { actor: "Bear1" } });
+      expect((await db.select().from(clanNotices))[0]).toMatchObject({ kind: "revived", payload: { gamertag: "Bear1" } });
+    });
+
+    it("a pending member's raise binds nothing", async () => {
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+      const PEND = "PEND-DAYZID-000000000000000000000000";
+      await db.insert(factionMembers).values({ factionId: BEAR, serverId, dayzId: PEND, discordId: "dPend", role: "member", joinedAt: now, status: "pending", pendingSince: now });
+      await raise(PEND, "Pendy", "Flag_Bear", P9, now);
+      const r = await raiseTick(db, { siteBaseUrl: SITE });
+      expect(r.bound).toBe(0);
+      expect(await declarationForFaction(db, BEAR)).toBeNull();
+      expect((await db.select().from(clanNotices))[0]).toMatchObject({ kind: "colors_elsewhere", payload: { gamertag: "Pendy" } });
+    });
+
+    it("too close to another base binds nothing and writes nothing", async () => {
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+      const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: WOLF_POLE, createdAt: now, activatedAt: now });
+      // seedFaction wrote its own synthetic flag.raised (evidence for WOLF's
+      // declaration, dayzId "SEED") — advance the cursor past it, same as
+      // beforeEach does for BEAR, so it doesn't queue its own non_member_raise.
+      const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${rows[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(B1, "Bear1", "Flag_Bear", WOLF_NEAR, now);
+      const r = await raiseTick(db, { siteBaseUrl: SITE });
+      expect(r.bound).toBe(0);
+      expect(await declarationForFaction(db, BEAR)).toBeNull();
+      expect(await declarationForFaction(db, wolf.id)).toMatchObject({ poleKey: WOLF_POLE });
+      expect(await db.select().from(clanNotices)).toEqual([]);
+      expect(await db.select().from(factionEvents)).toHaveLength(0);
+    });
+
+    it("a clan that still has a declaration gets the rebind proposal, not a bind", async () => {
+      await raise(B1, "Bear1", "Flag_Bear", P3, now);
+      const r = await raiseTick(db, { siteBaseUrl: SITE });
+      expect(r.bound).toBe(0);
+      expect((await db.select({ k: clanNotices.kind, p: clanNotices.payload }).from(clanNotices))[0]).toMatchObject({ k: "rebind_proposed", p: { gamertag: "Bear1", link: `${SITE}/clan/settings` } });
+      const d = await declarationForFaction(db, BEAR);
+      expect(d).toMatchObject({ poleKey: P1 }); // unchanged
+    });
   });
 });

@@ -1,7 +1,8 @@
 import type { Database } from "@factions/db";
 import { declarations, defenses, factionMembers, factions, identityLinks, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { appendWarLogTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
+import { appendWarLogTx, appendFactionEventTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
+import { declarationForFaction, declareTx } from "@factions/declarations";
 import { FLAG_DOWN_MS } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
@@ -10,14 +11,16 @@ import { reviveFactionTx } from "./dormancy-store.js";
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const RAISE_CONSUMER = "raise-consumer";
 
-export type RaiseTickResult = { scanned: number; defenses: number; revived: number; noticed: number };
+export type RaiseTickResult = { scanned: number; defenses: number; revived: number; noticed: number; bound: number };
 
-type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
+type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string; pole: { x: number; y: number; z: number } };
 function readFlagPayload(payload: unknown): FlagPayload | null {
   if (typeof payload !== "object" || payload === null) return null;
   const p = payload as Record<string, unknown>;
   if (typeof p.dayzId !== "string" || typeof p.gamertag !== "string" || typeof p.texture !== "string" || typeof p.poleKey !== "string") return null;
-  return { dayzId: p.dayzId, gamertag: p.gamertag, texture: p.texture, poleKey: p.poleKey };
+  const pole = p.pole as Record<string, unknown> | undefined;
+  if (typeof pole !== "object" || pole === null || typeof pole.x !== "number" || typeof pole.y !== "number" || typeof pole.z !== "number") return null;
+  return { dayzId: p.dayzId, gamertag: p.gamertag, texture: p.texture, poleKey: p.poleKey, pole: { x: pole.x, y: pole.y, z: pole.z } };
 }
 
 /**
@@ -39,7 +42,7 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
  */
 export async function raiseTick(db: Database, opts: { batchSize?: number; siteBaseUrl: string }): Promise<RaiseTickResult> {
   const batchSize = opts.batchSize ?? 500;
-  const out: RaiseTickResult = { scanned: 0, defenses: 0, revived: 0, noticed: 0 };
+  const out: RaiseTickResult = { scanned: 0, defenses: 0, revived: 0, noticed: 0, bound: 0 };
   let cursor = await readCursor(db, RAISE_CONSUMER);
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -137,21 +140,55 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
         }
 
         // Undeclared pole: does the texture belong to a holding clan on this server?
-        const [owner] = await tx.select({ id: factions.id, status: factions.status }).from(factions)
-          .where(and(eq(factions.serverId, ev.serverId), eq(factions.texture, p.texture), sql`${factions.status} in ('reserved','active','dormant')`));
+        // ⚠️ FOR UPDATE per §4.12 (`factions` before `declarations`): this
+        // branch may go on to call `declareTx`, which takes the declarations
+        // advisory lock, so the clan's `factions` row must be locked first.
+        const [owner] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status }).from(factions)
+          .where(and(eq(factions.serverId, ev.serverId), eq(factions.texture, p.texture), sql`${factions.status} in ('reserved','active','dormant')`))
+          .for("update");
         if (!owner || owner.status === "reserved") return done(null); // activation is ceremony-tick's
         const [full] = await tx.select({ id: factionMembers.id }).from(factionMembers)
           .where(and(eq(factionMembers.factionId, owner.id), eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full")));
-        if (full) {
-          await noticeClanTx(tx, { serverId: ev.serverId, factionId: owner.id, kind: "rebind_proposed", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, link: `${opts.siteBaseUrl}/clan/settings` } });
-        } else {
+        if (!full) {
           await noticeClanTx(tx, { serverId: ev.serverId, factionId: owner.id, kind: "colors_elsewhere", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag } });
+          return done("noticed" as const);
         }
-        return done("noticed" as const);
+
+        // §8.5: a holding clan with NO declaration binds one on the first
+        // `flag.raised` of its texture by a full member, at any free pole —
+        // the post-wipe case. A clan that still has a declaration keeps
+        // today's rebind-proposal path unchanged.
+        const existing = await declarationForFaction(tx, owner.id);
+        if (existing) {
+          await noticeClanTx(tx, { serverId: ev.serverId, factionId: owner.id, kind: "rebind_proposed", occurredAt: ev.occurredAt, payload: { gamertag: p.gamertag, link: `${opts.siteBaseUrl}/clan/settings` } });
+          return done("noticed" as const);
+        }
+
+        const declared = await declareTx(tx, {
+          serverId: ev.serverId, poleKey: p.poleKey, x: p.pole.x, y: p.pole.y, z: p.pole.z,
+          owner: { factionId: owner.id }, evidence: { eventId: ev.id }, at: ev.occurredAt,
+        });
+        if (!declared.ok) {
+          // ⚠️ No notice kind exists for this (ruling: §9.3 lists none) and
+          // nothing else is written — the site's clan page will show "no
+          // base" once increment 5 lands. Logged so an operator can still
+          // see it happened.
+          console.info(`raise-tick: bind refused for faction ${owner.id} at ${p.poleKey}: ${declared.reason}`);
+          return done(null);
+        }
+        await appendFactionEventTx(tx, {
+          serverId: ev.serverId, factionId: owner.id, kind: "rebound", occurredAt: ev.occurredAt,
+          payload: { name: owner.name, tag: owner.tag, texture: owner.texture },
+        });
+        if (owner.status === "dormant") {
+          await reviveFactionTx(tx, owner.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
+        }
+        return done("bound" as const);
       });
       if (r === "defense") out.defenses++;
       else if (r === "revived") out.revived++;
       else if (r === "noticed") out.noticed++;
+      else if (r === "bound") out.bound++;
     }
     // The tail: events this consumer skipped outright (wrong type, unparseable
     // payload) opened no transaction. They have no effects, so replaying them
