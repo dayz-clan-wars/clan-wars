@@ -38,6 +38,10 @@ import type {
   RequestJoinOutcome, DecideRequestOutcome,
 } from "./internal";
 import type { ActorRefusal } from "./actor";
+import {
+  clanForDb, directoryDb, clanByTagDb, claimContextDb, myInvitesDb, myRequestsDb,
+  type RosterRow, type ClanView, type DirectoryEntry, type ClanPage, type ClaimContext,
+} from "./reads";
 
 export type { Viewer, Role };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
@@ -46,6 +50,7 @@ export type {
   ActorRefusal, InviteOutcome, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
   SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
+export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -150,4 +155,29 @@ export function claimCeremony(discordId: string, ceremonyId: number, a: { name: 
 /** Confirm moving your clan's base to a pole a member raised your flag at. Leader only. */
 export function confirmRebind(actorDiscordId: string, poleKey: string) {
   return confirmRebindDb(db(), new Date(), actorDiscordId, poleKey);
+}
+
+/** Your clan page: roster, and — role permitting — invites out, requests in, rebind candidates. */
+export function clanFor(discordId: string): Promise<ClanView | "not-linked" | "not-in-clan"> {
+  return clanForDb(db(), discordId, new Date());
+}
+/** The public listing: recruiting clans first, then by name, plus the flag pool. */
+export function directory(): Promise<{ clans: DirectoryEntry[]; flags: { taken: string[]; free: string[] } }> {
+  return directoryDb(db());
+}
+/** A single clan's public page, and whether the viewer may request to join it. */
+export function clanByTag(tag: string, viewerDiscordId: string | null): Promise<ClanPage | null> {
+  return clanByTagDb(db(), tag, viewerDiscordId, new Date());
+}
+/** The viewer's open founding ceremony, or null. */
+export function claimContext(discordId: string): Promise<ClaimContext> {
+  return claimContextDb(db(), discordId);
+}
+/** Invites still open to you. */
+export function myInvites(discordId: string) {
+  return myInvitesDb(db(), discordId, new Date());
+}
+/** Your own outstanding join requests. */
+export function myRequests(discordId: string) {
+  return myRequestsDb(db(), discordId, new Date());
 }

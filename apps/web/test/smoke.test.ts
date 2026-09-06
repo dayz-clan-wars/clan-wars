@@ -94,6 +94,6 @@ describe("the web app reads nothing", () => {
     // the site's half of the pin; packages/roster/test/exports.test.ts is
     // the package's. Both must change for an export to land.
     const roster = await import("@factions/roster");
-    expect(Object.keys(roster).sort()).toEqual(["DECLARE_SOLO_REASONS", "ISSUE_OUTCOME_KINDS", "acceptInvite", "baseFor", "cancelLink", "claimCeremony", "confirmRebind", "decideRequest", "declareSolo", "declineInvite", "demote", "disband", "invite", "kick", "leave", "linkStatus", "promote", "releaseSolo", "rename", "requestJoin", "revokeInvite", "searchGamertags", "setRecruitingPost", "startLink", "transfer", "unlink", "viewerFor", "withdrawRequest"]);
+    expect(Object.keys(roster).sort()).toEqual(["DECLARE_SOLO_REASONS", "ISSUE_OUTCOME_KINDS", "acceptInvite", "baseFor", "cancelLink", "claimCeremony", "claimContext", "clanByTag", "clanFor", "confirmRebind", "decideRequest", "declareSolo", "declineInvite", "demote", "directory", "disband", "invite", "kick", "leave", "linkStatus", "myInvites", "myRequests", "promote", "releaseSolo", "rename", "requestJoin", "revokeInvite", "searchGamertags", "setRecruitingPost", "startLink", "transfer", "unlink", "viewerFor", "withdrawRequest"]);
   });
 });
