@@ -37,6 +37,21 @@ export type BotConfig = {
    * slash command's reply and the ceremony DM point players here.
    */
   siteBaseUrl: string;
+  /**
+   * Created by hand once (runbook); the bot never creates categories or `@Linked`,
+   * only clan roles and channels inside them.
+   */
+  clanTextCategoryId: string;
+  /**
+   * Created by hand once (runbook); the bot never creates categories or `@Linked`,
+   * only clan roles and channels inside them.
+   */
+  clanVoiceCategoryId: string;
+  /**
+   * Created by hand once (runbook); the bot never creates categories or `@Linked`,
+   * only clan roles and channels inside them.
+   */
+  linkedRoleId: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -87,6 +102,19 @@ function optionalSnowflake(env: NodeJS.ProcessEnv, key: string): string | undefi
     throw new Error(
       `${key} must be a Discord channel id — 17 to 20 digits — got ${JSON.stringify(raw)}. ` +
       "Copy it with Developer Mode enabled: right-click the channel, Copy Channel ID.",
+    );
+  }
+  return raw;
+}
+
+/** A snowflake that the bot cannot run without (spec §9.1: "refuses to start with any missing"). */
+function requiredSnowflake(env: NodeJS.ProcessEnv, key: string, what: string): string {
+  const raw = env[key];
+  if (raw === undefined || raw === "") throw new Error(`${key} is not set. The bot cannot start without ${what}.`);
+  if (!SNOWFLAKE_RE.test(raw)) {
+    throw new Error(
+      `${key} must be a Discord id — 17 to 20 digits — got ${JSON.stringify(raw)}. ` +
+      "Copy it with Developer Mode enabled: right-click, Copy ID.",
     );
   }
   return raw;
@@ -181,6 +209,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // pathname is `"/"`, which passes) would otherwise produce a doubled
     // slash in every link built from it.
     siteBaseUrl: (optionalHttpUrl(env, "SITE_BASE_URL") ?? "https://dayzclanwars.com").replace(/\/+$/u, ""),
+    clanTextCategoryId: requiredSnowflake(env, "CLAN_TEXT_CATEGORY_ID", "the category clan text channels are created in"),
+    clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
+    linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
   };
 
   return config;

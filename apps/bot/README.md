@@ -19,6 +19,9 @@ in-game verification tick confirms it.
 | `WAR_LOG_CHANNEL_ID` | no (unset means the war log is off) | The Discord channel id `#war-log` posts to — raids, defenses, and (later) week and season closes (`war_log_events`, spec §9.2). Unset by default: rows still accumulate, nothing posts. The bot needs **View Channel and Send Messages** in that channel. |
 | `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 | `SITE_BASE_URL` | no (default `https://dayzclanwars.com`) | Bare origin of the site. Every retired slash command and the ceremony DM point players here. |
+| `CLAN_TEXT_CATEGORY_ID` | yes | The Discord category id the bot creates clan text channels in. Right-click the category with Developer Mode enabled to copy it. |
+| `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
+| `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
 
 Example `.env` (placeholders only — never commit real values):
 
@@ -34,6 +37,9 @@ BOT_FEED_CHANNEL_ID=1234567890123456789
 WAR_LOG_CHANNEL_ID=1234567890123456789
 FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 SITE_BASE_URL=https://dayzclanwars.com
+CLAN_TEXT_CATEGORY_ID=12345678901234567
+CLAN_VOICE_CATEGORY_ID=22345678901234567
+LINKED_ROLE_ID=32345678901234567
 ```
 
 `BOT_FEED_CHANNEL_ID` above is a placeholder — replace it with your own
@@ -49,6 +55,10 @@ and block the feed queue at the first post.
 3. Under **OAuth2 → URL Generator**, select both the `bot` and `applications.commands` scopes. The `bot` scope is what lets the bot join a server and send messages/DMs; `applications.commands` is what lets it register and respond to slash commands.
 4. Under **Bot Permissions**, at minimum select "Send Messages" (used for the notification fallback when a player's DMs are closed) and "Manage Nicknames" (used to set a player's server nickname to their gamertag once `/link` verifies — not needed for linking itself, only for the rename, so linking still works if this is left off, just without the nickname change). Discord will never let a bot rename the server owner, no matter what permission it holds; that rename attempt always fails, and it's reported to the player as such.
 5. Open the generated URL, pick the target server, and authorize. Copy that server's ID into `DISCORD_GUILD_ID`.
+
+## Permissions and intents
+
+The bot needs **Manage Roles, Manage Channels, and Manage Nicknames** permissions guild-wide to create and manage clan roles and channels, and to rename members. Enable the **Server Members Intent** on the Developer Portal → Bot page; the gateway will refuse to connect without it once the intent is requested. The bot's own role must sit **above** every clan role it creates — Discord places new roles at the bottom by default, so this holds unless you manually reorder roles after the bot runs.
 
 ## Command registration is per-guild, not global
 

@@ -4,6 +4,7 @@ import { loadConfig } from "../src/config.js";
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
   DATABASE_URL: "postgres://x",
+  CLAN_TEXT_CATEGORY_ID: "12345678901234567", CLAN_VOICE_CATEGORY_ID: "22345678901234567", LINKED_ROLE_ID: "32345678901234567",
 };
 
 const env = () => OK;
@@ -187,6 +188,22 @@ describe("loadConfig", () => {
     });
     it("⚠️ strips a trailing slash, unlike FLAG_IMAGE_BASE_URL: every siteBaseUrl consumer concatenates its own path with no strip of its own, so an unstripped trailing slash would double up", () => {
       expect(loadConfig({ ...env(), SITE_BASE_URL: "https://dayzclanwars.com/" }).siteBaseUrl).toBe("https://dayzclanwars.com");
+    });
+  });
+
+  it.each(["CLAN_TEXT_CATEGORY_ID", "CLAN_VOICE_CATEGORY_ID", "LINKED_ROLE_ID"])(
+    "⚠️ refuses to start without %s (spec §9.1)", (key) => {
+      expect(() => loadConfig({ ...OK, [key]: undefined })).toThrow(key);
+      expect(() => loadConfig({ ...OK, [key]: "" })).toThrow(key);
+    },
+  );
+  it("rejects a malformed clan category or role id at load, not at first use", () => {
+    expect(() => loadConfig({ ...OK, LINKED_ROLE_ID: "000000000000000000" })).toThrow(/LINKED_ROLE_ID/u);
+    expect(() => loadConfig({ ...OK, CLAN_TEXT_CATEGORY_ID: "abc" })).toThrow(/CLAN_TEXT_CATEGORY_ID/u);
+  });
+  it("reads the three ids", () => {
+    expect(loadConfig(OK)).toMatchObject({
+      clanTextCategoryId: "12345678901234567", clanVoiceCategoryId: "22345678901234567", linkedRoleId: "32345678901234567",
     });
   });
 });
