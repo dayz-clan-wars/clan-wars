@@ -134,7 +134,9 @@ const TABLES = {
   leave: LEAVE, kick: KICK, role: ROLE, transfer: TRANSFER, disband: DISBAND, rename: RENAME, recruiting: RECRUITING, rebind: REBIND, claim: CLAIM, input: INPUT,
 } as const;
 export type Action = keyof typeof TABLES;
-export const code = (action: Action, outcome: string): string => `${action}.${outcome}`;
+export function code<A extends Action>(action: A, outcome: keyof (typeof TABLES)[A] & string): string {
+  return `${action}.${outcome}`;
+}
 
 /** Every code a roster route can redirect with, flattened to "<action>.<outcome>". A null-prototype object so a query-string key cannot reach Object.prototype. */
 export const RESULT_COPY: Record<string, string> = Object.assign(Object.create(null), Object.fromEntries(
