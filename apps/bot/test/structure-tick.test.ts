@@ -7,12 +7,14 @@ import {
   factions,
   factionMembers,
   identityLinks,
+  clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { noticeClanTx, PgNoticeStore } from "@factions/roster/internal";
-import { PgStructureStore } from "../src/structure-store.js";
+import { PgStructureStore, type StructureStore } from "../src/structure-store.js";
 import { structureTick } from "../src/structure-tick.js";
+import type { GuildGateway } from "../src/guild.js";
 import { seedFaction } from "./seed.js";
 import { FakeGuild } from "./fake-guild.js";
 
@@ -200,7 +202,7 @@ describe("structureTick", () => {
     await structureTick(store, guild, { linkedRoleId: "linked" });
     guild.calls.length = 0;
     const r = await structureTick(store, guild, { linkedRoleId: "linked" });
-    expect(r).toEqual({ created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0, nicknamesCleared: 0, errors: 0 });
+    expect(r).toEqual({ created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0, nicknamesCleared: 0, noticesFailed: 0, errors: 0 });
     expect(guild.calls).toEqual([]);
   });
 
@@ -212,5 +214,101 @@ describe("structureTick", () => {
     const [row] = await store.clansWithStructure();
     const [n] = await notices.readUnposted(10);
     expect(n).toMatchObject({ kind: "joined", target: "channel", discordTargetId: row!.textChannelId });
+  });
+  it("⚠️ adopts a role that already carries the clan's exact name instead of creating a second one", async () => {
+    // The shape of a create whose column write was lost: the object exists, no
+    // clan owns it, and the name matches exactly.
+    guild.roles.set("stray", { name: "Night Bears", members: new Set() });
+    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    expect(r).toMatchObject({ created: 1, errors: 0 });
+    const [row] = await store.clansWithStructure();
+    expect(row!.roleId).toBe("stray");
+    expect(guild.calls.filter((c) => c.startsWith("createRole"))).toEqual([]);
+  });
+
+  it("⚠️ a role-id write that keeps failing does not create a second role every tick", async () => {
+    const broken: StructureStore = {
+      clansNeedingStructure: () => store.clansNeedingStructure(),
+      clansToTearDown: () => store.clansToTearDown(),
+      clansWithStructure: () => store.clansWithStructure(),
+      setRoleId: async () => { throw new Error("lock timeout on factions"); },
+      setTextChannelId: (id, v) => store.setTextChannelId(id, v),
+      setVoiceChannelId: (id, v) => store.setVoiceChannelId(id, v),
+      fullMembersByClan: () => store.fullMembersByClan(),
+      linkedDiscordIds: () => store.linkedDiscordIds(),
+      failChannelNotices: (id, at) => store.failChannelNotices(id, at),
+    };
+    for (let i = 0; i < 3; i++) {
+      const r = await structureTick(broken, guild, { linkedRoleId: "linked" });
+      expect(r).toMatchObject({ created: 0, errors: 1 });
+    }
+    // One role, adopted by name on every tick after the first, not three.
+    expect(guild.calls.filter((c) => c.startsWith("createRole"))).toHaveLength(1);
+    expect(guild.roles.size).toBe(2); // Linked + the one clan role
+  });
+
+  it("⚠️ a role deleted by hand is reported once, not recreated, and step 4 stops diffing against it", async () => {
+    await structureTick(store, guild, { linkedRoleId: "linked" });
+    const [row] = await store.clansWithStructure();
+    guild.roles.delete(row!.roleId!);
+    guild.calls.length = 0;
+    const onError = vi.fn();
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", onError });
+    expect(onError.mock.calls.map((c) => c[0])).toEqual([`missing:${row!.roleId}`]);
+    expect(guild.calls.filter((c) => c.startsWith("createRole"))).toEqual([]);
+    // Without the skip this is one guaranteed-10011 addRole per full member, per tick, forever.
+    expect(guild.calls.filter((c) => c.startsWith("addRole"))).toEqual([]);
+    expect(r).toMatchObject({ created: 0, roleAdds: 0, roleRemoves: 0, errors: 0 });
+  });
+
+  it("⚠️ teardown fails the clan's queued channel notices before the channel column goes null", async () => {
+    await structureTick(store, guild, { linkedRoleId: "linked" });
+    await db.transaction((tx) => noticeClanTx(tx, { serverId, factionId: BEAR, kind: "joined", occurredAt: now, payload: { gamertag: "Two" } }));
+    const notices = new PgNoticeStore(db);
+    expect(await notices.readUnposted(10)).toHaveLength(1);
+
+    await db.update(factions).set({ status: "disbanded" }).where(eq(factions.id, BEAR));
+    const r = await structureTick(store, guild, { linkedRoleId: "linked" });
+    expect(r).toMatchObject({ tornDown: 1, noticesFailed: 1, errors: 0 });
+
+    // Without the stamp this row matches neither readUnposted (the channel
+    // column it coalesces onto is null) nor any cleanup — stuck forever, and
+    // counted forever by countUnpostedNotices.
+    expect(await notices.readUnposted(10)).toEqual([]);
+    const [n] = await db.select({ failedAt: clanNotices.failedAt }).from(clanNotices);
+    expect(n!.failedAt).not.toBeNull();
+  });
+
+  it("⚠️ never throws when the guild cache reads throw, and still returns a full result", async () => {
+    // What `cachedGuild()` does when `guilds.fetch` failed at start-up.
+    const blind: GuildGateway = {
+      fetchAllMembers: () => guild.fetchAllMembers(),
+      createRole: (n) => guild.createRole(n),
+      createTextChannel: (n, r) => guild.createTextChannel(n, r),
+      createVoiceChannel: (n, r) => guild.createVoiceChannel(n, r),
+      deleteRole: (i) => guild.deleteRole(i),
+      deleteChannel: (i) => guild.deleteChannel(i),
+      roleName: (i) => guild.roleName(i),
+      channelName: (i) => guild.channelName(i),
+      findRoleByName: (n) => guild.findRoleByName(n),
+      findChannelByName: (n, k) => guild.findChannelByName(n, k),
+      renameRole: (i, n) => guild.renameRole(i, n),
+      renameChannel: (i, n) => guild.renameChannel(i, n),
+      roleMembers: () => { throw new Error("guild not fetched yet"); },
+      isMember: () => { throw new Error("guild not fetched yet"); },
+      addRole: (u, r) => guild.addRole(u, r),
+      removeRole: (u, r) => guild.removeRole(u, r),
+      setNickname: (u, n) => guild.setNickname(u, n),
+    };
+    const onError = vi.fn();
+    const r = await structureTick(store, blind, { linkedRoleId: "linked", onError });
+    expect(r).toEqual({
+      created: 1, tornDown: 0, renamed: 0,
+      roleAdds: 0, roleRemoves: 0,
+      linkedAdds: 0, linkedRemoves: 0,
+      nicknamesCleared: 0, noticesFailed: 0,
+      errors: 2, // step 4's isMember, step 5's read — the pass still finishes
+    });
+    expect(onError.mock.calls.map((c) => c[0])).toEqual([`roles:${BEAR}`, "linked-read"]);
   });
 });

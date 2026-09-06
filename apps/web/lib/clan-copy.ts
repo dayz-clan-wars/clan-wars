@@ -82,7 +82,7 @@ const ROLE: Record<SetRoleOutcome | ActorRefusal, string> = {
 const TRANSFER: Record<TransferOutcome | ActorRefusal | "unconfirmed", string> = {
   ...REFUSAL, ok: "Leadership transferred. You are now an officer.", "not-leader": "Only the leader can transfer leadership.", "target-not-member": "That player is not a full member of your clan.", unconfirmed: "Tick the box to confirm before transferring leadership.",
 };
-export const DISBAND_WARNING = "Disbanding deletes the clan's text and voice channels and their entire history is deleted with them. Nothing is archived.";
+export const DISBAND_WARNING = "The clan's text and voice channels are deleted, along with their entire history. Nothing is archived.";
 const DISBAND: Record<"ok" | "not-leader" | ActorRefusal | "unconfirmed", string> = {
   ...REFUSAL,
   ok: `Disbanded. The flag and the pole are back in the pool; the name and tag are held. The pole stays private for ${days(RELEASED_POLE_GRACE_MS)}, then becomes public if nobody declares it. The clan's channels are gone.`,

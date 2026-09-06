@@ -11,6 +11,8 @@ export type StructureTickResult = {
   linkedAdds: number;
   linkedRemoves: number;
   nicknamesCleared: number;
+  /** Channel notices stamped `failed_at` because their clan's channel was torn down. */
+  noticesFailed: number;
   errors: number;
 };
 
@@ -43,6 +45,7 @@ export async function structureTick(
     linkedAdds: 0,
     linkedRemoves: 0,
     nicknamesCleared: 0,
+    noticesFailed: 0,
     errors: 0,
   };
 
@@ -55,22 +58,43 @@ export async function structureTick(
     }
   };
 
+  const needing = await store.clansNeedingStructure();
+
+  // Every Discord id some clan already owns. An object with a clan's expected
+  // name that appears here belongs to a DIFFERENT clan and must never be
+  // adopted; anything else with that exact name is either a create whose
+  // column write was lost or a hand-made object, and adopting it is what keeps
+  // the create step idempotent — without this, a column write that fails
+  // persistently creates a fresh role/channel on every tick, forever.
+  const owned = new Set<string>();
+  for (const row of [...needing, ...(await store.clansWithStructure())]) {
+    for (const id of [row.roleId, row.textChannelId, row.voiceChannelId]) {
+      if (id !== null) owned.add(id);
+    }
+  }
+  const adopt = (id: string | null): string | null => (id !== null && !owned.has(id) ? id : null);
+
   // 1. Create — column right after each create, so a crash in between resumes at the next missing column.
-  for (const row of await store.clansNeedingStructure()) {
+  for (const row of needing) {
     await step(`create:${row.id}`, async () => {
       let roleId = row.roleId;
       if (roleId === null) {
-        roleId = await guild.createRole(roleNameFor(row));
+        roleId = adopt(guild.findRoleByName(roleNameFor(row))) ?? (await guild.createRole(roleNameFor(row)));
+        owned.add(roleId);
         await store.setRoleId(row.id, roleId);
       }
       let textChannelId = row.textChannelId;
       if (textChannelId === null) {
-        textChannelId = await guild.createTextChannel(textChannelNameFor(row), roleId);
+        const textName = textChannelNameFor(row);
+        textChannelId = adopt(guild.findChannelByName(textName, "text")) ?? (await guild.createTextChannel(textName, roleId));
+        owned.add(textChannelId);
         await store.setTextChannelId(row.id, textChannelId);
       }
       let voiceChannelId = row.voiceChannelId;
       if (voiceChannelId === null) {
-        voiceChannelId = await guild.createVoiceChannel(voiceChannelNameFor(row), roleId);
+        const voiceName = voiceChannelNameFor(row);
+        voiceChannelId = adopt(guild.findChannelByName(voiceName, "voice")) ?? (await guild.createVoiceChannel(voiceName, roleId));
+        owned.add(voiceChannelId);
         await store.setVoiceChannelId(row.id, voiceChannelId);
       }
       out.created++;
@@ -81,6 +105,10 @@ export async function structureTick(
   for (const row of await store.clansToTearDown()) {
     await step(`teardown:${row.id}`, async () => {
       if (row.textChannelId !== null) {
+        // ⚠️ Before the column goes null: `readUnposted` coalesces onto it, so
+        // a notice still queued here would match neither that query nor any
+        // cleanup once the channel is gone.
+        out.noticesFailed += await store.failChannelNotices(row.id, new Date());
         await guild.deleteChannel(row.textChannelId);
         await store.setTextChannelId(row.id, null);
       }
@@ -135,6 +163,10 @@ export async function structureTick(
   for (const row of await store.clansWithStructure()) {
     await step(`roles:${row.id}`, async () => {
       const roleId = row.roleId!;
+      // Deleted by hand: step 3 already reported `missing:<id>`. Diffing against
+      // a dead role id yields `actual = ∅` and an addRole per full member, each
+      // a guaranteed 10011 — one failed REST call per clan per tick, forever.
+      if (guild.roleName(roleId) === null) return;
       const members = fullMembersByClan.get(row.id) ?? [];
       const desired = new Set(members.filter((id) => guild.isMember(id)));
       const actual = guild.roleMembers(roleId);
@@ -155,9 +187,17 @@ export async function structureTick(
 
   // 5. @Linked — for each user leaving the link set, clear the nickname THEN remove the
   // role (the link is gone; the role must go regardless of how the nickname clear went).
-  const linkedIds = await store.linkedDiscordIds();
-  const desiredLinked = new Set([...linkedIds].filter((id) => guild.isMember(id)));
-  const actualLinked = guild.roleMembers(opts.linkedRoleId);
+  // ⚠️ Inside `step` like everything else: both reads go through the gateway's
+  // guild cache, which throws when the guild was never fetched. Outside, that
+  // throw would abort the pass and lose the whole result — errors included —
+  // which is exactly what the "never throws" contract above promises it will not do.
+  let desiredLinked = new Set<string>();
+  let actualLinked = new Set<string>();
+  await step("linked-read", async () => {
+    const linkedIds = await store.linkedDiscordIds();
+    desiredLinked = new Set([...linkedIds].filter((id) => guild.isMember(id)));
+    actualLinked = guild.roleMembers(opts.linkedRoleId);
+  });
 
   for (const id of actualLinked) {
     if (desiredLinked.has(id)) continue;

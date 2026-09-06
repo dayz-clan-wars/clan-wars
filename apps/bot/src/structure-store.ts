@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, identityLinks } from "@factions/db";
+import { factions, factionMembers, identityLinks, clanNotices } from "@factions/db";
 import { and, eq, isNull, isNotNull, inArray, or, asc } from "drizzle-orm";
 
 export type StructureRow = {
@@ -27,6 +27,14 @@ export interface StructureStore {
   fullMembersByClan(): Promise<Map<number, string[]>>;
   /** Every identity_links.discord_id. */
   linkedDiscordIds(): Promise<Set<string>>;
+  /**
+   * Stamp `failed_at` on the clan's still-queued CHANNEL notices. Called at
+   * teardown, before the text-channel column is nulled: once the channel is
+   * gone those rows can never post, and `readUnposted` coalesces on that
+   * column, so leaving them would strand them — unpostable, unfailed, and
+   * counted forever by `countUnpostedNotices`. Returns the row count.
+   */
+  failChannelNotices(factionId: number, at: Date): Promise<number>;
 }
 
 export class PgStructureStore implements StructureStore {
@@ -149,5 +157,21 @@ export class PgStructureStore implements StructureStore {
   async linkedDiscordIds(): Promise<Set<string>> {
     const rows = await this.db.select({ discordId: identityLinks.discordId }).from(identityLinks);
     return new Set(rows.map((r) => r.discordId));
+  }
+
+  async failChannelNotices(factionId: number, at: Date): Promise<number> {
+    const rows = await this.db
+      .update(clanNotices)
+      .set({ failedAt: at })
+      .where(
+        and(
+          eq(clanNotices.factionId, factionId),
+          eq(clanNotices.target, "channel"),
+          isNull(clanNotices.postedAt),
+          isNull(clanNotices.failedAt),
+        ),
+      )
+      .returning({ id: clanNotices.id });
+    return rows.length;
   }
 }

@@ -33,6 +33,10 @@ export interface GuildGateway {
   /** Cache lookups; null when the id is not in the cache (deleted by hand, or never existed). */
   roleName(roleId: string): string | null;
   channelName(channelId: string): string | null;
+  /** Cache: id of a role with exactly this name, or null. Used to adopt an object a lost column write orphaned. */
+  findRoleByName(name: string): string | null;
+  /** Cache: id of a channel with exactly this name under the matching clan category, or null. */
+  findChannelByName(name: string, kind: "text" | "voice"): string | null;
   renameRole(roleId: string, name: string): Promise<void>;
   renameChannel(channelId: string, name: string): Promise<void>;
   /** Cache: user ids holding the role. Empty set for an unknown role. */
@@ -57,7 +61,7 @@ type RealGuild = {
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
   channels: {
-    cache: Map<string, { id: string; name: string; setName(name: string): Promise<unknown> }>;
+    cache: Map<string, { id: string; name: string; parentId: string | null; setName(name: string): Promise<unknown> }>;
     create(opts: Record<string, unknown>): Promise<{ id: string }>;
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
@@ -87,12 +91,35 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
   let guildPromise: Promise<RealGuild> | undefined;
   let resolvedGuild: RealGuild | undefined;
 
+  // ⚠️ Memoize only a RESOLVED fetch. A rejected promise left in `guildPromise`
+  // would be handed to every later caller, so one transient `guilds.fetch`
+  // failure would wedge every structural write for the process lifetime.
   const getGuild = async (): Promise<RealGuild> => {
-    guildPromise ??= (client.guilds.fetch(cfg.guildId) as unknown as Promise<RealGuild>).then((g) => {
-      resolvedGuild = g;
-      return g;
-    });
+    guildPromise ??= (client.guilds.fetch(cfg.guildId) as unknown as Promise<RealGuild>).then(
+      (g) => {
+        resolvedGuild = g;
+        return g;
+      },
+      (err: unknown) => {
+        guildPromise = undefined; // clear the memo so the next call retries
+        console.error("guild fetch failed (retrying on next use)", err);
+        throw err;
+      },
+    );
     return guildPromise;
+  };
+
+  /**
+   * The bot's own user id, for the channel overwrites below. Null only before
+   * login; the gateway is constructed at start-up but every method runs after
+   * `clientReady`, so this is a programming error rather than a runtime case.
+   */
+  const botUserId = (): string => {
+    const id = client.user?.id;
+    if (id === undefined) {
+      throw new Error("GuildGateway: client.user is null — the gateway is only usable after login");
+    }
+    return id;
   };
 
   const cachedGuild = (): RealGuild => {
@@ -121,9 +148,15 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
         name,
         type: ChannelType.GuildText,
         parent: cfg.clanTextCategoryId,
+        // ⚠️ The bot needs its OWN entry. `GuildChannelManager.create` sends
+        // permission_overwrites explicitly, which REPLACES the set synced from
+        // the category, and the @everyone deny applies to the bot too (it is
+        // not an Administrator). Without this, every clan channel notice
+        // 50001s and the increment's headline feature never delivers.
         permissionOverwrites: [
           { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
           { id: roleId, allow: [PermissionFlagsBits.ViewChannel] },
+          { id: botUserId(), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
         ],
       });
       return channel.id;
@@ -135,9 +168,12 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
         name,
         type: ChannelType.GuildVoice,
         parent: cfg.clanVoiceCategoryId,
+        // Same reason as the text channel: the bot must keep View (and Connect,
+        // so a later increment can move or clean up the channel) on its own.
         permissionOverwrites: [
           { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
           { id: roleId, allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] },
+          { id: botUserId(), allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] },
         ],
       });
       return channel.id;
@@ -173,6 +209,24 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
 
     channelName(channelId) {
       return cachedGuild().channels.cache.get(channelId)?.name ?? null;
+    },
+
+    findRoleByName(name) {
+      for (const role of cachedGuild().roles.cache.values()) {
+        if (role.name === name) return role.id;
+      }
+      return null;
+    },
+
+    // The category parent is part of the match: a clan's text and voice names
+    // never collide, but an unrelated channel elsewhere in the guild with the
+    // same name must not be adopted as a clan's.
+    findChannelByName(name, kind) {
+      const parentId = kind === "text" ? cfg.clanTextCategoryId : cfg.clanVoiceCategoryId;
+      for (const channel of cachedGuild().channels.cache.values()) {
+        if (channel.name === name && channel.parentId === parentId) return channel.id;
+      }
+      return null;
     },
 
     async renameRole(roleId, name) {

@@ -90,7 +90,7 @@ describe("discord wiring", () => {
       created: 0, tornDown: 0, renamed: 0,
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
-      nicknamesCleared: 0, errors: 0,
+      nicknamesCleared: 0, noticesFailed: 0, errors: 0,
     });
   });
 

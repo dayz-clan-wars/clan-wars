@@ -19,15 +19,15 @@ describe("clan object names (spec §9.1)", () => {
 
 function fakeClient() {
   const rolesCache = new Map<string, { id: string; name: string; members: Map<string, unknown> }>();
-  const channelsCache = new Map<string, { id: string; name: string }>();
+  const channelsCache = new Map<string, { id: string; name: string; parentId: string | null }>();
   const members = new Map<string, { id: string; manageable: boolean; roles: { add: ReturnType<typeof vi.fn>; remove: ReturnType<typeof vi.fn> }; setNickname: ReturnType<typeof vi.fn> }>();
   const guild = {
     id: "g", ownerId: "owner",
     roles: { cache: rolesCache, create: vi.fn(async ({ name }: { name: string }) => { const r = { id: `r-${name}`, name, members: new Map() }; rolesCache.set(r.id, r); return r; }), fetch: vi.fn(async (id: string) => rolesCache.get(id) ?? null) },
-    channels: { cache: channelsCache, create: vi.fn(async (o: { name: string; type?: ChannelType; parent?: string; permissionOverwrites: unknown[] }) => { const c = { id: `c-${o.name}`, name: o.name, delete: vi.fn() }; channelsCache.set(c.id, c); return c; }), fetch: vi.fn(async (id: string) => channelsCache.get(id) ?? null) },
+    channels: { cache: channelsCache, create: vi.fn(async (o: { name: string; type?: ChannelType; parent?: string; permissionOverwrites: unknown[] }) => { const c = { id: `c-${o.name}`, name: o.name, parentId: o.parent ?? null, delete: vi.fn() }; channelsCache.set(c.id, c); return c; }), fetch: vi.fn(async (id: string) => channelsCache.get(id) ?? null) },
     members: { cache: members, fetch: vi.fn(async (id?: string) => (id ? members.get(id) : members)), me: { permissions: { has: () => true } } },
   };
-  const client = { guilds: { fetch: vi.fn(async () => guild) } };
+  const client = { user: { id: "bot" }, guilds: { fetch: vi.fn(async () => guild) } };
   return { client, guild, rolesCache, channelsCache, members };
 }
 const CFG = { guildId: "g", clanTextCategoryId: "cat-t", clanVoiceCategoryId: "cat-v" };
@@ -40,9 +40,14 @@ describe("createGuildGateway", () => {
     expect(id).toBe("c-clan-bear");
     const call = f.guild.channels.create.mock.calls[0]![0];
     expect(call).toMatchObject({ name: "clan-bear", type: ChannelType.GuildText, parent: "cat-t" });
+    // ⚠️ The third entry is the bot's own. The @everyone deny applies to the
+    // bot too, and `channels.create` REPLACES the category's synced overwrites,
+    // so without this the bot cannot see — let alone post in — the channel it
+    // just made, and every queued clan notice 50001s.
     expect(call.permissionOverwrites).toEqual([
       { id: "g", deny: [PermissionFlagsBits.ViewChannel] },
       { id: "r-Bears", allow: [PermissionFlagsBits.ViewChannel] },
+      { id: "bot", allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.SendMessages] },
     ]);
   });
   it("creates a voice channel in the voice category with View + Connect for the role", async () => {
@@ -52,6 +57,7 @@ describe("createGuildGateway", () => {
     const call = f.guild.channels.create.mock.calls[0]![0];
     expect(call).toMatchObject({ name: "BEAR", type: ChannelType.GuildVoice, parent: "cat-v" });
     expect(call.permissionOverwrites[1]).toEqual({ id: "r-Bears", allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] });
+    expect(call.permissionOverwrites[2]).toEqual({ id: "bot", allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] });
   });
   it("⚠️ deleteRole and deleteChannel tolerate an object that is already gone", async () => {
     const f = fakeClient();
@@ -72,6 +78,30 @@ describe("createGuildGateway", () => {
     expect(g.roleName("r1")).toBe("Bears");
     expect(g.roleName("nope")).toBeNull();
   });
+  it("finds a role and a channel by exact name, the channel scoped to its clan category", async () => {
+    const f = fakeClient();
+    const g = createGuildGateway(f.client as never, CFG);
+    await g.createRole("Night Bears");
+    await g.createTextChannel("clan-bear", "r-Night Bears");
+    f.channelsCache.set("elsewhere", { id: "elsewhere", name: "clan-bear", parentId: "some-other-category" });
+    await g.fetchAllMembers();
+    expect(g.findRoleByName("Night Bears")).toBe("r-Night Bears");
+    expect(g.findRoleByName("night bears")).toBeNull(); // exact match only
+    expect(g.findChannelByName("clan-bear", "text")).toBe("c-clan-bear");
+    expect(g.findChannelByName("clan-bear", "voice")).toBeNull(); // wrong category
+    expect(g.findChannelByName("clan-nope", "text")).toBeNull();
+  });
+
+  it("⚠️ a rejected guild fetch is not memoized — the next call retries", async () => {
+    const f = fakeClient();
+    f.client.guilds.fetch = vi.fn()
+      .mockRejectedValueOnce(new Error("503"))
+      .mockResolvedValue(f.guild) as never;
+    const g = createGuildGateway(f.client as never, CFG);
+    await expect(g.fetchAllMembers()).rejects.toThrow("503");
+    await expect(g.fetchAllMembers()).resolves.toBe(0);
+  });
+
   it("setNickname reports applyNickname's outcome instead of throwing", async () => {
     const f = fakeClient();
     f.members.set("u1", { id: "u1", manageable: false, roles: { add: vi.fn(), remove: vi.fn() }, setNickname: vi.fn() });

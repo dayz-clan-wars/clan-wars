@@ -397,7 +397,25 @@ export async function start(cfg: BotConfig): Promise<void> {
   // lifetime (owner, outranked, no permission) — shared between the
   // start-up pass and every tick pass so neither repeats the other's log.
   const nicknameNoRetry = new Set<string>();
+  // ⚠️ False until one `fetchAllMembers()` resolves. `guild.members.fetch()`
+  // rejects with GuildMembersTimeout after 120s on a large or slow guild, and
+  // without a retry the member cache stays whatever gateway events happen to
+  // deliver — so `isMember` is false for anyone who never speaks and they
+  // never get their clan role for the process lifetime. (A cold cache only
+  // ever under-acts: `desired` is filtered by `isMember` and every id in
+  // `actual` comes from the member cache too, so no role is wrongly stripped.)
+  let membersFetched = false;
+  const tryFetchMembers = async (): Promise<void> => {
+    try {
+      const memberCount = await guildGateway.fetchAllMembers();
+      membersFetched = true;
+      console.log(`guild members fetched: ${memberCount}`);
+    } catch (err) {
+      console.error("guild members fetch failed (retrying next tick)", err);
+    }
+  };
   const runStructure = async (label: string): Promise<void> => {
+    if (!membersFetched) await tryFetchMembers();
     const s = await structureTick(structureStore, guildGateway, {
       linkedRoleId: cfg.linkedRoleId,
       nicknameNoRetry,
@@ -412,6 +430,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (s.linkedAdds) parts.push(`linkedAdds ${s.linkedAdds}`);
     if (s.linkedRemoves) parts.push(`linkedRemoves ${s.linkedRemoves}`);
     if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
+    if (s.noticesFailed) parts.push(`noticesFailed ${s.noticesFailed}`);
+    // ⚠️ Included, or a pass that did nothing but fail prints nothing at all —
+    // and this line is what an operator greps.
+    if (s.errors) parts.push(`errors ${s.errors}`);
     if (parts.length > 0) console.log(`structure ${label}: ${parts.join(", ")}`);
   };
 
@@ -759,15 +781,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
 
     // §9.1 "reconciled on start": populate the member cache and run one
-    // structure pass before the interval starts, each in its own try/catch —
-    // a failed fetch here logs and continues (a stale or empty member cache)
-    // rather than blocking the bot forever; the per-tick pass below retries.
-    try {
-      const memberCount = await guildGateway.fetchAllMembers();
-      console.log(`guild members fetched: ${memberCount}`);
-    } catch (err) {
-      console.error("guild member fetch failed", err);
-    }
+    // structure pass before the interval starts. `runStructure` fetches the
+    // members itself when it has not yet succeeded, so a failed fetch logs and
+    // continues rather than blocking the bot forever, and every later pass
+    // retries it until one succeeds.
     try {
       await runStructure("on start");
     } catch (err) {

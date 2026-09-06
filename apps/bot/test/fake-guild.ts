@@ -52,6 +52,14 @@ export class FakeGuild implements GuildGateway {
   channelName(id: string) {
     return this.channels.get(id)?.name ?? null;
   }
+  findRoleByName(name: string) {
+    for (const [id, r] of this.roles) if (r.name === name) return id;
+    return null;
+  }
+  findChannelByName(name: string, kind: "text" | "voice") {
+    for (const [id, c] of this.channels) if (c.name === name && c.kind === kind) return id;
+    return null;
+  }
   async renameRole(id: string, name: string) {
     this.roles.get(id)!.name = name;
     this.calls.push(`renameRole ${id} ${name}`);

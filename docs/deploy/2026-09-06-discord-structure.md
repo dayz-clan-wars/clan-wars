@@ -14,7 +14,9 @@ creates 3N objects and then goes quiet.
    every player role it must rename and above where clan roles will appear (new roles are
    created at the bottom, so this holds unless someone moves them).
 3. **Create by hand, once:** a text category (e.g. `CLANS`), a voice category (e.g. `CLAN VOICE`),
-   and a role `Linked`. Copy their ids into the bot `.env`:
+   and a role `Linked`. **Never assign `@Linked` by hand:** the reconciler treats a holder with
+   no link row as an unlink — it clears that user's nickname and takes the role back. Copy their
+   ids into the bot `.env`:
        CLAN_TEXT_CATEGORY_ID=…
        CLAN_VOICE_CATEGORY_ID=…
        LINKED_ROLE_ID=…
@@ -37,6 +39,13 @@ creates 3N objects and then goes quiet.
 8. **If someone deletes a clan channel by hand**, the bot logs `structure: missing:<id>` once
    per tick and does not recreate it (an operator's deletion is a decision). To have it
    recreated: `update factions set discord_text_channel_id = null where id = …;` — the next
-   tick creates a fresh one.
+   tick creates a fresh one. Note that a role, or a channel in one of the two clan categories,
+   whose name exactly matches a clan's expected name is **adopted** rather than duplicated: the
+   bot writes its id into the column instead of creating a second object. That is what makes a
+   lost column write self-heal — but it also means a hand-made `Night Bears` role or
+   `#clan-bear` channel becomes that clan's. Do not create objects with those names by hand.
+   The bot must also keep its own permission overwrite on each clan channel (View Channel +
+   Send Messages on text, View + Connect on voice); remove it and that clan's notices stop
+   delivering.
 9. **What waits.** `[TAG]` nickname prefixes, `@Alpha`, guest-pass overwrites and the
    guild-removal handler are increments 4 and 7.
