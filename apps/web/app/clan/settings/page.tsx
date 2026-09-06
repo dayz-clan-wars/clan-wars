@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { clanFor } from "@factions/roster";
 import { CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
-import { RESULT_COPY } from "@/lib/clan-copy";
+import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS } from "@/lib/clan-limits";
 import { when, days } from "@/lib/format";
@@ -99,6 +99,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <section className="mt-4 rounded-lg border border-rust bg-frame p-5">
             <h2 className={label}>Disband</h2>
             <p className="mt-2 text-sm text-ink-2">Irreversible. The flag and the pole return to the pool for anyone to claim; the name and tag are held so nobody can impersonate you. Every member is out, with no cooldown.</p>
+            <p className="mt-2 text-sm text-ink-2">{DISBAND_WARNING}</p>
             <form className="mt-3" action="/api/clan/disband" method="post">
               <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> Disband {clan.name}.</label>
               <button className="mt-3 min-h-[44px] rounded-md border border-rust px-4 font-display text-ink" type="submit">Disband the clan</button>
