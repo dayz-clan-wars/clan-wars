@@ -180,6 +180,15 @@ describe("the roster package's page reads", () => {
     it("no such clan is null", async () => {
       expect(await clanByTagDb(db, "NOPE", "d2", now)).toBeNull();
     });
+
+    it("a reserved clan's tag is null until activation (spec §4.4, matching directoryDb)", async () => {
+      await seedFaction(db, {
+        serverId, tag: "REX", name: "Foxes", texture: "Flag_Rex", status: "reserved",
+        poleKey: "8000.00:100.00:8000.00", x: 8000, z: 8000,
+        leaderDiscordId: "d3", createdAt: now, reservedUntil: new Date(now.getTime() + 86_400_000),
+      });
+      expect(await clanByTagDb(db, "REX", "d2", now)).toBeNull();
+    });
   });
 
   describe("claimContext", () => {

@@ -161,7 +161,15 @@ async function canRequestFor(db: Database, clan: { id: number; recruiting: boole
   return "yes";
 }
 
-/** The public clan page (target spec §10.3). `roster` carries gamertag and role only — no coordinate ever passes through here. */
+/**
+ * The public clan page (target spec §10.3). `roster` carries gamertag and
+ * role only — no coordinate ever passes through here.
+ *
+ * Filtered to `active`/`dormant` like `directoryDb` (spec §4.4), not the
+ * wider HOLDING set: a `reserved` clan holds its flag but is not yet public,
+ * so its tag must not resolve here either — until activation this returns
+ * null, same as a tag nobody has claimed.
+ */
 export async function clanByTagDb(db: Database, tag: string, viewerDiscordId: string | null, now: Date = new Date()): Promise<ClanPage | null> {
   const serverId = await activeServerId(db);
   const [row] = await db.select({
@@ -171,7 +179,7 @@ export async function clanByTagDb(db: Database, tag: string, viewerDiscordId: st
     memberCount: sql<number>`count(*) filter (where ${factionMembers.status} = 'full')`,
   }).from(factions)
     .leftJoin(factionMembers, eq(factionMembers.factionId, factions.id))
-    .where(and(eq(factions.serverId, serverId), eq(sql`lower(${factions.tag})`, tag.toLowerCase()), inArray(factions.status, HOLDING)))
+    .where(and(eq(factions.serverId, serverId), eq(sql`lower(${factions.tag})`, tag.toLowerCase()), inArray(factions.status, ["active", "dormant"])))
     .groupBy(factions.id);
   if (!row) return null;
 
