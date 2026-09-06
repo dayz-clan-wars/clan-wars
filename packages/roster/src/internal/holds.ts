@@ -18,9 +18,9 @@ export type HoldReason = "renamed" | "disbanded";
  * automatically at commit/rollback — nothing here ever unlocks by hand.
  *
  * Lock order (spec §4.12): this sits with `factions` at the head of the
- * order — taken right after the `factions` row lock in `rename`, and right
- * after the `factions` insert in `reserve`. Nothing takes it after any
- * later table.
+ * order — taken right after the `factions` row lock in `rename`, and in
+ * `reserve` right after the ceremony claim, before the `factions` insert.
+ * Nothing takes it after any later table.
  */
 export async function lockIdentity(tx: Tx, serverId: number): Promise<void> {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtext('identity'), ${serverId})`);
