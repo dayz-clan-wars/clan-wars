@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, identityLinks, players, poles, events, admFiles, declarations,
+  servers, factions, factionMembers, identityLinks, players, poles, events, admFiles, declarations, clanNotices,
   type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS } from "@factions/domain";
 import { declareTx, declarationForPlayer } from "@factions/declarations";
 import { sql, eq } from "drizzle-orm";
 import { baseForDb, declareSoloDb, releaseSoloDb } from "../src/base";
@@ -161,5 +161,47 @@ describe("roster base writes", () => {
     }
     expect(await db.select().from(declarations)).toEqual([]);
     expect(await db.select().from(identityLinks)).toEqual([]);
+  });
+
+  it("shows lapsed: a solo_lapsed notice from an hour ago with no declaration", async () => {
+    const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now }).returning();
+    const lapsedAt = ago(60 * 60 * 1000); // 1 hour ago
+    await db.insert(clanNotices).values({
+      serverId, factionId: f!.id, target: "dm", discordTargetId: "d1", kind: "solo_lapsed",
+      occurredAt: lapsedAt, payload: {},
+    });
+    const v = await baseForDb(db, "d1");
+    expect(v).toMatchObject({ linked: true, declaration: null });
+    if (!v.linked) throw new Error("linked");
+    expect(v.lapsed).toEqual({ at: lapsedAt });
+  });
+
+  it("lapsed is null when notice is older than RELEASED_POLE_GRACE_MS", async () => {
+    const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now }).returning();
+    const tooOld = ago(RELEASED_POLE_GRACE_MS + 1000); // Older than grace period
+    await db.insert(clanNotices).values({
+      serverId, factionId: f!.id, target: "dm", discordTargetId: "d1", kind: "solo_lapsed",
+      occurredAt: tooOld, payload: {},
+    });
+    const v = await baseForDb(db, "d1");
+    expect(v).toMatchObject({ linked: true, declaration: null });
+    if (!v.linked) throw new Error("linked");
+    expect(v.lapsed).toEqual(null);
+  });
+
+  it("lapsed is null when there is a live declaration", async () => {
+    await pole(P1, 5000, 5000);
+    await raise(UID_A, P1, 5000, 5000, ago(1000));
+    await declareSoloDb(db, "d1", P1, now);
+    const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now }).returning();
+    const lapsedAt = ago(60 * 60 * 1000); // 1 hour ago
+    await db.insert(clanNotices).values({
+      serverId, factionId: f!.id, target: "dm", discordTargetId: "d1", kind: "solo_lapsed",
+      occurredAt: lapsedAt, payload: {},
+    });
+    const v = await baseForDb(db, "d1");
+    if (!v.linked) throw new Error("linked");
+    expect(v.declaration).not.toBeNull();
+    expect(v.lapsed).toEqual(null);
   });
 });

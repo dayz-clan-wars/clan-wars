@@ -1,9 +1,11 @@
 import type { Database } from "@factions/db";
-import { factionMembers, identityLinks } from "@factions/db";
+import { factionMembers, identityLinks, clanNotices } from "@factions/db";
 import {
   declarationForPlayer, declareSoloTx, lockDeclarations, raisedPolesFor, releaseTx,
 } from "@factions/declarations";
-import { and, eq } from "drizzle-orm";
+import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
+import { and, eq, gt } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { activeServerId } from "./server";
 
 export const DECLARE_SOLO_REASONS = ["not-linked", "in-clan", "no-raise", "too-close", "pole-taken", "owner-has-base"] as const;
@@ -15,6 +17,7 @@ export type BaseView =
   | {
       linked: true; gamertag: string; inClan: boolean;
       declaration: { poleKey: string; x: number; z: number; declaredAt: Date } | null;
+      lapsed: { at: Date } | null;
       candidates: { poleKey: string; x: number; z: number; raisedAt: Date }[];
     };
 
@@ -42,11 +45,33 @@ export async function baseForDb(db: Database, discordId: string): Promise<BaseVi
     ));
   const declaration = await declarationForPlayer(db, serverId, link.dayzId);
   const raised = await raisedPolesFor(db, serverId, link.dayzId);
+
+  // When there's no declaration, check for a recent solo_lapsed notice
+  let lapsed: { at: Date } | null = null;
+  if (declaration === null) {
+    const now = new Date();
+    const [notice] = await db.select({ occurredAt: clanNotices.occurredAt })
+      .from(clanNotices)
+      .where(and(
+        eq(clanNotices.serverId, serverId),
+        eq(clanNotices.target, "dm"),
+        eq(clanNotices.kind, "solo_lapsed"),
+        eq(clanNotices.discordTargetId, discordId),
+        gt(clanNotices.occurredAt, new Date(now.getTime() - RELEASED_POLE_GRACE_MS)),
+      ))
+      .orderBy((t) => sql`${t.occurredAt} desc`)
+      .limit(1);
+    if (notice) {
+      lapsed = { at: notice.occurredAt };
+    }
+  }
+
   return {
     linked: true, gamertag: link.gamertag, inClan: member !== undefined,
     declaration: declaration
       ? { poleKey: declaration.poleKey, x: Number(declaration.x), z: Number(declaration.z), declaredAt: declaration.declaredAt }
       : null,
+    lapsed,
     candidates: raised
       .filter((r) => r.poleKey !== declaration?.poleKey)
       .map((r) => ({ poleKey: r.poleKey, x: r.x, z: r.z, raisedAt: r.occurredAt })),
