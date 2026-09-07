@@ -115,8 +115,11 @@ notice their owners — positions before zones, so a sighting's own dot has
 already landed by the time it can alert anyone. After zone, `sessions-tick.ts`
 and `kills-tick.ts` run the event consumers for player sessions and kills
 (spec §4.9, §11): `sessions-tick.ts` opens a `player_sessions` row on each
-`player.connected` event and closes it on `player.disconnected`,
-`player.restart` (file boundary), or a duplicate connect; `kills-tick.ts`
+`player.connected` event and closes it on `player.disconnected`, an ADM file
+boundary (the server restarted without a clean disconnect line — there is no
+`player.restart` event type), or a duplicate connect; the three outcomes are
+reported as `sessions: N opened, M closed, R restarted`, where `restarted`
+covers both of the latter two; `kills-tick.ts`
 opens a `kills` row for each `player.killed` or `player.died` event, resolving
 the victim and killer's clan membership at that instant via `membershipAt`.
 Alongside the pending-expiry sweep, `reaper-tick.ts` runs the map's half of
