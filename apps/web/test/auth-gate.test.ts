@@ -10,11 +10,11 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide"]);
   });
 
   it("pins the public prefixes", () => {
-    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/"]);
+    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/"]);
   });
 
   it("pins the auth pages", () => {
@@ -74,5 +74,11 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/players/SomeGamertag")).toBe(true);
     expect(pathIsPublic("/clan/board")).toBe(false);
     expect(pathIsPublic("/playersomething")).toBe(false);
+  });
+
+  it("lets the guide and its chapters through", () => {
+    expect(pathIsPublic("/guide")).toBe(true);
+    expect(pathIsPublic("/guide/05-raiding.html")).toBe(true);
+    expect(pathIsPublic("/guidesomething")).toBe(false);
   });
 });
