@@ -43,8 +43,8 @@ passes on `/clan/settings`.
    gamertag or clan changes. On a large guild this is a real burst of REST calls; it is
    not a config error.
 
-5. ⚠️ **Ruling 10, verbatim: no reconciliation of removals that happened while the bot
-   was down.** `guildMemberRemove` is a gateway event only — `apps/bot/src/guild-removal.ts`
+5. ⚠️ **Ruling 10, verbatim: no reconciliation of guild removals that happened while the
+   bot was down.** `guildMemberRemove` is a gateway event only — `apps/bot/src/guild-removal.ts`
    handles it as it arrives (checking the event's guild id against
    `DISCORD_GUILD_ID` first; a mismatch writes nothing), and there is no catch-up sweep
    at startup. A pass over "linked users not currently in the member cache" was
@@ -63,12 +63,13 @@ passes on `/clan/settings`.
      ballot counts on open) and watch a `vote_opened` notice post to the clan channel
      (`notice-text.ts`'s `vote_opened` renderer, with the closing time and a link to the
      site).
-   - Add a vault lock, then rotate it (or rotate all locks) and confirm the DM to full
-     members says only "🔐 Codes rotated by `<gamertag>` — see the vault." — never the
-     code itself (`codes_rotated` in `notice-text.ts`; the code lives only behind
-     `revealLock`/`confirmLock`, gated by the lock's `min_role`, and `/api/vault/reveal`
-     is the one POST that returns JSON instead of a redirect so the code never appears in
-     a URL, per the existing web write-boundary rules).
+   - Add a vault lock, then rotate it (or rotate all locks) and confirm the clan channel
+     shows "🔐 Codes rotated by `<gamertag>` — see the vault." while the DM to every
+     other full member says only "**`<clan>`** rotated its codes. See the vault:
+     `<link>`." — never the code itself (`codes_rotated` in `notice-text.ts`; the code
+     lives only behind `revealLock`/`confirmLock`, gated by the lock's `min_role`, and
+     `/api/vault/reveal` is the one POST that returns JSON instead of a redirect so the
+     code never appears in a URL, per the existing web write-boundary rules).
    - Grant a guest pass with `/guest @user` in a clan channel and confirm the target
      gains View + Connect on that clan's voice channel within one tick, and loses it
      again after 24h (or immediately on `revokeGuestPass` from `/clan/settings`).

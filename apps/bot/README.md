@@ -145,7 +145,7 @@ Alongside the pending-expiry sweep, `reaper-tick.ts` runs the map's half of
 the reaper (expired pins, stale positions, sightings with no recent fix),
 throttled to once every five minutes rather than every tick. Since increment
 7 it also deletes guest passes that are past `expires_at`, or that were
-revoked/converted more than five minutes ago — the delay leaves a
+revoked/converted more than `GUEST_PASS_MS` ago — the delay leaves a
 revoked/converted row in place long enough for the structure tick's own
 diff (below) to see it and remove the matching voice overwrite before the
 row disappears out from under it.
