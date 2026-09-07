@@ -113,6 +113,36 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "dismantle", target: "channel", occurredAt: now, payload: { gamertag: "Sasha", part: "wall_base_down" } }, now)).toContain("dismantled wall_base_down at your base");
     expect(noticeText({ kind: "solo_gate", target: "dm", occurredAt: now, payload: { gamertag: "Sasha" } }, now)).toBe("🔧 Sasha (not a member) built a gate at your base — 0 min ago");
   });
+
+  it("renders the nine leadership and vault lines (spec §9.3, §9.4)", () => {
+    expect(noticeText({ kind: "leader_removed", target: "channel", occurredAt: now, payload: { old: "Wolfie", new: "Bear1" } }, now))
+      .toBe("👑 Wolfie is no longer in the Discord. Bear1 is now leader.");
+    expect(noticeText({ kind: "succession_claimed", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", leader: "Wolfie" } }, now))
+      .toBe("⏳ Bear1 has claimed leadership — Wolfie has 48h to show up in game");
+    expect(noticeText({ kind: "succession_voided", target: "channel", occurredAt: now, payload: { leader: "Wolfie", claimant: "Bear1" } }, now))
+      .toBe("⏳ Wolfie showed up in game. The claim by Bear1 is void.");
+    expect(noticeText({ kind: "succession_done", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, now))
+      .toBe("👑 Bear1 is now leader (succession)");
+    expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://dayzclanwars.com/clan/vote" } }, now))
+      .toBe("🗳️ Vote opened: replace Wolfie with Bear1. Closes 8 Sep 2026 14:00 UTC. Vote on the site: https://dayzclanwars.com/clan/vote");
+    expect(noticeText({ kind: "vote_passed", target: "channel", occurredAt: now, payload: { yes: 6, n: 9, nominee: "Bear1", old: "Wolfie" } }, now))
+      .toBe("🗳️ Vote passed (6/9). Bear1 is now leader; Wolfie stays as officer.");
+    expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "2026-09-22T00:00:00.000Z" } }, now))
+      .toBe("🗳️ Vote failed (3/9). Next vote possible 22 Sep 2026.");
+    expect(noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, now))
+      .toBe("🔐 Codes rotated by Bear1 — see the vault.");
+    expect(noticeText({ kind: "codes_rotated", target: "dm", occurredAt: now, payload: { clan: "Bears", link: "https://dayzclanwars.com/clan/vault" } }, now))
+      .toBe("**Bears** rotated its codes. See the vault: https://dayzclanwars.com/clan/vault");
+    expect(noticeText({ kind: "guest", target: "channel", occurredAt: now, payload: { officer: "Wolfie", user: "123456789012345678" } }, now))
+      .toBe("🎟️ Wolfie gave <@123456789012345678> a 24h voice guest pass.");
+  });
+
+  it("never renders a smuggled 4-digit vault code, even though the type forbids it", () => {
+    const opened = noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://x/vote", code: "1234" } as never }, now);
+    expect(opened).not.toContain("1234");
+    const rotated = noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", code: "1234" } as never }, now);
+    expect(rotated).not.toContain("1234");
+  });
 });
 
 describe("relativeAge", () => {

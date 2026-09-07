@@ -1,4 +1,4 @@
-import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
 
@@ -9,6 +9,11 @@ const MIN_MS = 60_000;
 /** Whole days a millisecond window spans, rounded — the numeral a sentence names. */
 function days(ms: number): number {
   return Math.round(ms / DAY_MS);
+}
+
+/** Whole hours a millisecond window spans, rounded — the numeral a sentence names. */
+function hours(ms: number): number {
+  return Math.round(ms / HOUR_MS);
 }
 
 /** "6 min ago", "2 h ago", "3 d ago" — never a coordinate, never an exact clock time. */
@@ -29,11 +34,20 @@ export function duration(seconds: number): string {
   return `${hours}h ${minutes}m`;
 }
 
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 /** `d MMM yyyy`, UTC, from an ISO 8601 string — e.g. "8 Sep 2026". */
 function formatDate(iso: string): string {
-  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   const d = new Date(iso);
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+/** `formatDate` extended with the hour, UTC — e.g. "8 Sep 2026 14:00 UTC". */
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  const hh = String(d.getUTCHours()).padStart(2, "0");
+  const mm = String(d.getUTCMinutes()).padStart(2, "0");
+  return `${formatDate(iso)} ${hh}:${mm} UTC`;
 }
 
 /**
@@ -95,6 +109,18 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   solo_intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
   solo_dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
   solo_gate: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  leader_removed: (p) => `👑 ${person(p.old)} is no longer in the Discord. ${person(p.new)} is now leader.`,
+  succession_claimed: (p) => `⏳ ${person(p.gamertag)} has claimed leadership — ${person(p.leader)} has ${hours(SUCCESSION_WINDOW_MS)}h to show up in game`,
+  succession_voided: (p) => `⏳ ${person(p.leader)} showed up in game. The claim by ${person(p.claimant)} is void.`,
+  succession_done: (p) => `👑 ${person(p.gamertag)} is now leader (succession)`,
+  vote_opened: (p) => `🗳️ Vote opened: replace ${person(p.leader)} with ${person(p.nominee)}. Closes ${formatDateTime(String(p.closesAt))}. Vote on the site: ${p.link}`,
+  vote_passed: (p) => `🗳️ Vote passed (${p.yes}/${p.n}). ${person(p.nominee)} is now leader; ${person(p.old)} stays as officer.`,
+  vote_failed: (p) => `🗳️ Vote failed (${p.yes}/${p.n}). Next vote possible ${formatDate(String(p.date))}.`,
+  codes_rotated: (p, ctx) =>
+    ctx.target === "channel"
+      ? `🔐 Codes rotated by ${person(p.gamertag)} — see the vault.`
+      : `**${p.clan}** rotated its codes. See the vault: ${p.link}`,
+  guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a 24h voice guest pass.`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */
