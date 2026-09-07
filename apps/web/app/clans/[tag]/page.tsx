@@ -60,7 +60,11 @@ export default async function ClanPage({ params, searchParams }: { params: Promi
         <ul className="mt-2 flex flex-col gap-1">
           {clan.roster.map((r, i) => (
             <li key={`${r.gamertag ?? "?"}-${i}`} className="flex justify-between text-ink">
-              <span className="font-mono">{r.gamertag ?? "unknown"}</span>
+              {r.gamertag ? (
+                <a className="font-mono underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
+              ) : (
+                <span className="font-mono">unknown</span>
+              )}
               <span className="font-mono text-xs uppercase text-muted">{r.role}</span>
             </li>
           ))}

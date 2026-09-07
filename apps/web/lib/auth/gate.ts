@@ -6,7 +6,7 @@
  */
 
 /** The landing page, the clan directory, and the scoring pages (spec §10.2: public). */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log"] as const;
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
@@ -15,9 +15,11 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * Static flags stay public on purpose — they are the same 33 images the bot
  * already posts publicly, and gating them would break caching for every page.
  * `/clans/` is the public clan pages (`/clans/{tag}`); `/clan` (singular,
- * the member's own) is gated.
+ * the member's own) is gated. `/players/` is public player profiles
+ * (`/players/{gamertag}`, spec §10.2); `/clan/board` (under `/clan`, not
+ * `/players`) stays gated.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should

@@ -8,7 +8,8 @@ import type {
 } from "@factions/roster";
 import { days } from "./format";
 
-const REFUSAL: Record<ActorRefusal, string> = {
+/** Exported so pages that read an `ActorRefusal` directly (e.g. `/clan/board`) render the same wording as every `/api/clan/*` redirect. */
+export const REFUSAL: Record<ActorRefusal, string> = {
   "not-linked": "Link your character first — clan actions are taken by the character, not the Discord account.",
   "not-in-clan": "You are not in a clan.",
   "pending": `You are pending: stand within ${JOIN_PRESENCE_RADIUS_M} m of the clan's base in game to become a full member before you can act for the clan.`,

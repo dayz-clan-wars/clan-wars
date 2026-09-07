@@ -9,16 +9,23 @@ export const dynamic = "force-dynamic";
 
 const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
+function Gamertag({ gamertag }: { gamertag: string | null | undefined }) {
+  return gamertag ? (
+    <a className="underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(gamertag)}`}>{gamertag}</a>
+  ) : (
+    <>someone</>
+  );
+}
+
 function Entry({ e }: { e: WarLogEntry }) {
-  const gamertag = e.gamertag ?? "someone";
   if (e.kind === "raid") {
     return e.raider ? (
       <>
-        <strong className="text-ink">{e.raider.name}</strong> raided <strong className="text-ink">{e.victim.name}</strong> — flag lowered by {gamertag} · {e.points} pts
+        <strong className="text-ink">{e.raider.name}</strong> raided <strong className="text-ink">{e.victim.name}</strong> — flag lowered by <Gamertag gamertag={e.gamertag} /> · {e.points} pts
       </>
     ) : (
       <>
-        <strong className="text-ink">{e.victim.name}</strong> was raided — flag lowered by {gamertag} (no clan)
+        <strong className="text-ink">{e.victim.name}</strong> was raided — flag lowered by <Gamertag gamertag={e.gamertag} /> (no clan)
       </>
     );
   }
