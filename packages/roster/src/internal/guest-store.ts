@@ -1,30 +1,17 @@
 import type { Database } from "@factions/db";
-import { guestPasses, factionMembers, factions } from "@factions/db";
+import { guestPasses, factions } from "@factions/db";
 import { and, eq, gt, isNull, sql } from "drizzle-orm";
-import { GUEST_PASS_MS, ROLE_RANK, type ClanRole } from "@factions/domain";
-import { lockFactionTx } from "./leadership-store";
+import { GUEST_PASS_MS, ROLE_RANK } from "@factions/domain";
+import { lockFactionTx, fullMemberTx } from "./leadership-store";
 import { noticeClanTx } from "./notices";
 import { gamertagOrId } from "./feed-actor";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-type Role = ClanRole;
-
-/**
- * The caller's role, re-derived inside the transaction from `faction_members`
- * (§4.5: `status = 'full'` is every membership read). `null` covers both
- * "never a member" and "pending" — a pending member has no leadership
- * standing and, per the brief, may still HOLD a guest pass, but never
- * grants or revokes one.
- */
-async function currentMemberTx(tx: Tx, factionId: number, discordId: string): Promise<{ role: Role } | null> {
-  const [m] = await tx.select({ role: factionMembers.role, status: factionMembers.status })
-    .from(factionMembers)
-    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, discordId)));
-  if (!m || m.status !== "full") return null;
-  return { role: m.role as Role };
-}
+// A pending member has no leadership standing and, per the brief, may still
+// HOLD a guest pass, but never grants or revokes one — `fullMemberTx`
+// (leadership-store.ts) returns null for exactly that case.
 
 export type GrantGuestPassOutcome = "ok" | "not-permitted" | "already-active" | "is-member" | "self";
 export type RevokeGuestPassOutcome = "ok" | "not-permitted" | "gone";
@@ -52,10 +39,10 @@ export async function grantGuestPassDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, a.factionId);
 
-    const me = await currentMemberTx(tx, a.factionId, a.actorDiscordId);
+    const me = await fullMemberTx(tx, a.factionId, a.actorDiscordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, passId: null };
 
-    const target = await currentMemberTx(tx, a.factionId, a.userDiscordId);
+    const target = await fullMemberTx(tx, a.factionId, a.userDiscordId);
     if (target) return { outcome: "is-member" as const, passId: null };
 
     const [open] = await tx.select({ id: guestPasses.id }).from(guestPasses)
@@ -95,7 +82,7 @@ export async function revokeGuestPassDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, a.factionId);
 
-    const me = await currentMemberTx(tx, a.factionId, a.actorDiscordId);
+    const me = await fullMemberTx(tx, a.factionId, a.actorDiscordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return "not-permitted" as const;
 
     const [row] = await tx.update(guestPasses)

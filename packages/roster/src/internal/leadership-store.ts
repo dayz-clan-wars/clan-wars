@@ -3,12 +3,16 @@ import { factionMembers, factionVoteBallots, factionVotes, factions, players, su
 import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import {
   FAILED_VOTE_COOLDOWN_MS, HOLDING_STATUSES, LEADER_SILENT_MS, SUCCESSION_WINDOW_MS, VOTE_LENGTH_MS, voteThreshold,
+  type ClanRole,
 } from "@factions/domain";
 import { gamertagOrId } from "./feed-actor";
 import { noticeClanTx } from "./notices";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/** Mirrors `packages/roster`'s `Role` union — same string literals as domain's `ClanRole`. */
+type Role = ClanRole;
 
 // Widened to a mutable array for drizzle's inArray(), the same way
 // roster-store.ts does it. Both clocks below filter on it: a disbanded clan
@@ -64,6 +68,24 @@ export type OpenClaim = {
  */
 export async function lockFactionTx(tx: Tx, factionId: number): Promise<void> {
   await tx.execute(sql`select id from factions where id = ${factionId}::bigint for update`);
+}
+
+/**
+ * The caller's dayz id and role, re-derived inside the transaction from
+ * `faction_members` (§4.5: `status = 'full'` is every membership read).
+ * `null` covers both "never a member" and "pending" — a pending member has
+ * no leadership standing at all. Shared by `vault-store.ts` and
+ * `guest-store.ts`, which both call it right after `lockFactionTx`: a
+ * `VaultActor`/actor id built at page load (or by a bot command) can be
+ * stale by the time the write lands, so role is never trusted from the
+ * caller.
+ */
+export async function fullMemberTx(tx: Tx, factionId: number, discordId: string): Promise<{ dayzId: string; role: Role } | null> {
+  const [m] = await tx.select({ dayzId: factionMembers.dayzId, role: factionMembers.role, status: factionMembers.status })
+    .from(factionMembers)
+    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, discordId)));
+  if (!m || m.status !== "full") return null;
+  return { dayzId: m.dayzId, role: m.role as Role };
 }
 
 type MemberRow = { dayzId: string; discordId: string; serverId: number; role: string; status: string };

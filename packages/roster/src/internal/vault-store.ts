@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { vaultLocks, vaultHistory, players, factions, factionMembers } from "@factions/db";
+import { vaultLocks, vaultHistory, players, factions } from "@factions/db";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { ROLE_RANK, canSeeLock, randomVaultCode, type ClanRole, type VaultAction } from "@factions/domain";
-import { lockFactionTx } from "./leadership-store";
+import { lockFactionTx, fullMemberTx } from "./leadership-store";
 import { noticeClanTx, noticeFullMembersTx } from "./notices";
 import { gamertagOrId } from "./feed-actor";
 import { siteBaseUrl } from "./site-url";
@@ -34,23 +34,13 @@ async function gamertagByDayzIdTx(tx: Tx, dayzId: string): Promise<string> {
   return p?.gamertag ?? dayzId;
 }
 
-/**
- * ⚠️ The caller's `VaultActor` is trusted for nothing but `factionId` and
- * `discordId` — `role` and `dayzId` are re-derived here, inside the
- * transaction, right after `lockFactionTx`. A `VaultActor` built at page
- * load (or by a bot command) can be stale by the time the write lands: a
- * demoted officer, or a member kicked a moment ago, must be judged on the
- * roster row as it stands NOW, not on what the caller believes. `null`
- * covers both "never a member" and "pending" (spec §4.5: a pending member
- * has no vault standing at all).
- */
-async function currentMemberTx(tx: Tx, factionId: number, discordId: string): Promise<{ dayzId: string; role: Role } | null> {
-  const [m] = await tx.select({ dayzId: factionMembers.dayzId, role: factionMembers.role, status: factionMembers.status })
-    .from(factionMembers)
-    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, discordId)));
-  if (!m || m.status !== "full") return null;
-  return { dayzId: m.dayzId, role: m.role as Role };
-}
+// ⚠️ The caller's `VaultActor` is trusted for nothing but `factionId` and
+// `discordId` — `role` and `dayzId` are re-derived on every write, inside
+// the transaction, right after `lockFactionTx`, via the shared
+// `fullMemberTx` (leadership-store.ts). A `VaultActor` built at page load
+// (or by a bot command) can be stale by the time the write lands: a
+// demoted officer, or a member kicked a moment ago, must be judged on the
+// roster row as it stands NOW, not on what the caller believes.
 
 export type AddLockOutcome = "ok" | "not-permitted" | "bad-name" | "bad-note" | "bad-code";
 export type EditLockOutcome = "ok" | "not-permitted" | "gone" | "bad-name" | "bad-note";
@@ -90,7 +80,7 @@ export async function addLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, lockId: null };
     if (!validName(a.name)) return { outcome: "bad-name" as const, lockId: null };
     if (!validNote(a.note)) return { outcome: "bad-note" as const, lockId: null };
@@ -124,7 +114,7 @@ export async function editLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return "not-permitted" as const;
     if (!validName(a.name)) return "bad-name" as const;
     if (!validNote(a.note)) return "bad-note" as const;
@@ -151,7 +141,7 @@ export async function deleteLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return "not-permitted" as const;
 
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name }).from(vaultLocks)
@@ -184,7 +174,7 @@ export async function revealLockDb(
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return { outcome: "gone" as const, code: null };
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || !canSeeLock(me.role, lock.minRole as Role)) return { outcome: "not-visible" as const, code: null };
 
     await tx.insert(vaultHistory).values({
@@ -210,7 +200,7 @@ export async function rotateLocksDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, rotated: 0 };
 
     const where = a.lockId === "all"
@@ -258,7 +248,7 @@ export async function confirmLockDb(
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return "gone" as const;
 
-    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || !canSeeLock(me.role, lock.minRole as Role)) return "not-visible" as const;
 
     await tx.update(vaultLocks).set({ confirmedAt: a.at }).where(eq(vaultLocks.id, lock.id));
