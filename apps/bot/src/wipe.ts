@@ -96,6 +96,15 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
   // (5) The map's wipe-scoped state (§8.5): every pin and every sighting on
   // this server. Sightings cascade with the declarations deleted below;
   // the explicit delete keeps the step honest if that cascade ever changes.
+  //
+  // ⚠️ These two deletes sit BEFORE step (6)'s `poles` update, which inverts
+  // §4.12's poles-before-the-new-tables order inside this one transaction.
+  // That cannot deadlock: no counterparty acquires `poles` after
+  // `clan_pins` or `intruder_sightings` — the site's pin writes and the zone
+  // consumer take no pole lock at all — so there is no other transaction
+  // holding `poles` and waiting on either table. Keep it that way; a future
+  // writer that touches `poles` after these tables would make this an
+  // ordering bug, and then this block moves after step (6).
   const pinsCleared = (await tx.delete(clanPins).where(inArray(clanPins.factionId, factionIds)).returning({ id: clanPins.id })).length;
   const sightingsCleared = (await tx.delete(intruderSightings).where(inArray(intruderSightings.declarationId, declarationIds)).returning({ id: intruderSightings.id })).length;
 

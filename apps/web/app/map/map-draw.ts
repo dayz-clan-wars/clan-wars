@@ -52,6 +52,10 @@ export function parseState(raw: WireState): MapData {
 /**
  * `L.divIcon`, `bindTooltip` and `bindPopup` all take raw HTML. Gamertags and
  * pin notes are typed by players, so every one of them goes through this.
+ *
+ * ⚠️ Does not escape `'`. Use only in text nodes and double-quoted
+ * attributes — never in a single-quoted attribute (`style='…'`), which this
+ * would not make safe.
  */
 export function escapeHtml(s: string): string {
   return s.replace(/&/gu, "&amp;").replace(/</gu, "&lt;").replace(/>/gu, "&gt;").replace(/"/gu, "&quot;");

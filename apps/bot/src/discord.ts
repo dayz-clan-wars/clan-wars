@@ -542,13 +542,13 @@ export async function start(cfg: BotConfig): Promise<void> {
     // intruder pin come from the same event, and the page should never show
     // an intruder whose own dot has not landed yet.
     try {
-      const p = await positionsTick(db);
+      const p = await positionsTick(db, { now: new Date() });
       if (p.written > 0) console.log(`positions: ${p.written} fix(es)`);
     } catch (err) {
       console.error("positions tick failed", err);
     }
     try {
-      const z = await zoneTick(db);
+      const z = await zoneTick(db, { now: new Date() });
       if (z.alerts > 0) console.log(`zone watch: ${z.sightings} sighting(s), ${z.alerts} alert(s)`);
     } catch (err) {
       console.error("zone tick failed", err);

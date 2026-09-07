@@ -12,7 +12,7 @@
  *
  * ⚠️ Unverified against real tiles on this host — no mirrored tile set exists
  * here yet, so this is a documented assumption, not a measurement. The
- * runbook's step 1 checks a landmark. If everything drawn is uniformly
+ * runbook's step 7 checks a landmark. If everything drawn is uniformly
  * offset or scaled once real tiles are served, these two constants are what
  * to correct — `worldToPixel` takes `canvasPx` as a parameter precisely so
  * that stays a one-line fix. Do not "fix" `worldToPixel` itself: it is

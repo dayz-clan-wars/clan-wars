@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, factionMembers, identityLinks, intruderSightings, clanNotices, declarations, type Database } from "@factions/db";
 import { declareSolo } from "@factions/declarations";
-import { INTRUDER_ALERT_COOLDOWN_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { zoneTick } from "../src/zone-tick.js";
 import { seedFaction } from "./seed.js";
@@ -40,7 +40,7 @@ describe("zoneTick", () => {
     await fix(STRANGER, 5030, 5040);           // 50 m
     await fix(MEMBER, 5001, 5001);
     await fix(STRANGER, 5000 + WATCH_ZONE_RADIUS_M + 1, 5000, at(1000));
-    const r = await zoneTick(db);
+    const r = await zoneTick(db, { now });
     expect(r).toMatchObject({ sightings: 1, alerts: 1 });
     const [s] = await db.select().from(intruderSightings);
     expect(s).toMatchObject({ dayzId: STRANGER, distanceM: 50, lastX: "5030.00", lastZ: "5040.00" });
@@ -49,7 +49,7 @@ describe("zoneTick", () => {
 
   it("a pending member is an intruder (§7)", async () => {
     await fix(PENDING, 5010, 5010);
-    expect((await zoneTick(db)).alerts).toBe(1);
+    expect((await zoneTick(db, { now })).alerts).toBe(1);
   });
 
   it("moves the pin on every fix, alerts once per INTRUDER_ALERT_COOLDOWN_MS, and the last in-zone fix survives a fix outside", async () => {
@@ -57,7 +57,7 @@ describe("zoneTick", () => {
     await fix(STRANGER, 5020, 5020, at(5 * 60_000));
     await fix(STRANGER, 5030, 5030, at(INTRUDER_ALERT_COOLDOWN_MS + 1000));
     await fix(STRANGER, 9000, 9000, at(INTRUDER_ALERT_COOLDOWN_MS + 2000));
-    const r = await zoneTick(db);
+    const r = await zoneTick(db, { now });
     expect(r).toMatchObject({ sightings: 3, alerts: 2 });
     const [s] = await db.select().from(intruderSightings);
     expect(s).toMatchObject({ lastX: "5030.00", lastZ: "5030.00", lastSeenAt: at(INTRUDER_ALERT_COOLDOWN_MS + 1000), lastAlertAt: at(INTRUDER_ALERT_COOLDOWN_MS + 1000) });
@@ -70,7 +70,7 @@ describe("zoneTick", () => {
     expect(await declareSolo(db, { serverId, dayzId: SOLO, poleKey: Q, at: at(-4000) })).toMatchObject({ ok: true });
     await fix(SOLO, 8001, 8001);
     await fix(STRANGER, 8010, 8010);
-    expect((await zoneTick(db)).alerts).toBe(1);
+    expect((await zoneTick(db, { now })).alerts).toBe(1);
     expect(await notices()).toEqual([{ kind: "solo_intruder", target: "dm", payload: { gamertag: "Sasha", distance: 14 }, to: "900" }]);
   });
 
@@ -79,7 +79,7 @@ describe("zoneTick", () => {
     await built(STRANGER, 5010, 5010, "gate_base", "Fence");
     await built(STRANGER, 5010, 5010, "wall_base_up", "Fence");   // built, not a gate: nothing
     await built(MEMBER, 5010, 5010, "gate_base", "Fence");
-    const r = await zoneTick(db);
+    const r = await zoneTick(db, { now });
     expect(r.alerts).toBe(2);
     expect((await notices()).map((n) => [n.kind, n.payload])).toEqual([
       ["dismantle", { gamertag: "Sasha", part: "wall_base_down" }],
@@ -90,15 +90,29 @@ describe("zoneTick", () => {
 
   it("⚠️ never writes a coordinate into a notice, and is replay-safe (cursor per event)", async () => {
     await fix(STRANGER, 5010, 5010);
-    await zoneTick(db);
+    await zoneTick(db, { now });
     await db.execute(sql`update consumer_cursors set last_event_id = 0`);
-    await zoneTick(db);
+    await zoneTick(db, { now });
     expect(await notices()).toHaveLength(1);
     for (const n of await notices()) expect(Object.keys(n.payload as object)).not.toEqual(expect.arrayContaining(["x", "z", "pos", "poleKey"]));
   });
 
+
+  it("⚠️ a fix older than INTRUDER_PIN_TTL_MS is skipped entirely — no sighting, no notice — so an unseeded cursor cannot flood the channel", async () => {
+    await fix(STRANGER, 5010, 5010, at(-(INTRUDER_PIN_TTL_MS + 60_000)));
+    const stale = await zoneTick(db, { now });
+    expect(stale).toMatchObject({ scanned: 0, sightings: 0, alerts: 0 });
+    expect(await db.select().from(intruderSightings)).toHaveLength(0);
+    expect(await notices()).toHaveLength(0);
+
+    await fix(STRANGER, 5010, 5010, at(-(INTRUDER_PIN_TTL_MS - 60_000)));
+    const fresh = await zoneTick(db, { now });
+    expect(fresh).toMatchObject({ sightings: 1, alerts: 1 });
+    expect(await notices()).toHaveLength(1);
+  });
+
   it("the Hub is nobody's zone: a fix at (100, 93) alerts no one", async () => {
     await fix(STRANGER, 100, 93);
-    expect((await zoneTick(db)).alerts).toBe(0);
+    expect((await zoneTick(db, { now })).alerts).toBe(0);
   });
 });

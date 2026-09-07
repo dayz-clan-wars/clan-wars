@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { identityLinks, intruderSightings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { INTRUDER_ALERT_COOLDOWN_MS, type ClanNoticeKind } from "@factions/domain";
+import { INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, type ClanNoticeKind } from "@factions/domain";
 import { noticeClanTx, noticeUserTx, type NoticePayload } from "@factions/roster/internal";
 import { eq, sql } from "drizzle-orm";
 import { readFix } from "./positions-tick.js";
@@ -52,9 +52,21 @@ async function alertOwner(tx: Tx, zone: Zone, serverId: number, kind: "intruder"
  * commit the cursor with it. `base.built` (a gate) and `base.dismantled`
  * alert without a sighting. Lock order §4.12: no `factions` lock is taken —
  * the writes are `intruder_sightings` then `clan_notices`.
+ *
+ * ⚠️ Any fix whose `occurredAt` is older than `INTRUDER_PIN_TTL_MS` before
+ * `now` is skipped entirely — no sighting, no notice — while the cursor still
+ * advances past it. It is a stale fix: the pin it would draw has already
+ * expired, and the reaper would delete the row on its next pass. **This guard
+ * is what makes an unseeded or hand-rewound cursor unable to flood every clan
+ * channel and solo DM with historical intruder/dismantle/gate alerts.** The
+ * runbook still seeds this consumer at the log head before the deploy; the
+ * guard is the belt to the runbook's braces, and turns a missed seed from
+ * catastrophic into noisy-but-bounded.
  */
-export async function zoneTick(db: Database, opts: { batchSize?: number } = {}): Promise<ZoneTickResult> {
+export async function zoneTick(db: Database, opts: { batchSize?: number; now?: Date } = {}): Promise<ZoneTickResult> {
   const batchSize = opts.batchSize ?? 500;
+  const now = opts.now ?? new Date();
+  const oldest = now.getTime() - INTRUDER_PIN_TTL_MS;
   const out: ZoneTickResult = { scanned: 0, sightings: 0, alerts: 0 };
   let cursor = await readCursor(db, ZONE_CONSUMER);
   for (;;) {
@@ -68,6 +80,7 @@ export async function zoneTick(db: Database, opts: { batchSize?: number } = {}):
       const isPosition = ev.type === "player.position";
       const isBuild = ev.type === "base.built" || ev.type === "base.dismantled";
       if (!isPosition && !isBuild) continue;
+      if (ev.occurredAt.getTime() < oldest) continue;   // stale fix: the pin would have expired anyway
       out.scanned++;
       let zones = zonesByServer.get(ev.serverId);
       if (!zones) { zones = await zonesFor(db, ev.serverId); zonesByServer.set(ev.serverId, zones); }

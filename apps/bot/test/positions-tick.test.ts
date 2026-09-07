@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, playerPositions, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
+import { POSITION_RETENTION_MS } from "@factions/domain";
 import { positionsTick } from "../src/positions-tick.js";
 
 const URL = requireTestDatabaseUrl();
@@ -25,17 +26,27 @@ describe("positionsTick", () => {
     await ev("player.position", { dayzId: UID, gamertag: "A", pos: { x: 100.5, y: 7, z: 200.25 } });
     await ev("base.built", { dayzId: UID, gamertag: "A", action: "built", part: "gate", structure: "Fence", tool: null, pos: { x: 101, y: 7, z: 201 } }, new Date(now.getTime() + 1000));
     await ev("emote.performed", { dayzId: UID, gamertag: "A", emote: "EmoteSitA", item: null });
-    expect(await positionsTick(db)).toEqual({ scanned: 2, written: 2 });
+    expect(await positionsTick(db, { now })).toEqual({ scanned: 2, written: 2 });
     const rows = await db.select().from(playerPositions);
     expect(rows.map((r) => [Number(r.x), Number(r.z), Number(r.alt)])).toEqual([[100.5, 200.25, 7], [101, 201, 7]]);
-    expect(await positionsTick(db)).toEqual({ scanned: 0, written: 0 });
+    expect(await positionsTick(db, { now })).toEqual({ scanned: 0, written: 0 });
   });
 
   it("a replayed event (cursor reset) writes nothing twice", async () => {
     await ev("player.position", { dayzId: UID, gamertag: "A", pos: { x: 1, y: 2, z: 3 } });
-    await positionsTick(db);
+    await positionsTick(db, { now });
     await db.execute(sql`update consumer_cursors set last_event_id = 0`);
-    expect((await positionsTick(db)).written).toBe(0);
+    expect((await positionsTick(db, { now })).written).toBe(0);
+    expect(await db.select().from(playerPositions)).toHaveLength(1);
+  });
+
+  it("⚠️ a fix older than POSITION_RETENTION_MS is not written (the reaper would delete it within five minutes); one inside the window is", async () => {
+    await ev("player.position", { dayzId: UID, gamertag: "A", pos: { x: 1, y: 2, z: 3 } }, new Date(now.getTime() - POSITION_RETENTION_MS - 60_000));
+    expect(await positionsTick(db, { now })).toEqual({ scanned: 0, written: 0 });
+    expect(await db.select().from(playerPositions)).toHaveLength(0);
+
+    await ev("player.position", { dayzId: UID, gamertag: "A", pos: { x: 4, y: 5, z: 6 } }, new Date(now.getTime() - POSITION_RETENTION_MS + 60_000));
+    expect(await positionsTick(db, { now })).toEqual({ scanned: 1, written: 1 });
     expect(await db.select().from(playerPositions)).toHaveLength(1);
   });
 });
