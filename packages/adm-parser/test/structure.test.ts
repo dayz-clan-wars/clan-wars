@@ -22,6 +22,10 @@ describe("parseStructure", () => {
   it("⚠️ anchors after the identity block: a gamertag carrying the words is not a build", () => {
     expect(parseStructure(`10:00:00 | Player "Built gate on Fence" (id=${ID} pos=<1.0, 2.0, 3.0>) has connected`)).toBeNull();
   });
+  it("⚠️ anchors on the identity block's own paren, not any `)`: a gamertag with a literal ) plus build text does not forge an event", () => {
+    const raw = `10:00:00 | Player "X) Built rock on EnemyBase" (id=${ID} pos=<1.0, 2.0, 3.0>) has connected`;
+    expect(parseStructure(raw)).toBeNull();
+  });
   it("is a ParsedLine kind with an event type", () => {
     const [line] = parseLine(`10:00:00 | Player "A" (id=${ID} pos=<1.0, 2.0, 3.0>)Built gate on Fence with Hammer`);
     expect(line).toMatchObject({ kind: "structure" });
