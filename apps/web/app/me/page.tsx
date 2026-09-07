@@ -80,19 +80,26 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
               {viewer.clan.status === "dormant" && <span className="ml-2 font-mono text-xs uppercase text-muted">dormant</span>}
               {viewer.clan.status === "reserved" && <span className="ml-2 font-mono text-xs uppercase text-muted">reserved</span>}
             </p>
-            <a className="mt-2 inline-block text-gold underline-offset-4 hover:underline" href="/clan">Your clan page</a>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <a className="text-gold underline-offset-4 hover:underline" href="/clan">Your clan page</a>
+              <a className="text-gold underline-offset-4 hover:underline" href="/map">The map</a>
+            </div>
           </>
         ) : viewer.pending ? (
           <>
             <p className="mt-2 text-ink">Pending in <span className="font-display">{viewer.pending.name}</span> <span className="font-mono text-ink-2">[{viewer.pending.tag}]</span></p>
             <p className="mt-2 text-sm text-ink-2">Stand within {JOIN_PRESENCE_RADIUS_M} m of the clan&rsquo;s base in game and the server log will make you a full member. Unseen for {days(PENDING_EXPIRY_MS)}, the spot expires. Until then your solo base, if you have one, is still yours.</p>
-            <a className="mt-2 inline-block text-gold underline-offset-4 hover:underline" href="/clan">The roster you are joining</a>
+            <div className="mt-2 flex flex-wrap gap-3">
+              <a className="text-gold underline-offset-4 hover:underline" href="/clan">The roster you are joining</a>
+              <a className="text-gold underline-offset-4 hover:underline" href="/map">The map</a>
+            </div>
           </>
         ) : (
           <>
             <p className="mt-2 text-ink-2">You are not in a clan.</p>
             <div className="mt-2 flex flex-wrap gap-3">
               {viewer.link && <a className="text-gold underline-offset-4 hover:underline" href="/base">Your solo base</a>}
+              {viewer.link && <a className="text-gold underline-offset-4 hover:underline" href="/map">The map</a>}
               <a className="text-gold underline-offset-4 hover:underline" href="/clans">Browse the clans</a>
             </div>
           </>

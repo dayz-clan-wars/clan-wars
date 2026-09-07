@@ -36,6 +36,10 @@ describe("pathIsPublic", () => {
   it("gates the prototypes", () => {
     expect(pathIsPublic("/mobile")).toBe(false);
     expect(pathIsPublic("/link")).toBe(false);
+    // ⚠️ The map is login AND a linked character (spec §10.1). The middleware
+    // is the login half; /map's own render is the linked half. Adding "/map"
+    // to PUBLIC_PATHS would hand one clan's live positions to the internet.
+    expect(pathIsPublic("/map")).toBe(false);
   });
 
   // ⚠️ The auth pages are NOT public — middleware handles them specially,

@@ -45,3 +45,31 @@ body {
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
 }
+
+/*
+ * Leaflet's own chrome, in this palette.
+ *
+ * ⚠️ Leaflet ships light defaults — white tooltips, white popups, a white
+ * attribution strip — and its stylesheet is imported by app/map/map-view.tsx,
+ * not here, so these overrides are the only thing between the map and three
+ * white boxes on near-black terrain. Every selector is a `.leaflet-*` class,
+ * which exists on no other page. No token is re-declared: these read the
+ * @theme block above.
+ */
+.leaflet-container { background: var(--color-terrain); font-family: var(--font-sans); }
+.leaflet-tooltip,
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip,
+.leaflet-control-attribution,
+.leaflet-bar a {
+  background: var(--color-frame);
+  color: var(--color-ink);
+  border-color: var(--color-rule-2);
+}
+.leaflet-tooltip { box-shadow: none; }
+.leaflet-tooltip::before { border-top-color: var(--color-frame); border-right-color: var(--color-frame); }
+.leaflet-control-attribution a, .leaflet-popup-content a { color: var(--color-gold); }
+/* The clanmates' permanent name tags: readable over terrain, never a white slab. */
+.cw-map-tag { padding: 0 0.25rem; font-family: var(--font-mono); font-size: 11px; }
+/* divIcon roots are sized inline by Leaflet; these only need to not be a white box. */
+.cw-map-flag, .cw-map-pin { background: none; border: 0; }

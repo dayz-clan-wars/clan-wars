@@ -15,12 +15,14 @@
     "@factions/roster": "workspace:*",
     "arctic": "3.7.0",
     "jose": "6.2.10",
+    "leaflet": "1.9.4",
     "next": "^16.3.4",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.1.0",
+    "@types/leaflet": "1.9.12",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",

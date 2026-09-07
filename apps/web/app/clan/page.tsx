@@ -61,7 +61,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
           <p className={label}>[{clan.tag}] · {clan.status} · you are {me.status === "pending" ? "pending" : me.role}</p>
           <h1 className="mt-1 font-display text-3xl text-ink">{clan.name}</h1>
         </div>
-        {officer && <a className={`${label} ml-auto underline-offset-4 hover:underline`} href="/clan/settings">Settings</a>}
+        <div className="ml-auto flex flex-col items-end gap-1">
+          <a className={`${label} underline-offset-4 hover:underline`} href="/map">Map</a>
+          {officer && <a className={`${label} underline-offset-4 hover:underline`} href="/clan/settings">Settings</a>}
+        </div>
       </div>
       {notice && <p role="status" className="mt-6 rounded-md border border-rule-2 bg-surface p-3 text-sm text-ink">{notice}</p>}
 
