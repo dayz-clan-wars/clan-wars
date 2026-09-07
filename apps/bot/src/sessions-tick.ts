@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { playerSessions, admFiles, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { and, desc, eq, isNull, lt, lte } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, lt, lte } from "drizzle-orm";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const SESSIONS_CONSUMER = "sessions-projector";
@@ -54,13 +54,18 @@ export async function sessionsTick(db: Database, opts: { batchSize?: number } = 
   // this one) would look like the very first event this consumer has ever
   // seen for that server, and the file-boundary close would never fire.
   const lastFileByServer = new Map<number, number>();
+  // ⚠️ `DISTINCT ON (server_id)` — one row per server, never the whole table.
+  // `player_sessions` grows without bound (a 50-player server is ~200 rows a
+  // day) and this runs on every tick; the loop below only ever wanted the
+  // newest connect per server. `ORDER BY server_id, id DESC` is what makes
+  // the kept row that newest one, so the two clauses must stay in step.
   const seeds = await db
-    .select({ serverId: playerSessions.serverId, admFileId: events.admFileId })
+    .selectDistinctOn([playerSessions.serverId], { serverId: playerSessions.serverId, admFileId: events.admFileId })
     .from(playerSessions)
     .innerJoin(events, eq(events.id, playerSessions.connectEventId))
-    .orderBy(desc(playerSessions.id));
+    .orderBy(asc(playerSessions.serverId), desc(playerSessions.id));
   for (const row of seeds) {
-    if (!lastFileByServer.has(row.serverId)) lastFileByServer.set(row.serverId, row.admFileId);
+    lastFileByServer.set(row.serverId, row.admFileId);
   }
 
   for (;;) {

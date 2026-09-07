@@ -575,7 +575,11 @@ export async function start(cfg: BotConfig): Promise<void> {
     // rows with resolved faction membership via `membershipAt`.
     try {
       const s = await sessionsTick(db);
-      if (s.opened > 0 || s.closed > 0) console.log(`sessions: ${s.opened} opened, ${s.closed} closed`);
+      // ⚠️ `restarted` too: a server restart that strands 40 open sessions closes
+      // them all here and is otherwise invisible in production.
+      if (s.opened > 0 || s.closed > 0 || s.restarted > 0) {
+        console.log(`sessions: ${s.opened} opened, ${s.closed} closed, ${s.restarted} restarted`);
+      }
     } catch (err) {
       console.error("sessions tick failed", err);
     }

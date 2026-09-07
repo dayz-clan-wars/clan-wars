@@ -91,6 +91,11 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             killerDayzId: payload.killerDayzId,
             weapon: payload.weapon,
             distanceM: payload.distanceM === null ? null : String(payload.distanceM),
+            // ⚠️ `cause` is DESCRIPTIVE ONLY — nothing reads it. The column
+            // holds `DeathCause ∪ {'pvp'}`, and `'pvp'` is not a `DeathCause`.
+            // PvP is decided by `killer_dayz_id` (set, and not equal to the
+            // victim), never by this string: `cause = 'pvp'` would count
+            // self-kills as PvP kills. See the column comment in schema.ts.
             cause: "pvp",
             victimFactionId,
             killerFactionId,
