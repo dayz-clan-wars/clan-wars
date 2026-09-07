@@ -1,11 +1,12 @@
 import type { Metadata } from "next";
 import { clanFor } from "@factions/roster";
-import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS } from "@factions/domain";
+import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
+import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
-import { when, days } from "@/lib/format";
+import { when, days, hours } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
@@ -32,7 +33,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
   if (!session) {
     return <main className="mx-auto max-w-[40rem] px-4 py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan">Sign in again</a>.</p></main>;
   }
-  const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
+  const notice = result ? (lookupCopy(RESULT_COPY, result) ?? lookupCopy(LEADERSHIP_RESULT_COPY, result)) : undefined;
   const view = await clanFor(session.sub);
 
   if (view === "not-linked" || view === "not-in-clan") {
@@ -47,7 +48,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
     );
   }
 
-  const { clan, me, roster, invitesOut, requestsIn } = view;
+  const { clan, me, roster, invitesOut, requestsIn, leadership } = view;
   const officer = me.status === "full" && (me.role === "officer" || me.role === "leader");
   const leader = me.status === "full" && me.role === "leader";
   const full = roster.filter((r) => r.status === "full");
@@ -97,6 +98,66 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
           })}
         </ul>
       </section>
+
+      {me.status === "full" && (
+        <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+          <h2 className={label}>Leadership</h2>
+          <p className="mt-2 text-sm text-ink-2">Leader last seen {leadership.leaderLastSeenAt ? when(leadership.leaderLastSeenAt) : "never"}.</p>
+          {leadership.openClaim && (
+            <p className="mt-2 rounded-md border border-gold bg-surface p-3 text-sm text-ink">{leadership.openClaim.claimantGamertag} has claimed the seat from {leadership.openClaim.leaderGamertag}. Resolves {when(leadership.openClaim.resolvesAt)}.</p>
+          )}
+          {!leadership.openClaim && leadership.canClaim === "eligible" && (
+            <form className="mt-2" action="/api/clan/claim-succession" method="post">
+              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> I understand this opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if the leader is seen in game.</label>
+              <button className="mt-3 min-h-[44px] rounded-md bg-gold px-4 font-display text-ground" type="submit">Claim leadership — the leader has been silent for {days(LEADER_SILENT_MS)}</button>
+            </form>
+          )}
+          {!leadership.openClaim && (leadership.canClaim === "not-eligible" || leadership.canClaim === "leader-active") && (
+            <p className="mt-2 text-sm text-ink-2">
+              {leadership.canClaim === "not-eligible" ? "Only an officer can claim while the clan has officers." : `The leader has been seen in game within the last ${days(LEADER_SILENT_MS)}.`}
+            </p>
+          )}
+        </section>
+      )}
+
+      {me.status === "full" && (
+        <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+          <h2 className={label}>No-confidence vote</h2>
+          {leadership.openVote
+            ? (
+              <>
+                <p className="mt-2 text-ink">Replace {leadership.openVote.leaderGamertag} with {leadership.openVote.nomineeGamertag}</p>
+                <p className="mt-1 text-sm text-ink-2">{leadership.openVote.ballots} of {leadership.openVote.threshold} needed (electorate {leadership.openVote.electorateSize})</p>
+                <p className="mt-1 text-sm text-ink-2">closes {when(leadership.openVote.closesAt)}</p>
+                {leadership.openVote.inElectorate && !leadership.openVote.myBallot && (
+                  <form className="mt-3" action="/api/clan/cast-vote" method="post">
+                    <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> I confirm my vote.</label>
+                    <button className="mt-3 min-h-[44px] rounded-md bg-gold px-4 font-display text-ground" type="submit">Vote yes</button>
+                  </form>
+                )}
+                {leadership.openVote.myBallot && <p className="mt-2 text-sm text-ink-2">You voted.</p>}
+                {!leadership.openVote.inElectorate && !leader && <p className="mt-2 text-sm text-ink-2">Members who joined after the vote opened do not vote in it.</p>}
+                {leader && <p className="mt-2 text-sm text-ink-2">You can make your case in the clan channel.</p>}
+              </>
+            )
+            : (
+              !leader && (
+                <form className="mt-2" action="/api/clan/open-vote" method="post">
+                  <select className="min-h-[44px] w-full rounded-md border border-rule bg-ground px-3 font-mono text-ink" name="target" required disabled={leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now()}>
+                    {full.filter((r) => r.role !== "leader").map((r) => (
+                      <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"}</option>
+                    ))}
+                  </select>
+                  <label className="mt-2 flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> I understand this opens a no-confidence vote.</label>
+                  <button className="mt-3 min-h-[44px] rounded-md bg-gold px-4 font-display text-ground disabled:opacity-50" type="submit" disabled={leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now()}>Nominate</button>
+                  {leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now() && (
+                    <p className="mt-2 text-xs text-ink-2">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt)}.</p>
+                  )}
+                </form>
+              )
+            )}
+        </section>
+      )}
 
       {officer && (
         <>

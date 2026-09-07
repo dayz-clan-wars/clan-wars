@@ -5,7 +5,7 @@ import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS } from "@/lib/clan-limits";
-import { when, days } from "@/lib/format";
+import { when, days, hours } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -13,7 +13,6 @@ export const dynamic = "force-dynamic";
 
 const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 const field = "mt-1 w-full rounded-md border border-rule bg-ground px-3 py-2 font-mono text-ink";
-const hours = (ms: number) => `${Math.round(ms / 3_600_000)} h`;
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
