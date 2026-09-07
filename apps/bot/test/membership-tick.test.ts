@@ -132,4 +132,14 @@ describe("membershipTick / membershipAt", () => {
   it("membershipAt is null for a player who was never in any clan", async () => {
     expect(await membershipAt(db, serverId, "Z".repeat(40), now)).toBeNull();
   });
+
+  it("when two closed spans in different clans overlap (not produced by the reconciler, but not forbidden by the schema), membershipAt returns the later-joined clan", async () => {
+    // Inserted directly: the reconciler itself never produces overlapping
+    // spans, but the schema only guards against two OPEN spans per faction.
+    await db.insert(membershipHistory).values([
+      { serverId, factionId: factionAId, dayzId: UID_A, joinedAt: ago(300_000), leftAt: ago(100_000) },
+      { serverId, factionId: factionBId, dayzId: UID_A, joinedAt: ago(200_000), leftAt: ago(50_000) },
+    ]);
+    expect(await membershipAt(db, serverId, UID_A, ago(150_000))).toBe(factionBId);
+  });
 });

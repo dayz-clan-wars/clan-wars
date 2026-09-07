@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factionMembers, membershipHistory } from "@factions/db";
-import { and, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -39,8 +39,14 @@ export async function membershipTick(db: Database, now: Date): Promise<{ opened:
 
 /** The clan `dayzId` was a full member of at `at`, from the history spans. */
 export async function membershipAt(db: Database | Tx, serverId: number, dayzId: string, at: Date): Promise<number | null> {
+  // Defensive: the reconciler never produces overlapping spans for a player,
+  // but the schema only forbids two OPEN spans per (faction, dayz) — nothing
+  // stops two closed spans (or a closed and an open one) in different clans
+  // from overlapping in time. Order by joined_at desc so the most recently
+  // started span wins instead of an arbitrary row.
   const [row] = await db.select({ factionId: membershipHistory.factionId }).from(membershipHistory)
     .where(and(eq(membershipHistory.serverId, serverId), eq(membershipHistory.dayzId, dayzId), lte(membershipHistory.joinedAt, at), or(isNull(membershipHistory.leftAt), gt(membershipHistory.leftAt, at))))
+    .orderBy(desc(membershipHistory.joinedAt))
     .limit(1);
   return row?.factionId ?? null;
 }
