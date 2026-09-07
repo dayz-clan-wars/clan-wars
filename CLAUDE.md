@@ -92,6 +92,20 @@ turbo gate stays the gate, because it runs `typecheck` too.
   closed week's Alphas and takes it from everyone else. The bot now also requires
   `ALPHA_ROLE_ID` (config load fails without it, same as the other three role/category
   ids) — see `apps/bot/README.md`.
+  Since 5, `positions-tick.ts` and `zone-tick.ts` run right after presence and before
+  structure: positions backfills the 30-day history from events in batches, and zone watch
+  detects intruders within 60 m of declared bases every 5 min, queueing alerts by range and
+  cooldown. `reaper-tick.ts` runs every 5 minutes beside pending expiry, deleting positions
+  and sightings older than their retention windows. The map's four rules — base visibility
+  (`status = 'active' and not flag_down` for active bases; dormant bases visible to linked members only),
+  position history (reads own positions only, joined clan and solo), intruders
+  (within 60 m and range-posted, keyed on `declaration_id` and player UID), and no trails
+  (map.ts WHERE clauses, the state route's header `Cache-Control: no-store, private`,
+  `map-view.tsx` draws no polylines) — are enforced at read, not at write. Tiles are a
+  static host prerequisite, mirrored from One Life and shared with dayzonelife.com; absent
+  tiles render the map with a dark ground, not broken. `POSITION_RETENTION_MS` is
+  deliberately absent from `docs/guide-numbers.json` — it is a housekeeping constant, not a
+  player-facing number.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
