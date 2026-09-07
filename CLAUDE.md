@@ -83,7 +83,10 @@ turbo gate stays the gate, because it runs `typecheck` too.
   Since 4, `week-tick.ts` runs right after `raise-tick.ts` (it reads `raidTick`'s output,
   so it belongs after it) and before the posters: it closes every ended week, in order,
   under `seasons.week_closed_through`, inserting `alpha_weeks` and the `#war-log` row in
-  one transaction — `war-log-tick.ts` posts that row only after the commit.
+  one transaction per season (`closeWeeksTx`) — `war-log-tick.ts` posts those rows only
+  after the commit. `wipeTx` calls the same `closeWeeksTx` with `now = wipeAt` before it
+  closes the season, so the last elapsed week still crowns its Alphas: once `ended_at` is
+  set, the tick (which walks open seasons only) can never reach it.
   `structure-tick.ts`'s reconciler gained an `@Alpha` step alongside its existing
   role/channel/`@Linked` diffs: it gives the role to the full members of the latest
   closed week's Alphas and takes it from everyone else. The bot now also requires
@@ -170,7 +173,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
-| The wipe, and a standings rebuild | `pnpm wipe --server <id> [--at <ISO>]` (`scripts/wipe.ts`), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — both refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
+| The wipe, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — both refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
 date and commit. Read it before proposing work — several entries record hazards that are

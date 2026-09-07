@@ -2,11 +2,12 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, seasons, seasonStandings, declarations, poles, identityHolds, factions, events, admFiles, warLogEvents,
+  alphaWeeks, raids,
   type Database,
 } from "@factions/db";
 import { sql, eq, asc } from "drizzle-orm";
-import { POST_WIPE_BIND_MS } from "@factions/domain";
-import { wipe } from "../src/wipe.js";
+import { POST_WIPE_BIND_MS, weekStartOf } from "@factions/domain";
+import { wipe, wipeTx } from "../src/wipe.js";
 import { openSeason } from "../src/season.js";
 import { seedFaction, seedSeason } from "./seed.js";
 
@@ -23,13 +24,31 @@ describe("wipe", () => {
   let lineIndex = 0;
   let WOLF = 0;
   let BEAR = 0;
+  let seasonId = 0;
+
+  /**
+   * A raid row, written directly (this file's concern is the wipe that reads
+   * `raids` through `weekTopThree`, not the consumer that writes them —
+   * `week-tick.test.ts` uses the same shortcut).
+   */
+  const seedRaid = async (a: { raider: number; victim: number; points: number; at: Date }) => {
+    const [ev] = await db.insert(events).values({
+      serverId, admFileId, lineIndex: lineIndex++, type: "flag.lowered", occurredAt: a.at, payload: {},
+    }).returning();
+    await db.insert(raids).values({
+      seasonId, serverId, victimFactionId: a.victim, raiderDayzId: "X", raiderFactionId: a.raider,
+      firstLowerEventId: ev!.id, firstLowerAt: a.at, lastLowerAt: a.at, lastLowerEventId: ev!.id,
+      lowerCount: 1, points: a.points, victimRankAtLower: null, rankedCountAtLower: 0,
+      weekStart: weekStartOf(a.at),
+    });
+  };
 
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table war_log_events, season_results, season_standings, identity_holds, declarations, poles, faction_members, events, adm_files, seasons, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table war_log_events, alpha_weeks, raids, season_results, season_standings, identity_holds, declarations, poles, faction_members, events, adm_files, seasons, factions, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
@@ -38,7 +57,8 @@ describe("wipe", () => {
     }).returning();
     admFileId = a!.id;
 
-    await seedSeason(db, serverId, ago(30 * 86_400_000));
+    const season = await seedSeason(db, serverId, ago(30 * 86_400_000));
+    seasonId = season.id;
 
     const wolf = await seedFaction(db, {
       serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "1000.00:100.00:1000.00",
@@ -77,11 +97,23 @@ describe("wipe", () => {
     });
   });
 
+  /** Everything a second wipe would touch, for an unchanged-by-the-re-run comparison. */
+  const snapshot = async () => ({
+    seasons: (await db.select().from(seasons)).length,
+    declarations: (await db.select().from(declarations)).length,
+    warLog: (await db.select().from(warLogEvents)).length,
+    alphaWeeks: (await db.select().from(alphaWeeks)).length,
+    poles: await db.select({ id: poles.id, g: poles.graceUntil }).from(poles).orderBy(asc(poles.id)),
+  });
+
   it("does §8.5 in one transaction", async () => {
     const r = await wipe(db, serverId, wipeAt);
     expect(r).toMatchObject({
       skipped: false, closedSeason: 1, openedSeason: 2,
       holdsEnded: 1, declarationsDeleted: 3, polesStamped: 3, clansCleared: 2,
+      // Season 1 opened Mon 2026-08-03; the last week to end at or before
+      // wipeAt (Wed 2026-09-30) is the one starting 2026-09-21.
+      weeksClosed: 8,
     });
 
     expect(await db.select().from(declarations)).toEqual([]);
@@ -108,10 +140,77 @@ describe("wipe", () => {
 
   it("⚠️ wipe twice is once", async () => {
     await wipe(db, serverId, wipeAt);
+    const after = await snapshot();
     const again = await wipe(db, serverId, wipeAt);
     expect(again.skipped).toBe(true);
-    expect(await db.select().from(seasons)).toHaveLength(2);
-    expect(await db.select().from(warLogEvents)).toHaveLength(1);
+    expect(again.openedSeason).toBe(2);
+    expect(await snapshot()).toEqual(after);
+    expect(after.seasons).toBe(2);
+  });
+
+  it("⚠️ a re-run with a LATER --at is skipped too", async () => {
+    // The operator re-runs after a typo, or without --at on an older build:
+    // the season on offer is the one the first run opened minutes ago, not a
+    // season boundary. The guard is the open season's age, not the timestamp.
+    await wipe(db, serverId, wipeAt);
+    const after = await snapshot();
+    const again = await wipe(db, serverId, new Date(wipeAt.getTime() + 3_600_000));
+    expect(again.skipped).toBe(true);
+    expect(again.openedSeason).toBe(2);
+    expect(await snapshot()).toEqual(after);
+  });
+
+  it("⚠️ a second wipe that races the first blocks on the lock, then skips", async () => {
+    // Connection A opens a transaction and runs the whole wipe in it without
+    // committing; connection B starts a second wipe with a later --at. B's
+    // first statement is `factions ... FOR UPDATE`, which A holds, so B waits
+    // for A to commit and only then reads the season table — under the locks,
+    // where it sees the season A just opened and skips. The pre-lock guard
+    // this replaces read the season table before taking any lock, so both
+    // invocations passed it and the second one wiped.
+    const dbB = createClient(URL);
+    try {
+      let bSettled = false;
+      let bPromise: Promise<unknown> | undefined;
+      await db.transaction(async (tx) => {
+        await wipeTx(tx, serverId, wipeAt);
+        bPromise = wipe(dbB, serverId, new Date(wipeAt.getTime() + 3_600_000));
+        void bPromise.then(() => { bSettled = true; }, () => { bSettled = true; });
+        // Long enough for B to reach the lock. B must NOT be awaited here —
+        // it cannot finish until this transaction commits.
+        await new Promise((r) => setTimeout(r, 300));
+        expect(bSettled).toBe(false);
+      });
+      expect(await bPromise!).toMatchObject({ skipped: true, closedSeason: null, openedSeason: 2, weeksClosed: 0 });
+      expect(await db.select().from(seasons)).toHaveLength(2);
+      expect(await db.select().from(warLogEvents)).toHaveLength(9);
+      expect(await db.select().from(declarations)).toEqual([]);
+    } finally {
+      await dbB.$client.end();
+    }
+  });
+
+  it("closes the season's last elapsed week before it closes the season", async () => {
+    // The runbook stops the bot on the Sunday evening and wipes on the
+    // Monday morning: the week that ended at Monday 00:00 UTC elapsed
+    // entirely while the bot was down, and once `ended_at` is set the week
+    // tick — which only walks OPEN seasons — can never crown its Alphas.
+    const mondayWipe = new Date("2026-09-28T06:00:00Z");
+    const lastWeek = new Date("2026-09-21T00:00:00Z");
+    await seedRaid({ raider: WOLF, victim: BEAR, points: 200, at: new Date("2026-09-23T12:00:00Z") });
+
+    const r = await wipe(db, serverId, mondayWipe);
+    expect(r).toMatchObject({ skipped: false, closedSeason: 1, weeksClosed: 8 });
+
+    expect(await db.select().from(alphaWeeks).where(eq(alphaWeeks.weekStart, lastWeek)))
+      .toMatchObject([{ rank: 1, factionId: WOLF, points: 200 }]);
+
+    const [closedSeason] = await db.select({ w: seasons.weekClosedThrough }).from(seasons).where(eq(seasons.number, 1));
+    expect(closedSeason!.w).toEqual(lastWeek); // the Monday minus 7
+
+    const lines = await db.select({ k: warLogEvents.kind }).from(warLogEvents).orderBy(asc(warLogEvents.id));
+    expect(lines.filter((l) => l.k === "week_closed")).toHaveLength(8);
+    expect(lines.at(-1)!.k).toBe("season_closed"); // every week_closed precedes it
   });
 
   it("a failing step rolls the whole wipe back", async () => {

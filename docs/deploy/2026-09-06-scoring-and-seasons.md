@@ -28,17 +28,24 @@ interval) and `@Alpha`; the site gains four public pages. `scripts/wipe.ts` is t
 
        set -a && . ./.env && set +a && pnpm wipe --server 1 --at 2026-10-01T06:00:00Z
 
-   (equivalently `DATABASE_URL=... pnpm wipe --server 1 --at <ISO>`; the CLI refuses to run
-   unless `DATABASE_URL` ends in `/factions_live`, add `--allow-test-db` only off production). It
-   prints the `WipeResult` as one line of JSON. Running it again with the same `--at` prints
-   `"skipped":true` and **exits non-zero on purpose** — that is the guard against a second,
+   `--at` is **required** — it is the season boundary and has no default; omitting it (or passing
+   an unparseable date) prints the usage line and exits 2 rather than wiping at "now". The CLI also
+   refuses to run unless `DATABASE_URL` ends in `/factions_live` (add `--allow-test-db` only off
+   production). It prints the `WipeResult` as one line of JSON, including `weeksClosed` — the wipe
+   closes every week of the old season that had already elapsed (so the last Alpha week still gets
+   its `alpha_weeks` rows and its `🏆` line) before it closes the season. Running it **again at all
+   within a week of the season it just opened** — same `--at` or later — prints `"skipped":true`,
+   changes nothing, and **exits non-zero on purpose**: that is the guard against a second,
    accidental wipe, not a bug. Then start the bot. `#war-log` gets the `🏁 Season N is over…`
    line; `/seasons` shows the table; every clan's flag is down in the game and its base is
    unbound. The first raise of a holding clan's own texture by one of its full members, at any
    free pole, binds the new base (the normal 200 m rule applies to that raise like any other
    declare); if the raise is refused (too close to another hold, or the pole is already taken),
    nothing is written — no notice, no feed row, just an `info`-level log line — and the member has
-   to raise again at a different pole. Solos re-declare on `/base`.
+   to raise again at a different pole. Solos re-declare on `/base`. ⚠️ Until each clan rebinds,
+   **no clan appears in the generated supply file and no kit spawns** — the supply projection joins
+   `factions` to `declarations`, and the wipe deleted every declaration — so expect an empty supply
+   file and no supply drops at the first restart; each clan's drops resume with its bind.
 7. **Rebuild standings** only if a hand edit or a bug is suspected:
 
        DATABASE_URL=... pnpm rebuild:standings --season <id>

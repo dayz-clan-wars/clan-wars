@@ -1,11 +1,14 @@
 /**
  * Run the wipe for one server (spec §8.5).
  *
- *   DATABASE_URL=postgres://... pnpm wipe --server 1 [--at 2026-09-30T00:00:00Z]
+ *   DATABASE_URL=postgres://... pnpm wipe --server 1 --at 2026-09-30T00:00:00Z
  *
- * `--at` defaults to now, rounded to the minute. Exits non-zero when the
- * wipe reports `skipped: true` (a wipe with this exact `--at` already ran),
- * so a re-run is visible in an exit code, not only in the printed JSON.
+ * `--at` is REQUIRED: it is the season boundary, and it has no safe default.
+ * A missing or unparseable `--at` is a usage error (exit 2) — never "now" —
+ * so a bare re-run cannot invent a fresh timestamp and wipe a second time.
+ * Exits 1 when the wipe reports `skipped: true` (the season on offer is one
+ * a wipe just opened), so a re-run is visible in an exit code, not only in
+ * the printed JSON.
  *
  * ⚠️ Refuses to run against a URL whose database name is not `factions_live`
  * unless `--allow-test-db` is also passed — this is the bot-stopped, one-shot
@@ -17,18 +20,27 @@ import { wipe } from "../apps/bot/src/wipe.js";
 
 const args = process.argv.slice(2);
 
+const USAGE = "usage: wipe --server <id> --at <ISO> [--allow-test-db]";
+function usageError(message: string): never {
+  console.error(`${message}\n${USAGE}`);
+  process.exit(2);
+}
+
 const serverFlagIndex = args.indexOf("--server");
 const serverArg = serverFlagIndex === -1 ? undefined : args[serverFlagIndex + 1];
 if (!serverArg || !/^\d+$/u.test(serverArg)) {
-  throw new Error("usage: wipe --server <id> [--at <ISO>] [--allow-test-db]");
+  usageError(`--server is missing or not a positive integer (got: ${serverArg ?? "nothing"})`);
 }
 const serverId = Number(serverArg);
 
 const atFlagIndex = args.indexOf("--at");
 const atArg = atFlagIndex === -1 ? undefined : args[atFlagIndex + 1];
-const at = atArg ? new Date(atArg) : new Date(Math.floor(Date.now() / 60_000) * 60_000);
+if (!atArg) {
+  usageError("--at is required (the season boundary; there is no default).");
+}
+const at = new Date(atArg);
 if (Number.isNaN(at.getTime())) {
-  throw new Error(`--at is not a valid date (got: ${atArg})`);
+  usageError(`--at is not a valid date (got: ${atArg})`);
 }
 
 const allowTestDb = args.includes("--allow-test-db");
