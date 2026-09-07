@@ -37,6 +37,9 @@ import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
+import { membershipTick } from "./membership-tick.js";
+import { sessionsTick } from "./sessions-tick.js";
+import { killsTick } from "./kills-tick.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return RETIRED_COMMANDS.map((name) =>
@@ -526,6 +529,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("player projection failed", err);
     }
 
+    // ⚠️ Its own try/catch, separate from every other step: it must see the
+    // roster as it stands before this tick's promotions land, so a promotion
+    // recorded by presence this tick opens its span next tick; and it must run
+    // before the kills consumer so membership is reconciled before kills read it.
+    try {
+      const m = await membershipTick(db, new Date());
+      if (m.opened > 0 || m.closed > 0) console.log(`membership: ${m.opened} opened, ${m.closed} closed`);
+    } catch (err) {
+      console.error("membership tick failed", err);
+    }
+
     // ⚠️ Its own try/catch, separate from every other step: a pending
     // member's promotion must not wait on verification, ceremony or
     // dormancy, and a throw here must not stop any of them.
@@ -552,6 +566,25 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (z.alerts > 0) console.log(`zone watch: ${z.sightings} sighting(s), ${z.alerts} alert(s)`);
     } catch (err) {
       console.error("zone tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch: runs after zone (which needs membership
+    // reconciled before it matches intruders against clans) and before
+    // structure. sessionsTick reads connect/disconnect events and opens/closes
+    // `player_sessions` rows; killsTick reads kill events and opens `kills`
+    // rows with resolved faction membership via `membershipAt`.
+    try {
+      const s = await sessionsTick(db);
+      if (s.opened > 0 || s.closed > 0) console.log(`sessions: ${s.opened} opened, ${s.closed} closed`);
+    } catch (err) {
+      console.error("sessions tick failed", err);
+    }
+
+    try {
+      const k = await killsTick(db);
+      if (k.written > 0) console.log(`kills: ${k.written} written`);
+    } catch (err) {
+      console.error("kills tick failed", err);
     }
 
     // ⚠️ Its own try/catch, after presence (and the map's positions/zone

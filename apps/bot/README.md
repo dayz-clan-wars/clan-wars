@@ -99,17 +99,29 @@ processes — this codebase does not implement one.
 The presence tick promotes a pending member on the first log line that
 places them within 50 m of their clan's base (the guide's number lives in
 `rules.ts`); the pending-expiry sweep removes a pending member unseen for 7
-days.
+days. Before presence runs, `membership-tick.ts` reconciles the membership
+history (spec §11 ⚠️): it diffs the current full members against the open
+rows of `membership_history` and writes only the differences — a new member
+opens a span, a missing one closes it at that tick's `now`. This must run
+before presence (so it sees the roster before promotions) and before the kills
+consumer (which uses `membershipAt` to resolve faction membership at the
+instant each kill happened).
 
 Each tick also runs the map's two consumers, right after presence and before
 the structure tick: `positions-tick.ts` projects every `pos`-bearing event
 into `player_positions` (the map's "last fix" per player), then
 `zone-tick.ts` reads the same events to raise or drop intruder sightings and
 notice their owners — positions before zones, so a sighting's own dot has
-already landed by the time it can alert anyone. Alongside the pending-expiry
-sweep, `reaper-tick.ts` runs the map's half of the reaper (expired pins,
-stale positions, sightings with no recent fix), throttled to once every five
-minutes rather than every tick.
+already landed by the time it can alert anyone. After zone, `sessions-tick.ts`
+and `kills-tick.ts` run the event consumers for player sessions and kills
+(spec §4.9, §11): `sessions-tick.ts` opens a `player_sessions` row on each
+`player.connected` event and closes it on `player.disconnected`,
+`player.restart` (file boundary), or a duplicate connect; `kills-tick.ts`
+opens a `kills` row for each `player.killed` or `player.died` event, resolving
+the victim and killer's clan membership at that instant via `membershipAt`.
+Alongside the pending-expiry sweep, `reaper-tick.ts` runs the map's half of
+the reaper (expired pins, stale positions, sightings with no recent fix),
+throttled to once every five minutes rather than every tick.
 
 Each tick also runs the raid and raise consumers (`raid-tick.ts`,
 `raise-tick.ts`) — every `flag.lowered`/`flag.raised` event that scores a
