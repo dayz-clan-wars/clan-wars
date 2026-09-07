@@ -93,14 +93,24 @@ turbo gate stays the gate, because it runs `typecheck` too.
   `ALPHA_ROLE_ID` (config load fails without it, same as the other three role/category
   ids) — see `apps/bot/README.md`.
   Since 5, `positions-tick.ts` and `zone-tick.ts` run right after presence and before
-  structure: positions backfills the 30-day history from events in batches, and zone watch
-  detects intruders within 60 m of declared bases every 5 min, queueing alerts by range and
-  cooldown. `reaper-tick.ts` runs every 5 minutes beside pending expiry, deleting positions
-  and sightings older than their retention windows. The map's four rules (spec §10.3):
+  structure, **both every tick** (`BOT_TICK_INTERVAL_MS`, default 10 s) — not on a
+  5-minute schedule; `reaper-tick.ts` is the 5-minute one, running beside pending expiry
+  and deleting positions and sightings older than their retention windows
+  (`POSITION_RETENTION_MS`, `INTRUDER_PIN_TTL_MS`). `positions-tick.ts` projects every
+  pos-bearing event into `player_positions` in batches, **skipping any fix older than
+  `POSITION_RETENTION_MS`** (the reaper would delete it minutes later) while still
+  advancing its cursor; `docs/deploy/2026-09-07-map.md` step 5 seeds that cursor at the
+  30-day boundary, so on a real deploy it backfills the retained history only.
+  `zone-tick.ts` detects intruders within `WATCH_ZONE_RADIUS_M` = **100 m** of declared
+  bases (never 60 — 60 is not a number in this increment), queueing alerts by range and
+  `INTRUDER_ALERT_COOLDOWN_MS`, and it likewise **skips any fix older than
+  `INTRUDER_PIN_TTL_MS`** — that guard, plus the runbook's `zone-watch` cursor seed at the
+  log head, is what stops an unseeded or rewound cursor replaying the whole event log into
+  every clan channel. The map's four rules (spec §10.3):
   every fix shows its age — `player_positions.occurred_at` written by `positions-tick.ts`,
   returned as `at`/`lastSeenAt` by `map.ts`, rendered by `map-draw.ts`'s age labels
   refreshed every 30 s in `map-view.tsx`; no trails — `map-draw.ts` draws one marker per
-  player and the only `L.polyline` is the 1 km grid; no position of anyone outside your clan
+  player and its only polylines are the 1 km grid (`drawGrid`); no position of anyone outside your clan
   except intruders inside your own zone — `map.ts` queries `player_positions` only for the
   viewer plus their full clanmates, and `intruder_sightings.last_x`/`last_z` (the last
   in-zone fix, never overwritten by an out-of-zone fix — `zone-tick.ts`) only for the
