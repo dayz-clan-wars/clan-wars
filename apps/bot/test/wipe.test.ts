@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, seasons, seasonStandings, declarations, poles, identityHolds, factions, events, admFiles, warLogEvents,
-  alphaWeeks, raids,
+  alphaWeeks, raids, clanPins, intruderSightings,
   type Database,
 } from "@factions/db";
 import { sql, eq, asc } from "drizzle-orm";
@@ -107,6 +107,18 @@ describe("wipe", () => {
   });
 
   it("does §8.5 in one transaction", async () => {
+    // The map's wipe-scoped state (§8.5 step 5): one pin on WOLF, one
+    // sighting on WOLF's declaration.
+    const [wolfDecl] = await db.select({ id: declarations.id }).from(declarations).where(eq(declarations.ownerFactionId, WOLF));
+    await db.insert(clanPins).values({
+      factionId: WOLF, dayzId: "A".repeat(40), x: "1", z: "1", icon: "loot",
+      createdAt: ago(1), expiresAt: new Date(now.getTime() + 999_999),
+    });
+    await db.insert(intruderSightings).values({
+      declarationId: wolfDecl!.id, dayzId: "B".repeat(40),
+      firstSeenAt: ago(1), lastSeenAt: ago(1), lastAlertAt: ago(1), distanceM: 1, lastX: "1", lastZ: "1",
+    });
+
     const r = await wipe(db, serverId, wipeAt);
     expect(r).toMatchObject({
       skipped: false, closedSeason: 1, openedSeason: 2,
@@ -114,9 +126,12 @@ describe("wipe", () => {
       // Season 1 opened Mon 2026-08-03; the last week to end at or before
       // wipeAt (Wed 2026-09-30) is the one starting 2026-09-21.
       weeksClosed: 8,
+      pinsCleared: 1, sightingsCleared: 1,
     });
 
     expect(await db.select().from(declarations)).toEqual([]);
+    expect(await db.select().from(clanPins)).toEqual([]);
+    expect(await db.select().from(intruderSightings)).toEqual([]);
 
     for (const p of await db.select().from(poles)) {
       expect(p.graceUntil).toEqual(new Date(wipeAt.getTime() + POST_WIPE_BIND_MS));

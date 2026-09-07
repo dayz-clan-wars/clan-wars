@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { declarations, factions, identityHolds, poles, seasons } from "@factions/db";
+import { clanPins, declarations, factions, identityHolds, intruderSightings, poles, seasons } from "@factions/db";
 import { POST_WIPE_BIND_MS } from "@factions/domain";
 import { lockDeclarations } from "@factions/declarations";
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import { closeSeasonTx } from "./season-close.js";
 import { closeWeeksTx } from "./week-tick.js";
 
@@ -17,6 +17,8 @@ export type WipeResult = {
   polesStamped: number;
   clansCleared: number;
   weeksClosed: number;
+  pinsCleared: number;
+  sightingsCleared: number;
 };
 
 /**
@@ -39,9 +41,6 @@ const WIPE_RERUN_WINDOW_MS = POST_WIPE_BIND_MS;
  * row, then `lockDeclarations`'s advisory lock before touching
  * `declarations`.
  *
- * `clan_pins` and `intruder_sightings` do not exist yet — increment 5's plan
- * adds them, and its wipe step (5) clears them here too.
- *
  * No-op (`skipped: true`) when the server's open season is one a wipe just
  * opened — its `started_at` is at or after `wipeAt`, or within
  * `WIPE_RERUN_WINDOW_MS` before it. §8.5 makes the wipe "idempotent by the
@@ -55,7 +54,8 @@ const WIPE_RERUN_WINDOW_MS = POST_WIPE_BIND_MS;
  */
 export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<WipeResult> {
   // (0) Lock order §4.12: factions first, then the server's open season.
-  await tx.select({ id: factions.id }).from(factions).where(eq(factions.serverId, serverId)).for("update");
+  const factionRows = await tx.select({ id: factions.id }).from(factions).where(eq(factions.serverId, serverId)).for("update");
+  const factionIds = factionRows.map((f) => f.id);
 
   const [open] = await tx.select({
     id: seasons.id, number: seasons.number, serverId: seasons.serverId,
@@ -69,6 +69,7 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
     return {
       skipped: true, closedSeason: null, openedSeason: open.number,
       holdsEnded: 0, declarationsDeleted: 0, polesStamped: 0, clansCleared: 0, weeksClosed: 0,
+      pinsCleared: 0, sightingsCleared: 0,
     };
   }
 
@@ -90,6 +91,14 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
 
   // (5) Clear every declaration, after taking the declarations advisory lock.
   await lockDeclarations(tx, serverId);
+  const declarationIds = (await tx.select({ id: declarations.id }).from(declarations).where(eq(declarations.serverId, serverId))).map((d) => d.id);
+
+  // (5) The map's wipe-scoped state (§8.5): every pin and every sighting on
+  // this server. Sightings cascade with the declarations deleted below;
+  // the explicit delete keeps the step honest if that cascade ever changes.
+  const pinsCleared = (await tx.delete(clanPins).where(inArray(clanPins.factionId, factionIds)).returning({ id: clanPins.id })).length;
+  const sightingsCleared = (await tx.delete(intruderSightings).where(inArray(intruderSightings.declarationId, declarationIds)).returning({ id: intruderSightings.id })).length;
+
   const declRows = await tx.delete(declarations).where(eq(declarations.serverId, serverId)).returning({ id: declarations.id });
 
   // (6) Re-bind every pole: fresh post-wipe grace, flag down.
@@ -120,6 +129,8 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
     polesStamped: poleRows.length,
     clansCleared: clanRows.length,
     weeksClosed,
+    pinsCleared,
+    sightingsCleared,
   };
 }
 

@@ -101,6 +101,16 @@ places them within 50 m of their clan's base (the guide's number lives in
 `rules.ts`); the pending-expiry sweep removes a pending member unseen for 7
 days.
 
+Each tick also runs the map's two consumers, right after presence and before
+the structure tick: `positions-tick.ts` projects every `pos`-bearing event
+into `player_positions` (the map's "last fix" per player), then
+`zone-tick.ts` reads the same events to raise or drop intruder sightings and
+notice their owners — positions before zones, so a sighting's own dot has
+already landed by the time it can alert anyone. Alongside the pending-expiry
+sweep, `reaper-tick.ts` runs the map's half of the reaper (expired pins,
+stale positions, sightings with no recent fix), throttled to once every five
+minutes rather than every tick.
+
 Each tick also runs the raid and raise consumers (`raid-tick.ts`,
 `raise-tick.ts`) — every `flag.lowered`/`flag.raised` event that scores a
 raid, records a defense, revives a dormant clan, or notices a non-member

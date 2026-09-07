@@ -19,6 +19,9 @@ import { ceremonyTick } from "./ceremony-tick.js";
 import { notifyCeremonies } from "./ceremony-notify.js";
 import { dormancyTick } from "./dormancy-tick.js";
 import { presenceTick, expirePendingMembers } from "./presence-tick.js";
+import { positionsTick } from "./positions-tick.js";
+import { zoneTick } from "./zone-tick.js";
+import { reaperTick } from "./reaper-tick.js";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
@@ -490,6 +493,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const warLogFailures = new Set<number>();
   let lastReportedWarLogBlockedAt: number | null = null;
 
+  // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
+  // tick — see the throttle beside expirePendingMembers below.
+  const REAPER_INTERVAL_MS = 5 * 60_000;
+  let lastReaperAt = 0;
+
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
@@ -528,11 +536,30 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("presence tick failed", err);
     }
 
-    // ⚠️ Its own try/catch, right after presence and before the notice tick:
-    // a promotion this tick should hold its clan role before a `became_full`
-    // line posts, and a channel created this tick should already exist to
-    // receive the notices queued for it. structureTick never throws, but the
-    // runner's discipline is one try/catch per step regardless.
+    // ⚠️ Its own try/catch, after presence (both read pos events; presence
+    // must promote before the zone consumer decides who is a member) and
+    // before structure. positions before zones: the map's "last fix" and the
+    // intruder pin come from the same event, and the page should never show
+    // an intruder whose own dot has not landed yet.
+    try {
+      const p = await positionsTick(db);
+      if (p.written > 0) console.log(`positions: ${p.written} fix(es)`);
+    } catch (err) {
+      console.error("positions tick failed", err);
+    }
+    try {
+      const z = await zoneTick(db);
+      if (z.alerts > 0) console.log(`zone watch: ${z.sightings} sighting(s), ${z.alerts} alert(s)`);
+    } catch (err) {
+      console.error("zone tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, after presence (and the map's positions/zone
+    // ticks) and before the notice tick: a promotion this tick should hold
+    // its clan role before a `became_full` line posts, and a channel created
+    // this tick should already exist to receive the notices queued for it.
+    // structureTick never throws, but the runner's discipline is one
+    // try/catch per step regardless.
     try {
       await runStructure("tick");
     } catch (err) {
@@ -684,6 +711,18 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (expired.length > 0) console.log(`pending expiry: ${expired.length} member(s) dropped`);
     } catch (err) {
       console.error("pending expiry failed", err);
+    }
+
+    // The reaper's map half (spec §7: 5 min). Throttled here rather than on
+    // its own timer so there is still exactly one interval in this process.
+    if (Date.now() - lastReaperAt >= REAPER_INTERVAL_MS) {
+      try {
+        const r = await reaperTick(db, new Date());
+        lastReaperAt = Date.now();
+        if (r.pins + r.positions + r.sightings > 0) console.log(`reaper: ${r.pins} pin(s), ${r.positions} position(s), ${r.sightings} sighting(s)`);
+      } catch (err) {
+        console.error("reaper tick failed", err);
+      }
     }
 
     // ⚠️ Its own try/catch, like every other step. Runs after dormancy so a
