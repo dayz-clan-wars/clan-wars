@@ -1,14 +1,29 @@
 import type { Database } from "@factions/db";
 import { factionMembers, factionVoteBallots, factionVotes, factions, players, successionClaims } from "@factions/db";
-import { and, asc, eq, isNull, lte, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import {
-  FAILED_VOTE_COOLDOWN_MS, LEADER_SILENT_MS, SUCCESSION_WINDOW_MS, VOTE_LENGTH_MS, voteThreshold,
+  FAILED_VOTE_COOLDOWN_MS, HOLDING_STATUSES, LEADER_SILENT_MS, SUCCESSION_WINDOW_MS, VOTE_LENGTH_MS, voteThreshold,
 } from "@factions/domain";
 import { gamertagOrId } from "./feed-actor";
 import { noticeClanTx } from "./notices";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+// Widened to a mutable array for drizzle's inArray(), the same way
+// roster-store.ts does it. Both clocks below filter on it: a disbanded clan
+// has no leadership left to settle.
+const HOLDING: string[] = [...HOLDING_STATUSES];
+
+/**
+ * Close one open vote saying nothing: no cooldown, no notice. The shape
+ * every silent close shares — `closeLeadershipSilentlyTx` and
+ * `evaluateVoteTx`'s nominee-gone branch both go through here rather than
+ * writing the same UPDATE twice with different follow-ups.
+ */
+async function closeVoteSilentlyTx(tx: Tx, voteId: number, at: Date): Promise<void> {
+  await tx.update(factionVotes).set({ result: "failed", closedAt: at }).where(eq(factionVotes.id, voteId));
+}
 
 export type ClaimOutcome = "ok" | "not-member" | "is-leader" | "not-eligible" | "leader-active" | "claim-open";
 export type OpenVoteOutcome =
@@ -197,8 +212,15 @@ export async function openClaimFor(db: Database, factionId: number): Promise<Ope
  * whole set against every player-driven write for the length of the pass.
  */
 export async function resolveSuccessionClaims(db: Database, now: Date): Promise<{ succeeded: number; voided: number }> {
+  // ⚠️ Holding clans only. A disbanded clan's rows are closed silently by
+  // `disbandFactionTx`, but the join is the belt to that braces: a row that
+  // outlived its clan by any route must not crown a successor on a roster
+  // that no longer exists, nor post a notice to a deleted channel.
   const open = await db.select({ id: successionClaims.id, factionId: successionClaims.factionId })
-    .from(successionClaims).where(isNull(successionClaims.closedAt)).orderBy(asc(successionClaims.id));
+    .from(successionClaims)
+    .innerJoin(factions, eq(factions.id, successionClaims.factionId))
+    .where(and(isNull(successionClaims.closedAt), inArray(factions.status, HOLDING)))
+    .orderBy(asc(successionClaims.id));
 
   let succeeded = 0;
   let voided = 0;
@@ -286,10 +308,25 @@ export async function evaluateVoteTx(
   // Already closed by whoever held the clan's row before us. Nothing to do.
   if (!v) return "open";
 
+  // ⚠️ BEFORE the count, and whatever the count says. A nominee who has left
+  // the clan (or who is somehow the leader already) is nobody to crown, so
+  // the question the vote asked no longer has an answer. It closes SILENTLY —
+  // `result = 'failed'`, no cooldown, no notice — for the same reason
+  // `closeLeadershipSilentlyTx` does: the clan never rejected anyone, so
+  // barring them from voting again for FAILED_VOTE_COOLDOWN_MS, and
+  // announcing a defeat that nobody voted for, would both be lies.
+  const nominee = await memberTx(tx, v.factionId, v.nomineeDiscordId);
+  if (!nominee || nominee.status !== "full" || nominee.role === "leader") {
+    await closeVoteSilentlyTx(tx, v.id, at);
+    return "failed";
+  }
+
   const [b] = await tx.select({ n: sql<number>`count(*)::int` }).from(factionVoteBallots)
     .where(eq(factionVoteBallots.voteId, v.id));
   const ballots = b!.n;
 
+  // The clan was asked and said no — the only close that stamps a cooldown
+  // and posts a notice.
   const fail = async () => {
     const nextAllowed = new Date(at.getTime() + FAILED_VOTE_COOLDOWN_MS);
     await tx.update(factionVotes).set({ result: "failed", closedAt: at }).where(eq(factionVotes.id, v.id));
@@ -302,14 +339,13 @@ export async function evaluateVoteTx(
   };
 
   if (v.electorateSize > 0 && ballots >= voteThreshold(v.electorateSize)) {
-    const nominee = await memberTx(tx, v.factionId, v.nomineeDiscordId);
-    // The nominee left (or was already the leader) between the open and the
-    // deciding ballot: there is nobody to crown, so the vote fails rather
-    // than leaving the clan leaderless.
-    if (!nominee || nominee.status !== "full" || nominee.role === "leader") return fail();
-
     const leader = await leaderTx(tx, v.factionId);
-    if (!leader) return fail();
+    // No seated leader to unseat: another path (a succession, a guild
+    // removal) already took the question away. Silent, for the same reason.
+    if (!leader) {
+      await closeVoteSilentlyTx(tx, v.id, at);
+      return "failed";
+    }
 
     // Demote-then-promote, one transaction: `faction_members_leader_uniq`
     // permits exactly one leader at a time. The ousted leader stays an
@@ -414,8 +450,13 @@ export async function castVoteDb(
     // The electorate is the frozen list, not today's roster: it already
     // excludes the leader and every pending member, and a member who joined
     // after the open is simply not on it (ruling 2).
+    // ⚠️ `status = 'full'` as well as the frozen list (spec §4.5). The list
+    // holds dayz ids, and a player who left and came back is a NEW, pending
+    // row carrying the same id — the array alone would enfranchise them.
     const voter = await memberTx(tx, a.factionId, a.voterDiscordId);
-    if (!voter || !v.electorateDayzIds.includes(voter.dayzId)) return "not-in-electorate" as const;
+    if (!voter || voter.status !== "full" || !v.electorateDayzIds.includes(voter.dayzId)) {
+      return "not-in-electorate" as const;
+    }
 
     const inserted = await tx.insert(factionVoteBallots)
       .values({ voteId: v.id, dayzId: voter.dayzId, castAt: a.at })
@@ -490,9 +531,11 @@ export async function applyElectorateLeaveTx(
  * unlocked read of what is due, then one transaction per vote.
  */
 export async function closeExpiredVotes(db: Database, now: Date): Promise<{ passed: number; failed: number }> {
+  // Holding clans only — see `resolveSuccessionClaims`'s note.
   const due = await db.select({ id: factionVotes.id, factionId: factionVotes.factionId })
     .from(factionVotes)
-    .where(and(isNull(factionVotes.closedAt), lte(factionVotes.closesAt, now)))
+    .innerJoin(factions, eq(factions.id, factionVotes.factionId))
+    .where(and(isNull(factionVotes.closedAt), lte(factionVotes.closesAt, now), inArray(factions.status, HOLDING)))
     .orderBy(asc(factionVotes.id));
 
   let passed = 0;
@@ -520,6 +563,7 @@ export async function closeExpiredVotes(db: Database, now: Date): Promise<{ pass
 export async function closeLeadershipSilentlyTx(tx: Tx, factionId: number, at: Date): Promise<void> {
   await tx.update(successionClaims).set({ outcome: "voided", closedAt: at })
     .where(and(eq(successionClaims.factionId, factionId), isNull(successionClaims.closedAt)));
-  await tx.update(factionVotes).set({ result: "failed", closedAt: at })
+  const [v] = await tx.select({ id: factionVotes.id }).from(factionVotes)
     .where(and(eq(factionVotes.factionId, factionId), isNull(factionVotes.closedAt)));
+  if (v) await closeVoteSilentlyTx(tx, v.id, at);
 }

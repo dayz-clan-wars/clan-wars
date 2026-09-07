@@ -14,7 +14,7 @@ import {
   claimSuccessionDb, openVoteDb, castVoteDb, resolveSuccessionClaims, closeExpiredVotes,
   openVoteFor, openClaimFor, successionEligibility, closeLeadershipSilentlyTx, lockFactionTx,
 } from "../src/internal";
-import { kickDb, transferDb, promoteDb, inviteDb, leaveDb } from "../src/writes";
+import { kickDb, transferDb, promoteDb, inviteDb, leaveDb, disbandDb } from "../src/writes";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -366,6 +366,64 @@ describe("leadership store: succession, votes, the freeze", () => {
     await open("M1", "M2");
     expect(await closeExpiredVotes(db, on(HOUR))).toEqual({ passed: 0, failed: 0 });
     expect((await voteRow())!.result).toBeNull();
+  });
+
+  it("nominee gone: the vote closes silently — no cooldown, no notice, nothing to cast into", async () => {
+    const { voteId } = await open("M1", "M2");
+
+    expect(await leaveDb(db, on(HOUR), D.M2)).toBe("ok");
+
+    const v = await voteRow();
+    expect(v!.result).toBe("failed");
+    expect(v!.closedAt!.getTime()).toBe(on(HOUR).getTime());
+    // The clan was never asked, so it never said no.
+    expect((await leaderDiscordId()).next).toBeNull();
+    expect(await notices("vote_failed")).toEqual([]);
+    expect(await roleOf("L")).toBe("leader");
+    expect(await ballotCount(voteId!)).toBe(1);
+
+    // And a ballot arriving afterwards finds nothing open.
+    expect(await cast("M3", on(2 * HOUR))).toBe("no-vote");
+
+    // The clan may open another vote at once — no cooldown was stamped.
+    expect((await open("M1", "M3", on(3 * HOUR))).outcome).toBe("ok");
+  });
+
+  it("cast: a re-joiner whose dayz id is still in the frozen electorate is pending, and pending votes in nothing", async () => {
+    const { voteId } = await open("M1", "M3");
+
+    // Straight to the table: a `leaveDb` would take M2 out of the electorate
+    // array, and it is precisely the STALE id that must not enfranchise them.
+    await db.delete(factionMembers).where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.dayzId, UID.M2)));
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: UID.M2, discordId: D.M2, role: "member",
+      joinedAt: on(HOUR), status: "pending", pendingSince: on(HOUR),
+    });
+    expect((await voteRow())!.electorateDayzIds).toContain(UID.M2);
+
+    expect(await cast("M2", on(2 * HOUR))).toBe("not-in-electorate");
+    expect(await ballotCount(voteId!)).toBe(1);
+  });
+
+  it("disband: an open claim and an open vote die with the clan, and neither tick touches them again", async () => {
+    await seen("L", ago(8 * DAY));
+    expect(await claim("O1")).toBe("ok");
+    expect((await open("M1", "M2")).outcome).toBe("ok");
+
+    expect(await disbandDb(db, D.L)).toBe("ok");
+
+    expect((await claimRow())!.outcome).toBe("voided");
+    expect((await voteRow())!.result).toBe("failed");
+    expect((await leaderDiscordId()).next).toBeNull();
+    const before = await db.select({ id: clanNotices.id }).from(clanNotices);
+
+    expect(await resolveSuccessionClaims(db, on(SUCCESSION_WINDOW_MS + DAY))).toEqual({ succeeded: 0, voided: 0 });
+    expect(await closeExpiredVotes(db, on(VOTE_LENGTH_MS + DAY))).toEqual({ passed: 0, failed: 0 });
+
+    expect(await db.select({ id: clanNotices.id }).from(clanNotices)).toEqual(before);
+    expect((await leaderDiscordId()).next).toBeNull();
+    expect(await notices("vote_failed")).toEqual([]);
+    expect(await notices("succession_voided")).toEqual([]);
   });
 
   it("silent close: a leader who leaves the Discord takes their claim and their vote with them", async () => {

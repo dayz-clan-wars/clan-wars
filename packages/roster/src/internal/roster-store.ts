@@ -7,7 +7,7 @@ import { actorGamertagTx, gamertagOrId } from "./feed-actor";
 import { noticeClanTx, noticeUserTx } from "./notices";
 import { releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
-import { applyElectorateLeaveTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
+import { applyElectorateLeaveTx, closeLeadershipSilentlyTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -242,6 +242,15 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
       isNull(factionInvites.declinedAt),
       isNull(factionInvites.revokedAt),
     ));
+
+  // Open leadership business dies with the clan, and it dies SILENTLY: there
+  // is no seat left to succeed to and no leader left to depose, so a
+  // `succession_voided`/`vote_failed` notice would post to a channel that is
+  // about to be deleted, and a cooldown would be stamped on a clan that can
+  // never vote again. Placed here, after `faction_invites` and before
+  // `faction_events`, because that is where `faction_votes` →
+  // `faction_vote_ballots` → `succession_claims` sit in the §4.12 order.
+  await closeLeadershipSilentlyTx(tx, factionId, new Date());
 
   // ⚠️ Last, per the lock order this function documents. Identity is frozen
   // here because by the time the post goes out the flag, tag and pole are
