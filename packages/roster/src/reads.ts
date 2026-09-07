@@ -1,12 +1,13 @@
 import type { Database } from "@factions/db";
 import {
-  ceremonies, factionJoinRequests, factionMembers, factions, identityLinks, players, rosterCooldowns,
+  ceremonies, factionJoinRequests, factionMembers, factionVoteBallots, factions, identityLinks, players, rosterCooldowns,
 } from "@factions/db";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, CLAN_SIZE_CAP, HOLDING_STATUSES, REBIND_CONFIRM_MS, type MemberStatus } from "@factions/domain";
 import {
   PgFactionStore, PgRebindStore, PgRosterStore, openRequestsFor, requestsBy, selectCandidates,
-  type JoinRequest, type Role,
+  openClaimFor, openVoteFor, successionEligibility, openGuestPassesDb,
+  type JoinRequest, type Role, type OpenClaim, type OpenVote, type SuccessionEligibility, type OpenGuestPass,
 } from "./internal";
 import { activeServerId } from "./server";
 import { alphaWeekCountFor, clanStatsFor, latestAlphaFactionIds, placementsFor } from "./scoring";
@@ -29,6 +30,14 @@ export type ClanView = {
   invitesOut: Awaited<ReturnType<PgRosterStore["invitesOut"]>>;
   requestsIn: JoinRequest[];
   rebindCandidates: { poleKey: string; raisedAt: Date; by: string }[];
+  leadership: {
+    openClaim: OpenClaim | null;
+    openVote: (OpenVote & { myBallot: boolean; inElectorate: boolean }) | null;
+    canClaim: SuccessionEligibility;
+    nextVoteAllowedAt: Date | null;
+    leaderLastSeenAt: Date | null;
+  };
+  guestPasses: OpenGuestPass[];
 };
 
 export type DirectoryEntry = {
@@ -78,11 +87,47 @@ async function rebindCandidatesFor(db: Database, factionId: number, now: Date): 
   return candidates.map((c) => ({ poleKey: c.poleKey, raisedAt: c.occurredAt, by: c.gamertag }));
 }
 
+/** The seated leader's `players.last_seen_at` (ruling 1). Null when there is no seated leader or no `players` row. */
+async function leaderLastSeenFor(db: Database, factionId: number): Promise<Date | null> {
+  const [l] = await db.select({ lastSeenAt: players.lastSeenAt })
+    .from(factionMembers)
+    .leftJoin(players, eq(players.dayzId, factionMembers.dayzId))
+    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.role, "leader"), eq(factionMembers.status, "full")));
+  return l?.lastSeenAt ?? null;
+}
+
+/**
+ * The leadership block of `/clan` for a full member — succession and
+ * no-confidence state, own standing included. `openVote`'s extra fields
+ * (`myBallot`, `inElectorate`) are read against the same electorate list
+ * `castVoteDb` enforces (§4.5/ruling 2): a member who joined after the vote
+ * opened is simply not in it.
+ */
+async function leadershipFor(db: Database, factionId: number, dayzId: string, now: Date): Promise<ClanView["leadership"]> {
+  const openClaim = await openClaimFor(db, factionId);
+  const vote = await openVoteFor(db, factionId);
+  let openVote: ClanView["leadership"]["openVote"] = null;
+  if (vote) {
+    const [ballot] = await db.select({ id: factionVoteBallots.id }).from(factionVoteBallots)
+      .where(and(eq(factionVoteBallots.voteId, vote.id), eq(factionVoteBallots.dayzId, dayzId)));
+    openVote = { ...vote, myBallot: ballot !== undefined, inElectorate: vote.electorateDayzIds.includes(dayzId) };
+  }
+  const canClaim = await successionEligibility(db, factionId, dayzId, now);
+  const [f] = await db.select({ nextVoteAllowedAt: factions.nextVoteAllowedAt }).from(factions).where(eq(factions.id, factionId));
+  const leaderLastSeenAt = await leaderLastSeenFor(db, factionId);
+  return { openClaim, openVote, canClaim, nextVoteAllowedAt: f?.nextVoteAllowedAt ?? null, leaderLastSeenAt };
+}
+
+/** The leadership block for a pending member — no standing at all. */
+const PENDING_LEADERSHIP: ClanView["leadership"] = { openClaim: null, openVote: null, canClaim: "not-eligible", nextVoteAllowedAt: null, leaderLastSeenAt: null };
+
 /**
  * The clan page for a member — leader, officer, member or pending alike
  * (target spec §10.2). A pending member sees the roster they are waiting to
  * join but not the officer views: `invitesOut`/`requestsIn` are `[]` for
- * anyone below officer, `rebindCandidates` for anyone but the leader.
+ * anyone below officer, `rebindCandidates` for anyone but the leader,
+ * `leadership`/`guestPasses` (§4.5) computed only for a full member —
+ * `guestPasses` officer+ only, `leadership` for every full rank.
  */
 export async function clanForDb(db: Database, discordId: string, now: Date = new Date()): Promise<ClanView | "not-linked" | "not-in-clan"> {
   const [link] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks).where(eq(identityLinks.discordId, discordId));
@@ -107,8 +152,10 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const invitesOut = officerPlus ? await new PgRosterStore(db).invitesOut(m.factionId, now) : [];
   const requestsIn = officerPlus ? await openRequestsFor(db, m.factionId, now) : [];
   const rebindCandidates = status === "full" && role === "leader" ? await rebindCandidatesFor(db, m.factionId, now) : [];
+  const leadership = status === "full" ? await leadershipFor(db, m.factionId, link.dayzId, now) : PENDING_LEADERSHIP;
+  const guestPasses = officerPlus ? await openGuestPassesDb(db, m.factionId, now) : [];
 
-  return { clan: clan!, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates };
+  return { clan: clan!, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses };
 }
 
 /**

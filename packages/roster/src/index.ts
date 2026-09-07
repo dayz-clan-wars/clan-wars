@@ -8,10 +8,17 @@
  * (`declareSolo`, `releaseSolo`, `baseFor`) and the roster writes — invites
  * and join requests both ways, `leave`/`kick`/`promote`/`demote`/`transfer`,
  * `rename`/`setRecruitingPost`/`disband`, `claimCeremony` and
- * `confirmRebind`. Every write names the ACTOR's Discord id first and
- * resolves their clan itself. Nothing here may ever set a clan active or dormant, write a raid
- * or a defense, insert a declaration without citing evidence the log
- * already holds, or create a faction without a ceremony.
+ * `confirmRebind`. Increment 7 adds three more groups, each named by its own
+ * `Db`-suffixed wrapper file: leadership (`claimSuccession`, `openVote`,
+ * `castVote` — succession and no-confidence, spec §5/§7), the vault
+ * (`vaultFor`, `addLock`/`editLock`/`deleteLock`, `revealLock`/`confirmLock`,
+ * `rotateLocks`, and the `VAULT_NAME_MAX`/`VAULT_NOTE_MAX` limits — spec
+ * §4.9/§10.2) and settings/guest passes (`grantGuestPass`,
+ * `revokeGuestPass` — spec §4.10). Every write names the ACTOR's Discord id
+ * first and resolves their clan itself. Nothing here may ever set a clan
+ * active or dormant, write a raid or a defense, insert a declaration
+ * without citing evidence the log already holds, or create a faction
+ * without a ceremony.
  *
  * Lock order for the writes that land in increments 2b and 2c (spec §4.12):
  * factions → declarations → poles → faction_members → faction_invites →
@@ -51,6 +58,19 @@ import {
   playerBoardsDb, playerProfileDb, clanBoardDb,
   type StatScope, type ResolvedScope, type BoardRow, type KdRow, type Boards, type PlayerProfile,
 } from "./stats";
+import {
+  claimSuccessionDbFor, openVoteDbFor, castVoteDbFor,
+  type ClaimOutcome, type OpenVoteOutcome, type CastOutcome, type OpenVote, type OpenClaim,
+} from "./leadership";
+import {
+  vaultForDb, addLockDbFor, editLockDbFor, deleteLockDbFor, revealLockDbFor, rotateLocksDbFor, confirmLockDbFor,
+  VAULT_NAME_MAX, VAULT_NOTE_MAX,
+  type VaultState, type VaultLockView, type VaultHistoryRow,
+} from "./vault";
+import {
+  grantGuestPassDbFor, revokeGuestPassDbFor,
+  type GuestGrantOutcome, type GuestTargetRef,
+} from "./guest";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -63,6 +83,10 @@ export type {
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry };
 export type { StatScope, ResolvedScope, BoardRow, KdRow, Boards, PlayerProfile };
+export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
+export type { VaultState, VaultLockView, VaultHistoryRow };
+export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
+export type { GuestGrantOutcome, GuestTargetRef };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -229,4 +253,55 @@ export function playerProfile(gamertag: string, scope: StatScope): Promise<Playe
 /** The same boards, narrowed to the viewer's own clan's current full roster. Full members only. */
 export function clanBoard(discordId: string, scope: StatScope): Promise<Boards | "not-linked" | "not-in-clan" | "pending"> {
   return clanBoardDb(db(), discordId, scope, undefined, new Date());
+}
+
+/** Claim a silent leader's seat (guide ch. 3/8). Full members only; every eligibility rule is inside `claimSuccessionDb`. */
+export function claimSuccession(discordId: string) {
+  return claimSuccessionDbFor(db(), new Date(), discordId);
+}
+/** Open a no-confidence vote against your leader, nominating a replacement (yourself included). The leader may not open one. */
+export function openVote(discordId: string, nomineeDiscordId: string) {
+  return openVoteDbFor(db(), new Date(), discordId, nomineeDiscordId);
+}
+/** Cast your one ballot in your clan's open vote. */
+export function castVote(discordId: string) {
+  return castVoteDbFor(db(), new Date(), discordId);
+}
+
+/** Your clan's vault: locks your rank may see, and — leader only — its history. Never a code. */
+export function vaultFor(discordId: string) {
+  return vaultForDb(db(), discordId);
+}
+/** Add a vault lock. Officer+ only. */
+export function addLock(discordId: string, a: { name: string; note: string | null; minRole: Role; code?: string }) {
+  return addLockDbFor(db(), new Date(), discordId, a);
+}
+/** Rename/re-describe/re-gate a lock. Officer+ only; the code is untouched. */
+export function editLock(discordId: string, a: { lockId: number; name: string; note: string | null; minRole: Role }) {
+  return editLockDbFor(db(), new Date(), discordId, a);
+}
+/** Delete a lock. Officer+ only. */
+export function deleteLock(discordId: string, lockId: number) {
+  return deleteLockDbFor(db(), new Date(), discordId, lockId);
+}
+/** Reveal a lock's code. Any rank meeting the lock's `min_role`. */
+export function revealLock(discordId: string, lockId: number) {
+  return revealLockDbFor(db(), new Date(), discordId, lockId);
+}
+/** Rotate one lock's code, or every lock in the vault (`lockId: "all"`). Officer+ only. */
+export function rotateLocks(discordId: string, lockId: number | "all") {
+  return rotateLocksDbFor(db(), new Date(), discordId, lockId);
+}
+/** Confirm a lock's code was changed in-game. Any rank meeting the lock's `min_role`. */
+export function confirmLock(discordId: string, lockId: number) {
+  return confirmLockDbFor(db(), new Date(), discordId, lockId);
+}
+
+/** Grant a 24 h guest voice pass, by Discord id or by a linked gamertag. Officer+ only. */
+export function grantGuestPass(discordId: string, target: GuestTargetRef) {
+  return grantGuestPassDbFor(db(), new Date(), discordId, target);
+}
+/** Revoke an open guest pass early. Officer+ only. */
+export function revokeGuestPass(discordId: string, passId: number) {
+  return revokeGuestPassDbFor(db(), new Date(), discordId, passId);
 }

@@ -10,6 +10,8 @@ import { CLAIMABLE_FLAGS } from "@factions/domain";
 import {
   clanForDb, directoryDb, clanByTagDb, claimContextDb, myInvitesDb, myRequestsDb,
 } from "../src/reads";
+import { openVoteDb, grantGuestPassDb } from "../src/internal";
+import { promoteDb, demoteDb } from "../src/writes";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -81,6 +83,7 @@ describe("the roster package's page reads", () => {
       expect(view.invitesOut).toHaveLength(1);
       expect(view.requestsIn).toHaveLength(1);
       expect(view.roster.map((r) => r.dayzId).sort()).toEqual([UID_L, UID_T].sort());
+      expect(view.leadership.canClaim).toBe("is-leader");
     });
 
     it("a plain member sees the roster but no invitesOut or requestsIn", async () => {
@@ -95,6 +98,44 @@ describe("the roster package's page reads", () => {
       expect(view.invitesOut).toEqual([]);
       expect(view.requestsIn).toEqual([]);
       expect(view.rebindCandidates).toEqual([]);
+      expect(view.guestPasses).toEqual([]);
+    });
+
+    it("shows an open vote's myBallot/inElectorate for a full member who has not voted", async () => {
+      const UID_V = "V".repeat(40);
+      await db.insert(players).values({ dayzId: UID_V, gamertag: "Vera", firstSeenAt: now, lastSeenAt: now });
+      await db.insert(identityLinks).values({ discordId: "d6", dayzId: UID_V, gamertag: "Vera", verifiedAt: now });
+      await db.insert(factionMembers).values({
+        factionId, serverId, dayzId: UID_V, discordId: "d6", role: "member", joinedAt: now, status: "full",
+      });
+
+      await openVoteDb(db, { factionId, openerDiscordId: "d3", nomineeDiscordId: "d6", at: now, siteBaseUrl: "https://example.test" });
+
+      const view = await clanForDb(db, "d6", now);
+      if (view === "not-linked" || view === "not-in-clan") throw new Error("expected a ClanView");
+      expect(view.leadership.openVote).not.toBeNull();
+      expect(view.leadership.openVote!.inElectorate).toBe(true);
+      expect(view.leadership.openVote!.myBallot).toBe(false);
+
+      // The opener's nomination IS their own yes (ruling 3).
+      const openerView = await clanForDb(db, "d3", now);
+      if (openerView === "not-linked" || openerView === "not-in-clan") throw new Error("expected a ClanView");
+      expect(openerView.leadership.openVote!.myBallot).toBe(true);
+    });
+
+    it("populates guestPasses for an officer, empty for a plain member", async () => {
+      await promoteDb(db, "d1", "d3");
+      await grantGuestPassDb(db, { factionId, actorDiscordId: "d3", userDiscordId: "d-guest", at: now });
+
+      const officerView = await clanForDb(db, "d3", now);
+      if (officerView === "not-linked" || officerView === "not-in-clan") throw new Error("expected a ClanView");
+      expect(officerView.guestPasses).toHaveLength(1);
+      expect(officerView.guestPasses[0]!.userDiscordId).toBe("d-guest");
+
+      await demoteDb(db, "d1", "d3");
+      const plainView = await clanForDb(db, "d3", now);
+      if (plainView === "not-linked" || plainView === "not-in-clan") throw new Error("expected a ClanView");
+      expect(plainView.guestPasses).toEqual([]);
     });
 
     it("a pending member sees the roster, status pending, and no officer views", async () => {

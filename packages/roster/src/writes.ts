@@ -17,30 +17,38 @@ const TAG_RE = /^[A-Za-z0-9]+$/u;
 export const validName = (s: string) => s.trim().length >= CLAN_NAME_LENGTH.min && s.trim().length <= CLAN_NAME_LENGTH.max;
 export const validTag = (s: string) => s.length >= CLAN_TAG_LENGTH.min && s.length <= CLAN_TAG_LENGTH.max && TAG_RE.test(s);
 
+/**
+ * A gamertag resolved to its linked Discord account — the ONLY place a
+ * gamertag maps to a Discord id, since gamertag has no unique index. Tries
+ * an exact-case match first; only falls back to case-insensitive (and only
+ * there risks ambiguity) if the exact match misses. Shared by `inviteDb`
+ * (the site has no Discord user picker) and `grantGuestPassDbFor`'s
+ * gamertag form for the same reason.
+ */
+export async function resolveGamertagLink(db: Database, gamertag: string): Promise<{ dayzId: string; discordId: string } | "ambiguous-gamertag" | null> {
+  const cols = { dayzId: identityLinks.dayzId, discordId: identityLinks.discordId };
+  const exact = await db.select(cols).from(identityLinks).where(eq(identityLinks.gamertag, gamertag)).limit(2);
+  if (exact.length === 1) return exact[0]!;
+  const ci = await db.select(cols).from(identityLinks)
+    .where(sql`lower(${identityLinks.gamertag}) = lower(${gamertag})`).limit(2);
+  if (ci.length > 1) return "ambiguous-gamertag";
+  return ci[0] ?? null;
+}
+
 export type InviteOutcome = CreateInviteOutcome | ActorRefusal | "not-permitted" | "invitee-not-linked" | "ambiguous-gamertag";
 export type InviteeRef = { discordId: string } | { gamertag: string };
 export async function inviteDb(db: Database, now: Date, actorDiscordId: string, invitee: InviteeRef): Promise<{ outcome: InviteOutcome; inviteId: number | null }> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return { outcome: a, inviteId: null };
-  const cols = { dayzId: identityLinks.dayzId, discordId: identityLinks.discordId };
-  let link: { dayzId: string; discordId: string } | undefined;
+  let link: { dayzId: string; discordId: string } | null;
   if ("discordId" in invitee) {
-    [link] = await db.select(cols).from(identityLinks).where(eq(identityLinks.discordId, invitee.discordId));
+    const cols = { dayzId: identityLinks.dayzId, discordId: identityLinks.discordId };
+    const [row] = await db.select(cols).from(identityLinks).where(eq(identityLinks.discordId, invitee.discordId));
+    link = row ?? null;
   } else {
-    // The site invites by gamertag — it has no Discord user picker — and the
-    // link row is the ONLY place a gamertag maps to a Discord account.
-    // gamertag has no unique index, so try an exact-case match first; only
-    // fall back to case-insensitive (and only there risk ambiguity) if the
-    // exact match misses.
-    const exact = await db.select(cols).from(identityLinks).where(eq(identityLinks.gamertag, invitee.gamertag)).limit(2);
-    if (exact.length === 1) {
-      link = exact[0];
-    } else {
-      const ci = await db.select(cols).from(identityLinks)
-        .where(sql`lower(${identityLinks.gamertag}) = lower(${invitee.gamertag})`).limit(2);
-      if (ci.length > 1) return { outcome: "ambiguous-gamertag", inviteId: null };
-      link = ci[0];
-    }
+    const resolved = await resolveGamertagLink(db, invitee.gamertag);
+    if (resolved === "ambiguous-gamertag") return { outcome: "ambiguous-gamertag", inviteId: null };
+    link = resolved;
   }
   if (!link) return { outcome: "invitee-not-linked", inviteId: null };
   return new PgRosterStore(db).createInvite({

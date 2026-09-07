@@ -2,17 +2,24 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, factionInvites, identityHolds, rosterCooldowns, identityLinks, players,
-  poles, events, admFiles, declarations, ceremonies, ceremonyParticipants,
+  poles, events, admFiles, declarations, ceremonies, ceremonyParticipants, successionClaims,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { PENDING_EXPIRY_MS, ROSTER_COOLDOWN_MS, ACTIVATION_WINDOW_MS, RELEASED_POLE_GRACE_MS } from "@factions/domain";
+import {
+  PENDING_EXPIRY_MS, ROSTER_COOLDOWN_MS, ACTIVATION_WINDOW_MS, RELEASED_POLE_GRACE_MS, LEADER_SILENT_MS,
+} from "@factions/domain";
 import { actorFor } from "../src/actor";
 import {
   inviteDb, acceptInviteDb, leaveDb, requestJoinDbByTag, decideRequestDbFor,
   kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb,
   claimCeremonyDb, confirmRebindDb,
 } from "../src/writes";
+import { claimSuccessionDbFor, openVoteDbFor, castVoteDbFor } from "../src/leadership";
+import {
+  vaultForDb, addLockDbFor, editLockDbFor, deleteLockDbFor, revealLockDbFor, rotateLocksDbFor, confirmLockDbFor,
+} from "../src/vault";
+import { grantGuestPassDbFor, revokeGuestPassDbFor } from "../src/guest";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -275,6 +282,85 @@ describe("roster package writes", () => {
       expect(decl!.poleKey).toBe(newPole);
       const [oldPole] = await db.select().from(poles).where(eq(poles.poleKey, "5000.00:100.00:5000.00"));
       expect(oldPole!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+    });
+  });
+
+  describe("leadership, vault and guest-pass exports", () => {
+    it("claimSuccession: refuses a linked non-member, then lets the sole member claim a silent leader's seat", async () => {
+      expect(await claimSuccessionDbFor(db, now, "d2")).toBe("not-in-clan");
+
+      await db.update(players).set({ lastSeenAt: ago(LEADER_SILENT_MS + 1_000) }).where(eq(players.dayzId, UID_L));
+      expect(await claimSuccessionDbFor(db, now, "d3")).toBe("ok");
+      const [claim] = await db.select().from(successionClaims).where(eq(successionClaims.factionId, factionId));
+      expect(claim!.claimantDiscordId).toBe("d3");
+    });
+
+    it("openVote and castVote: a two-member electorate passes on the second ballot; castVote refuses an unlinked caller", async () => {
+      await db.insert(factionMembers).values({ factionId, serverId, dayzId: UID_O, discordId: "d2", role: "member", joinedAt: now, status: "full" });
+
+      const opened = await openVoteDbFor(db, now, "d3", "d2");
+      expect(opened.outcome).toBe("ok");
+      expect(opened.voteId).not.toBeNull();
+
+      expect(await castVoteDbFor(db, now, "d2")).toBe("passed");
+      const [f] = await db.select().from(factions).where(eq(factions.id, factionId));
+      expect(f!.leaderDiscordId).toBe("d2");
+
+      expect(await castVoteDbFor(db, now, "d-nobody")).toBe("not-linked");
+    });
+
+    it("addLock: an officer succeeds; a pending actor is refused", async () => {
+      await db.insert(factionMembers).values({
+        factionId, serverId, dayzId: UID_O, discordId: "d2", role: "member", joinedAt: now, status: "pending", pendingSince: now,
+      });
+      const pending = await addLockDbFor(db, now, "d2", { name: "Shed", note: null, minRole: "member" });
+      expect(pending.outcome).toBe("pending");
+
+      const added = await addLockDbFor(db, now, "d1", { name: "Shed", note: "the back one", minRole: "member", code: "1234" });
+      expect(added.outcome).toBe("ok");
+      expect(added.lockId).not.toBeNull();
+    });
+
+    it("editLock, revealLock, confirmLock, rotateLocks, vaultFor and deleteLock round-trip one lock", async () => {
+      const { lockId } = await addLockDbFor(db, now, "d1", { name: "Shed", note: null, minRole: "officer", code: "1234" });
+      expect(lockId).not.toBeNull();
+
+      // Gated to officer: a plain member cannot see it yet.
+      expect((await revealLockDbFor(db, now, "d3", lockId!)).outcome).toBe("not-visible");
+
+      expect(await editLockDbFor(db, now, "d1", { lockId: lockId!, name: "Shed2", note: "n", minRole: "member" })).toBe("ok");
+
+      const revealed = await revealLockDbFor(db, now, "d3", lockId!);
+      expect(revealed).toEqual({ outcome: "ok", code: "1234" });
+
+      expect(await confirmLockDbFor(db, now, "d3", lockId!)).toBe("ok");
+
+      const rotated = await rotateLocksDbFor(db, now, "d1", lockId!);
+      expect(rotated).toEqual({ outcome: "ok", rotated: 1 });
+
+      const state = await vaultForDb(db, "d1");
+      if (typeof state === "string") throw new Error("expected a VaultState");
+      expect(state.locks).toHaveLength(1);
+      expect(state.locks[0]!.exposed).toBe(false);
+      expect(state.history).not.toBeNull();
+      expect(state.history!.length).toBeGreaterThan(0);
+
+      expect(await deleteLockDbFor(db, now, "d1", lockId!)).toBe("ok");
+      const after = await vaultForDb(db, "d1");
+      if (typeof after === "string") throw new Error("expected a VaultState");
+      expect(after.locks).toEqual([]);
+    });
+
+    it("grantGuestPass by Discord id and by a linked gamertag, then revokeGuestPass", async () => {
+      const byId = await grantGuestPassDbFor(db, now, "d1", { discordId: "d-guest" });
+      expect(byId.outcome).toBe("ok");
+      expect(byId.passId).not.toBeNull();
+
+      const byTag = await grantGuestPassDbFor(db, now, "d1", { gamertag: "Otto" });
+      expect(byTag.outcome).toBe("ok");
+      expect(byTag.passId).not.toBeNull();
+
+      expect(await revokeGuestPassDbFor(db, now, "d1", byId.passId!)).toBe("ok");
     });
   });
 });
