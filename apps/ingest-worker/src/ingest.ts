@@ -164,6 +164,32 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
         emote: line.event.emote,
         item: line.event.item,
       };
+    case "death":
+      return line.event.kind === "killed"
+        ? {
+            victimDayzId: line.event.victimDayzId,
+            victimGamertag: line.event.victimGamertag,
+            killerDayzId: line.event.killerDayzId,
+            killerGamertag: line.event.killerGamertag,
+            weapon: line.event.weapon,
+            distanceM: line.event.distanceM,
+          }
+        : {
+            victimDayzId: line.event.victimDayzId,
+            victimGamertag: line.event.victimGamertag,
+            cause: line.event.cause,
+            entity: line.event.entity,
+          };
+    case "session":
+      return { dayzId: line.event.dayzId, gamertag: line.event.gamertag };
+    case "teleport":
+      return {
+        dayzId: line.event.dayzId,
+        gamertag: line.event.gamertag,
+        from: line.event.from,
+        to: line.event.to,
+        reason: line.event.reason,
+      };
     case "roster":
       return { count: line.count };
   }

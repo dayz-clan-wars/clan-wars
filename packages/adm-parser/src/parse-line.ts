@@ -4,6 +4,9 @@ import { parseFlagPole, type FlagPoleEvent, type FlagPoleAction } from "./flagpo
 import { parseStructure, type StructureEvent } from "./structure.js";
 import { parseRosterHeader, parsePlayerListEntry } from "./playerlist.js";
 import { parseEmote, type EmotePerformed } from "./emote.js";
+import { parseDeath, type DeathLine } from "./death.js";
+import { parseSession, type SessionEvent } from "./session.js";
+import { parseTeleport, type TeleportEvent } from "./teleport.js";
 
 export type ParsedLine =
   | { kind: "flag"; change: FlagChange }
@@ -11,7 +14,10 @@ export type ParsedLine =
   | { kind: "structure"; event: StructureEvent }
   | { kind: "roster"; count: number }
   | { kind: "position"; gamertag: string; dayzId: string; pos: Vec3 }
-  | { kind: "emote"; event: EmotePerformed };
+  | { kind: "emote"; event: EmotePerformed }
+  | { kind: "death"; event: DeathLine }
+  | { kind: "session"; event: SessionEvent }
+  | { kind: "teleport"; event: TeleportEvent };
 
 /**
  * Every ParsedLine a single raw line yields, in a FIXED order.
@@ -31,6 +37,15 @@ export function parseLine(raw: string): ParsedLine[] {
 
   const structure = parseStructure(raw);
   if (structure) return [{ kind: "structure", event: structure }];
+
+  const death = parseDeath(raw);
+  if (death) return [{ kind: "death", event: death }];
+
+  const session = parseSession(raw);
+  if (session) return [{ kind: "session", event: session }];
+
+  const teleport = parseTeleport(raw);
+  if (teleport) return [{ kind: "teleport", event: teleport }];
 
   const entry = parsePlayerListEntry(raw);
   if (entry) {
@@ -62,6 +77,12 @@ export function eventTypeFor(line: ParsedLine): EventType | null {
       return "player.position";
     case "emote":
       return "emote.performed";
+    case "death":
+      return line.event.kind === "killed" ? "player.killed" : "player.died";
+    case "session":
+      return line.event.kind === "connected" ? "player.connected" : "player.disconnected";
+    case "teleport":
+      return "player.teleported";
     case "roster":
       return null;
   }

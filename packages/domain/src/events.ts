@@ -8,4 +8,9 @@ export type EventType =
   | "base.built"
   | "base.dismantled"
   | "player.position"
-  | "emote.performed";
+  | "emote.performed"
+  | "player.connected"
+  | "player.disconnected"
+  | "player.killed"
+  | "player.died"
+  | "player.teleported";

@@ -5,5 +5,8 @@ export * from "./flag.js";
 export * from "./flagpole.js";
 export * from "./structure.js";
 export * from "./playerlist.js";
+export * from "./death.js";
+export * from "./session.js";
+export * from "./teleport.js";
 export * from "./timestamps.js";
 export * from "./parse-line.js";

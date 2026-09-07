@@ -42,9 +42,9 @@ describe("ingestFile", () => {
 
   it("appends only lines that parse to events", async () => {
     const r = await ingestFile(db, opts());
-    // kit placement + raise + one position entry = 3. Roster header, terminator,
-    // boot header and "is connected" produce no events.
-    expect(r.eventsAppended).toBe(3);
+    // kit placement + raise + one position entry + "is connected" = 4. Roster
+    // header, terminator and boot header produce no events.
+    expect(r.eventsAppended).toBe(4);
   });
 
   it("resolves absolute timestamps from the boot header", async () => {
@@ -67,7 +67,7 @@ describe("ingestFile", () => {
     await ingestFile(db, opts());
     const second = await ingestFile(db, opts());
     expect(second.eventsAppended).toBe(0);
-    expect(await db.select().from(events)).toHaveLength(3);
+    expect(await db.select().from(events)).toHaveLength(4);
   });
 
   it("reports zero unparsed flag-shaped lines for a clean file", async () => {

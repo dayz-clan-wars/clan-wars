@@ -46,7 +46,7 @@ describe("parseLine", () => {
   });
 
   it("yields nothing for an unrelated line", () => {
-    expect(parseLine(`10:00:00 | Player "A" (id=${ID}) is connected`)).toEqual([]);
+    expect(parseLine(`10:00:00 | Player "A" (id=${ID}) is connecting`)).toEqual([]);
   });
 
   it("routes an emote line to the emote branch", () => {
@@ -66,6 +66,32 @@ describe("parseLine", () => {
   it("does not let the PlayerList entry matcher claim an emote line", () => {
     const raw = `| 15:24:30 | Player "Steve" (id=${"A".repeat(40)} pos=<1.0, 2.0, 3.0>) performed EmoteClap`;
     expect(parseLine(raw)[0]?.kind).not.toBe("position");
+  });
+
+  it("routes a death line to the death branch", () => {
+    const raw = `10:00:00 | Player "Vic" (DEAD) (id=${ID} pos=<1.0, 2.0, 3.0>) bled out`;
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("death");
+    expect(eventTypeFor(out[0]!)).toBe("player.died");
+  });
+
+  it("routes a connect line to the session branch", () => {
+    const raw = `10:00:00 | Player "Steve" (id=${ID}) is connected`;
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("session");
+    expect(eventTypeFor(out[0]!)).toBe("player.connected");
+  });
+
+  it("routes a teleport line to the teleport branch", () => {
+    const raw =
+      `13:00:07 | Player "Steve" (id=${ID} pos=<100.0, 93.0, 300.0>) ` +
+      "was teleported from: <1.0, 300.0, 2.0> to: <100.0, 93.0, 200.0>. Reason: Fast Travel";
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("teleport");
+    expect(eventTypeFor(out[0]!)).toBe("player.teleported");
   });
 });
 
