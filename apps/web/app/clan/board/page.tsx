@@ -24,22 +24,23 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
   const parsed = parseSeasonParam(season);
 
   // ⚠️ Same two-step default as /players: a "default" parse needs the
-  // roster's own `seasons` list before it can pick the open season. The
-  // probe also doubles as the refusal check — a refusal short-circuits
-  // before any second call.
-  const probe = await clanBoard(session.sub, { kind: "all" });
-  if (isRefusal(probe)) {
+  // roster's own `seasons` list before it can pick the open season, so it
+  // is resolved with an all-time call that doubles as the refusal check. An
+  // explicit scope (a season number, or "all") never needs that lookup, so
+  // it costs exactly one call.
+  const first = await clanBoard(session.sub, parsed === "default" ? { kind: "all" } : parsed);
+  if (isRefusal(first)) {
     return (
       <main className="mx-auto max-w-[40rem] px-4 py-10">
         <p className={label}>Clan board</p>
-        <p className="mt-6 text-ink-2">{REFUSAL[probe]}</p>
+        <p className="mt-6 text-ink-2">{REFUSAL[first]}</p>
       </main>
     );
   }
 
-  const boards = parsed === "default"
-    ? (probe.seasons[0] !== undefined ? await clanBoard(session.sub, { kind: "season", number: probe.seasons[0] }) : probe)
-    : await clanBoard(session.sub, parsed);
+  const boards = parsed === "default" && first.seasons[0] !== undefined
+    ? await clanBoard(session.sub, { kind: "season", number: first.seasons[0] })
+    : first;
 
   if (isRefusal(boards)) {
     return (

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { playerProfile } from "@factions/roster";
 import { parseSeasonParam } from "@/lib/stat-scope";
-import { playTime, scopeLabel } from "@/lib/stats-copy";
+import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { when } from "@/lib/format";
 
@@ -15,7 +15,7 @@ const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 const LIST_LIMIT = 10;
 
 function OpponentList({ items }: { items: { gamertag: string; count: number }[] }) {
-  if (items.length === 0) return <p className="mt-2 text-sm text-ink-2">Nothing yet.</p>;
+  if (items.length === 0) return <p className="mt-2 text-sm text-ink-2">{EMPTY_BOARD}</p>;
   const shown = items.slice(0, LIST_LIMIT);
   const rest = items.length - shown.length;
   return (
@@ -110,7 +110,7 @@ export default async function PlayerProfilePage({
       <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
         <h2 className={label}>Clan history</h2>
         {profile.clanHistory.length === 0 ? (
-          <p className="mt-2 text-sm text-ink-2">Nothing yet.</p>
+          <p className="mt-2 text-sm text-ink-2">{EMPTY_BOARD}</p>
         ) : (
           <ul className="mt-2 flex flex-col gap-1">
             {profile.clanHistory.map((c, i) => (
