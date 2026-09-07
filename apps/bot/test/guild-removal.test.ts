@@ -4,7 +4,8 @@ import {
   servers, factionMembers, identityLinks, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { handleGuildMemberRemove } from "../src/guild-removal.js";
+import { removeFromGuildDb } from "@factions/roster/internal";
+import { handleGuildMemberRemove, type RemoveFromGuild } from "../src/guild-removal.js";
 import { seedFaction } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
@@ -48,5 +49,44 @@ describe("handleGuildMemberRemove", () => {
     expect(result).toMatchObject({ linked: true, roster: "member-left" });
     expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, D_M))).toEqual([]);
     expect(await db.select().from(identityLinks).where(eq(identityLinks.discordId, D_M))).toEqual([]);
+  });
+
+  /**
+   * Ruling 10 gives removals no catch-up sweep, so a dropped event is a
+   * roster row and an identity link nothing ever returns for. A deadlock
+   * (`40P01`) aborts the losing transaction and leaves the database exactly
+   * as it was, so the whole store call is replayable — once.
+   */
+  it("retries once on a 40P01 deadlock and returns the second call's result", async () => {
+    let calls = 0;
+    const flaky: RemoveFromGuild = async (d, x) => {
+      calls++;
+      if (calls === 1) {
+        const err = new Error("deadlock detected") as Error & { code: string };
+        err.code = "40P01";
+        throw err;
+      }
+      return removeFromGuildDb(d, x);
+    };
+
+    const result = await handleGuildMemberRemove(db, { guildId: GUILD, expectedGuildId: GUILD, userId: D_M, now }, flaky);
+
+    expect(calls).toBe(2);
+    expect(result).toMatchObject({ linked: true, roster: "member-left" });
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, D_M))).toEqual([]);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.discordId, D_M))).toEqual([]);
+  });
+
+  it("rethrows anything that is not a deadlock, and does not retry", async () => {
+    let calls = 0;
+    const broken: RemoveFromGuild = async () => {
+      calls++;
+      throw new Error("boom");
+    };
+
+    await expect(
+      handleGuildMemberRemove(db, { guildId: GUILD, expectedGuildId: GUILD, userId: D_M, now }, broken),
+    ).rejects.toThrow("boom");
+    expect(calls).toBe(1);
   });
 });

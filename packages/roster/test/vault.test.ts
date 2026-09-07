@@ -263,6 +263,150 @@ describe("vault store", () => {
     expect(rotated.outcome).toBe("not-permitted");
   });
 
+  // ------------------------------------------------- 8. cross-clan isolation
+
+  /**
+   * Every vault read and write is scoped by `factionId` as well as `lockId`,
+   * so a member of another clan naming clan A's lock id sees exactly what
+   * they would see naming a lock id that never existed: `gone`, and never a
+   * code. The actor here is an OFFICER of clan B, so the officer gate cannot
+   * be what refuses them — only the scoping.
+   */
+  it("a member of another clan gets gone for clan A's lock id, and no code", async () => {
+    const lockId = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
+
+    const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+    await db.insert(admFiles).values({ serverId: s2!.id, filename: "g.ADM", bootAt: now, linesIngested: 0, complete: true });
+    const bUid = "B".repeat(40);
+    await db.insert(players).values({ dayzId: bUid, gamertag: "Bo", firstSeenAt: now, lastSeenAt: now });
+    await db.insert(identityLinks).values({ discordId: "dB", dayzId: bUid, gamertag: "Bo", verifiedAt: now });
+    const other = await seedFaction(db, {
+      serverId: s2!.id, tag: "WOLF", name: "Wolves", texture: "Flag_Wolf",
+      leaderDiscordId: "dB", createdAt: now, activatedAt: now, poleKey: "7000.00:100.00:7000.00", x: 7000, z: 7000,
+    });
+    await db.insert(factionMembers).values({
+      factionId: other.id, serverId: s2!.id, dayzId: bUid, discordId: "dB", role: "officer", joinedAt: now, status: "full",
+    });
+    const bActor: VaultActor = { factionId: other.id, serverId: s2!.id, dayzId: bUid, discordId: "dB", role: "officer" };
+
+    const revealed = await revealLockDb(db, bActor, { lockId, at: now });
+    expect(revealed).toEqual({ outcome: "gone", code: null });
+    expect(await editLockDb(db, bActor, { lockId, name: "Theirs", note: null, minRole: "member", at: now })).toBe("gone");
+    expect(await deleteLockDb(db, bActor, { lockId, at: now })).toBe("gone");
+
+    // Untouched, and no history written against either clan.
+    const row = await lockRow(lockId);
+    expect(row.name).toBe("Front gate");
+    expect((await historyRows()).map((h) => h.action)).toEqual(["added"]);
+  });
+
+  // ------------------------------------------------- 9. staged race (§13)
+
+  /**
+   * `rotateLocksDb("all")` and `leaveDb` both open by taking the clan's
+   * `factions` row, so a third connection HOLDING that row parks both and
+   * releasing it lets Postgres pick the order. Ordering is read out of
+   * `pg_stat_activity`, never waited out — the pattern removal.test.ts uses.
+   *
+   * The two legal outcomes are the two halves of one rule: the leaver
+   * exposes only what they knew. Leave-first, the exposure lands on the
+   * PRE-rotation codes and the rotation then clears `exposed_at` — those
+   * codes are dead. Rotate-first, the leaver was still in the clan when the
+   * new codes were written (they were DM'd), so they knew them and the
+   * exposure that follows is correct. What must never happen is the middle:
+   * a lock rotated by this rotation and left exposed by an exposure the
+   * rotation should have cleared, or a rotation that missed a lock. The
+   * officer lock is never exposed by a plain member in either order.
+   */
+  for (const rotateFirst of [true, false]) {
+  it(`rotate-all racing a member's leave never leaves a half-exposed vault (${rotateFirst ? "rotate" : "leave"} started first)`, async () => {
+    const memberLock = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
+    const officerLock = (await addLockDb(db, actor("O1"), { name: "Officer safe", note: null, minRole: "officer", at: now, rng: () => 0.1 })).lockId!;
+    const before = [(await lockRow(memberLock)).code, (await lockRow(officerLock)).code];
+
+    const rotateAt = new Date(now.getTime() + 60_000);
+    const leaveAt = new Date(now.getTime() + 30_000);
+
+    const holderDb = createClient(URL);
+    let release!: () => void;
+    const released = new Promise<void>((r) => { release = r; });
+    let taken!: () => void;
+    const isTaken = new Promise<void>((r) => { taken = r; });
+    const holder = holderDb.transaction(async (tx) => {
+      await tx.execute(sql`select id from factions where id = ${factionId}::bigint for update`);
+      taken();
+      await released;
+    });
+
+    const dbA = createClient(URL);
+    const dbB = createClient(URL);
+    let rotated!: { outcome: string; rotated: number };
+    let left!: string;
+    try {
+      await isTaken;
+      // ⚠️ Staged, not just launched: each side is started only once the
+      // previous one is CONFIRMED waiting on the row, so Postgres' FIFO
+      // queue puts them in the order this test names. Merely calling them in
+      // order proves nothing — `leaveDb` opens with an unlocked read and
+      // would always queue second whichever way round the calls were
+      // written. Waiter counts come from `pg_stat_activity`, never a sleep.
+      const rotating = () => rotateLocksDb(dbA, actor("O1"), { lockId: "all", at: rotateAt, rng: () => 0.9 });
+      const leaving = () => leaveDb(dbB, leaveAt, D.M1);
+      const waitFor = async (n: number) => {
+        for (let i = 0; i < 20_000; i++) {
+          const rows = await db.execute(sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+          if (Number((rows as unknown as { n: number }[])[0]!.n) >= n) return;
+        }
+        throw new Error(`only saw fewer than ${n} waiters on the factions row`);
+      };
+
+      let rotateP: ReturnType<typeof rotating>;
+      let leaveP: ReturnType<typeof leaving>;
+      if (rotateFirst) {
+        rotateP = rotating();
+        await waitFor(1);
+        leaveP = leaving();
+      } else {
+        leaveP = leaving();
+        await waitFor(1);
+        rotateP = rotating();
+      }
+      await waitFor(2);
+      const racers = Promise.all([rotateP, leaveP]);
+      release();
+      [rotated, left] = await racers;
+    } finally {
+      release();
+      await holder.catch(() => {});
+      await holderDb.$client.end();
+      await dbA.$client.end();
+      await dbB.$client.end();
+    }
+
+    // Neither order may error; both wrote what they promised.
+    expect(rotated).toEqual({ outcome: "ok", rotated: 2 });
+    expect(left).toBe("ok");
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, D.M1))).toEqual([]);
+
+    const after = [await lockRow(memberLock), await lockRow(officerLock)];
+    // The rotation covered the WHOLE vault, whichever side went first.
+    expect(after[0]!.code).not.toBe(before[0]);
+    expect(after[1]!.code).not.toBe(before[1]);
+    expect(after[0]!.rotatedAt?.getTime()).toBe(rotateAt.getTime());
+    expect(after[1]!.rotatedAt?.getTime()).toBe(rotateAt.getTime());
+
+    // A member leaver never exposes an officer-only lock, in either order.
+    expect(after[1]!.exposedAt).toBeNull();
+
+    // And the member lock is in exactly one of the two consistent states:
+    // cleared by the rotation (leave went first), or exposed at the leave's
+    // own timestamp because the leaver was still in the clan when the new
+    // code was written. Never anything between.
+    const exposed = after[0]!.exposedAt;
+    expect(exposed === null || exposed.getTime() === leaveAt.getTime()).toBe(true);
+  });
+  }
+
   it("a kicked actor's stale VaultActor gets not-visible on revealLock, not the code", async () => {
     const memberLock = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
     const staleMember = actor("M1"); // built before the kick below

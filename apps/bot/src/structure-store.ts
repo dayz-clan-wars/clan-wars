@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { factions, factionMembers, identityLinks, players, clanNotices, seasons, alphaWeeks } from "@factions/db";
-import { and, eq, isNull, isNotNull, inArray, or, asc } from "drizzle-orm";
+import { and, eq, isNull, isNotNull, inArray, or, asc, sql } from "drizzle-orm";
 import { openPassesByVoiceChannel, convertPassesForFullMembersDb } from "@factions/roster/internal";
 import { nicknameFor, HOLDING_STATUSES } from "@factions/domain";
 
@@ -239,13 +239,26 @@ export class PgStructureStore implements StructureStore {
     return convertPassesForFullMembersDb(this.db, now);
   }
 
+  /**
+   * ⚠️ One row per link, and the tag is picked DETERMINISTICALLY. Nothing
+   * stops a user holding a full membership in two clans at once (two
+   * servers), and an unscoped join would then hand out whichever row the
+   * planner returned last — a tag that can flap from tick to tick, renaming
+   * the same person back and forth forever. The clan with the LOWEST
+   * `factions.id` wins, the same tiebreak `actorFor` uses
+   * (`orderBy(asc(factions.id)).limit(1)`).
+   *
+   * The `factions` join carries the holding-status test so a non-holding
+   * membership can never out-sort a holding one; such a row comes back with
+   * null faction columns and sorts last, leaving the bare gamertag only when
+   * there is no holding clan at all.
+   */
   async desiredNicknames(): Promise<Map<string, string>> {
     const rows = await this.db
       .select({
         discordId: identityLinks.discordId,
         linkGamertag: identityLinks.gamertag,
         playerGamertag: players.gamertag,
-        factionStatus: factions.status,
         tag: factions.tag,
       })
       .from(identityLinks)
@@ -254,17 +267,19 @@ export class PgStructureStore implements StructureStore {
         factionMembers,
         and(eq(factionMembers.discordId, identityLinks.discordId), eq(factionMembers.status, "full")),
       )
-      .leftJoin(factions, eq(factions.id, factionMembers.factionId))
-      .orderBy(asc(identityLinks.id));
+      .leftJoin(
+        factions,
+        and(eq(factions.id, factionMembers.factionId), inArray(factions.status, [...HOLDING_STATUSES])),
+      )
+      .orderBy(asc(identityLinks.id), sql`${factions.id} asc nulls last`);
 
     const result = new Map<string, string>();
     for (const row of rows) {
+      // First row per link is the winner: lowest holding faction id, else the
+      // sole tagless row.
+      if (result.has(row.discordId)) continue;
       const gamertag = row.playerGamertag ?? row.linkGamertag;
-      const tag =
-        row.tag !== null && HOLDING_STATUSES.includes(row.factionStatus as (typeof HOLDING_STATUSES)[number])
-          ? row.tag
-          : null;
-      result.set(row.discordId, nicknameFor(gamertag, tag));
+      result.set(row.discordId, nicknameFor(gamertag, row.tag ?? null));
     }
     return result;
   }

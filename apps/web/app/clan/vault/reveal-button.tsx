@@ -39,10 +39,20 @@ export function RevealButton({ lockId }: { lockId: number }) {
     }
   };
 
-  if (code) return <span className="font-mono text-lg tracking-[0.2em] text-gold">{code}</span>;
+  // `role="status"` on the wrapper, not on the code or the error alone: the
+  // live region has to be in the DOM BEFORE its content changes for a screen
+  // reader to announce it, and this element is. It is the one place either
+  // outcome — the revealed code, or the refusal — appears.
+  if (code) {
+    return (
+      <div role="status" className="flex items-center gap-2">
+        <span className="font-mono text-lg tracking-[0.2em] text-gold">{code}</span>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex items-center gap-2">
+    <div role="status" className="flex items-center gap-2">
       <button type="button" className="min-h-[44px] rounded-md border border-rule px-3 font-display text-sm text-ink" onClick={reveal} disabled={busy}>
         {busy ? "Revealing…" : "Reveal code"}
       </button>

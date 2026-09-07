@@ -6,7 +6,17 @@ import { and, asc, eq, isNull, sql } from "drizzle-orm";
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
-/** Named display fields, frozen at write time. Never a coordinate — the check is the second line of defence. */
+/**
+ * Named display fields, frozen at write time.
+ *
+ * ⚠️ The type forbids NOTHING by name: `Record<string, …>` accepts a `code`
+ * key, a `poleKey`, an `x`/`y`/`z`, anything. What actually keeps a vault
+ * code or a coordinate out of a notice is three things, none of them the
+ * compiler: the call sites, which pass named display fields only; the
+ * renderers, which read the keys they know and ignore every other; and the
+ * copy tests, which assert the rendered text (and, for rotations, the stored
+ * payload) carries no code and no coordinate.
+ */
 export type NoticePayload = Record<string, string | number | boolean | null>;
 
 export type ClanNoticeInput = {

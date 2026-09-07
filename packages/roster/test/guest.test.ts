@@ -9,6 +9,7 @@ import { sql, eq, asc } from "drizzle-orm";
 import { GUEST_PASS_MS } from "@factions/domain";
 import {
   grantGuestPassDb, revokeGuestPassDb, openGuestPassesDb, openPassesByVoiceChannel, convertPassesForFullMembersDb,
+  removeFromGuildDb,
 } from "../src/internal";
 import { seedFaction } from "./seed";
 
@@ -142,6 +143,122 @@ describe("guest-pass store", () => {
     const mapOpen = await openPassesByVoiceChannel(db, soon);
     expect(mapOpen.get("voice-1")).toEqual(new Set([U9]));
   });
+
+  // ------------------------------------------------- staged race (§13)
+
+  /**
+   * `grantGuestPassDb` and `removeFromGuildDb` both open by taking the
+   * clan's `factions` row (the removal only when the user has a roster row
+   * there, so the target below is a PENDING member — pending has no roster
+   * standing, so the grant still sees a non-member and goes through). A
+   * third connection HOLDING that row parks both; releasing it lets Postgres
+   * pick the order, read out of `pg_stat_activity` rather than waited out.
+   *
+   * ⚠️ What is asserted, and what is deliberately NOT. A guest pass is FOR an
+   * outsider: `U9` in every test above holds one with no identity link at
+   * all, so "an open pass belongs to a linked user" is not an invariant of
+   * this system and cannot be asserted here. What IS invariant is that the
+   * removal never MISSES a pass that existed when it ran: the pass granted
+   * before the race is revoked in both orders. The raced pass is then in
+   * exactly one of two consistent states — revoked, because the grant landed
+   * first and the removal swept it; or open, because the removal had already
+   * committed and the officer granted a pass to somebody who by then was
+   * simply an outsider. Never half-written, and never a deadlock.
+   */
+  for (const grantFirst of [true, false]) {
+  it(`a grant racing the target's guild removal ends in one of two consistent states (${grantFirst ? "grant" : "removal"} started first)`, async () => {
+    const uid9 = "9".repeat(40);
+    await db.insert(players).values({ dayzId: uid9, gamertag: "Nine", firstSeenAt: now, lastSeenAt: now });
+    await db.insert(identityLinks).values({ discordId: U9, dayzId: uid9, gamertag: "Nine", verifiedAt: now });
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: uid9, discordId: U9, role: "member", joinedAt: now, status: "pending", pendingSince: now,
+    });
+
+    // A pass that already exists when the removal runs. It must be revoked
+    // whichever way the race falls.
+    const earlier = await grantGuestPassDb(db, { factionId, actorDiscordId: D.L, userDiscordId: U9, at: now });
+    expect(earlier.outcome).toBe("ok");
+    await revokeGuestPassDb(db, { factionId, actorDiscordId: D.L, passId: earlier.passId!, at: now });
+    const standing = await grantGuestPassDb(db, { factionId, actorDiscordId: D.L, userDiscordId: U9, at: now });
+    expect(standing.outcome).toBe("ok");
+
+    const at = new Date(now.getTime() + 60_000);
+
+    const holderDb = createClient(URL);
+    let release!: () => void;
+    const released = new Promise<void>((r) => { release = r; });
+    let taken!: () => void;
+    const isTaken = new Promise<void>((r) => { taken = r; });
+    const holder = holderDb.transaction(async (tx) => {
+      await tx.execute(sql`select id from factions where id = ${factionId}::bigint for update`);
+      taken();
+      await released;
+    });
+
+    const dbA = createClient(URL);
+    const dbB = createClient(URL);
+    let granted!: { outcome: string; passId: number | null };
+    let removed!: { linked: boolean; roster: string };
+    try {
+      await isTaken;
+      // ⚠️ Staged, not just launched: the second side starts only once the
+      // first is CONFIRMED waiting on the `factions` row, so the FIFO queue
+      // gives this test the order it names. `removeFromGuildDb` opens with
+      // two reads of its own and would otherwise always queue second.
+      const granting = () => grantGuestPassDb(dbA, { factionId, actorDiscordId: D.O1, userDiscordId: U9, at });
+      const removing = () => removeFromGuildDb(dbB, { discordId: U9, at });
+      const waitFor = async (n: number) => {
+        for (let i = 0; i < 20_000; i++) {
+          const rows = await db.execute(sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+          if (Number((rows as unknown as { n: number }[])[0]!.n) >= n) return;
+        }
+        throw new Error(`only saw fewer than ${n} waiters on the factions row`);
+      };
+
+      let grantP: ReturnType<typeof granting>;
+      let removeP: ReturnType<typeof removing>;
+      if (grantFirst) {
+        grantP = granting();
+        await waitFor(1);
+        removeP = removing();
+      } else {
+        removeP = removing();
+        await waitFor(1);
+        grantP = granting();
+      }
+      await waitFor(2);
+      const racers = Promise.all([grantP, removeP]);
+      release();
+      [granted, removed] = await racers;
+    } finally {
+      release();
+      await holder.catch(() => {});
+      await holderDb.$client.end();
+      await dbA.$client.end();
+      await dbB.$client.end();
+    }
+
+    // Neither order errored, and the removal did its whole job.
+    expect(removed.linked).toBe(true);
+    expect(await db.select().from(identityLinks).where(eq(identityLinks.discordId, U9))).toEqual([]);
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, U9))).toEqual([]);
+
+    // The pass that existed when the removal ran is revoked, either way.
+    expect((await passRow(standing.passId!)).revokedAt?.getTime()).toBe(at.getTime());
+
+    // Grant-first is `already-active` (the standing pass was still open);
+    // removal-first is `ok`, because the sweep closed that pass first.
+    expect(["ok", "already-active"]).toContain(granted.outcome);
+    if (granted.outcome === "already-active") {
+      expect(granted.passId).toBeNull();
+      expect(await openGuestPassesDb(db, factionId, at)).toEqual([]);
+    } else {
+      // The only open pass is the one granted AFTER the removal committed.
+      const open = await openGuestPassesDb(db, factionId, at);
+      expect(open.map((o) => o.id)).toEqual([granted.passId]);
+    }
+  });
+  }
 
   it("convertPassesForFullMembersDb: converts once the user is a full member, and it drops out of open lists", async () => {
     const granted = await grantGuestPassDb(db, { factionId, actorDiscordId: D.O1, userDiscordId: U9, at: now });

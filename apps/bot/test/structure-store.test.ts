@@ -167,6 +167,51 @@ describe("PgStructureStore", () => {
       expect(await store.desiredNicknames()).toEqual(new Map([["d1", "One"]]));
     });
 
+    /**
+     * "One player, one faction per SERVER" — so two servers is two legal
+     * full memberships for one Discord id, and the join behind
+     * `desiredNicknames` returns two rows for them. Whichever row wins has
+     * to be the same one every tick, or the reconciler renames the same
+     * person back and forth forever. Lowest `factions.id` wins, matching
+     * `actorFor`.
+     */
+    it("picks the lowest-id holding clan's tag for a user full in two clans, stably", async () => {
+      const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+      const first = await seedFaction(db, { serverId, name: "Night Bears", tag: "BEAR", texture: "Flag_A", status: "active", createdAt: now, poleKey: "1.00:1.00:1.00" });
+      const second = await seedFaction(db, { serverId: s2!.id, name: "Wolves", tag: "WOLF", texture: "Flag_B", status: "active", createdAt: now, poleKey: "2.00:1.00:2.00" });
+      expect(first.id).toBeLessThan(second.id);
+
+      await db.insert(identityLinks).values({ discordId: "d1", dayzId: "U1", gamertag: "One", verifiedAt: now });
+      await db.insert(factionMembers).values([
+        { factionId: second.id, serverId: s2!.id, dayzId: "U1", discordId: "d1", role: "leader", joinedAt: now, status: "full" },
+        { factionId: first.id, serverId, dayzId: "U1", discordId: "d1", role: "member", joinedAt: now, status: "full" },
+      ]);
+
+      expect(await store.desiredNicknames()).toEqual(new Map([["d1", "[BEAR] One"]]));
+      // Same answer twice: the tie is broken by the data, not the planner.
+      expect(await store.desiredNicknames()).toEqual(new Map([["d1", "[BEAR] One"]]));
+    });
+
+    /**
+     * A membership in a NON-holding clan must never out-sort a holding one,
+     * however low its faction id — the tag has to come from the clan the
+     * player is actually in.
+     */
+    it("ignores a lower-id non-holding membership in favour of the holding one", async () => {
+      const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+      const lapsed = await seedFaction(db, { serverId, name: "Old Bears", tag: "OLD", texture: "Flag_A", status: "lapsed", createdAt: now, poleKey: "1.00:1.00:1.00" });
+      const live = await seedFaction(db, { serverId: s2!.id, name: "Wolves", tag: "WOLF", texture: "Flag_B", status: "active", createdAt: now, poleKey: "2.00:1.00:2.00" });
+      expect(lapsed.id).toBeLessThan(live.id);
+
+      await db.insert(identityLinks).values({ discordId: "d1", dayzId: "U1", gamertag: "One", verifiedAt: now });
+      await db.insert(factionMembers).values([
+        { factionId: lapsed.id, serverId, dayzId: "U1", discordId: "d1", role: "member", joinedAt: now, status: "full" },
+        { factionId: live.id, serverId: s2!.id, dayzId: "U1", discordId: "d1", role: "member", joinedAt: now, status: "full" },
+      ]);
+
+      expect(await store.desiredNicknames()).toEqual(new Map([["d1", "[WOLF] One"]]));
+    });
+
     it("truncates a 40-char gamertag so the nickname is exactly 32 chars, tag intact", async () => {
       const bear = await seedFaction(db, { serverId, name: "Night Bears", tag: "BEAR", texture: "Flag_A", status: "active", createdAt: now, poleKey: "1.00:1.00:1.00" });
       const longName = "X".repeat(40);

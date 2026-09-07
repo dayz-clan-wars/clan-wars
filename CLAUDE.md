@@ -480,7 +480,8 @@ runs, together with 2b and 2c-a.
 **Increment 7 (leadership and the vault) is merged; not deployed until
 `docs/deploy/2026-09-09-leadership-and-vault.md` runs.** Migration 0028 adds succession
 claims, no-confidence votes, the vault, and guest passes. A silent leader (`last_seen_at`
-older than `LEADER_SILENT_MS` = 7 d) can be claimed by any full member and the claim
+older than `LEADER_SILENT_MS` = 7 d) can be claimed by an OFFICER while the clan has any
+officer on its roster, and by any full member only when it has none; the claim
 resolves after `SUCCESSION_WINDOW_MS` = 48 h unless the leader is seen again first; any
 full member can instead open a no-confidence vote (2/3 of the electorate, 48 h, one at a
 time per clan), which the leader cannot open and cannot dodge by transferring away.

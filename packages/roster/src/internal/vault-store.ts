@@ -170,11 +170,17 @@ export async function revealLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
+    // Roster read BEFORE the `vault_locks` row lock, the same order the four
+    // writes above take (`factions` → `faction_members` → `vault_locks`, per
+    // §4.12). Behaviour is unchanged — `gone` is still answered before
+    // `not-visible` — but no two vault entry points now take the two tables
+    // in opposite orders.
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
+
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name, code: vaultLocks.code, minRole: vaultLocks.minRole })
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return { outcome: "gone" as const, code: null };
 
-    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || !canSeeLock(me.role, lock.minRole as Role)) return { outcome: "not-visible" as const, code: null };
 
     await tx.insert(vaultHistory).values({
@@ -244,11 +250,14 @@ export async function confirmLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
+    // Read-then-lock, as `revealLockDb` and the four officer writes do: the
+    // roster row before the `vault_locks` row (§4.12). Behaviour unchanged.
+    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
+
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name, minRole: vaultLocks.minRole })
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return "gone" as const;
 
-    const me = await fullMemberTx(tx, actor.factionId, actor.discordId);
     if (!me || !canSeeLock(me.role, lock.minRole as Role)) return "not-visible" as const;
 
     await tx.update(vaultLocks).set({ confirmedAt: a.at }).where(eq(vaultLocks.id, lock.id));

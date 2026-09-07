@@ -104,6 +104,17 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
     // `unlinkDb` sweeps them. A PENDING member may still hold a solo base of
     // their own (§5.3), and nothing ties it to the server their clan is on.
     // A full member's declaration belongs to the clan, so this finds none.
+    //
+    // ⚠️ `link.dayzId` here, `gone.dayzId` (the roster row's) for the cooldown
+    // below. They are the SAME player — `identity_links` and
+    // `faction_members` each carry a copy of the dayz id — and each write
+    // keys on the table it is actually about. The release is about the
+    // player's identity, which exists whether or not they are on any roster,
+    // so it must run even when `candidate` is null and there is no roster row
+    // to read a dayz id from. The cooldown is about a roster slot on a
+    // specific server, so it takes the id off the row it just deleted,
+    // alongside that row's `server_id` — the composite key
+    // `roster_cooldowns(server_id, dayz_id)` needs both from one place.
     const releasedSoloBase = await releaseSoloEverywhereTx(tx, link.dayzId, a.at);
 
     // Re-read under the clan's row lock, and take the roster row's own lock

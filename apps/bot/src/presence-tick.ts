@@ -4,7 +4,7 @@ import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { distance2d, JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS, HOLDING_STATUSES } from "@factions/domain";
 import { lockDeclarations, releaseTx } from "@factions/declarations";
 import { and, eq, inArray, lte } from "drizzle-orm";
-import { noticeClanTx, noticeUserTx, gamertagOrId } from "@factions/roster/internal";
+import { lockFactionTx, noticeClanTx, noticeUserTx, gamertagOrId } from "@factions/roster/internal";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const PRESENCE_CONSUMER = "presence-promoter";
@@ -34,9 +34,18 @@ function pointOf(type: string, payload: unknown): { dayzId: string; x: number; z
  *
  * Per event: a pending member with this UID → their clan's declaration →
  * distance in 2-D → within JOIN_PRESENCE_RADIUS_M → one transaction:
- * `lockDeclarations` → `releaseTx` (the joiner's solo base, if any — §5.3 ⚠️
- * "not at accept") → `faction_members` update. Lock order §4.12:
- * declarations → poles → faction_members. Notices (`became_full`): increment 3.
+ * `lockFactionTx` → `lockDeclarations` → `releaseTx` (the joiner's solo base,
+ * if any — §5.3 ⚠️ "not at accept") → `faction_members` update.
+ *
+ * ⚠️ The clan's `factions` row is taken FOR UPDATE FIRST, before
+ * `lockDeclarations`, per the §4.12 order `factions → declarations → poles →
+ * faction_members → … → clan_notices`. It is not decoration: the
+ * `became_full` notice below inserts into `clan_notices(faction_id)`, and
+ * that FK insert takes FOR KEY SHARE on this very `factions` row. Without the
+ * FOR UPDATE up front, this transaction would hold the declarations advisory
+ * lock while queueing for `factions`, exactly opposite to
+ * `removeFromGuildDb`, which takes `factions` and then sweeps declarations —
+ * a real A→B/B→A cycle. Notices (`became_full`): increment 3.
  * Discord role: the structure reconciler (`structure-tick.ts`) gives full
  * members the clan role on its next pass.
  */
@@ -71,6 +80,9 @@ export async function presenceTick(db: Database, opts: { batchSize?: number } = 
       if (!m) continue;
       if (distance2d({ x: pt.x, z: pt.z }, { x: m.poleX, z: m.poleZ }) > JOIN_PRESENCE_RADIUS_M) continue;
       const result = await db.transaction(async (tx) => {
+        // §4.12: `factions` first — see this function's docblock. The notice
+        // at the end of this transaction FK-locks the same row.
+        await lockFactionTx(tx, m.factionId);
         await lockDeclarations(tx, m.serverId);
         const released = await releaseTx(tx, { dayzId: m.dayzId, serverId: m.serverId }, ev.occurredAt);
         const rows = await tx.update(factionMembers)

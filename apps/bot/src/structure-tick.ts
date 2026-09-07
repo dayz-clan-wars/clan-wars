@@ -320,7 +320,7 @@ export async function structureTick(
   // Disjoint from step 5, which only ever clears the nickname of a user
   // LEAVING the link set; this only ever touches users `desiredNicknames()`
   // still lists, so the two never fight over the same id in one pass.
-  let nicknameChanges: [string, string][] = [];
+  const nicknameChanges: [string, string][] = [];
   await step("nickname-read", async () => {
     const desired = await store.desiredNicknames();
     for (const [id, nickname] of desired) {
