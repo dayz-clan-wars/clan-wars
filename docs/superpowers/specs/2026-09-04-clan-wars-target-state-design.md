@@ -556,9 +556,11 @@ channel's overwrites against open passes and removes strays.
  OPEN ──48 h, or threshold unreachable──► FAILED (next_vote_allowed_at = now + 14 d)
 ```
 
-- While open: `kick` and `transfer` refuse (§10.4 enforces this in the package, where both
-  the bot's guild-removal path and the site can see it). Invites still work; arrivals are
-  not in the electorate.
+- While open: `kick`, `transfer` and `disband` refuse (§10.4 enforces this in the package,
+  where both the bot's guild-removal path and the site can see it). Invites still work;
+  arrivals are not in the electorate. Only the leader-initiated `disband` is frozen — the
+  shared disband logic it calls into is not, so the dormancy tick's auto-disband and the
+  guild-removal path both keep working while a vote is open.
 - A leaver in the electorate decrements `electorate_size`; the threshold is re-evaluated on
   every ballot and every leave. It never grows.
 - `openVote` refuses when `next_vote_allowed_at > now`, when a vote is open, or when the

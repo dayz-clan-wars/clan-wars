@@ -103,7 +103,7 @@ export interface RosterStore {
   leave(a: LeaveArgs): Promise<LeaveOutcome>;
   setRole(a: SetRoleArgs): Promise<SetRoleOutcome>;
   transfer(a: TransferArgs): Promise<TransferOutcome>;
-  disband(factionId: number, discordId: string): Promise<"ok" | "not-leader">;
+  disband(factionId: number, discordId: string): Promise<"ok" | "not-leader" | "vote-open">;
   rename(a: RenameArgs): Promise<RenameOutcome>;
   revokeInvite(a: { inviteId: number; factionId: number; actorDiscordId: string; at: Date }): Promise<"ok" | "not-permitted" | "gone">;
   invitesOut(factionId: number, at: Date): Promise<(PendingInvite & { inviteeDiscordId: string; inviteeGamertag: string | null })[]>;
@@ -952,9 +952,22 @@ export class PgRosterStore implements RosterStore {
    * auto-disband; this just supplies the leadership check as that function's
    * `guard`.
    */
-  async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader"> {
-    return this.db.transaction(async (tx) =>
-      await disbandFactionTx(tx, factionId, leaderIs(factionId, discordId)) ? "ok" as const : "not-leader" as const);
+  async disband(factionId: number, discordId: string): Promise<"ok" | "not-leader" | "vote-open"> {
+    return this.db.transaction(async (tx) => {
+      // ⚠️ FIRST statement of the transaction, same lock order as
+      // `kick`/`transfer` above.
+      await lockFactionTx(tx, factionId);
+
+      // §5.7: the roster freezes while a no-confidence vote is open — a
+      // leader who could disband the clan could dodge any vote against them,
+      // so this is enforced in the store, never in a page. The shared
+      // `disbandFactionTx` itself is NOT frozen: the dormancy tick's
+      // auto-disband and the guild-removal path both ride it and must keep
+      // working while a vote is open.
+      if (await voteIsOpenTx(tx, factionId)) return "vote-open" as const;
+
+      return await disbandFactionTx(tx, factionId, leaderIs(factionId, discordId)) ? "ok" as const : "not-leader" as const;
+    });
   }
 
   /**

@@ -413,14 +413,17 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   documents describe a separate VPS holding only `web` and `caddy`; that machine does
   not exist and never did on this deployment. Name compose services anyway — a bare
   `up -d` starts more than you mean.
-- **The vote freeze and the electorate decrement both live in `kick`/`leave`/`transfer`,
-  never in a page.** `kick` and `transfer` both refuse while a no-confidence vote is open
-  (`voteIsOpenTx`, spec §5.7: "no handing the seat to an ally to dodge a vote on it");
-  `leave` does not — nobody is trapped in a clan by a vote — but a leaver's electorate
-  slot and ballot are both removed (`applyElectorateLeaveTx`), which can carry a vote
-  that was one short. `kick` also decrements the electorate, since the freeze only
-  refuses `kick` while a vote is open; the call is made anyway on the (currently
-  unreachable) chance that changes.
+- **The vote freeze and the electorate decrement both live in `kick`/`leave`/`transfer`/
+  `disband`, never in a page.** `kick`, `transfer` and `disband` all refuse while a
+  no-confidence vote is open (`voteIsOpenTx`, spec §5.7: "no handing the seat to an ally
+  to dodge a vote on it", and no disbanding the clan to dodge one either); `leave` does
+  not — nobody is trapped in a clan by a vote — but a leaver's electorate slot and
+  ballot are both removed (`applyElectorateLeaveTx`), which can carry a vote that was
+  one short. `kick` also decrements the electorate, since the freeze only refuses
+  `kick` while a vote is open; the call is made anyway on the (currently unreachable)
+  chance that changes. Only the leader-initiated `disband` (`PgRosterStore.disband`) is
+  frozen — the shared `disbandFactionTx` it calls into is not, so the dormancy tick's
+  auto-disband and the guild-removal path keep working while a vote is open.
 - **Vault exposure lives in `kick`/`leave`, full members only.** A departing full member
   (never a pending one — spec §4.5, whose role is `'member'` regardless) has every lock
   they could see marked exposed (`exposeLocksTx`), because every code they knew is now

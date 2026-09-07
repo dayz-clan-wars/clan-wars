@@ -68,6 +68,10 @@ const LEAVE: Record<LeaveOutcome | "not-in-clan" | "unconfirmed", string> = {
   "leader-must-transfer": "A leader cannot leave. Transfer leadership in settings first, or disband.",
   unconfirmed: "Tick the box to confirm before leaving.",
 };
+// §5.7: the roster freezes for the length of a no-confidence vote, so the
+// leader cannot remove the people voting on them, transfer leadership away
+// from the vote, or disband the clan to dodge it.
+const VOTE_OPEN = "A no-confidence vote is open. Nobody can be removed and leadership cannot be transferred until it closes.";
 const KICK: Record<KickOutcome | ActorRefusal, string> = {
   ...REFUSAL,
   ok: `Removed. They can join a clan again after ${days(ROSTER_COOLDOWN_MS)}.`,
@@ -76,23 +80,22 @@ const KICK: Record<KickOutcome | ActorRefusal, string> = {
   "cannot-kick-self": "Use Leave to leave.",
   "cannot-kick-officer": "Only the leader can remove an officer. Demote them first.",
   "cannot-kick-leader": "The leader cannot be removed.",
-  // §5.7: the roster freezes for the length of a no-confidence vote, so the
-  // leader cannot remove the people voting on them.
-  "vote-open": "A no-confidence vote is open. Nobody can be removed and leadership cannot be transferred until it closes.",
+  "vote-open": VOTE_OPEN,
 };
 const ROLE: Record<SetRoleOutcome | ActorRefusal, string> = {
   ...REFUSAL, ok: "Done.", "not-leader": "Only the leader can change ranks.", "target-not-member": "That player is not a full member of your clan.", "cannot-target-leader": "The leader's rank cannot be changed this way — transfer leadership instead.",
 };
 const TRANSFER: Record<TransferOutcome | ActorRefusal | "unconfirmed", string> = {
   ...REFUSAL, ok: "Leadership transferred. You are now an officer.", "not-leader": "Only the leader can transfer leadership.", "target-not-member": "That player is not a full member of your clan.", unconfirmed: "Tick the box to confirm before transferring leadership.",
-  "vote-open": "A no-confidence vote is open. Nobody can be removed and leadership cannot be transferred until it closes.",
+  "vote-open": VOTE_OPEN,
 };
 export const DISBAND_WARNING = "The clan's text and voice channels are deleted, along with their entire history. Nothing is archived.";
-const DISBAND: Record<"ok" | "not-leader" | ActorRefusal | "unconfirmed", string> = {
+const DISBAND: Record<"ok" | "not-leader" | "vote-open" | ActorRefusal | "unconfirmed", string> = {
   ...REFUSAL,
   ok: `Disbanded. The flag and the pole are back in the pool; the name and tag are held. The pole stays private for ${days(RELEASED_POLE_GRACE_MS)}, then becomes public if nobody declares it. The clan's channels are gone.`,
   "not-leader": "Only the leader can disband the clan.",
   unconfirmed: "Tick the box to confirm before disbanding.",
+  "vote-open": VOTE_OPEN,
 };
 const RENAME: Record<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag", string> = {
   ...REFUSAL,

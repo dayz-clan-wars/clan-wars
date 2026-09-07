@@ -13,6 +13,7 @@ import {
 import {
   claimSuccessionDb, openVoteDb, castVoteDb, resolveSuccessionClaims, closeExpiredVotes,
   openVoteFor, openClaimFor, successionEligibility, closeLeadershipSilentlyTx, lockFactionTx,
+  disbandFactionTx, leaderIs,
 } from "../src/internal";
 import { kickDb, transferDb, promoteDb, inviteDb, leaveDb, disbandDb } from "../src/writes";
 import { seedFaction } from "./seed";
@@ -80,6 +81,14 @@ describe("leadership store: succession, votes, the freeze", () => {
     const [m] = await db.select({ role: factionMembers.role }).from(factionMembers)
       .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.dayzId, UID[k])));
     return m?.role ?? null;
+  };
+  const statusOf = async () => {
+    const [f] = await db.select({ status: factions.status }).from(factions).where(eq(factions.id, factionId));
+    return f!.status;
+  };
+  const rosterSize = async () => {
+    const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(factionMembers).where(eq(factionMembers.factionId, factionId));
+    return r!.n;
   };
   const notices = async (kind: ClanNoticeKind) => {
     const rows = await db.select({ payload: clanNotices.payload }).from(clanNotices)
@@ -339,6 +348,22 @@ describe("leadership store: succession, votes, the freeze", () => {
     expect((await inviteDb(db, on(HOUR), D.L, { discordId: D.X })).outcome).toBe("ok");
   });
 
+  it("freeze: an open vote also refuses the leader-initiated disband, and lets it through once the vote closes", async () => {
+    const { voteId } = await open("M1", "M2");
+
+    expect(await disbandDb(db, D.L)).toBe("vote-open");
+    expect(await statusOf()).toBe("active");
+    expect(await rosterSize()).toBe(6);
+
+    expect(await closeExpiredVotes(db, on(VOTE_LENGTH_MS))).toEqual({ passed: 0, failed: 1 });
+    expect((await voteRow())!.result).toBe("failed");
+    expect(await ballotCount(voteId!)).toBe(1);
+
+    expect(await disbandDb(db, D.L)).toBe("ok");
+    expect(await statusOf()).toBe("disbanded");
+    expect(await rosterSize()).toBe(0);
+  });
+
   // --------------------------------------------------------------- 7. expiry
 
   it("expiry: a vote short of the threshold at close fails and starts the cooldown", async () => {
@@ -410,7 +435,13 @@ describe("leadership store: succession, votes, the freeze", () => {
     expect(await claim("O1")).toBe("ok");
     expect((await open("M1", "M2")).outcome).toBe("ok");
 
-    expect(await disbandDb(db, D.L)).toBe("ok");
+    // The leader-initiated `disbandDb` refuses here — §5.7's freeze now
+    // covers disband too (see the "freeze" tests below) — so this exercises
+    // the shared `disbandFactionTx` directly, exactly as the dormancy tick's
+    // auto-disband and the guild-removal path call it: neither of those is
+    // frozen, and this is what proves the cleanup they share still works
+    // with a claim and a vote open.
+    expect(await db.transaction((tx) => disbandFactionTx(tx, factionId, leaderIs(factionId, D.L)))).toBe(true);
 
     expect((await claimRow())!.outcome).toBe("voided");
     expect((await voteRow())!.result).toBe("failed");

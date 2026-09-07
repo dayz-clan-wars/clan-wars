@@ -107,7 +107,7 @@ export async function transferDb(db: Database, now: Date, actorDiscordId: string
   if (isRefusal(a)) return a;
   return new PgRosterStore(db).transfer({ factionId: a.factionId, fromDiscordId: actorDiscordId, toDiscordId: targetDiscordId, at: now });
 }
-export async function disbandDb(db: Database, actorDiscordId: string): Promise<"ok" | "not-leader" | ActorRefusal> {
+export async function disbandDb(db: Database, actorDiscordId: string): Promise<"ok" | "not-leader" | "vote-open" | ActorRefusal> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return a;
   return new PgRosterStore(db).disband(a.factionId, actorDiscordId);
