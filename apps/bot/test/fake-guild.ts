@@ -5,6 +5,7 @@ export class FakeGuild implements GuildGateway {
   roles = new Map<string, { name: string; members: Set<string> }>();
   channels = new Map<string, { name: string; kind: "text" | "voice"; roleId: string }>();
   members = new Map<string, { nickname: string | null }>();
+  overwrites = new Map<string, Set<string>>();
   nicknameOutcome: NicknameOutcome = "ok";
   calls: string[] = [];
   failNext = new Set<string>(); // method names that throw once
@@ -91,5 +92,23 @@ export class FakeGuild implements GuildGateway {
       if (m) m.nickname = nickname;
     }
     return this.nicknameOutcome;
+  }
+  memberOverwrites(channelId: string) {
+    return new Set(this.overwrites.get(channelId) ?? []);
+  }
+  async grantVoiceAccess(channelId: string, userId: string) {
+    this.fail("grantVoiceAccess");
+    const set = this.overwrites.get(channelId) ?? new Set<string>();
+    set.add(userId);
+    this.overwrites.set(channelId, set);
+    this.calls.push(`grantVoiceAccess ${channelId} ${userId}`);
+  }
+  async revokeVoiceAccess(channelId: string, userId: string) {
+    this.fail("revokeVoiceAccess");
+    this.overwrites.get(channelId)?.delete(userId);
+    this.calls.push(`revokeVoiceAccess ${channelId} ${userId}`);
+  }
+  memberNickname(userId: string) {
+    return this.members.get(userId)?.nickname;
   }
 }

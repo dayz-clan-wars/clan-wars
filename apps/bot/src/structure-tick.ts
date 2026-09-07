@@ -15,6 +15,14 @@ export type StructureTickResult = {
   nicknamesCleared: number;
   /** Channel notices stamped `failed_at` because their clan's channel was torn down. */
   noticesFailed: number;
+  /** Voice-channel overwrites granted for an open guest pass. */
+  guestGrants: number;
+  /** Voice-channel overwrites revoked: pass converted, expired/revoked, or a stray. */
+  guestRevokes: number;
+  /** Open passes stamped `converted_at` because their user is now a full member of the granting clan. */
+  guestConverted: number;
+  /** `[TAG] gamertag`/bare-gamertag nicknames applied to still-linked users (step 8; disjoint from step 5's clears). */
+  nicknamesSet: number;
   errors: number;
 };
 
@@ -24,6 +32,8 @@ export type StructureTickOpts = {
   onError?: (what: string, err: unknown) => void;
   /** Users whose nickname the bot cannot change (owner, outranked, no permission): logged once per instance, never retried. Owned by the caller. */
   nicknameNoRetry?: Set<string>;
+  /** Clock, overridable for tests. Defaults to `() => new Date()`. */
+  now?: () => Date;
 };
 
 const NO_RETRY: ReadonlySet<NicknameOutcome> = new Set(["is-owner", "outranked", "no-permission"]);
@@ -51,6 +61,10 @@ export async function structureTick(
     alphaRemoves: 0,
     nicknamesCleared: 0,
     noticesFailed: 0,
+    guestGrants: 0,
+    guestRevokes: 0,
+    guestConverted: 0,
+    nicknamesSet: 0,
     errors: 0,
   };
 
@@ -255,6 +269,69 @@ export async function structureTick(
     await step(`alpha-add:${id}`, async () => {
       await guild.addRole(id, opts.alphaRoleId);
       out.alphaAdds++;
+    });
+  }
+
+  const now = opts.now?.() ?? new Date();
+
+  // 7. Guest-pass overwrites — conversion first: an open pass whose user is
+  // now a full member has its access carried by the clan role from here on,
+  // so its overwrite becomes a stray for the diff below to remove.
+  await step("guest-convert", async () => {
+    out.guestConverted += await store.convertGuestPasses(now);
+  });
+
+  let passesByVoiceChannel = new Map<string, Set<string>>();
+  await step("guest-read", async () => {
+    passesByVoiceChannel = await store.openGuestPassesByVoiceChannel(now);
+  });
+
+  for (const row of await store.clansWithStructure()) {
+    if (row.voiceChannelId === null) continue;
+    await step(`guest:${row.id}`, async () => {
+      const voiceChannelId = row.voiceChannelId!;
+      const desired = passesByVoiceChannel.get(voiceChannelId) ?? new Set<string>();
+      const actual = guild.memberOverwrites(voiceChannelId);
+      for (const id of desired) {
+        if (!actual.has(id)) {
+          await guild.grantVoiceAccess(voiceChannelId, id);
+          out.guestGrants++;
+        }
+      }
+      for (const id of actual) {
+        if (!desired.has(id)) {
+          await guild.revokeVoiceAccess(voiceChannelId, id);
+          out.guestRevokes++;
+        }
+      }
+    });
+  }
+
+  // 8. Nicknames — `[TAG] gamertag`/bare-gamertag for every still-linked user.
+  // Disjoint from step 5, which only ever clears the nickname of a user
+  // LEAVING the link set; this only ever touches users `desiredNicknames()`
+  // still lists, so the two never fight over the same id in one pass.
+  let nicknameChanges: [string, string][] = [];
+  await step("nickname-read", async () => {
+    const desired = await store.desiredNicknames();
+    for (const [id, nickname] of desired) {
+      if (opts.nicknameNoRetry?.has(id)) continue;
+      if (!guild.isMember(id)) continue;
+      const current = guild.memberNickname(id);
+      if (current === undefined || current === nickname) continue;
+      nicknameChanges.push([id, nickname]);
+    }
+  });
+
+  for (const [id, nickname] of nicknameChanges) {
+    await step(`nickname-set:${id}`, async () => {
+      const outcome = await guild.setNickname(id, nickname);
+      if (NO_RETRY.has(outcome)) {
+        opts.nicknameNoRetry?.add(id);
+        opts.onError?.(`nickname:${id}`, new Error(`setNickname refused: ${outcome}`));
+      } else if (outcome === "ok") {
+        out.nicknamesSet++;
+      }
     });
   }
 

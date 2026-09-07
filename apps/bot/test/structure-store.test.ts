@@ -7,11 +7,14 @@ import {
   factions,
   factionMembers,
   identityLinks,
+  players,
+  guestPasses,
   seasons,
   alphaWeeks,
   type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { sql, eq } from "drizzle-orm";
+import { GUEST_PASS_MS } from "@factions/domain";
 import { PgStructureStore } from "../src/structure-store.js";
 import { seedFaction } from "./seed.js";
 
@@ -29,7 +32,7 @@ describe("PgStructureStore", () => {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(
-        sql`truncate table alpha_weeks, seasons, identity_links, faction_members, factions, declarations, poles, events, adm_files, servers restart identity cascade`,
+        sql`truncate table alpha_weeks, seasons, identity_links, players, guest_passes, faction_members, factions, declarations, poles, events, adm_files, servers restart identity cascade`,
       );
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
@@ -110,5 +113,71 @@ describe("PgStructureStore", () => {
   it("currentAlphaFactionIds is empty when no week has closed", async () => {
     await db.insert(seasons).values({ serverId, number: 1, startedAt: now, weekClosedThrough: null });
     expect(await store.currentAlphaFactionIds()).toEqual(new Set());
+  });
+
+  it("openGuestPassesByVoiceChannel delegates to openPassesByVoiceChannel", async () => {
+    const a = await seedFaction(db, { serverId, tag: "AAA", texture: "Flag_A", createdAt: now });
+    await store.setVoiceChannelId(a.id, "voice-a");
+    await db.insert(guestPasses).values({
+      factionId: a.id, discordUserId: "d1", grantedByDiscordId: "d0", grantedAt: now,
+      expiresAt: new Date(now.getTime() + 1000),
+    });
+    expect(await store.openGuestPassesByVoiceChannel(now)).toEqual(new Map([["voice-a", new Set(["d1"])]]));
+  });
+
+  it("convertGuestPasses delegates to convertPassesForFullMembersDb", async () => {
+    const a = await seedFaction(db, { serverId, tag: "AAA", texture: "Flag_A", createdAt: now });
+    await db.insert(factionMembers).values({
+      factionId: a.id, serverId, dayzId: "U1", discordId: "d1", role: "member", joinedAt: now, status: "full",
+    });
+    const [pass] = await db.insert(guestPasses).values({
+      factionId: a.id, discordUserId: "d1", grantedByDiscordId: "d0", grantedAt: now,
+      expiresAt: new Date(now.getTime() + 1000),
+    }).returning();
+    expect(await store.convertGuestPasses(now)).toBe(1);
+    const [row] = await db.select({ convertedAt: guestPasses.convertedAt }).from(guestPasses).where(eq(guestPasses.id, pass!.id));
+    expect(row!.convertedAt).not.toBeNull();
+  });
+
+  describe("desiredNicknames", () => {
+    it("prefixes a full member's tag, falls back to the link's gamertag, and bares a non-member", async () => {
+      const bear = await seedFaction(db, { serverId, name: "Night Bears", tag: "BEAR", texture: "Flag_A", status: "active", createdAt: now, poleKey: "1.00:1.00:1.00" });
+      await db.insert(identityLinks).values([
+        { discordId: "d1", dayzId: "U1", gamertag: "LinkOne", verifiedAt: now },
+        { discordId: "d2", dayzId: "U2", gamertag: "LinkTwo", verifiedAt: now },
+      ]);
+      // Current gamertag wins over the link's stale one.
+      await db.insert(players).values({ dayzId: "U1", gamertag: "One", firstSeenAt: now, lastSeenAt: now });
+      await db.insert(factionMembers).values([
+        { factionId: bear.id, serverId, dayzId: "U1", discordId: "d1", role: "leader", joinedAt: now, status: "full" },
+        { factionId: bear.id, serverId, dayzId: "U2", discordId: "d2", role: "member", joinedAt: now, status: "pending" },
+      ]);
+      expect(await store.desiredNicknames()).toEqual(new Map([
+        ["d1", "[BEAR] One"],
+        ["d2", "LinkTwo"],
+      ]));
+    });
+
+    it("bares the gamertag for a full member of a non-holding (lapsed) clan", async () => {
+      const bear = await seedFaction(db, { serverId, name: "Night Bears", tag: "BEAR", texture: "Flag_A", status: "lapsed", createdAt: now, poleKey: "1.00:1.00:1.00" });
+      await db.insert(identityLinks).values({ discordId: "d1", dayzId: "U1", gamertag: "One", verifiedAt: now });
+      await db.insert(factionMembers).values({
+        factionId: bear.id, serverId, dayzId: "U1", discordId: "d1", role: "leader", joinedAt: now, status: "full",
+      });
+      expect(await store.desiredNicknames()).toEqual(new Map([["d1", "One"]]));
+    });
+
+    it("truncates a 40-char gamertag so the nickname is exactly 32 chars, tag intact", async () => {
+      const bear = await seedFaction(db, { serverId, name: "Night Bears", tag: "BEAR", texture: "Flag_A", status: "active", createdAt: now, poleKey: "1.00:1.00:1.00" });
+      const longName = "X".repeat(40);
+      await db.insert(identityLinks).values({ discordId: "d1", dayzId: "U1", gamertag: longName, verifiedAt: now });
+      await db.insert(factionMembers).values({
+        factionId: bear.id, serverId, dayzId: "U1", discordId: "d1", role: "leader", joinedAt: now, status: "full",
+      });
+      const result = await store.desiredNicknames();
+      const nickname = result.get("d1")!;
+      expect(nickname).toHaveLength(32);
+      expect(nickname.startsWith("[BEAR] ")).toBe(true);
+    });
   });
 });

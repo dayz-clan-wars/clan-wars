@@ -451,6 +451,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (s.alphaRemoves) parts.push(`alphaRemoves ${s.alphaRemoves}`);
     if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
     if (s.noticesFailed) parts.push(`noticesFailed ${s.noticesFailed}`);
+    if (s.guestGrants) parts.push(`guestGrants ${s.guestGrants}`);
+    if (s.guestRevokes) parts.push(`guestRevokes ${s.guestRevokes}`);
+    if (s.guestConverted) parts.push(`guestConverted ${s.guestConverted}`);
+    if (s.nicknamesSet) parts.push(`nicknamesSet ${s.nicknamesSet}`);
     // ⚠️ Included, or a pass that did nothing but fail prints nothing at all —
     // and this line is what an operator greps.
     if (s.errors) parts.push(`errors ${s.errors}`);
@@ -803,7 +807,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       try {
         const r = await reaperTick(db, new Date());
         lastReaperAt = Date.now();
-        if (r.pins + r.positions + r.sightings > 0) console.log(`reaper: ${r.pins} pin(s), ${r.positions} position(s), ${r.sightings} sighting(s)`);
+        if (r.pins + r.positions + r.sightings + r.guestPasses > 0) console.log(`reaper: ${r.pins} pin(s), ${r.positions} position(s), ${r.sightings} sighting(s), ${r.guestPasses} guest pass(es)`);
       } catch (err) {
         console.error("reaper tick failed", err);
       }

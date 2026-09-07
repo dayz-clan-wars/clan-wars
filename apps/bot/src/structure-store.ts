@@ -1,6 +1,8 @@
 import type { Database } from "@factions/db";
-import { factions, factionMembers, identityLinks, clanNotices, seasons, alphaWeeks } from "@factions/db";
+import { factions, factionMembers, identityLinks, players, clanNotices, seasons, alphaWeeks } from "@factions/db";
 import { and, eq, isNull, isNotNull, inArray, or, asc } from "drizzle-orm";
+import { openPassesByVoiceChannel, convertPassesForFullMembersDb } from "@factions/roster/internal";
+import { nicknameFor, HOLDING_STATUSES } from "@factions/domain";
 
 export type StructureRow = {
   id: number;
@@ -47,6 +49,15 @@ export interface StructureStore {
    * counted forever by `countUnpostedNotices`. Returns the row count.
    */
   failChannelNotices(factionId: number, at: Date): Promise<number>;
+  /** Every open guest pass, keyed by the holding clan's voice channel. Delegates to `openPassesByVoiceChannel`. */
+  openGuestPassesByVoiceChannel(now: Date): Promise<Map<string, Set<string>>>;
+  /** Stamp `converted_at` on any open pass whose user is now a FULL member of the granting clan. Returns the count. */
+  convertGuestPasses(now: Date): Promise<number>;
+  /**
+   * discordId → the nickname every linked user should have: `[TAG] gamertag`
+   * for a FULL member of a holding-status clan, bare gamertag otherwise.
+   */
+  desiredNicknames(): Promise<Map<string, string>>;
 }
 
 export class PgStructureStore implements StructureStore {
@@ -218,5 +229,43 @@ export class PgStructureStore implements StructureStore {
       )
       .returning({ id: clanNotices.id });
     return rows.length;
+  }
+
+  async openGuestPassesByVoiceChannel(now: Date): Promise<Map<string, Set<string>>> {
+    return openPassesByVoiceChannel(this.db, now);
+  }
+
+  async convertGuestPasses(now: Date): Promise<number> {
+    return convertPassesForFullMembersDb(this.db, now);
+  }
+
+  async desiredNicknames(): Promise<Map<string, string>> {
+    const rows = await this.db
+      .select({
+        discordId: identityLinks.discordId,
+        linkGamertag: identityLinks.gamertag,
+        playerGamertag: players.gamertag,
+        factionStatus: factions.status,
+        tag: factions.tag,
+      })
+      .from(identityLinks)
+      .leftJoin(players, eq(players.dayzId, identityLinks.dayzId))
+      .leftJoin(
+        factionMembers,
+        and(eq(factionMembers.discordId, identityLinks.discordId), eq(factionMembers.status, "full")),
+      )
+      .leftJoin(factions, eq(factions.id, factionMembers.factionId))
+      .orderBy(asc(identityLinks.id));
+
+    const result = new Map<string, string>();
+    for (const row of rows) {
+      const gamertag = row.playerGamertag ?? row.linkGamertag;
+      const tag =
+        row.tag !== null && HOLDING_STATUSES.includes(row.factionStatus as (typeof HOLDING_STATUSES)[number])
+          ? row.tag
+          : null;
+      result.set(row.discordId, nicknameFor(gamertag, tag));
+    }
+    return result;
   }
 }

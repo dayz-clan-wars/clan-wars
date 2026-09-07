@@ -1,4 +1,4 @@
-import { ChannelType, DiscordAPIError, PermissionFlagsBits, type Client } from "discord.js";
+import { ChannelType, DiscordAPIError, OverwriteType, PermissionFlagsBits, type Client } from "discord.js";
 import { applyNickname, type GuildLike } from "./nickname.js";
 import type { NicknameOutcome } from "./nickname.js";
 
@@ -47,6 +47,14 @@ export interface GuildGateway {
   removeRole(userId: string, roleId: string): Promise<void>;
   /** `applyNickname` semantics: never throws, reports the outcome. */
   setNickname(userId: string, nickname: string | null): Promise<NicknameOutcome>;
+  /** Cache: user-type overwrite ids on this voice channel. Empty for an unknown channel. */
+  memberOverwrites(channelId: string): Set<string>;
+  /** `permissionOverwrites.edit(userId, { ViewChannel: true, Connect: true })`. */
+  grantVoiceAccess(channelId: string, userId: string): Promise<void>;
+  /** `permissionOverwrites.delete(userId)`, tolerating an already-missing overwrite or channel. */
+  revokeVoiceAccess(channelId: string, userId: string): Promise<void>;
+  /** Cache: this member's current nickname, or `undefined` when the member is not cached. */
+  memberNickname(userId: string): string | null | undefined;
 }
 
 export type GuildGatewayConfig = { guildId: string; clanTextCategoryId: string; clanVoiceCategoryId: string };
@@ -61,12 +69,19 @@ type RealGuild = {
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
   channels: {
-    cache: Map<string, { id: string; name: string; parentId: string | null; setName(name: string): Promise<unknown> }>;
+    cache: Map<string, {
+      id: string; name: string; parentId: string | null; setName(name: string): Promise<unknown>;
+      permissionOverwrites: {
+        cache: Map<string, { id: string; type: number }>;
+        edit(userId: string, opts: Record<string, boolean>): Promise<unknown>;
+        delete(userId: string): Promise<unknown>;
+      };
+    }>;
     create(opts: Record<string, unknown>): Promise<{ id: string }>;
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
   members: {
-    cache: Map<string, unknown>;
+    cache: Map<string, { nickname: string | null }>;
     fetch(userId?: string): Promise<unknown>;
     me: { permissions: { has(perm: bigint): boolean } } | null;
   };
@@ -273,6 +288,40 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
         members_me_permissions_has: () => guild.members.me?.permissions.has(PermissionFlagsBits.ManageNicknames) ?? false,
       };
       return applyNickname(guildLike, userId, nickname);
+    },
+
+    memberOverwrites(channelId) {
+      const channel = cachedGuild().channels.cache.get(channelId);
+      if (channel === undefined) return new Set<string>();
+      const result = new Set<string>();
+      for (const ov of channel.permissionOverwrites.cache.values()) {
+        if (ov.type === OverwriteType.Member) result.add(ov.id);
+      }
+      return result;
+    },
+
+    async grantVoiceAccess(channelId, userId) {
+      const guild = await getGuild();
+      const channel = guild.channels.cache.get(channelId);
+      if (channel === undefined) return;
+      await channel.permissionOverwrites.edit(userId, { ViewChannel: true, Connect: true });
+    },
+
+    async revokeVoiceAccess(channelId, userId) {
+      const guild = await getGuild();
+      const channel = guild.channels.cache.get(channelId);
+      if (channel === undefined) return;
+      try {
+        await channel.permissionOverwrites.delete(userId);
+      } catch (err) {
+        if (isAlreadyGone(err)) return;
+        throw err;
+      }
+    },
+
+    memberNickname(userId) {
+      const member = cachedGuild().members.cache.get(userId);
+      return member === undefined ? undefined : member.nickname;
     },
   };
 }

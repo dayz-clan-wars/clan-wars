@@ -7,6 +7,7 @@ import {
   factions,
   factionMembers,
   identityLinks,
+  guestPasses,
   clanNotices,
   seasons,
   alphaWeeks,
@@ -36,7 +37,7 @@ describe("structureTick", () => {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(
-        sql`truncate table clan_notices, alpha_weeks, seasons, identity_links, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`,
+        sql`truncate table clan_notices, alpha_weeks, seasons, identity_links, guest_passes, faction_members, declarations, poles, events, adm_files, factions, servers restart identity cascade`,
       );
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
@@ -205,7 +206,11 @@ describe("structureTick", () => {
     await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     guild.calls.length = 0;
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
-    expect(r).toEqual({ created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0, alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, noticesFailed: 0, errors: 0 });
+    expect(r).toEqual({
+      created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0,
+      alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, noticesFailed: 0,
+      guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0, errors: 0,
+    });
     expect(guild.calls).toEqual([]);
   });
 
@@ -242,6 +247,9 @@ describe("structureTick", () => {
       currentAlphaFactionIds: () => store.currentAlphaFactionIds(),
       linkedDiscordIds: () => store.linkedDiscordIds(),
       failChannelNotices: (id, at) => store.failChannelNotices(id, at),
+      openGuestPassesByVoiceChannel: (now) => store.openGuestPassesByVoiceChannel(now),
+      convertGuestPasses: (now) => store.convertGuestPasses(now),
+      desiredNicknames: () => store.desiredNicknames(),
     };
     for (let i = 0; i < 3; i++) {
       const r = await structureTick(broken, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
@@ -304,6 +312,13 @@ describe("structureTick", () => {
       addRole: (u, r) => guild.addRole(u, r),
       removeRole: (u, r) => guild.removeRole(u, r),
       setNickname: (u, n) => guild.setNickname(u, n),
+      // Not cache-backed by "guild not fetched" in this fake: both return the
+      // documented "unknown"/"not cached" values rather than throwing, same
+      // as `roleName`/`channelName` above.
+      memberOverwrites: () => new Set<string>(),
+      grantVoiceAccess: (i, u) => guild.grantVoiceAccess(i, u),
+      revokeVoiceAccess: (i, u) => guild.revokeVoiceAccess(i, u),
+      memberNickname: () => undefined,
     };
     const onError = vi.fn();
     const r = await structureTick(store, blind, { linkedRoleId: "linked", alphaRoleId: "alpha", onError });
@@ -313,9 +328,105 @@ describe("structureTick", () => {
       linkedAdds: 0, linkedRemoves: 0,
       alphaAdds: 0, alphaRemoves: 0,
       nicknamesCleared: 0, noticesFailed: 0,
-      errors: 3, // step 4's isMember, step 5's read, step 6's read — the pass still finishes
+      guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0,
+      // step 4's isMember, step 5's read, step 6's read, step 8's read — the pass still finishes
+      errors: 4,
     });
-    expect(onError.mock.calls.map((c) => c[0])).toEqual([`roles:${BEAR}`, "linked-read", "alpha-read"]);
+    expect(onError.mock.calls.map((c) => c[0])).toEqual([`roles:${BEAR}`, "linked-read", "alpha-read", "nickname-read"]);
+  });
+
+  describe("guest passes (step 7)", () => {
+    it("grants access for an open pass, is a no-op on the second pass, and revokes a stray with no pass", async () => {
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      const [row] = await store.clansWithStructure();
+      const voiceId = row!.voiceChannelId!;
+      guild.overwrites.set(voiceId, new Set(["d8"])); // stray: no pass behind it
+      await db.insert(guestPasses).values({
+        factionId: BEAR, discordUserId: "d9", grantedByDiscordId: "d1", grantedAt: now,
+        expiresAt: new Date(now.getTime() + 1000),
+      });
+
+      guild.calls.length = 0;
+      let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(r).toMatchObject({ guestGrants: 1, guestRevokes: 1 });
+      expect(guild.calls).toContain(`grantVoiceAccess ${voiceId} d9`);
+      expect(guild.calls).toContain(`revokeVoiceAccess ${voiceId} d8`);
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set(["d9"]));
+
+      // Cache already matches: no REST call at all.
+      guild.calls.length = 0;
+      r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(r).toMatchObject({ guestGrants: 0, guestRevokes: 0 });
+      expect(guild.calls.filter((c) => c.includes("VoiceAccess"))).toEqual([]);
+
+      // Expired: revoked.
+      await db.update(guestPasses).set({ expiresAt: new Date(now.getTime() - 1) }).where(eq(guestPasses.discordUserId, "d9"));
+      r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(r).toMatchObject({ guestRevokes: 1 });
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set());
+    });
+
+    it("converts a pass once its user is a full member; the overwrite is revoked and converted_at stamped", async () => {
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      const [row] = await store.clansWithStructure();
+      const voiceId = row!.voiceChannelId!;
+      const [pass] = await db.insert(guestPasses).values({
+        factionId: BEAR, discordUserId: "d9", grantedByDiscordId: "d1", grantedAt: now,
+        expiresAt: new Date(now.getTime() + 100000),
+      }).returning();
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set(["d9"]));
+
+      await db.insert(factionMembers).values({
+        factionId: BEAR, serverId, dayzId: "U9", discordId: "d9", role: "member", joinedAt: now, status: "full",
+      });
+      const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(r).toMatchObject({ guestConverted: 1, guestRevokes: 1 });
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set());
+      const [after] = await db.select({ convertedAt: guestPasses.convertedAt }).from(guestPasses).where(eq(guestPasses.id, pass!.id));
+      expect(after!.convertedAt).not.toBeNull();
+    });
+  });
+
+  describe("nicknames (step 8)", () => {
+    it("prefixes a full member, bares a linked non-member and a pending member, and skips an already-correct entry", async () => {
+      await db.insert(identityLinks).values({ discordId: "d3", dayzId: "U3", gamertag: "Three", verifiedAt: now });
+      guild.members.get("d1")!.nickname = "One"; // full member of BEAR → desired "[BEAR] One"
+      guild.members.get("d2")!.nickname = "[BEAR] Two"; // full member, already correct
+      guild.members.get("d4")!.nickname = "[BEAR] Four"; // linked, no clan → desired bare "Four"
+      // d3 (pending, no clan standing) keeps its beforeEach null nickname → desired bare "Three"
+
+      const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+
+      expect(guild.calls).toContain("setNickname d1 [BEAR] One");
+      expect(guild.calls).toContain("setNickname d4 Four");
+      expect(guild.calls).toContain("setNickname d3 Three");
+      expect(guild.calls.filter((c) => c.startsWith("setNickname d2"))).toEqual([]);
+      expect(r.nicknamesSet).toBe(3);
+    });
+
+    it("never retries a user in nicknameNoRetry", async () => {
+      guild.members.get("d1")!.nickname = "One"; // mismatched — would otherwise become "[BEAR] One"
+      const noRetry = new Set<string>(["d1"]);
+      const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now, nicknameNoRetry: noRetry });
+      expect(guild.calls.filter((c) => c.startsWith("setNickname d1"))).toEqual([]);
+      // d2 and d4 still get theirs — nicknameNoRetry gates d1 only.
+      expect(r.nicknamesSet).toBe(2);
+    });
+
+    it("truncates a 40-char gamertag so the nickname is exactly 32 chars, tag intact", async () => {
+      const longName = "X".repeat(40);
+      await db.insert(identityLinks).values({ discordId: "d5", dayzId: "U5", gamertag: longName, verifiedAt: now });
+      await db.insert(factionMembers).values({
+        factionId: BEAR, serverId, dayzId: "U5", discordId: "d5", role: "member", joinedAt: now, status: "full",
+      });
+      guild.members.set("d5", { nickname: null });
+
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+
+      expect(guild.members.get("d5")!.nickname).toHaveLength(32);
+      expect(guild.members.get("d5")!.nickname!.startsWith("[BEAR] ")).toBe(true);
+    });
   });
 
   describe("@Alpha", () => {

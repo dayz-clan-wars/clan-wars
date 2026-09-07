@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, playerPositions, intruderSightings, clanPins, declarations, type Database } from "@factions/db";
-import { PIN_TTL_MS, POSITION_RETENTION_MS, INTRUDER_PIN_TTL_MS } from "@factions/domain";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, playerPositions, intruderSightings, clanPins, declarations, guestPasses, type Database } from "@factions/db";
+import { PIN_TTL_MS, POSITION_RETENTION_MS, INTRUDER_PIN_TTL_MS, GUEST_PASS_MS } from "@factions/domain";
 import { sql } from "drizzle-orm";
 import { reaperTick } from "../src/reaper-tick.js";
 import { seedFaction } from "./seed.js";
@@ -15,7 +15,7 @@ describe("reaperTick", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table clan_pins, intruder_sightings, player_positions, declarations, poles, factions, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table clan_pins, intruder_sightings, player_positions, guest_passes, declarations, poles, factions, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
     factionId = (await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", createdAt: ago(1000) })).id;
@@ -38,9 +38,29 @@ describe("reaperTick", () => {
       { declarationId, dayzId: UID, firstSeenAt: ago(INTRUDER_PIN_TTL_MS + 1), lastSeenAt: ago(INTRUDER_PIN_TTL_MS + 1), lastAlertAt: ago(INTRUDER_PIN_TTL_MS + 1), distanceM: 1, lastX: "1", lastZ: "1" },
       { declarationId, dayzId: "B".repeat(40), firstSeenAt: ago(1), lastSeenAt: ago(1), lastAlertAt: ago(1), distanceM: 1, lastX: "1", lastZ: "1" },
     ]);
-    expect(await reaperTick(db, now)).toEqual({ pins: 1, positions: 1, sightings: 1 });
+    expect(await reaperTick(db, now)).toEqual({ pins: 1, positions: 1, sightings: 1, guestPasses: 0 });
     expect(await db.select().from(clanPins)).toHaveLength(1);
     expect(await db.select().from(playerPositions)).toHaveLength(0);
     expect(await db.select().from(intruderSightings)).toHaveLength(1);
+  });
+
+  it("deletes an expired guest pass; keeps an open one, and a revoked/converted one still within GUEST_PASS_MS", async () => {
+    await db.insert(guestPasses).values([
+      // expired outright
+      { factionId, discordUserId: "d1", grantedByDiscordId: "d0", grantedAt: ago(2000), expiresAt: ago(1) },
+      // still open
+      { factionId, discordUserId: "d2", grantedByDiscordId: "d0", grantedAt: now, expiresAt: new Date(now.getTime() + 1000) },
+      // revoked long ago
+      { factionId, discordUserId: "d3", grantedByDiscordId: "d0", grantedAt: ago(GUEST_PASS_MS * 2), expiresAt: new Date(now.getTime() + 1000), revokedAt: ago(GUEST_PASS_MS + 1) },
+      // revoked recently — must survive
+      { factionId, discordUserId: "d4", grantedByDiscordId: "d0", grantedAt: ago(1000), expiresAt: new Date(now.getTime() + 1000), revokedAt: ago(1) },
+      // converted long ago
+      { factionId, discordUserId: "d5", grantedByDiscordId: "d0", grantedAt: ago(GUEST_PASS_MS * 2), expiresAt: new Date(now.getTime() + 1000), convertedAt: ago(GUEST_PASS_MS + 1) },
+      // converted recently — must survive
+      { factionId, discordUserId: "d6", grantedByDiscordId: "d0", grantedAt: ago(1000), expiresAt: new Date(now.getTime() + 1000), convertedAt: ago(1) },
+    ]);
+    expect(await reaperTick(db, now)).toEqual({ pins: 0, positions: 0, sightings: 0, guestPasses: 3 });
+    const remaining = await db.select({ discordUserId: guestPasses.discordUserId }).from(guestPasses);
+    expect(remaining.map((r) => r.discordUserId).sort()).toEqual(["d2", "d4", "d6"]);
   });
 });
