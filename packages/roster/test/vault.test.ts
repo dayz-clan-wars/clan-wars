@@ -222,4 +222,29 @@ describe("vault store", () => {
 
     expect(await editLockDb(db, actor("O1"), { lockId: lockId + 9999, name: "x", note: null, minRole: "member", at: now })).toBe("gone");
   });
+
+  // ------------------------------------------------------- 7. stale actor
+
+  it("re-derives the actor's role from faction_members, never trusting a stale VaultActor", async () => {
+    const staleOfficer = actor("O1"); // built before the demotion below
+
+    await db.update(factionMembers).set({ role: "member" })
+      .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.dayzId, UID.O1)));
+
+    const added = await addLockDb(db, staleOfficer, { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 });
+    expect(added.outcome).toBe("not-permitted");
+
+    const rotated = await rotateLocksDb(db, staleOfficer, { lockId: "all", at: now, rng: () => 0.9 });
+    expect(rotated.outcome).toBe("not-permitted");
+  });
+
+  it("a kicked actor's stale VaultActor gets not-visible on revealLock, not the code", async () => {
+    const memberLock = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
+    const staleMember = actor("M1"); // built before the kick below
+
+    expect(await kickDb(db, now, D.L, D.M1)).toBe("ok");
+
+    const revealed = await revealLockDb(db, staleMember, { lockId: memberLock, at: now });
+    expect(revealed).toEqual({ outcome: "not-visible", code: null });
+  });
 });

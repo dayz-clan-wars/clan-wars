@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { vaultLocks, vaultHistory, players, factions } from "@factions/db";
+import { vaultLocks, vaultHistory, players, factions, factionMembers } from "@factions/db";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import { ROLE_RANK, canSeeLock, randomVaultCode, type ClanRole, type VaultAction } from "@factions/domain";
 import { lockFactionTx } from "./leadership-store";
@@ -32,6 +32,24 @@ export type VaultActor = { factionId: number; serverId: number; dayzId: string; 
 async function gamertagByDayzIdTx(tx: Tx, dayzId: string): Promise<string> {
   const [p] = await tx.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, dayzId));
   return p?.gamertag ?? dayzId;
+}
+
+/**
+ * ⚠️ The caller's `VaultActor` is trusted for nothing but `factionId` and
+ * `discordId` — `role` and `dayzId` are re-derived here, inside the
+ * transaction, right after `lockFactionTx`. A `VaultActor` built at page
+ * load (or by a bot command) can be stale by the time the write lands: a
+ * demoted officer, or a member kicked a moment ago, must be judged on the
+ * roster row as it stands NOW, not on what the caller believes. `null`
+ * covers both "never a member" and "pending" (spec §4.5: a pending member
+ * has no vault standing at all).
+ */
+async function currentMemberTx(tx: Tx, factionId: number, discordId: string): Promise<{ dayzId: string; role: Role } | null> {
+  const [m] = await tx.select({ dayzId: factionMembers.dayzId, role: factionMembers.role, status: factionMembers.status })
+    .from(factionMembers)
+    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, discordId)));
+  if (!m || m.status !== "full") return null;
+  return { dayzId: m.dayzId, role: m.role as Role };
 }
 
 export type AddLockOutcome = "ok" | "not-permitted" | "bad-name" | "bad-note" | "bad-code";
@@ -72,7 +90,8 @@ export async function addLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    if (ROLE_RANK[actor.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, lockId: null };
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, lockId: null };
     if (!validName(a.name)) return { outcome: "bad-name" as const, lockId: null };
     if (!validNote(a.note)) return { outcome: "bad-note" as const, lockId: null };
     if (a.code !== undefined && !CODE_RE.test(a.code)) return { outcome: "bad-code" as const, lockId: null };
@@ -84,12 +103,12 @@ export async function addLockDb(
       code,
       note: a.note,
       minRole: a.minRole,
-      createdByDayzId: actor.dayzId,
+      createdByDayzId: me.dayzId,
       createdAt: a.at,
     }).returning({ id: vaultLocks.id });
 
     await tx.insert(vaultHistory).values({
-      factionId: actor.factionId, lockId: row!.id, lockName: a.name, action: "added", dayzId: actor.dayzId, at: a.at,
+      factionId: actor.factionId, lockId: row!.id, lockName: a.name, action: "added", dayzId: me.dayzId, at: a.at,
     });
 
     return { outcome: "ok" as const, lockId: row!.id };
@@ -105,7 +124,8 @@ export async function editLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    if (ROLE_RANK[actor.role] < ROLE_RANK.officer) return "not-permitted" as const;
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return "not-permitted" as const;
     if (!validName(a.name)) return "bad-name" as const;
     if (!validNote(a.note)) return "bad-note" as const;
 
@@ -115,7 +135,7 @@ export async function editLockDb(
 
     await tx.update(vaultLocks).set({ name: a.name, note: a.note, minRole: a.minRole }).where(eq(vaultLocks.id, lock.id));
     await tx.insert(vaultHistory).values({
-      factionId: actor.factionId, lockId: lock.id, lockName: a.name, action: "edited", dayzId: actor.dayzId, at: a.at,
+      factionId: actor.factionId, lockId: lock.id, lockName: a.name, action: "edited", dayzId: me.dayzId, at: a.at,
     });
 
     return "ok" as const;
@@ -131,14 +151,15 @@ export async function deleteLockDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    if (ROLE_RANK[actor.role] < ROLE_RANK.officer) return "not-permitted" as const;
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return "not-permitted" as const;
 
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name }).from(vaultLocks)
       .where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return "gone" as const;
 
     await tx.insert(vaultHistory).values({
-      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "deleted", dayzId: actor.dayzId, at: a.at,
+      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "deleted", dayzId: me.dayzId, at: a.at,
     });
     await tx.delete(vaultLocks).where(eq(vaultLocks.id, lock.id));
 
@@ -162,10 +183,12 @@ export async function revealLockDb(
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name, code: vaultLocks.code, minRole: vaultLocks.minRole })
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return { outcome: "gone" as const, code: null };
-    if (!canSeeLock(actor.role, lock.minRole as Role)) return { outcome: "not-visible" as const, code: null };
+
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || !canSeeLock(me.role, lock.minRole as Role)) return { outcome: "not-visible" as const, code: null };
 
     await tx.insert(vaultHistory).values({
-      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "revealed", dayzId: actor.dayzId, at: a.at,
+      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "revealed", dayzId: me.dayzId, at: a.at,
     });
 
     return { outcome: "ok" as const, code: lock.code };
@@ -187,7 +210,8 @@ export async function rotateLocksDb(
   return db.transaction(async (tx) => {
     await lockFactionTx(tx, actor.factionId);
 
-    if (ROLE_RANK[actor.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, rotated: 0 };
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, rotated: 0 };
 
     const where = a.lockId === "all"
       ? eq(vaultLocks.factionId, actor.factionId)
@@ -199,10 +223,10 @@ export async function rotateLocksDb(
     for (const t of targets) {
       const code = randomVaultCode(a.rng);
       await tx.update(vaultLocks).set({
-        code, rotatedAt: a.at, rotatedByDayzId: actor.dayzId, confirmedAt: null, exposedAt: null,
+        code, rotatedAt: a.at, rotatedByDayzId: me.dayzId, confirmedAt: null, exposedAt: null,
       }).where(eq(vaultLocks.id, t.id));
       await tx.insert(vaultHistory).values({
-        factionId: actor.factionId, lockId: t.id, lockName: t.name, action: "rotated", dayzId: actor.dayzId, at: a.at,
+        factionId: actor.factionId, lockId: t.id, lockName: t.name, action: "rotated", dayzId: me.dayzId, at: a.at,
       });
     }
 
@@ -233,11 +257,13 @@ export async function confirmLockDb(
     const [lock] = await tx.select({ id: vaultLocks.id, name: vaultLocks.name, minRole: vaultLocks.minRole })
       .from(vaultLocks).where(and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId))).for("update");
     if (!lock) return "gone" as const;
-    if (!canSeeLock(actor.role, lock.minRole as Role)) return "not-visible" as const;
+
+    const me = await currentMemberTx(tx, actor.factionId, actor.discordId);
+    if (!me || !canSeeLock(me.role, lock.minRole as Role)) return "not-visible" as const;
 
     await tx.update(vaultLocks).set({ confirmedAt: a.at }).where(eq(vaultLocks.id, lock.id));
     await tx.insert(vaultHistory).values({
-      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "confirmed", dayzId: actor.dayzId, at: a.at,
+      factionId: actor.factionId, lockId: lock.id, lockName: lock.name, action: "confirmed", dayzId: me.dayzId, at: a.at,
     });
 
     return "ok" as const;
