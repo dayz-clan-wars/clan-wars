@@ -46,8 +46,10 @@ import {
   scoreboardDb, alphasDb, seasonsDb, warLogDb,
   type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry,
 } from "./scoring";
+import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 
 export type { Viewer, Role };
+export type { MapState, MapFix, DropPinOutcome };
 export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
@@ -203,3 +205,10 @@ export function seasons(): Promise<SeasonSummary[]> {
 export function warLog(limit?: number): Promise<WarLogEntry[]> {
   return warLogDb(db(), limit);
 }
+
+/** The map, scoped to who is looking (spec §10.3). */
+export function mapState(discordId: string): Promise<MapState | "not-linked"> { return mapStateDb(db(), discordId, new Date()); }
+/** Drop a clan pin. Full members only; every rule is inside. */
+export function dropPin(discordId: string, pin: { x: number; z: number; icon: string; note: string | null }): Promise<DropPinOutcome> { return dropPinDb(db(), discordId, pin, new Date()); }
+/** Delete one of your clan's pins. Any full member may. */
+export function deletePin(discordId: string, pinId: number): Promise<{ deleted: boolean }> { return deletePinDb(db(), discordId, pinId); }
