@@ -6,6 +6,8 @@ export class FakeGuild implements GuildGateway {
   channels = new Map<string, { name: string; kind: "text" | "voice"; roleId: string }>();
   members = new Map<string, { nickname: string | null }>();
   overwrites = new Map<string, Set<string>>();
+  /** The bot's own user id — `createVoiceChannel` seeds its own overwrite with this, matching the real adapter. */
+  botUserId = "bot";
   nicknameOutcome: NicknameOutcome = "ok";
   calls: string[] = [];
   failNext = new Set<string>(); // method names that throw once
@@ -34,6 +36,11 @@ export class FakeGuild implements GuildGateway {
     this.fail("createVoiceChannel");
     const id = `voice-${++this.n}`;
     this.channels.set(id, { name, kind: "voice", roleId });
+    // The real adapter's `permissionOverwrites` array always includes the
+    // bot's own entry (§ createVoiceChannel, guild.ts) — seeded here too so
+    // a test starts from a real channel shape instead of one `memberOverwrites`
+    // never had to filter.
+    this.overwrites.set(id, new Set([this.botUserId]));
     this.calls.push(`createVoiceChannel ${name}`);
     return id;
   }
@@ -94,7 +101,8 @@ export class FakeGuild implements GuildGateway {
     return this.nicknameOutcome;
   }
   memberOverwrites(channelId: string) {
-    return new Set(this.overwrites.get(channelId) ?? []);
+    const set = this.overwrites.get(channelId) ?? new Set<string>();
+    return new Set([...set].filter((id) => id !== this.botUserId));
   }
   async grantVoiceAccess(channelId: string, userId: string) {
     this.fail("grantVoiceAccess");

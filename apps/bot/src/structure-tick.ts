@@ -281,30 +281,39 @@ export async function structureTick(
     out.guestConverted += await store.convertGuestPasses(now);
   });
 
+  // ⚠️ Gated on `guestReadOk`, not just an empty-map default — an empty map
+  // left in place by a FAILED read would read as "no clan has an open pass"
+  // and the diff below would revoke EVERY guest overwrite in the guild on a
+  // single transient DB error. A failed read must under-act (skip the diff
+  // entirely), never over-act.
   let passesByVoiceChannel = new Map<string, Set<string>>();
+  let guestReadOk = false;
   await step("guest-read", async () => {
     passesByVoiceChannel = await store.openGuestPassesByVoiceChannel(now);
+    guestReadOk = true;
   });
 
-  for (const row of await store.clansWithStructure()) {
-    if (row.voiceChannelId === null) continue;
-    await step(`guest:${row.id}`, async () => {
-      const voiceChannelId = row.voiceChannelId!;
-      const desired = passesByVoiceChannel.get(voiceChannelId) ?? new Set<string>();
-      const actual = guild.memberOverwrites(voiceChannelId);
-      for (const id of desired) {
-        if (!actual.has(id)) {
-          await guild.grantVoiceAccess(voiceChannelId, id);
-          out.guestGrants++;
+  if (guestReadOk) {
+    for (const row of await store.clansWithStructure()) {
+      if (row.voiceChannelId === null) continue;
+      await step(`guest:${row.id}`, async () => {
+        const voiceChannelId = row.voiceChannelId!;
+        const desired = passesByVoiceChannel.get(voiceChannelId) ?? new Set<string>();
+        const actual = guild.memberOverwrites(voiceChannelId);
+        for (const id of desired) {
+          if (!actual.has(id)) {
+            await guild.grantVoiceAccess(voiceChannelId, id);
+            out.guestGrants++;
+          }
         }
-      }
-      for (const id of actual) {
-        if (!desired.has(id)) {
-          await guild.revokeVoiceAccess(voiceChannelId, id);
-          out.guestRevokes++;
+        for (const id of actual) {
+          if (!desired.has(id)) {
+            await guild.revokeVoiceAccess(voiceChannelId, id);
+            out.guestRevokes++;
+          }
         }
-      }
-    });
+      });
+    }
   }
 
   // 8. Nicknames — `[TAG] gamertag`/bare-gamertag for every still-linked user.

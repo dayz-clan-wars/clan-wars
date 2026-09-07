@@ -47,7 +47,7 @@ export interface GuildGateway {
   removeRole(userId: string, roleId: string): Promise<void>;
   /** `applyNickname` semantics: never throws, reports the outcome. */
   setNickname(userId: string, nickname: string | null): Promise<NicknameOutcome>;
-  /** Cache: user-type overwrite ids on this voice channel. Empty for an unknown channel. */
+  /** Cache: user-type overwrite ids on this voice channel, EXCLUDING the bot's own (it is not a guest pass). Empty for an unknown channel. */
   memberOverwrites(channelId: string): Set<string>;
   /** `permissionOverwrites.edit(userId, { ViewChannel: true, Connect: true })`. */
   grantVoiceAccess(channelId: string, userId: string): Promise<void>;
@@ -295,7 +295,13 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
       if (channel === undefined) return new Set<string>();
       const result = new Set<string>();
       for (const ov of channel.permissionOverwrites.cache.values()) {
-        if (ov.type === OverwriteType.Member) result.add(ov.id);
+        // ⚠️ The bot's own overwrite is excluded, never diffed. `createVoiceChannel`
+        // deliberately grants the bot View+Connect on every clan voice channel
+        // (the @everyone deny applies to it too — it is not an Administrator),
+        // and that overwrite is NOT a guest pass. Without this exclusion, step
+        // 7's stray-revoke loop reads it as an id with no open pass behind it
+        // and revokes the bot's own access on the very first tick.
+        if (ov.type === OverwriteType.Member && ov.id !== botUserId()) result.add(ov.id);
       }
       return result;
     },

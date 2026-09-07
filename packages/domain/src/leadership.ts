@@ -29,10 +29,14 @@ export const NICKNAME_MAX = 32;
 
 /**
  * `[TAG] gamertag`, tag upper-cased, gamertag sliced so the whole string
- * fits NICKNAME_MAX. With no tag, the bare gamertag (untouched).
+ * fits NICKNAME_MAX. With no tag, the bare gamertag, ALSO sliced to
+ * NICKNAME_MAX — a gamertag over the cap must come back stable, or the
+ * caller (the bot's structure-tick reconciler) diffs this value against
+ * Discord's own truncated one, sees a permanent mismatch, and re-issues
+ * `setNickname` every tick forever.
  */
 export function nicknameFor(gamertag: string, tag: string | null): string {
-  if (tag === null) return gamertag;
+  if (tag === null) return gamertag.slice(0, NICKNAME_MAX);
   const prefix = `[${tag.toUpperCase()}] `;
   const maxGamertag = NICKNAME_MAX - prefix.length;
   return prefix + gamertag.slice(0, maxGamertag);

@@ -340,7 +340,7 @@ describe("structureTick", () => {
       await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
       const [row] = await store.clansWithStructure();
       const voiceId = row!.voiceChannelId!;
-      guild.overwrites.set(voiceId, new Set(["d8"])); // stray: no pass behind it
+      guild.overwrites.get(voiceId)!.add("d8"); // stray: no pass behind it (kept alongside the bot's own)
       await db.insert(guestPasses).values({
         factionId: BEAR, discordUserId: "d9", grantedByDiscordId: "d1", grantedAt: now,
         expiresAt: new Date(now.getTime() + 1000),
@@ -351,7 +351,7 @@ describe("structureTick", () => {
       expect(r).toMatchObject({ guestGrants: 1, guestRevokes: 1 });
       expect(guild.calls).toContain(`grantVoiceAccess ${voiceId} d9`);
       expect(guild.calls).toContain(`revokeVoiceAccess ${voiceId} d8`);
-      expect(guild.overwrites.get(voiceId)).toEqual(new Set(["d9"]));
+      expect(guild.memberOverwrites(voiceId)).toEqual(new Set(["d9"]));
 
       // Cache already matches: no REST call at all.
       guild.calls.length = 0;
@@ -363,7 +363,7 @@ describe("structureTick", () => {
       await db.update(guestPasses).set({ expiresAt: new Date(now.getTime() - 1) }).where(eq(guestPasses.discordUserId, "d9"));
       r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
       expect(r).toMatchObject({ guestRevokes: 1 });
-      expect(guild.overwrites.get(voiceId)).toEqual(new Set());
+      expect(guild.memberOverwrites(voiceId)).toEqual(new Set());
     });
 
     it("converts a pass once its user is a full member; the overwrite is revoked and converted_at stamped", async () => {
@@ -375,16 +375,61 @@ describe("structureTick", () => {
         expiresAt: new Date(now.getTime() + 100000),
       }).returning();
       await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
-      expect(guild.overwrites.get(voiceId)).toEqual(new Set(["d9"]));
+      expect(guild.memberOverwrites(voiceId)).toEqual(new Set(["d9"]));
 
       await db.insert(factionMembers).values({
         factionId: BEAR, serverId, dayzId: "U9", discordId: "d9", role: "member", joinedAt: now, status: "full",
       });
       const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
       expect(r).toMatchObject({ guestConverted: 1, guestRevokes: 1 });
-      expect(guild.overwrites.get(voiceId)).toEqual(new Set());
+      expect(guild.memberOverwrites(voiceId)).toEqual(new Set());
       const [after] = await db.select({ convertedAt: guestPasses.convertedAt }).from(guestPasses).where(eq(guestPasses.id, pass!.id));
       expect(after!.convertedAt).not.toBeNull();
+    });
+
+    it("⚠️ never revokes the bot's own overwrite, even with no open pass behind it", async () => {
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      const [row] = await store.clansWithStructure();
+      const voiceId = row!.voiceChannelId!;
+      // `createVoiceChannel` seeded the bot's own overwrite; the diff must never
+      // treat it as a stray, or the bot loses View/Connect on the channel it
+      // just made.
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set([guild.botUserId]));
+
+      const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(r).toMatchObject({ guestGrants: 0, guestRevokes: 0 });
+      expect(guild.calls.filter((c) => c.includes("VoiceAccess"))).toEqual([]);
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set([guild.botUserId]));
+    });
+
+    it("⚠️ a failed guest-read leaves every overwrite alone — under-acts, never mass-revokes", async () => {
+      await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      const [row] = await store.clansWithStructure();
+      const voiceId = row!.voiceChannelId!;
+      guild.overwrites.get(voiceId)!.add("d8"); // stray, no pass — would be revoked if the diff below ran
+
+      const broken: StructureStore = {
+        clansNeedingStructure: () => store.clansNeedingStructure(),
+        clansToTearDown: () => store.clansToTearDown(),
+        clansWithStructure: () => store.clansWithStructure(),
+        setRoleId: (id, v) => store.setRoleId(id, v),
+        setTextChannelId: (id, v) => store.setTextChannelId(id, v),
+        setVoiceChannelId: (id, v) => store.setVoiceChannelId(id, v),
+        fullMembersByClan: () => store.fullMembersByClan(),
+        fullMembersOf: (ids) => store.fullMembersOf(ids),
+        currentAlphaFactionIds: () => store.currentAlphaFactionIds(),
+        linkedDiscordIds: () => store.linkedDiscordIds(),
+        failChannelNotices: (id, at) => store.failChannelNotices(id, at),
+        openGuestPassesByVoiceChannel: async () => { throw new Error("db down"); },
+        convertGuestPasses: (now2) => store.convertGuestPasses(now2),
+        desiredNicknames: () => store.desiredNicknames(),
+      };
+      const onError = vi.fn();
+      const r = await structureTick(broken, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now, onError });
+      expect(r).toMatchObject({ guestGrants: 0, guestRevokes: 0 });
+      expect(guild.calls.filter((c) => c.includes("VoiceAccess"))).toEqual([]);
+      expect(guild.overwrites.get(voiceId)).toEqual(new Set([guild.botUserId, "d8"]));
+      expect(onError.mock.calls.map((c) => c[0])).toContain("guest-read");
     });
   });
 
@@ -426,6 +471,22 @@ describe("structureTick", () => {
 
       expect(guild.members.get("d5")!.nickname).toHaveLength(32);
       expect(guild.members.get("d5")!.nickname!.startsWith("[BEAR] ")).toBe(true);
+    });
+
+    it("⚠️ a bare (no-clan) gamertag over 32 chars is truncated too, so the cache matches and it is never re-sent", async () => {
+      const longName = "Y".repeat(40);
+      await db.insert(identityLinks).values({ discordId: "d6", dayzId: "U6a", gamertag: longName, verifiedAt: now });
+      guild.members.set("d6", { nickname: null });
+
+      let r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(guild.calls.filter((c) => c.startsWith("setNickname d6"))).toHaveLength(1);
+      expect(guild.members.get("d6")!.nickname).toHaveLength(32);
+      expect(guild.members.get("d6")!.nickname).toBe("Y".repeat(32));
+
+      guild.calls.length = 0;
+      r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha", now: () => now });
+      expect(guild.calls.filter((c) => c.startsWith("setNickname d6"))).toEqual([]);
+      expect(r.nicknamesSet).toBe(0);
     });
   });
 

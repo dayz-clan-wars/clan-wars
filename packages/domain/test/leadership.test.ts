@@ -19,6 +19,11 @@ describe("nicknameFor", () => {
   it("renders the bare gamertag when there is no tag", () => {
     expect(nicknameFor("Wolfie", null)).toBe("Wolfie");
   });
+  it("slices a bare gamertag over NICKNAME_MAX too, so it never drifts from Discord's own truncation", () => {
+    const n = nicknameFor("A".repeat(40), null);
+    expect(n).toHaveLength(NICKNAME_MAX);
+    expect(n).toBe("A".repeat(NICKNAME_MAX));
+  });
   it("upper-cases a lowercase tag", () => {
     expect(nicknameFor("Wolfie", "bear")).toBe("[BEAR] Wolfie");
   });
