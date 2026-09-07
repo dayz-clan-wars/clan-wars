@@ -25,13 +25,17 @@ describe("api routes", () => {
   /**
    * The one route that answers JSON instead of a redirect — a vault code
    * must never ride a URL. It still has to leave with `Cache-Control:
-   * no-store, private` like every other personal read/write, via the
-   * shared `NO_STORE`/`json(` helpers rather than a hand-rolled response.
+   * no-store, private` like every other personal read/write; pinned by
+   * requiring the shared `lib/api.ts` helper (`json(`/`NO_STORE`) rather
+   * than a hand-rolled `NextResponse.json(...)` or `new Response(...)`,
+   * either of which would satisfy a looser check while skipping the header.
    */
-  it("/api/vault/reveal sends NO_STORE", () => {
+  it("/api/vault/reveal sends NO_STORE via lib/api", () => {
     const file = routes.find((f) => f.endsWith(join("vault", "reveal", "route.ts")));
     expect(file).toBeDefined();
     const text = readFileSync(file!, "utf8");
-    expect(text).toMatch(/NO_STORE|json\(/u);
+    expect(text).toMatch(/from "@\/lib\/api"/u);
+    expect(text).not.toMatch(/NextResponse\.json\(/u);
+    expect(text).not.toMatch(/new Response\(/u);
   });
 });

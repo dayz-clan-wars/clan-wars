@@ -1,10 +1,11 @@
 import type { NextRequest, NextResponse } from "next/server";
-import { addLock, VAULT_NAME_MAX, VAULT_NOTE_MAX, type Role } from "@factions/roster";
+import { addLock, VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/roster";
+import { VAULT_CODE_DIGITS } from "@factions/domain";
 import { formAction, text, optionalText } from "@/lib/form";
+import { minRoleFrom } from "@/lib/vault-form";
 import { vaultCode } from "@/lib/vault-copy";
 
-const ROLES: readonly Role[] = ["leader", "officer", "member"];
-const CODE_RE = /^\d{4}$/u;
+const CODE_RE = new RegExp(`^\\d{${VAULT_CODE_DIGITS}}$`, "u");
 
 /** POST from /clan/vault. Officer+; the code is caller-supplied or generated ("leave blank to generate"). */
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -13,9 +14,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!name) return vaultCode("input", "bad-input");
     const note = optionalText(form, "note", VAULT_NOTE_MAX);
     if (note === "too-long") return vaultCode("input", "bad-input");
-    const minRoleRaw = form.get("minRole");
-    if (typeof minRoleRaw !== "string" || !ROLES.includes(minRoleRaw as Role)) return vaultCode("input", "bad-input");
-    const minRole = minRoleRaw as Role;
+    const minRole = minRoleFrom(form);
+    if (!minRole) return vaultCode("input", "bad-input");
     const rawCode = form.get("code");
     let code: string | undefined;
     if (typeof rawCode === "string" && rawCode.trim() !== "") {

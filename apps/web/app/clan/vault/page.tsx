@@ -1,8 +1,10 @@
 import type { Metadata } from "next";
-import { clanFor, vaultFor, VAULT_NAME_MAX, VAULT_NOTE_MAX, type Role } from "@factions/roster";
+import { clanFor, vaultFor, VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/roster";
+import { VAULT_CODE_DIGITS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { REFUSAL } from "@/lib/clan-copy";
 import { VAULT_INTRO, VAULT_RESULT_COPY } from "@/lib/vault-copy";
+import { VAULT_ROLES } from "@/lib/vault-form";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
@@ -15,7 +17,7 @@ const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 const field = "mt-1 w-full rounded-md border border-rule bg-ground px-3 py-2 font-mono text-ink";
 const small = "min-h-[44px] rounded-md border border-rule px-3 font-display text-sm text-ink";
 const badge = "rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]";
-const ROLES: readonly Role[] = ["leader", "officer", "member"];
+const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
 
 export default async function VaultPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
@@ -77,7 +79,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                   <label className="block"><span className={label}>Note</span><input className={field} name="note" defaultValue={lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /></label>
                   <label className="block"><span className={label}>Minimum rank</span>
                     <select className={field} name="minRole" defaultValue={lock.minRole} required>
-                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
                   <button className={`${small} self-start`} type="submit">Save</button>
@@ -108,10 +110,10 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
               <label className="block"><span className={label}>Note</span><input className={field} name="note" maxLength={VAULT_NOTE_MAX} /></label>
               <label className="block"><span className={label}>Minimum rank</span>
                 <select className={field} name="minRole" defaultValue="member" required>
-                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                 </select>
               </label>
-              <label className="block"><span className={label}>Code</span><input className={field} name="code" pattern="\d{4}" inputMode="numeric" placeholder="leave blank to generate" /></label>
+              <label className="block"><span className={label}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" placeholder="leave blank to generate" /></label>
               <button className="min-h-[44px] self-start rounded-md bg-gold px-4 font-display text-ground" type="submit">Add lock</button>
             </form>
           </section>

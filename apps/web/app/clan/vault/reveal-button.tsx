@@ -32,6 +32,8 @@ export function RevealButton({ lockId }: { lockId: number }) {
       setCode(data.code);
       if (timer.current) clearTimeout(timer.current);
       timer.current = setTimeout(() => setCode(null), REVEAL_MS);
+    } catch {
+      setError("Could not reveal that lock.");
     } finally {
       setBusy(false);
     }
