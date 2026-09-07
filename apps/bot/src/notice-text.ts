@@ -1,4 +1,4 @@
-import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
 
@@ -120,7 +120,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     ctx.target === "channel"
       ? `🔐 Codes rotated by ${person(p.gamertag)} — see the vault.`
       : `**${p.clan}** rotated its codes. See the vault: ${p.link}`,
-  guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a 24h voice guest pass.`,
+  guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a ${hours(GUEST_PASS_MS)}h voice guest pass.`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */
