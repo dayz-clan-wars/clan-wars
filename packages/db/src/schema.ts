@@ -727,6 +727,64 @@ export const seasonResults = pgTable("season_results", {
 }));
 
 /**
+ * Every `pos`-bearing event, projected (spec §4.9). The last fix per player
+ * is the newest row; a reaper keeps POSITION_RETENTION_MS. ⚠️ Never derive
+ * movement from consecutive rows — fast travel teleports (§14).
+ */
+export const playerPositions = pgTable("player_positions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  dayzId: text("dayz_id").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  alt: numeric("alt", { precision: 12, scale: 2 }).notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+}, (t) => ({
+  uniqEvent: uniqueIndex("player_positions_event_uniq").on(t.eventId),
+  byPlayer: index("player_positions_player_idx").on(t.serverId, t.dayzId, sql`${t.occurredAt} desc`),
+  byOccurred: index("player_positions_occurred_idx").on(t.occurredAt),
+}));
+
+/**
+ * A non-member seen inside a declaration's WATCH_ZONE_RADIUS_M (spec §4.9).
+ * One row per (declaration, player); `last_alert_at` drives the 20-minute
+ * cooldown, `last_seen_at` the 60-minute drop-off, and `last_x/last_z` is
+ * the last fix INSIDE the zone — the only position of a non-member the map
+ * may ever show (§10.3 rule three).
+ */
+export const intruderSightings = pgTable("intruder_sightings", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  declarationId: bigint("declaration_id", { mode: "number" }).notNull().references(() => declarations.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
+  lastAlertAt: timestamp("last_alert_at", { withTimezone: true }).notNull(),
+  distanceM: integer("distance_m").notNull(),
+  lastX: numeric("last_x", { precision: 12, scale: 2 }).notNull(),
+  lastZ: numeric("last_z", { precision: 12, scale: 2 }).notNull(),
+}, (t) => ({
+  uniqSighting: uniqueIndex("intruder_sightings_uniq").on(t.declarationId, t.dayzId),
+  byLastSeen: index("intruder_sightings_last_seen_idx").on(t.lastSeenAt),
+}));
+
+/** Clan pins (spec §4.10): the one member-entered coordinate; read by nothing but the clan's own map. */
+export const clanPins = pgTable("clan_pins", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  icon: text("icon").notNull(),
+  note: text("note"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  iconValid: check("clan_pins_icon_valid", sql`${t.icon} IN ('loot','vehicle','enemy','meet','danger','note')`),
+  byFaction: index("clan_pins_faction_idx").on(t.factionId, t.expiresAt),
+}));
+
+/**
  * The #war-log queue (spec §4.7, §9.2). Same no-coordinates invariant as
  * `faction_events`, for the same reason: this table's whole purpose is to be
  * published.

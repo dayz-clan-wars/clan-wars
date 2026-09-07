@@ -83,6 +83,16 @@ export const POSITION_FIX_MS = 5 * MIN;
 export const INTRUDER_ALERT_COOLDOWN_MS = 20 * MIN;
 export const INTRUDER_PIN_TTL_MS = 60 * MIN;
 export const PIN_TTL_MS = 7 * DAY;
+/**
+ * How long `player_positions` rows are kept (spec §4.9). Operational, not a
+ * promise the guide makes, so it is deliberately absent from
+ * docs/guide-numbers.json — the drift test covers only promised numbers.
+ */
+export const POSITION_RETENTION_MS = 30 * DAY;
+export const PIN_ICONS = ["loot", "vehicle", "enemy", "meet", "danger", "note"] as const;
+export type PinIcon = (typeof PIN_ICONS)[number];
+/** Pin note length cap, characters. UI + package share it. */
+export const PIN_NOTE_MAX = 140;
 
 // Getting around
 export const TRAVEL_POINTS = 209;
