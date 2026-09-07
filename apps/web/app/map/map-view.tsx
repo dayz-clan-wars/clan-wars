@@ -5,8 +5,8 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, gridRef, latLngToWorld, worldToLatLng } from "@/lib/map-projection";
 import { LAYER_LABELS, PIN_ICON_GLYPHS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import {
-  TRAVEL_PANE, type Ctx, type MapData, type WireState,
-  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, parseState, ptFor,
+  TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
+  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, parseState, ptFor, refreshAges,
 } from "./map-draw";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
@@ -71,12 +71,20 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
     }
   }, []);
 
+  // 401 and 403 are answers, not outages: the session is gone or the character
+  // is not linked, and neither is fixed by asking again five minutes later.
+  const terminal = error === "unauthenticated" || error === "not-linked";
+
   useEffect(() => {
     setEnabled(loadSwitches());
     void load();
+  }, [load]);
+
+  useEffect(() => {
+    if (terminal) return;
     const id = setInterval(() => void load(), POSITION_FIX_MS);
     return () => clearInterval(id);
-  }, [load]);
+  }, [load, terminal]);
 
   // Ages tick between fetches: a fix five minutes old must not read "just now"
   // for the whole interval.
@@ -104,10 +112,17 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
   nowRef.current = now;
 
   const observer = useRef<ResizeObserver | null>(null);
+  // `layers` comes from the server render and never changes for a mounted
+  // MapView, but the creation effect deliberately depends on `size` alone —
+  // reading it through a ref keeps that honest.
+  const layersRef = useRef(layers);
+  layersRef.current = layers;
   const enabledRef = useRef(enabled);
   enabledRef.current = enabled;
 
   const size = data?.world.size ?? null;
+
+  const ages = useRef<AgeLabel[]>([]);
 
   const redraw = useCallback(() => {
     const Lm = leaflet.current;
@@ -126,9 +141,12 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
       }
     }
 
-    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current });
+    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current });
     // The same groups, cleared and rebuilt rather than diffed — what is on the
     // map stays in lockstep with the data, with no stale layer left behind.
+    // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
+    // map-draw.ts: rebuilding on the 30 s tick tore down every open popup.
+    ages.current = [];
     for (const key of ALL_KEYS) if (key !== "terrain") groups.current[key]!.clearLayers();
     drawYou(ctx("you"));
     drawBase(ctx("base"));
@@ -199,10 +217,19 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
         // Long-press on touch, right-click on desktop — Leaflet gives both the
         // same event, which is why the pin gesture needs no touch handling of
         // its own.
-        m.on("contextmenu", (e: L.LeafletMouseEvent) => {
-          const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
-          setPinAt({ x: Math.round(w.x), z: Math.round(w.z) });
-        });
+        //
+        // ⚠️ Registered ONLY for a viewer who has the pins layer. A solo or
+        // pending viewer who long-pressed used to set `pinAt`, which hid the
+        // bottom bar while the form that owns the Cancel button stayed
+        // unrendered — one stray right-click and the map had no controls left.
+        // The guard here and the `!pinSheet` on the bar are the two halves of
+        // that; `pinSheet` below keeps them from drifting apart again.
+        if (layersRef.current.pins) {
+          m.on("contextmenu", (e: L.LeafletMouseEvent) => {
+            const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
+            setPinAt({ x: Math.round(w.x), z: Math.round(w.z) });
+          });
+        }
 
         // Leaflet measures the container once at creation and only listens for
         // WINDOW resizes; a full-viewport container settles after mount (bars
@@ -222,6 +249,9 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
       map.current?.remove();
       map.current = null;
       groups.current = {};
+      // With the groups gone, every AgeLabel points at a detached layer; an
+      // age tick must not go looking for their tooltips.
+      ages.current = [];
       gridDrawn.current = false;
       leaflet.current = null;
     };
@@ -230,7 +260,13 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [size]);
 
-  useEffect(redraw, [data, now, redraw]);
+  // Structure follows the data. Nothing here reads `now`.
+  useEffect(redraw, [data, redraw]);
+
+  // ⚠️ The age tick rewrites text and NOTHING else. It must never clear a
+  // layer group: a player reading a pin note would lose the note and its
+  // Delete button mid-read, twice a minute, with no input of their own.
+  useEffect(() => { refreshAges(ages.current, now); }, [now]);
 
   // One group per layer, added and removed on its switch.
   useEffect(() => {
@@ -244,12 +280,11 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
     }
   }, [enabled, data]);
 
-  if (error === "unauthenticated") {
-    return <main className="mx-auto max-w-[34rem] px-4 py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/map">Sign in again</a>.</p></main>;
-  }
-  if (error === "not-linked") {
-    return <main className="mx-auto max-w-[34rem] px-4 py-10"><p className="text-ink-2"><a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> first — the map is behind login and a linked character.</p></main>;
-  }
+  // ⚠️ ONE condition, read twice. The pin sheet and the bottom bar are
+  // mutually exclusive, and when they were written as `pinAt && layers.pins`
+  // against `!pinAt` they could both be false at once — leaving a full-screen
+  // map with no controls and no way back.
+  const pinSheet = pinAt !== null && layers.pins;
 
   return (
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
@@ -258,7 +293,26 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
     <div className="fixed inset-0 isolate bg-terrain">
       <div ref={el} className="absolute inset-0" />
 
-      {pinAt && layers.pins && (
+      {/*
+        ⚠️ An overlay, not an early return. Returning message JSX instead of
+        the page unmounted the container while the creation effect neither
+        re-ran nor cleaned up: the L.Map kept its listeners on a detached
+        element, and if the error ever cleared the remounted container could
+        never be given a map again. Rendering over the top leaves that
+        effect's cleanup the single owner of teardown; the poll stops on its
+        own (see `terminal` above).
+      */}
+      {terminal && (
+        <div className="absolute inset-0 z-[1200] flex items-center justify-center bg-ground/95 px-6">
+          <p role="status" className="max-w-[24rem] text-center text-ink-2">
+            {error === "unauthenticated"
+              ? <>Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/map">Sign in again</a>.</>
+              : <><a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> first — the map is behind login and a linked character.</>}
+          </p>
+        </div>
+      )}
+
+      {pinSheet && (
         <form
           method="post" action="/api/map/pin"
           className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t border-rule bg-frame p-4"
@@ -286,7 +340,7 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
         </form>
       )}
 
-      {!pinAt && (
+      {!pinSheet && (
         <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t border-rule bg-frame/95 p-3">
           {notice && <p role="status" className="mb-2 rounded-md border border-rule-2 bg-surface p-2 text-sm text-ink">{notice}</p>}
           {error === "failed" && <p role="status" className="mb-2 rounded-md border border-rust bg-surface p-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
