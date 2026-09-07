@@ -8,6 +8,7 @@ import { noticeClanTx, noticeUserTx } from "./notices";
 import { releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
 import { applyElectorateLeaveTx, closeLeadershipSilentlyTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
+import { exposeLocksTx } from "./vault-store";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -703,7 +704,7 @@ export class PgRosterStore implements RosterStore {
           sql`${actorRole} in ('leader', 'officer')`,
           sql`not (${actorRole} = 'officer' and ${factionMembers.role} = 'officer')`,
         ))
-        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId });
+        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId, role: factionMembers.role });
 
       const row = deleted[0];
       if (!row) {
@@ -731,6 +732,11 @@ export class PgRosterStore implements RosterStore {
       // keeps the two departure paths identical rather than relying on one
       // of them being unreachable.
       await applyElectorateLeaveTx(tx, { factionId: a.factionId, dayzId: row.dayzId, at: a.at });
+
+      // Every vault lock this kicked member could see is now known to
+      // someone outside the clan (spec §4.10). `vault_locks` sits after
+      // `faction_votes`/ballots in the lock order (§4.12).
+      await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
 
       const [clan] = await tx.select({ name: factions.name }).from(factions).where(eq(factions.id, a.factionId));
 
@@ -768,7 +774,7 @@ export class PgRosterStore implements RosterStore {
           eq(factionMembers.discordId, a.discordId),
           ne(factionMembers.role, "leader"),
         ))
-        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId });
+        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId, role: factionMembers.role });
 
       const row = deleted[0];
       if (!row) {
@@ -789,6 +795,10 @@ export class PgRosterStore implements RosterStore {
       // vote that was one short. The freeze does not refuse a leaver; nobody
       // is trapped in a clan by a vote.
       await applyElectorateLeaveTx(tx, { factionId: a.factionId, dayzId: row.dayzId, at: a.at });
+
+      // Every vault lock this leaver could see is now known to someone
+      // outside the clan (spec §4.10).
+      await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
 
       await noticeClanTx(tx, {
         serverId: row.serverId, factionId: a.factionId, kind: "left", occurredAt: a.at,
