@@ -21,4 +21,17 @@ describe("api routes", () => {
     expect(text).toMatch(/export async function POST\(/u);
     expect(text).not.toMatch(/export async function GET\(/u);
   });
+
+  /**
+   * The one route that answers JSON instead of a redirect — a vault code
+   * must never ride a URL. It still has to leave with `Cache-Control:
+   * no-store, private` like every other personal read/write, via the
+   * shared `NO_STORE`/`json(` helpers rather than a hand-rolled response.
+   */
+  it("/api/vault/reveal sends NO_STORE", () => {
+    const file = routes.find((f) => f.endsWith(join("vault", "reveal", "route.ts")));
+    expect(file).toBeDefined();
+    const text = readFileSync(file!, "utf8");
+    expect(text).toMatch(/NO_STORE|json\(/u);
+  });
 });

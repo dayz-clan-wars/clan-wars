@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { clanFor } from "@factions/roster";
-import { CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
+import { CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, GUEST_PASS_MS, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { RECRUITING_LIMITS } from "@/lib/clan-limits";
+import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
@@ -32,7 +32,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
       </main>
     );
   }
-  const { clan, me, roster, rebindCandidates } = view;
+  const { clan, me, roster, rebindCandidates, guestPasses } = view;
   const leader = me.role === "leader";
   const others = roster.filter((r) => r.status === "full" && r.discordId !== session.sub);
 
@@ -51,6 +51,25 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <label className="block"><span className={label}>Pitch</span><textarea className={field} name="pitch" defaultValue={clan.pitch ?? ""} maxLength={RECRUITING_LIMITS.pitch} rows={3} /></label>
           <button className="min-h-[44px] self-start rounded-md bg-gold px-4 font-display text-ground" type="submit">Save</button>
         </form>
+      </section>
+
+      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+        <h2 className={label}>Guest passes</h2>
+        <p className="mt-2 text-sm text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
+        <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
+          <label className="block"><span className={label}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" /></label>
+          <button className="min-h-[44px] self-start rounded-md bg-gold px-4 font-display text-ground" type="submit">Grant pass</button>
+        </form>
+        {guestPasses.length === 0 ? <p className="mt-3 text-sm text-ink-2">No open passes.</p> : (
+          <ul className="mt-3 flex flex-col gap-2">
+            {guestPasses.map((p) => (
+              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-rule-2 px-4 py-2 text-sm text-ink">
+                <span><span className="font-mono">{p.userDiscordId}</span> <span className="text-xs text-ink-2">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span></span>
+                <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><button className="min-h-[44px] rounded-md border border-rule px-3 font-display text-sm text-ink" type="submit">Revoke</button></form>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
 
       {leader && (

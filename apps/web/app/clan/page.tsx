@@ -65,6 +65,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
         <div className="ml-auto flex flex-col items-end gap-1">
           <a className={`${label} underline-offset-4 hover:underline`} href="/map">Map</a>
           <a className={`${label} underline-offset-4 hover:underline`} href="/clan/board">Board</a>
+          {me.status === "full" && <a className={`${label} underline-offset-4 hover:underline`} href="/clan/vault">Vault</a>}
           {officer && <a className={`${label} underline-offset-4 hover:underline`} href="/clan/settings">Settings</a>}
         </div>
       </div>

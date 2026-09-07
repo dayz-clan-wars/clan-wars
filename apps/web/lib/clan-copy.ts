@@ -1,12 +1,12 @@
 import {
-  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
+  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
   PENDING_EXPIRY_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS,
 } from "@factions/domain";
 import type {
   ActorRefusal, InviteOutcome, AcceptInviteOutcome, RequestJoinOutcome, DecideRequestOutcome, LeaveOutcome, KickOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, ReserveOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, ReserveOutcome, GuestGrantOutcome,
 } from "@factions/roster";
-import { days } from "./format";
+import { days, hours } from "./format";
 
 /** Exported so pages that read an `ActorRefusal` directly (e.g. `/clan/board`) render the same wording as every `/api/clan/*` redirect. */
 export const REFUSAL: Record<ActorRefusal, string> = {
@@ -135,9 +135,28 @@ const CLAIM: Record<ReserveOutcome | "not-linked" | "no-such-ceremony" | "bad-na
 };
 const INPUT: Record<"bad-input", string> = { "bad-input": "Something in that form was missing or too long. Try again." };
 
+/** §4.10: a guest pass, granted by Discord id or by a linked gamertag (the site has no user picker). */
+const GUEST: Record<GuestGrantOutcome, string> = {
+  ...REFUSAL,
+  ok: `Guest pass given: they can see and join the voice channel for ${hours(GUEST_PASS_MS)}. The clan channel has been told.`,
+  "not-permitted": "Only an officer or the leader can grant a guest pass.",
+  "already-active": "That player already has an open guest pass.",
+  "is-member": "That player is already a full member of your clan.",
+  "self": "You cannot grant yourself a guest pass.",
+  "target-not-linked": INVITE["invitee-not-linked"],
+  "ambiguous-gamertag": INVITE["ambiguous-gamertag"],
+};
+const REVOKE_GUEST: Record<"ok" | "not-permitted" | "gone" | ActorRefusal, string> = {
+  ...REFUSAL,
+  ok: "Guest pass revoked.",
+  "not-permitted": "Only an officer or the leader can revoke a guest pass.",
+  gone: "That pass was already gone.",
+};
+
 const TABLES = {
   invite: INVITE, revoke: REVOKE, accept: ACCEPT, decline: DECLINE, request: REQUEST, withdraw: WITHDRAW, decide: DECIDE,
   leave: LEAVE, kick: KICK, role: ROLE, transfer: TRANSFER, disband: DISBAND, rename: RENAME, recruiting: RECRUITING, rebind: REBIND, claim: CLAIM, input: INPUT,
+  guest: GUEST, "revoke-guest": REVOKE_GUEST,
 } as const;
 export type Action = keyof typeof TABLES;
 export function code<A extends Action>(action: A, outcome: keyof (typeof TABLES)[A] & string): string {
