@@ -41,15 +41,9 @@ export default async function PlayerProfilePage({
   const { season } = await searchParams;
   const parsed = parseSeasonParam(season);
 
-  // ⚠️ Same two-step default as /players: a "default" parse needs the
-  // roster's own `seasons` list before it can pick the open season.
-  const profile = parsed === "default"
-    ? await (async () => {
-        const probe = await playerProfile(gamertag, { kind: "all" });
-        if (!probe) return probe;
-        return probe.seasons[0] !== undefined ? playerProfile(gamertag, { kind: "season", number: probe.seasons[0] }) : probe;
-      })()
-    : await playerProfile(gamertag, parsed);
+  // ⚠️ Same as /players: `{ kind: "current" }` is resolved inside the roster,
+  // so this is ONE call on every path — `resolvePlayer` runs once, not twice.
+  const profile = await playerProfile(gamertag, parsed === "default" ? { kind: "current" } : parsed);
 
   if (!profile) notFound();
 

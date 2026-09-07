@@ -1,5 +1,5 @@
 import { KD_MIN_KILLS } from "@factions/domain";
-import type { Boards, StatScope } from "@factions/roster";
+import type { Boards, ResolvedScope } from "@factions/roster";
 
 /** Section headings for the five boards (spec §11), in display order. */
 export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, string> = {
@@ -23,7 +23,7 @@ export function playTime(seconds: number): string {
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
 }
 
-/** "All-time" or "Season N", for the scope picker and page headings. */
-export function scopeLabel(scope: StatScope): string {
+/** "All-time" or "Season N", for the scope picker and page headings. ⚠️ A RESOLVED scope: `Boards.scope` and `PlayerProfile.scope` never carry `"current"`. */
+export function scopeLabel(scope: ResolvedScope): string {
   return scope.kind === "all" ? "All-time" : `Season ${scope.number}`;
 }

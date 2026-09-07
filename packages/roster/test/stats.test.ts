@@ -371,4 +371,65 @@ describe("roster player stats", () => {
       expect(await clanBoardDb(db, "dZ", ALL, undefined, now)).toBe("not-linked");
     });
   });
+
+  describe("the 'current' scope", () => {
+    it("resolves to the newest season, and reports the resolved scope, never 'current'", async () => {
+      const boards = await playerBoardsDb(db, { kind: "current" }, undefined, now);
+      expect(boards.scope).toEqual(SEASON_2);
+      expect(boards.killers).toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
+
+      const p = (await playerProfileDb(db, "Alpha", { kind: "current" }, now))!;
+      expect(p.scope).toEqual(SEASON_2);
+      expect(p.pvpKills).toBe(0);
+      expect(p.pvpDeaths).toBe(3);
+
+      const clan = await clanBoardDb(db, "dB", { kind: "current" }, undefined, now);
+      if (typeof clan === "string") throw new Error(clan);
+      expect(clan.scope).toEqual(SEASON_2);
+    });
+
+    it("resolves to all-time when the server has no seasons at all", async () => {
+      await db.delete(raids);
+      await db.delete(seasons);
+
+      const boards = await playerBoardsDb(db, { kind: "current" }, undefined, now);
+      expect(boards.scope).toEqual(ALL);
+      expect(boards.seasons).toEqual([]);
+      expect(boards.killers).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 13 },
+        { dayzId: R, gamertag: "Romeo", value: 3 },
+      ]);
+
+      const p = (await playerProfileDb(db, "Alpha", { kind: "current" }, now))!;
+      expect(p.scope).toEqual(ALL);
+      expect(p.pvpKills).toBe(13);
+    });
+  });
+
+  describe("scope edges", () => {
+    it("per-season raid credits key on raids.season_id, not on the season's timestamps", async () => {
+      // ⚠️ Scored in season 2, but lowered at an instant inside season 1's
+      // window — the one case where the two rules disagree.
+      const [s2] = await db.select({ id: seasons.id }).from(seasons).where(sql`${seasons.number} = 2`);
+      await mkRaid({ seasonId: s2!.id, at: h(t0, 5), raider: A });
+
+      expect((await playerBoardsDb(db, SEASON_2, undefined, now)).raiders)
+        .toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
+      expect((await playerBoardsDb(db, SEASON_1, undefined, now)).raiders).toEqual([]);
+      expect((await playerProfileDb(db, "Alpha", SEASON_2, now))!.raidCredits).toBe(3);
+      expect((await playerProfileDb(db, "Alpha", SEASON_1, now))!.raidCredits).toBe(0);
+      // All-time has no season id and no upper bound: every raid.
+      expect((await playerProfileDb(db, "Alpha", ALL, now))!.raidCredits).toBe(3);
+    });
+
+    it("an open season ends at now: a future-dated row is outside it, but still on the all-time boards", async () => {
+      // A mis-set `servers.clock_offset_ms` is how this happens in production.
+      await mkKill({ at: h(now, 24), victim: A, killer: R, victimFactionId: bearId, killerFactionId: wolfId });
+
+      expect((await playerBoardsDb(db, SEASON_2, undefined, now)).killers)
+        .toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
+      expect((await playerProfileDb(db, "Romeo", SEASON_2, now))!.pvpKills).toBe(3);
+      expect((await playerProfileDb(db, "Romeo", ALL, now))!.pvpKills).toBe(4);
+    });
+  });
 });

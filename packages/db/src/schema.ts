@@ -112,6 +112,15 @@ export const events = pgTable("events", {
   byRaiseLookup: index("events_raise_lookup_idx")
     .on(t.serverId, sql`(${t.payload}->>'poleKey')`, sql`(${t.payload}->>'texture')`, t.occurredAt)
     .where(sql`${t.type} = 'flag.raised'`),
+  // ⚠️ The stats package's upkeep-raise count (`packages/roster/src/stats.ts`)
+  // asks "which flag.raised rows did THIS player write". `events_type_idx`
+  // narrows to flag.raised but then every one of them (measured: 120k at 1M
+  // events) is heap-fetched and filtered on the payload key. Partial, on the
+  // payload key alone, because the predicate is an equality on one player and
+  // the route that runs it (`/players/{gamertag}`) is public.
+  byRaisePlayer: index("events_raise_by_player_idx")
+    .on(sql`(${t.payload}->>'dayzId')`)
+    .where(sql`${t.type} = 'flag.raised'`),
 }));
 
 export const consumerCursors = pgTable("consumer_cursors", {
@@ -199,6 +208,10 @@ export const identityLinks = pgTable("identity_links", {
 }, (t) => ({
   uniqDiscord: uniqueIndex("identity_links_discord_uniq").on(t.discordId),
   uniqDayz: uniqueIndex("identity_links_dayz_uniq").on(t.dayzId),
+  // ⚠️ Functional, on `lower(gamertag)`: `resolvePlayer` (stats.ts) matches a
+  // URL-supplied name case-insensitively, so a plain `gamertag` index cannot
+  // serve it. NOT unique — two links may have carried the same name.
+  byGamertagLower: index("identity_links_gamertag_lower_idx").on(sql`lower(${t.gamertag})`),
 }));
 
 /**
@@ -219,6 +232,9 @@ export const players = pgTable("players", {
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull(),
 }, (t) => ({
   byLastSeen: index("players_last_seen_idx").on(t.lastSeenAt),
+  // ⚠️ Same reason as `identity_links_gamertag_lower_idx`: the public
+  // `/players/{gamertag}` lookup is `lower(gamertag) = lower($1)`.
+  byGamertagLower: index("players_gamertag_lower_idx").on(sql`lower(${t.gamertag})`),
 }));
 
 /** One issued emote sequence for one Discord account. */
@@ -816,6 +832,13 @@ export const kills = pgTable("kills", {
   killerDayzId: text("killer_dayz_id"),
   weapon: text("weapon"),
   distanceM: numeric("distance_m", { precision: 8, scale: 1 }),
+  /**
+   * ⚠️ DESCRIPTIVE ONLY — no read anywhere derives behaviour from it. It holds
+   * `DeathCause ∪ {'pvp'}`: `kills-tick.ts` writes the literal `'pvp'` for a
+   * player kill, which is NOT a member of `DeathCause`. PvP is decided by
+   * `killer_dayz_id` being set and different from `victim_dayz_id`, never by
+   * this column — `cause = 'pvp'` would wrongly count self-kills.
+   */
   cause: text("cause").notNull(),
   victimFactionId: bigint("victim_faction_id", { mode: "number" }).references(() => factions.id),
   killerFactionId: bigint("killer_faction_id", { mode: "number" }).references(() => factions.id),
@@ -824,6 +847,12 @@ export const kills = pgTable("kills", {
   uniqEvent: uniqueIndex("kills_event_uniq").on(t.eventId),
   byVictim: index("kills_victim_idx").on(t.serverId, t.victimDayzId, t.occurredAt),
   byKiller: index("kills_killer_idx").on(t.serverId, t.killerDayzId, t.occurredAt),
+  // ⚠️ Bare-column, in addition to the two composites above. `resolvePlayer`'s
+  // fallback EXISTS (stats.ts) has no `server_id` to lead with, so neither
+  // composite's leading column is usable and the check degrades to a
+  // sequential scan of `kills` — on a public, unauthenticated route.
+  byVictimDayz: index("kills_victim_dayz_idx").on(t.victimDayzId),
+  byKillerDayz: index("kills_killer_dayz_idx").on(t.killerDayzId),
 }));
 
 /**

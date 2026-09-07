@@ -190,6 +190,13 @@
       "when": 1788765402051,
       "tag": "0026_player_stats",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788771366686,
+      "tag": "0027_stats_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -30,11 +30,21 @@ import { actorFor, isRefusal, type ActorRefusal } from "./actor";
  * as a filter applied to wider rows afterwards.
  */
 
-export type StatScope = { kind: "all" } | { kind: "season"; number: number };
+/**
+ * What a caller asks for. `"current"` is the site's default when `?season=` is
+ * absent or unparseable: it means "the newest season on the active server, or
+ * all-time when there are no seasons". It is resolved HERE, not by the caller
+ * — a page that resolved it itself would have to fetch a whole board set
+ * purely to learn the season list first.
+ */
+export type StatScope = { kind: "all" } | { kind: "season"; number: number } | { kind: "current" };
+/** What a scope resolved to. `Boards.scope` and `PlayerProfile.scope` are always one of these — never `"current"`. */
+export type ResolvedScope = { kind: "all" } | { kind: "season"; number: number };
 export type BoardRow = { dayzId: string; gamertag: string; value: number };
 export type KdRow = BoardRow & { kills: number; deaths: number };
 export type Boards = {
-  scope: StatScope;
+  /** ⚠️ The RESOLVED scope: a `"current"` request comes back as the season (or all-time) it named. */
+  scope: ResolvedScope;
   /** The numbers available for the picker, newest first. */
   seasons: number[];
   raiders: BoardRow[];
@@ -44,7 +54,7 @@ export type Boards = {
   friendlyFire: BoardRow[];
 };
 export type PlayerProfile = {
-  dayzId: string; gamertag: string; linked: boolean; scope: StatScope; seasons: number[];
+  dayzId: string; gamertag: string; linked: boolean; scope: ResolvedScope; seasons: number[];
   playTimeSeconds: number; sessions: number; lastSeenAt: Date | null;
   pvpKills: number; pvpDeaths: number; kd: number | null;
   killedBy: { gamertag: string; count: number }[]; killed: { gamertag: string; count: number }[];
@@ -55,23 +65,44 @@ export type PlayerProfile = {
 
 const DEFAULT_LIMIT = 25;
 
-/** Half-open `[from, to)`; `to` null means "up to now" (an open season, or all time). */
-type Window = { from: Date; to: Date | null };
+/**
+ * Half-open `[from, to)`; `to` null means "no upper bound at all", which only
+ * all-time has. An OPEN season's upper bound is `now`, not null — the plan's
+ * window is `[started_at, coalesce(ended_at, now))`, so a row with a
+ * future `occurred_at` (a mis-set `servers.clock_offset_ms`) is outside it.
+ *
+ * `seasonId` is the season this window came from, or null for all-time and
+ * for an unknown season number. `raids` carries an authoritative `season_id`,
+ * so raid reads key on it rather than on the timestamps.
+ */
+type Window = { from: Date; to: Date | null; seasonId: number | null };
 
 /** An unknown season number: a window that contains no instant at all, so every aggregate is zero rather than everything. */
-const EMPTY_WINDOW: Window = { from: new Date(0), to: new Date(0) };
+const EMPTY_WINDOW: Window = { from: new Date(0), to: new Date(0), seasonId: null };
 
 /**
  * The window one scope names. "All" starts at the epoch rather than at the
  * first season's `started_at`: a kill the log recorded before season 1 opened
  * is still part of that player's all-time record.
  */
-async function windowFor(db: Database, serverId: number, scope: StatScope): Promise<Window> {
-  if (scope.kind === "all") return { from: new Date(0), to: null };
-  const [s] = await db.select({ startedAt: seasons.startedAt, endedAt: seasons.endedAt })
+async function windowFor(db: Database, serverId: number, scope: ResolvedScope, now: Date): Promise<Window> {
+  if (scope.kind === "all") return { from: new Date(0), to: null, seasonId: null };
+  const [s] = await db.select({ id: seasons.id, startedAt: seasons.startedAt, endedAt: seasons.endedAt })
     .from(seasons).where(and(eq(seasons.serverId, serverId), eq(seasons.number, scope.number)));
   if (!s) return EMPTY_WINDOW;
-  return { from: s.startedAt, to: s.endedAt };
+  // ⚠️ `?? now`, not `?? null`: an open season ends at this instant.
+  return { from: s.startedAt, to: s.endedAt ?? now, seasonId: s.id };
+}
+
+/**
+ * `"current"` → the newest season on this server, or all-time when the server
+ * has none. Resolved from the season list the caller has already fetched, so
+ * it costs no extra query.
+ */
+function resolveScope(scope: StatScope, seasonList: number[]): ResolvedScope {
+  if (scope.kind !== "current") return scope;
+  const newest = seasonList[0];
+  return newest === undefined ? { kind: "all" } : { kind: "season", number: newest };
 }
 
 /** Every season number on this server, newest first. */
@@ -94,6 +125,16 @@ const inWindow = (col: PgColumn, w: Window): SQL =>
   w.to === null ? sql`${col} >= ${ts(w.from)}` : sql`${col} >= ${ts(w.from)} and ${col} < ${ts(w.to)}`;
 
 /** `dayz_id in (…)` for a clan board, or nothing at all for the public boards. An empty roster matches nobody. */
+/**
+ * Raids in scope. For a season, `raids.season_id` — authoritative, exact and
+ * cheaper than the timestamps, which agree only when a season's `started_at`
+ * / `ended_at` happen to bracket every raid it scored. For all-time the
+ * window is `[epoch, ∞)` and this is a no-op; for an unknown season number it
+ * is `EMPTY_WINDOW`, which matches nothing.
+ */
+const raidsInScope = (w: Window): SQL =>
+  w.seasonId !== null ? eq(raids.seasonId, w.seasonId) : inWindow(raids.firstLowerAt, w);
+
 const inRoster = (col: PgColumn, roster: string[] | null): SQL | undefined =>
   roster === null ? undefined : roster.length === 0 ? sql`false` : inArray(col, roster);
 
@@ -188,12 +229,15 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
 /** The five boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const serverId = await activeServerId(db);
-  const w = await windowFor(db, serverId, scope);
+  // ⚠️ The season list first, alone: `{ kind: "current" }` is resolved from it,
+  // and the resolved scope is what every query below (and `Boards.scope`) uses.
+  const seasonList = await seasonNumbers(db, serverId);
+  const resolved = resolveScope(scope, seasonList);
+  const w = await windowFor(db, serverId, resolved, now);
 
-  const [seasonList, raiders, killers, kd, playTime, friendlyFire] = await Promise.all([
-    seasonNumbers(db, serverId),
+  const [raiders, killers, kd, playTime, friendlyFire] = await Promise.all([
     countBoard(db, raids.raiderDayzId, raids, and(
-      eq(raids.serverId, serverId), inWindow(raids.firstLowerAt, w), inRoster(raids.raiderDayzId, roster),
+      eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
     )!, limit),
     countBoard(db, kills.killerDayzId, kills, and(
       eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
@@ -206,7 +250,7 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
     )!, limit),
   ]);
 
-  return { scope, seasons: seasonList, raiders, killers, kd, playTime, friendlyFire };
+  return { scope: resolved, seasons: seasonList, raiders, killers, kd, playTime, friendlyFire };
 }
 
 /** The public boards (spec §11). */
@@ -303,16 +347,19 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
   if (!who) return null;
   const { dayzId } = who;
   const serverId = await activeServerId(db);
-  const w = await windowFor(db, serverId, scope);
+  // ⚠️ Same as `boardsFor`: the season list first, so `{ kind: "current" }`
+  // resolves here rather than costing the caller a whole probe profile.
+  const seasonList = await seasonNumbers(db, serverId);
+  const resolved = resolveScope(scope, seasonList);
+  const w = await windowFor(db, serverId, resolved, now);
 
   const inW = inWindow(kills.occurredAt, w);
   const mine = eq(kills.serverId, serverId);
 
   const [
-    seasonList, lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
+    lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
     friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, clanHistory,
   ] = await Promise.all([
-    seasonNumbers(db, serverId),
     db.select({ lastSeenAt: players.lastSeenAt }).from(players).where(eq(players.dayzId, dayzId)),
     db.select({
       seconds: sql<number>`coalesce(sum(${clippedSeconds(w, now)}), 0)::bigint`,
@@ -328,7 +375,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
     killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.victimDayzId, dayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
     db.select({ n: sql<number>`count(*)::int` }).from(raids)
-      .where(and(eq(raids.serverId, serverId), eq(raids.raiderDayzId, dayzId), inWindow(raids.firstLowerAt, w))),
+      .where(and(eq(raids.serverId, serverId), eq(raids.raiderDayzId, dayzId), raidsInScope(w))),
     upkeepRaiseCount(db, serverId, dayzId, w),
     // ⚠️ The whole history, not the window's slice: "which clans has this
     // player belonged to" is not a per-season number.
@@ -339,7 +386,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
   ]);
 
   return {
-    dayzId, gamertag: who.gamertag, linked: who.linked, scope, seasons: seasonList,
+    dayzId, gamertag: who.gamertag, linked: who.linked, scope: resolved, seasons: seasonList,
     playTimeSeconds: Number(session[0]?.seconds ?? 0),
     sessions: Number(session[0]?.sessions ?? 0),
     lastSeenAt: lastSeen[0]?.lastSeenAt ?? null,

@@ -13,16 +13,11 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   const { season } = await searchParams;
   const parsed = parseSeasonParam(season);
 
-  // ⚠️ ?season= is looked up, never echoed: an unparseable value falls back
-  // to the default scope (the open season when one exists, else all-time),
-  // which needs the roster's own `seasons` list — so a "default" parse
-  // fetches all-time first to learn it, then re-fetches the actual scope.
-  const boards = parsed === "default"
-    ? await (async () => {
-        const probe = await playerBoards({ kind: "all" });
-        return probe.seasons[0] !== undefined ? playerBoards({ kind: "season", number: probe.seasons[0] }) : probe;
-      })()
-    : await playerBoards(parsed);
+  // ⚠️ ?season= is looked up, never echoed. A "default" parse becomes
+  // `{ kind: "current" }`, which the roster resolves against its own `seasons`
+  // list — ONE call on every path, never a probe fetch and a real one.
+  // `boards.scope` comes back resolved, so the page never renders "current".
+  const boards = await playerBoards(parsed === "default" ? { kind: "current" } : parsed);
 
   return (
     <main className="mx-auto max-w-[40rem] px-4 py-10">

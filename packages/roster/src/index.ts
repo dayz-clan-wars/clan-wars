@@ -49,7 +49,7 @@ import {
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import {
   playerBoardsDb, playerProfileDb, clanBoardDb,
-  type StatScope, type BoardRow, type KdRow, type Boards, type PlayerProfile,
+  type StatScope, type ResolvedScope, type BoardRow, type KdRow, type Boards, type PlayerProfile,
 } from "./stats";
 
 export type { Viewer, Role };
@@ -62,7 +62,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry };
-export type { StatScope, BoardRow, KdRow, Boards, PlayerProfile };
+export type { StatScope, ResolvedScope, BoardRow, KdRow, Boards, PlayerProfile };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {

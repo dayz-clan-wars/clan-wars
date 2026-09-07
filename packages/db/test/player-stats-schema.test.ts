@@ -66,3 +66,31 @@ describe("migration 0026", () => {
     await db.insert(membershipHistory).values({ serverId, factionId, dayzId: UID, joinedAt: later });
   });
 });
+
+/**
+ * Migration 0027: the five indexes behind the public `/players` routes.
+ * Additive only — 0027 creates indexes and nothing else. Named rather than
+ * inferred, because `resolvePlayer` and `upkeepRaiseCount` reach them through
+ * raw `lower(...)` / `payload->>` fragments that no typecheck can pin.
+ */
+describe("migration 0027 — stats indexes", () => {
+  let db: Database;
+
+  beforeAll(async () => {
+    db = createClient(URL);
+    await runMigrations(db);
+  });
+
+  it.each([
+    ["players", "players_gamertag_lower_idx"],
+    ["identity_links", "identity_links_gamertag_lower_idx"],
+    ["kills", "kills_victim_dayz_idx"],
+    ["kills", "kills_killer_dayz_idx"],
+    ["events", "events_raise_by_player_idx"],
+  ])("%s has %s", async (table, indexName) => {
+    const rows = await db.execute(sql`
+      select indexdef from pg_indexes
+      where schemaname = current_schema() and tablename = ${table} and indexname = ${indexName}`);
+    expect(rows).toHaveLength(1);
+  });
+});
