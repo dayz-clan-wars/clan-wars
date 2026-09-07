@@ -96,16 +96,21 @@ turbo gate stays the gate, because it runs `typecheck` too.
   structure: positions backfills the 30-day history from events in batches, and zone watch
   detects intruders within 60 m of declared bases every 5 min, queueing alerts by range and
   cooldown. `reaper-tick.ts` runs every 5 minutes beside pending expiry, deleting positions
-  and sightings older than their retention windows. The map's four rules — base visibility
-  (`status = 'active' and not flag_down` for active bases; dormant bases visible to linked members only),
-  position history (reads own positions only, joined clan and solo), intruders
-  (within 60 m and range-posted, keyed on `declaration_id` and player UID), and no trails
-  (map.ts WHERE clauses, the state route's header `Cache-Control: no-store, private`,
-  `map-view.tsx` draws no polylines) — are enforced at read, not at write. Tiles are a
-  static host prerequisite, mirrored from One Life and shared with dayzonelife.com; absent
-  tiles render the map with a dark ground, not broken. `POSITION_RETENTION_MS` is
-  deliberately absent from `docs/guide-numbers.json` — it is a housekeeping constant, not a
-  player-facing number.
+  and sightings older than their retention windows. The map's four rules (spec §10.3):
+  every fix shows its age — `player_positions.occurred_at` written by `positions-tick.ts`,
+  returned as `at`/`lastSeenAt` by `map.ts`, rendered by `map-draw.ts`'s age labels
+  refreshed every 30 s in `map-view.tsx`; no trails — `map-draw.ts` draws one marker per
+  player and the only `L.polyline` is the 1 km grid; no position of anyone outside your clan
+  except intruders inside your own zone — `map.ts` queries `player_positions` only for the
+  viewer plus their full clanmates, and `intruder_sightings.last_x`/`last_z` (the last
+  in-zone fix, never overwritten by an out-of-zone fix — `zone-tick.ts`) only for the
+  viewer's own declaration; dormant clans keep their map (`HOLDING_STATUSES`); and
+  `Cache-Control: no-store, private` on every position response — `apps/web/app/api/map/state/route.ts`,
+  pinned by `apps/web/test/map-route-headers.test.ts`, with ownership as a WHERE predicate
+  in `map.ts`, never a post-filter. Tiles are a static host prerequisite, mirrored from One
+  Life and shared with dayzonelife.com; absent tiles render the map with a dark ground, not
+  broken. `POSITION_RETENTION_MS` is deliberately absent from `docs/guide-numbers.json` —
+  it is a housekeeping constant, not a player-facing number.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
