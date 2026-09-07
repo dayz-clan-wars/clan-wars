@@ -3,10 +3,13 @@ import { retiredPath, retiredReply, RETIRED_COMMANDS } from "../src/retired-comm
 import { buildCommands } from "../src/discord.js";
 
 describe("retired commands", () => {
-  it("registers exactly the four old names, bare, so a stale client gets a pointer and not 'unknown command'", () => {
+  it("registers the four old names, bare, plus the live 'guest' command, so a stale client gets a pointer and not 'unknown command'", () => {
     const cmds = buildCommands();
-    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS].sort());
-    for (const c of cmds) expect((c as { options?: unknown[] }).options ?? []).toEqual([]);
+    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, "guest"].sort());
+    for (const c of cmds) {
+      if (c.name === "guest") continue;
+      expect((c as { options?: unknown[] }).options ?? []).toEqual([]);
+    }
   });
   it("points each command at the page that replaced it", () => {
     expect(retiredPath("link", null)).toBe("/link");

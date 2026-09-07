@@ -79,10 +79,24 @@ pnpm --filter @factions/bot start
 
 This registers `/link`, `/unlink`, `/whoami` and `/faction` as bare, retired
 commands — each answers with one line pointing at the site (spec §9.1) —
-logs in, and starts the tick loops on `BOT_TICK_INTERVAL_MS`. Each tick is
+plus `/guest`, which is the one live command: an officer or the leader runs
+it in their clan's own text channel to give someone a 24h voice guest pass
+(`guest-command.ts`, backed by the roster's `grantGuestPassDb`) — logs in,
+and starts the tick loops on `BOT_TICK_INTERVAL_MS`. Each tick is
 skipped rather than overlapped if the previous one is still running — the
 tick reads and writes a shared cursor, and two overlapping runs could
 otherwise move that cursor backwards.
+
+Outside the tick loop, the gateway's `guildMemberRemove` event is handled as
+it arrives (`guild-removal.ts`): the guide's "being removed from the
+Discord removes you from everything" (spec §5.4). The handler first checks
+the event's guild id against `DISCORD_GUILD_ID` — a mismatch writes nothing
+— and only then calls the roster's `removeFromGuildDb`, which in one
+transaction drops the roster row, the identity link, any solo declaration,
+and any guest pass the user held, handing the seat to a successor (or
+disbanding the clan) if the departed player was its leader. There is no
+catch-up sweep for removals that happened while the bot was down (ruling
+10) — this is a gateway-event handler only.
 
 Sending `SIGTERM` or `SIGINT` (e.g. `Ctrl-C`, or a container stop) stops
 future tick firings immediately and waits (up to a 15-second grace period)
@@ -99,7 +113,12 @@ processes — this codebase does not implement one.
 The presence tick promotes a pending member on the first log line that
 places them within 50 m of their clan's base (the guide's number lives in
 `rules.ts`); the pending-expiry sweep removes a pending member unseen for 7
-days. Before presence runs, `membership-tick.ts` reconciles the membership
+days. Right after presence, `leadership-tick.ts` runs spec §7's leadership
+clock every tick (ruling 13, a 60 s ceiling rather than a throttle): a
+succession claim past its `resolves_at` hands the seat to the claimant or is
+voided, and a no-confidence vote past its `closes_at` passes or fails —
+`resolveSuccessionClaims` and `closeExpiredVotes`, both from the roster's
+internal store. Before presence runs, `membership-tick.ts` reconciles the membership
 history (spec §11 ⚠️): it diffs the current full members against the open
 rows of `membership_history` and writes only the differences — a new member
 opens a span, a missing one closes it at that tick's `now`. This must run

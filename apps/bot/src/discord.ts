@@ -40,10 +40,20 @@ import { structureTick } from "./structure-tick.js";
 import { membershipTick } from "./membership-tick.js";
 import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
+import { leadershipTick } from "./leadership-tick.js";
+import { handleGuildMemberRemove } from "./guild-removal.js";
+import { handleGuestCommand } from "./guest-command.js";
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
-  return RETIRED_COMMANDS.map((name) =>
-    new SlashCommandBuilder().setName(name).setDescription(RETIRED_DESCRIPTION).toJSON());
+  return [
+    ...RETIRED_COMMANDS.map((name) =>
+      new SlashCommandBuilder().setName(name).setDescription(RETIRED_DESCRIPTION).toJSON()),
+    new SlashCommandBuilder()
+      .setName("guest")
+      .setDescription("Give someone a 24h voice guest pass")
+      .addUserOption((o) => o.setName("user").setDescription("Who").setRequired(true))
+      .toJSON(),
+  ];
 }
 
 export * from "./notify.js";
@@ -450,6 +460,16 @@ export async function start(cfg: BotConfig): Promise<void> {
   client.on("interactionCreate", async (interaction) => {
     try {
       if (interaction.isAutocomplete()) { await interaction.respond([]); return; }
+      if (interaction.isChatInputCommand() && interaction.commandName === "guest") {
+        const reply = await handleGuestCommand(db, {
+          channelId: interaction.channelId,
+          actorDiscordId: interaction.user.id,
+          targetUserId: interaction.options.getUser("user", true).id,
+          now: new Date(),
+        });
+        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+        return;
+      }
       if (interaction.isChatInputCommand()) {
         const sub = interaction.options.getSubcommand(false);
         const reply = retiredReply(cfg.siteBaseUrl, interaction.commandName, sub);
@@ -465,6 +485,20 @@ export async function start(cfg: BotConfig): Promise<void> {
       // ⚠️ discord.js does not await this listener; an uncaught throw is an unhandled rejection that takes the bot down. Log and drop the one interaction.
       console.error(`interaction failed`, err);
     }
+  });
+
+  // Spec §5.4: "being removed from the Discord removes you from everything."
+  // Gateway event only (ruling 10: no reconciliation of removals that
+  // happened while the bot was down) — the guild id is checked first, and a
+  // mismatched guild writes nothing (see handleGuildMemberRemove).
+  client.on("guildMemberRemove", (m) => {
+    void handleGuildMemberRemove(db, { guildId: m.guild.id, expectedGuildId: cfg.guildId, userId: m.id, now: new Date() })
+      .then((r) => {
+        if (r !== "other-guild" && r.linked) {
+          console.log(`guild removal: ${m.id} ${r.roster}${r.successorDiscordId ? ` → ${r.successorDiscordId}` : ""}`);
+        }
+      })
+      .catch((err) => console.error("guild removal failed", err));
   });
 
   const send: Sender = async (n) => {
@@ -548,6 +582,19 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (pr.promoted.length > 0) console.log(`presence: ${pr.promoted.length} member(s) now full`);
     } catch (err) {
       console.error("presence tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, separate from every other step: spec §7's
+    // leadership clock (succession claims and no-confidence votes past their
+    // deadline) runs every tick (ruling 13) and a failure here must not stop
+    // anything else.
+    try {
+      const lt = await leadershipTick(db, new Date());
+      if (lt.succeeded > 0 || lt.voided > 0 || lt.passed > 0 || lt.failed > 0) {
+        console.log(`leadership: ${lt.succeeded} succeeded, ${lt.voided} voided, ${lt.passed} passed, ${lt.failed} failed`);
+      }
+    } catch (err) {
+      console.error("leadership tick failed", err);
     }
 
     // ⚠️ Its own try/catch, after presence (both read pos events; presence
