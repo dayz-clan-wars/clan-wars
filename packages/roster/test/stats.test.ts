@@ -32,6 +32,23 @@ const N = "dayz-N";
 
 const aLastSeen = h(now, -2);
 
+/**
+ * ⚠️ The sessions that make the window clip load-bearing. Without these two
+ * every session sits wholly inside one window and an unclipped `sum` would
+ * pass every assertion below.
+ */
+const straddleFrom = h(t50, -1);   // closed, and it crosses the season boundary
+const straddleTo = h(t50, 2);
+const openFrom = h(t50, -2);       // still open at `now`, and it starts in season 1
+
+const secs = (a: Date, b: Date) => Math.round((b.getTime() - a.getTime()) / 1000);
+
+/** A's play time, per window, worked out from the instants rather than restated. */
+const CLOSED_IN_SEASON_1 = 3600 + 1800;
+const PLAY_ALL = CLOSED_IN_SEASON_1 + secs(straddleFrom, straddleTo) + secs(openFrom, now);
+const PLAY_SEASON_1 = CLOSED_IN_SEASON_1 + secs(straddleFrom, t50) + secs(openFrom, t50);
+const PLAY_SEASON_2 = secs(t50, straddleTo) + secs(t50, now);
+
 const ALL = { kind: "all" } as const;
 const SEASON_1 = { kind: "season", number: 1 } as const;
 const SEASON_2 = { kind: "season", number: 2 } as const;
@@ -134,7 +151,9 @@ describe("roster player stats", () => {
     const joinedAt = h(t0, -2);
     await db.insert(membershipHistory).values([
       { serverId, factionId: bearId, dayzId: A, joinedAt, leftAt: null },
-      { serverId, factionId: bearId, dayzId: B, joinedAt, leftAt: null },
+      // ⚠️ B left and rejoined: the closed span is what makes `left_at` matter.
+      { serverId, factionId: bearId, dayzId: B, joinedAt, leftAt: h(t0, 60) },
+      { serverId, factionId: bearId, dayzId: B, joinedAt: h(t0, 70), leftAt: null },
       { serverId, factionId: wolfId, dayzId: R, joinedAt, leftAt: null },
     ]);
 
@@ -155,10 +174,14 @@ describe("roster player stats", () => {
     // A self-kill: never a PvP kill and never a PvP death.
     await mkKill({ at: h(t50, 4), victim: R, killer: R, victimFactionId: wolfId, killerFactionId: wolfId });
 
-    // A's play time: 1 h + 30 min in season 1, plus a session still open at `now`.
+    // A's play time: 1 h + 30 min wholly inside season 1, one closed session
+    // that straddles the season boundary, and one still open at `now`.
+    // ⚠️ `player_sessions_open_uniq` allows one open session per player, so the
+    // open one is the boundary-crossing one — it is clipped at BOTH ends.
     await mkSession({ dayzId: A, from: h(t0, 30), to: h(t0, 31) });
     await mkSession({ dayzId: A, from: h(t0, 40), to: new Date(h(t0, 40).getTime() + 1800_000) });
-    await mkSession({ dayzId: A, from: now, to: null });
+    await mkSession({ dayzId: A, from: straddleFrom, to: straddleTo });
+    await mkSession({ dayzId: A, from: openFrom, to: null });
 
     const [s2] = await db.select({ id: seasons.id }).from(seasons).where(sql`${seasons.number} = 2`);
     await mkRaid({ seasonId: s2!.id, at: h(t50, 5), raider: A });
@@ -170,6 +193,13 @@ describe("roster player stats", () => {
     await mkEvent({ type: "flag.raised", at: h(t0, 51), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
     await mkEvent({ type: "flag.raised", at: h(t50, 10), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
     await mkEvent({ type: "flag.raised", at: h(t0, 52), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Wolf", poleKey: "WOLF:0:0" } });
+    // ⚠️ A raised BEAR's colors an hour before their membership span opens: not
+    // an upkeep raise, and the only row that exercises `joined_at <= occurred_at`.
+    await mkEvent({ type: "flag.raised", at: h(t0, -3), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
+    // B: inside the first span, in the gap after they left, inside the second.
+    await mkEvent({ type: "flag.raised", at: h(t0, 55), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
+    await mkEvent({ type: "flag.raised", at: h(t0, 65), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
+    await mkEvent({ type: "flag.raised", at: h(t0, 75), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
   });
 
   describe("playerBoards", () => {
@@ -184,7 +214,7 @@ describe("roster player stats", () => {
         { dayzId: A, gamertag: "Alpha", value: 13 },
         { dayzId: R, gamertag: "Romeo", value: 3 },
       ]);
-      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: 5400 }]);
+      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
     });
 
@@ -201,8 +231,8 @@ describe("roster player stats", () => {
       expect(boards.scope).toEqual(SEASON_2);
       expect(boards.killers).toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
       expect(boards.raiders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 2 }]);
-      // The only session touching season 2 is still open and connected at `now`.
-      expect(boards.playTime).toEqual([]);
+      // Only the far side of the straddling session and of the open one.
+      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_SEASON_2 }]);
       expect(boards.friendlyFire).toEqual([]);
       expect(boards.kd).toEqual([]);
     });
@@ -211,7 +241,8 @@ describe("roster player stats", () => {
       const boards = await playerBoardsDb(db, SEASON_1, undefined, now);
       expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
       expect(boards.raiders).toEqual([]);
-      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: 5400 }]);
+      // Only the near side of the straddling session and of the open one.
+      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_SEASON_1 }]);
       expect(boards.friendlyFire).toEqual([]);
     });
 
@@ -238,8 +269,8 @@ describe("roster player stats", () => {
       expect(p.linked).toBe(true);
       expect(p.scope).toEqual(ALL);
       expect(p.seasons).toEqual([2, 1]);
-      expect(p.playTimeSeconds).toBe(5400);
-      expect(p.sessions).toBe(3);
+      expect(p.playTimeSeconds).toBe(PLAY_ALL);
+      expect(p.sessions).toBe(4);
       expect(p.lastSeenAt).toEqual(aLastSeen);
       expect(p.pvpKills).toBe(13);
       expect(p.pvpDeaths).toBe(3);
@@ -260,8 +291,8 @@ describe("roster player stats", () => {
       expect(p.kd).toBe(12);
       expect(p.upkeepRaises).toBe(2);
       expect(p.raidCredits).toBe(0);
-      expect(p.playTimeSeconds).toBe(5400);
-      expect(p.sessions).toBe(2);
+      expect(p.playTimeSeconds).toBe(PLAY_SEASON_1);
+      expect(p.sessions).toBe(4);
       expect(p.friendlyFireKills).toBe(0);
       expect(p.killed).toEqual([{ gamertag: "Romeo", count: 12 }]);
       expect(p.killedBy).toEqual([]);
@@ -285,6 +316,23 @@ describe("roster player stats", () => {
       expect(p.friendlyFireDeaths).toBe(1);
       expect(p.friendlyFireKills).toBe(0);
       expect(p.pvpDeaths).toBe(1);
+    });
+
+    it("a raise before the player's membership span opens is not an upkeep raise", async () => {
+      // A has four Flag_Bear raises; the one at t0-3h predates their span.
+      const all = (await playerProfileDb(db, "Alpha", ALL, now))!;
+      expect(all.upkeepRaises).toBe(3);
+    });
+
+    it("a raise in the gap between two membership spans is not an upkeep raise", async () => {
+      // B raised BEAR's colors three times: inside the first span, after they
+      // left it, and inside the span they rejoined on. Only two count.
+      const p = (await playerProfileDb(db, "Bravo", ALL, now))!;
+      expect(p.upkeepRaises).toBe(2);
+      expect(p.clanHistory).toEqual([
+        { tag: "BEAR", name: "BEAR", joinedAt: h(t0, 70), leftAt: null },
+        { tag: "BEAR", name: "BEAR", joinedAt: h(t0, -2), leftAt: h(t0, 60) },
+      ]);
     });
 
     it("an unlinked stranger the log has seen still resolves", async () => {
@@ -311,7 +359,7 @@ describe("roster player stats", () => {
       // A and B only: R is WOLF, P is pending, N is in no clan.
       expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 13 }]);
       expect(boards.raiders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 2 }]);
-      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: 5400 }]);
+      expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
       expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4.33, kills: 13, deaths: 3 }]);
       expect(boards.seasons).toEqual([2, 1]);
