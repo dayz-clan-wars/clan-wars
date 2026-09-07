@@ -38,6 +38,13 @@ describe("parseLine", () => {
     expect(parseLine(raw)[0]?.kind).toBe("flagpole");
   });
 
+  it("yields exactly one structure entry for a build line", () => {
+    const raw = `10:00:00 | Player "A" (id=${ID} pos=<1.0, 2.0, 3.0>)Built wall_base_down on Fence with Hammer`;
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("structure");
+  });
+
   it("yields nothing for an unrelated line", () => {
     expect(parseLine(`10:00:00 | Player "A" (id=${ID}) is connected`)).toEqual([]);
   });

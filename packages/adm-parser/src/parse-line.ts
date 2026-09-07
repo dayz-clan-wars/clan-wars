@@ -1,12 +1,14 @@
 import type { EventType, Vec3 } from "@factions/domain";
 import { parseFlagChange, type FlagChange } from "./flag.js";
 import { parseFlagPole, type FlagPoleEvent, type FlagPoleAction } from "./flagpole.js";
+import { parseStructure, type StructureEvent } from "./structure.js";
 import { parseRosterHeader, parsePlayerListEntry } from "./playerlist.js";
 import { parseEmote, type EmotePerformed } from "./emote.js";
 
 export type ParsedLine =
   | { kind: "flag"; change: FlagChange }
   | { kind: "flagpole"; event: FlagPoleEvent }
+  | { kind: "structure"; event: StructureEvent }
   | { kind: "roster"; count: number }
   | { kind: "position"; gamertag: string; dayzId: string; pos: Vec3 }
   | { kind: "emote"; event: EmotePerformed };
@@ -26,6 +28,9 @@ export function parseLine(raw: string): ParsedLine[] {
 
   const pole = parseFlagPole(raw);
   if (pole) return [{ kind: "flagpole", event: pole }];
+
+  const structure = parseStructure(raw);
+  if (structure) return [{ kind: "structure", event: structure }];
 
   const entry = parsePlayerListEntry(raw);
   if (entry) {
@@ -51,6 +56,8 @@ export function eventTypeFor(line: ParsedLine): EventType | null {
       return line.change.action === "raised" ? "flag.raised" : "flag.lowered";
     case "flagpole":
       return FLAGPOLE_ACTION_TO_EVENT_TYPE[line.event.action];
+    case "structure":
+      return line.event.action === "built" ? "base.built" : "base.dismantled";
     case "position":
       return "player.position";
     case "emote":
