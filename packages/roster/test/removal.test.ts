@@ -138,6 +138,18 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     expect(await linkRow("L")).toBeNull();
   });
 
+  it("the removed leader knew every code: locks of every min_role are exposed", async () => {
+    await lock("gate", "member");
+    await lock("stash", "officer");
+    await lock("core", "leader");
+
+    expect(await remove("L")).toMatchObject({ roster: "leader-succeeded", successorDiscordId: D.O2 });
+
+    expect(await lockExposed("gate")).toEqual(now);
+    expect(await lockExposed("stash")).toEqual(now);
+    expect(await lockExposed("core")).toEqual(now);
+  });
+
   // ------------------------------------------------- 2. no officers / nobody left
 
   it("with no officers the longest-tenured full member leads (a pending member is never chosen)", async () => {

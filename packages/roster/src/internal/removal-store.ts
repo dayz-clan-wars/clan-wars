@@ -46,7 +46,8 @@ const NOTHING: RemovalResult = { linked: false, roster: "none", successorDiscord
  *   member, and NO cooldown is stamped on anybody. There is no vote and no
  *   claim to settle afterwards: whatever leadership business was open was
  *   ABOUT this person, so `closeLeadershipSilentlyTx` closes it with no
- *   cooldown and no notice (ruling 11).
+ *   cooldown and no notice (ruling 11). The vault IS exposed: they knew
+ *   every code, leader-only locks included.
  * - **the leader, alone** → `disbandFactionTx`, the same one `/faction
  *   disband` and the dormancy tick ride, with a `true` guard: the check
  *   ("is this the leader, and is anyone left?") has already been made here.
@@ -115,6 +116,15 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // The vote was about this leader's fitness and the claim about
           // their absence; neither question outlives them (ruling 11).
           await closeLeadershipSilentlyTx(tx, member.factionId, a.at);
+
+          // A leader removed from the guild IS a leaver, and the one who
+          // knew EVERY code — `leaverRole: "leader"` exposes locks of every
+          // `min_role`, the leader-only ones included. Same lock-order slot
+          // as the member branch below: after the roster and leadership
+          // writes, before `guest_passes` and the notice (§4.12). The
+          // disband sub-branch needs no equivalent — the clan's rows go with
+          // it on cascade.
+          await exposeLocksTx(tx, { factionId: member.factionId, leaverRole: "leader", at: a.at });
 
           await revokePassesTx(tx, a.discordId, a.at);
           await noticeClanTx(tx, {
