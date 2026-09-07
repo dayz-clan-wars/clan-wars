@@ -121,6 +121,26 @@ turbo gate stays the gate, because it runs `typecheck` too.
   Life and shared with dayzonelife.com; absent tiles render the map with a dark ground, not
   broken. `POSITION_RETENTION_MS` is deliberately absent from `docs/guide-numbers.json` —
   it is a housekeeping constant, not a player-facing number.
+  Since 6, `membership-tick.ts` runs **before** presence (it reconciles the roster against
+  `membership_history`, opening and closing spans as members join and leave; presence must
+  see the reconciled spans before promoting a pending member) and **before** the kills
+  consumer (which uses `membershipAt` to resolve faction membership at the instant each kill
+  happened). `sessions-tick.ts` and `kills-tick.ts` run right after zone (which needs
+  membership reconciled before it matches intruders against clans) and **before** structure,
+  both every tick. `sessions-tick.ts` projects `player.connected` and `player.disconnected`
+  events into `player_sessions` rows (opening on connect, closing on disconnect/restart/
+  duplicate-connect); `kills-tick.ts` projects `player.killed` and `player.died` events
+  into `kills` rows, resolving faction membership and friendly fire (self-kills are never
+  friendly fire, never PvP). `membership_history` is a projection the roster never writes
+  — only the bot writes it, once per tick. Rebuild scripts `pnpm rebuild:sessions --server
+  <id>` and `pnpm rebuild:kills --server <id>` (single-server only, `factions_live` guard,
+  idempotent) clear and backfill from the log head; use them after a migration or to wipe
+  stats. ⚠️ The two consumers are deliberately left unseeded (cursor 0) so they backfill the
+  whole log — nothing posts to Discord from either (kills are stats, never points — spec
+  §11 global constraint). Schedule the deploy restart in a quiet hour because the bot posts
+  nothing new until the backfill completes (`guardedRunner` skips overlapping ticks meanwhile).
+  Kills before the first membership reconciler run have null faction ids and `friendly_fire
+  = false` unless the seeded span (from `joined_at`) covers them.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
