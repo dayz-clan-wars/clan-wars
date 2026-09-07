@@ -68,11 +68,18 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
         if (!payload) continue;
         out.scanned++;
 
+        // Two membershipAt calls outside a transaction: safe, because a
+        // history span covering an already-elapsed instant (ev.occurredAt)
+        // is immutable — nothing can change what it resolves to between
+        // these two reads.
         const [killerFactionId, victimFactionId] = await Promise.all([
           membershipAt(db, ev.serverId, payload.killerDayzId, ev.occurredAt),
           membershipAt(db, ev.serverId, payload.victimDayzId, ev.occurredAt),
         ]);
-        const friendlyFire = killerFactionId !== null && killerFactionId === victimFactionId;
+        // A self-kill (e.g. a player's own grenade) is never friendly fire,
+        // even when the player is in a clan and both ids resolve to it.
+        const friendlyFire = payload.killerDayzId !== payload.victimDayzId
+          && killerFactionId !== null && killerFactionId === victimFactionId;
 
         const inserted = await db
           .insert(kills)

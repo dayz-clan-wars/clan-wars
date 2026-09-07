@@ -71,6 +71,19 @@ describe("killsTick", () => {
     expect(rows[1]!.victimFactionId).toBeNull();
   });
 
+  it("2b. a self-kill (killerDayzId === victimDayzId) is never friendly fire, even for a clan member", async () => {
+    await ev("player.killed", { victimDayzId: A, victimGamertag: "A", killerDayzId: A, killerGamertag: "A", weapon: "M67", distanceM: 0 }, t1);
+    await killsTick(db);
+    const rows = await db.select().from(kills);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.killerDayzId).toBe(A);
+    expect(rows[0]!.victimDayzId).toBe(A);
+    expect(rows[0]!.friendlyFire).toBe(false);
+    expect(rows[0]!.killerFactionId).not.toBeNull();
+    expect(rows[0]!.victimFactionId).not.toBeNull();
+    expect(rows[0]!.killerFactionId).toBe(rows[0]!.victimFactionId);
+  });
+
   it("3. player.died (infected) for A: killerDayzId null, cause 'infected', killerFactionId null, friendlyFire false", async () => {
     await ev("player.died", { victimDayzId: A, victimGamertag: "A", cause: "infected", entity: "ZmbM_Base" }, t1);
     const result = await killsTick(db);
