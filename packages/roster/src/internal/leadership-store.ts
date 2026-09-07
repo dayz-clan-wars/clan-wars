@@ -583,9 +583,13 @@ export async function closeExpiredVotes(db: Database, now: Date): Promise<{ pass
  * caller's transaction, which already holds the clan's row.
  */
 export async function closeLeadershipSilentlyTx(tx: Tx, factionId: number, at: Date): Promise<void> {
-  await tx.update(successionClaims).set({ outcome: "voided", closedAt: at })
-    .where(and(eq(successionClaims.factionId, factionId), isNull(successionClaims.closedAt)));
+  // ⚠️ `faction_votes` (and its ballots) BEFORE `succession_claims`, per the
+  // §4.12 order. No behaviour of this function depends on which goes first —
+  // the order is the point, so that a writer holding one of these tables and
+  // reaching for the other can never meet this one coming the other way.
   const [v] = await tx.select({ id: factionVotes.id }).from(factionVotes)
     .where(and(eq(factionVotes.factionId, factionId), isNull(factionVotes.closedAt)));
   if (v) await closeVoteSilentlyTx(tx, v.id, at);
+  await tx.update(successionClaims).set({ outcome: "voided", closedAt: at })
+    .where(and(eq(successionClaims.factionId, factionId), isNull(successionClaims.closedAt)));
 }

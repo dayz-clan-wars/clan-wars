@@ -9,6 +9,7 @@ import {
 import { sql, eq, and, asc } from "drizzle-orm";
 import { ROSTER_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, NEW_POLE_GRACE_MS, type ClanNoticeKind } from "@factions/domain";
 import { removeFromGuildDb, openVoteDb, claimSuccessionDb } from "../src/internal";
+import { transferDb } from "../src/writes";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -299,6 +300,97 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     const rows = await db.select({ id: guestPasses.id, user: guestPasses.discordUserId, revokedAt: guestPasses.revokedAt })
       .from(guestPasses).orderBy(asc(guestPasses.id));
     expect(rows.map((r) => r.revokedAt)).toEqual([now, revokedEarlier, null]);
+  });
+
+  it("a pending member's solo base on a SECOND active server goes too", async () => {
+    const [s2] = await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning();
+    const [adm2] = await db.insert(admFiles).values({ serverId: s2!.id, filename: "f2.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+    const far = "7000.00:100.00:7000.00";
+    await db.insert(poles).values({
+      serverId: s2!.id, map: "livonia", poleKey: far, x: "7000.00", y: "100.00", z: "7000.00",
+      currentTexture: "Flag_White", flagRaised: true, firstSeenAt: ago(10 * DAY), lastSeenAt: ago(10 * DAY),
+      graceUntil: new Date(ago(10 * DAY).getTime() + NEW_POLE_GRACE_MS),
+    });
+    const [ev] = await db.insert(events).values({
+      serverId: s2!.id, admFileId: adm2!.id, lineIndex: 0, type: "flag.raised", occurredAt: ago(10 * DAY),
+      payload: { dayzId: UID.P, gamertag: TAGS.P, texture: "Flag_White", poleKey: far, pole: { x: 7000, y: 100, z: 7000 } },
+    }).returning();
+    await db.insert(declarations).values({
+      serverId: s2!.id, poleKey: far, x: "7000.00", y: "100.00", z: "7000.00",
+      ownerDayzId: UID.P, evidenceEventId: ev!.id, declaredAt: ago(10 * DAY),
+    });
+    // …and one on their clan's own server, so both arms of the sweep are live.
+    await seedSolo("P");
+
+    expect(await remove("P")).toMatchObject({ roster: "member-left", releasedSoloBase: true });
+    expect(await db.select().from(declarations).where(eq(declarations.ownerDayzId, UID.P))).toEqual([]);
+    const [p2] = await db.select({ graceUntil: poles.graceUntil }).from(poles).where(eq(poles.poleKey, far));
+    expect(p2!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+  });
+
+  // ------------------------------------------------- staged race (§13)
+
+  /**
+   * The new writer pair: `removeFromGuildDb` and `transfer` both write
+   * `faction_members` on one clan and both open by taking that clan's
+   * `factions` row, so a third connection HOLDING that row parks both of
+   * them and releasing it lets Postgres pick an order. Ordering is read out
+   * of `pg_stat_activity`, never waited out.
+   *
+   * Unfixed — branching on the role read BEFORE the lock — the two orders
+   * are: transfer-first, where the removal still believes L is leader and
+   * deletes a row that is now an officer's while promoting a SECOND leader
+   * into `faction_members_leader_uniq`; or removal-first, where the transfer
+   * finds no leader row and reports `not-leader`. Both must end with exactly
+   * one leader, `leader_discord_id` naming them, and no trace of L.
+   */
+  it("guild removal racing a transfer never leaves two leaders or none", async () => {
+    const holderDb = createClient(URL);
+    let release!: () => void;
+    const released = new Promise<void>((r) => { release = r; });
+    let taken!: () => void;
+    const isTaken = new Promise<void>((r) => { taken = r; });
+    const holder = holderDb.transaction(async (tx) => {
+      await tx.execute(sql`select id from factions where id = ${factionId}::bigint for update`);
+      taken();
+      await released;
+    });
+
+    const dbA = createClient(URL);
+    const dbB = createClient(URL);
+    try {
+      await isTaken;
+      const racers = Promise.all([
+        removeFromGuildDb(dbA, { discordId: D.L, at: now }),
+        transferDb(dbB, now, D.L, D.O1),
+      ]);
+      for (let i = 0; i < 5000; i++) {
+        const rows = await db.execute(sql`select count(*)::int as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock'`);
+        if (Number((rows as unknown as { n: number }[])[0]!.n) >= 2) break;
+      }
+      release();
+      const [removed, transferred] = await racers;
+
+      expect(removed.linked).toBe(true);
+      // Both orders are legal; neither may raise a constraint error, which
+      // `Promise.all` above would have rethrown before this line.
+      expect(["leader-succeeded", "member-left"]).toContain(removed.roster);
+      expect(["ok", "not-leader", "not-in-clan"]).toContain(transferred);
+    } finally {
+      release();
+      await holder.catch(() => {});
+      await holderDb.$client.end();
+      await dbA.$client.end();
+      await dbB.$client.end();
+    }
+
+    const rows = await db.select({ discordId: factionMembers.discordId, role: factionMembers.role })
+      .from(factionMembers).where(eq(factionMembers.factionId, factionId));
+    const leaders = rows.filter((r) => r.role === "leader");
+    expect(leaders).toHaveLength(1);
+    expect((await factionRow()).leaderDiscordId).toBe(leaders[0]!.discordId);
+    expect(rows.map((r) => r.discordId)).not.toContain(D.L);
+    expect(await linkRow("L")).toBeNull();
   });
 
   // ------------------------------------------------- 6. idempotence

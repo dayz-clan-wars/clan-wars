@@ -63,6 +63,11 @@ const NOTHING: RemovalResult = { linked: false, roster: "none", successorDiscord
  * `succession_claims` → `vault_locks` → `guest_passes` → `faction_events`
  * → `clan_notices`.
  *
+ * ⚠️ Nothing branches on an unlocked read. The clan is CHOSEN before the
+ * locks and everything else is re-read after them — see the notes in the
+ * body. That is what keeps a `transfer` racing this from producing either a
+ * `faction_members_leader_uniq` violation or a leaderless clan.
+ *
  * ⚠️ Idempotent by the link: a second `guildMemberRemove` for the same id
  * finds no link and returns `linked: false` having written nothing. Discord
  * redelivers, and a ban fires `guildMemberRemove` alongside `guildBanAdd`.
@@ -73,35 +78,60 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
       .from(identityLinks).where(eq(identityLinks.discordId, a.discordId)).for("update");
     if (!link) return NOTHING;
 
-    const [member] = await tx.select({
-      factionId: factionMembers.factionId, serverId: factionMembers.serverId,
-      dayzId: factionMembers.dayzId, role: factionMembers.role, status: factionMembers.status,
-    }).from(factionMembers)
+    // Which clan's row to lock. This read is UNLOCKED and decides nothing
+    // but that: every fact about the membership — role and status above all
+    // — is re-read under the lock below. A concurrent `transfer`, `setRole`
+    // or `kick` can move this player between the two reads, and branching on
+    // the stale copy is how the leader branch would delete a sitting leader
+    // (committing a leaderless clan) or promote a second one straight into
+    // `faction_members_leader_uniq`.
+    const [candidate] = await tx.select({ factionId: factionMembers.factionId })
+      .from(factionMembers)
       .innerJoin(factions, eq(factions.id, factionMembers.factionId))
       .where(and(eq(factionMembers.discordId, a.discordId), inArray(factions.status, HOLDING)))
       .orderBy(asc(factions.id)).limit(1);
 
     let roster: RemovalRoster = "none";
     let successorDiscordId: string | null = null;
-    let releasedSoloBase = false;
+
+    // ⚠️ FIRST write-order statement once a clan is involved: `factions`
+    // before declarations and before `faction_members`, so a concurrent
+    // kick/disband/dormancy tick queues on this row instead of taking the
+    // tables in the opposite order (see `lockFactionTx`).
+    if (candidate) await lockFactionTx(tx, candidate.factionId);
+
+    // Declarations next, per §4.12 — and on EVERY active server, the way
+    // `unlinkDb` sweeps them. A PENDING member may still hold a solo base of
+    // their own (§5.3), and nothing ties it to the server their clan is on.
+    // A full member's declaration belongs to the clan, so this finds none.
+    const releasedSoloBase = await releaseSoloEverywhereTx(tx, link.dayzId, a.at);
+
+    // Re-read under the clan's row lock, and take the roster row's own lock
+    // too: `setRole` writes `faction_members` WITHOUT taking `factions`, so
+    // the faction lock alone would not hold it still. Everything below
+    // branches on THIS row.
+    const member = candidate ? await lockedMemberTx(tx, candidate.factionId, a.discordId) : null;
 
     if (member) {
-      // ⚠️ FIRST write-order statement once a clan is involved: `factions`
-      // before declarations and before `faction_members`, so a concurrent
-      // kick/disband/dormancy tick queues on this row instead of taking the
-      // two tables in the opposite order (see `lockFactionTx`).
-      await lockFactionTx(tx, member.factionId);
-      await lockDeclarations(tx, member.serverId);
-      // A PENDING member may still hold a solo base of their own (§5.3), so
-      // this runs whatever their status. A full member's declaration is the
-      // clan's, and this finds nothing.
-      releasedSoloBase = await releaseTx(tx, { dayzId: link.dayzId, serverId: member.serverId }, a.at);
+      // The delete is the decision, the way `kick`/`leave` make theirs: the
+      // guards repeat what the locked read saw, and the returned row — not
+      // the read — is what the branches below use. Zero rows would mean the
+      // world moved under a lock this transaction holds, which cannot
+      // happen; it falls through having written nothing, as if the player
+      // had been in no clan at all.
+      const [gone] = await tx.delete(factionMembers)
+        .where(and(
+          eq(factionMembers.id, member.id),
+          eq(factionMembers.role, member.role),
+          eq(factionMembers.status, member.status),
+        ))
+        .returning({
+          dayzId: factionMembers.dayzId, serverId: factionMembers.serverId,
+          role: factionMembers.role, status: factionMembers.status,
+        });
 
-      if (member.role === "leader") {
-        await tx.delete(factionMembers)
-          .where(and(eq(factionMembers.factionId, member.factionId), eq(factionMembers.discordId, a.discordId)));
-
-        const successor = await successorTx(tx, member.factionId);
+      if (gone && gone.role === "leader") {
+        const successor = await successorTx(tx, candidate!.factionId);
         if (successor) {
           // Delete-then-promote, for the same reason `transfer` demotes
           // before it promotes: `faction_members_leader_uniq` permits one
@@ -111,11 +141,11 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // Display provenance, kept true by every leader change (§4.5's
           // note on `leader_discord_id`), the way `transfer` does it.
           await tx.update(factions).set({ leaderDiscordId: successor.discordId })
-            .where(eq(factions.id, member.factionId));
+            .where(eq(factions.id, candidate!.factionId));
 
           // The vote was about this leader's fitness and the claim about
           // their absence; neither question outlives them (ruling 11).
-          await closeLeadershipSilentlyTx(tx, member.factionId, a.at);
+          await closeLeadershipSilentlyTx(tx, candidate!.factionId, a.at);
 
           // A leader removed from the guild IS a leaver, and the one who
           // knew EVERY code — `leaverRole: "leader"` exposes locks of every
@@ -124,11 +154,11 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // writes, before `guest_passes` and the notice (§4.12). The
           // disband sub-branch needs no equivalent — the clan's rows go with
           // it on cascade.
-          await exposeLocksTx(tx, { factionId: member.factionId, leaverRole: "leader", at: a.at });
+          await exposeLocksTx(tx, { factionId: candidate!.factionId, leaverRole: "leader", at: a.at });
 
           await revokePassesTx(tx, a.discordId, a.at);
           await noticeClanTx(tx, {
-            serverId: member.serverId, factionId: member.factionId, kind: "leader_removed", occurredAt: a.at,
+            serverId: gone.serverId, factionId: candidate!.factionId, kind: "leader_removed", occurredAt: a.at,
             payload: { old: await gamertagOrId(tx, a.discordId), new: await gamertagOrId(tx, successor.discordId) },
           });
 
@@ -139,48 +169,43 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // can put its leadership check in the UPDATE's own WHERE. Here the
           // leader's row has just been deleted, so no such check could pass
           // — the decision was made above.
-          await disbandFactionTx(tx, member.factionId, sql`true`);
+          await disbandFactionTx(tx, candidate!.factionId, sql`true`);
           await revokePassesTx(tx, a.discordId, a.at);
           roster = "leader-disbanded";
         }
-      } else {
-        await tx.delete(factionMembers)
-          .where(and(eq(factionMembers.factionId, member.factionId), eq(factionMembers.discordId, a.discordId)));
-
+      } else if (gone) {
         // "As a leave, with the cooldown — they cannot rejoin anyway"
         // (§5.4). A floor, never shortened: kick's upsert, verbatim.
         await tx.insert(rosterCooldowns)
-          .values({ serverId: member.serverId, dayzId: member.dayzId, until: new Date(a.at.getTime() + ROSTER_COOLDOWN_MS) })
+          .values({ serverId: gone.serverId, dayzId: gone.dayzId, until: new Date(a.at.getTime() + ROSTER_COOLDOWN_MS) })
           .onConflictDoUpdate({
             target: [rosterCooldowns.serverId, rosterCooldowns.dayzId],
             set: { until: sql`greatest(${rosterCooldowns.until}, excluded.until)` },
           });
 
-        // §4.5: a pending member voted in nothing and saw no lock, so there
-        // is no slot to give back and nothing to expose. Calling either with
-        // a pending member would be a no-op today; skipping them says why.
-        if (member.status === "full") {
-          await applyElectorateLeaveTx(tx, { factionId: member.factionId, dayzId: member.dayzId, at: a.at });
+        // §4.5: a pending member was in no electorate and could see no lock.
+        // ⚠️ The gate is load-bearing for the vault, not decorative: a
+        // pending member's ROLE is 'member', so `exposeLocksTx` would burn
+        // every member-rank lock in the clan for someone who never held a
+        // code. `applyElectorateLeaveTx` is genuinely a no-op for them (they
+        // are in no `electorate_dayz_ids`) and is inside the gate only to
+        // keep the two "as a leave" effects together.
+        if (gone.status === "full") {
+          await applyElectorateLeaveTx(tx, { factionId: candidate!.factionId, dayzId: gone.dayzId, at: a.at });
           await exposeLocksTx(tx, {
-            factionId: member.factionId, leaverRole: member.role as "leader" | "officer" | "member", at: a.at,
+            factionId: candidate!.factionId, leaverRole: gone.role as "leader" | "officer" | "member", at: a.at,
           });
         }
 
         await revokePassesTx(tx, a.discordId, a.at);
         await noticeClanTx(tx, {
-          serverId: member.serverId, factionId: member.factionId, kind: "left", occurredAt: a.at,
+          serverId: gone.serverId, factionId: candidate!.factionId, kind: "left", occurredAt: a.at,
           payload: { gamertag: await gamertagOrId(tx, a.discordId) },
         });
 
         roster = "member-left";
       }
     } else {
-      // No holding clan: the solo base can be on any active server, so this
-      // sweeps them all, exactly as `unlinkDb` does.
-      for (const s of await tx.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).orderBy(asc(servers.id))) {
-        await lockDeclarations(tx, s.id);
-        if (await releaseTx(tx, { dayzId: link.dayzId, serverId: s.id }, a.at)) releasedSoloBase = true;
-      }
       await revokePassesTx(tx, a.discordId, a.at);
     }
 
@@ -188,6 +213,38 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
 
     return { linked: true, roster, successorDiscordId, releasedSoloBase };
   });
+}
+
+/**
+ * The roster row, re-read under BOTH the clan's row lock and its own. The
+ * clan lock is not enough on its own: `setRole` promotes and demotes without
+ * ever touching `factions`, so only `for update` on this row stops a role
+ * changing between the branch and the delete.
+ */
+async function lockedMemberTx(tx: Tx, factionId: number, discordId: string) {
+  const [m] = await tx.select({
+    id: factionMembers.id, dayzId: factionMembers.dayzId, serverId: factionMembers.serverId,
+    role: factionMembers.role, status: factionMembers.status,
+  }).from(factionMembers)
+    .where(and(eq(factionMembers.factionId, factionId), eq(factionMembers.discordId, discordId)))
+    .for("update");
+  return m ?? null;
+}
+
+/**
+ * The player's own solo declaration, on every active server, in ascending
+ * server id — the sweep `unlinkDb` does and the order every sweeper takes,
+ * so two of them can never hold each other's next advisory lock. Returns
+ * whether anything was released. Never touches a CLAN's declaration: that is
+ * keyed by `owner_faction_id` and released by `disbandFactionTx`.
+ */
+async function releaseSoloEverywhereTx(tx: Tx, dayzId: string, at: Date): Promise<boolean> {
+  let released = false;
+  for (const s of await tx.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).orderBy(asc(servers.id))) {
+    await lockDeclarations(tx, s.id);
+    if (await releaseTx(tx, { dayzId, serverId: s.id }, at)) released = true;
+  }
+  return released;
 }
 
 /**

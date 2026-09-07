@@ -209,6 +209,31 @@ describe("vault store", () => {
     expect((await lockRow(officerLock)).exposedAt).toBeNull();
   });
 
+  /**
+   * §4.5: "a pending member … sees no vault". Their ROLE is 'member', so an
+   * ungated `exposeLocksTx` would burn every member-rank lock in the clan
+   * the moment they are kicked — telling a clan to change codes that never
+   * left it. Both departure paths are checked: kick, and the guild-removal
+   * path, which shares the rule.
+   */
+  it("exposure: a PENDING member who goes exposes nothing", async () => {
+    const memberLock = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
+    const officerLock = (await addLockDb(db, actor("O1"), { name: "Officer safe", note: null, minRole: "officer", at: now, rng: () => 0.1 })).lockId!;
+
+    const pendingUid = "P".repeat(40);
+    await db.insert(players).values({ dayzId: pendingUid, gamertag: "Pia", firstSeenAt: now, lastSeenAt: now });
+    await db.insert(identityLinks).values({ discordId: "dP", dayzId: pendingUid, gamertag: "Pia", verifiedAt: now });
+    await db.insert(factionMembers).values({
+      factionId, serverId, dayzId: pendingUid, discordId: "dP", role: "member",
+      joinedAt: now, status: "pending", pendingSince: now,
+    });
+
+    expect(await kickDb(db, now, D.L, "dP")).toBe("ok");
+    expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, "dP"))).toEqual([]);
+    expect((await lockRow(memberLock)).exposedAt).toBeNull();
+    expect((await lockRow(officerLock)).exposedAt).toBeNull();
+  });
+
   it("editLock: officer+ only, validates, and gone for a missing lock", async () => {
     const lockId = (await addLockDb(db, actor("O1"), { name: "Front gate", note: null, minRole: "member", at: now, rng: () => 0.5 })).lockId!;
 

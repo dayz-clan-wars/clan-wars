@@ -704,7 +704,10 @@ export class PgRosterStore implements RosterStore {
           sql`${actorRole} in ('leader', 'officer')`,
           sql`not (${actorRole} = 'officer' and ${factionMembers.role} = 'officer')`,
         ))
-        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId, role: factionMembers.role });
+        .returning({
+          dayzId: factionMembers.dayzId, serverId: factionMembers.serverId,
+          role: factionMembers.role, status: factionMembers.status,
+        });
 
       const row = deleted[0];
       if (!row) {
@@ -736,7 +739,14 @@ export class PgRosterStore implements RosterStore {
       // Every vault lock this kicked member could see is now known to
       // someone outside the clan (spec §4.10). `vault_locks` sits after
       // `faction_votes`/ballots in the lock order (§4.12).
-      await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
+      //
+      // ⚠️ FULL members only (§4.5: "a pending member … sees no vault"). A
+      // pending member's ROLE is 'member', so an ungated call would burn
+      // every member-rank lock in the clan on somebody who never held a
+      // code — the clan would be told to change codes it never leaked.
+      if (row.status === "full") {
+        await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
+      }
 
       const [clan] = await tx.select({ name: factions.name }).from(factions).where(eq(factions.id, a.factionId));
 
@@ -774,7 +784,10 @@ export class PgRosterStore implements RosterStore {
           eq(factionMembers.discordId, a.discordId),
           ne(factionMembers.role, "leader"),
         ))
-        .returning({ dayzId: factionMembers.dayzId, serverId: factionMembers.serverId, role: factionMembers.role });
+        .returning({
+          dayzId: factionMembers.dayzId, serverId: factionMembers.serverId,
+          role: factionMembers.role, status: factionMembers.status,
+        });
 
       const row = deleted[0];
       if (!row) {
@@ -797,8 +810,12 @@ export class PgRosterStore implements RosterStore {
       await applyElectorateLeaveTx(tx, { factionId: a.factionId, dayzId: row.dayzId, at: a.at });
 
       // Every vault lock this leaver could see is now known to someone
-      // outside the clan (spec §4.10).
-      await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
+      // outside the clan (spec §4.10). FULL members only, for the reason
+      // spelled out on `kick`'s call: a pending member saw no vault, and
+      // their role is 'member'.
+      if (row.status === "full") {
+        await exposeLocksTx(tx, { factionId: a.factionId, leaverRole: row.role as "leader" | "officer" | "member", at: a.at });
+      }
 
       await noticeClanTx(tx, {
         serverId: row.serverId, factionId: a.factionId, kind: "left", occurredAt: a.at,
