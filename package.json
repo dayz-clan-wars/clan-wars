@@ -13,6 +13,7 @@
     "guide:numbers": "tsx scripts/guide-numbers.ts",
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
+    "rebuild:kills": "tsx scripts/rebuild-kills.ts",
     "wipe": "tsx scripts/wipe.ts"
   },
   "devDependencies": {
