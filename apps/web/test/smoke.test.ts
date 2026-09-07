@@ -94,6 +94,6 @@ describe("the web app reads nothing", () => {
     // the site's half of the pin; packages/roster/test/exports.test.ts is
     // the package's. Both must change for an export to land.
     const roster = await import("@factions/roster");
-    expect(Object.keys(roster).sort()).toEqual(["DECLARE_SOLO_REASONS", "ISSUE_OUTCOME_KINDS", "acceptInvite", "alphas", "baseFor", "cancelLink", "claimCeremony", "claimContext", "clanByTag", "clanFor", "confirmRebind", "decideRequest", "declareSolo", "declineInvite", "deletePin", "demote", "directory", "disband", "dropPin", "invite", "kick", "leave", "linkStatus", "mapState", "myInvites", "myRequests", "promote", "releaseSolo", "rename", "requestJoin", "revokeInvite", "scoreboard", "searchGamertags", "seasons", "setRecruitingPost", "startLink", "transfer", "unlink", "viewerFor", "warLog", "withdrawRequest"]);
+    expect(Object.keys(roster).sort()).toEqual(["DECLARE_SOLO_REASONS", "ISSUE_OUTCOME_KINDS", "acceptInvite", "alphas", "baseFor", "cancelLink", "claimCeremony", "claimContext", "clanBoard", "clanByTag", "clanFor", "confirmRebind", "decideRequest", "declareSolo", "declineInvite", "deletePin", "demote", "directory", "disband", "dropPin", "invite", "kick", "leave", "linkStatus", "mapState", "myInvites", "myRequests", "playerBoards", "playerProfile", "promote", "releaseSolo", "rename", "requestJoin", "revokeInvite", "scoreboard", "searchGamertags", "seasons", "setRecruitingPost", "startLink", "transfer", "unlink", "viewerFor", "warLog", "withdrawRequest"]);
   });
 });

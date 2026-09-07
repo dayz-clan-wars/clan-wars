@@ -47,6 +47,10 @@ import {
   type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry,
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
+import {
+  playerBoardsDb, playerProfileDb, clanBoardDb,
+  type StatScope, type BoardRow, type KdRow, type Boards, type PlayerProfile,
+} from "./stats";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -58,6 +62,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry };
+export type { StatScope, BoardRow, KdRow, Boards, PlayerProfile };
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {
@@ -212,3 +217,16 @@ export function mapState(discordId: string): Promise<MapState | "not-linked"> { 
 export function dropPin(discordId: string, pin: { x: number; z: number; icon: string; note: string | null }): Promise<DropPinOutcome> { return dropPinDb(db(), discordId, pin, new Date()); }
 /** Delete one of your clan's pins. Any full member may. */
 export function deletePin(discordId: string, pinId: number): Promise<{ deleted: boolean }> { return deletePinDb(db(), discordId, pinId); }
+
+/** The public player boards for one scope: raiders, killers, K/D, play time, friendly fire (spec §11). */
+export function playerBoards(scope: StatScope, limit?: number): Promise<Boards> {
+  return playerBoardsDb(db(), scope, limit, new Date());
+}
+/** One player's public page, by gamertag. Null when the log has never seen that name. */
+export function playerProfile(gamertag: string, scope: StatScope): Promise<PlayerProfile | null> {
+  return playerProfileDb(db(), gamertag, scope, new Date());
+}
+/** The same boards, narrowed to the viewer's own clan's current full roster. Full members only. */
+export function clanBoard(discordId: string, scope: StatScope): Promise<Boards | "not-linked" | "not-in-clan" | "pending"> {
+  return clanBoardDb(db(), discordId, scope, undefined, new Date());
+}
