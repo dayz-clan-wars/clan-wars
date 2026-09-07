@@ -18,10 +18,10 @@ export const WAR_LOG_KINDS = ["raid", "defense", "week_closed", "season_closed"]
 export type WarLogKind = (typeof WAR_LOG_KINDS)[number];
 
 /**
- * clan_notices kinds that exist as of increment 3a (spec §9.3, §9.4). Kinds
- * the spec lists for later increments (intruder, dismantle, gate_built,
- * leader_removed, succession_*, vote_*, codes_rotated, guest) are added with
- * the increment that writes them; apps/bot/test/notice-text.test.ts pins
+ * clan_notices kinds that exist as of increment 5 (spec §9.3, §9.4). Kinds
+ * the spec lists for later increments (leader_removed, succession_*,
+ * vote_*, codes_rotated, guest) are added with the increment that writes
+ * them; apps/bot/test/notice-text.test.ts pins
  * that every kind here has a renderer and no renderer exists for a kind
  * not here.
  */
@@ -30,6 +30,7 @@ export const CLAN_NOTICE_KINDS = [
   "non_member_raise", "colors_elsewhere", "rebind_proposed", "rebind_confirmed",
   "joined", "became_full", "left", "kicked", "promoted", "demoted", "transferred", "renamed",
   "invited", "request_accepted", "request_declined", "pending_expired", "solo_non_member_raise", "solo_lapsed",
+  "intruder", "dismantle", "gate_built", "solo_intruder", "solo_dismantle", "solo_gate",
 ] as const;
 export type ClanNoticeKind = (typeof CLAN_NOTICE_KINDS)[number];
 export const NOTICE_TARGETS = ["channel", "dm"] as const;

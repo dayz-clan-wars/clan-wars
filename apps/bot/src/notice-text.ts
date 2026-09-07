@@ -89,6 +89,12 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   pending_expired: (p) => `Your spot in **${p.clan}** expired — you were never seen at the base.`,
   solo_non_member_raise: (p, ctx) => `⚑ ${person(p.gamertag)} (not a member) raised your flag at your base — ${ctx.age}`,
   solo_lapsed: (p) => `Your base declaration lapsed — no raise in ${days(SOLO_LAPSE_MS)} days. The pole goes public in ${days(RELEASED_POLE_GRACE_MS)} days unless you raise there and declare again: ${p.link}`,
+  intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
+  dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
+  gate_built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  solo_intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
+  solo_dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
+  solo_gate: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */

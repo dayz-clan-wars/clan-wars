@@ -104,6 +104,15 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: { gamertag: "123456789012345678" } }, now))
       .toBe("➖ <@123456789012345678> left");
   });
+
+  it("renders the intruder line with distance and age", () => {
+    expect(noticeText({ kind: "intruder", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "Sasha", distance: 42 } }, now))
+      .toBe("👁 Sasha (not a member) was seen 42 m from your base — 6 min ago");
+  });
+  it("renders dismantle with the part, and the gate line without one", () => {
+    expect(noticeText({ kind: "dismantle", target: "channel", occurredAt: now, payload: { gamertag: "Sasha", part: "wall_base_down" } }, now)).toContain("dismantled wall_base_down at your base");
+    expect(noticeText({ kind: "solo_gate", target: "dm", occurredAt: now, payload: { gamertag: "Sasha" } }, now)).toBe("🔧 Sasha (not a member) built a gate at your base — 0 min ago");
+  });
 });
 
 describe("relativeAge", () => {

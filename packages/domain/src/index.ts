@@ -8,3 +8,4 @@ export * from "./factions";
 export * from "./rules";
 export * from "./spacing";
 export * from "./scoring";
+export * from "./travel";
