@@ -784,6 +784,65 @@ export const clanPins = pgTable("clan_pins", {
   byFaction: index("clan_pins_faction_idx").on(t.factionId, t.expiresAt),
 }));
 
+/** Connect → disconnect, or → the next ADM boundary (`restart`). Spec §4.9. */
+export const playerSessions = pgTable("player_sessions", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  dayzId: text("dayz_id").notNull(),
+  connectedAt: timestamp("connected_at", { withTimezone: true }).notNull(),
+  connectEventId: bigint("connect_event_id", { mode: "number" }).notNull().references(() => events.id),
+  disconnectedAt: timestamp("disconnected_at", { withTimezone: true }),
+  closeReason: text("close_reason"),
+}, (t) => ({
+  reasonValid: check("player_sessions_reason_valid", sql`${t.closeReason} IS NULL OR ${t.closeReason} IN ('disconnect','restart')`),
+  closedIffReason: check("player_sessions_closed_iff_reason", sql`(${t.disconnectedAt} IS NULL) = (${t.closeReason} IS NULL)`),
+  uniqConnect: uniqueIndex("player_sessions_connect_uniq").on(t.connectEventId),
+  openByPlayer: uniqueIndex("player_sessions_open_uniq").on(t.serverId, t.dayzId).where(sql`${t.disconnectedAt} IS NULL`),
+  byPlayer: index("player_sessions_player_idx").on(t.serverId, t.dayzId, t.connectedAt),
+}));
+
+/**
+ * Every death (spec §4.9). `killer_dayz_id` null = not a player (infected,
+ * fall, vehicle, bled out…); PvP reads filter on it being set. Faction ids
+ * and `friendly_fire` are resolved AT `occurred_at` from membership_history.
+ * ⚠️ Stats, never points: nothing reads this into season_standings (§11).
+ */
+export const kills = pgTable("kills", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  eventId: bigint("event_id", { mode: "number" }).notNull().references(() => events.id),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  victimDayzId: text("victim_dayz_id").notNull(),
+  killerDayzId: text("killer_dayz_id"),
+  weapon: text("weapon"),
+  distanceM: numeric("distance_m", { precision: 8, scale: 1 }),
+  cause: text("cause").notNull(),
+  victimFactionId: bigint("victim_faction_id", { mode: "number" }).references(() => factions.id),
+  killerFactionId: bigint("killer_faction_id", { mode: "number" }).references(() => factions.id),
+  friendlyFire: boolean("friendly_fire").notNull().default(false),
+}, (t) => ({
+  uniqEvent: uniqueIndex("kills_event_uniq").on(t.eventId),
+  byVictim: index("kills_victim_idx").on(t.serverId, t.victimDayzId, t.occurredAt),
+  byKiller: index("kills_killer_idx").on(t.serverId, t.killerDayzId, t.occurredAt),
+}));
+
+/**
+ * Full-membership spans, one row per (clan, player, span), written only by
+ * the bot's membership reconciler (spec §11: the stats increment never
+ * touches roster invariants). `left_at` null = still a full member.
+ */
+export const membershipHistory = pgTable("membership_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id),
+  dayzId: text("dayz_id").notNull(),
+  joinedAt: timestamp("joined_at", { withTimezone: true }).notNull(),
+  leftAt: timestamp("left_at", { withTimezone: true }),
+}, (t) => ({
+  openUniq: uniqueIndex("membership_history_open_uniq").on(t.factionId, t.dayzId).where(sql`${t.leftAt} IS NULL`),
+  byPlayer: index("membership_history_player_idx").on(t.serverId, t.dayzId, t.joinedAt),
+}));
+
 /**
  * The #war-log queue (spec §4.7, §9.2). Same no-coordinates invariant as
  * `faction_events`, for the same reason: this table's whole purpose is to be
