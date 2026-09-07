@@ -3,7 +3,7 @@ import { clanFor } from "@factions/roster";
 import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
-import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
+import { LEADERSHIP_RESULT_COPY, CLAIM_REFUSAL } from "@/lib/leadership-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
@@ -113,9 +113,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             </form>
           )}
           {!leadership.openClaim && (leadership.canClaim === "not-eligible" || leadership.canClaim === "leader-active") && (
-            <p className="mt-2 text-sm text-ink-2">
-              {leadership.canClaim === "not-eligible" ? "Only an officer can claim while the clan has officers." : `The leader has been seen in game within the last ${days(LEADER_SILENT_MS)}.`}
-            </p>
+            <p className="mt-2 text-sm text-ink-2">{CLAIM_REFUSAL[leadership.canClaim]}</p>
           )}
         </section>
       )}
@@ -143,11 +141,13 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             : (
               !leader && (
                 <form className="mt-2" action="/api/clan/open-vote" method="post">
-                  <select className="min-h-[44px] w-full rounded-md border border-rule bg-ground px-3 font-mono text-ink" name="target" required disabled={leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now()}>
-                    {full.filter((r) => r.role !== "leader").map((r) => (
-                      <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"}</option>
-                    ))}
-                  </select>
+                  <label className="block"><span className={label}>Nominee</span>
+                    <select className="min-h-[44px] w-full rounded-md border border-rule bg-ground px-3 font-mono text-ink" name="target" required disabled={leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now()}>
+                      {full.filter((r) => r.role !== "leader").map((r) => (
+                        <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"}</option>
+                      ))}
+                    </select>
+                  </label>
                   <label className="mt-2 flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> I understand this opens a no-confidence vote.</label>
                   <button className="mt-3 min-h-[44px] rounded-md bg-gold px-4 font-display text-ground disabled:opacity-50" type="submit" disabled={leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now()}>Nominate</button>
                   {leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now() && (

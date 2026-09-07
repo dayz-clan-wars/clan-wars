@@ -11,12 +11,21 @@ import { days, hours } from "./format";
  * full member before any of these outcomes can fire) but the type is still
  * exhaustive, so it gets the same wording as `not-in-clan`.
  */
-const CLAIM: Record<ClaimOutcome | ActorRefusal | "unconfirmed", string> = {
-  ...REFUSAL,
-  "not-member": REFUSAL["not-in-clan"],
-  ok: `Claimed. The leader has ${hours(SUCCESSION_WINDOW_MS)} to be seen in game; if they are, the claim is void. The clan channel has been told.`,
+/**
+ * `not-eligible`/`leader-active` are also read directly by `/clan` to explain
+ * why the claim button is hidden (`canClaim`, a `SuccessionEligibility`, not
+ * a write outcome) — exported so the page and this table share one wording
+ * rather than the page re-typing it inline.
+ */
+export const CLAIM_REFUSAL: Record<"not-eligible" | "leader-active", string> = {
   "not-eligible": "Only an officer can claim while the clan has officers.",
   "leader-active": `The leader has been seen in game within the last ${days(LEADER_SILENT_MS)}.`,
+};
+const CLAIM: Record<ClaimOutcome | ActorRefusal | "unconfirmed", string> = {
+  ...REFUSAL,
+  ...CLAIM_REFUSAL,
+  "not-member": REFUSAL["not-in-clan"],
+  ok: `Claimed. The leader has ${hours(SUCCESSION_WINDOW_MS)} to be seen in game; if they are, the claim is void. The clan channel has been told.`,
   "claim-open": "A claim is already open.",
   "is-leader": "You are the leader.",
   unconfirmed: "Tick the box to confirm before claiming leadership.",
@@ -25,6 +34,8 @@ const OPEN_VOTE: Record<OpenVoteOutcome | ActorRefusal | "unconfirmed", string> 
   ...REFUSAL,
   "not-member": REFUSAL["not-in-clan"],
   ok: "Vote opened. The clan channel has been told.",
+  // Generic on purpose: a result code is looked up (never echoed), so this
+  // string can't carry the actual nominee's name — see lib/copy-lookup.ts.
   passed: "Passed on the spot — the electorate was small enough. The nominee leads.",
   cooldown: `A vote failed recently; the next is possible after ${days(FAILED_VOTE_COOLDOWN_MS)} from then.`,
   "vote-open": "A no-confidence vote is already open.",
