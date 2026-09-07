@@ -141,6 +141,23 @@ turbo gate stays the gate, because it runs `typecheck` too.
   nothing new until the backfill completes (`guardedRunner` skips overlapping ticks meanwhile).
   Kills before the first membership reconciler run have null faction ids and `friendly_fire
   = false` unless the seeded span (from `joined_at`) covers them.
+  Since increment 7, `leadership-tick.ts` runs right after presence, every tick (ruling
+  13 — a 60 s ceiling in spec §7, not a throttle): a succession claim past its
+  `resolves_at` hands the seat to the claimant or is voided, and a no-confidence vote
+  past its `closes_at` passes or fails (`resolveSuccessionClaims`/`closeExpiredVotes`
+  from the roster's internal store). `structure-tick.ts` gains two more reconciler
+  steps, after the existing role/channel/`@Linked`/`@Alpha` diffs: step 7 grants/revokes
+  a clan voice channel's per-user overwrite for each open guest pass (converting one to
+  a full member's role access first, so its overwrite becomes a stray for the same
+  diff to remove); step 8 sets `[TAG] gamertag`/bare-gamertag nicknames for every
+  linked user, diffed against the member cache every pass. Outside the tick loop, the
+  bot also now handles the gateway's `guildMemberRemove` event as it arrives
+  (`guild-removal.ts`) — not on a schedule — dropping a departed user's roster row,
+  identity link, solo declaration and guest passes in one transaction, handing off
+  leadership if they held it (ruling 10: no catch-up sweep for removals during
+  downtime). `/guest` is the one live slash command, registered the same way every
+  retired command is (`Routes.applicationGuildCommands`), letting an officer or the
+  leader give a 24h voice guest pass from the clan's own text channel.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -396,6 +413,37 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   documents describe a separate VPS holding only `web` and `caddy`; that machine does
   not exist and never did on this deployment. Name compose services anyway — a bare
   `up -d` starts more than you mean.
+- **The vote freeze and the electorate decrement both live in `kick`/`leave`/`transfer`,
+  never in a page.** `kick` and `transfer` both refuse while a no-confidence vote is open
+  (`voteIsOpenTx`, spec §5.7: "no handing the seat to an ally to dodge a vote on it");
+  `leave` does not — nobody is trapped in a clan by a vote — but a leaver's electorate
+  slot and ballot are both removed (`applyElectorateLeaveTx`), which can carry a vote
+  that was one short. `kick` also decrements the electorate, since the freeze only
+  refuses `kick` while a vote is open; the call is made anyway on the (currently
+  unreachable) chance that changes.
+- **Vault exposure lives in `kick`/`leave`, full members only.** A departing full member
+  (never a pending one — spec §4.5, whose role is `'member'` regardless) has every lock
+  they could see marked exposed (`exposeLocksTx`), because every code they knew is now
+  known to someone outside the clan. A removed leader exposes the whole vault, and
+  `removeFromGuildDb` releases their solo declaration and closes any open vote or claim
+  in their clan silently, the same way `disbandFactionTx` does.
+- **`removeFromGuildDb` is internal-only, and the one roster writer a gateway event (not
+  the log, a clock, or the site) is allowed to start** (`@factions/roster/internal`,
+  never the package root — `packages/roster/test/exports.test.ts` and
+  `apps/web/test/smoke.test.ts` both pin the allowlist). It runs from
+  `apps/bot/src/guild-removal.ts`'s `guildMemberRemove` handler, which checks the
+  event's guild id against `DISCORD_GUILD_ID` before it ever reaches the store —
+  ruling 10: there is no catch-up sweep for removals that happened while the bot was
+  down, gateway event only.
+- **Nicknames and guest-pass voice overwrites are reconciled by `structureTick`, never
+  fire-and-forget** — the same discipline 3b established for roles/channels/`@Linked`.
+  Step 7 diffs each clan voice channel's member overwrites against its open guest
+  passes (`memberOverwrites` excludes the bot's own overwrite, so the diff never
+  revokes its own View+Connect grant; a failed pass read under-acts — skips the whole
+  diff rather than revoking every pass in the guild); step 8 diffs every linked user's
+  current nickname against `nicknameFor` (`[TAG] gamertag` for a full member of a
+  holding clan, bare gamertag otherwise, both capped at `NICKNAME_MAX` = 32) against the
+  member cache every pass, so a manual rename reverts within one tick interval.
 
 ---
 
@@ -428,6 +476,23 @@ runs, together with 2b and 2c-a.
 **Increment 3b merged; not deployed until `docs/deploy/2026-09-06-discord-structure.md`.**
 
 **Increment 4 merged; not deployed until `docs/deploy/2026-09-06-scoring-and-seasons.md`.**
+
+**Increment 7 (leadership and the vault) is merged; not deployed until
+`docs/deploy/2026-09-09-leadership-and-vault.md` runs.** Migration 0028 adds succession
+claims, no-confidence votes, the vault, and guest passes. A silent leader (`last_seen_at`
+older than `LEADER_SILENT_MS` = 7 d) can be claimed by any full member and the claim
+resolves after `SUCCESSION_WINDOW_MS` = 48 h unless the leader is seen again first; any
+full member can instead open a no-confidence vote (2/3 of the electorate, 48 h, one at a
+time per clan), which the leader cannot open and cannot dodge by transferring away.
+Removal from the Discord — `guildMemberRemove` — removes a player from everything at
+once: roster, identity link, solo declaration, guest passes, and the leader seat if they
+held it. The vault (`vault_locks`/`vault_history`) holds a clan's door/safe codes behind
+a per-lock `min_role`; a code is never DM'd, fed, or put in a URL — only shown by
+`revealLock`/`/api/vault/reveal`, and a rotation's DM says only "see the vault." Guest
+passes (`guest_passes`) give a non-member 24h voice-channel access via `/guest` or
+`/clan/settings`, reconciled onto the clan's voice channel by the structure tick.
+`@factions/roster`'s root export list grows by 14 (12 functions, `VAULT_NAME_MAX`,
+`VAULT_NOTE_MAX`).
 
 ⚠️ Hand-deleted clan channels are logged, not recreated; null the column to recreate. If
 an operator deletes a clan's role or channel by hand, `structure-tick.ts` logs

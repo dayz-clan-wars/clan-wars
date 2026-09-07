@@ -143,7 +143,32 @@ opens a `kills` row for each `player.killed` or `player.died` event, resolving
 the victim and killer's clan membership at that instant via `membershipAt`.
 Alongside the pending-expiry sweep, `reaper-tick.ts` runs the map's half of
 the reaper (expired pins, stale positions, sightings with no recent fix),
-throttled to once every five minutes rather than every tick.
+throttled to once every five minutes rather than every tick. Since increment
+7 it also deletes guest passes that are past `expires_at`, or that were
+revoked/converted more than five minutes ago — the delay leaves a
+revoked/converted row in place long enough for the structure tick's own
+diff (below) to see it and remove the matching voice overwrite before the
+row disappears out from under it.
+
+`structure-tick.ts`'s reconciler (right before the structure summary line
+below) gained two more steps since increment 7, run in this order after its
+existing role/channel/`@Linked`/`@Alpha` diffs: step 7 reconciles each clan
+voice channel's guest-pass overwrites — an open pass whose user is now a
+full member is converted first (`convertGuestPasses`, so its access rides
+the clan role from then on and its overwrite becomes a stray for the same
+diff to remove), then the remaining open passes are diffed against the
+channel's actual member overwrites (`guild.memberOverwrites`, which excludes
+the bot's own View+Connect grant on that channel so the diff never revokes
+it) and only the difference is granted or revoked; a failed pass read is
+gated out of the diff entirely (`guestReadOk`) so it under-acts rather than
+reading "no open passes" and revoking every guest overwrite in the guild.
+Step 8 sets `[TAG] gamertag`/bare-gamertag nicknames (`nicknameFor` in
+`packages/domain/src/leadership.ts`, both forms capped at Discord's 32-char
+limit) for every still-linked user whose current nickname (read from the
+member cache, so a manual rename is caught within one tick interval at zero
+REST cost when nothing actually changed) does not already match — disjoint
+from step 5, which only ever clears a nickname for a user LEAVING the link
+set.
 
 Each tick also runs the raid and raise consumers (`raid-tick.ts`,
 `raise-tick.ts`) — every `flag.lowered`/`flag.raised` event that scores a
