@@ -254,6 +254,26 @@ describe("raiseTick", () => {
       expect(await db.select().from(clanNotices)).toEqual([]);
     });
 
+    it("a replay of the bind event binds nothing more and proposes no rebind", async () => {
+      // The bind exits through done(), which commits the cursor in the
+      // event's own transaction. Rewind the cursor and re-deliver the same
+      // raise: the branch now finds the declaration it just wrote, so a
+      // regression that moved the cursor write would fall through to the
+      // rebind proposal and DM the clan about its own bind.
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+      await raise(B1, "Bear1", "Flag_Bear", P9, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+      expect(await db.select().from(factionEvents)).toHaveLength(1);
+
+      await db.execute(sql`update consumer_cursors set last_event_id = ${cursorAfterSetup} where consumer_name = 'raise-consumer'`);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 0 });
+
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: P9 });
+      expect(await db.select().from(declarations)).toHaveLength(1);
+      expect(await db.select().from(factionEvents)).toHaveLength(1); // no second "rebound"
+      expect(await db.select().from(clanNotices)).toEqual([]);       // no spurious rebind_proposed
+    });
+
     it("a dormant clan's bind also revives it", async () => {
       await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
       await db.update(factions).set({ status: "dormant", dormantSince: ago(86_400_000), dormantReason: "inactive", disbandWarnedAt: ago(1000) }).where(eq(factions.id, BEAR));

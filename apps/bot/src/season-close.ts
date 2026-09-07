@@ -34,6 +34,10 @@ export async function closeSeasonTx(tx: Tx, serverId: number, at: Date): Promise
   if (!season) return null;
 
   const table = await seasonTable(tx, season.id);
+  // ⚠️ This guard is LIVE, not defensive padding: `seasonTable` reads
+  // `season_standings`, which is legitimately empty for a season in which
+  // nobody raided (rows are written by the raid/defense consumers, not at
+  // clan creation). Do not delete it.
   if (table.length > 0) {
     await tx.insert(seasonResults).values(table.map((row, i) => ({
       seasonId: season.id,

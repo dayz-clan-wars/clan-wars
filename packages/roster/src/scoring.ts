@@ -49,7 +49,8 @@ export async function latestAlphaFactionIds(db: Database, serverId: number): Pro
  * The open season's table in §8.1 order: ranked clans (rank 1..N) first,
  * then unranked (rank null) by name. Disbanded/lapsed clans are excluded.
  *
- * The §8.1 order (points desc, times_raided asc, activated_at asc) is
+ * The §8.1 order (points desc, times_raided asc, activated_at asc, then
+ * `factions.id` asc as the final deterministic tie-break) is
  * re-implemented here as one SQL `order by` — the bot's `standings.ts` is
  * not importable from this package. apps/bot/test/standings.test.ts's
  * "rankedStandings orders by points desc, times_raided asc, activated_at
@@ -73,7 +74,7 @@ export async function scoreboardDb(db: Database): Promise<Scoreboard> {
   }).from(factions)
     .leftJoin(seasonStandings, and(eq(seasonStandings.factionId, factions.id), eq(seasonStandings.seasonId, season.id)))
     .where(and(eq(factions.serverId, serverId), inArray(factions.status, ["active", "dormant"])))
-    .orderBy(desc(points), asc(timesRaided), asc(factions.activatedAt));
+    .orderBy(desc(points), asc(timesRaided), asc(factions.activatedAt), asc(factions.id));
 
   const ranked = rows.filter((r) => r.status === "active" && r.points > 0);
   const rankOf = new Map(ranked.map((r, i) => [r.factionId, i + 1]));

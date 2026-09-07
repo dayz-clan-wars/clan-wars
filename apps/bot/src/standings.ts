@@ -12,8 +12,9 @@ export type StandingRow = {
 
 /**
  * Every standings row of the season, in spec §8.1 order (points desc,
- * times_raided asc, activated_at asc). Not filtered by status or points —
- * callers slice what they need.
+ * times_raided asc, activated_at asc), with `factions.id asc` appended as the
+ * final tie-break so two clans equal on all three read back in the same order
+ * every time. Not filtered by status or points — callers slice what they need.
  */
 export async function seasonTable(db: Database | Tx, seasonId: number): Promise<StandingRow[]> {
   return db.select({
@@ -30,7 +31,7 @@ export async function seasonTable(db: Database | Tx, seasonId: number): Promise<
   }).from(seasonStandings)
     .innerJoin(factions, eq(factions.id, seasonStandings.factionId))
     .where(eq(seasonStandings.seasonId, seasonId))
-    .orderBy(desc(seasonStandings.points), asc(seasonStandings.timesRaided), asc(factions.activatedAt));
+    .orderBy(desc(seasonStandings.points), asc(seasonStandings.timesRaided), asc(factions.activatedAt), asc(factions.id));
 }
 
 /**
@@ -51,7 +52,8 @@ export async function rankedStandings(db: Database | Tx, seasonId: number): Prom
 /**
  * The top `ALPHAS_PER_WEEK` clans by `sum(raids.points)` for the given week
  * (spec §4.8, §7), ties broken by §8.1 order (using each clan's season
- * `times_raided` and `activated_at`, not anything week-scoped). Only sums
+ * `times_raided` and `activated_at`, then `factions.id` as the final
+ * deterministic tie-break, not anything week-scoped). Only sums
  * greater than zero count — a week of solo raids (0 points each) or no raids
  * at all crowns nobody.
  */
@@ -68,9 +70,9 @@ export async function weekTopThree(db: Database | Tx, seasonId: number, weekStar
     .innerJoin(factions, eq(factions.id, raids.raiderFactionId))
     .leftJoin(seasonStandings, and(eq(seasonStandings.seasonId, raids.seasonId), eq(seasonStandings.factionId, raids.raiderFactionId)))
     .where(and(eq(raids.seasonId, seasonId), eq(raids.weekStart, weekStart)))
-    .groupBy(raids.raiderFactionId, factions.name, factions.tag, factions.texture, factions.activatedAt, seasonStandings.timesRaided)
+    .groupBy(raids.raiderFactionId, factions.id, factions.name, factions.tag, factions.texture, factions.activatedAt, seasonStandings.timesRaided)
     .having(sql`${weekPoints} > 0`)
-    .orderBy(desc(weekPoints), asc(timesRaided), asc(factions.activatedAt))
+    .orderBy(desc(weekPoints), asc(timesRaided), asc(factions.activatedAt), asc(factions.id))
     .limit(ALPHAS_PER_WEEK);
   return rows.map((r) => ({ factionId: r.factionId!, name: r.name, tag: r.tag, texture: r.texture, points: r.points }));
 }
