@@ -7,6 +7,7 @@ import { actorGamertagTx, gamertagOrId } from "./feed-actor";
 import { noticeClanTx, noticeUserTx } from "./notices";
 import { releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
+import { applyElectorateLeaveTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -60,7 +61,7 @@ export type PendingInvite = {
 };
 export type AcceptInviteOutcome = "ok" | "gone" | "already-member" | "cooldown" | "not-holding" | "link-changed" | "cap";
 export type KickArgs = { factionId: number; actorDiscordId: string; targetDiscordId: string; at: Date; until: Date };
-export type KickOutcome = "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader";
+export type KickOutcome = "ok" | "not-permitted" | "target-not-member" | "cannot-kick-self" | "cannot-kick-officer" | "cannot-kick-leader" | "vote-open";
 export type LeaveArgs = { factionId: number; discordId: string; at: Date; until: Date };
 export type LeaveOutcome = "ok" | "not-member" | "leader-must-transfer";
 export type SetRoleArgs = {
@@ -77,7 +78,7 @@ export type SetRoleArgs = {
 };
 export type SetRoleOutcome = "ok" | "not-leader" | "target-not-member" | "cannot-target-leader";
 export type TransferArgs = { factionId: number; fromDiscordId: string; toDiscordId: string; at: Date };
-export type TransferOutcome = "ok" | "not-leader" | "target-not-member";
+export type TransferOutcome = "ok" | "not-leader" | "target-not-member" | "vote-open";
 export type RenameArgs = { factionId: number; discordId: string; name: string; tag?: string; at: Date; notBefore: Date };
 export type RenameOutcome = "ok" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged";
 
@@ -671,6 +672,18 @@ export class PgRosterStore implements RosterStore {
     if (a.actorDiscordId === a.targetDiscordId) return "cannot-kick-self";
 
     return this.db.transaction(async (tx) => {
+      // ⚠️ FIRST statement of the transaction. `kick` now touches
+      // `faction_votes` (the freeze below, and the electorate decrement
+      // after the delete), so it must take `factions` before
+      // `faction_members` like every other writer that spans the two — see
+      // `transfer`'s note on spec §4.12.
+      await lockFactionTx(tx, a.factionId);
+
+      // §5.7: the roster freezes while a no-confidence vote is open. A
+      // leader who could kick the electorate could win any vote, so this is
+      // enforced in the store, never in a page.
+      if (await voteIsOpenTx(tx, a.factionId)) return "vote-open" as const;
+
       const actorRole = sql`(select role from faction_members where faction_id = ${a.factionId} and discord_id = ${a.actorDiscordId} and status = 'full')`;
 
       const deleted = await tx.delete(factionMembers)
@@ -704,6 +717,12 @@ export class PgRosterStore implements RosterStore {
           set: { until: sql`greatest(${rosterCooldowns.until}, excluded.until)` },
         });
 
+      // The kicked player leaves the electorate of any open vote with them —
+      // unreachable here (the freeze above refuses the kick), but the call
+      // keeps the two departure paths identical rather than relying on one
+      // of them being unreachable.
+      await applyElectorateLeaveTx(tx, { factionId: a.factionId, dayzId: row.dayzId, at: a.at });
+
       const [clan] = await tx.select({ name: factions.name }).from(factions).where(eq(factions.id, a.factionId));
 
       await noticeClanTx(tx, {
@@ -729,6 +748,11 @@ export class PgRosterStore implements RosterStore {
    */
   async leave(a: LeaveArgs): Promise<LeaveOutcome> {
     return this.db.transaction(async (tx) => {
+      // ⚠️ FIRST statement, for the same reason as `kick`'s: the electorate
+      // decrement below writes `faction_votes`, which sits after
+      // `faction_members` in the lock order (spec §4.12).
+      await lockFactionTx(tx, a.factionId);
+
       const deleted = await tx.delete(factionMembers)
         .where(and(
           eq(factionMembers.factionId, a.factionId),
@@ -750,6 +774,12 @@ export class PgRosterStore implements RosterStore {
           target: [rosterCooldowns.serverId, rosterCooldowns.dayzId],
           set: { until: sql`greatest(${rosterCooldowns.until}, excluded.until)` },
         });
+
+      // §5.7: a leaver takes their electorate slot AND their ballot with
+      // them, so an open vote's threshold moves down — which can carry a
+      // vote that was one short. The freeze does not refuse a leaver; nobody
+      // is trapped in a clan by a vote.
+      await applyElectorateLeaveTx(tx, { factionId: a.factionId, dayzId: row.dayzId, at: a.at });
 
       await noticeClanTx(tx, {
         serverId: row.serverId, factionId: a.factionId, kind: "left", occurredAt: a.at,
@@ -823,6 +853,9 @@ export class PgRosterStore implements RosterStore {
         // against it (the same reasoning as `acceptInvite`'s note on lock
         // order).
         await tx.execute(sql`select id from factions where id = ${a.factionId}::bigint for update`);
+
+        // §5.7: no handing the seat to an ally to dodge a vote on it.
+        if (await voteIsOpenTx(tx, a.factionId)) return "vote-open" as const;
 
         const demoted = await tx.update(factionMembers)
           .set({ role: "officer" })

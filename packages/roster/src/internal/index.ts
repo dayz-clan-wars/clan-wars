@@ -18,3 +18,4 @@ export * from "./holds";
 export * from "./requests";
 export * from "./notices";
 export * from "./site-url";
+export * from "./leadership-store";
