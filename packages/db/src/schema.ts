@@ -1,6 +1,6 @@
 import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
-  uniqueIndex, index, numeric, boolean, check,
+  uniqueIndex, index, numeric, boolean, check, char,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason } from "@factions/domain";
@@ -525,6 +525,8 @@ export const factions = pgTable("factions", {
   dormantReason: text("dormant_reason").$type<DormantReason>(),
   /** The day-10 warning was queued. Cleared by revive. */
   disbandWarnedAt: timestamp("disband_warned_at", { withTimezone: true }),
+  /** Set FAILED_VOTE_COOLDOWN_MS ahead by a failed no-confidence vote (spec §4.3, §5.7). Null = no cooldown. */
+  nextVoteAllowedAt: timestamp("next_vote_allowed_at", { withTimezone: true }),
   /** Filled by increment 3b at activation; null until then. clan_notices with target 'channel' post only once this is set. */
   discordRoleId: text("discord_role_id"),
   discordTextChannelId: text("discord_text_channel_id"),
@@ -798,6 +800,115 @@ export const clanPins = pgTable("clan_pins", {
 }, (t) => ({
   iconValid: check("clan_pins_icon_valid", sql`${t.icon} IN ('loot','vehicle','enemy','meet','danger','note')`),
   byFaction: index("clan_pins_faction_idx").on(t.factionId, t.expiresAt),
+}));
+
+/** Succession by silence (spec §4.6, §5.4). One open claim per clan. */
+export const successionClaims = pgTable("succession_claims", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  claimantDayzId: text("claimant_dayz_id").notNull(),
+  claimantDiscordId: text("claimant_discord_id").notNull(),
+  leaderDayzId: text("leader_dayz_id").notNull(),
+  leaderDiscordId: text("leader_discord_id").notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  resolvesAt: timestamp("resolves_at", { withTimezone: true }).notNull(),
+  outcome: text("outcome"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (t) => ({
+  outcomeValid: check("succession_claims_outcome_valid", sql`${t.outcome} IS NULL OR ${t.outcome} IN ('succeeded','voided')`),
+  closedIffOutcome: check("succession_claims_closed_iff_outcome", sql`(${t.closedAt} IS NULL) = (${t.outcome} IS NULL)`),
+  oneOpen: uniqueIndex("succession_claims_open_uniq").on(t.factionId).where(sql`${t.closedAt} IS NULL`),
+}));
+
+/**
+ * A no-confidence vote (spec §4.6, §5.7). `electorate_dayz_ids` freezes who
+ * may vote at open (full members except the leader); `electorate_size` is
+ * what the threshold reads and shrinks when one of them leaves. A ballot is
+ * a yes; there is no "no".
+ */
+export const factionVotes = pgTable("faction_votes", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  nomineeDayzId: text("nominee_dayz_id").notNull(),
+  nomineeDiscordId: text("nominee_discord_id").notNull(),
+  openedByDayzId: text("opened_by_dayz_id").notNull(),
+  leaderDayzId: text("leader_dayz_id").notNull(),
+  leaderDiscordId: text("leader_discord_id").notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+  electorateDayzIds: text("electorate_dayz_ids").array().notNull(),
+  electorateSize: integer("electorate_size").notNull(),
+  result: text("result"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (t) => ({
+  resultValid: check("faction_votes_result_valid", sql`${t.result} IS NULL OR ${t.result} IN ('passed','failed')`),
+  closedIffResult: check("faction_votes_closed_iff_result", sql`(${t.closedAt} IS NULL) = (${t.result} IS NULL)`),
+  sizeNonNegative: check("faction_votes_size_non_negative", sql`${t.electorateSize} >= 0`),
+  oneOpen: uniqueIndex("faction_votes_open_uniq").on(t.factionId).where(sql`${t.closedAt} IS NULL`),
+}));
+
+export const factionVoteBallots = pgTable("faction_vote_ballots", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  voteId: bigint("vote_id", { mode: "number" }).notNull().references(() => factionVotes.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  castAt: timestamp("cast_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  uniq: uniqueIndex("faction_vote_ballots_uniq").on(t.voteId, t.dayzId),
+}));
+
+/**
+ * The vault (spec §4.10; guide ch. 8). `confirmed_at < rotated_at` (or null
+ * after a rotation) renders "changed in game?"; `exposed_at` non-null renders
+ * "known to an ex-member" — set on every lock a leaver could see, cleared by
+ * rotate. ⚠️ `code` never leaves the package except through `revealLock`.
+ */
+export const vaultLocks = pgTable("vault_locks", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  name: text("name").notNull(),
+  code: char("code", { length: 4 }).notNull(),
+  note: text("note"),
+  minRole: text("min_role").notNull(),
+  createdByDayzId: text("created_by_dayz_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  rotatedAt: timestamp("rotated_at", { withTimezone: true }),
+  rotatedByDayzId: text("rotated_by_dayz_id"),
+  confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+  exposedAt: timestamp("exposed_at", { withTimezone: true }),
+}, (t) => ({
+  minRoleValid: check("vault_locks_min_role_valid", sql`${t.minRole} IN ('leader','officer','member')`),
+  codeDigits: check("vault_locks_code_digits", sql`${t.code} ~ '^[0-9]{4}$'`),
+  byFaction: index("vault_locks_faction_idx").on(t.factionId),
+}));
+
+/** Who did what to which lock (spec §4.10). Outlives the lock: `lock_id` nulls on delete, `lock_name` is frozen at write. */
+export const vaultHistory = pgTable("vault_history", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  lockId: bigint("lock_id", { mode: "number" }).references(() => vaultLocks.id, { onDelete: "set null" }),
+  lockName: text("lock_name").notNull(),
+  action: text("action").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  at: timestamp("at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  actionValid: check("vault_history_action_valid", sql`${t.action} IN ('added','edited','rotated','revealed','confirmed','deleted')`),
+  byFaction: index("vault_history_faction_idx").on(t.factionId, t.at),
+}));
+
+/** A 24 h voice guest pass (spec §4.10, §5.6). Open = revoked_at, converted_at null and expires_at > now; the grant checks that under the clan's row lock. */
+export const guestPasses = pgTable("guest_passes", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  discordUserId: text("discord_user_id").notNull(),
+  grantedByDiscordId: text("granted_by_discord_id").notNull(),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  convertedAt: timestamp("converted_at", { withTimezone: true }),
+}, (t) => ({
+  byUser: index("guest_passes_user_idx").on(t.factionId, t.discordUserId),
 }));
 
 /** Connect → disconnect, or → the next ADM boundary (`restart`). Spec §4.9. */
