@@ -10,7 +10,7 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png"]);
   });
 
   it("pins the public prefixes", () => {

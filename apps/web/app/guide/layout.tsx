@@ -19,13 +19,15 @@ export const dynamic = "force-dynamic";
 export default async function GuideLayout({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
   return (
-    <div className="guide">
+    <>
       <SiteBar signedIn={session !== null} crumb="Field guide" extra={
         <details className="group relative">
           <summary className="flex min-h-[36px] cursor-pointer list-none items-center border border-rule-2 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
-          <div className="menu"><Contents /><a className="site-link" href="/">&larr; Back to the site</a></div>
+          {/* ⚠️ Its own .guide wrapper: the bar itself must stay outside the guide's link colours, or its gold Sign in button loses its ink. */}
+          <div className="guide"><div className="menu"><Contents /><a className="site-link" href="/">&larr; Back to the site</a></div></div>
         </details>
       } />
+      <div className="guide">
       <div className="shell">
         <aside className="rail">
           <div className="rail-inner">
@@ -35,6 +37,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
         </aside>
         <main>{children}</main>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
