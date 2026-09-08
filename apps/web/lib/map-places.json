@@ -1,0 +1,364 @@
+{
+ "enoch": [
+  {
+   "kind": "village",
+   "lat": -118.9748047,
+   "lng": 61.5262012,
+   "name": "Adamów"
+  },
+  {
+   "kind": "local",
+   "lat": -33.3098047,
+   "lng": 236.4561914,
+   "name": "Bagno"
+  },
+  {
+   "kind": "village",
+   "lat": -62.4509961,
+   "lng": 31.468999,
+   "name": "Bielawa"
+  },
+  {
+   "kind": "village",
+   "lat": -86.0985937,
+   "lng": 196.1498047,
+   "name": "Borek"
+  },
+  {
+   "kind": "ruin",
+   "lat": -27.6243945,
+   "lng": 21.4508008,
+   "name": "Branzow Castle"
+  },
+  {
+   "kind": "city",
+   "lat": -31.7793945,
+   "lng": 132.3525977,
+   "name": "Brena"
+  },
+  {
+   "kind": "hill",
+   "lat": -233.5062012,
+   "lng": 11.5452002,
+   "name": "Dambog"
+  },
+  {
+   "kind": "village",
+   "lat": -242.8854004,
+   "lng": 226.247793,
+   "name": "Dolnik"
+  },
+  {
+   "kind": "local",
+   "lat": -154.1421973,
+   "lng": 116.6944043,
+   "name": "Drewniki"
+  },
+  {
+   "kind": "village",
+   "lat": -168.3925977,
+   "lng": 224.8003906,
+   "name": "Gieraltów"
+  },
+  {
+   "kind": "village",
+   "lat": -57.5651953,
+   "lng": 99.8524023,
+   "name": "Gliniska"
+  },
+  {
+   "kind": "village",
+   "lat": -35.4885937,
+   "lng": 213.3243945,
+   "name": "Grabin"
+  },
+  {
+   "kind": "marine",
+   "lat": -36.1358008,
+   "lng": 224.9848047,
+   "name": "Grabinskie"
+  },
+  {
+   "kind": "local",
+   "lat": -160.0898047,
+   "lng": 90.2595996,
+   "name": "Hedryków"
+  },
+  {
+   "kind": "local",
+   "lat": -68.5774023,
+   "lng": 129.05,
+   "name": "Hrud"
+  },
+  {
+   "kind": "village",
+   "lat": -146.5444043,
+   "lng": 102.8294043,
+   "name": "Huta"
+  },
+  {
+   "kind": "marine",
+   "lat": -76.897207,
+   "lng": 70.647002,
+   "name": "Jantar"
+  },
+  {
+   "kind": "local",
+   "lat": -208.8825977,
+   "lng": 41.9552002,
+   "name": "Jezurów"
+  },
+  {
+   "kind": "local",
+   "lat": -159.0428027,
+   "lng": 130.245,
+   "name": "Kamieniołom Maksymilian"
+  },
+  {
+   "kind": "village",
+   "lat": -116.8608008,
+   "lng": 201.4548047,
+   "name": "Karlin"
+  },
+  {
+   "kind": "village",
+   "lat": -16.3614062,
+   "lng": 168.3390039,
+   "name": "Kolembrody"
+  },
+  {
+   "kind": "village",
+   "lat": -198.0414014,
+   "lng": 229.7914063,
+   "name": "Konopki"
+  },
+  {
+   "kind": "hill",
+   "lat": -80.647793,
+   "lng": 110.3762012,
+   "name": "Kopa"
+  },
+  {
+   "kind": "hill",
+   "lat": -54.375,
+   "lng": 157.4986035,
+   "name": "Krsnik"
+  },
+  {
+   "kind": "local",
+   "lat": -208.17,
+   "lng": 223.0003906,
+   "name": "Kulno"
+  },
+  {
+   "kind": "camp",
+   "lat": -83.8732031,
+   "lng": 16.2730005,
+   "name": "Lawenda"
+  },
+  {
+   "kind": "village",
+   "lat": -123.2859961,
+   "lng": 173.6093945,
+   "name": "Lembork"
+  },
+  {
+   "kind": "village",
+   "lat": -119.5998047,
+   "lng": 118.8374023,
+   "name": "Lipina"
+  },
+  {
+   "kind": "village",
+   "lat": -16.6693945,
+   "lng": 70.592998,
+   "name": "Lukow"
+  },
+  {
+   "kind": "village",
+   "lat": -128.312002,
+   "lng": 91.35,
+   "name": "Muratyn"
+  },
+  {
+   "kind": "city",
+   "lat": -176.3366016,
+   "lng": 122.19,
+   "name": "Nadbór"
+  },
+  {
+   "kind": "village",
+   "lat": -95.7332031,
+   "lng": 122.5778027,
+   "name": "Nidek"
+  },
+  {
+   "kind": "village",
+   "lat": -102.5174023,
+   "lng": 96.3805957,
+   "name": "Olszanka"
+  },
+  {
+   "kind": "local",
+   "lat": -181.653999,
+   "lng": 66.4772021,
+   "name": "Piekło"
+  },
+  {
+   "kind": "camp",
+   "lat": -158.6567969,
+   "lng": 26.828999,
+   "name": "Pionier"
+  },
+  {
+   "kind": "hill",
+   "lat": -12.8280078,
+   "lng": 12.9121997,
+   "name": "Piorun"
+  },
+  {
+   "kind": "village",
+   "lat": -213.357002,
+   "lng": 65.5922021,
+   "name": "Polana"
+  },
+  {
+   "kind": "ruin",
+   "lat": -124.3955957,
+   "lng": 237.4261914,
+   "name": "Półkrabiec"
+  },
+  {
+   "kind": "camp",
+   "lat": -217.056001,
+   "lng": 232.6774023,
+   "name": "Potoki"
+  },
+  {
+   "kind": "village",
+   "lat": -97.2017969,
+   "lng": 80.1556006,
+   "name": "Radacz"
+  },
+  {
+   "kind": "city",
+   "lat": -126.162002,
+   "lng": 145.9675977,
+   "name": "Radunin"
+  },
+  {
+   "kind": "hill",
+   "lat": -215.1608008,
+   "lng": 177.6308008,
+   "name": "Rodzanica"
+  },
+  {
+   "kind": "village",
+   "lat": -149.6505957,
+   "lng": 153.9055957,
+   "name": "Roztoka"
+  },
+  {
+   "kind": "camp",
+   "lat": -146.2587988,
+   "lng": 235.5119922,
+   "name": "Rumianek"
+  },
+  {
+   "kind": "village",
+   "lat": -156.595,
+   "lng": 66.1612012,
+   "name": "Sarnówek"
+  },
+  {
+   "kind": "marine",
+   "lat": -47.2080078,
+   "lng": 228.2382031,
+   "name": "Sitnickie"
+  },
+  {
+   "kind": "village",
+   "lat": -64.5398047,
+   "lng": 230.0461914,
+   "name": "Sitnik"
+  },
+  {
+   "kind": "hill",
+   "lat": -216.8786011,
+   "lng": 59.985,
+   "name": "Skala"
+  },
+  {
+   "kind": "village",
+   "lat": -50.9416016,
+   "lng": 125.1387988,
+   "name": "Sobotka"
+  },
+  {
+   "kind": "hill",
+   "lat": -14.7133984,
+   "lng": 233.2553906,
+   "name": "Sowa"
+  },
+  {
+   "kind": "hill",
+   "lat": -211.5145996,
+   "lng": 97.0995996,
+   "name": "Swarog"
+  },
+  {
+   "kind": "city",
+   "lat": -37.9040039,
+   "lng": 186.5661914,
+   "name": "Tarnow"
+  },
+  {
+   "kind": "city",
+   "lat": -109.3825977,
+   "lng": 37.1763989,
+   "name": "Topolin"
+  },
+  {
+   "kind": "local",
+   "lat": -231.575,
+   "lng": 58.048999,
+   "name": "Tymbark"
+  },
+  {
+   "kind": "camp",
+   "lat": -54.7453906,
+   "lng": 227.0346094,
+   "name": "Tymianka"
+  },
+  {
+   "kind": "local",
+   "lat": -213.1283984,
+   "lng": 204.7706055,
+   "name": "Widok"
+  },
+  {
+   "kind": "marine",
+   "lat": -38.3208008,
+   "lng": 247.3693945,
+   "name": "Wolisko"
+  },
+  {
+   "kind": "local",
+   "lat": -167.2304004,
+   "lng": 180.865,
+   "name": "Wrzeszcz"
+  },
+  {
+   "kind": "village",
+   "lat": -145.2775977,
+   "lng": 17.9216003,
+   "name": "Zalesie"
+  },
+  {
+   "kind": "village",
+   "lat": -81.7648047,
+   "lng": 161.165,
+   "name": "Zapadlisko"
+  }
+ ]
+}
