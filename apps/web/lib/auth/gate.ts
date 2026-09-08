@@ -11,8 +11,11 @@
  * everyone. ⚠️ `public/` files are NOT exempt from the gate: the middleware
  * matcher only skips /_next/static, /_next/image, favicon.ico and robots.txt,
  * so an image outside these lists 303s to /login for an anonymous visitor.
+ * The app icons and manifest (app/icon.png, app/apple-icon.png,
+ * app/manifest.ts) are fetched by the browser before any login, so they are
+ * public too — a 303 there is a broken tab icon, not a leak prevented.
  */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png"] as const;
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
@@ -27,7 +30,7 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * (`app/guide/[slug]`), served by this app since 2026-09-07 — before that
  * every subpath was a permanent redirect to the guide's own host.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should
