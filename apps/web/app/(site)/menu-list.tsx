@@ -3,8 +3,10 @@ import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { menuFor, signInHref } from "@/lib/menu";
 
-const item = "flex min-h-[44px] items-center rounded px-3 text-ink hover:bg-frame";
-const current = "text-gold";
+// ⚠️ Colour is chosen, not layered: text-ink and text-gold are the same
+// specificity, so stacking both leaves the stylesheet order to decide — and it
+// decided against gold in production.
+const item = "flex min-h-[44px] items-center rounded px-3 hover:bg-frame";
 const quiet = "flex min-h-[44px] w-full items-center rounded px-3 font-mono text-xs uppercase tracking-[0.18em] text-muted hover:bg-frame";
 
 /**
@@ -39,7 +41,7 @@ export function MenuList({ signedIn }: { signedIn: boolean }) {
               const on = pathname === m.href || (m.href !== "/" && pathname.startsWith(`${m.href}/`));
               return (
                 <li key={m.href}>
-                  <a className={`${item} ${on ? current : ""}`} href={m.href} aria-current={on ? "page" : undefined}>{m.label}</a>
+                  <a className={`${item} ${on ? "text-gold" : "text-ink"}`} href={m.href} aria-current={on ? "page" : undefined}>{m.label}</a>
                 </li>
               );
             })}
