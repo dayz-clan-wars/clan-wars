@@ -14,7 +14,7 @@ type Outcome = Wire<IssueOutcome>;
 const POLL_MS = 5_000;
 
 const spread = "grid gap-6 px-5 py-6 lg:grid-cols-2 lg:gap-16 lg:px-8 lg:py-14";
-const step = "font-mono text-[10px] uppercase tracking-[0.18em] text-muted lg:text-[11px]";
+const step = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 const h1 = "mt-3 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:mt-4 lg:text-[64px]";
 const body = "mt-4 max-w-[480px] text-[15px] leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-6 lg:text-[17px]";
 const card = "border-2 border-rule-2 bg-frame p-5 lg:self-start";
@@ -191,7 +191,7 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
             <li key={s.token} className={`flex min-h-[56px] items-center gap-4 border-2 px-4 lg:min-h-[60px] ${s.confirmed ? "border-olive bg-surface" : "border-rule-2"}`}>
               <span className={`font-display text-xl lg:text-[22px] ${s.confirmed ? "text-olive" : "text-dim"}`}>{i + 1}</span>
               <span className={`font-display text-lg lg:text-xl ${s.confirmed ? "text-olive line-through" : "text-ink"}`}>{s.label}</span>
-              <span className={`ml-auto font-mono text-[10px] uppercase tracking-[0.18em] ${s.confirmed ? "text-olive" : "text-muted"}`}>{s.confirmed ? "Confirmed" : "Waiting"}</span>
+              <span className={`ml-auto font-mono text-[11px] uppercase tracking-[0.18em] ${s.confirmed ? "text-olive" : "text-muted"}`}>{s.confirmed ? "Confirmed" : "Waiting"}</span>
             </li>
           ))}
         </ol>

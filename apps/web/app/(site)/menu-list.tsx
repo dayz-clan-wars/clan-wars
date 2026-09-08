@@ -79,7 +79,7 @@ export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex
               return (
                 <li key={m.href}>
                   <a href={m.href} aria-current={on ? "page" : undefined} className={`${item} ${on ? "text-gold" : "text-ink"}`}>
-                    {m.label}{on && <span className="font-mono text-[10px] tracking-[0.18em]">Here</span>}
+                    {m.label}{on && <span className="font-mono text-[11px] tracking-[0.18em]">Here</span>}
                   </a>
                 </li>
               );

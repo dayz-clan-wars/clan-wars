@@ -9,7 +9,7 @@
 /** The mono caption: 11px, uppercase, tracked. */
 export const kicker = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 /** A sub-caption inside a panel: same voice, one step smaller. */
-export const kickerSm = "font-mono text-[10px] uppercase tracking-[0.18em] text-muted";
+export const kickerSm = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 
 /** Buttons. All meet the 44px touch minimum; primary and CTA are taller. */
 export const btnPrimary = "inline-flex min-h-[44px] items-center justify-center gap-3 bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover disabled:opacity-40";

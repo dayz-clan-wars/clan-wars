@@ -451,7 +451,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
               <aside id="map-layers" className="w-[300px] border-2 border-rule-2 bg-frame">
                 <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
                   <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
-                  <span className="font-mono text-[10px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
+                  <span className="font-mono text-[11px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
                 </div>
                 <ul className="py-1.5">
                   {visible.map((key) => (
@@ -460,7 +460,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
                         <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
                         <span aria-hidden="true" className={`flex flex-none ${enabled[key] ? "" : "opacity-40"}`} dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
                         {LAYER_LABELS[key]}
-                        <span className="ml-auto font-mono text-[10px] text-muted">{enabled[key] ? "ON" : "OFF"}</span>
+                        <span className="ml-auto font-mono text-[11px] text-muted">{enabled[key] ? "ON" : "OFF"}</span>
                       </label>
                     </li>
                   ))}

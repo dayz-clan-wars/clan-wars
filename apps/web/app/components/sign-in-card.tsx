@@ -17,7 +17,7 @@ export function SignInCard({ step, heading, body, action, actionHref, footnote, 
   return (
     <div className="grid w-full gap-8 px-5 py-7 lg:min-h-[calc(100dvh-var(--spacing-bar))] lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-8 lg:py-0">
       <div>
-        <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-gold lg:text-[11px]">{step}</div>
+        <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-gold">{step}</div>
         <h1 className="mt-4 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:mt-5 lg:text-[72px]">{heading}</h1>
         <p className="mt-4 max-w-[480px] text-base leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-6 lg:text-lg">{body}</p>
         {guide && <GuideLine guide={guide} className="mt-5" />}
@@ -40,7 +40,7 @@ export function SignInCard({ step, heading, body, action, actionHref, footnote, 
 function Refusal({ children }: { children: React.ReactNode }) {
   return (
     <div className="mt-5 border border-rule-2 bg-surface px-3.5 py-3" role="alert">
-      <div className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted">Sign-in failed</div>
+      <div className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Sign-in failed</div>
       <div className="mt-1 text-sm leading-relaxed text-ink">{children}</div>
     </div>
   );

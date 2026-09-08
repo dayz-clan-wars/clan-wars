@@ -78,8 +78,8 @@ export default async function ScoreboardPage() {
                         <img src={`/${flagImagePath(r.texture)}`} alt="" width={28} height={28} className={`h-7 w-7 flex-none object-contain ${dormant ? "opacity-60" : ""}`} />
                         <span className="min-w-0">
                           <span className={`block truncate font-display text-[15px] ${dormant ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
-                          {r.alpha && <span className="font-mono text-[10px] uppercase text-gold">{ALPHA_BADGE}</span>}
-                          {dormant && <span className="font-mono text-[10px] uppercase text-muted">Dormant</span>}
+                          {r.alpha && <span className="font-mono text-[11px] uppercase text-gold">{ALPHA_BADGE}</span>}
+                          {dormant && <span className="font-mono text-[11px] uppercase text-muted">Dormant</span>}
                         </span>
                       </a>
                       <span className={`text-right font-display text-xl ${dormant ? "text-muted" : "text-ink"}`}>{r.points}</span>

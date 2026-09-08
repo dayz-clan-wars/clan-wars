@@ -33,7 +33,7 @@ export function WarLogLine({ e, points = false }: { e: WarLogEntry; points?: boo
 export function WarLogKicker({ e, time }: { e: WarLogEntry; time?: string }) {
   const stamp = time ?? e.at.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
   return (
-    <span className={`font-mono text-[10px] uppercase tracking-[0.12em] ${e.kind === "raid" ? "text-gold" : "text-olive"}`}>
+    <span className={`font-mono text-[11px] uppercase tracking-[0.12em] ${e.kind === "raid" ? "text-gold" : "text-olive"}`}>
       {e.kind === "raid" ? "Raid" : "Defense"} · {stamp}
     </span>
   );

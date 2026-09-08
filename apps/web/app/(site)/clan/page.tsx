@@ -113,10 +113,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             <Panel num="02" title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
-                  <input className={`${field} !mt-0 min-w-0 flex-1`} name="gamertag" placeholder="gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" />
+                  <input className={`${field} !mt-0 min-w-0 flex-1`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby="invite-note" />
                   <button className={`${btnPrimary} min-h-[52px] flex-none`} type="submit">Invite</button>
                 </form>
-                <p className="mt-2.5 text-xs text-muted">They must have linked their character on the site.</p>
+                <p id="invite-note" className="mt-2.5 text-xs text-muted">They must have linked their character on the site.</p>
                 {invitesOut.length > 0 && (
                   <ul className="mt-4 border-t border-rule-2">
                     {invitesOut.map((inv) => (
