@@ -873,7 +873,7 @@ the base. The guide is explicit.
 | `/clans/{tag}` | flag, armband, founded, status, season placements, Alpha weeks, stats (raids, defenses, longest siege, days held), roster (gamertag, rank, raid credits), recruiting post, **Request to join** (linked, not in a clan, off cooldown) |
 | `/players` | boards: raiders, killers, K/D (≥ 10 kills), play time, friendly fire; per season and all-time |
 | `/players/{gamertag}` | play time, sessions, last seen, PvP kills and deaths, K/D, killed-by and killed lists (names only), friendly-fire kills and deaths, raid credits, upkeep raises, clan history |
-| `/guide` | the field guide, served static |
+| `/guide` | the field guide — a permanent redirect to its own host (`fieldguide.dayzclanwars.com`, GitHub Pages from `../field-guide/`), so the authority has one copy |
 
 **Linked**
 
@@ -1100,7 +1100,7 @@ dependency, then by what players feel first.
 | 5 | **The map**: positions consumer, `/map` with every layer, pins, intruders, public bases, travel points, base alerts (after checking the gate line against a live log) | `2026-09-07-map.md` | 2c-b, 3a (notices), 3b (channel delivery) |
 | 6 | **Player stats**: sessions and kills consumers, `/players`, profiles, boards, clan board | `2026-09-08-player-stats.md` | 2c-b |
 | 7 | **Leadership and the vault**: succession, votes, guild-removal handler, vault, guest passes + `/guest`, `[TAG]` nicknames | `2026-09-09-leadership-and-vault.md` | 2c-b |
-| 8 | **Launch**: raid-window runbook, stale file cleanup, launch grace stamp, `/guide`, acceptance against `factions_live` | `2026-09-xx-launch.md` | all |
+| 8 | **Launch**: raid-window runbook, stale file cleanup, launch grace stamp, `/guide`, acceptance against `factions_live` | `2026-09-10-launch.md` | all |
 
 Increments 6 and 7 are independent of each other and of 3a–5 once 2c-b has landed; 5 needs
 the notices queue from 3a and channel delivery from 3b.
