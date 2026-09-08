@@ -4,7 +4,7 @@ import { CANVAS_PX, MAX_ZOOM, gridRef, worldToLatLng } from "@/lib/map-projectio
 import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
-  baseIcon, clanmateIcon, hubIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
+  baseIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
 } from "@/lib/map-icons";
 import { flagImagePath } from "@/src/flag-images";
 
@@ -302,12 +302,11 @@ export function drawTravel({ L, group, pt, data, p }: Ctx): void {
   // Dot or chip is the container's `cw-far` class, flipped on zoomend in
   // map-view.tsx — 209 markers swap form with one class, none rebuilt.
   const icon = chipIcon(L, travelIcon(p), ICON.travel, "cw-mk-travel");
+  // The Hub itself is not drawn: it is one fixed, well-known building, and a
+  // marker with a name tag at every zoom only covered the south-west corner.
   for (const t of data.travelPoints) {
     L.marker(pt(t.x, t.z), { pane: TRAVEL_PANE, icon, keyboard: false, interactive: false }).addTo(group);
   }
-  L.marker(pt(data.hub.x, data.hub.z), { pane: TRAVEL_PANE, icon: chipIcon(L, hubIcon(p), ICON.hub, "cw-mk-hub"), keyboard: false })
-    .bindTooltip("Fast Travel Hub", { ...tag(`${TAG}-hub`), pane: TRAVEL_PANE })
-    .addTo(group);
 }
 
 /** A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in. */

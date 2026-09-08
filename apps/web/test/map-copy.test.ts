@@ -81,9 +81,9 @@ describe("RESULT_COPY", () => {
 });
 
 describe("the layer labels name every switch the map can draw", () => {
-  it("covers the eight layers", () => {
+  it("covers the nine layers", () => {
     expect(Object.keys(LAYER_LABELS).sort()).toEqual(
-      ["base", "clanmates", "intruders", "pins", "publicBases", "terrain", "travel", "you"],
+      ["base", "clanmates", "intruders", "pins", "places", "publicBases", "terrain", "travel", "you"],
     );
   });
 });

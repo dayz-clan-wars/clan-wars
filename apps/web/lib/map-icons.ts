@@ -35,7 +35,6 @@ export const ICON = {
   /** A 3px pole and a framed 28×14 flag beside it; anchored bottom-left, at the foot. */
   publicBase: { size: [35, 34], anchor: [1, 34], tooltipAnchor: [22, -17] },
   travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
-  hub: { size: [36, 36], anchor: [18, 18], tooltipAnchor: [23, 0] },
   pin: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
 } as const satisfies Record<string, { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }>;
 
@@ -135,12 +134,6 @@ export function travelIcon(p: Palette): string {
     `<span class="cw-tp-chip">${chip(p, p.olive, BOLT.replaceAll("{a}", p.olive))}</span>`;
 }
 
-/** The Hub: a black hexagon with an H, twice a point's size, at every zoom. */
-export function hubIcon(p: Palette): string {
-  return `<svg width="36" height="36" viewBox="0 0 36 36" fill="none" stroke="${p.olive}" stroke-width="2" aria-hidden="true">` +
-    `<path d="M18 2l14 8v16l-14 8L4 26V10z" fill="${p.frame}"/><path d="M12 11v14M24 11v14M12 18h12" stroke-linecap="square"/></svg>`;
-}
-
 /**
  * The layers panel's row icons: the marker's own glyph, bare, 20px, so the
  * panel is a legend. Keys are `LAYER_LABELS`'s.
@@ -155,6 +148,7 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
     case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;
+    case "places": return `${open(` stroke="${p.ink}"`)}<path d="M3 8h16l6 6-6 6H3z" fill="${p.frame}"/><path d="M7 14h9"/></svg>`;
     default: return `${open(` stroke="${p.ink2}"`)}<path d="M3 3h22v22H3zM3 14h22M14 3v22"/></svg>`;
   }
 }
