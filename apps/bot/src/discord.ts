@@ -689,7 +689,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // same tick. Edits only on a change; a restart shows once regardless.
     if (onlineBoard) {
       try {
-        const o = await onlineTick(onlineStore, onlineBoard, onlineState, new Date());
+        const o = await onlineTick(onlineStore, onlineBoard, onlineState, new Date(), cfg.siteBaseUrl);
         if (o.edited) console.log(`players online: ${o.players} shown`);
       } catch (err) {
         console.error("players online tick failed", err);

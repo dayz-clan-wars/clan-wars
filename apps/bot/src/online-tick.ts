@@ -21,11 +21,11 @@ export type OnlineTickResult = { players: number; edited: boolean };
  * ⚠️ `lastKey` is written only AFTER the show succeeds. A failed edit leaves
  * it stale, so the next tick tries again rather than believing the message.
  */
-export async function onlineTick(store: OnlineStore, board: OnlineBoard, state: OnlineState, now: Date): Promise<OnlineTickResult> {
+export async function onlineTick(store: OnlineStore, board: OnlineBoard, state: OnlineState, now: Date, siteBaseUrl: string): Promise<OnlineTickResult> {
   const online = await store.read();
   const key = onlineKey(online);
   if (key === state.lastKey) return { players: online.length, edited: false };
-  await board.show(onlineEmbed(online, now));
+  await board.show(onlineEmbed(online, now, siteBaseUrl));
   state.lastKey = key;
   return { players: online.length, edited: true };
 }

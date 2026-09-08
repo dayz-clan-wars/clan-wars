@@ -1,5 +1,5 @@
 import type { APIEmbed } from "discord.js";
-import { escapeMarkdown } from "./kill-feed-embed.js";
+import { escapeMarkdown, profileUrl } from "./kill-feed-embed.js";
 
 /** One player the log currently has on the server. */
 export type OnlinePlayer = { dayzId: string; gamertag: string; tag: string | null; connectedAt: Date };
@@ -19,14 +19,15 @@ export function onlineKey(players: OnlinePlayer[]): string {
 /**
  * The one message in #players-online. Pure — no client, no I/O.
  *
- * Longest-connected first, each with their clan tag and how long they have
- * been on. Empty is a sentence, not an empty list.
+ * Longest-connected first, each name linked to their profile on the site,
+ * with their clan tag and how long they have been on. Empty is a sentence,
+ * not an empty list.
  */
-export function onlineEmbed(players: OnlinePlayer[], now: Date): APIEmbed {
+export function onlineEmbed(players: OnlinePlayer[], now: Date, siteBaseUrl: string): APIEmbed {
   const sorted = [...players].sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime() || a.gamertag.localeCompare(b.gamertag));
   const lines = sorted.map((p) => {
     const tag = p.tag ? ` [${escapeMarkdown(p.tag)}]` : "";
-    return `**${escapeMarkdown(p.gamertag)}**${tag} · on since <t:${Math.floor(p.connectedAt.getTime() / 1000)}:R>`;
+    return `**[${escapeMarkdown(p.gamertag)}](${profileUrl(siteBaseUrl, p.gamertag)})**${tag} · on since <t:${Math.floor(p.connectedAt.getTime() / 1000)}:R>`;
   });
   return {
     title: `Players online · ${players.length}`,
