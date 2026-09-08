@@ -236,6 +236,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
 | Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
+| The raid window, flipped by hand twice a week | `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
