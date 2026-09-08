@@ -17,9 +17,14 @@ creates 3N objects and then goes quiet.
    and a role `Linked`. **Never assign `@Linked` by hand:** the reconciler treats a holder with
    no link row as an unlink — it clears that user's nickname and takes the role back. Copy their
    ids into the bot `.env`:
-       CLAN_TEXT_CATEGORY_ID=…
-       CLAN_VOICE_CATEGORY_ID=…
-       LINKED_ROLE_ID=…
+       CLAN_TEXT_CATEGORY_ID=1546677384378318909
+       CLAN_VOICE_CATEGORY_ID=1546677560539095170
+       LINKED_ROLE_ID=1546677997841686658
+
+   (Those are the values for the Clan Wars guild, created 2026-09-07: categories `CLANS` and
+   `CLAN VOICE`, role `Linked`, all below the bot's role. The bot's managed role was given View
+   Channels, Manage Channels, Manage Roles, Manage Nicknames, Send Messages, Embed Links and
+   Read Message History guild-wide the same day, and the Server Members Intent was already on.)
    The bot refuses to start with any of the three missing or malformed.
 4. **Deploy** the bot: `sudo systemctl restart clan-wars-bot`. The web image is unchanged by
    this increment; deploy it only if 3a's runbook has not been applied yet (do that first).

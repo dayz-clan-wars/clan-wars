@@ -8,7 +8,7 @@ interval) and `@Alpha`; the site gains four public pages. `scripts/wipe.ts` is t
 2. **Apply 0024** with the one-off runner from `docs/deploy/2026-09-02-dormancy.md`. The bot may
    keep running while it applies; restart it after.
 3. **Create the `@Alpha` role by hand**, below the bot's role; put its id in the bot `.env` as
-   `ALPHA_ROLE_ID`. The bot refuses to start without it. Never assign it by hand — the reconciler
+   `ALPHA_ROLE_ID` (created 2026-09-07 in the Clan Wars guild: `ALPHA_ROLE_ID=1546678091995291728`, gold, below the bot's role). The bot refuses to start without it. Never assign it by hand — the reconciler
    (`structure-tick.ts`) gives it to the full members of the latest closed week's Alphas and takes
    it from everyone else.
 4. **Deploy** bot and web together: `docker compose build web && docker compose up -d web &&

@@ -46,7 +46,7 @@ must happen before the restart.
    The three numbers must agree. If the bot is restarted before this runs, stop it, run the
    two statements, then `update factions set flag_down_since = null, flag_down_by_dayz_id = null;`
    to discard the incoherent fold, and start it again.
-6. **Env.** Bot `.env`: `WAR_LOG_CHANNEL_ID=<#war-log channel id>` (optional; without it raids
+6. **Env.** Bot `.env`: `WAR_LOG_CHANNEL_ID=1546677744044216432` (`#war-log`, created 2026-09-07 under the Feeds category; `#faction-feed` was renamed `#clan-feed` the same day, id unchanged) (optional; without it raids
    queue and post in order once set). Web container (`docker-compose.yml`): `SITE_BASE_URL`
    alongside `WEB_BASE_URL`, same value — the invite DM's link is built inside the package.
 7. **Deploy** bot and web together: `docker compose build web && docker compose up -d web &&
