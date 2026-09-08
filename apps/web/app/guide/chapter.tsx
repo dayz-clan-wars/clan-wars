@@ -18,7 +18,7 @@ export default function ChapterPage({ chapter }: { chapter: Chapter }) {
   const { prev, next } = neighbours(chapter);
   return (
     <article className="page">
-      <header className="opener"><span className="num">{chapter.number}</span><h1>{chapter.title}</h1><p className="lede">{chapter.lede}</p></header>
+      <header className="opener"><div className="row"><span className="num">{chapter.number}</span><h1>{chapter.title}</h1></div><p className="lede">{chapter.lede}</p></header>
       <div dangerouslySetInnerHTML={{ __html: html }} />
       <nav className="pager" aria-label="Previous and next">
         {prev ? <a className="prev" href={hrefFor(prev)}><span className="lbl">&larr; Back</span><span className="dest">{prev.number}. {prev.title}</span></a> : <span className="prev empty" aria-hidden="true" />}

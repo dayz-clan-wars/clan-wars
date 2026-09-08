@@ -315,51 +315,81 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
       {pinSheet && (
         <form
           method="post" action="/api/map/pin"
-          className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t border-rule bg-frame p-4"
+          className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame p-4 lg:inset-x-auto lg:bottom-6 lg:left-6 lg:w-[360px] lg:border-2"
         >
           <input type="hidden" name="x" value={pinAt.x} />
           <input type="hidden" name="z" value={pinAt.z} />
-          <p className={bar}>Drop a pin at {gridRef(pinAt.x, pinAt.z)}</p>
+          <p className="font-display text-[13px] uppercase tracking-[0.06em] text-ink"><span className="mr-3 text-gold">Pin</span>{gridRef(pinAt.x, pinAt.z)}</p>
           <fieldset className="mt-3 flex flex-wrap gap-2">
             <legend className="sr-only">Icon</legend>
             {PIN_ICONS.map((icon, i) => (
-              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-rule-2 px-3 text-sm text-ink has-[:checked]:border-gold">
-                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="h-4 w-4" />
+              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-2 px-3 text-sm text-ink has-[:checked]:border-gold">
+                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="h-4 w-4 accent-gold" />
                 <span aria-hidden="true">{PIN_ICON_GLYPHS[icon]}</span> {PIN_ICON_LABELS[icon]}
               </label>
             ))}
           </fieldset>
           <textarea
             name="note" maxLength={PIN_NOTE_MAX} rows={2} placeholder={`A note, ${PIN_NOTE_MAX} characters at most`}
-            className="mt-3 w-full rounded-md border border-rule-2 bg-surface p-2 text-sm text-ink"
+            className="mt-3 w-full border-2 border-rule-2 bg-ground p-2.5 font-mono text-sm text-ink placeholder:text-dim focus:border-gold focus:outline-none"
           />
-          <div className="mt-3 flex gap-2">
-            <button type="submit" className="min-h-[44px] rounded-md bg-gold px-4 font-display text-ground">Drop</button>
-            <button type="button" onClick={() => setPinAt(null)} className="min-h-[44px] rounded-md border border-rule px-4 font-display text-ink">Cancel</button>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button type="submit" className="flex min-h-[48px] items-center justify-center bg-gold font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Drop a pin</button>
+            <button type="button" onClick={() => setPinAt(null)} className="flex min-h-[48px] items-center justify-center border-2 border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink">Cancel</button>
           </div>
         </form>
       )}
 
       {!pinSheet && (
-        <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t border-rule bg-frame/95 p-3">
-          {notice && <p role="status" className="mb-2 rounded-md border border-rule-2 bg-surface p-2 text-sm text-ink">{notice}</p>}
-          {error === "failed" && <p role="status" className="mb-2 rounded-md border border-rust bg-surface p-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
-          <div className="flex flex-wrap gap-2">
-            {visible.map((key) => (
-              <label key={key} className="flex min-h-[44px] cursor-pointer items-center gap-2 rounded-md border border-rule-2 px-3 text-sm text-ink has-[:checked]:border-gold">
-                <input type="checkbox" className="h-4 w-4" checked={enabled[key]} onChange={() => toggle(key)} />
-                {LAYER_LABELS[key]}
-              </label>
-            ))}
+        <>
+          {/* Desktop: the layers as a panel, top right; grid and refresh bottom left. */}
+          <aside className="absolute right-6 top-6 z-[1100] hidden w-[300px] border-2 border-rule-2 bg-frame lg:block">
+            <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
+              <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
+              <span className="font-mono text-[10px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
+            </div>
+            {notice && <p role="status" className="m-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
+            {error === "failed" && <p role="status" className="m-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+            <ul className="py-1.5">
+              {visible.map((key) => (
+                <li key={key}>
+                  <label className="flex min-h-[44px] cursor-pointer items-center gap-3 px-5 text-sm text-ink">
+                    <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
+                    {LAYER_LABELS[key]}
+                    <span className={`ml-auto font-mono text-[10px] ${enabled[key] ? "text-muted" : "text-dim"}`}>{enabled[key] ? "ON" : "OFF"}</span>
+                  </label>
+                </li>
+              ))}
+            </ul>
+            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Dots older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}</div>
+          </aside>
+          <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
+            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
+            <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
+            <a className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold" href="/clan">Your clan</a>
           </div>
-          <div className="mt-2 flex flex-wrap items-center gap-4">
-            <span className={bar}>Grid {centre}</span>
-            <button type="button" onClick={() => void load()} className={`${bar} underline-offset-4 hover:underline`}>Refresh</button>
-            <a className={`${bar} underline-offset-4 hover:underline`} href="/me">Your page</a>
-            <a className={`${bar} underline-offset-4 hover:underline`} href="/clan">Your clan</a>
-            {layers.pins && <span className={bar}>Press and hold to drop a pin</span>}
+
+          {/* Phones: a bottom sheet with the layers as chips. */}
+          <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame lg:hidden">
+            <div className="flex justify-center pt-2"><span className="h-1 w-10 bg-rule-2" /></div>
+            {notice && <p role="status" className="mx-4 mt-2 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
+            {error === "failed" && <p role="status" className="mx-4 mt-2 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+            <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
+              {visible.map((key) => (
+                <label key={key} className={`flex min-h-[40px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[10px] uppercase tracking-[0.12em] ${enabled[key] ? "border-gold text-ink" : "border-rule-2 text-muted"}`}>
+                  <input type="checkbox" className="sr-only" checked={enabled[key]} onChange={() => toggle(key)} />
+                  {LAYER_LABELS[key]}
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-4 border-t border-rule-2 px-4 py-2.5">
+              <span className={bar}>Grid {centre}</span>
+              <button type="button" onClick={() => void load()} className={`${bar} text-ink`}>Refresh</button>
+              <a className={`${bar} text-ink`} href="/clan">Your clan</a>
+              {layers.pins && <span className={bar}>Hold to pin</span>}
+            </div>
           </div>
-        </div>
+        </>
       )}
     </div>
   );
