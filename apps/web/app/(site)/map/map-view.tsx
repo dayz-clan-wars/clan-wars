@@ -47,6 +47,17 @@ function loadSwitches(): Record<LayerKey, boolean> {
 
 const bar = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
+/** The settings sprocket: an eight-tooth gear in the chip's stroke, currentColor so the button colours it. */
+function Sprocket({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true">
+      <circle cx="14" cy="14" r="4" />
+      <path d="M14 2v4M14 22v4M2 14h4M22 14h4M5.5 5.5l2.8 2.8M19.7 19.7l2.8 2.8M5.5 22.5l2.8-2.8M19.7 8.3l2.8-2.8" />
+      <circle cx="14" cy="14" r="8.5" />
+    </svg>
+  );
+}
+
 export default function MapView({ layers, notice, guide }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string } }) {
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
@@ -55,6 +66,9 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   const [enabled, setEnabled] = useState<Record<LayerKey, boolean>>(ALL_ON);
   const [centre, setCentre] = useState("000 000");
   const [pinAt, setPinAt] = useState<{ x: number; z: number } | null>(null);
+  // The layers live behind a sprocket. Closed by default: the map is the
+  // page, and a panel that stays open covers the terrain a player came for.
+  const [layersOpen, setLayersOpen] = useState(false);
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
 
@@ -294,6 +308,14 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+
+  // Escape closes the panel; nothing else on this page listens for it.
+  useEffect(() => {
+    if (!layersOpen) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLayersOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [layersOpen]);
   // Read once the component is on a page: the fallbacks equal the tokens, so
   // the server render and the browser agree on every glyph.
   const pal = palette();
@@ -355,48 +377,73 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
 
       {!pinSheet && (
         <>
-          {/* Desktop: the layers as a panel, top right; grid and refresh bottom left. */}
-          <aside className="absolute right-6 top-6 z-[1100] hidden w-[300px] border-2 border-rule-2 bg-frame lg:block">
-            <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
-              <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
-              <span className="font-mono text-[10px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
+          {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
+          <div className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
+            <button
+              type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
+              className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
+            >
+              <Sprocket />
+              <span className="sr-only">Layers</span>
+            </button>
+            {layersOpen && (
+              <aside id="map-layers" className="w-[300px] border-2 border-rule-2 bg-frame">
+                <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
+                  <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
+                  <span className="font-mono text-[10px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
+                </div>
+                <ul className="py-1.5">
+                  {visible.map((key) => (
+                    <li key={key}>
+                      <label className="flex min-h-[44px] cursor-pointer items-center gap-3 px-5 text-sm text-ink">
+                        <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
+                        <span aria-hidden="true" className={`flex flex-none ${enabled[key] ? "" : "opacity-40"}`} dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
+                        {LAYER_LABELS[key]}
+                        <span className={`ml-auto font-mono text-[10px] ${enabled[key] ? "text-muted" : "text-dim"}`}>{enabled[key] ? "ON" : "OFF"}</span>
+                      </label>
+                    </li>
+                  ))}
+                </ul>
+                <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+              </aside>
+            )}
+          </div>
+          {/* Notices stay visible with the panel closed: a failed refresh is not a setting. */}
+          {(notice || error === "failed") && (
+            <div className="absolute left-6 top-6 z-[1100] hidden w-[360px] lg:block">
+              {notice && <p role="status" className="border border-rule-2 bg-frame px-3 py-2 text-sm text-ink">{notice}</p>}
+              {error === "failed" && <p role="status" className="mt-2 border border-rust bg-frame px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
             </div>
-            {notice && <p role="status" className="m-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
-            {error === "failed" && <p role="status" className="m-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
-            <ul className="py-1.5">
-              {visible.map((key) => (
-                <li key={key}>
-                  <label className="flex min-h-[44px] cursor-pointer items-center gap-3 px-5 text-sm text-ink">
-                    <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
-                    <span aria-hidden="true" className={`flex flex-none ${enabled[key] ? "" : "opacity-40"}`} dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
-                    {LAYER_LABELS[key]}
-                    <span className={`ml-auto font-mono text-[10px] ${enabled[key] ? "text-muted" : "text-dim"}`}>{enabled[key] ? "ON" : "OFF"}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
-          </aside>
+          )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
             <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
             <a className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold" href="/clan">Your clan</a>
           </div>
 
-          {/* Phones: a bottom sheet with the layers as chips. */}
+          {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
           <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame lg:hidden">
-            <div className="flex justify-center pt-2"><span className="h-1 w-10 bg-rule-2" /></div>
-            {notice && <p role="status" className="mx-4 mt-2 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
-            {error === "failed" && <p role="status" className="mx-4 mt-2 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
-            <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
-              {visible.map((key) => (
-                <label key={key} className={`flex min-h-[40px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[10px] uppercase tracking-[0.12em] ${enabled[key] ? "border-gold text-ink" : "border-rule-2 text-muted"}`}>
-                  <input type="checkbox" className="sr-only" checked={enabled[key]} onChange={() => toggle(key)} />
-                  {LAYER_LABELS[key]}
-                </label>
-              ))}
-            </div>
-            <div className="flex flex-wrap items-center gap-4 border-t border-rule-2 px-4 py-2.5">
+            {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
+            {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+            {layersOpen && (
+              <div id="map-layers-sheet" className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
+                {visible.map((key) => (
+                  <label key={key} className={`flex min-h-[40px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[10px] uppercase tracking-[0.12em] ${enabled[key] ? "border-gold text-ink" : "border-rule-2 text-muted"}`}>
+                    <input type="checkbox" className="sr-only" checked={enabled[key]} onChange={() => toggle(key)} />
+                    <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: layerIcon(pal, key, 16) }} />
+                    {LAYER_LABELS[key]}
+                  </label>
+                ))}
+              </div>
+            )}
+            <div className={`flex flex-wrap items-center gap-4 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
+              <button
+                type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"
+                className={`flex h-10 w-10 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink"}`}
+              >
+                <Sprocket size={18} />
+                <span className="sr-only">Layers</span>
+              </button>
               <span className={bar}>Grid {centre}</span>
               <button type="button" onClick={() => void load()} className={`${bar} text-ink`}>Refresh</button>
               <a className={`${bar} text-ink`} href="/clan">Your clan</a>
