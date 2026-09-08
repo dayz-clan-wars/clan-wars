@@ -22,7 +22,7 @@ const mins = (ms: number) => `${ms / MIN} min`;
  */
 const EXPECTED: Record<string, string> = {
   "Link: emotes to perform": `${R.LINK_EMOTES}, in order`,
-  "Link: time limit": mins(R.LINK_TTL_MS),
+  "Link: time limit": hours(R.LINK_TTL_MS),
   "Flags in the pool": `${R.FLAG_POOL_SIZE} (white is neutral)`,
   "Ceremony: linked players required": `${R.CEREMONY_MIN_PARTICIPANTS}`,
   "Ceremony: window": mins(R.CEREMONY_WINDOW_MS),

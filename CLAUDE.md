@@ -463,7 +463,7 @@ not of anything that has happened here yet.
 
 Increment 2a (site foundation) landed: Tailwind, `packages/roster` with `viewerFor`,
 `/me` from the database. No new player capability; the slash commands still run.
-Increment 2b landed: `/link` (autocomplete, three emotes, ten minutes, 5 s poll), unlink
+Increment 2b landed: `/link` (autocomplete, three emotes, 24 hours since 2026-09-08 — ten minutes before, 5 s poll), unlink
 on `/me`, `/base` for solo declare and release; migration 0021; inbox 7 closed.
 Discord's `/link` still runs beside the page until 2c-b.
 Increment 2c-a landed: the roster store in `packages/roster`, pending/full membership

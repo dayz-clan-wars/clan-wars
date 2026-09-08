@@ -21,7 +21,7 @@ violation.
    null-channel notification (DM only, no channel fallback) and falls back to
    `DISCORD_GUILD_ID` for the nickname on a site-issued link. No new environment variables.
 5. **Acceptance, as a linked player.** On the site: `/link` lists unclaimed gamertags the
-   server has seen; a challenge shows three emotes and a ten-minute clock; performing them
+   server has seen; a challenge shows three emotes and a 24-hour clock (ten minutes until 2026-09-08); performing them
    in game ticks the tickets within a minute (the bot's tick) and the DM arrives; `/me`
    shows the link; `/base` lists the poles you have raised at; Declare, then Release, with
    the `?result=` copy each time. Then in the database:

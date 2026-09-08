@@ -17,6 +17,9 @@ describe("link copy", () => {
   });
   it("formats a remainder as m:ss and clamps at zero", () => {
     expect(formatRemaining(9 * 60_000 + 41_000)).toBe("9:41");
+    expect(formatRemaining(24 * 3_600_000 - 1)).toBe("23 h 59 min");
+    expect(formatRemaining(3_600_000)).toBe("1 h 0 min");
+    expect(formatRemaining(3_600_000 - 1)).toBe("59:59");
     expect(formatRemaining(5_000)).toBe("0:05");
     expect(formatRemaining(-1)).toBe("0:00");
   });

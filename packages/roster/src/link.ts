@@ -64,8 +64,8 @@ export async function linkStatusDb(db: Database, discordId: string, now: Date): 
 export async function startLinkDb(db: Database, a: {
   discordId: string; targetDayzId: string; newSequence?: boolean; now: Date; rng: () => number;
 }): Promise<IssueOutcome> {
-  // ⚠️ LINK_TTL_MS, the guide's ten minutes — not the bot's 24 h. The site
-  // flow assumes the player is already in game (spec §5.5).
+  // ⚠️ LINK_TTL_MS, the guide's 24 hours (raised from ten minutes on
+  // 2026-09-08: a player who starts on the site need not already be in game).
   return issueChallenge(new PgVerificationStore(db), { rng: a.rng, now: a.now, ttlMs: LINK_TTL_MS }, {
     discordId: a.discordId, targetDayzId: a.targetDayzId, guildId: null, channelId: null, newSequence: a.newSequence,
   });

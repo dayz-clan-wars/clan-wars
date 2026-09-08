@@ -61,7 +61,7 @@ Everything not listed here matches the earlier specs and the code as it stands.
 | Vocabulary | "faction" everywhere | **"clan"** in every player-facing string; code keeps `faction` |
 | Primary surface | Discord slash commands; site read-only | **The site is the tool.** Roster, vault, map, link, claim, declare, votes, settings — all on the site. Discord is announcements, one text + one voice channel per clan, and DMs. The only slash command left is `/guest` |
 | Web write boundary | `packages/roster` exports invite, revokeInvite, kick, promote, demote (frontend rebuild §3) | Same package, same principle, **many more exports** (§10.4). The prohibition is restated precisely: no export sets a clan `active` or `dormant`, writes a raid or a defense, or inserts a declaration without citing evidence the log already holds |
-| Link flow | `/link` in Discord, 4 emotes, targeted challenge | **On the site**: gamertag autocomplete over seen-and-unclaimed players → **3** emotes in order → 10 min. Still binds `discord_id → dayz_id`; still targeted; still budgeted |
+| Link flow | `/link` in Discord, 4 emotes, targeted challenge | **On the site**: gamertag autocomplete over seen-and-unclaimed players → **3** emotes in order → 24 h (10 min until 2026-09-08; the guide changed first). Still binds `discord_id → dayz_id`; still targeted; still budgeted |
 | Ceremony claim | Discord modal, `claim_drafts` | **On the site** at `/claim/{ceremony}`. Only free flags are offered. Refused within 200 m of another declaration |
 | Stake | Identity + supplies; rankings designed, unbuilt | **Reputation is the headline**: raid points, weekly Alphas, season champion. Supplies remain the material stake behind the 24 h flag-down clock |
 | Raid → victim | Dormancy is inactivity-only; raid-driven dormancy out of scope | **A non-member lowering the flag starts a 24 h clock.** Re-raise by a member = defense; miss it = dormant. Two entrances to `dormant`, one exit |
@@ -385,7 +385,7 @@ and is never published.
 ### 4.11 `verification_challenges` — changed
 
 Sequence length is already **3** (`generateSequence`'s default since targeted linking);
-the TTL becomes **10 min** and moves to `rules.ts`. `guild_id` and `channel_id` become
+the TTL becomes **24 h** (10 min at first) and moves to `rules.ts`. `guild_id` and `channel_id` become
 nullable: the site issues challenges, and there is no channel. The emote budget (`MAX_POOL_EMOTES_PER_ATTEMPT`), the safe pool, the
 "already linked elsewhere" refusal (inbox 7) and the lockout message naming the unreached
 emote (inbox 8) all stay.
@@ -521,9 +521,9 @@ tick: no `flag.raised` by the declarant at that pole for 7 days. Raising again i
 ### 5.5 Link challenge
 
 ```
- (none) ──site picks a seen, unclaimed gamertag──► OPEN (3 emotes, 10 min)
+ (none) ──site picks a seen, unclaimed gamertag──► OPEN (3 emotes, 24 h)
  OPEN ──3 matched in order──► COMPLETED (identity_links row; Linked role; nickname)
- OPEN ──10 min──► EXPIRED     OPEN ──budget exceeded──► CANCELED (lockout DM names the emote)
+ OPEN ──24 h──► EXPIRED     OPEN ──budget exceeded──► CANCELED (lockout DM names the emote)
  OPEN ──target UID already linked elsewhere──► REFUSED at issue time (never issued)
 ```
 

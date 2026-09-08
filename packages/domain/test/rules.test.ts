@@ -7,7 +7,7 @@ const MIN = 60_000;
 
 describe("rules", () => {
   it("states the guide's timers in milliseconds", () => {
-    expect(R.LINK_TTL_MS).toBe(10 * MIN);
+    expect(R.LINK_TTL_MS).toBe(24 * HOUR);
     expect(R.CEREMONY_WINDOW_MS).toBe(10 * MIN);
     expect(R.CLAIM_WINDOW_MS).toBe(24 * HOUR);
     expect(R.ACTIVATION_WINDOW_MS).toBe(24 * HOUR);

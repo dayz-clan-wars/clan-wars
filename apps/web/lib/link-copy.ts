@@ -35,8 +35,13 @@ function at(d: Date | string): string {
   return new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 }
 
-/** "9:41" from a millisecond remainder; "0:00" once expired. */
+/**
+ * "23 h 59 min" while an hour or more remains, "9:41" under an hour, "0:00"
+ * once expired. The challenge lasts LINK_TTL_MS (24 h since 2026-09-08), so
+ * the first day reads as hours and the last hour ticks by the second.
+ */
 export function formatRemaining(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
+  if (s >= 3600) return `${Math.floor(s / 3600)} h ${Math.floor((s % 3600) / 60)} min`;
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 }

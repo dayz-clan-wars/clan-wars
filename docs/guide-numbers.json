@@ -1,6 +1,6 @@
 {
   "source": "field-guide/numbers.html",
-  "generatedAt": "2026-09-05T19:10:30.139Z",
+  "generatedAt": "2026-09-08T00:49:10.891Z",
   "rows": [
     {
       "label": "Link: emotes to perform",
@@ -8,7 +8,7 @@
     },
     {
       "label": "Link: time limit",
-      "value": "10 min"
+      "value": "24 h"
     },
     {
       "label": "Flags in the pool",

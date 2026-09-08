@@ -15,7 +15,7 @@ const DAY = 86_400_000;
 
 // Getting in
 export const LINK_EMOTES = 3;
-export const LINK_TTL_MS = 10 * MIN;
+export const LINK_TTL_MS = 24 * HOUR;
 
 // Founding
 export const FLAG_POOL_SIZE = 33;
