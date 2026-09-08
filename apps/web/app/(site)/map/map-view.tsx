@@ -290,7 +290,7 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
-    <div className="fixed inset-0 isolate bg-terrain">
+    <div className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain">
       <div ref={el} className="absolute inset-0" />
 
       {/*
