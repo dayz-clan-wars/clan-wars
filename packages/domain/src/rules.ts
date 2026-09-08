@@ -1,6 +1,6 @@
 /**
  * Every timer, cap, radius and cooldown the player's guide promises, in one
- * place. The guide (../field-guide/numbers.html) is the authority; this file
+ * place. The guide (apps/web/content/guide/numbers.html) is the authority; this file
  * is its mirror in code, and `test/guide-numbers-drift.test.ts` fails when
  * the two disagree.
  *
