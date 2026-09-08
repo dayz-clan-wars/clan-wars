@@ -178,7 +178,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
 
       <Footer>
         {/* The logout route is POST-only (app/api/auth/logout/route.ts), so a form, not a link. */}
-        <form action="/api/auth/logout" method="post"><button className="uppercase tracking-[0.18em] text-muted hover:text-ink" type="submit">Sign out</button></form>
+        <form action="/api/auth/logout" method="post"><button className="flex min-h-[44px] items-center uppercase tracking-[0.18em] text-muted hover:text-ink" type="submit">Sign out</button></form>
       </Footer>
     </Page>
   );

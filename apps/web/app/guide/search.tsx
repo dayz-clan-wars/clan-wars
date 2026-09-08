@@ -20,7 +20,7 @@ export function GuideSearch({ index, compact = false }: { index: SearchEntry[]; 
       <input
         type="search" value={q} onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setQ(""); }}
         placeholder="Search the guide" aria-label="Search the guide" autoComplete="off" spellCheck={false}
-        className={`block w-full border-2 border-rule-2 bg-ground px-3 font-mono text-[13px] text-ink placeholder:text-dim focus:border-gold focus:outline-none ${compact ? "min-h-[40px]" : "min-h-[44px]"}`}
+        className="block min-h-[44px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-[13px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
       />
       {q.trim().length >= 2 && (
         <ol className="m-0 mt-2 list-none border-2 border-rule-2 bg-frame p-0" aria-label="Results">

@@ -14,7 +14,7 @@ export const kickerSm = "font-mono text-[10px] uppercase tracking-[0.18em] text-
 /** Buttons. All meet the 44px touch minimum; primary and CTA are taller. */
 export const btnPrimary = "inline-flex min-h-[44px] items-center justify-center gap-3 bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover disabled:opacity-40";
 export const btnCta = "flex min-h-[56px] items-center justify-between gap-6 bg-gold px-5 font-display text-[15px] uppercase tracking-[0.04em] text-ground hover:bg-gold-hover disabled:opacity-40";
-export const btnSecondary = "inline-flex min-h-[44px] items-center justify-center gap-3 border-2 border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em] text-ink hover:border-muted disabled:opacity-40";
+export const btnSecondary = "inline-flex min-h-[44px] items-center justify-center gap-3 border-2 border-rule-3 px-4 font-display text-xs uppercase tracking-[0.06em] text-ink hover:border-muted disabled:opacity-40";
 export const btnDanger = "inline-flex min-h-[44px] items-center justify-center gap-3 border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink hover:bg-rust/15 disabled:opacity-40";
 export const btnQuiet = "inline-flex min-h-[44px] items-center font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink disabled:opacity-40";
 /** A text link inside prose. */
@@ -23,8 +23,8 @@ export const link = "text-gold underline-offset-4 hover:underline";
 export const linkMono = "font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:underline underline-offset-4";
 
 /** Form fields: 52px, squared, ground-black on the frame. */
-export const field = "mt-1 block min-h-[52px] w-full border-2 border-rule-2 bg-ground px-4 font-mono text-sm text-ink placeholder:text-dim focus:border-gold focus:outline-none";
-export const checkbox = "h-5 w-5 flex-none border-2 border-rule-2 bg-ground accent-gold";
+export const field = "mt-1 block min-h-[52px] w-full border-2 border-rule-3 bg-ground px-4 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none";
+export const checkbox = "h-5 w-5 flex-none border-2 border-rule-3 bg-ground accent-gold";
 
 /** The page column. Wide pages use `wide`; reading pages the default. */
 export function Page({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
@@ -91,7 +91,7 @@ export function Panel({ num, title, aside, tone = "plain", children, className =
       {title && (
         <div className={`flex items-center justify-between gap-4 border-b-2 ${edge} px-4 py-3 lg:px-5`}>
           <h2 className={`m-0 font-display text-[13px] uppercase tracking-[0.06em] lg:text-sm ${head}`}>
-            {num && <span className={`mr-3 ${tone === "rust" ? "text-rust" : "text-gold"}`}>{num}</span>}{title}
+            {num && <span className={`mr-3 ${tone === "rust" ? "text-rust-2" : "text-gold"}`}>{num}</span>}{title}
           </h2>
           {aside && <div className="font-mono text-[11px] text-muted">{aside}</div>}
         </div>
@@ -115,7 +115,7 @@ export function Notice({ children, tone = "plain" }: { children: React.ReactNode
 /** The bordered segmented nav: scoreboard/alphas/seasons, all-time/season N. */
 export function SegNav({ items, label, className = "" }: { items: { label: string; href: string; current?: boolean }[]; label: string; className?: string }) {
   return (
-    <nav aria-label={label} className={`flex border-2 border-rule-2 font-display text-xs uppercase tracking-[0.04em] ${className}`}>
+    <nav aria-label={label} className={`flex border-2 border-rule-3 font-display text-xs uppercase tracking-[0.04em] ${className}`}>
       {items.map((it, i) => (
         <a key={it.href} href={it.href} aria-current={it.current ? "page" : undefined}
           className={`flex min-h-[44px] flex-1 items-center justify-center whitespace-nowrap px-3 text-center lg:flex-none lg:px-[18px] ${i > 0 ? "border-l border-rule-2" : ""} ${it.current ? "bg-gold text-ground" : "text-ink hover:bg-surface"}`}>
@@ -146,7 +146,7 @@ export function Rank({ n, size = "md" }: { n: number | null; size?: "md" | "lg" 
 export const HONEST = "Nothing on this page is invented: it is what the server log has recorded.";
 export function Footer({ children }: { children?: React.ReactNode }) {
   return (
-    <footer className="flex flex-col gap-3 border-t-2 border-rule-2 bg-frame px-5 py-4 font-mono text-[11px] leading-relaxed text-dim lg:flex-row lg:items-center lg:justify-between lg:px-8">
+    <footer className="flex flex-col gap-3 border-t-2 border-rule-2 bg-frame px-5 py-4 font-mono text-xs leading-relaxed text-muted lg:flex-row lg:items-center lg:justify-between lg:px-8">
       <span>{HONEST}</span>
       {children && <span className="flex gap-6 uppercase tracking-[0.18em]">{children}</span>}
     </footer>

@@ -15,7 +15,7 @@ export const metadata: Metadata = { title: "Clan Wars — found your clan", robo
 export const dynamic = "force-dynamic";
 
 const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-2 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
+const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
 
 export default async function ClaimPage({ params, searchParams }: { params: Promise<{ ceremony: string }>; searchParams: Promise<{ result?: string }> }) {
   const { ceremony: raw } = await params;
@@ -52,7 +52,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
           <ul className="mt-2 grid grid-cols-4 gap-2 sm:grid-cols-6">
             {ctx.freeFlags.map((f) => (
               <li key={f}>
-                <label className="flex cursor-pointer flex-col items-center gap-1 border-2 border-rule-2 p-2 has-[:checked]:border-gold">
+                <label className="flex cursor-pointer flex-col items-center gap-1 border-2 border-rule-3 p-2 has-[:checked]:border-gold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
                   <input type="radio" name="texture" value={f} required className="sr-only" />
                   <img src={`/${flagImagePath(f)}`} alt={f} width={48} height={48} className="h-12 w-12 object-contain" />
                   <span className="font-mono text-[10px] text-muted">{f.replace(/^Flag_/u, "")}</span>

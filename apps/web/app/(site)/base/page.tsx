@@ -65,7 +65,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                 <p className="mt-1 text-sm text-ink-2">Declared {when(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
                 <form className="mt-4" action="/api/base/release" method="post">
                   <label className="flex items-center gap-2 text-sm text-ink-2">
-                    <input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> I understand the pole goes public if nobody declares it within the grace period.
+                    <input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> I understand the pole goes public if nobody declares it within the grace period.
                   </label>
                   <button className="mt-3 inline-flex min-h-[44px] items-center border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Release this base</button>
                 </form>

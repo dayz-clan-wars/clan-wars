@@ -16,7 +16,7 @@ export const metadata: Metadata = { title: "Clan Wars — vault", robots: { inde
 export const dynamic = "force-dynamic";
 
 const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-2 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
+const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
 const small = "inline-flex min-h-[44px] items-center border-2 border-rule-2 px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink";
 const badge = "border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]";
 const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
@@ -59,7 +59,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
               <span className="font-display text-lg text-ink">{lock.name}</span>
               <span className={`${badge} border-rule-2 text-ink-2`}>{lock.minRole}</span>
               {lock.changedInGame && <span className={`${badge} border-gold text-gold`}>changed in game?</span>}
-              {lock.exposed && <span className={`${badge} border-rust text-rust`}>known to an ex-member</span>}
+              {lock.exposed && <span className={`${badge} border-rust text-rust-2`}>known to an ex-member</span>}
             </div>
             {lock.note && <p className="mt-2 text-sm text-ink-2">{lock.note}</p>}
             <p className="mt-2 text-xs text-ink-2">{lock.rotatedAt ? `rotated ${when(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${when(lock.createdAt)} by ${lock.createdBy}`}</p>
@@ -89,12 +89,12 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                 </form>
                 <form action="/api/vault/rotate" method="post">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate this lock&rsquo;s code.</label>
+                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> Rotate this lock&rsquo;s code.</label>
                   <button className={`${small} mt-2`} type="submit">Rotate</button>
                 </form>
                 <form action="/api/vault/delete" method="post">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Delete this lock.</label>
+                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> Delete this lock.</label>
                   <button className="mt-2 inline-flex min-h-[44px] items-center border-2 border-rust px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Delete</button>
                 </form>
               </div>
@@ -125,7 +125,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             <h2 className={label}>Rotate all</h2>
             <form className="mt-2" action="/api/vault/rotate" method="post">
               <input type="hidden" name="all" value="yes" />
-              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate every lock in the vault.</label>
+              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> Rotate every lock in the vault.</label>
               <button className={`${small} mt-2`} type="submit">Rotate all</button>
             </form>
           </section>

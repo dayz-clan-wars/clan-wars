@@ -14,7 +14,7 @@ export const metadata: Metadata = { title: "Clan Wars — clan settings", robots
 export const dynamic = "force-dynamic";
 
 const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-2 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
+const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
 
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
@@ -96,7 +96,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                     {others.map((r) => <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"} — {r.role}</option>)}
                   </select>
                 </label>
-                <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> I understand I become an officer and they lead.</label>
+                <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> I understand I become an officer and they lead.</label>
                 <button className="inline-flex min-h-[44px] items-center self-start border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Transfer</button>
               </form>
             )}
@@ -122,7 +122,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <p className="mt-2 text-sm text-ink-2">Irreversible. The flag and the pole return to the pool for anyone to claim; the name and tag are held so nobody can impersonate you. Every member is out, with no cooldown.</p>
             <p className="mt-2 text-sm text-ink-2">{DISBAND_WARNING}</p>
             <form className="mt-3" action="/api/clan/disband" method="post">
-              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Disband {clan.name}.</label>
+              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> Disband {clan.name}.</label>
               <button className="mt-3 inline-flex min-h-[44px] items-center border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Disband the clan</button>
             </form>
           </section>

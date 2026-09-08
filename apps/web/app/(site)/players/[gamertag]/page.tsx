@@ -58,7 +58,7 @@ export default async function PlayerProfilePage({
       </div>
       <GuideLine guide={guideLinkFor("/players/[gamertag]")} className="mt-3" />
       <ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} />
-      <p className="mt-4 text-sm text-ink-2">{scopeLabel(profile.scope)}</p>
+      <p className="sr-only">{scopeLabel(profile.scope)}</p>
 
       <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Activity</h2>

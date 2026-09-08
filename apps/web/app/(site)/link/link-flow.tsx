@@ -172,7 +172,7 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
       {/* Rust: an obligation the player still owes the server (frontend rebuild §4). */}
       <div className="border-2 border-rust bg-frame lg:self-start">
         <div className="flex items-center justify-between gap-4 border-b-2 border-rust px-4 py-3 lg:px-5">
-          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust">●</span>Challenge open</h2>
+          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust-2">●</span>Challenge open</h2>
           <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}</span>
         </div>
         {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Switched" neutral>{notice}</Refusal></div>}

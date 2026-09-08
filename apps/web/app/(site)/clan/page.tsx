@@ -120,7 +120,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                     {invitesOut.map((inv) => (
                       <li key={inv.id} className="flex min-h-[52px] items-center justify-between gap-3 text-sm text-ink">
                         <span><span className="font-mono">{inv.inviteeGamertag ?? "unknown"}</span> <span className="text-xs text-muted">expires {when(inv.expiresAt)}</span></span>
-                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><button className={`${btnSecondary} !min-h-[40px] !px-3.5`} type="submit">Withdraw</button></form>
+                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><button className={`${btnSecondary} !px-3.5`} type="submit">Withdraw</button></form>
                       </li>
                     ))}
                   </ul>
@@ -165,7 +165,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                 ]} />
                 {!leadership.openClaim && leadership.canClaim === "eligible" && (
                   <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/claim-succession" method="post">
-                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" className={`${checkbox} mt-0.5`} /> I understand this opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if the leader is seen in game.</label>
+                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand this opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if the leader is seen in game.</label>
                     <button className={`mt-3 ${btnPrimary}`} type="submit">Claim leadership — the leader has been silent for {days(LEADER_SILENT_MS)}</button>
                   </form>
                 )}
@@ -178,7 +178,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <p className="mt-1 text-sm text-ink-2">{leadership.openVote.ballots} of {leadership.openVote.threshold} needed (electorate {leadership.openVote.electorateSize}) · closes {when(leadership.openVote.closesAt)}</p>
                       {leadership.openVote.inElectorate && !leadership.openVote.myBallot && (
                         <form className="mt-3" action="/api/clan/cast-vote" method="post">
-                          <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className={checkbox} /> I confirm my vote.</label>
+                          <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> I confirm my vote.</label>
                           <button className={`mt-3 ${btnPrimary}`} type="submit">Vote yes</button>
                         </form>
                       )}
@@ -198,7 +198,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                           ))}
                         </select>
                       </label>
-                      <label className="mt-3 flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className={checkbox} /> I understand this opens a no-confidence vote.</label>
+                      <label className="mt-3 flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> I understand this opens a no-confidence vote.</label>
                       <button className={`mt-3 ${btnSecondary}`} type="submit" disabled={voteBlocked}>Nominate</button>
                       {voteBlocked && <p className="mt-2 text-xs text-muted">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt!)}.</p>}
                     </form>
@@ -214,7 +214,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                 ? <p className="text-sm leading-relaxed text-ink-2">A leader cannot leave. <a className={link} href="/clan/settings">Transfer leadership</a> first, or disband.</p>
                 : (
                   <form action="/api/clan/leave" method="post">
-                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" className={`${checkbox} mt-0.5`} /> I understand I cannot join a clan again for a while after leaving.</label>
+                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I cannot join a clan again for a while after leaving.</label>
                     <button className={`mt-3.5 ${btnDanger}`} type="submit">Leave the clan</button>
                   </form>
                 )}

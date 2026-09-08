@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Clan Wars — seasons" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
 export const dynamic = "force-dynamic";
 
-const th = "border-b-2 border-rule-2 px-4 py-3 text-left font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-dim lg:px-6";
+const th = "border-b-2 border-rule-2 px-4 py-3 text-left font-mono text-xs font-normal uppercase tracking-[0.18em] text-muted lg:px-6";
 const num = "px-4 text-right font-mono text-sm text-ink-2 lg:px-6";
 
 export default async function SeasonsPage() {

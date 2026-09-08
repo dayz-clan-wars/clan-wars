@@ -17,7 +17,7 @@ export default function Contents() {
           return (
             <li key={c.slug} className={c.slug === "numbers" ? "mt-2 border-t border-rule-2 pt-2" : ""}>
               <a href={hrefFor(c)} aria-current={on ? "page" : undefined}
-                className={`flex min-h-[40px] items-center gap-3.5 px-6 no-underline ${on ? "bg-gold font-display text-ground" : "text-ink hover:text-gold"}`}>
+                className={`flex min-h-[44px] items-center gap-3.5 px-6 no-underline ${on ? "bg-gold font-display text-ground" : "text-ink hover:text-gold"}`}>
                 <span className={`w-4 flex-none font-mono text-[11px] ${on ? "text-ground" : "text-muted"}`}>{c.number}</span>
                 {c.title}
               </a>

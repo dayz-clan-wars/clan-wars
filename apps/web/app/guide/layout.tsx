@@ -23,8 +23,8 @@ export default async function GuideLayout({ children }: { children: React.ReactN
     <>
       <SiteBar signedIn={session !== null} crumb="Field guide" extra={
         <details className="group relative">
-          <summary className="flex min-h-[36px] cursor-pointer list-none items-center border border-rule-2 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
-          <div className="absolute right-0 top-[calc(100%+8px)] z-[1300] max-h-[75vh] w-[min(86vw,320px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+          <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-rule-3 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
+          <div className="absolute right-0 top-[calc(100%+8px)] z-[1300] max-h-[75dvh] w-[min(86vw,320px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">
             <div className="px-4 pb-3"><GuideSearch index={index} /></div>
             <Contents />
             <a className="mt-4 block px-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted" href="/">&larr; Back to the site</a>

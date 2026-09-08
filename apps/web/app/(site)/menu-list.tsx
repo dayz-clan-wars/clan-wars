@@ -65,7 +65,7 @@ export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex
   const item = "flex min-h-[48px] items-center justify-between px-5 font-display text-sm uppercase tracking-[0.06em]";
   return (
     <details ref={root} className="group">
-      <summary className="flex min-h-[36px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
+      <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">Menu</span><span className="hidden group-open:inline">Close</span>
       </summary>
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}

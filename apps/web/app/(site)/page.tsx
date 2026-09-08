@@ -32,7 +32,7 @@ export default async function Home() {
             {board.season ? `Season ${board.season.number} · Week ${week} · Livonia` : "Livonia · Xbox"}
           </div>
           <h1 className="mt-5 font-display text-[44px] uppercase leading-[.88] tracking-[-0.02em] text-ink lg:mt-6 lg:text-[96px] lg:leading-[.86]">
-            Clans, bases<br className="hidden lg:inline" /> and <span className="whitespace-nowrap text-gold">consequence.</span>
+            Clans, bases<br className="hidden lg:inline" /> and <span className="text-gold lg:whitespace-nowrap">consequence.</span>
           </h1>
           <p className="mt-5 max-w-[560px] text-base leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-7 lg:text-lg">
             Found a clan at a flagpole with two friends. Declare a base. Raid other clans to climb the scoreboard, and defend your own flag or lose it.
