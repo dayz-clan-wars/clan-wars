@@ -60,7 +60,7 @@ export default async function WarLogPage() {
                       </div>
                       {/* Phones: a kicker line, then the sentence. */}
                       <div className="px-4 py-3.5 text-sm leading-relaxed text-ink-2 lg:hidden">
-                        <div className="mb-1.5 flex justify-between font-mono text-[10px] uppercase tracking-[0.12em]">
+                        <div className="mb-1.5 flex justify-between font-mono text-[11px] uppercase tracking-[0.12em]">
                           <span className={e.kind === "raid" ? "text-gold" : "text-olive"}>{e.kind === "raid" ? "Raid" : "Defense"} · {timeOf(e.at)}</span>
                           <span className={e.kind === "defense" ? "text-olive" : e.raider ? "text-ink" : "text-muted"}>
                             {e.kind === "defense" ? duration(e.durationSeconds) : e.raider ? `${e.points} pts` : "no clan"}

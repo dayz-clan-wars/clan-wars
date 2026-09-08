@@ -112,7 +112,8 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                       {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
-                  <label className="block"><span className={fieldLabel}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" placeholder="leave blank to generate" /></label>
+                  <label className="block"><span className={fieldLabel}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" title={`${VAULT_CODE_DIGITS} digits`} aria-describedby="code-note" /></label>
+                  <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS} digits. Leave it blank and one is generated.</p>
                   <button className={`${btnPrimary} self-start`} type="submit">Add lock</button>
                 </form>
               </PanelBody>

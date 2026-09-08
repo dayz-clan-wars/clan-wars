@@ -41,7 +41,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
                 <input className={field} name="name" required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} autoComplete="off" />
               </label>
               <label className="block"><span className={fieldLabel}>Tag — {CLAN_TAG_LENGTH.min} to {CLAN_TAG_LENGTH.max} letters or digits</span>
-                <input className={`${field} uppercase`} name="tag" required minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" autoComplete="off" />
+                <input className={`${field} uppercase`} name="tag" required minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} autoComplete="off" />
               </label>
             </PanelBody>
           </Panel>
@@ -56,7 +56,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
                       <label className="flex cursor-pointer flex-col items-center gap-1 border-2 border-rule-3 p-2 has-[:checked]:border-gold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
                         <input type="radio" name="texture" value={f} required className="sr-only" />
                         <img src={`/${flagImagePath(f)}`} alt={f} width={48} height={48} className="h-12 w-12 object-contain" />
-                        <span className="font-mono text-[10px] text-muted">{f.replace(/^Flag_/u, "")}</span>
+                        <span className="font-mono text-[11px] text-muted">{f.replace(/^Flag_/u, "")}</span>
                       </label>
                     </li>
                   ))}

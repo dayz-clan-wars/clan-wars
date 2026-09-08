@@ -24,7 +24,7 @@ function formatValue(kind: Kind, value: number): string {
 
 function BoardPanel({ kind, rows }: { kind: Kind; rows: BoardRow[] | KdRow[] }) {
   return (
-    <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={kind === "kd" ? <span className="text-[10px]">{KD_NOTE}</span> : undefined}>
+    <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={kind === "kd" ? <span className="text-[11px]">{KD_NOTE}</span> : undefined}>
       {rows.length === 0 ? (
         <p className="px-4 py-3 text-sm text-ink-2 lg:px-5">{EMPTY_BOARD}</p>
       ) : (

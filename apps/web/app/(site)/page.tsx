@@ -27,7 +27,7 @@ export default async function Home() {
     <Page wide>
       <section className="grid gap-8 border-b-2 border-rule-2 px-5 pb-7 pt-8 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end lg:gap-12 lg:px-8 lg:pb-10 lg:pt-14">
         <div>
-          <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-gold lg:text-[11px]">
+          <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-gold">
             <span className="inline-block h-2 w-2 bg-gold" />
             {board.season ? `Season ${board.season.number} · Week ${week} · Livonia` : "Livonia · Xbox"}
           </div>

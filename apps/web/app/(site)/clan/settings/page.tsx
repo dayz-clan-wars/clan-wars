@@ -55,9 +55,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         <Panel num="02" title="Guest passes" aside={guestPasses.length > 0 ? `${guestPasses.length} open` : undefined}>
           <PanelBody>
-            <p className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
+            <p id="guest-note" className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
             <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
-              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" /></label>
+              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby="guest-note" /></label>
               <button className={`${btnPrimary} self-start`} type="submit">Grant pass</button>
             </form>
           </PanelBody>
@@ -79,8 +79,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <PanelBody>
                 <form className="flex flex-col gap-3" action="/api/clan/rename" method="post">
                   <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /></label>
-                  <label className="block"><span className={fieldLabel}>Tag</span><input className={`${field} uppercase`} name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" /></label>
-                  <p className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
+                  <label className="block"><span className={fieldLabel}>Tag</span><input className={`${field} uppercase`} name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} aria-describedby="rename-note" /></label>
+                  <p id="rename-note" className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
                   <button className={`${btnSecondary} self-start`} type="submit">Rename</button>
                 </form>
               </PanelBody>

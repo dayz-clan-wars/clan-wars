@@ -45,13 +45,13 @@ export default function ChapterPage({ chapter }: { chapter: Chapter }) {
       <nav className="mt-10 grid max-w-[66ch] grid-cols-2 border-2 border-rule-2 lg:mt-14" aria-label="Previous and next">
         {prev ? (
           <a className="block min-h-[72px] border-r border-rule-2 px-4 py-3.5 text-ink hover:bg-frame lg:px-5 lg:py-4" href={hrefFor(prev)}>
-            <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-muted">&larr; Back</span>
+            <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-muted">&larr; Back</span>
             <span className="mt-1.5 block font-display text-sm lg:text-[15px]">{prev.number}. {prev.title}</span>
           </a>
         ) : <span className="min-h-[72px] border-r border-rule-2" aria-hidden="true" />}
         {next ? (
           <a className="block min-h-[72px] px-4 py-3.5 text-right text-ink hover:bg-frame lg:px-5 lg:py-4" href={hrefFor(next)}>
-            <span className="block font-mono text-[10px] uppercase tracking-[0.18em] text-gold">Next &rarr;</span>
+            <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-gold">Next &rarr;</span>
             <span className="mt-1.5 block font-display text-sm lg:text-[15px]">{next.number}. {next.title}</span>
           </a>
         ) : <span className="min-h-[72px]" aria-hidden="true" />}

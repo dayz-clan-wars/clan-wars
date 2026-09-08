@@ -37,7 +37,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
         <aside className="hidden w-[300px] flex-none border-r-2 border-rule-2 lg:block">
           <div className="sticky top-bar max-h-[calc(100dvh-var(--spacing-bar))] overflow-y-auto pb-10 pt-6">
             <div className="px-6 pb-4"><GuideSearch index={index} /></div>
-            <p className="m-0 px-6 pb-4 font-mono text-[10px] uppercase leading-relaxed tracking-[0.18em] text-muted">Field Guide<br />one Xbox server, Livonia</p>
+            <p className="m-0 px-6 pb-4 font-mono text-[11px] uppercase leading-relaxed tracking-[0.18em] text-muted">Field Guide<br />one Xbox server, Livonia</p>
             <Contents />
             <a className="mt-5 block px-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink" href="/">&larr; Back to the site</a>
           </div>
