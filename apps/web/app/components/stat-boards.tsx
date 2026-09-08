@@ -6,7 +6,10 @@ import { Panel, Rank, SegNav } from "./ui";
 export function ScopePicker({ seasons, basePath, current }: { seasons: number[]; basePath: string; current?: Boards["scope"] }) {
   return (
     <SegNav label="Scope" items={[
-      { label: "All-time", href: basePath, current: current?.kind === "all" },
+      // ⚠️ `?season=all`, never the bare path: a bare path parses as "default",
+      // which is the OPEN season — so the All-time button led straight back to
+      // Season 1 for as long as one was open.
+      { label: "All-time", href: `${basePath}?season=all`, current: current?.kind === "all" },
       ...seasons.map((n) => ({ label: `Season ${n}`, href: `${basePath}?season=${n}`, current: current?.kind === "season" && current.number === n })),
     ]} />
   );
