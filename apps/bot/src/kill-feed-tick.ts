@@ -2,7 +2,7 @@ import type { APIEmbed } from "discord.js";
 import type { Database } from "@factions/db";
 import { consumerCursors, factions, kills, players, seasons } from "@factions/db";
 import { readCursor, writeCursor } from "@factions/event-log";
-import { and, asc, desc, eq, gt, gte, isNotNull, lt, lte, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { killFeedEmbed, type KillFeedItem } from "./kill-feed-embed.js";
@@ -144,13 +144,18 @@ export class PgKillFeedStore implements KillFeedStore {
   }
 
   /**
-   * The killer's PvP kills and the victim's PvP deaths in the newest season
-   * (all-time with no season), up to and including this kill — so the line
-   * reads the same however late the post lands.
+   * The killer's PvP kills and the victim's PvP deaths in the season THIS
+   * KILL belongs to — the one whose window contains it — up to and including
+   * it, so the line reads the same however late the post lands. A kill
+   * before any season (the launch-day backfill) counts all-time; "0 kills
+   * this season" under a kill from last week is a wrong sentence, not a
+   * small number.
    */
   private async tally(serverId: number, killerDayzId: string, victimDayzId: string, at: Date) {
     const [season] = await this.db.select({ number: seasons.number, startedAt: seasons.startedAt, endedAt: seasons.endedAt })
-      .from(seasons).where(eq(seasons.serverId, serverId)).orderBy(desc(seasons.number)).limit(1);
+      .from(seasons)
+      .where(and(eq(seasons.serverId, serverId), lte(seasons.startedAt, at), or(isNull(seasons.endedAt), gt(seasons.endedAt, at))))
+      .orderBy(desc(seasons.number)).limit(1);
     const inWindow = season
       ? and(gte(kills.occurredAt, season.startedAt), season.endedAt ? lt(kills.occurredAt, season.endedAt) : sql`true`)!
       : sql`true`;
