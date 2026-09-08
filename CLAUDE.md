@@ -575,8 +575,7 @@ factions`, or it proves nothing.
 Increment 8 (launch) merged on 2026-09-07: `/guide` redirects to the
 guide's host, `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` is the
 twice-weekly base-damage flip, and `docs/deploy/2026-09-10-launch.md` is the order every
-unapplied runbook (2b → 7) reaches `factions_live` in, plus the acceptance. Nothing from
-increments 2b through 8 is deployed until that runbook is run.
+unapplied runbook (2b → 7) reaches `factions_live` in, plus the acceptance. Deployed to `factions_live` on 2026-09-08 as one consolidated deploy (migrations 0020–0028 together; the database held zero clans): `docs/acceptance/2026-09-08-launch.md`. Launch instant `2026-09-08T00:39:17Z`; poles in grace until 2026-09-15.
 
 ### Known-open, in rough priority order
 
