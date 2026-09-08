@@ -28,6 +28,8 @@ export type BotConfig = {
   warLogChannelId: string | undefined;
   /** #kill-feed. Optional: the kill feed is off unless deliberately turned on. */
   killFeedChannelId?: string;
+  /** #players-online: one message the bot keeps edited. Optional. */
+  playersOnlineChannelId?: string;
   /**
    * Base URL the flag images are served from — `https://dayzclanwars.com`.
    * Undefined means embeds post with no thumbnail, exactly as they did before
@@ -207,6 +209,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
     warLogChannelId: optionalSnowflake(env, "WAR_LOG_CHANNEL_ID"),
     killFeedChannelId: optionalSnowflake(env, "KILL_FEED_CHANNEL_ID"),
+    playersOnlineChannelId: optionalSnowflake(env, "PLAYERS_ONLINE_CHANNEL_ID"),
     flagImageBaseUrl: optionalHttpUrl(env, "FLAG_IMAGE_BASE_URL"),
     // ⚠️ Stripped of any trailing slash here, unlike FLAG_IMAGE_BASE_URL just
     // above — that resolver strips its own trailing slash at the point it
