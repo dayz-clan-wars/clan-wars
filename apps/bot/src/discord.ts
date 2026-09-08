@@ -35,6 +35,7 @@ import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
 import { PgKillFeedStore, killFeedTick } from "./kill-feed-tick.js";
+import { PgOnlineStore, onlineTick, type OnlineBoard, type OnlineState } from "./online-tick.js";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
@@ -332,6 +333,46 @@ export function createFeedPoster(client: Client, channelId: string): FeedPoster 
 }
 
 /**
+ * The one message in #players-online. The bot's newest message in the
+ * channel is the board; with none, the first `show` sends it. The id is
+ * cached for the process's life and dropped on an edit failure, so a message
+ * someone deleted is replaced on the next tick rather than erroring forever.
+ *
+ * ⚠️ Throws on every unreachable path, like the posters: `onlineTick` records
+ * a successful show only when this resolves.
+ */
+export function createOnlineBoard(client: Client, channelId: string): OnlineBoard {
+  let messageId: string | null = null;
+  return {
+    async show(embed) {
+      const channel = await client.channels.fetch(channelId);
+      if (!channel?.isSendable() || !channel.isTextBased() || channel.isDMBased()) {
+        throw new Error(`players-online channel ${channelId} is missing or not sendable by this bot`);
+      }
+      const me = client.user?.id;
+      if (messageId === null && me) {
+        const recent = await channel.messages.fetch({ limit: 20 });
+        const mine = recent.filter((m) => m.author.id === me).sort((a, b) => b.createdTimestamp - a.createdTimestamp).first();
+        messageId = mine?.id ?? null;
+      }
+      if (messageId !== null) {
+        try {
+          const msg = await channel.messages.fetch(messageId);
+          await msg.edit({ embeds: [embed] });
+          return;
+        } catch (err) {
+          // Deleted, or no longer ours to edit: forget it and send a fresh one.
+          messageId = null;
+          console.warn(`players-online board message could not be edited; sending a new one`, err);
+        }
+      }
+      const sent = await channel.send({ embeds: [embed] });
+      messageId = sent.id;
+    },
+  };
+}
+
+/**
  * ⚠️ Same shape and reasoning as `createFeedPoster`: throws on every
  * unreachable path rather than returning quietly, because `warLogTick`
  * marks a row posted only when this resolves — a swallowed failure would
@@ -403,6 +444,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   // The same embed poster the feed uses, aimed at #kill-feed.
   const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
   const killFeedStore = new PgKillFeedStore(db);
+  const onlineBoard = cfg.playersOnlineChannelId ? createOnlineBoard(client, cfg.playersOnlineChannelId) : null;
+  const onlineStore = new PgOnlineStore(db);
+  const onlineState: OnlineState = { lastKey: null };
   const noticeSender = createNoticeSender(client);
 
   const renameOnLink = createNicknameApplier(client);
@@ -639,6 +683,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       console.error("sessions tick failed", err);
+    }
+
+    // Right after sessions, so a connect and the board showing it land in the
+    // same tick. Edits only on a change; a restart shows once regardless.
+    if (onlineBoard) {
+      try {
+        const o = await onlineTick(onlineStore, onlineBoard, onlineState, new Date());
+        if (o.edited) console.log(`players online: ${o.players} shown`);
+      } catch (err) {
+        console.error("players online tick failed", err);
+      }
     }
 
     try {

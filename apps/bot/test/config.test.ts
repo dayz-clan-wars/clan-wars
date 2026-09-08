@@ -95,6 +95,14 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("PLAYERS_ONLINE_CHANNEL_ID", () => {
+    it("is optional, reads a snowflake, and rejects anything else", () => {
+      expect(loadConfig({ ...OK }).playersOnlineChannelId).toBeUndefined();
+      expect(loadConfig({ ...OK, PLAYERS_ONLINE_CHANNEL_ID: "1546928156902949016" }).playersOnlineChannelId).toBe("1546928156902949016");
+      expect(() => loadConfig({ ...OK, PLAYERS_ONLINE_CHANNEL_ID: "#players-online" })).toThrow(/PLAYERS_ONLINE_CHANNEL_ID/u);
+    });
+  });
+
   describe("KILL_FEED_CHANNEL_ID", () => {
     it("⚠️ is optional, so the kill feed is off unless deliberately turned on", () => {
       expect(loadConfig({ ...OK }).killFeedChannelId).toBeUndefined();
