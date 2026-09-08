@@ -1,6 +1,7 @@
 import { currentSession } from "@/lib/viewer";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
+import { InstallStrip } from "@/app/components/install-strip";
 
 /**
  * The site shell: one top bar with the menu, over every page except the
@@ -19,6 +20,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   return (
     <>
       <SiteBar signedIn={session !== null} guideIndex={buildIndex()} />
+      <InstallStrip />
       {children}
     </>
   );
