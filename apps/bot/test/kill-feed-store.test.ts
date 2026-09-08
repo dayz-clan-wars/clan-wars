@@ -89,14 +89,21 @@ describe("PgKillFeedStore", () => {
     expect(k!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: null });
   });
 
-  it("the tally counts only the newest season's window", async () => {
+  it("the tally counts in the season the kill belongs to, and all-time before any season", async () => {
     await db.insert(seasons).values([
       { serverId, number: 1, startedAt: h(-48), endedAt: h(-24) },
       { serverId, number: 2, startedAt: h(-24), endedAt: null },
     ]);
-    await mkKill({ at: h(-30), victim: R, killer: A }); // season 1: not counted
-    const e = await mkKill({ at: h(1), victim: R, killer: A });
-    const [k] = await store.readAfter(e - 1, 10);
-    expect(k!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: 2 });
+    const e0 = await mkKill({ at: h(-60), victim: R, killer: A }); // before season 1: all-time
+    const e1 = await mkKill({ at: h(-30), victim: R, killer: A }); // season 1
+    const e2 = await mkKill({ at: h(1), victim: R, killer: A });   // season 2
+    const [k0, k1, k2] = await store.readAfter(0, 10);
+    expect(k0!.eventId).toBe(e0);
+    expect(k0!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: null });
+    expect(k1!.eventId).toBe(e1);
+    expect(k1!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: 1 });
+    expect(k2!.eventId).toBe(e2);
+    // ⚠️ Season 2 only: the season-1 kill and the pre-season kill are not in this window.
+    expect(k2!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: 2 });
   });
 });
