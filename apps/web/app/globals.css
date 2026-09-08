@@ -33,6 +33,9 @@
   --font-display: var(--font-archivo-black), system-ui, sans-serif;
   --font-sans: var(--font-archivo), system-ui, sans-serif;
   --font-mono: var(--font-space-mono), ui-monospace, monospace;
+
+  /* The (site) top bar's height. The map and the full-height auth pages subtract it. */
+  --spacing-bar: 52px;
 }
 
 :root { color-scheme: dark; }

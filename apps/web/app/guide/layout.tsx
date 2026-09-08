@@ -11,12 +11,13 @@ export default function GuideLayout({ children }: { children: React.ReactNode })
     <div className="guide">
       <header className="topbar">
         <a className="brand" href="/guide"><img src="/guide/logo.png" alt="Clan Wars" width={40} height={40} /><span>Field Guide</span></a>
-        <details><summary>Contents</summary><div className="menu"><Contents /></div></details>
+        <details><summary>Contents</summary><div className="menu"><Contents /><a className="site-link" href="/">&larr; Back to the site</a></div></details>
       </header>
       <div className="shell">
         <aside className="rail"><div className="rail-inner">
           <a href="/guide"><img src="/guide/logo.png" alt="Clan Wars" width={120} height={120} /></a>
           <p className="kicker">Field Guide · one Xbox server, Livonia</p>
+          <a className="site-link" href="/">&larr; Back to the site</a>
           <Contents />
         </div></aside>
         <main>{children}</main>

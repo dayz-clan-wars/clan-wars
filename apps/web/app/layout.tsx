@@ -9,8 +9,9 @@ export const metadata: Metadata = {
 
 /**
  * The three font variables ride on <html> so @theme's --font-* tokens
- * resolve everywhere, including portals and the 404 page. Pages own their
- * own layout below this; there is no shared chrome yet.
+ * resolve everywhere, including portals and the 404 page. The site's top bar
+ * and menu live one level down, in app/(site)/layout.tsx, so the static
+ * landing page and guide stay outside it.
  */
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

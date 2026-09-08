@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignInCard } from "../components/sign-in-card";
+import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
 
 export const metadata: Metadata = {
@@ -16,7 +16,7 @@ export default async function JoinPage({
   const next = safeNextPath(typeof params.next === "string" ? params.next : null);
 
   return (
-    <div className="flex min-h-dvh flex-col items-center px-4 pb-18 pt-7">
+    <div className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
       {/*
         ⚠️ The button is the consent. Discord will ask for "Join servers for
         you" on the round this starts, and that prompt should follow something

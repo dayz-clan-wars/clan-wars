@@ -23,7 +23,7 @@ export default async function LinkPage() {
   const status = await linkStatus(session.sub);
   // Dates cross to the client as strings; the component parses them.
   return (
-    <main className="flex min-h-dvh flex-col items-center px-4 pb-18 pt-7">
+    <main className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
       <LinkFlow initial={JSON.parse(JSON.stringify(status))} />
     </main>
   );

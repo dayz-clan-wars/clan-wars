@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { SignInCard } from "../components/sign-in-card";
+import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
 
 export const metadata: Metadata = {
@@ -24,7 +24,7 @@ export default async function LoginPage({
   const rawError = typeof params.error === "string" ? params.error : "";
 
   return (
-    <div className="flex min-h-dvh flex-col items-center px-4 pb-18 pt-7">
+    <div className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
       <SignInCard
         step="Sign in"
         heading="Link your character"
