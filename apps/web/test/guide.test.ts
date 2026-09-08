@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import config from "../next.config";
 import { CHAPTERS, CONTENT_DIR, chapterBySlug, hrefFor, neighbours } from "../lib/guide";
 
 /**
@@ -46,5 +47,33 @@ describe("the fragments", () => {
     const html = readFileSync(join(CONTENT_DIR, "numbers.html"), "utf8");
     const rows = html.match(/<tr><td>[^<]*<\/td><td class="v">[^<]*<\/td><\/tr>/gu) ?? [];
     expect(rows.length).toBeGreaterThanOrEqual(40);
+  });
+});
+
+describe("guide.css rides on @theme", () => {
+  const dir = join(import.meta.dirname, "..", "app");
+  const css = readFileSync(join(dir, "guide", "guide.css"), "utf8");
+  const theme = readFileSync(join(dir, "globals.css"), "utf8").match(/@theme\s*\{([\s\S]*?)\n\}/u)?.[1] ?? "";
+  const declared = (s: string) => new Set([...s.matchAll(/^\s*(--[a-z0-9-]+)\s*:/gmu)].map((m) => m[1]!));
+
+  it("⚠️ declares no colour or face of its own — the palette is stated once, in globals.css", () => {
+    for (const name of declared(css)) expect(name).not.toMatch(/^--(color|font)-/u);
+  });
+
+  it("references only tokens @theme or it declares", () => {
+    const known = new Set([...declared(theme), ...declared(css)]);
+    for (const m of css.matchAll(/var\((--[a-z0-9-]+)\)/gu)) expect(known.has(m[1]!), m[1]).toBe(true);
+  });
+
+  it("scopes every element selector under .guide", () => {
+    // Tailwind's preflight and the rest of the site must not pick these up.
+    const bare = [...css.matchAll(/^(h1|h2|h3|p|ul|ol|li|a|table|th|td|strong|em|hr|code|kbd|main|body|html)\b[^{]*\{/gmu)];
+    expect(bare.map((m) => m[0])).toEqual([]);
+  });
+});
+
+describe("the site serves the guide itself", () => {
+  it("has no redirects — /guide used to hand off to fieldguide.dayzclanwars.com", () => {
+    expect(config.redirects).toBeUndefined();
   });
 });

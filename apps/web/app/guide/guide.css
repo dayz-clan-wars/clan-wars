@@ -1,0 +1,182 @@
+/* apps/web/app/guide/guide.css
+   The field guide's stylesheet, ported from the old field-guide repo's
+   assets/style.css. Colours and faces are the app's @theme tokens
+   (globals.css) — nothing is restated here (test/guide.test.ts). Every rule
+   is scoped under .guide so the site's other pages never see them.
+   ⚠️ Tailwind v4's preflight zeroes list styles and margins, so ul/ol get
+   their markers back explicitly below. */
+
+.guide {
+  --measure: 66ch;
+  --rail: 280px;
+  font-size: 17px;
+  line-height: 1.6;
+  color: var(--color-ink);
+}
+@media (min-width: 1000px) { .guide { font-size: 18px; } }
+.guide a { color: var(--color-gold); text-decoration: none; }
+.guide a:hover, .guide a:focus-visible { text-decoration: underline; text-underline-offset: 3px; }
+.guide :focus-visible { outline: 2px solid var(--color-gold); outline-offset: 3px; }
+
+/* ---------- shell ---------- */
+
+.guide .shell { display: flex; min-height: 100vh; }
+
+.guide .rail {
+  display: none;
+  width: var(--rail);
+  flex: 0 0 var(--rail);
+  border-right: 1px solid var(--color-rule);
+  background: var(--color-frame);
+}
+.guide .rail-inner { position: sticky; top: 0; padding: 28px 22px 40px; max-height: 100vh; overflow-y: auto; }
+.guide .rail img { width: 120px; height: 120px; display: block; margin-bottom: 18px; }
+.guide .rail .kicker { color: var(--color-muted); font-size: 13px; margin: 0 0 22px; }
+
+.guide .toc { list-style: none; margin: 0; padding: 0; }
+.guide .toc li { margin: 0; }
+.guide .toc a {
+  display: grid; grid-template-columns: 2ch 1fr; gap: 12px;
+  padding: 7px 0; color: var(--color-ink-2); font-size: 14.5px; line-height: 1.35;
+}
+.guide .toc a .n { color: var(--color-dim); font-family: var(--font-mono); font-size: 12.5px; padding-top: 2px; }
+.guide .toc a:hover { color: var(--color-ink); text-decoration: none; }
+.guide .toc a[aria-current="page"] { color: var(--color-gold); }
+.guide .toc a[aria-current="page"] .n { color: var(--color-gold); }
+.guide .toc .sep { border-top: 1px solid var(--color-rule-2); margin: 12px 0; }
+
+.guide .topbar {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 18px; border-bottom: 1px solid var(--color-rule); background: var(--color-frame);
+  position: sticky; top: 0; z-index: 5;
+}
+.guide .topbar img { width: 40px; height: 40px; }
+.guide .topbar .brand { display: flex; align-items: center; gap: 12px; color: var(--color-ink); font-family: var(--font-display); font-size: 15px; letter-spacing: .02em; }
+.guide .topbar details { position: relative; }
+.guide .topbar summary {
+  list-style: none; cursor: pointer; color: var(--color-gold); font-size: 15px;
+  padding: 10px 4px; min-height: 44px; display: flex; align-items: center;
+}
+.guide .topbar summary::-webkit-details-marker { display: none; }
+.guide .topbar details[open] summary { color: var(--color-ink); }
+.guide .topbar .menu {
+  position: absolute; right: 0; top: 100%; width: min(86vw, 340px);
+  background: var(--color-surface); border: 1px solid var(--color-rule-2); padding: 12px 16px;
+  max-height: 75vh; overflow-y: auto;
+}
+.guide .topbar .menu .toc a { padding: 9px 0; min-height: 44px; align-items: center; }
+
+@media (min-width: 1000px) {
+  .guide .rail { display: block; }
+  .guide .topbar { display: none; }
+}
+
+.guide main { flex: 1 1 auto; min-width: 0; }
+.guide .page { padding: 28px 20px 64px; max-width: calc(var(--measure) + 40px); }
+@media (min-width: 700px) { .guide .page { padding: 48px 40px 96px; } }
+@media (min-width: 1000px) { .guide .page { padding: 64px 64px 120px; } }
+
+/* ---------- chapter opener ---------- */
+
+.guide .opener { margin: 0 0 40px; padding-bottom: 28px; border-bottom: 1px solid var(--color-rule-2); }
+.guide .opener .num {
+  display: block; font-family: var(--font-display); color: var(--color-gold);
+  font-size: 88px; line-height: .9; letter-spacing: -.02em; margin: 0 0 8px -3px;
+}
+@media (min-width: 700px) { .guide .opener .num { font-size: 128px; } }
+.guide .opener h1 {
+  font-family: var(--font-display); font-weight: 400; margin: 0;
+  font-size: 34px; line-height: 1.08; letter-spacing: -.01em;
+}
+@media (min-width: 700px) { .guide .opener h1 { font-size: 46px; } }
+.guide .opener .lede { color: var(--color-ink-2); font-size: 1.1em; margin: 16px 0 0; max-width: 56ch; }
+
+/* ---------- text ---------- */
+
+.guide h2 {
+  font-family: var(--font-display); font-weight: 400; font-size: 1.45em; line-height: 1.2;
+  margin: 2.2em 0 .6em; letter-spacing: -.005em;
+}
+.guide h3 { font-size: 1.05em; font-weight: 700; margin: 1.8em 0 .4em; }
+.guide p { margin: 0 0 1em; max-width: var(--measure); }
+.guide ul, .guide ol { padding-left: 1.3em; margin: 0 0 1.1em; max-width: var(--measure); }
+.guide ul { list-style: disc; }
+.guide ol { list-style: decimal; }
+.guide li { margin: 0 0 .45em; }
+.guide li::marker { color: var(--color-muted); }
+.guide strong { color: #fff; font-weight: 700; }
+.guide em { color: var(--color-ink-2); }
+.guide hr { border: 0; border-top: 1px solid var(--color-rule-2); margin: 2.4em 0; }
+.guide code, .guide .mono { font-family: var(--font-mono); font-size: .88em; }
+.guide kbd { font-family: var(--font-mono); font-size: .85em; background: var(--color-surface); border: 1px solid var(--color-rule-2); padding: 1px 6px; }
+
+/* A rule: the thing a player is promised. The one loud device on the page. */
+.guide .rule {
+  margin: 1.6em 0; padding: 18px 22px;
+  border-left: 3px solid var(--color-gold); background: var(--color-frame);
+  font-size: 1.08em; line-height: 1.5; max-width: var(--measure);
+}
+.guide .rule p { margin: 0; }
+.guide .rule p + p { margin-top: .7em; }
+.guide .rule strong { color: var(--color-gold); }
+
+/* What the server can see — the honesty box. Quiet, grey, never gold. */
+.guide .log {
+  margin: 1.6em 0; padding: 16px 20px; background: var(--color-surface);
+  border: 1px solid var(--color-rule-2); color: var(--color-ink-2); font-size: .95em; max-width: var(--measure);
+}
+.guide .log .t { display: block; color: var(--color-muted); font-size: .82em; margin-bottom: 6px; }
+.guide .log p:last-child { margin-bottom: 0; }
+
+/* Enforced by people — rust means an obligation, not a decoration. */
+.guide .human {
+  margin: 1.6em 0; padding: 16px 20px; border-left: 3px solid var(--color-rust);
+  background: var(--color-frame); max-width: var(--measure);
+}
+.guide .human p:last-child { margin-bottom: 0; }
+
+/* An announcement as the bot would post it. */
+.guide .post {
+  margin: 1.2em 0; padding: 14px 18px; background: var(--color-surface); border: 1px solid var(--color-rule-2);
+  font-family: var(--font-mono); font-size: .86em; line-height: 1.5; max-width: var(--measure);
+  overflow-x: auto;
+}
+.guide .post .ch { color: var(--color-muted); display: block; margin-bottom: 4px; font-size: .9em; }
+
+.guide table { border-collapse: collapse; width: 100%; max-width: var(--measure); margin: 1.2em 0 1.6em; font-size: .95em; }
+.guide .tablewrap { overflow-x: auto; max-width: var(--measure); }
+.guide th, .guide td { text-align: left; vertical-align: top; padding: 9px 12px 9px 0; border-bottom: 1px solid var(--color-rule-2); }
+.guide th { color: var(--color-muted); font-weight: 400; font-size: .85em; }
+.guide td:last-child, .guide th:last-child { padding-right: 0; }
+.guide td.v { font-family: var(--font-mono); font-size: .9em; white-space: nowrap; color: #fff; }
+.guide tr.group td { color: var(--color-gold); font-family: var(--font-display); padding-top: 22px; border-bottom-color: var(--color-rule-2); }
+
+/* one-page rules list */
+.guide .onepage h2 { font-size: 1.15em; margin-top: 2em; }
+.guide .onepage ul { list-style: none; padding: 0; }
+.guide .onepage li { padding: 8px 0; border-bottom: 1px solid var(--color-rule); margin: 0; }
+
+/* prev / next — big, tappable, unmistakable */
+.guide .pager {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px;
+  margin-top: 56px; padding-top: 28px; border-top: 1px solid var(--color-rule-2); max-width: var(--measure);
+}
+.guide .pager a {
+  display: flex; flex-direction: column; justify-content: center; gap: 3px;
+  min-height: 72px; padding: 14px 18px;
+  background: var(--color-gold); color: var(--color-ground); border: 1px solid var(--color-gold);
+}
+.guide .pager a .lbl { font-family: var(--font-display); font-size: 17px; letter-spacing: .01em; }
+.guide .pager a .dest { font-size: 14px; line-height: 1.3; opacity: .8; }
+.guide .pager a:hover, .guide .pager a:focus-visible { background: #e6b04f; border-color: #e6b04f; text-decoration: none; }
+.guide .pager a:hover .dest { opacity: 1; }
+.guide .pager .prev { grid-column: 1; text-align: left; }
+.guide .pager .next { grid-column: 2; text-align: right; align-items: flex-end; }
+.guide .pager .empty { min-height: 72px; }
+
+.guide footer.site { color: var(--color-dim); font-size: 13px; margin-top: 40px; max-width: var(--measure); }
+
+@media (prefers-reduced-motion: no-preference) {
+  .guide .topbar .menu { animation: guide-drop .12s ease-out; }
+  @keyframes guide-drop { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+}
