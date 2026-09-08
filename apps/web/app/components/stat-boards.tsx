@@ -16,7 +16,7 @@ export function ScopePicker({ seasons, basePath, current }: { seasons: number[];
 }
 
 type Kind = keyof Omit<Boards, "scope" | "seasons">;
-const NUM: Record<Kind, string> = { raiders: "01", killers: "02", kd: "03", playTime: "04", friendlyFire: "05" };
+const NUM: Record<Kind, string> = { raiders: "01", killers: "02", deaths: "03", kd: "04", playTime: "05", friendlyFire: "06" };
 
 function formatValue(kind: Kind, value: number): string {
   return kind === "playTime" ? playTime(value) : String(value);
@@ -46,7 +46,7 @@ function BoardPanel({ kind, rows }: { kind: Kind; rows: BoardRow[] | KdRow[] }) 
   );
 }
 
-/** The five boards (spec §11), in the order `BOARD_LABELS` names them, in a three-column grid on desktop. */
+/** The six boards (spec §11, plus deaths), in the order `BOARD_LABELS` names them, in a three-column grid on desktop. */
 export function StatBoards({ boards, extra }: { boards: Boards; extra?: React.ReactNode }) {
   return (
     <>
@@ -54,6 +54,7 @@ export function StatBoards({ boards, extra }: { boards: Boards; extra?: React.Re
       <div className="grid gap-4 lg:grid-cols-3 lg:gap-6">
         <BoardPanel kind="raiders" rows={boards.raiders} />
         <BoardPanel kind="killers" rows={boards.killers} />
+        <BoardPanel kind="deaths" rows={boards.deaths} />
         <BoardPanel kind="kd" rows={boards.kd} />
         <BoardPanel kind="playTime" rows={boards.playTime} />
         <BoardPanel kind="friendlyFire" rows={boards.friendlyFire} />

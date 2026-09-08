@@ -49,6 +49,8 @@ export type Boards = {
   seasons: number[];
   raiders: BoardRow[];
   killers: BoardRow[];
+  /** Most PvP deaths: killed by another player. A self-kill or a killer-less death is not one. */
+  deaths: BoardRow[];
   kd: KdRow[];
   playTime: BoardRow[];
   friendlyFire: BoardRow[];
@@ -226,7 +228,7 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
     .slice(0, limit);
 }
 
-/** The five boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+/** The six boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const serverId = await activeServerId(db);
   // ⚠️ The season list first, alone: `{ kind: "current" }` is resolved from it,
@@ -235,12 +237,17 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
   const resolved = resolveScope(scope, seasonList);
   const w = await windowFor(db, serverId, resolved, now);
 
-  const [raiders, killers, kd, playTime, friendlyFire] = await Promise.all([
+  const [raiders, killers, deaths, kd, playTime, friendlyFire] = await Promise.all([
     countBoard(db, raids.raiderDayzId, raids, and(
       eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
     )!, limit),
     countBoard(db, kills.killerDayzId, kills, and(
       eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
+    )!, limit),
+    // ⚠️ The ROSTER predicate is on the victim: a member's deaths count
+    // whoever killed them, the same rule the K/D board's denominator uses.
+    countBoard(db, kills.victimDayzId, kills, and(
+      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.victimDayzId, roster),
     )!, limit),
     kdBoard(db, serverId, w, roster, limit),
     playTimeBoard(db, serverId, w, now, roster, limit),
@@ -250,7 +257,7 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
     )!, limit),
   ]);
 
-  return { scope: resolved, seasons: seasonList, raiders, killers, kd, playTime, friendlyFire };
+  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire };
 }
 
 /** The public boards (spec §11). */
