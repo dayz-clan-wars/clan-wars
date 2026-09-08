@@ -27,7 +27,7 @@ export function escapeMarkdown(s: string): string {
   return s.replace(/[\\*_~`|[\]()>]/gu, (c) => `\\${c}`);
 }
 
-function profileUrl(siteBaseUrl: string, gamertag: string): string {
+export function profileUrl(siteBaseUrl: string, gamertag: string): string {
   return `${siteBaseUrl}/players/${encodeURIComponent(gamertag)}`;
 }
 

@@ -3,6 +3,7 @@ import { onlineTick, type OnlineBoard, type OnlineState } from "../src/online-ti
 import type { OnlinePlayer } from "../src/online-embed.js";
 
 const now = new Date("2026-09-08T18:00:00Z");
+const site = "https://dayzclanwars.com";
 const p = (gamertag: string): OnlinePlayer => ({ dayzId: gamertag.padEnd(40, "0"), gamertag, tag: null, connectedAt: now });
 
 describe("onlineTick", () => {
@@ -12,13 +13,13 @@ describe("onlineTick", () => {
     const board: OnlineBoard = { show: vi.fn(async () => {}) };
     const state: OnlineState = { lastKey: null };
 
-    expect(await onlineTick(store, board, state, now)).toEqual({ players: 1, edited: true });
-    expect(await onlineTick(store, board, state, now)).toEqual({ players: 1, edited: false });
+    expect(await onlineTick(store, board, state, now, site)).toEqual({ players: 1, edited: true });
+    expect(await onlineTick(store, board, state, now, site)).toEqual({ players: 1, edited: false });
     online = [p("A"), p("B")];
-    expect(await onlineTick(store, board, state, now)).toEqual({ players: 2, edited: true });
+    expect(await onlineTick(store, board, state, now, site)).toEqual({ players: 2, edited: true });
     online = [];
-    expect(await onlineTick(store, board, state, now)).toEqual({ players: 0, edited: true });
-    expect(await onlineTick(store, board, state, now)).toEqual({ players: 0, edited: false });
+    expect(await onlineTick(store, board, state, now, site)).toEqual({ players: 0, edited: true });
+    expect(await onlineTick(store, board, state, now, site)).toEqual({ players: 0, edited: false });
     expect(board.show).toHaveBeenCalledTimes(3);
   });
 
@@ -26,9 +27,9 @@ describe("onlineTick", () => {
     const store = { read: async () => [p("A")] };
     const show = vi.fn<(e: unknown) => Promise<void>>().mockRejectedValueOnce(new Error("discord is down")).mockResolvedValue(undefined);
     const state: OnlineState = { lastKey: null };
-    await expect(onlineTick(store, { show }, state, now)).rejects.toThrow("discord is down");
+    await expect(onlineTick(store, { show }, state, now, site)).rejects.toThrow("discord is down");
     expect(state.lastKey).toBeNull();
-    expect(await onlineTick(store, { show }, state, now)).toEqual({ players: 1, edited: true });
+    expect(await onlineTick(store, { show }, state, now, site)).toEqual({ players: 1, edited: true });
     expect(state.lastKey).not.toBeNull();
   });
 });
