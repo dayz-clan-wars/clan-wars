@@ -95,6 +95,17 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("KILL_FEED_CHANNEL_ID", () => {
+    it("⚠️ is optional, so the kill feed is off unless deliberately turned on", () => {
+      expect(loadConfig({ ...OK }).killFeedChannelId).toBeUndefined();
+    });
+
+    it("reads the channel id when set, and rejects a non-snowflake", () => {
+      expect(loadConfig({ ...OK, KILL_FEED_CHANNEL_ID: "1546919850583261215" }).killFeedChannelId).toBe("1546919850583261215");
+      expect(() => loadConfig({ ...OK, KILL_FEED_CHANNEL_ID: "#kill-feed" })).toThrow(/KILL_FEED_CHANNEL_ID/u);
+    });
+  });
+
   describe("WAR_LOG_CHANNEL_ID", () => {
     it("⚠️ is optional, so the war log is off unless deliberately turned on", () => {
       expect(loadConfig({ ...OK }).warLogChannelId).toBeUndefined();

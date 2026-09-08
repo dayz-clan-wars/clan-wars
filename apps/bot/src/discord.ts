@@ -34,6 +34,7 @@ import { raiseTick } from "./raise-tick.js";
 import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
+import { PgKillFeedStore, killFeedTick } from "./kill-feed-tick.js";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
@@ -399,6 +400,9 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
   const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
+  // The same embed poster the feed uses, aimed at #kill-feed.
+  const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
+  const killFeedStore = new PgKillFeedStore(db);
   const noticeSender = createNoticeSender(client);
 
   const renameOnLink = createNicknameApplier(client);
@@ -533,6 +537,8 @@ export async function start(cfg: BotConfig): Promise<void> {
   // One log per bot instance, mirroring feedFailures/lastReportedBlockedAt above.
   const warLogFailures = new Set<number>();
   let lastReportedWarLogBlockedAt: number | null = null;
+  const killFeedFailures = new Set<number>();
+  let lastReportedKillFeedBlockedAt: number | null = null;
 
   // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
   // tick — see the throttle beside expirePendingMembers below.
@@ -877,6 +883,34 @@ export async function start(cfg: BotConfig): Promise<void> {
         }
       } catch (err) {
         console.error("war log tick failed", err);
+      }
+    }
+
+    // ⚠️ After killsTick above, so a kill and its post land in the same tick.
+    // Gated on a channel id like the feed and the war log; the first run
+    // seeds the cursor at the head and posts nothing (see kill-feed-tick.ts).
+    if (killFeedPoster) {
+      try {
+        const k = await killFeedTick(killFeedStore, killFeedPoster, {
+          siteBaseUrl: cfg.siteBaseUrl,
+          flagImage: flagImageResolver(cfg.flagImageBaseUrl),
+          onError: (id, err) => {
+            if (killFeedFailures.has(id)) return;
+            killFeedFailures.add(id);
+            console.error(`kill feed post failed for kill event ${id}`, err);
+          },
+        });
+        if (k.seeded) console.log("kill feed: cursor seeded at the head; history is not posted");
+        if (k.posted > 0) console.log(`kill feed posted ${k.posted}`);
+        if (k.blockedAt !== null && k.blockedAt !== lastReportedKillFeedBlockedAt) {
+          console.error(
+            `kill feed blocked at kill event ${k.blockedAt}; nothing behind it will post ` +
+            `until this one succeeds. Check the bot's View Channel / Send Messages / Embed Links permission on ${cfg.killFeedChannelId}.`,
+          );
+          lastReportedKillFeedBlockedAt = k.blockedAt;
+        }
+      } catch (err) {
+        console.error("kill feed tick failed", err);
       }
     }
 
