@@ -76,7 +76,47 @@ body {
 .leaflet-tooltip { box-shadow: none; }
 .leaflet-tooltip::before { border-top-color: var(--color-frame); border-right-color: var(--color-frame); }
 .leaflet-control-attribution a, .leaflet-popup-content a { color: var(--color-gold); }
-/* The clanmates' permanent name tags: readable over terrain, never a white slab. */
-.cw-map-tag { padding: 0 0.25rem; font-family: var(--font-mono); font-size: 11px; }
-/* divIcon roots are sized inline by Leaflet; these only need to not be a white box. */
-.cw-map-flag, .cw-map-pin { background: none; border: 0; }
+/*
+ * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
+ * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and
+ * these rules only keep it from being a white box and let a class flip its
+ * state — stale, open, far — without rebuilding the element.
+ */
+.cw-mk { background: none; border: 0; }
+.cw-mk svg { display: block; }
+/* Name tags: mono in the black chip, no arrow. Age lowers the tag's opacity with the marker's, never its text colour. */
+.cw-map-tag {
+  padding: 3px 7px; font-family: var(--font-mono); font-size: 11px; line-height: 1.3; white-space: nowrap;
+  background: var(--color-frame); color: var(--color-ink); border: 1px solid var(--color-rule-2); border-radius: 0; box-shadow: none;
+}
+.cw-map-tag::before { display: none; }
+.cw-map-tag-you { color: var(--color-gold); }
+.cw-map-tag-base { border-color: var(--color-gold); }
+.cw-map-tag-intruder { border-color: var(--color-rust); }
+.cw-map-tag-hub { color: var(--color-olive); }
+/* A clanmate's core hollows past a day (`cw-stale` is toggled by the age tick). */
+.cw-mk-clanmate .cw-core-hollow { display: none; }
+.cw-mk-clanmate.cw-stale .cw-core-solid { display: none; }
+.cw-mk-clanmate.cw-stale .cw-core-hollow { display: block; }
+/* An intruder's slow single pulse while inside the zone. */
+.cw-mk-intruder { position: relative; }
+.cw-ring {
+  position: absolute; left: -4px; top: -4px; width: 36px; height: 36px; box-sizing: border-box;
+  border: 2px solid; transform: rotate(45deg); opacity: .45; pointer-events: none;
+  animation: cw-pulse 3s ease-out infinite;
+}
+@keyframes cw-pulse {
+  0% { transform: rotate(45deg) scale(.7); opacity: .6; }
+  100% { transform: rotate(45deg) scale(1.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .cw-ring { animation: none; } }
+/* Travel points: a dot below zoom 3 (`cw-far` on the container), a glyph chip from zoom 3 up. */
+.leaflet-container.cw-far .cw-tp-chip { display: none; }
+.leaflet-container:not(.cw-far) .cw-tp-dot { display: none; }
+/* A pin's chip frame turns gold while its popup is open. */
+.cw-mk-pin.cw-open .cw-chip-edge { stroke: var(--color-gold); }
+/* Pin and clanmate popups: the site's squared 2px frame, no rounded white card. */
+.cw-map-popup .leaflet-popup-content-wrapper { border-radius: 0; border: 2px solid var(--color-rule-2); padding: 0; box-shadow: 0 12px 32px rgb(0 0 0 / .45); }
+.cw-map-popup .leaflet-popup-content { margin: 0; line-height: normal; }
+.cw-map-popup .leaflet-popup-close-button { color: var(--color-muted); }
+.cw-map-popup .leaflet-popup-close-button:hover { color: var(--color-ink); }
