@@ -18,7 +18,7 @@ import Contents from "./contents";
 export const dynamic = "force-dynamic";
 
 export default async function GuideLayout({ children }: { children: React.ReactNode }) {
-  const [session, index] = [await currentSession(), buildIndex()];
+  const [session, index] = [await currentSession(), buildIndex(true)];
   return (
     <>
       <SiteBar signedIn={session !== null} crumb="Field guide" extra={

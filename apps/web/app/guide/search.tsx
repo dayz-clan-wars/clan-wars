@@ -12,7 +12,7 @@ export function GuideSearch({ index, compact = false }: { index: SearchEntry[]; 
   const hits = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (needle.length < 2) return [];
-    return index.filter((e) => `${e.chapter} ${e.heading ?? ""} ${e.text}`.toLowerCase().includes(needle)).slice(0, 12);
+    return index.filter((e) => `${e.chapter} ${e.heading ?? ""} ${e.text} ${e.body ?? ""}`.toLowerCase().includes(needle)).slice(0, 12);
   }, [q, index]);
 
   return (

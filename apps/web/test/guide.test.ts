@@ -156,6 +156,13 @@ describe("the search index", () => {
       expect(chapterBySlug(slug), e.href).toBeDefined();
     }
   });
+  it("the full index finds body text the light one does not", () => {
+    const light = buildIndex(false), full = buildIndex(true);
+    const has = (ix: typeof light, q: string) => ix.some((e) => `${e.chapter} ${e.heading ?? ""} ${e.text} ${e.body ?? ""}`.toLowerCase().includes(q));
+    expect(has(full, "watch zone")).toBe(true);
+    expect(light.every((e) => e.body === undefined)).toBe(true);
+    expect(JSON.stringify(light).length).toBeLessThan(30_000);
+  });
   it("gives every section a hint sentence", () => {
     for (const e of index.filter((e) => e.heading)) expect(e.text.length, e.href).toBeGreaterThan(0);
   });
