@@ -4,6 +4,7 @@ import { FLAG_POOL_SIZE } from "@factions/domain";
 import { flagImagePath } from "@/src/flag-images";
 import { ALPHA_BADGE, EMPTY_SCOREBOARD, EMPTY_WAR_LOG } from "@/lib/scoring-copy";
 import { WarLogLine, WarLogKicker } from "./war-log/entry";
+import { currentSession } from "@/lib/viewer";
 import { Page, Panel, Stat, Rank, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
 
 export const metadata: Metadata = {
@@ -16,7 +17,7 @@ export const dynamic = "force-dynamic";
 const WEEK = 7 * 86_400_000;
 
 export default async function Home() {
-  const [{ clans, flags }, board, log] = await Promise.all([directory(), scoreboard(), warLog(4)]);
+  const [{ clans, flags }, board, log, session] = await Promise.all([directory(), scoreboard(), warLog(4), currentSession()]);
   const week = board.season ? Math.floor((Date.now() - board.season.startedAt.getTime()) / WEEK) + 1 : null;
   const raids = board.rows.reduce((n, r) => n + r.raids, 0);
   const alphas = board.rows.filter((r) => r.alpha).length;
@@ -30,8 +31,8 @@ export default async function Home() {
             <span className="inline-block h-2 w-2 bg-gold" />
             {board.season ? `Season ${board.season.number} · Week ${week} · Livonia` : "Livonia · Xbox"}
           </div>
-          <h1 className="mt-5 font-display text-[44px] uppercase leading-[.88] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] lg:mt-6 lg:text-[96px] lg:leading-[.86]">
-            Clans, bases<br className="hidden lg:inline" /> and <span className="text-gold">consequence.</span>
+          <h1 className="mt-5 font-display text-[44px] uppercase leading-[.88] tracking-[-0.02em] text-ink lg:mt-6 lg:text-[96px] lg:leading-[.86]">
+            Clans, bases<br className="hidden lg:inline" /> and <span className="whitespace-nowrap text-gold">consequence.</span>
           </h1>
           <p className="mt-5 max-w-[560px] text-base leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-7 lg:text-lg">
             Found a clan at a flagpole with two friends. Declare a base. Raid other clans to climb the scoreboard, and defend your own flag or lose it.
@@ -39,11 +40,13 @@ export default async function Home() {
           </p>
         </div>
         <div className="flex flex-col gap-2.5 lg:gap-3">
-          <a className={btnCta} href="/api/auth/discord?next=%2Fme">Continue with Discord <span className="font-mono text-sm normal-case">→</span></a>
+          {session
+            ? <a className={btnCta} href="/me">Your page <span className="font-mono text-sm normal-case">→</span></a>
+            : <a className={btnCta} href="/api/auth/discord?next=%2Fme">Continue with Discord <span className="font-mono text-sm normal-case">→</span></a>}
           <a className="flex min-h-[52px] items-center justify-between gap-6 border-2 border-rule-2 px-5 font-display text-sm uppercase tracking-[0.04em] text-ink hover:border-muted" href="/guide">
             Read the field guide <span className="font-mono text-sm normal-case text-muted">→</span>
           </a>
-          <p className="mt-1 hidden font-mono text-[11px] leading-relaxed text-muted lg:block">One character per account. You need to be in the Clan Wars Discord — we will offer to add you if you are not.</p>
+          {!session && <p className="mt-1 hidden font-mono text-[11px] leading-relaxed text-muted lg:block">One character per account. You need to be in the Clan Wars Discord — we will offer to add you if you are not.</p>}
         </div>
       </section>
 
@@ -57,7 +60,7 @@ export default async function Home() {
       <section className="grid gap-5 px-5 py-5 lg:grid-cols-[7fr_5fr] lg:gap-6 lg:px-8 lg:py-8">
         <Panel num="01" title="Scoreboard" aside={<a className={linkMono} href="/scoreboard">Full board →</a>}>
           {top.length === 0 ? (
-            <p className="p-5 text-sm text-ink-2">{EMPTY_SCOREBOARD}</p>
+            <p className="p-5 text-sm text-ink-2">{board.season ? "Nobody has scored yet." : EMPTY_SCOREBOARD}</p>
           ) : (
             <ul>
               {top.map((r) => (
