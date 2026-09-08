@@ -196,13 +196,20 @@ async function playTimeBoard(db: Database, serverId: number, w: Window, now: Dat
  * window, their PvP deaths in the same window, `kills / max(deaths, 1)`
  * rounded to 2 dp. The gate is a board rule only — a profile always shows
  * its own ratio.
+ *
+ * ⚠️ Friendly fire is NOT a K/D kill. Shooting a clanmate still counts on
+ * the killers board and the friendly-fire board, but it earns nothing here,
+ * on the row's `kills` or towards the gate — a K/D padded on your own roster
+ * is not one. A friendly-fire DEATH is still a death: dead is dead. The
+ * profile's `kd` follows the same rule.
  */
+const kdKill = and(byAnotherPlayer, eq(kills.friendlyFire, false))!;
 async function kdBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<KdRow[]> {
   const killCount = sql<number>`count(*)::int`;
   const killerRows = await db.select({ dayzId: sql<string>`${kills.killerDayzId}`, gamertag: gamertagOf(kills.killerDayzId), kills: killCount })
     .from(kills)
     .leftJoin(players, eq(players.dayzId, kills.killerDayzId))
-    .where(and(eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster)))
+    .where(and(eq(kills.serverId, serverId), kdKill, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster)))
     .groupBy(kills.killerDayzId, players.gamertag)
     .having(sql`count(*) >= ${KD_MIN_KILLS}`);
   if (killerRows.length === 0) return [];
@@ -398,7 +405,8 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     sessions: Number(session[0]?.sessions ?? 0),
     lastSeenAt: lastSeen[0]?.lastSeenAt ?? null,
     pvpKills, pvpDeaths,
-    kd: pvpKills === 0 && pvpDeaths === 0 ? null : round2(pvpKills / Math.max(pvpDeaths, 1)),
+    // The board's rule: friendly fire earns nothing towards K/D (see kdBoard).
+    kd: pvpKills === 0 && pvpDeaths === 0 ? null : round2((pvpKills - friendlyFireKills) / Math.max(pvpDeaths, 1)),
     killedBy, killed,
     friendlyFireKills, friendlyFireDeaths,
     raidCredits: Number(raidCredits[0]?.n ?? 0),
