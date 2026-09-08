@@ -12,7 +12,7 @@ import { PIN_ICONS, type PinIcon } from "@factions/domain";
 
 export const LAYER_LABELS = {
   you: "You", base: "Your base", clanmates: "Clanmates", intruders: "Intruders",
-  publicBases: "Public bases", pins: "Pins", travel: "Travel points", terrain: "Terrain",
+  publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
 } as const;
 
 export const PIN_ICON_LABELS: Record<PinIcon, string> = { loot: "Loot", vehicle: "Vehicle", enemy: "Enemy seen", meet: "Meet here", danger: "Danger", note: "Note" };

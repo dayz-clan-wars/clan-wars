@@ -93,7 +93,6 @@ body {
 .cw-map-tag-you { color: var(--color-gold); }
 .cw-map-tag-base { border-color: var(--color-gold); }
 .cw-map-tag-intruder { border-color: var(--color-rust); }
-.cw-map-tag-hub { color: var(--color-olive); }
 /* A clanmate's core hollows past a day (`cw-stale` is toggled by the age tick). */
 .cw-mk-clanmate .cw-core-hollow { display: none; }
 .cw-mk-clanmate.cw-stale .cw-core-solid { display: none; }

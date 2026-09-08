@@ -25,14 +25,14 @@ const BLANK_TILE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAA
 const LAYER_STORAGE_KEY = "clan-wars.map.layers";
 /** The world this map draws; the place names are keyed on it. */
 const MAP = "enoch";
-/** Place names sit under every marker (overlay pane 400, travel pane 350), over the tiles (200). */
+/** Place names sit over the travel points (350) and under every player marker (overlay 400, markers 600). */
 const PLACE_PANE = "places";
 /** Ages are recomputed far more often than positions are fetched, so a label never goes stale. */
 const AGE_TICK_MS = 30_000;
 
 type LayerKey = keyof typeof LAYER_LABELS;
 /** The four every linked viewer has; the other four are gated on `layers.*`. */
-const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "terrain"];
+const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "places", "terrain"];
 const ALL_KEYS = Object.keys(LAYER_LABELS) as LayerKey[];
 const ALL_ON = Object.fromEntries(ALL_KEYS.map((k) => [k, true])) as Record<LayerKey, boolean>;
 
@@ -168,7 +168,8 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
     // map-draw.ts: rebuilding on the 30 s tick tore down every open popup.
     ages.current = [];
-    for (const key of ALL_KEYS) if (key !== "terrain") groups.current[key]!.clearLayers();
+    // Places are the zoom's, not the data's: zoomend redraws them, not a poll.
+    for (const key of ALL_KEYS) if (key !== "terrain" && key !== "places") groups.current[key]!.clearLayers();
     drawYou(ctx("you"));
     drawBase(ctx("base"));
     drawClanmates(ctx("clanmates"));
@@ -218,7 +219,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
         const pane = m.createPane(TRAVEL_PANE);
         if (pane) pane.style.zIndex = "350";
         const placePane = m.createPane(PLACE_PANE);
-        if (placePane) placePane.style.zIndex = "340";
+        if (placePane) placePane.style.zIndex = "360";
 
         // ⚠️ The zoom floor: never a view with anything but map in it. Set
         // from the container's size, and again on every resize, because the
@@ -229,12 +230,12 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           if (floor !== null) m.setMinZoom(floor);
         };
 
-        // Place names, tiered by zoom (lib/map-places.ts): rebuilt on zoomend,
-        // sixty markers at most. Not a switch — a map without its towns is a
-        // map nobody can give directions on.
-        const places = Lm.layerGroup();
-        places.addTo(m);
+        // Place names, tiered by zoom (lib/map-places.ts): rebuilt on zoomend
+        // into the "places" layer group, which the switches add and remove
+        // like any other. Sixty markers at most.
         const drawPlaces = () => {
+          const places = groups.current.places;
+          if (!places) return;
           places.clearLayers();
           for (const p of placesFor(MAP, m.getZoom())) {
             // `p.lat`/`p.lng` are already on this pyramid — not run through `ll`.
