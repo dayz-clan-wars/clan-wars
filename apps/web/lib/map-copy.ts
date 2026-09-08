@@ -16,7 +16,7 @@ export const LAYER_LABELS = {
 } as const;
 
 export const PIN_ICON_LABELS: Record<PinIcon, string> = { loot: "Loot", vehicle: "Vehicle", enemy: "Enemy seen", meet: "Meet here", danger: "Danger", note: "Note" };
-export const PIN_ICON_GLYPHS: Record<PinIcon, string> = { loot: "📦", vehicle: "🚙", enemy: "👁", meet: "📍", danger: "⚠️", note: "📝" };
+/** The glyph for each icon is an SVG, not an emoji: `PIN_GLYPHS` in map-icons.ts. */
 
 /**
  * ⚠️ One line per `DropPinOutcome` refusal reason, plus the two successes and
@@ -48,7 +48,17 @@ export function fixAge(at: Date, now: Date): string {
   return d === 1 ? "yesterday" : `${d} d ago`;
 }
 
-/** Past 24 h a dot is dimmed (guide ch. 10). */
+/** "expires in 6 d", "expires in 3 h", "expires in 20 min" — and "expiring" once the hour is up. */
+export function expiresIn(expiresAt: Date, now: Date): string {
+  const min = Math.round((expiresAt.getTime() - now.getTime()) / 60_000);
+  if (min < 1) return "expiring";
+  if (min < 60) return `expires in ${min} min`;
+  const h = Math.round(min / 60);
+  if (h < 24) return `expires in ${h} h`;
+  return `expires in ${Math.round(h / 24)} d`;
+}
+
+/** Past 24 h a marker is dimmed (guide ch. 10). */
 export const DIM_AFTER_MS = 24 * 3600_000;
 
 export { PIN_ICONS };

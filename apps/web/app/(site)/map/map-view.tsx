@@ -3,10 +3,11 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type * as L from "leaflet";
 import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, gridRef, latLngToWorld, worldToLatLng } from "@/lib/map-projection";
-import { LAYER_LABELS, PIN_ICON_GLYPHS, PIN_ICON_LABELS } from "@/lib/map-copy";
+import { LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
+import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import {
-  TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, parseState, ptFor, refreshAges,
+  FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
+  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
@@ -130,6 +131,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     const d = dataRef.current;
     if (!Lm || !m || !d) return;
     const pt = ptFor(Lm, d.world.size);
+    const p = palette();
 
     for (const key of ALL_KEYS) {
       // Created and added as two statements, never `layerGroup().addTo(m)`:
@@ -141,7 +143,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
       }
     }
 
-    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current });
+    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current, p });
     // The same groups, cleared and rebuilt rather than diffed — what is on the
     // map stays in lockstep with the data, with no stale layer left behind.
     // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
@@ -197,6 +199,12 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
         const pane = m.createPane(TRAVEL_PANE);
         if (pane) pane.style.zIndex = "350";
 
+        // Travel points are a dot when zoomed out and a glyph chip from
+        // TRAVEL_CHIP_ZOOM up. Both forms are in every marker's markup; one
+        // class on the container picks, so 209 markers swap with no rebuild.
+        const far = () => m.getContainer().classList.toggle(FAR_CLASS, m.getZoom() < TRAVEL_CHIP_ZOOM);
+        m.on("zoomend", far);
+
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
         Lm.tileLayer("/tiles/enoch/topographic/{z}/{x}/{y}.webp", {
           minZoom: 0, maxZoom: MAX_ZOOM, noWrap: true,
@@ -208,6 +216,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
         }).addTo(groups.current.terrain!);
 
         m.fitBounds(world);
+        far();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
 
@@ -285,6 +294,9 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+  // Read once the component is on a page: the fallbacks equal the tokens, so
+  // the server render and the browser agree on every glyph.
+  const pal = palette();
 
   return (
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
@@ -320,12 +332,13 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           <input type="hidden" name="x" value={pinAt.x} />
           <input type="hidden" name="z" value={pinAt.z} />
           <p className="font-display text-[13px] uppercase tracking-[0.06em] text-ink"><span className="mr-3 text-gold">Pin</span>{gridRef(pinAt.x, pinAt.z)}</p>
-          <fieldset className="mt-3 flex flex-wrap gap-2">
+          <fieldset className="mt-3 grid grid-cols-3 gap-2">
             <legend className="sr-only">Icon</legend>
             {PIN_ICONS.map((icon, i) => (
-              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-2 px-3 text-sm text-ink has-[:checked]:border-gold">
-                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="h-4 w-4 accent-gold" />
-                <span aria-hidden="true">{PIN_ICON_GLYPHS[icon]}</span> {PIN_ICON_LABELS[icon]}
+              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-2 px-2.5 text-[13px] text-ink has-[:checked]:border-gold">
+                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="sr-only" />
+                <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: pinGlyph(pal, icon, 22) }} />
+                {PIN_ICON_LABELS[icon]}
               </label>
             ))}
           </fieldset>
@@ -355,13 +368,14 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
                 <li key={key}>
                   <label className="flex min-h-[44px] cursor-pointer items-center gap-3 px-5 text-sm text-ink">
                     <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
+                    <span aria-hidden="true" className={`flex flex-none ${enabled[key] ? "" : "opacity-40"}`} dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
                     {LAYER_LABELS[key]}
                     <span className={`ml-auto font-mono text-[10px] ${enabled[key] ? "text-muted" : "text-dim"}`}>{enabled[key] ? "ON" : "OFF"}</span>
                   </label>
                 </li>
               ))}
             </ul>
-            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Dots older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
           </aside>
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
