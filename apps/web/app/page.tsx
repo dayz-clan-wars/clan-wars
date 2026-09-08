@@ -25,6 +25,7 @@ export default function Home() {
           <a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="https://discord.gg/TJu4XP25nr">
             Join the Discord
           </a>
+          <a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="/guide">Read the field guide</a>
           <a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="/clans">Browse the clans</a>
           <a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="/scoreboard">Scoreboard</a>
           <a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="/players">Players</a>

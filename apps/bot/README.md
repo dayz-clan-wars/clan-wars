@@ -183,3 +183,8 @@ no channel configuration at all. A `clan_notices` row that fails three times
 is marked failed and stops being retried; a row behind it for the SAME
 target waits only for the current tick, and posts on the next one once the
 failing target is no longer blocking it.
+
+The raid window (base damage on, Friday 00:00 UTC → Monday 00:00 UTC) is not the bot's:
+the game server's `cfggameplay.json` decides it and a human flips it twice a week —
+`docs/deploy/raid-window.md`. The Monday restart is the normal case for the week close;
+nothing in the bot needs to be timed against it.

@@ -229,17 +229,18 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 | What | Where |
 |---|---|
-| The player's guide (the authority over every rule) | `../field-guide/` — published at dayzclanwars.com/guide |
+| The player's guide (the authority over every rule) | `../field-guide/` — published at fieldguide.dayzclanwars.com; dayzclanwars.com/guide redirects there |
 | The target state, guide → system | `docs/superpowers/specs/2026-09-04-clan-wars-target-state-design.md` — wins over every earlier spec where they differ |
 | Designs (per increment) | `docs/superpowers/specs/` |
 | Implementation plans | `docs/superpowers/plans/` |
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
 | Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
+| The raid window, flipped by hand twice a week | `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
-| The wipe, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — both refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
+| The wipe, the launch grace stamp, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm launch --server <id> --at <ISO>` (`scripts/launch.ts`; stamps every pole on the server to `--at` + 7 days, spec §4.2; same `--at`-is-required rule, idempotent for the same instant), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — all three refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
 date and commit. Read it before proposing work — several entries record hazards that are
@@ -571,6 +572,12 @@ is the same output it gives when "nothing will transition on the next tick" — 
 text, opposite meanings. Read a zero-row result together with `select count(*) from
 factions`, or it proves nothing.
 
+Increment 8 (launch) merged on 2026-09-07: `/guide` redirects to the
+guide's host, `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` is the
+twice-weekly base-damage flip, and `docs/deploy/2026-09-10-launch.md` is the order every
+unapplied runbook (2b → 7) reaches `factions_live` in, plus the acceptance. Nothing from
+increments 2b through 8 is deployed until that runbook is run.
+
 ### Known-open, in rough priority order
 
 1. A genuinely dead server never releases its flags — the last of inbox item 26's three
@@ -582,7 +589,9 @@ factions`, or it proves nothing.
    24 have ever appeared in live data. A player was blocked by `EmoteMove` on
    2026-09-01.
 3. A stale 30KB `flag-supplies.json` sits beside ours in the server's mission `custom/`
-   directory. `cfggameplay.json` does not load it; it is only confusing.
+   directory. `cfggameplay.json` does not load it; it is only confusing. Deleted by the
+   launch runbook (`docs/deploy/2026-09-10-launch.md` §1), after a check that
+   `cfggameplay.json` does not name it.
 4. A blocked feed queue has no alerting: `feed queue blocked at …` is an error-level log
    line and nothing else, so a human has to notice it. See inbox item 35 (the artwork
    half of that item closed 2026-09-03).

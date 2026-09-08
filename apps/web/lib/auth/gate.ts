@@ -5,8 +5,8 @@
  * exactly, so adding an entry is a deliberate act that fails a test naming it.
  */
 
-/** The landing page, the clan directory, and the scoring pages (spec §10.2: public). */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players"] as const;
+/** The landing page, the clan directory, the scoring pages, and the guide (spec §10.2: public). */
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
@@ -17,9 +17,12 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * `/clans/` is the public clan pages (`/clans/{tag}`); `/clan` (singular,
  * the member's own) is gated. `/players/` is public player profiles
  * (`/players/{gamertag}`, spec §10.2); `/clan/board` (under `/clan`, not
- * `/players`) stays gated.
+ * `/players`) stays gated. `/guide/` is the field guide's subpaths — every
+ * one of them is a permanent redirect to the guide's own host
+ * (next.config.ts), and Next runs redirects before middleware, so this entry
+ * makes the list true rather than making the route reachable.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should
