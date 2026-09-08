@@ -229,7 +229,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 
 | What | Where |
 |---|---|
-| The player's guide (the authority over every rule) | `../field-guide/` — published at fieldguide.dayzclanwars.com; dayzclanwars.com/guide redirects there |
+| The player's guide (the authority over every rule) | `apps/web/content/guide/` (hand-written HTML fragments) and `apps/web/lib/guide.ts` (chapter manifest) — served at dayzclanwars.com/guide by `apps/web/app/guide/`. Moved in from the archived field-guide repo on 2026-09-07 |
 | The target state, guide → system | `docs/superpowers/specs/2026-09-04-clan-wars-target-state-design.md` — wins over every earlier spec where they differ |
 | Designs (per increment) | `docs/superpowers/specs/` |
 | Implementation plans | `docs/superpowers/plans/` |
@@ -573,7 +573,7 @@ text, opposite meanings. Read a zero-row result together with `select count(*) f
 factions`, or it proves nothing.
 
 Increment 8 (launch) merged on 2026-09-07: `/guide` redirects to the
-guide's host, `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` is the
+guide's host (superseded 2026-09-07: the guide now lives in `apps/web`), `pnpm launch` stamps the launch grace, `docs/deploy/raid-window.md` is the
 twice-weekly base-damage flip, and `docs/deploy/2026-09-10-launch.md` is the order every
 unapplied runbook (2b → 7) reaches `factions_live` in, plus the acceptance. Deployed to `factions_live` on 2026-09-08 as one consolidated deploy (migrations 0020–0028 together; the database held zero clans): `docs/acceptance/2026-09-08-launch.md`. Launch instant `2026-09-08T00:39:17Z`; poles in grace until 2026-09-15.
 

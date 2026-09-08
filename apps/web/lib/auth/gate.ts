@@ -17,10 +17,9 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * `/clans/` is the public clan pages (`/clans/{tag}`); `/clan` (singular,
  * the member's own) is gated. `/players/` is public player profiles
  * (`/players/{gamertag}`, spec §10.2); `/clan/board` (under `/clan`, not
- * `/players`) stays gated. `/guide/` is the field guide's subpaths — every
- * one of them is a permanent redirect to the guide's own host
- * (next.config.ts), and Next runs redirects before middleware, so this entry
- * makes the list true rather than making the route reachable.
+ * `/players`) stays gated. `/guide/` is the field guide's chapters
+ * (`app/guide/[slug]`), served by this app since 2026-09-07 — before that
+ * every subpath was a permanent redirect to the guide's own host.
  */
 export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/"] as const;
 

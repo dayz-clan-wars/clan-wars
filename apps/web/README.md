@@ -5,7 +5,9 @@ flag images the bot's Discord embeds use as thumbnails.
 
 ## What this is today
 
-A Next.js 16 (App Router) app on Tailwind v4. Public: the landing page. Gated
+A Next.js 16 (App Router) app on Tailwind v4. Public: the landing page, and
+`/guide` — the field guide, rendered from hand-written HTML fragments in
+`content/guide/` (`lib/guide.ts` is the chapter manifest). Gated
 behind Discord login and guild membership (`lib/auth`, `middleware.ts`): `/me`,
 which shows the viewer's link and clan, read through `@factions/roster`.
 

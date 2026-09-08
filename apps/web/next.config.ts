@@ -1,5 +1,4 @@
 import type { NextConfig } from "next";
-import { GUIDE_URL } from "./lib/guide";
 
 const config: NextConfig = {
   // ⚠️ Required by apps/web/Dockerfile. The standalone output is a
@@ -17,15 +16,6 @@ const config: NextConfig = {
   // the server bundle rather than letting Next try to compile it.
   serverExternalPackages: ["postgres"],
 
-  // `/guide` is the field guide (spec §10.2), which is published by its own
-  // repo. A permanent redirect keeps one copy of the authority. Both entries
-  // are pinned by test/guide-redirect.test.ts.
-  async redirects() {
-    return [
-      { source: "/guide", destination: `${GUIDE_URL}/`, permanent: true },
-      { source: "/guide/:path*", destination: `${GUIDE_URL}/:path*`, permanent: true },
-    ];
-  },
 };
 
 export default config;
