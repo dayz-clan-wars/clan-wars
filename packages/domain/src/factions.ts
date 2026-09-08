@@ -23,10 +23,17 @@ export const MEMBER_STATUSES = ["pending", "full"] as const;
 export type MemberStatus = (typeof MEMBER_STATUSES)[number];
 
 /**
- * Supplied iff `status = 'active' and flag_down_since is null` (spec §4.3).
+ * Supplied iff `status in ('reserved', 'active') and flag_down_since is null`.
  * A predicate, not a status list: a raided clan keeps `active` for the 24 h
- * clock and loses its kit the moment the flag is down. Spelled in SQL by
+ * clock and loses its kit the moment the flag is down.
+ *
+ * ⚠️ `reserved` is IN, amending spec §4.3 (2026-09-04), which had `active`
+ * alone. The kit is the only source of a clan's own flag, and raising that
+ * flag is what activates the clan — with `active` alone, no clan could ever
+ * activate (COK and NIGHT, 2026-09-08). A reserved clan never has
+ * `flag_down_since` set (only an active clan's flag can be "down"), so the
+ * second clause is inert for it and harmless. Spelled in SQL by
  * apps/ingest-worker/src/supply-tick.ts; packages/db/test/holding-index-drift.test.ts
  * pins the spelling.
  */
-export const SUPPLIED_PREDICATE = "status = 'active' and flag_down_since is null";
+export const SUPPLIED_PREDICATE = "status in ('reserved', 'active') and flag_down_since is null";

@@ -9,8 +9,11 @@ describe("faction status sets", () => {
   });
 
   it("supplied is a predicate, not a status list: active with the flag up", () => {
-    // Dormant is excluded because it isn't 'active'; a raided-but-active clan
-    // keeps its 24h clock and loses its kit the moment flag_down_since is set.
-    expect(SUPPLIED_PREDICATE).toBe("status = 'active' and flag_down_since is null");
+    // ⚠️ Reserved is IN. The kit is the only source of the clan's own flag,
+    // and raising that flag is what activates the clan — an active-only
+    // predicate is a dead end nobody can activate out of (2026-09-08, COK and
+    // NIGHT both stuck). Dormant is out; a raided-but-active clan keeps its
+    // 24h clock and loses its kit the moment flag_down_since is set.
+    expect(SUPPLIED_PREDICATE).toBe("status in ('reserved', 'active') and flag_down_since is null");
   });
 });

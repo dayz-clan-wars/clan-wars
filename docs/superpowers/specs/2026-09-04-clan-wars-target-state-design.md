@@ -193,9 +193,17 @@ is what stops it; the drift test in the rebind spec's §6 stays.
 `status` keeps its five values. `HOLDING_STATUSES` (`reserved, active, dormant`) is
 untouched, still mirrored by the texture and tag partial indexes and, now, by the
 existence of a `declarations` row. `SUPPLIED_STATUSES` is replaced by a predicate:
-**supplied iff `status = 'active' and flag_down_since is null`**. The supply projection
-reads that predicate; the drift test in `packages/db/test/holding-index-drift.test.ts` is
-extended to it.
+**supplied iff `status in ('reserved', 'active') and flag_down_since is null`**. The supply
+projection reads that predicate; the drift test in `packages/db/test/holding-index-drift.test.ts`
+is extended to it.
+
+> **Amended 2026-09-08.** This spec originally read `status = 'active'` alone, and that
+> shipped. It was a dead end: the kit is the only source of a clan's own flag, and raising
+> that flag is the activation, so no clan could ever become active — COK and NIGHT both sat
+> reserved through a restart with nothing to raise. `reserved` is back in, as it was under
+> the old `SUPPLIED_STATUSES`. The lapse mechanism is unchanged: a reservation that misses
+> its 24 h window stops being supplied the moment the row leaves the predicate, and the
+> next sweep drops its kit from the file.
 
 ### 4.4 `identity_holds` — new
 
