@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
 import { alphas, seasons } from "@factions/roster";
 import { flagImagePath } from "@/src/flag-images";
-import { when } from "@/lib/format";
-import { NO_ALPHAS_WEEK } from "@/lib/scoring-copy";
+import { NO_ALPHAS_WEEK, EMPTY_SCOREBOARD } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
-import { Page, PageHead, Body, Panel, Rank, linkMono, kickerSm } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, linkMono, kickerSm } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — alphas" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -41,6 +40,7 @@ export default async function AlphasPage() {
             )}
           </Panel>
         ))}
+        {!season && <p className="text-ink-2 lg:col-span-3">{EMPTY_SCOREBOARD}</p>}
         {season && weeks.length === 0 && <p className="text-ink-2 lg:col-span-3">No week has closed yet.</p>}
 
         {closed.length > 0 && (
