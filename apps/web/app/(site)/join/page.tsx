@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { guideLinkFor } from "@/lib/guide-links";
+import { Page } from "@/app/components/ui";
 
 export const metadata: Metadata = {
   title: "Clan Wars — join the Discord",
@@ -17,7 +18,7 @@ export default async function JoinPage({
   const next = safeNextPath(typeof params.next === "string" ? params.next : null);
 
   return (
-    <main className="mx-auto w-full max-w-[1280px]">
+    <Page wide>
       {/*
         ⚠️ The button is the consent. Discord will ask for "Join servers for
         you" on the round this starts, and that prompt should follow something
@@ -33,6 +34,6 @@ export default async function JoinPage({
         cardLabel="Join"
         guide={guideLinkFor("/join")}
       />
-    </main>
+    </Page>
   );
 }

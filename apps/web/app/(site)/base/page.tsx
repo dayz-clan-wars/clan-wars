@@ -6,7 +6,7 @@ import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
-import { GuideLine } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, btnPrimary, btnDanger, link, checkbox } from "@/app/components/ui";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -16,19 +16,12 @@ export const metadata: Metadata = {
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 /** Metres, whole. These are the viewer's own raises; nobody else's pole reaches this page. */
 const at = (x: number, z: number) => `${Math.round(x)}, ${Math.round(z)}`;
 
 export default async function BasePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await currentSession();
-  if (!session) {
-    return (
-      <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-        <p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/base">Sign in again</a>.</p>
-      </main>
-    );
-  }
+  if (!session) return <SessionLost next="/base" />;
   const params = await searchParams;
   // ⚠️ Looked up, never echoed: ?result= is attacker-supplied, including
   // prototype keys like `__proto__`, so the lookup must miss on those rather
@@ -37,68 +30,66 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
   const view = await baseFor(session.sub);
 
   return (
-    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-      <p className={label}>Your base</p>
-      <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Solo declaration</h1>
-      <GuideLine guide={guideLinkFor("/base")} className="mt-3" />
-      {result && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{result}{params.result === "too-close" && <> <a className="text-gold underline-offset-4 hover:underline" href={guideLink(GUIDE_INLINE.spacing).href}>Why the rule exists</a>.</>}</p>}
+    <Page>
+      <PageHead guide={guideLinkFor("/base")} kicker="Your base" title="Solo declaration" />
+      <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
+        {result && <Notice>{result}{params.result === "too-close" && <> <a className={link} href={guideLink(GUIDE_INLINE.spacing).href}>Why the rule exists</a>.</>}</Notice>}
 
-      {!view.linked && (
-        <p className="mt-6 text-ink-2"><a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> first — a base is declared by the character that raised the flag. <a className="text-gold underline-offset-4 hover:underline" href={guideLink(GUIDE_INLINE.gettingIn).href}>How linking works</a>.</p>
-      )}
+        {!view.linked && (
+          <p className="text-ink-2"><a className={link} href="/link">Link your character</a> first — a base is declared by the character that raised the flag. <a className={link} href={guideLink(GUIDE_INLINE.gettingIn).href}>How linking works</a>.</p>
+        )}
 
-      {view.linked && view.inClan && (
-        <p className="mt-6 text-ink-2">You are in a clan, so your base is the clan&rsquo;s. Solo declarations are for players outside one.</p>
-      )}
+        {view.linked && view.inClan && (
+          <p className="text-ink-2">You are in a clan, so your base is the clan&rsquo;s. Solo declarations are for players outside one.</p>
+        )}
 
-      {view.linked && !view.inClan && (
-        <>
-          {view.lapsed && (
-            <p className="mt-6 border-2 border-gold bg-frame p-4 text-ink">{lapsedCopy(view.lapsed.at)}</p>
-          )}
+        {view.linked && !view.inClan && (
+          <>
+            {view.lapsed && <Notice tone="gold" focus={false}>{lapsedCopy(view.lapsed.at)}</Notice>}
 
-          <section className="mt-8 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Declared</h2>
-            {view.declaration ? (
-              <>
-                <p className="mt-2 font-mono text-ink">{at(view.declaration.x, view.declaration.z)}</p>
-                <p className="mt-1 text-sm text-ink-2">Declared {when(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
-                <form className="mt-4" action="/api/base/release" method="post">
-                  <label className="flex items-center gap-2 text-sm text-ink-2">
-                    <input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> I understand the pole goes public if nobody declares it within the grace period.
-                  </label>
-                  <button className="mt-3 inline-flex min-h-[44px] items-center border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Release this base</button>
-                </form>
-              </>
-            ) : (
-              <p className="mt-2 text-ink-2">Nothing declared. Pick one of the poles below — only poles the server log has seen you raise a flag at can be declared.</p>
-            )}
-          </section>
-
-          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Poles you have raised at</h2>
-            {view.candidates.length === 0 ? (
-              <p className="mt-2 text-ink-2">None yet. Raise your flag at your pole in game; the log reaches us within a few minutes.</p>
-            ) : (
-              <ul className="mt-2 flex flex-col gap-2">
-                {view.candidates.map((c) => (
-                  <li key={c.poleKey} className="flex min-h-[56px] items-center justify-between gap-3 border border-rule-2 px-4">
-                    <div>
-                      <div className="font-mono text-ink">{at(c.x, c.z)}</div>
-                      <div className="text-xs text-ink-2">raised {when(c.raisedAt)}</div>
-                    </div>
-                    <form action="/api/base/declare" method="post">
-                      <input type="hidden" name="poleKey" value={c.poleKey} />
-                      <button className="inline-flex min-h-[44px] items-center bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover disabled:opacity-40" type="submit" disabled={view.declaration !== null}>Declare</button>
+            <Panel num="01" title="Declared" aside={view.declaration ? `${WATCH_ZONE_RADIUS_M} m watch zone` : undefined}>
+              <PanelBody>
+                {view.declaration ? (
+                  <>
+                    <p className="font-mono text-lg text-ink">{at(view.declaration.x, view.declaration.z)}</p>
+                    <p className="mt-1 text-sm text-ink-2">Declared {when(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
+                    <form className="mt-4 border-t border-rule-2 pt-4" action="/api/base/release" method="post">
+                      <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2">
+                        <input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand the pole goes public if nobody declares it within the grace period.
+                      </label>
+                      <button className={`mt-3 ${btnDanger}`} type="submit">Release this base</button>
                     </form>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-        </>
-      )}
-      <p className="mt-8"><a className="font-mono text-xs uppercase tracking-[0.18em] text-muted underline-offset-4 hover:underline" href="/me">Your page</a></p>
-    </main>
+                  </>
+                ) : (
+                  <p className="text-sm leading-relaxed text-ink-2">Nothing declared. Pick one of the poles below — only poles the server log has seen you raise a flag at can be declared.</p>
+                )}
+              </PanelBody>
+            </Panel>
+
+            <Panel num="02" title="Poles you have raised at" aside={view.candidates.length > 0 ? `${view.candidates.length}` : undefined}>
+              {view.candidates.length === 0 ? (
+                <PanelBody><p className="text-sm leading-relaxed text-ink-2">None yet. Raise your flag at your pole in game; the log reaches us within a few minutes.</p></PanelBody>
+              ) : (
+                <ul>
+                  {view.candidates.map((c) => (
+                    <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
+                      <div>
+                        <div className="font-mono text-ink">{at(c.x, c.z)}</div>
+                        <div className="text-xs text-muted">raised {when(c.raisedAt)}</div>
+                      </div>
+                      <form action="/api/base/declare" method="post">
+                        <input type="hidden" name="poleKey" value={c.poleKey} />
+                        <button className={btnPrimary} type="submit" disabled={view.declaration !== null}>Declare</button>
+                      </form>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+          </>
+        )}
+        <BackLine href="/me">Your page</BackLine>
+      </Body>
+    </Page>
   );
 }

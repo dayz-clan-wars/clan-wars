@@ -4,6 +4,7 @@ import { SiteBar } from "@/app/(site)/site-bar";
 import { buildIndex } from "./index";
 import { GuideSearch } from "./search";
 import Contents from "./contents";
+import { SkipLink } from "@/app/components/ui";
 
 /**
  * The guide's chrome on the site's own pieces: the top bar (with a "/ Field
@@ -21,6 +22,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
   const [session, index] = [await currentSession(), buildIndex(true)];
   return (
     <>
+      <SkipLink />
       <SiteBar signedIn={session !== null} crumb="Field guide" extra={
         <details className="group relative">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-rule-3 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
@@ -40,7 +42,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
             <a className="mt-5 block px-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink" href="/">&larr; Back to the site</a>
           </div>
         </aside>
-        <main className="min-w-0 flex-1">{children}</main>
+        <main id="main" tabIndex={-1} className="min-w-0 flex-1 outline-none">{children}</main>
       </div>
     </>
   );

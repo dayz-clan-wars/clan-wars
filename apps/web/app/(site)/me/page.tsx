@@ -7,7 +7,7 @@ import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when, days } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
-import { Page, Panel, PanelBody, Notice, Footer, GuideLine, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
+import { Page, Panel, PanelBody, Notice, Footer, GuideLine, SessionLost, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = {
@@ -32,11 +32,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
   if (!session) {
     // The middleware admitted this request, so the cookie was valid a moment
     // ago. Say what happened rather than rendering an empty page.
-    return (
-      <main className="mx-auto max-w-[34rem] px-5 py-10">
-        <p className="text-ink-2">Your session could not be read. <a className={link} href="/login?next=/me">Sign in again</a>.</p>
-      </main>
-    );
+    return <SessionLost next="/me" />;
   }
   const viewer = await viewerFor(session.sub);
   const [invites, requests, claim] = await Promise.all([myInvites(session.sub), myRequests(session.sub), claimContext(session.sub)]);
@@ -148,7 +144,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                   <li key={inv.id} className="flex min-h-[64px] flex-wrap items-center gap-3.5 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
                     <div className="min-w-0 flex-1">
                       <div className="font-display text-[15px] text-ink">{inv.clanName} <span className="font-mono text-xs text-ink-2">[{inv.tag}]</span></div>
-                      <div className="font-mono text-[11px] text-muted">expires {when(inv.expiresAt)}</div>
+                      <div className="font-mono text-xs text-muted">expires {when(inv.expiresAt)}</div>
                     </div>
                     <form action="/api/me/invite/accept" method="post"><input type="hidden" name="inviteId" value={inv.id} /><button className={btnPrimary} type="submit">Accept</button></form>
                     <form action="/api/me/invite/decline" method="post"><input type="hidden" name="inviteId" value={inv.id} /><button className={btnSecondary} type="submit">Decline</button></form>
@@ -165,7 +161,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                   <li key={r.id} className="flex min-h-[64px] flex-wrap items-center gap-3.5 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
                     <div className="min-w-0 flex-1">
                       <div className="font-display text-[15px] text-ink">{r.clanName} <span className="font-mono text-xs text-ink-2">[{r.tag}]</span></div>
-                      <div className="font-mono text-[11px] text-muted">asked {when(r.createdAt)} · expires {when(r.expiresAt)}</div>
+                      <div className="font-mono text-xs text-muted">asked {when(r.createdAt)} · expires {when(r.expiresAt)}</div>
                     </div>
                     <form action="/api/me/request/withdraw" method="post"><input type="hidden" name="requestId" value={r.id} /><button className={btnSecondary} type="submit">Withdraw</button></form>
                   </li>

@@ -85,6 +85,9 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .leaflet-tooltip { box-shadow: none; }
 .leaflet-tooltip::before { border-top-color: var(--color-frame); border-right-color: var(--color-frame); }
 .leaflet-control-attribution a, .leaflet-popup-content a { color: var(--color-gold); }
+/* The attribution strip in the mono voice, 11px, framed like a tag; Leaflet's default is 11px sans in a white rounded box. */
+.leaflet-control-attribution { font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border: 1px solid var(--color-rule-2); border-radius: 0; margin: 0; }
+.leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
 /*
  * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
  * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and

@@ -1,13 +1,14 @@
 import { NO_PROFILE } from "@/lib/stats-copy";
-
-const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
+import { Page, PageHead, Body, BackLine } from "@/app/components/ui";
 
 export default function PlayerNotFound() {
   return (
-    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-      <p className={label}>Player</p>
-      <p className="mt-6 text-ink-2">{NO_PROFILE}</p>
-      <p className="mt-8"><a className={`${label} underline-offset-4 hover:underline`} href="/players">Player boards</a></p>
-    </main>
+    <Page>
+      <PageHead kicker="Player" title="No such player" />
+      <Body className="max-w-[40rem]">
+        <p className="text-ink-2">{NO_PROFILE}</p>
+        <BackLine href="/players">Player boards</BackLine>
+      </Body>
+    </Page>
   );
 }

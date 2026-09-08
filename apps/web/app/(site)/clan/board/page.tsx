@@ -5,13 +5,11 @@ import { REFUSAL } from "@/lib/clan-copy";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { StatBoards, ScopePicker } from "@/app/components/stat-boards";
 import { guideLinkFor } from "@/lib/guide-links";
-import { GuideLine } from "@/app/components/ui";
+import { Page, PageHead, Body, BackLine, SessionLost, link } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — clan board", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
-
-const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 
 function isRefusal(v: Boards | ActorRefusal): v is ActorRefusal {
   return typeof v === "string";
@@ -19,9 +17,7 @@ function isRefusal(v: Boards | ActorRefusal): v is ActorRefusal {
 
 export default async function ClanBoardPage({ searchParams }: { searchParams: Promise<{ season?: string | string[] }> }) {
   const session = await currentSession();
-  if (!session) {
-    return <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan/board">Sign in again</a>.</p></main>;
-  }
+  if (!session) return <SessionLost next="/clan/board" />;
   const { season } = await searchParams;
   const parsed = parseSeasonParam(season);
 
@@ -31,21 +27,23 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
   const boards = await clanBoard(session.sub, parsed === "default" ? { kind: "current" } : parsed);
   if (isRefusal(boards)) {
     return (
-      <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-        <p className={label}>Clan board</p>
-        <p className="mt-6 text-ink-2">{REFUSAL[boards]}</p>
-      </main>
+      <Page>
+        <PageHead guide={guideLinkFor("/clan/board")} kicker="Clan board" title="No board yet" />
+        <Body className="max-w-[40rem]">
+          <p className="text-ink-2">{REFUSAL[boards]} <a className={link} href="/clan">Your clan</a>.</p>
+        </Body>
+      </Page>
     );
   }
 
   return (
-    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-      <p className={label}>Clan board</p>
-      <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Your clan&rsquo;s boards</h1>
-      <GuideLine guide={guideLinkFor("/clan/board")} className="mt-3" />
-      <ScopePicker seasons={boards.seasons} basePath="/clan/board" />
-      <StatBoards boards={boards} />
-      <p className="mt-8"><a className={`${label} underline-offset-4 hover:underline`} href="/clan">Your clan</a></p>
-    </main>
+    <Page>
+      <PageHead guide={guideLinkFor("/clan/board")} kicker="Clan board" title={<>Your clan&rsquo;s boards</>}
+        aside={<ScopePicker seasons={boards.seasons} basePath="/clan/board" current={boards.scope} />} />
+      <Body>
+        <StatBoards boards={boards} />
+        <BackLine href="/clan">Your clan</BackLine>
+      </Body>
+    </Page>
   );
 }

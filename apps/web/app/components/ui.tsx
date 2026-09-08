@@ -25,10 +25,44 @@ export const linkMono = "font-mono text-[11px] uppercase tracking-[0.18em] text-
 /** Form fields: 52px, squared, ground-black on the frame. */
 export const field = "mt-1 block min-h-[52px] w-full border-2 border-rule-3 bg-ground px-4 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none";
 export const checkbox = "h-5 w-5 flex-none border-2 border-rule-3 bg-ground accent-gold";
+/** A form label's caption, over its field. */
+export const fieldLabel = "block font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
+/** The "Your clan" / "Your page" way-back line every gated page ends on. */
+export function BackLine({ href, children }: { href: string; children: React.ReactNode }) {
+  return <p className="mt-8"><a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={href}>&larr; {children}</a></p>;
+}
 
 /** The page column. Wide pages use `wide`; reading pages the default. */
 export function Page({ children, wide = false }: { children: React.ReactNode; wide?: boolean }) {
-  return <main className={`mx-auto w-full ${wide ? "max-w-[1280px]" : "max-w-[64rem]"}`}>{children}</main>;
+  return <main id="main" tabIndex={-1} className={`mx-auto w-full outline-none ${wide ? "max-w-[1280px]" : "max-w-[64rem]"}`}>{children}</main>;
+}
+
+/**
+ * The skip link every layout opens with: invisible until a keyboard user
+ * tabs onto it, then a gold block over the bar. `Page` is its target.
+ */
+export function SkipLink() {
+  return (
+    <a href="#main" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-3 focus:z-[1400] focus:bg-gold focus:px-4 focus:py-3 focus:font-display focus:text-xs focus:uppercase focus:tracking-[0.06em] focus:text-ground">
+      Skip to content
+    </a>
+  );
+}
+
+/**
+ * The gated pages' fallback when the middleware admitted the request but
+ * the cookie could not be read a moment later. One shape, with a heading,
+ * instead of a bare sentence on an otherwise empty page.
+ */
+export function SessionLost({ next }: { next: string }) {
+  return (
+    <Page>
+      <PageHead kicker="Signed out" title="Session lost" />
+      <Body className="max-w-[40rem]">
+        <p className="text-ink-2">Your session could not be read. <a className={link} href={`/login?next=${encodeURIComponent(next)}`}>Sign in again</a>.</p>
+      </Body>
+    </Page>
+  );
 }
 
 /**
@@ -106,11 +140,10 @@ export function PanelBody({ children, className = "" }: { children: React.ReactN
   return <div className={`p-4 lg:p-5 ${className}`}>{children}</div>;
 }
 
-/** A status line — the result of a form post, looked up from copy. */
-export function Notice({ children, tone = "plain" }: { children: React.ReactNode; tone?: "plain" | "gold" | "rust" }) {
-  const edge = tone === "gold" ? "border-gold" : tone === "rust" ? "border-rust" : "border-rule-2";
-  return <p role="status" className={`border ${edge} bg-surface px-4 py-3 text-sm text-ink`}>{children}</p>;
-}
+/** A status line — the result of a form post. Lives in notice.tsx (a client component: it takes focus on mount so it is announced). */
+export { Notice } from "./notice";
+/** The two-press submit button for one-click removals. */
+export { ConfirmButton } from "./confirm-button";
 
 /** The bordered segmented nav: scoreboard/alphas/seasons, all-time/season N. */
 export function SegNav({ items, label, className = "" }: { items: { label: string; href: string; current?: boolean }[]; label: string; className?: string }) {

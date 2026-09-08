@@ -8,7 +8,7 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, btnPrimary, btnSecondary, btnDanger, link, kicker, kickerSm, field, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
@@ -16,11 +16,13 @@ export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { 
 export const dynamic = "force-dynamic";
 
 /** Hidden target + one button: the shape of every per-row action. */
-function RowAction({ action, target, children, style = btnSecondary }: { action: string; target: string; children: React.ReactNode; style?: string }) {
+function RowAction({ action, target, children, style = btnSecondary, confirm }: { action: string; target: string; children: React.ReactNode; style?: string; confirm?: string }) {
   return (
     <form action={`/api/clan/${action}`} method="post">
       <input type="hidden" name="target" value={target} />
-      <button className={`${style} !px-3.5`} type="submit">{children}</button>
+      {confirm
+        ? <ConfirmButton confirm={confirm} className={`${style} !px-3.5`}>{children}</ConfirmButton>
+        : <button className={`${style} !px-3.5`} type="submit">{children}</button>}
     </form>
   );
 }
@@ -31,7 +33,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
   const { result } = await searchParams;
   const session = await currentSession();
   if (!session) {
-    return <main className="mx-auto max-w-[40rem] px-5 py-10"><p className="text-ink-2">Your session could not be read. <a className={link} href="/login?next=/clan">Sign in again</a>.</p></main>;
+    return <SessionLost next="/clan" />;
   }
   const notice = result ? (lookupCopy(RESULT_COPY, result) ?? lookupCopy(LEADERSHIP_RESULT_COPY, result)) : undefined;
   const view = await clanFor(session.sub);
@@ -76,8 +78,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
       {(notice || clan.status === "reserved" || me.status === "pending") && (
         <div className="flex flex-col gap-2 px-5 pt-5 lg:px-8 lg:pt-6">
           {notice && <Notice>{notice}</Notice>}
-          {clan.status === "reserved" && <Notice tone="gold">Reserved. Raise your flag at the pole within {days(ACTIVATION_WINDOW_MS)} of the claim to activate the clan. Until then nobody else can take the name, tag, flag or pole.</Notice>}
-          {me.status === "pending" && <Notice tone="gold">You are pending. Stand within {JOIN_PRESENCE_RADIUS_M} m of the clan&rsquo;s base in game and the server log will make you a full member. Unseen for {days(PENDING_EXPIRY_MS)}, the spot expires.</Notice>}
+          {clan.status === "reserved" && <Notice tone="gold" focus={false}>Reserved. Raise your flag at the pole within {days(ACTIVATION_WINDOW_MS)} of the claim to activate the clan. Until then nobody else can take the name, tag, flag or pole.</Notice>}
+          {me.status === "pending" && <Notice tone="gold" focus={false}>You are pending. Stand within {JOIN_PRESENCE_RADIUS_M} m of the clan&rsquo;s base in game and the server log will make you a full member. Unseen for {days(PENDING_EXPIRY_MS)}, the spot expires.</Notice>}
         </div>
       )}
 
@@ -97,10 +99,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         {isPending ? <>asked {when(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {when(r.joinedAt)}{r.lastSeenAt && ` · seen ${when(r.lastSeenAt)}`}</>}
                       </div>
                     </div>
-                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger}>Remove</RowAction>}
-                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger}>Remove</RowAction>}
+                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
+                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
                     {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="promote" target={r.discordId}>Make officer</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId}>Demote</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId} confirm="Demote them?">Demote</RowAction>}
                   </li>
                 );
               })}
@@ -120,7 +122,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                     {invitesOut.map((inv) => (
                       <li key={inv.id} className="flex min-h-[52px] items-center justify-between gap-3 text-sm text-ink">
                         <span><span className="font-mono">{inv.inviteeGamertag ?? "unknown"}</span> <span className="text-xs text-muted">expires {when(inv.expiresAt)}</span></span>
-                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><button className={`${btnSecondary} !px-3.5`} type="submit">Withdraw</button></form>
+                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><ConfirmButton confirm="Withdraw it?" className={`${btnSecondary} !px-3.5`}>Withdraw</ConfirmButton></form>
                       </li>
                     ))}
                   </ul>

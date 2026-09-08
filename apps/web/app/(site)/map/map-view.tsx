@@ -349,6 +349,27 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
 
+  // The popup's Delete button (map-draw.ts) carries `data-arm`: the first
+  // tap swaps its label for that text, the second within four seconds
+  // submits. Delegated from the map's own element, because Leaflet builds
+  // the popup's DOM itself and rebuilds it on every open.
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    const onClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-arm]");
+      if (!btn || btn.dataset.armed) return;
+      e.preventDefault();
+      const label = btn.textContent;
+      btn.dataset.armed = "1";
+      btn.textContent = btn.dataset.arm ?? label;
+      btn.classList.add("bg-rust/15");
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = label; btn.classList.remove("bg-rust/15"); } }, 4_000);
+    };
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, []);
+
   // Escape closes the panel; nothing else on this page listens for it.
   useEffect(() => {
     if (!layersOpen) return;
@@ -364,7 +385,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
-    <div className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain">
+    <main id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
       <div ref={el} className="absolute inset-0" />
 
       {/*
@@ -493,6 +514,6 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           </div>
         </>
       )}
-    </div>
+    </main>
   );
 }

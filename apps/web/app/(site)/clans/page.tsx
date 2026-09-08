@@ -13,6 +13,8 @@ export const dynamic = "force-dynamic";
 export default async function ClansPage() {
   const { clans, flags } = await directory();
   const recruiting = clans.filter((c) => c.recruiting);
+  // A reserved clan holds its flag before it is on the server, so the pool count can exceed the roster; say so rather than contradict the title.
+  const reserved = flags.taken.length - clans.length;
   const href = (tag: string) => `/clans/${encodeURIComponent(tag)}`;
 
   return (
@@ -20,7 +22,7 @@ export default async function ClansPage() {
       <PageHead guide={guideLinkFor("/clans")}
         kicker="Clans"
         title={`${clans.length} on the server`}
-        aside={<div className={`${kicker} lg:pb-2`}>{flags.taken.length} of {FLAG_POOL_SIZE} flags flying · {recruiting.length} recruiting</div>}
+        aside={<div className={`${kicker} lg:pb-2`}>{flags.taken.length} of {FLAG_POOL_SIZE} flags held{reserved > 0 && <> · {reserved} reserved</>} · {recruiting.length} recruiting</div>}
       />
       <div className="grid gap-4 px-5 py-5 lg:grid-cols-[5fr_7fr] lg:items-start lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="flex flex-col gap-4 lg:gap-6">

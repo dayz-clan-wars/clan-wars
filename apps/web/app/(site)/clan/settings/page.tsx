@@ -7,31 +7,28 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { GuideLine } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
-
 export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
   const session = await currentSession();
-  if (!session) {
-    return <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan/settings">Sign in again</a>.</p></main>;
-  }
+  if (!session) return <SessionLost next="/clan/settings" />;
   const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
   const view = await clanFor(session.sub);
   const officer = typeof view !== "string" && view.me.status === "full" && (view.me.role === "officer" || view.me.role === "leader");
   if (typeof view === "string" || !officer) {
     return (
-      <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-        <p className={label}>Clan settings</p>
-        {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
-        <p className="mt-6 text-ink-2">Settings are for a clan&rsquo;s officers and leader. <a className="text-gold underline-offset-4 hover:underline" href="/clan">Your clan</a>.</p>
-      </main>
+      <Page>
+        <PageHead guide={guideLinkFor("/clan/settings")} kicker="Clan settings" title="Officers only" />
+        <Body className="flex max-w-[40rem] flex-col gap-4">
+          {notice && <Notice>{notice}</Notice>}
+          <p className="text-ink-2">Settings are for a clan&rsquo;s officers and leader. <a className={link} href="/clan">Your clan</a>.</p>
+        </Body>
+      </Page>
     );
   }
   const { clan, me, roster, rebindCandidates, guestPasses } = view;
@@ -39,96 +36,104 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const others = roster.filter((r) => r.status === "full" && r.discordId !== session.sub);
 
   return (
-    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-      <p className={label}>Clan settings</p>
-      <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">{clan.name} <span className="font-mono text-xl text-ink-2">[{clan.tag}]</span></h1>
-      <GuideLine guide={guideLinkFor("/clan/settings")} className="mt-3" />
-      {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
+    <Page>
+      <PageHead guide={guideLinkFor("/clan/settings")} kicker={<>[{clan.tag}] · settings</>} title={clan.name} />
+      <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
+        {notice && <Notice>{notice}</Notice>}
 
-      <section className="mt-8 border-2 border-rule-2 bg-frame p-5">
-        <h2 className={label}>Recruiting post</h2>
-        <form className="mt-2 flex flex-col gap-3" action="/api/clan/recruiting" method="post">
-          <label className="flex items-center gap-2 text-ink"><input type="checkbox" name="recruiting" value="yes" defaultChecked={clan.recruiting} className="h-5 w-5 accent-gold" /> Recruiting — listed first on the clans page; players can ask to join</label>
-          <label className="block"><span className={label}>When you play</span><input className={field} name="playWindow" defaultValue={clan.playWindow ?? ""} maxLength={RECRUITING_LIMITS.playWindow} placeholder="EU evenings, weekends" /></label>
-          <label className="block"><span className={label}>Language</span><input className={field} name="language" defaultValue={clan.language ?? ""} maxLength={RECRUITING_LIMITS.language} placeholder="English" /></label>
-          <label className="block"><span className={label}>Pitch</span><textarea className={field} name="pitch" defaultValue={clan.pitch ?? ""} maxLength={RECRUITING_LIMITS.pitch} rows={3} /></label>
-          <button className="inline-flex min-h-[44px] items-center self-start bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover" type="submit">Save</button>
-        </form>
-      </section>
+        <Panel num="01" title="Recruiting post">
+          <PanelBody>
+            <form className="flex flex-col gap-3" action="/api/clan/recruiting" method="post">
+              <label className="flex items-start gap-3 text-sm leading-relaxed text-ink"><input type="checkbox" name="recruiting" value="yes" defaultChecked={clan.recruiting} className={`${checkbox} mt-0.5`} /> Recruiting — listed first on the clans page; players can ask to join</label>
+              <label className="block"><span className={fieldLabel}>When you play</span><input className={field} name="playWindow" defaultValue={clan.playWindow ?? ""} maxLength={RECRUITING_LIMITS.playWindow} placeholder="EU evenings, weekends" /></label>
+              <label className="block"><span className={fieldLabel}>Language</span><input className={field} name="language" defaultValue={clan.language ?? ""} maxLength={RECRUITING_LIMITS.language} placeholder="English" /></label>
+              <label className="block"><span className={fieldLabel}>Pitch</span><textarea className={`${field} py-3`} name="pitch" defaultValue={clan.pitch ?? ""} maxLength={RECRUITING_LIMITS.pitch} rows={3} /></label>
+              <button className={`${btnPrimary} self-start`} type="submit">Save</button>
+            </form>
+          </PanelBody>
+        </Panel>
 
-      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-        <h2 className={label}>Guest passes</h2>
-        <p className="mt-2 text-sm text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
-        <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
-          <label className="block"><span className={label}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" /></label>
-          <button className="inline-flex min-h-[44px] items-center self-start bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover" type="submit">Grant pass</button>
-        </form>
-        {guestPasses.length === 0 ? <p className="mt-3 text-sm text-ink-2">No open passes.</p> : (
-          <ul className="mt-3 flex flex-col gap-2">
-            {guestPasses.map((p) => (
-              <li key={p.id} className="flex flex-wrap items-center justify-between gap-3 border border-rule-2 px-4 py-2 text-sm text-ink">
-                <span><span className="font-mono">{p.userDiscordId}</span> <span className="text-xs text-ink-2">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span></span>
-                <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><button className="inline-flex min-h-[44px] items-center border-2 border-rule-2 px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Revoke</button></form>
-              </li>
-            ))}
-          </ul>
+        <Panel num="02" title="Guest passes" aside={guestPasses.length > 0 ? `${guestPasses.length} open` : undefined}>
+          <PanelBody>
+            <p className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
+            <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
+              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" /></label>
+              <button className={`${btnPrimary} self-start`} type="submit">Grant pass</button>
+            </form>
+          </PanelBody>
+          {guestPasses.length === 0 ? <PanelBody className="border-t border-rule-2 !py-3"><p className="text-sm text-ink-2">No open passes.</p></PanelBody> : (
+            <ul className="border-t border-rule-2">
+              {guestPasses.map((p) => (
+                <li key={p.id} className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
+                  <span><span className="font-mono">{p.userDiscordId}</span> <span className="text-xs text-muted">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span></span>
+                  <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><ConfirmButton confirm="Revoke it?" className={`${btnSecondary} !px-3.5`}>Revoke</ConfirmButton></form>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+
+        {leader && (
+          <>
+            <Panel num="03" title="Rename" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
+              <PanelBody>
+                <form className="flex flex-col gap-3" action="/api/clan/rename" method="post">
+                  <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /></label>
+                  <label className="block"><span className={fieldLabel}>Tag</span><input className={`${field} uppercase`} name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" /></label>
+                  <p className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
+                  <button className={`${btnSecondary} self-start`} type="submit">Rename</button>
+                </form>
+              </PanelBody>
+            </Panel>
+
+            <Panel num="04" title="Transfer leadership">
+              <PanelBody>
+                {others.length === 0 ? <p className="text-sm text-ink-2">No other full member to hand over to.</p> : (
+                  <form className="flex flex-col gap-3" action="/api/clan/transfer" method="post">
+                    <label className="block"><span className={fieldLabel}>To</span>
+                      <select className={field} name="target" required>
+                        {others.map((r) => <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"} — {r.role}</option>)}
+                      </select>
+                    </label>
+                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I become an officer and they lead.</label>
+                    <button className={`${btnDanger} self-start`} type="submit">Transfer</button>
+                  </form>
+                )}
+              </PanelBody>
+            </Panel>
+
+            <Panel num="05" title="Move the base" aside={`one move per ${days(REBIND_COOLDOWN_MS)}`}>
+              <PanelBody>
+                <p className="text-sm leading-relaxed text-ink-2">When a member raises your flag at another pole, it appears here for {hours(REBIND_CONFIRM_MS)}. Confirming moves the base; the old pole goes public after {days(RELEASED_POLE_GRACE_MS)}.</p>
+                {rebindCandidates.length === 0 && <p className="mt-2 text-sm text-ink-2">No recent raise elsewhere.</p>}
+              </PanelBody>
+              {rebindCandidates.length > 0 && (
+                <ul className="border-t border-rule-2">
+                  {rebindCandidates.map((c) => (
+                    <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
+                      <span>raised by <span className="font-mono">{c.by}</span> {when(c.raisedAt)}</span>
+                      <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><button className={`${btnPrimary} !px-3.5`} type="submit">Move here</button></form>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </Panel>
+
+            {/* Rust: the one irreversible act on the page. */}
+            <Panel num="06" title="Disband" tone="rust">
+              <PanelBody>
+                <p className="text-sm leading-relaxed text-ink-2">Irreversible. The flag and the pole return to the pool for anyone to claim; the name and tag are held so nobody can impersonate you. Every member is out, with no cooldown.</p>
+                <p className="mt-2 text-sm leading-relaxed text-ink-2">{DISBAND_WARNING}</p>
+                <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/disband" method="post">
+                  <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> Disband {clan.name}.</label>
+                  <button className={`mt-3 ${btnDanger}`} type="submit">Disband the clan</button>
+                </form>
+              </PanelBody>
+            </Panel>
+          </>
         )}
-      </section>
-
-      {leader && (
-        <>
-          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Rename — once every {days(RENAME_COOLDOWN_MS)}</h2>
-            <form className="mt-2 flex flex-col gap-3" action="/api/clan/rename" method="post">
-              <label className="block"><span className={label}>Name</span><input className={field} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /></label>
-              <label className="block"><span className={label}>Tag</span><input className={`${field} uppercase`} name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" /></label>
-              <p className="text-xs text-ink-2">The old name and tag stay held — nobody else can take them.</p>
-              <button className="inline-flex min-h-[44px] items-center self-start border-2 border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Rename</button>
-            </form>
-          </section>
-
-          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Transfer leadership</h2>
-            {others.length === 0 ? <p className="mt-2 text-sm text-ink-2">No other full member to hand over to.</p> : (
-              <form className="mt-2 flex flex-col gap-3" action="/api/clan/transfer" method="post">
-                <label className="block"><span className={label}>To</span>
-                  <select className={field} name="target" required>
-                    {others.map((r) => <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"} — {r.role}</option>)}
-                  </select>
-                </label>
-                <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> I understand I become an officer and they lead.</label>
-                <button className="inline-flex min-h-[44px] items-center self-start border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Transfer</button>
-              </form>
-            )}
-          </section>
-
-          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Move the base</h2>
-            <p className="mt-2 text-sm text-ink-2">When a member raises your flag at another pole, it appears here for {hours(REBIND_CONFIRM_MS)}. Confirming moves the base; the old pole goes public after {days(RELEASED_POLE_GRACE_MS)}. One move per {days(REBIND_COOLDOWN_MS)}.</p>
-            {rebindCandidates.length === 0 ? <p className="mt-2 text-sm text-ink-2">No recent raise elsewhere.</p> : (
-              <ul className="mt-2 flex flex-col gap-2">
-                {rebindCandidates.map((c) => (
-                  <li key={c.poleKey} className="flex items-center justify-between gap-3 border border-rule-2 px-4 py-2 text-sm text-ink">
-                    <span>raised by <span className="font-mono">{c.by}</span> {when(c.raisedAt)}</span>
-                    <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><button className="inline-flex min-h-[44px] items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover" type="submit">Move here</button></form>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </section>
-
-          <section className="mt-4 border-2 border-rust bg-frame p-5">
-            <h2 className={label}>Disband</h2>
-            <p className="mt-2 text-sm text-ink-2">Irreversible. The flag and the pole return to the pool for anyone to claim; the name and tag are held so nobody can impersonate you. Every member is out, with no cooldown.</p>
-            <p className="mt-2 text-sm text-ink-2">{DISBAND_WARNING}</p>
-            <form className="mt-3" action="/api/clan/disband" method="post">
-              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className="h-5 w-5 accent-gold" /> Disband {clan.name}.</label>
-              <button className="mt-3 inline-flex min-h-[44px] items-center border-2 border-rust px-4 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Disband the clan</button>
-            </form>
-          </section>
-        </>
-      )}
-      <p className="mt-8"><a className={`${label} underline-offset-4 hover:underline`} href="/clan">Your clan</a></p>
-    </main>
+        <BackLine href="/clan">Your clan</BackLine>
+      </Body>
+    </Page>
   );
 }
