@@ -3,9 +3,9 @@
 <div class="tablewrap"><table>
 <tr><th>Layer</th><th>Who sees it</th><th>What is on it</th></tr>
 <tr><td><strong>You</strong></td><td>everyone linked</td><td>your last known position</td></tr>
-<tr><td><strong>Your base</strong></td><td>your clan, or you if solo</td><td>your declared pole and its 100 m watch zone</td></tr>
+<tr><td><strong>Your base</strong></td><td>your clan, or you if solo</td><td>your declared pole and its {{WATCH_ZONE_RADIUS_M|m}} watch zone</td></tr>
 <tr><td><strong>Clanmates</strong></td><td>your clan</td><td>every member's last known position, name, and how old the position is</td></tr>
-<tr><td><strong>Intruders</strong></td><td>your clan, or you if solo</td><td>anyone who is not on your roster — pending members included — seen inside your watch zone; the pin moves every time a new position comes in while they are inside, and drops off after 60 minutes without one</td></tr>
+<tr><td><strong>Intruders</strong></td><td>your clan, or you if solo</td><td>anyone who is not on your roster — pending members included — seen inside your watch zone; the pin moves every time a new position comes in while they are inside, and drops off after {{INTRUDER_PIN_TTL_MS|minutes}} without one</td></tr>
 <tr><td><strong>Public bases</strong></td><td>everyone linked</td><td>every undeclared pole past its grace, with the flag flying there</td></tr>
 <tr><td><strong>Pins</strong></td><td>your clan</td><td>pins any member drops — icon, note, who and when</td></tr>
 <tr><td><strong>Travel points</strong></td><td>everyone linked</td><td>all 209 fast-travel points — outhouses, wells, bus stops (<a href="/guide/getting-around">Getting around</a>)</td></tr>
@@ -18,7 +18,7 @@
 <div class="rule"><p><strong>Only your own clanmates' positions are ever visible to you</strong>, plus intruders inside your own watch zone. A solo declarant gets the same intruder layer for their own base. No player's position is shown to anyone outside their clan for any other reason — not on a public page, not in Discord, not in an announcement.</p></div>
 
 <h2>Pins</h2>
-<p>Press and hold to drop one. Pick an icon — loot, vehicle, enemy seen, meet here, danger, note — add text if you want, and everyone in the clan sees it with your name and the time. Anyone in the clan can delete a pin. Pins expire after <strong>7 days</strong>. Nothing about a pin ever leaves the clan.</p>
+<p>Press and hold to drop one. Pick an icon — loot, vehicle, enemy seen, meet here, danger, note — add text if you want, and everyone in the clan sees it with your name and the time. Anyone in the clan can delete a pin. Pins expire after <strong>{{PIN_TTL_MS|days}}</strong>. Nothing about a pin ever leaves the clan.</p>
 
 <h2>Things the map is honest about</h2>
 <ul>

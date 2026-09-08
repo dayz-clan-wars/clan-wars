@@ -9,6 +9,7 @@ import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, btnPrimary, btnSecondary, btnDanger, link, kicker, kickerSm, field, checkbox } from "@/app/components/ui";
+import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -38,11 +39,11 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
   if (view === "not-linked" || view === "not-in-clan") {
     return (
       <Page>
-        <PageHead kicker="Your clan" title={view === "not-linked" ? "Not linked" : "No clan yet"} />
+        <PageHead guide={guideLinkFor("/clan")} kicker="Your clan" title={view === "not-linked" ? "Not linked" : "No clan yet"} />
         <Body className="flex max-w-[40rem] flex-col gap-4">
           {notice && <Notice>{notice}</Notice>}
           {view === "not-linked"
-            ? <p className="text-ink-2"><a className={link} href="/link">Link your character</a> first — a clan is joined by the character, not the Discord account.</p>
+            ? <p className="text-ink-2"><a className={link} href="/link">Link your character</a> first — a clan is joined by the character, not the Discord account. <a className={link} href={guideLink(GUIDE_INLINE.gettingIn).href}>How linking works</a>.</p>
             : <p className="text-ink-2">You are not in a clan. <a className={link} href="/clans">Browse the clans</a>, accept an invite on <a className={link} href="/me">your page</a>, or found one at a flagpole with two friends.</p>}
         </Body>
       </Page>
@@ -65,7 +66,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
 
   return (
     <Page wide>
-      <PageHead
+      <PageHead guide={guideLinkFor("/clan")}
         icon={<img src={`/${flagImagePath(clan.texture)}`} alt="" width={96} height={96} className="h-16 w-16 flex-none object-contain lg:h-24 lg:w-24" />}
         kicker={<>[{clan.tag}] · {clan.status} · you are {me.status === "pending" ? "pending" : me.role}</>}
         title={clan.name}

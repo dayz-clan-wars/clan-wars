@@ -7,7 +7,11 @@ flag images the bot's Discord embeds use as thumbnails.
 
 A Next.js 16 (App Router) app on Tailwind v4. Public: the landing page, and
 `/guide` — the field guide, rendered from hand-written HTML fragments in
-`content/guide/` (`lib/guide.ts` is the chapter manifest).
+`content/guide/` (`lib/guide.ts` is the chapter manifest). `app/guide/render.ts`
+substitutes `{{KEY|format}}` number tokens from `@factions/domain`'s
+`guide-numbers.ts` and anchors every heading; `app/guide/index.ts` builds the
+search index from the same pass; `lib/guide-links.ts` is where each page's
+"In the guide" link points.
 
 Every other page sits in the `app/(site)/` route group, whose layout reads the
 session and renders the top bar and menu (`site-bar.tsx`, `menu-list.tsx`;

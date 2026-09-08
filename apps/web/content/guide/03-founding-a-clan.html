@@ -8,18 +8,18 @@
 <div class="log"><span class="t">What the server can see</span><p>Routine flag upkeep is one player lowering and raising, seconds apart. Three different people doing it at one pole inside ten minutes does not happen by accident, which is why the ceremony separates cleanly from noise.</p></div>
 
 <h2>The claim</h2>
-<p>Any one of the three goes to the site and claims the ceremony within <strong>24 hours</strong>:</p>
+<p>Any one of the three goes to the site and claims the ceremony within <strong>{{CLAIM_WINDOW_MS|hours}}</strong>:</p>
 <ul>
 <li><strong>Name</strong> — 3 to 32 characters, unique on the server.</li>
 <li><strong>Tag</strong> — 2 to 5 letters or numbers, unique. This becomes your <code>[TAG]</code> in Discord and on the map.</li>
 <li><strong>Flag</strong> — one of the <strong>33</strong> not currently held. The matching armband comes with it.</li>
 <li><strong>Roster</strong> — the three participants, pre-filled. Whoever files the claim becomes Leader, and can remove anyone who wandered into the ceremony by accident.</li>
 </ul>
-<p>The claim is refused if the pole is within <strong>200 m</strong> of another declared base. The map cannot show you private bases, so a refusal is your first warning — see <a href="/guide/bases">Bases</a> for why the rule exists.</p>
-<p>Your clan is now <strong>reserved</strong>: name, tag, flag and pole are yours and nobody else can take them — for 24 hours.</p>
+<p>The claim is refused if the pole is within <strong>{{MIN_BASE_SPACING_M|m}}</strong> of another declared base. The map cannot show you private bases, so a refusal is your first warning — see <a href="/guide/bases">Bases</a> for why the rule exists.</p>
+<p>Your clan is now <strong>reserved</strong>: name, tag, flag and pole are yours and nobody else can take them — for {{ACTIVATION_WINDOW_MS|hours}}.</p>
 
 <h2>Activation</h2>
-<p>Within those 24 hours, any member <strong>raises your new flag at that pole</strong>. The system only counts a flag being raised, so if a flag is already up, lower it and then raise yours. The moment the log shows it:</p>
+<p>Within those {{ACTIVATION_WINDOW_MS|hours}}, any member <strong>raises your new flag at that pole</strong>. The system only counts a flag being raised, so if a flag is already up, lower it and then raise yours. The moment the log shows it:</p>
 <ul>
 <li>the clan is <strong>active</strong>, and the flag and tag are locked to you;</li>
 <li>your Discord channel and role are created;</li>
@@ -27,7 +27,7 @@
 <li>the pole becomes your <strong>declared base</strong>;</li>
 <li>the founders are full members immediately. Joining a clan normally requires visiting its base, and they were already there.</li>
 </ul>
-<p>Miss the 24 hours and the reservation <strong>lapses</strong>: name, tag and flag go straight back to the pool — nothing was ever flown under them — the feed says so, and you start over with a new ceremony.</p>
+<p>Miss the {{ACTIVATION_WINDOW_MS|hours}} and the reservation <strong>lapses</strong>: name, tag and flag go straight back to the pool — nothing was ever flown under them — the feed says so, and you start over with a new ceremony.</p>
 
 <h2>Supplies</h2>
 <p>An active clan gets a <strong>starter kit</strong> spawned at its pole at the next server restart: building materials, tools, barrels, a fence kit and a watchtower kit. The kit refreshes at every restart while you are active. It pauses while your flag is down, stops if you go dormant, and comes back when you revive (<a href="/guide/defending">Defending</a>).</p>

@@ -46,7 +46,7 @@ function loadSwitches(): Record<LayerKey, boolean> {
 
 const bar = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
-export default function MapView({ layers, notice }: { layers: MapData["layers"]; notice?: string }) {
+export default function MapView({ layers, notice, guide }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string } }) {
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
@@ -361,7 +361,7 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
                 </li>
               ))}
             </ul>
-            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Dots older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}</div>
+            <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Dots older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
           </aside>
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
@@ -387,6 +387,7 @@ export default function MapView({ layers, notice }: { layers: MapData["layers"];
               <button type="button" onClick={() => void load()} className={`${bar} text-ink`}>Refresh</button>
               <a className={`${bar} text-ink`} href="/clan">Your clan</a>
               {layers.pins && <span className={bar}>Hold to pin</span>}
+              {guide && <a className={`${bar} text-gold`} href={guide.href}>Guide</a>}
             </div>
           </div>
         </>

@@ -5,6 +5,8 @@ import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
+import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
+import { GuideLine } from "@/app/components/ui";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -38,10 +40,11 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
     <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
       <p className={label}>Your base</p>
       <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Solo declaration</h1>
-      {result && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{result}</p>}
+      <GuideLine guide={guideLinkFor("/base")} className="mt-3" />
+      {result && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{result}{params.result === "too-close" && <> <a className="text-gold underline-offset-4 hover:underline" href={guideLink(GUIDE_INLINE.spacing).href}>Why the rule exists</a>.</>}</p>}
 
       {!view.linked && (
-        <p className="mt-6 text-ink-2"><a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> first — a base is declared by the character that raised the flag.</p>
+        <p className="mt-6 text-ink-2"><a className="text-gold underline-offset-4 hover:underline" href="/link">Link your character</a> first — a base is declared by the character that raised the flag. <a className="text-gold underline-offset-4 hover:underline" href={guideLink(GUIDE_INLINE.gettingIn).href}>How linking works</a>.</p>
       )}
 
       {view.linked && view.inClan && (

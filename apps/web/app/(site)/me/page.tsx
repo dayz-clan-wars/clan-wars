@@ -7,7 +7,8 @@ import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when, days } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, Footer, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
+import { Page, Panel, PanelBody, Notice, Footer, GuideLine, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = {
   title: "Clan Wars — you",
@@ -48,9 +49,12 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           <div className={kicker}>Signed in as</div>
           <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] lg:text-[56px]">{session.name}</h1>
         </div>
-        <div className={`flex items-center gap-3 pb-1.5 ${kicker}`}>
-          <span className={`inline-block h-2 w-2 ${viewer.link ? "bg-olive" : "bg-rust"}`} />
-          {viewer.link ? "Linked" : "Not linked"}
+        <div className="flex flex-col gap-3 pb-1.5 lg:items-end">
+          <GuideLine guide={guideLinkFor("/me")} />
+          <div className={`flex items-center gap-3 ${kicker}`}>
+            <span className={`inline-block h-2 w-2 ${viewer.link ? "bg-olive" : "bg-rust"}`} />
+            {viewer.link ? "Linked" : "Not linked"}
+          </div>
         </div>
       </div>
 

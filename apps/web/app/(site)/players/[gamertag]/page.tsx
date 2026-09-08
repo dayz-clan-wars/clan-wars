@@ -5,6 +5,8 @@ import { parseSeasonParam } from "@/lib/stat-scope";
 import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { when } from "@/lib/format";
+import { guideLinkFor } from "@/lib/guide-links";
+import { GuideLine } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — player" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -54,6 +56,7 @@ export default async function PlayerProfilePage({
         <h1 className="font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">{profile.gamertag}</h1>
         {!profile.linked && <span className="font-mono text-xs uppercase text-muted">not linked</span>}
       </div>
+      <GuideLine guide={guideLinkFor("/players/[gamertag]")} className="mt-3" />
       <ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} />
       <p className="mt-4 text-sm text-ink-2">{scopeLabel(profile.scope)}</p>
 

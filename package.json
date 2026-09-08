@@ -10,7 +10,6 @@
     "test": "turbo run test --concurrency=1",
     "typecheck": "turbo run typecheck",
     "ci": "turbo run typecheck test --concurrency=1",
-    "guide:numbers": "tsx scripts/guide-numbers.ts",
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
     "rebuild:kills": "tsx scripts/rebuild-kills.ts",

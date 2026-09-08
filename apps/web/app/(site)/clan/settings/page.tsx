@@ -6,6 +6,8 @@ import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
+import { guideLinkFor } from "@/lib/guide-links";
+import { GuideLine } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -40,6 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
       <p className={label}>Clan settings</p>
       <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">{clan.name} <span className="font-mono text-xl text-ink-2">[{clan.tag}]</span></h1>
+      <GuideLine guide={guideLinkFor("/clan/settings")} className="mt-3" />
       {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
 
       <section className="mt-8 border-2 border-rule-2 bg-frame p-5">
