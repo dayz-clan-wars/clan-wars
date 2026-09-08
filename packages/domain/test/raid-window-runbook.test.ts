@@ -35,7 +35,22 @@ describe("docs/deploy/raid-window.md matches RAID_WINDOW", () => {
 
   it("edits exactly the key spec §12 names, to both values", () => {
     expect(text).toContain("GeneralData.disableBaseDamage");
-    expect(text).toContain("`false`");
-    expect(text).toContain("`true`");
+  });
+
+  function tableRowFor(dow: number): string {
+    const lines = text.split("\n");
+    const line = lines.find(
+      (l) => l.includes(`${DAY_NAMES[dow]} 00:00 UTC`) && l.trim().startsWith("|"),
+    );
+    if (!line) throw new Error(`no table row found for ${DAY_NAMES[dow]} 00:00 UTC`);
+    return line;
+  }
+
+  it("sets disableBaseDamage to false at the opening boundary's table row", () => {
+    expect(tableRowFor(RAID_WINDOW.openDow)).toContain("`false`");
+  });
+
+  it("sets disableBaseDamage to true at the closing boundary's table row", () => {
+    expect(tableRowFor(RAID_WINDOW.closeDow)).toContain("`true`");
   });
 });

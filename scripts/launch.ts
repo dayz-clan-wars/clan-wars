@@ -40,13 +40,23 @@ if (Number.isNaN(at.getTime())) {
 
 const allowTestDb = args.includes("--allow-test-db");
 
+function redacted(u: string): string {
+  try {
+    const p = new URL(u);
+    if (p.password) p.password = "***";
+    return p.toString();
+  } catch {
+    return "<unparseable url>";
+  }
+}
+
 const url = process.env.DATABASE_URL;
 if (!url) {
   throw new Error("DATABASE_URL is not set.");
 }
 if (!allowTestDb && !url.endsWith("/factions_live")) {
   throw new Error(
-    `DATABASE_URL does not end in /factions_live (got: ${url}). ` +
+    `DATABASE_URL does not end in /factions_live (got: ${redacted(url)}). ` +
     "Pass --allow-test-db to run against a non-production database.",
   );
 }
