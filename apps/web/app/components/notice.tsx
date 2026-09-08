@@ -18,7 +18,16 @@ import { useEffect, useRef } from "react";
  */
 export function Notice({ children, tone = "plain", focus = true }: { children: React.ReactNode; tone?: "plain" | "gold" | "rust"; focus?: boolean }) {
   const el = useRef<HTMLParagraphElement>(null);
-  useEffect(() => { if (focus) el.current?.focus({ preventScroll: false }); }, [focus]);
+  // One frame after hydration, and only if nothing else has focus yet: a
+  // player who already tabbed to a control while the page was loading keeps it.
+  useEffect(() => {
+    if (!focus) return;
+    const id = requestAnimationFrame(() => {
+      const active = document.activeElement;
+      if (!active || active === document.body) el.current?.focus({ preventScroll: false });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [focus]);
   const edge = tone === "gold" ? "border-gold" : tone === "rust" ? "border-rust" : "border-rule-2";
   return (
     <p ref={el} role="status" tabIndex={-1} className={`border ${edge} bg-surface px-4 py-3 text-sm text-ink focus:outline-none focus-visible:outline-none`}>

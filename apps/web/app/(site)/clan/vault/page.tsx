@@ -59,7 +59,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                 {lock.exposed && <span className={`${badge} border-rust text-rust-2`}>known to an ex-member</span>}
               </div>
               {lock.note && <p className="mt-3 text-sm leading-relaxed text-ink-2">{lock.note}</p>}
-              <p className="mt-2 text-xs text-muted">{lock.rotatedAt ? `rotated ${when(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${when(lock.createdAt)} by ${lock.createdBy}`}</p>
+              <p className="mt-2 text-xs text-muted">{lock.rotatedAt ? `rotated by ${lock.rotatedBy}` : `added by ${lock.createdBy}`}</p>
 
               <div className="mt-4 flex flex-wrap items-center gap-3">
                 <RevealButton lockId={lock.id} />
