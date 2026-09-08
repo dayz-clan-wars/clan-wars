@@ -39,6 +39,30 @@ export function latLngToWorld(lat: number, lng: number, size: number): { x: numb
   return { x: (lng * scale) / k, z: size - (-lat * scale) / k };
 }
 
+/** Quarter steps: whole-level snapping makes a fractional zoom floor unreachable. */
+export const ZOOM_SNAP = 0.25;
+
+/**
+ * The lowest zoom at which the world still covers the whole container, so
+ * nothing outside the map is ever on screen. From One Life's map-canvas:
+ * the pyramid is one 256px tile at zoom 0 and spans `256 * 2**z` px at
+ * zoom z, so the floor is where that just covers the LONGER side —
+ * `z >= log2(max(w, h) / 256)` — rounded UP to a snap point, which is what
+ * makes it reachable: Leaflet rounds a zoom target to the snap first and
+ * clamps to minZoom second, so a floor between snap points is rounded away
+ * and the map bounces back a step.
+ *
+ * Null for a container measured as empty (log2(0) is -Infinity): a nonsense
+ * floor clamps every gesture to a zoom whose tiles do not exist, and the
+ * old behaviour is the better failure.
+ */
+export function zoomFloor(width: number, height: number, snap = ZOOM_SNAP, maxZoom = MAX_ZOOM): number | null {
+  const exact = Math.log2(Math.max(width, height) / 256);
+  const floor = Math.ceil(exact / snap) * snap;
+  if (!Number.isFinite(floor) || floor > maxZoom) return null;
+  return Math.max(0, floor);
+}
+
 /** "067 023": metres ÷ 100, truncated, zero-padded — what players say out loud. */
 export function gridRef(x: number, z: number): string {
   const cell = (v: number) => String(Math.max(0, Math.floor(v / 100))).padStart(3, "0");

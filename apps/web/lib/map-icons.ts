@@ -125,12 +125,14 @@ export function publicBaseIcon(p: Palette, src: string | null): string {
  * dot with an olive core, from zoom 3 up the glyph in a chip so a player can
  * see the point before walking. The container's `cw-far` class picks.
  *
- * The data carries no kind (outhouse / well / bus stop), so every point wears
- * the same roofed glyph.
+ * The glyph is a bolt — the points are fast travel, and the data carries no
+ * kind (outhouse / well / bus stop) to draw instead.
  */
+export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
+
 export function travelIcon(p: Palette): string {
   return `<svg class="cw-tp-dot" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="5" fill="${p.frame}"/><circle cx="14" cy="14" r="2.5" fill="${p.olive}"/></svg>` +
-    `<span class="cw-tp-chip">${chip(p, p.olive, `<path d="M6 13l8-7 8 7v9H6zM11 22v-6h6v6"/>`)}</span>`;
+    `<span class="cw-tp-chip">${chip(p, p.olive, BOLT.replaceAll("{a}", p.olive))}</span>`;
 }
 
 /** The Hub: a black hexagon with an H, twice a point's size, at every zoom. */
@@ -152,7 +154,7 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "intruders": return `${open()}<path d="M14 3l11 11-11 11L3 14z" fill="${p.rust}"/><path d="M14 9v6M14 18v1.5" stroke="${p.ink}"/></svg>`;
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
-    case "travel": return `${open(` stroke="${p.olive}"`)}<path d="M4 13l10-9 10 9v11H4zM10 24v-7h8v7"/></svg>`;
+    case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;
     default: return `${open(` stroke="${p.ink2}"`)}<path d="M3 3h22v22H3zM3 14h22M14 3v22"/></svg>`;
   }
 }

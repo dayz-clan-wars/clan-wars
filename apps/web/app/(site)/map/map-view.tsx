@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as L from "leaflet";
 import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
-import { MAX_ZOOM, gridRef, latLngToWorld, worldToLatLng } from "@/lib/map-projection";
+import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor } from "@/lib/map-projection";
+import { placeWeight, placesFor } from "@/lib/map-places";
 import { LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, palette, parseState, ptFor, refreshAges,
+  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
@@ -22,6 +23,10 @@ const TILE_ATTRIBUTION = '<a href="https://dayz.xam.nu" target="_blank">Tiles ©
 /** A 1x1 transparent gif: absent tiles read as dark ground, not a broken-image checkerboard. */
 const BLANK_TILE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 const LAYER_STORAGE_KEY = "clan-wars.map.layers";
+/** The world this map draws; the place names are keyed on it. */
+const MAP = "enoch";
+/** Place names sit under every marker (overlay pane 400, travel pane 350), over the tiles (200). */
+const PLACE_PANE = "places";
 /** Ages are recomputed far more often than positions are fetched, so a label never goes stale. */
 const AGE_TICK_MS = 30_000;
 
@@ -195,7 +200,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           // Quarter steps: whole-level snapping makes a fractional zoom floor
           // unreachable, and no snapping at all makes the wheel rescale tiles
           // continuously instead of stepping between rendered levels.
-          zoomSnap: 0.25,
+          zoomSnap: ZOOM_SNAP,
           // A hard stop at the world's edge rather than an elastic bounce —
           // the edge is a fact about the terrain, not a suggestion.
           maxBoundsViscosity: 1,
@@ -212,6 +217,38 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
         // the map to find.
         const pane = m.createPane(TRAVEL_PANE);
         if (pane) pane.style.zIndex = "350";
+        const placePane = m.createPane(PLACE_PANE);
+        if (placePane) placePane.style.zIndex = "340";
+
+        // ⚠️ The zoom floor: never a view with anything but map in it. Set
+        // from the container's size, and again on every resize, because the
+        // floor depends on the container's longer side (see zoomFloor).
+        const applyFloor = () => {
+          const size = m.getSize();
+          const floor = zoomFloor(size.x, size.y);
+          if (floor !== null) m.setMinZoom(floor);
+        };
+
+        // Place names, tiered by zoom (lib/map-places.ts): rebuilt on zoomend,
+        // sixty markers at most. Not a switch — a map without its towns is a
+        // map nobody can give directions on.
+        const places = Lm.layerGroup();
+        places.addTo(m);
+        const drawPlaces = () => {
+          places.clearLayers();
+          for (const p of placesFor(MAP, m.getZoom())) {
+            // `p.lat`/`p.lng` are already on this pyramid — not run through `ll`.
+            Lm.marker(Lm.latLng(p.lat, p.lng), {
+              pane: PLACE_PANE, interactive: false, keyboard: false,
+              // ⚠️ The visible label is the inner span. `iconSize: [0, 0]` writes
+              // `width: 0; height: 0` inline on the root, which no class rule
+              // beats — a box on the root paints a dash at the anchor while the
+              // text overflows it. The root is the anchor; the span is the chip.
+              icon: Lm.divIcon({ className: `cw-place cw-place-${placeWeight(p.kind)}`, html: `<span class="cw-place-chip">${escapeHtml(p.name)}</span>`, iconSize: [0, 0] }),
+            }).addTo(places);
+          }
+        };
+        m.on("zoomend", drawPlaces);
 
         // Travel points are a dot when zoomed out and a glyph chip from
         // TRAVEL_CHIP_ZOOM up. Both forms are in every marker's markup; one
@@ -229,8 +266,10 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           attribution: TILE_ATTRIBUTION,
         }).addTo(groups.current.terrain!);
 
+        applyFloor();
         m.fitBounds(world);
         far();
+        drawPlaces();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
 
@@ -258,7 +297,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
         // WINDOW resizes; a full-viewport container settles after mount (bars
         // and fonts land late) and the stale measurement leaves a blank band.
         if (typeof ResizeObserver !== "undefined") {
-          const ro = new ResizeObserver(() => map.current?.invalidateSize());
+          const ro = new ResizeObserver(() => { map.current?.invalidateSize(); applyFloor(); });
           ro.observe(el.current);
           observer.current = ro;
         }
