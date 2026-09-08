@@ -10,3 +10,4 @@ export * from "./leadership";
 export * from "./spacing";
 export * from "./scoring";
 export * from "./travel";
+export * from "./guide-numbers";
