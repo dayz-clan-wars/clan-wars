@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import config from "../next.config";
 import { CHAPTERS, CONTENT_DIR, chapterBySlug, hrefFor, neighbours } from "../lib/guide";
+import { renderFragment } from "../app/guide/render";
 
 /**
  * The guide is the authority over every rule (CLAUDE.md, "Where things
@@ -75,5 +76,22 @@ describe("guide.css rides on @theme", () => {
 describe("the site serves the guide itself", () => {
   it("has no redirects — /guide used to hand off to fieldguide.dayzclanwars.com", () => {
     expect(config.redirects).toBeUndefined();
+  });
+});
+
+describe("renderFragment", () => {
+  it("substitutes tokens from rules.ts", () => {
+    expect(renderFragment("<p>re-raise within {{FLAG_DOWN_MS|hours}}</p>").html).toBe("<p>re-raise within 24 hours</p>");
+    expect(renderFragment("<p>{{ MIN_BASE_SPACING_M }}</p>").html).toBe("<p>200 m</p>");
+  });
+  it("⚠️ throws on an unknown key or format, so a typo never ships as braces", () => {
+    expect(() => renderFragment("{{NOPE}}")).toThrow();
+    expect(() => renderFragment("{{FLAG_DOWN_MS|fortnights}}")).toThrow();
+    expect(() => renderFragment("{{WATCH_ZONE_RADIUS_M|days}}")).toThrow();
+  });
+  it("gives every h2 an id and an anchor, de-duplicating within the fragment", () => {
+    const { html, headings } = renderFragment("<h2>The claim</h2><p>x</p><h2>The claim</h2><h2>Exploits — permanent ban</h2>");
+    expect(headings).toEqual([{ id: "the-claim", text: "The claim" }, { id: "the-claim-2", text: "The claim" }, { id: "exploits-permanent-ban", text: "Exploits — permanent ban" }]);
+    expect(html).toContain('<h2 id="the-claim">The claim<a class="anchor" href="#the-claim" aria-label="Link to this section">#</a></h2>');
   });
 });
