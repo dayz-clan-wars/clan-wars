@@ -19,6 +19,13 @@ export type IngestOptions = {
    * skip the lines it is about to gain.
    */
   markComplete: boolean;
+  /**
+   * Re-run the parser over lines already ingested, from line 0. Only
+   * `reparse.ts` sets this: after a parser gains a line shape, the files
+   * ingested before it hold lines that never became events, and the
+   * idempotency key on `events` makes appending them again harmless.
+   */
+  reparse?: boolean;
 };
 
 export type IngestResult = {
@@ -56,7 +63,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
 
   const total = opts.lines.length;
   // Clamp: the file shrank or rotated. Never reprocess under this row's id.
-  const from = Math.min(Math.max(existing.linesIngested, 0), total);
+  const from = opts.reparse ? 0 : Math.min(Math.max(existing.linesIngested, 0), total);
 
   const cursor = new TimelineCursor(opts.bootAt, opts.clockOffsetMs);
   let eventsAppended = 0;
