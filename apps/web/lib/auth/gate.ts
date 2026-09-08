@@ -5,8 +5,14 @@
  * exactly, so adding an entry is a deliberate act that fails a test naming it.
  */
 
-/** The landing page, the clan directory, the scoring pages, and the guide (spec §10.2: public). */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide"] as const;
+/**
+ * The landing page, the clan directory, the scoring pages, and the guide
+ * (spec §10.2: public) — and the site mark, which the top bar shows to
+ * everyone. ⚠️ `public/` files are NOT exempt from the gate: the middleware
+ * matcher only skips /_next/static, /_next/image, favicon.ico and robots.txt,
+ * so an image outside these lists 303s to /login for an anonymous visitor.
+ */
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match

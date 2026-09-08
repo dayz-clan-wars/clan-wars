@@ -28,6 +28,8 @@
   --color-terrain: #111110;
   /* Page ground, below --color-frame, deliberately. */
   --color-ground: #050505;
+  /* The gold's hover state, one step lighter. The only derived colour. */
+  --color-gold-hover: #e6b04f;
 
   /* app/fonts.ts self-hosts these and sets the --font-archivo* variables on <html>. */
   --font-display: var(--font-archivo-black), system-ui, sans-serif;
@@ -44,6 +46,8 @@ body {
   margin: 0;
   min-height: 100dvh;
   background: var(--color-ground);
+  /* The canvas's faint scanline over the ground: 1px in 3, at 1.2% white. */
+  background-image: repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.012) 0 1px, transparent 1px 3px);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;

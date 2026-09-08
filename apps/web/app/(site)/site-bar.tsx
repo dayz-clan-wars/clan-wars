@@ -1,31 +1,33 @@
-import { MenuList } from "./menu-list";
+import { BarNav, Drawer } from "./menu-list";
 
 /**
- * The 52px top bar (`--spacing-bar` in globals.css): the mark and wordmark on
- * the left, the Menu on the right. The drawer is a <details>, the same
- * no-JavaScript mechanism the guide's phone top bar uses; menu-list.tsx adds
- * Escape and click-outside on top.
+ * The 52px top bar (`--spacing-bar` in globals.css), from the design canvas:
+ * the mark and wordmark on the left; on desktop the nav inline on the right,
+ * each item a cell with a hairline on its left and the current one gold with
+ * a 2px gold rule under it; on phones a bordered gold "Menu" that opens the
+ * drawer (menu-list.tsx) over a dimmed page.
+ *
+ * `crumb` is the guide's "/ Field guide"; `extra` is a slot beside the phone
+ * Menu button (the guide's Contents).
  *
  * ⚠️ z-[1300]: Leaflet's panes sit at 200–700 and its controls at 1000, and
  * the map page's own sheets at 1100–1200. The bar and its open drawer must
  * paint over all of them or the menu is unreachable from the one page a
  * player spends the most time on.
  */
-export function SiteBar({ signedIn }: { signedIn: boolean }) {
+export function SiteBar({ signedIn, crumb, extra }: { signedIn: boolean; crumb?: string; extra?: React.ReactNode }) {
   return (
-    <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b border-rule bg-frame px-4">
-      <a className="flex items-center gap-2.5 font-display text-sm tracking-[0.02em] text-ink" href={signedIn ? "/me" : "/"}>
+    <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame pl-4 pr-4 lg:pl-8 lg:pr-8">
+      <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href={signedIn ? "/me" : "/"}>
         <img src="/mark.png" alt="" width={28} height={28} />
         Clan Wars
+        {crumb && <span className="ml-1.5 hidden text-muted lg:inline">/ {crumb}</span>}
       </a>
-      <details className="group relative">
-        <summary className="flex min-h-[44px] cursor-pointer list-none items-center px-1 font-mono text-xs uppercase tracking-[0.18em] text-gold group-open:text-ink [&::-webkit-details-marker]:hidden">
-          Menu
-        </summary>
-        <div className="absolute right-0 top-full mt-1 max-h-[80dvh] w-[min(86vw,320px)] overflow-y-auto rounded-md border border-rule-2 bg-surface p-2 shadow-[0_12px_32px_rgba(0,0,0,.5)]">
-          <MenuList signedIn={signedIn} />
-        </div>
-      </details>
+      <div className="hidden h-full lg:block"><BarNav signedIn={signedIn} /></div>
+      <div className="flex items-center gap-2 lg:hidden">
+        {extra}
+        <Drawer signedIn={signedIn} />
+      </div>
     </header>
   );
 }

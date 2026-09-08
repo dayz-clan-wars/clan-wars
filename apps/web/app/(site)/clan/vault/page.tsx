@@ -13,26 +13,26 @@ export const metadata: Metadata = { title: "Clan Wars — vault", robots: { inde
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 w-full rounded-md border border-rule bg-ground px-3 py-2 font-mono text-ink";
-const small = "min-h-[44px] rounded-md border border-rule px-3 font-display text-sm text-ink";
-const badge = "rounded-full border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]";
+const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
+const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-2 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
+const small = "inline-flex min-h-[44px] items-center border-2 border-rule-2 px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink";
+const badge = "border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]";
 const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
 
 export default async function VaultPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
   const session = await currentSession();
   if (!session) {
-    return <main className="mx-auto max-w-[40rem] px-4 py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan/vault">Sign in again</a>.</p></main>;
+    return <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan/vault">Sign in again</a>.</p></main>;
   }
   const notice = result ? lookupCopy(VAULT_RESULT_COPY, result) : undefined;
   const view = await vaultFor(session.sub);
 
   if (typeof view === "string") {
     return (
-      <main className="mx-auto max-w-[40rem] px-4 py-10">
+      <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
         <p className={label}>Vault</p>
-        {notice && <p role="status" className="mt-6 rounded-md border border-rule-2 bg-surface p-3 text-sm text-ink">{notice}</p>}
+        {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
         <p className="mt-6 text-ink-2">{REFUSAL[view]} <a className="text-gold underline-offset-4 hover:underline" href="/clan">Your clan</a>.</p>
       </main>
     );
@@ -43,15 +43,15 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   const { locks, history } = view;
 
   return (
-    <main className="mx-auto max-w-[40rem] px-4 py-10">
+    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
       <p className={label}>Vault</p>
-      <h1 className="mt-1 font-display text-3xl text-ink">Your clan&rsquo;s vault</h1>
+      <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Your clan&rsquo;s vault</h1>
       <p className="mt-3 text-sm text-ink-2">{VAULT_INTRO}</p>
-      {notice && <p role="status" className="mt-6 rounded-md border border-rule-2 bg-surface p-3 text-sm text-ink">{notice}</p>}
+      {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
 
       <ul className="mt-6 flex flex-col gap-4">
         {locks.map((lock) => (
-          <li key={lock.id} className="rounded-lg border border-rule bg-frame p-5">
+          <li key={lock.id} className="border-2 border-rule-2 bg-frame p-5">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-display text-lg text-ink">{lock.name}</span>
               <span className={`${badge} border-rule-2 text-ink-2`}>{lock.minRole}</span>
@@ -86,13 +86,13 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                 </form>
                 <form action="/api/vault/rotate" method="post">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> Rotate this lock&rsquo;s code.</label>
+                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate this lock&rsquo;s code.</label>
                   <button className={`${small} mt-2`} type="submit">Rotate</button>
                 </form>
                 <form action="/api/vault/delete" method="post">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> Delete this lock.</label>
-                  <button className="mt-2 min-h-[44px] rounded-md border border-rust px-3 font-display text-sm text-ink" type="submit">Delete</button>
+                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Delete this lock.</label>
+                  <button className="mt-2 inline-flex min-h-[44px] items-center border-2 border-rust px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Delete</button>
                 </form>
               </div>
             )}
@@ -103,7 +103,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
 
       {officer && (
         <>
-          <section className="mt-6 rounded-lg border border-rule bg-frame p-5">
+          <section className="mt-6 border-2 border-rule-2 bg-frame p-5">
             <h2 className={label}>Add lock</h2>
             <form className="mt-2 flex flex-col gap-3" action="/api/vault/add" method="post">
               <label className="block"><span className={label}>Name</span><input className={field} name="name" required maxLength={VAULT_NAME_MAX} /></label>
@@ -114,15 +114,15 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                 </select>
               </label>
               <label className="block"><span className={label}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" placeholder="leave blank to generate" /></label>
-              <button className="min-h-[44px] self-start rounded-md bg-gold px-4 font-display text-ground" type="submit">Add lock</button>
+              <button className="inline-flex min-h-[44px] items-center self-start bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover" type="submit">Add lock</button>
             </form>
           </section>
 
-          <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
             <h2 className={label}>Rotate all</h2>
             <form className="mt-2" action="/api/vault/rotate" method="post">
               <input type="hidden" name="all" value="yes" />
-              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5" /> Rotate every lock in the vault.</label>
+              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate every lock in the vault.</label>
               <button className={`${small} mt-2`} type="submit">Rotate all</button>
             </form>
           </section>
@@ -130,7 +130,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
       )}
 
       {history !== null && (
-        <section className="mt-6 rounded-lg border border-rule bg-frame p-5">
+        <section className="mt-6 border-2 border-rule-2 bg-frame p-5">
           <h2 className={label}>History</h2>
           {history.length === 0 ? <p className="mt-2 text-sm text-ink-2">Nothing yet.</p> : (
             <div className="mt-2 overflow-x-auto">

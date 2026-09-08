@@ -10,7 +10,7 @@ export const metadata: Metadata = { title: "Clan Wars — player" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
 export const dynamic = "force-dynamic";
 
-const label = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
+const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
 /** Killed-by / killed lists are uncapped in the package; render at most this many, "and N more" for the rest. */
 const LIST_LIMIT = 10;
 
@@ -48,16 +48,16 @@ export default async function PlayerProfilePage({
   if (!profile) notFound();
 
   return (
-    <main className="mx-auto max-w-[34rem] px-4 py-10">
+    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
       <p className={label}>Player</p>
       <div className="mt-1 flex items-center gap-3">
-        <h1 className="font-display text-3xl text-ink">{profile.gamertag}</h1>
+        <h1 className="font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">{profile.gamertag}</h1>
         {!profile.linked && <span className="font-mono text-xs uppercase text-muted">not linked</span>}
       </div>
       <ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} />
       <p className="mt-4 text-sm text-ink-2">{scopeLabel(profile.scope)}</p>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Activity</h2>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-ink-2">
           <dt className={label}>Play time</dt><dd>{playTime(profile.playTimeSeconds)}</dd>
@@ -66,7 +66,7 @@ export default async function PlayerProfilePage({
         </dl>
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>PvP</h2>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-ink-2">
           <dt className={label}>Kills</dt><dd>{profile.pvpKills}</dd>
@@ -75,17 +75,17 @@ export default async function PlayerProfilePage({
         </dl>
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Killed by</h2>
         <OpponentList items={profile.killedBy} />
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Killed</h2>
         <OpponentList items={profile.killed} />
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Friendly fire</h2>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-ink-2">
           <dt className={label}>Kills</dt><dd>{profile.friendlyFireKills}</dd>
@@ -93,7 +93,7 @@ export default async function PlayerProfilePage({
         </dl>
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Raiding</h2>
         <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 text-sm text-ink-2">
           <dt className={label}>Raid credits</dt><dd>{profile.raidCredits}</dd>
@@ -101,7 +101,7 @@ export default async function PlayerProfilePage({
         </dl>
       </section>
 
-      <section className="mt-4 rounded-lg border border-rule bg-frame p-5">
+      <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
         <h2 className={label}>Clan history</h2>
         {profile.clanHistory.length === 0 ? (
           <p className="mt-2 text-sm text-ink-2">{EMPTY_BOARD}</p>
