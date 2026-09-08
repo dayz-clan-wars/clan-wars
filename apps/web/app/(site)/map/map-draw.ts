@@ -284,7 +284,7 @@ export function drawPins({ L, group, pt, data, now, ages, p }: Ctx): void {
         `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[10px] text-muted">${escapeHtml(pin.by)} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +
         `<form method="post" action="/api/map/pin/delete" class="m-0">` +
           `<input type="hidden" name="id" value="${pin.id}" />` +
-          `<button type="submit" class="flex min-h-[44px] w-full items-center justify-center border-t border-rule-2 font-display text-[11px] uppercase tracking-[0.06em] text-ink shadow-[inset_0_2px_0_var(--color-rust)] hover:bg-rust/15">Delete pin</button>` +
+          `<button type="submit" data-arm="Delete it? Tap again" class="flex min-h-[44px] w-full items-center justify-center border-t border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink shadow-[inset_0_2px_0_var(--color-rust)] hover:bg-rust/15">Delete pin</button>` +
         `</form>` +
       `</div>`;
     const age = fixAge(pin.at, new Date(now));

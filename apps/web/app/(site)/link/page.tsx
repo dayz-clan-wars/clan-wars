@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { linkStatus } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
-import { Page, GuideLine } from "@/app/components/ui";
+import { Page, GuideLine, SessionLost } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
 import { LinkFlow } from "./link-flow";
 
@@ -16,11 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function LinkPage() {
   const session = await currentSession();
   if (!session) {
-    return (
-      <main className="mx-auto max-w-[34rem] px-5 py-10">
-        <p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/link">Sign in again</a>.</p>
-      </main>
-    );
+    return <SessionLost next="/link" />;
   }
   const status = await linkStatus(session.sub);
   // Dates cross to the client as strings; the component parses them.

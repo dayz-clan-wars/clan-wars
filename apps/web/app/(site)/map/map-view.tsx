@@ -349,6 +349,27 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
 
+  // The popup's Delete button (map-draw.ts) carries `data-arm`: the first
+  // tap swaps its label for that text, the second within four seconds
+  // submits. Delegated from the map's own element, because Leaflet builds
+  // the popup's DOM itself and rebuilds it on every open.
+  useEffect(() => {
+    const root = el.current;
+    if (!root) return;
+    const onClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-arm]");
+      if (!btn || btn.dataset.armed) return;
+      e.preventDefault();
+      const label = btn.textContent;
+      btn.dataset.armed = "1";
+      btn.textContent = btn.dataset.arm ?? label;
+      btn.classList.add("bg-rust/15");
+      setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = label; btn.classList.remove("bg-rust/15"); } }, 4_000);
+    };
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, []);
+
   // Escape closes the panel; nothing else on this page listens for it.
   useEffect(() => {
     if (!layersOpen) return;
@@ -364,7 +385,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
-    <div className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain">
+    <main id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
       <div ref={el} className="absolute inset-0" />
 
       {/*
@@ -397,7 +418,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           <fieldset className="mt-3 grid grid-cols-3 gap-2">
             <legend className="sr-only">Icon</legend>
             {PIN_ICONS.map((icon, i) => (
-              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-2 px-2.5 text-[13px] text-ink has-[:checked]:border-gold">
+              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-3 px-2.5 text-[13px] text-ink has-[:checked]:border-gold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
                 <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="sr-only" />
                 <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: pinGlyph(pal, icon, 22) }} />
                 {PIN_ICON_LABELS[icon]}
@@ -406,7 +427,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           </fieldset>
           <textarea
             name="note" maxLength={PIN_NOTE_MAX} rows={2} placeholder={`A note, ${PIN_NOTE_MAX} characters at most`}
-            className="mt-3 w-full border-2 border-rule-2 bg-ground p-2.5 font-mono text-sm text-ink placeholder:text-dim focus:border-gold focus:outline-none"
+            className="mt-3 w-full border-2 border-rule-3 bg-ground p-2.5 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none"
           />
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button type="submit" className="flex min-h-[48px] items-center justify-center bg-gold font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Drop a pin</button>
@@ -439,12 +460,12 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
                         <input type="checkbox" className="h-4 w-4 flex-none accent-gold" checked={enabled[key]} onChange={() => toggle(key)} />
                         <span aria-hidden="true" className={`flex flex-none ${enabled[key] ? "" : "opacity-40"}`} dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
                         {LAYER_LABELS[key]}
-                        <span className={`ml-auto font-mono text-[10px] ${enabled[key] ? "text-muted" : "text-dim"}`}>{enabled[key] ? "ON" : "OFF"}</span>
+                        <span className="ml-auto font-mono text-[10px] text-muted">{enabled[key] ? "ON" : "OFF"}</span>
                       </label>
                     </li>
                   ))}
                 </ul>
-                <div className="border-t border-rule-2 px-5 py-3 font-mono text-[10px] leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
           </div>
@@ -468,7 +489,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
             {layersOpen && (
               <div id="map-layers-sheet" className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
                 {visible.map((key) => (
-                  <label key={key} className={`flex min-h-[40px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[10px] uppercase tracking-[0.12em] ${enabled[key] ? "border-gold text-ink" : "border-rule-2 text-muted"}`}>
+                  <label key={key} className={`flex min-h-[44px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[11px] uppercase tracking-[0.12em] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${enabled[key] ? "border-gold text-ink" : "border-rule-3 text-muted"}`}>
                     <input type="checkbox" className="sr-only" checked={enabled[key]} onChange={() => toggle(key)} />
                     <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: layerIcon(pal, key, 16) }} />
                     {LAYER_LABELS[key]}
@@ -479,20 +500,20 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
             <div className={`flex flex-wrap items-center gap-4 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
               <button
                 type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"
-                className={`flex h-10 w-10 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink"}`}
+                className={`flex h-11 w-11 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-3 text-ink"}`}
               >
                 <Sprocket size={18} />
                 <span className="sr-only">Layers</span>
               </button>
-              <span className={bar}>Grid {centre}</span>
-              <button type="button" onClick={() => void load()} className={`${bar} text-ink`}>Refresh</button>
-              <a className={`${bar} text-ink`} href="/clan">Your clan</a>
-              {layers.pins && <span className={bar}>Hold to pin</span>}
-              {guide && <a className={`${bar} text-gold`} href={guide.href}>Guide</a>}
+              <span className={`${bar} flex min-h-[44px] items-center`}>Grid {centre}</span>
+              <button type="button" onClick={() => void load()} className={`${bar} flex min-h-[44px] items-center text-ink`}>Refresh</button>
+              <a className={`${bar} flex min-h-[44px] items-center text-ink`} href="/clan">Your clan</a>
+              {layers.pins && <span className={`${bar} flex min-h-[44px] items-center`}>Hold to pin</span>}
+              {guide && <a className={`${bar} flex min-h-[44px] items-center text-gold`} href={guide.href}>Guide</a>}
             </div>
           </div>
         </>
       )}
-    </div>
+    </main>
   );
 }

@@ -11,7 +11,7 @@ export const metadata: Metadata = { title: "Clan Wars — scoreboard" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
 export const dynamic = "force-dynamic";
 
-const th = "border-b-2 border-rule-2 px-6 py-3.5 text-left font-mono text-[10px] font-normal uppercase tracking-[0.18em] text-dim";
+const th = "border-b-2 border-rule-2 px-6 py-3.5 text-left font-mono text-xs font-normal uppercase tracking-[0.18em] text-muted";
 const num = "px-6 text-right font-mono text-sm text-ink-2";
 
 export default async function ScoreboardPage() {

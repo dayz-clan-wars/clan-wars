@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
 import { guideLinkFor } from "@/lib/guide-links";
+import { Page } from "@/app/components/ui";
 
 export const metadata: Metadata = {
   title: "Clan Wars — sign in",
@@ -25,7 +26,7 @@ export default async function LoginPage({
   const rawError = typeof params.error === "string" ? params.error : "";
 
   return (
-    <main className="mx-auto w-full max-w-[1280px]">
+    <Page wide>
       <SignInCard
         step="Step 1 of 3"
         heading="Link your character."
@@ -36,6 +37,6 @@ export default async function LoginPage({
         error={ERRORS[rawError]}
         guide={guideLinkFor("/login")}
       />
-    </main>
+    </Page>
   );
 }

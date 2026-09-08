@@ -129,15 +129,24 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
         {(notice || denial) && <Refusal label="Not issued">{denial ?? notice}</Refusal>}
         <input className={field.replace("mt-1", "")} value={query}
           onChange={(e) => { setQuery(e.target.value); setDenial(null); }} placeholder="Gamertag" aria-label="Gamertag" autoComplete="off" spellCheck={false} />
-        <div className="mt-2 flex flex-col gap-1" role="listbox" aria-label="Characters the server has seen">
-          {query.trim() && matches.length === 0 && <div className="px-2 py-2 font-mono text-xs text-muted">No unclaimed character by that name</div>}
-          {matches.map((m) => (
-            <button key={m.dayzId} type="button" role="option" aria-selected={m.gamertag.toLowerCase() === query.trim().toLowerCase()}
-              className="min-h-[44px] px-3 text-left font-mono text-ink hover:bg-surface" onClick={() => setQuery(m.gamertag)}>
-              {m.gamertag}
-            </button>
-          ))}
-        </div>
+        {/* Plain buttons in a list, not a listbox: a listbox's options cannot be focusable buttons, and Tab-then-Enter is what a keyboard user will do here. */}
+        <p role="status" className="sr-only">{query.trim() ? `${matches.length} ${matches.length === 1 ? "character" : "characters"} found` : ""}</p>
+        {query.trim() && matches.length === 0 && <p className="mt-2 px-2 py-2 font-mono text-xs text-muted">No unclaimed character by that name</p>}
+        {matches.length > 0 && (
+          <ul className="mt-2 flex flex-col gap-1" aria-label="Characters the server has seen">
+            {matches.map((m) => {
+              const picked = m.gamertag.toLowerCase() === query.trim().toLowerCase();
+              return (
+                <li key={m.dayzId}>
+                  <button type="button" aria-pressed={picked}
+                    className={`flex min-h-[44px] w-full items-center px-3 text-left font-mono text-ink hover:bg-surface ${picked ? "bg-surface" : ""}`} onClick={() => setQuery(m.gamertag)}>
+                    {m.gamertag}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
         <button className={`mt-5 ${button}`} type="button" onClick={claim} disabled={busy || !query.trim()}>Claim it <span className="font-mono normal-case">→</span></button>
         <div className="mt-4 font-mono text-[11px] leading-relaxed text-muted lg:hidden">One character per Discord account. You will prove it is you with {LINK_EMOTES} emotes in game.</div>
       </div>
@@ -172,7 +181,7 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
       {/* Rust: an obligation the player still owes the server (frontend rebuild §4). */}
       <div className="border-2 border-rust bg-frame lg:self-start">
         <div className="flex items-center justify-between gap-4 border-b-2 border-rust px-4 py-3 lg:px-5">
-          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust">●</span>Challenge open</h2>
+          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust-2">●</span>Challenge open</h2>
           <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}</span>
         </div>
         {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Switched" neutral>{notice}</Refusal></div>}

@@ -17,13 +17,18 @@
   --color-ink: #e8e2d4;
   --color-ink-2: #b5afa4;
   --color-muted: #8a857c;
-  --color-dim: #6e6a62;
+  /* ⚠️ 4.7:1 on every surface. The old #6e6a62 was 3.5–3.8:1 and carried real text. */
+  --color-dim: #837f76;
   --color-frame: #0b0b0a;
   --color-surface: #131211;
   --color-rule: #1a1917;
   --color-rule-2: #2a2825;
+  /* The edge of a CONTROL (field, secondary button, checkbox): 3.2:1, the floor for a boundary that is the only affordance. Panels keep --color-rule-2. */
+  --color-rule-3: #66625b;
   --color-gold: #d9a03c;
   --color-rust: #8c3a22;
+  /* Rust as TEXT. --color-rust is 2.6:1 on the frame and is for edges only; this is the same hue at 5:1. */
+  --color-rust-2: #d4623a;
   --color-olive: #8fa36a;
   --color-terrain: #111110;
   /* Page ground, below --color-frame, deliberately. */
@@ -53,6 +58,10 @@ body {
   -webkit-tap-highlight-color: transparent;
 }
 
+/* Keyboard focus, in the palette. Fields draw their own gold border instead. */
+:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 2px; }
+input:focus-visible, textarea:focus-visible, select:focus-visible { outline: none; }
+
 /*
  * Leaflet's own chrome, in this palette.
  *
@@ -76,6 +85,9 @@ body {
 .leaflet-tooltip { box-shadow: none; }
 .leaflet-tooltip::before { border-top-color: var(--color-frame); border-right-color: var(--color-frame); }
 .leaflet-control-attribution a, .leaflet-popup-content a { color: var(--color-gold); }
+/* The attribution strip in the mono voice, 11px, framed like a tag; Leaflet's default is 11px sans in a white rounded box. */
+.leaflet-control-attribution { font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border: 1px solid var(--color-rule-2); border-radius: 0; margin: 0; }
+.leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
 /*
  * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
  * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and

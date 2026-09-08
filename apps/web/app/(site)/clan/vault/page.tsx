@@ -9,153 +9,151 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
 import { guideLinkFor } from "@/lib/guide-links";
-import { GuideLine } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-const label = "font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
-const field = "mt-1 block min-h-[48px] w-full border-2 border-rule-2 bg-ground px-3 font-mono text-sm text-ink focus:border-gold focus:outline-none";
-const small = "inline-flex min-h-[44px] items-center border-2 border-rule-2 px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink";
-const badge = "border px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.14em]";
+const badge = "border px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em]";
 const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
+const num = (i: number) => String(i).padStart(2, "0");
 
 export default async function VaultPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
   const { result } = await searchParams;
   const session = await currentSession();
-  if (!session) {
-    return <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10"><p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/clan/vault">Sign in again</a>.</p></main>;
-  }
+  if (!session) return <SessionLost next="/clan/vault" />;
   const notice = result ? lookupCopy(VAULT_RESULT_COPY, result) : undefined;
   const view = await vaultFor(session.sub);
 
   if (typeof view === "string") {
     return (
-      <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-        <p className={label}>Vault</p>
-        {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
-        <p className="mt-6 text-ink-2">{REFUSAL[view]} <a className="text-gold underline-offset-4 hover:underline" href="/clan">Your clan</a>.</p>
-      </main>
+      <Page>
+        <PageHead guide={guideLinkFor("/clan/vault")} kicker="Vault" title="No vault yet" />
+        <Body className="flex max-w-[40rem] flex-col gap-4">
+          {notice && <Notice>{notice}</Notice>}
+          <p className="text-ink-2">{REFUSAL[view]} <a className={link} href="/clan">Your clan</a>.</p>
+        </Body>
+      </Page>
     );
   }
 
   const clan = await clanFor(session.sub);
   const officer = typeof clan !== "string" && clan.me.status === "full" && (clan.me.role === "officer" || clan.me.role === "leader");
   const { locks, history } = view;
+  let n = 0;
 
   return (
-    <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
-      <p className={label}>Vault</p>
-      <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Your clan&rsquo;s vault</h1>
-      <GuideLine guide={guideLinkFor("/clan/vault")} className="mt-3" />
-      <p className="mt-3 text-sm text-ink-2">{VAULT_INTRO}</p>
-      {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
+    <Page>
+      <PageHead guide={guideLinkFor("/clan/vault")} kicker="Vault" title={<>Your clan&rsquo;s vault</>} sub={VAULT_INTRO} />
+      <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
+        {notice && <Notice>{notice}</Notice>}
 
-      <ul className="mt-6 flex flex-col gap-4">
+        {locks.length === 0 && <p className="text-sm text-ink-2">No locks your rank can see yet.</p>}
         {locks.map((lock) => (
-          <li key={lock.id} className="border-2 border-rule-2 bg-frame p-5">
-            <div className="flex flex-wrap items-center gap-2">
-              <span className="font-display text-lg text-ink">{lock.name}</span>
-              <span className={`${badge} border-rule-2 text-ink-2`}>{lock.minRole}</span>
-              {lock.changedInGame && <span className={`${badge} border-gold text-gold`}>changed in game?</span>}
-              {lock.exposed && <span className={`${badge} border-rust text-rust`}>known to an ex-member</span>}
-            </div>
-            {lock.note && <p className="mt-2 text-sm text-ink-2">{lock.note}</p>}
-            <p className="mt-2 text-xs text-ink-2">{lock.rotatedAt ? `rotated ${when(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${when(lock.createdAt)} by ${lock.createdBy}`}</p>
+          <Panel key={lock.id} num={num(++n)} title={lock.name} aside={lock.rotatedAt ? `rotated ${when(lock.rotatedAt)}` : `added ${when(lock.createdAt)}`}>
+            <PanelBody>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`${badge} border-rule-2 text-ink-2`}>{lock.minRole}</span>
+                {lock.changedInGame && <span className={`${badge} border-gold text-gold`}>changed in game?</span>}
+                {lock.exposed && <span className={`${badge} border-rust text-rust-2`}>known to an ex-member</span>}
+              </div>
+              {lock.note && <p className="mt-3 text-sm leading-relaxed text-ink-2">{lock.note}</p>}
+              <p className="mt-2 text-xs text-muted">{lock.rotatedAt ? `rotated ${when(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${when(lock.createdAt)} by ${lock.createdBy}`}</p>
 
-            <div className="mt-3 flex flex-wrap items-center gap-3">
-              <RevealButton lockId={lock.id} />
-              {lock.changedInGame && (
-                <form action="/api/vault/confirm" method="post">
-                  <input type="hidden" name="lockId" value={lock.id} />
-                  <button className={small} type="submit">Confirm changed in game</button>
-                </form>
-              )}
-            </div>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <RevealButton lockId={lock.id} />
+                {lock.changedInGame && (
+                  <form action="/api/vault/confirm" method="post">
+                    <input type="hidden" name="lockId" value={lock.id} />
+                    <button className={btnSecondary} type="submit">Confirm changed in game</button>
+                  </form>
+                )}
+              </div>
+            </PanelBody>
 
             {officer && (
-              <div className="mt-4 flex flex-col gap-3 border-t border-rule-2 pt-4">
-                <form className="flex flex-col gap-2" action="/api/vault/edit" method="post">
+              <PanelBody className="flex flex-col gap-4 border-t border-rule-2">
+                <form className="flex flex-col gap-3" action="/api/vault/edit" method="post">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="block"><span className={label}>Name</span><input className={field} name="name" defaultValue={lock.name} required maxLength={VAULT_NAME_MAX} /></label>
-                  <label className="block"><span className={label}>Note</span><input className={field} name="note" defaultValue={lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /></label>
-                  <label className="block"><span className={label}>Minimum rank</span>
+                  <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={lock.name} required maxLength={VAULT_NAME_MAX} /></label>
+                  <label className="block"><span className={fieldLabel}>Note</span><input className={field} name="note" defaultValue={lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /></label>
+                  <label className="block"><span className={fieldLabel}>Minimum rank</span>
                     <select className={field} name="minRole" defaultValue={lock.minRole} required>
                       {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
-                  <button className={`${small} self-start`} type="submit">Save</button>
+                  <button className={`${btnSecondary} self-start`} type="submit">Save</button>
                 </form>
+                <form className="border-t border-rule-2 pt-4" action="/api/vault/rotate" method="post">
+                  <input type="hidden" name="lockId" value={lock.id} />
+                  <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> Rotate this lock&rsquo;s code.</label>
+                  <button className={`mt-3 ${btnSecondary}`} type="submit">Rotate</button>
+                </form>
+                <form className="border-t border-rule-2 pt-4" action="/api/vault/delete" method="post">
+                  <input type="hidden" name="lockId" value={lock.id} />
+                  <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> Delete this lock.</label>
+                  <button className={`mt-3 ${btnDanger}`} type="submit">Delete</button>
+                </form>
+              </PanelBody>
+            )}
+          </Panel>
+        ))}
+
+        {officer && (
+          <>
+            <Panel num={num(++n)} title="Add lock">
+              <PanelBody>
+                <form className="flex flex-col gap-3" action="/api/vault/add" method="post">
+                  <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" required maxLength={VAULT_NAME_MAX} /></label>
+                  <label className="block"><span className={fieldLabel}>Note</span><input className={field} name="note" maxLength={VAULT_NOTE_MAX} /></label>
+                  <label className="block"><span className={fieldLabel}>Minimum rank</span>
+                    <select className={field} name="minRole" defaultValue="member" required>
+                      {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </label>
+                  <label className="block"><span className={fieldLabel}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" placeholder="leave blank to generate" /></label>
+                  <button className={`${btnPrimary} self-start`} type="submit">Add lock</button>
+                </form>
+              </PanelBody>
+            </Panel>
+
+            <Panel num={num(++n)} title="Rotate all">
+              <PanelBody>
                 <form action="/api/vault/rotate" method="post">
-                  <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate this lock&rsquo;s code.</label>
-                  <button className={`${small} mt-2`} type="submit">Rotate</button>
+                  <input type="hidden" name="all" value="yes" />
+                  <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> Rotate every lock in the vault.</label>
+                  <button className={`mt-3 ${btnSecondary}`} type="submit">Rotate all</button>
                 </form>
-                <form action="/api/vault/delete" method="post">
-                  <input type="hidden" name="lockId" value={lock.id} />
-                  <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Delete this lock.</label>
-                  <button className="mt-2 inline-flex min-h-[44px] items-center border-2 border-rust px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ink" type="submit">Delete</button>
-                </form>
+              </PanelBody>
+            </Panel>
+          </>
+        )}
+
+        {history !== null && (
+          <Panel num={num(++n)} title="History">
+            {history.length === 0 ? <PanelBody><p className="text-sm text-ink-2">Nothing yet.</p></PanelBody> : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-sm text-ink">
+                  <thead><tr className="font-mono text-xs uppercase tracking-[0.18em] text-muted"><th className="px-4 py-3 font-normal lg:px-5">When</th><th className="py-3 pr-3 font-normal">Who</th><th className="py-3 pr-3 font-normal">Action</th><th className="py-3 pr-4 font-normal">Lock</th></tr></thead>
+                  <tbody>
+                    {history.map((h, i) => (
+                      <tr key={i} className="border-t border-rule-2">
+                        <td className="px-4 py-2.5 lg:px-5">{when(h.at)}</td>
+                        <td className="py-2.5 pr-3">{h.by}</td>
+                        <td className="py-2.5 pr-3">{h.action}</td>
+                        <td className="py-2.5 pr-4">{h.lockName}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             )}
-          </li>
-        ))}
-        {locks.length === 0 && <p className="text-sm text-ink-2">No locks your rank can see yet.</p>}
-      </ul>
+          </Panel>
+        )}
 
-      {officer && (
-        <>
-          <section className="mt-6 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Add lock</h2>
-            <form className="mt-2 flex flex-col gap-3" action="/api/vault/add" method="post">
-              <label className="block"><span className={label}>Name</span><input className={field} name="name" required maxLength={VAULT_NAME_MAX} /></label>
-              <label className="block"><span className={label}>Note</span><input className={field} name="note" maxLength={VAULT_NOTE_MAX} /></label>
-              <label className="block"><span className={label}>Minimum rank</span>
-                <select className={field} name="minRole" defaultValue="member" required>
-                  {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </label>
-              <label className="block"><span className={label}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" placeholder="leave blank to generate" /></label>
-              <button className="inline-flex min-h-[44px] items-center self-start bg-gold px-4 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover" type="submit">Add lock</button>
-            </form>
-          </section>
-
-          <section className="mt-4 border-2 border-rule-2 bg-frame p-5">
-            <h2 className={label}>Rotate all</h2>
-            <form className="mt-2" action="/api/vault/rotate" method="post">
-              <input type="hidden" name="all" value="yes" />
-              <label className="flex items-center gap-2 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" className="h-5 w-5 accent-gold" /> Rotate every lock in the vault.</label>
-              <button className={`${small} mt-2`} type="submit">Rotate all</button>
-            </form>
-          </section>
-        </>
-      )}
-
-      {history !== null && (
-        <section className="mt-6 border-2 border-rule-2 bg-frame p-5">
-          <h2 className={label}>History</h2>
-          {history.length === 0 ? <p className="mt-2 text-sm text-ink-2">Nothing yet.</p> : (
-            <div className="mt-2 overflow-x-auto">
-              <table className="w-full text-left text-sm text-ink">
-                <thead><tr className="text-xs text-ink-2"><th className="pr-3">When</th><th className="pr-3">Who</th><th className="pr-3">Action</th><th>Lock</th></tr></thead>
-                <tbody>
-                  {history.map((h, i) => (
-                    <tr key={i} className="border-t border-rule-2">
-                      <td className="py-1 pr-3">{when(h.at)}</td>
-                      <td className="py-1 pr-3">{h.by}</td>
-                      <td className="py-1 pr-3">{h.action}</td>
-                      <td className="py-1">{h.lockName}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-      )}
-
-      <p className="mt-8"><a className={`${label} underline-offset-4 hover:underline`} href="/clan">Your clan</a></p>
-    </main>
+        <BackLine href="/clan">Your clan</BackLine>
+      </Body>
+    </Page>
   );
 }

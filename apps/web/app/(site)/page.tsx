@@ -32,7 +32,7 @@ export default async function Home() {
             {board.season ? `Season ${board.season.number} · Week ${week} · Livonia` : "Livonia · Xbox"}
           </div>
           <h1 className="mt-5 font-display text-[44px] uppercase leading-[.88] tracking-[-0.02em] text-ink lg:mt-6 lg:text-[96px] lg:leading-[.86]">
-            Clans, bases<br className="hidden lg:inline" /> and <span className="whitespace-nowrap text-gold">consequence.</span>
+            Clans, bases<br className="hidden lg:inline" /> and <span className="text-gold lg:whitespace-nowrap">consequence.</span>
           </h1>
           <p className="mt-5 max-w-[560px] text-base leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-7 lg:text-lg">
             Found a clan at a flagpole with two friends. Declare a base. Raid other clans to climb the scoreboard, and defend your own flag or lose it.
@@ -69,7 +69,7 @@ export default async function Home() {
                   <img src={`/${flagImagePath(r.texture)}`} alt="" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${r.status === "dormant" ? "opacity-60" : ""}`} />
                   <a href={`/clans/${encodeURIComponent(r.tag)}`} className="min-w-0">
                     <span className={`block truncate font-display text-[15px] lg:text-base ${r.status === "dormant" ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
-                    <span className="font-mono text-[10px] text-ink-2 lg:text-[11px]">
+                    <span className="font-mono text-[11px] text-ink-2">
                       <span className="hidden lg:inline">[{r.tag}]</span>
                       {r.alpha && <><span className="hidden lg:inline"> · </span><span className="uppercase text-gold">{ALPHA_BADGE}</span></>}
                       {r.status === "dormant" && <><span className="hidden lg:inline"> · </span><span className="uppercase text-muted">dormant</span></>}
