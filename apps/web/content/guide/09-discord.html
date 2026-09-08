@@ -10,7 +10,7 @@
 <h2>What lands in your clan channel</h2>
 <ul>
 <li>Flag down, defended, dormant, revived.</li>
-<li><strong>Intruder alerts</strong> — anyone not on your roster seen inside your watch zone: first sight, then one alert per player per 20 minutes. Pending members trigger it too, until they are in.</li>
+<li><strong>Intruder alerts</strong> — anyone not on your roster seen inside your watch zone: first sight, then one alert per player per {{INTRUDER_ALERT_COOLDOWN_MS|minutes}}. Pending members trigger it too, until they are in.</li>
 <li>Someone who is not a member raised your flag at your pole.</li>
 <li>Someone who is not a member <strong>dismantled</strong> a part of your base or <strong>built a gate</strong> in your watch zone — the log names them.</li>
 <li>Your flag was raised at some other pole by someone outside the clan. (If a member does this, it is the start of moving your base, and the channel says that instead.)</li>
@@ -29,7 +29,7 @@
 </ul>
 
 <h2>Guest pass</h2>
-<p>An officer runs <code>/guest @user</code> in the clan channel, or does it from the roster page. That person can see and join your <strong>voice</strong> channel for <strong>24 hours</strong> — not the text channel. If they join the clan, the pass becomes the real role. Otherwise it expires on its own. It is logged in your channel.</p>
+<p>An officer runs <code>/guest @user</code> in the clan channel, or does it from the roster page. That person can see and join your <strong>voice</strong> channel for <strong>{{GUEST_PASS_MS|hours}}</strong> — not the text channel. If they join the clan, the pass becomes the real role. Otherwise it expires on its own. It is logged in your channel.</p>
 
 <h2>No commands for managing anything</h2>
 <p>Everything except <code>/guest</code> answers with a link to the site. There is nothing to memorize.</p>

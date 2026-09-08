@@ -5,6 +5,7 @@ import { when } from "@/lib/format";
 import { EMPTY_SCOREBOARD, ALPHA_BADGE } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
 import { Page, PageHead, Body, Panel, Rank, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — scoreboard" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -18,7 +19,7 @@ export default async function ScoreboardPage() {
 
   return (
     <Page wide>
-      <PageHead kicker="Scoreboard" title={season ? `Season ${season.number}` : "No season"} aside={<ScoringNav current="/scoreboard" />} />
+      <PageHead guide={guideLinkFor("/scoreboard")} kicker="Scoreboard" title={season ? `Season ${season.number}` : "No season"} aside={<ScoringNav current="/scoreboard" />} />
       <Body>
         {!season ? (
           <p className="text-ink-2">{EMPTY_SCOREBOARD}</p>

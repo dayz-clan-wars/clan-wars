@@ -17,23 +17,23 @@
 <h2>Grace</h2>
 <p>A pole is not published the instant it is seen.</p>
 <ul>
-<li><strong>New pole, never declared: 7 days</strong> from the first time the log sees a flag on it. Declare inside the week or it goes on the map. Seven days is also how long DayZ gives you to re-raise a flag before the base starts to decay — one deadline, two reasons to meet it.</li>
-<li><strong>A clan moved out, lapsed, or disbanded: 3 days.</strong> Long enough to haul loot out before the old spot is on the map.</li>
+<li><strong>New pole, never declared: {{NEW_POLE_GRACE_MS|days}}</strong> from the first time the log sees a flag on it. Declare inside the week or it goes on the map. Seven days is also how long DayZ gives you to re-raise a flag before the base starts to decay — one deadline, two reasons to meet it.</li>
+<li><strong>A clan moved out, lapsed, or disbanded: {{RELEASED_POLE_GRACE_MS|days}}.</strong> Long enough to haul loot out before the old spot is on the map.</li>
 <li><strong>Launch day:</strong> every pole standing when Clan Wars goes live gets the 7-day grace from that day.</li>
 </ul>
 
 <h2>When a declaration lapses</h2>
 <p>Rule 4 has a clock. Only a flag raise by the owner resets that clock: you, for a solo base; any member, for a clan base.</p>
 <ul>
-<li><strong>Clan:</strong> no member raise for 7 days makes the clan dormant; 14 more days disbands it. The base stays declared and private through all of that, and goes public 3 days after the disband. See <a href="/guide/defending">Defending</a>.</li>
-<li><strong>Solo:</strong> no raise by you for <strong>7 days</strong> and the declaration lapses on the spot. The pole gets the usual 3-day grace, then it is public. Raise the flag again inside the grace and it is yours again.</li>
+<li><strong>Clan:</strong> no member raise for {{DORMANT_AFTER_MS|days}} makes the clan dormant; {{DISBAND_AFTER_DORMANT_MS|n}} more days disbands it. The base stays declared and private through all of that, and goes public {{RELEASED_POLE_GRACE_MS|days}} after the disband. See <a href="/guide/defending">Defending</a>.</li>
+<li><strong>Solo:</strong> no raise by you for <strong>{{SOLO_LAPSE_MS|days}}</strong> and the declaration lapses on the spot. The pole gets the usual {{RELEASED_POLE_GRACE_MS|n}}-day grace, then it is public. Raise the flag again inside the grace and it is yours again.</li>
 </ul>
 <p>A solo base can be lowered by anyone, and nothing scores — there is no clan to raid. The only cost is that you have to go raise it again.</p>
 
 <h2>Spacing</h2>
-<div class="rule"><p><strong>No two declared bases within 200 m of each other.</strong> First declared wins. This applies to a ceremony claim, a solo declaration, and a base move.</p></div>
-<p>Why: every declared base has a 100 m watch zone around its pole. Keeping poles 200 m apart means zones never overlap, so anything the log records inside your zone — a stranger loitering, a wall dismantled, a fence turned into a gate — is unambiguously <em>at your base</em>, and the alert can say so.</p>
-<p>The honest consequence: if the site refuses a claim with "too close to another declared base", you have learned that a private base is somewhere within 200 m. Not where. That small leak is accepted; the alternative is letting you found a clan and failing you later.</p>
+<div class="rule"><p><strong>No two declared bases within {{MIN_BASE_SPACING_M|m}} of each other.</strong> First declared wins. This applies to a ceremony claim, a solo declaration, and a base move.</p></div>
+<p>Why: every declared base has a {{WATCH_ZONE_RADIUS_M|m}} watch zone around its pole. Keeping poles {{MIN_BASE_SPACING_M|m}} apart means zones never overlap, so anything the log records inside your zone — a stranger loitering, a wall dismantled, a fence turned into a gate — is unambiguously <em>at your base</em>, and the alert can say so.</p>
+<p>The honest consequence: if the site refuses a claim with "too close to another declared base", you have learned that a private base is somewhere within {{MIN_BASE_SPACING_M|m}}. Not where. That small leak is accepted; the alternative is letting you found a clan and failing you later.</p>
 
 <h2>Solo to clan</h2>
 <p>A solo base flies white by necessity — a solo has no flag from the 33. Three linked players, <strong>one of them the base's declarant</strong>, run the ceremony there, and it becomes the clan's base with everything in it. Same ritual, same evidence, no upgrade step.</p>

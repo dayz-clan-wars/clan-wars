@@ -1,4 +1,4 @@
-import { btnCta } from "./ui";
+import { btnCta, GuideLine } from "./ui";
 
 /**
  * The sign-in screen from the design canvas: on desktop a two-column spread
@@ -11,8 +11,8 @@ import { btnCta } from "./ui";
  * (frontend rebuild §4); a failed sign-in owes the server nothing. It uses
  * the stronger rule colour and plain ink instead.
  */
-export function SignInCard({ step, heading, body, action, actionHref, footnote, error, cardLabel = "Sign in" }: {
-  step: string; heading: string; body: string; action: string; actionHref: string; footnote: string; error?: string; cardLabel?: string;
+export function SignInCard({ step, heading, body, action, actionHref, footnote, error, cardLabel = "Sign in", guide }: {
+  step: string; heading: string; body: string; action: string; actionHref: string; footnote: string; error?: string; cardLabel?: string; guide?: { href: string; label: string };
 }) {
   return (
     <div className="grid w-full gap-8 px-5 py-7 lg:min-h-[calc(100dvh-var(--spacing-bar))] lg:grid-cols-2 lg:items-center lg:gap-16 lg:px-8 lg:py-0">
@@ -20,6 +20,7 @@ export function SignInCard({ step, heading, body, action, actionHref, footnote, 
         <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[10px] uppercase tracking-[0.18em] text-gold lg:text-[11px]">{step}</div>
         <h1 className="mt-4 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:mt-5 lg:text-[72px]">{heading}</h1>
         <p className="mt-4 max-w-[480px] text-base leading-relaxed text-ink-2 [text-wrap:pretty] lg:mt-6 lg:text-lg">{body}</p>
+        {guide && <GuideLine guide={guide} className="mt-5" />}
         <div className="mt-6 lg:hidden">
           <a className={btnCta} href={actionHref}>{action} <span className="font-mono normal-case">→</span></a>
           {error && <Refusal>{error}</Refusal>}

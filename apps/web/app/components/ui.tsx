@@ -36,8 +36,10 @@ export function Page({ children, wide = false }: { children: React.ReactNode; wi
  * and an optional right-hand slot (a segmented nav, a CTA, a status). Closes
  * with the 2px rule every page in the canvas has.
  */
-export function PageHead({ kicker: k, title, sub, aside, icon }: {
+export function PageHead({ kicker: k, title, sub, aside, icon, guide }: {
   kicker: React.ReactNode; title: React.ReactNode; sub?: React.ReactNode; aside?: React.ReactNode; icon?: React.ReactNode;
+  /** The chapter this page is explained by (lib/guide-links.ts): "In the guide: 4. Bases →". */
+  guide?: { href: string; label: string };
 }) {
   return (
     <div className="flex flex-col gap-5 border-b-2 border-rule-2 px-5 pb-5 pt-6 lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:px-8 lg:pb-6 lg:pt-10">
@@ -47,10 +49,25 @@ export function PageHead({ kicker: k, title, sub, aside, icon }: {
           <div className={kicker}>{k}</div>
           <h1 className="mt-2 font-display text-[clamp(2.25rem,6vw,4rem)] uppercase leading-[.9] tracking-[-0.02em] text-ink [overflow-wrap:anywhere]">{title}</h1>
           {sub && <div className="mt-2 text-sm text-ink-2">{sub}</div>}
+          {guide && <GuideLine guide={guide} className="mt-3 lg:hidden" />}
         </div>
       </div>
-      {aside && <div className="flex-none">{aside}</div>}
+      {(aside || guide) && (
+        <div className="flex flex-none flex-col items-start gap-3 lg:items-end">
+          {guide && <GuideLine guide={guide} className="hidden lg:flex" />}
+          {aside}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** "In the guide: 4. Bases →", the mono voice, gold on hover. */
+export function GuideLine({ guide, className = "" }: { guide: { href: string; label: string }; className?: string }) {
+  return (
+    <a href={guide.href} className={`items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-gold ${className.includes("hidden") ? className : `flex ${className}`}`}>
+      <span className="text-dim">In the guide:</span> {guide.label} <span aria-hidden="true">→</span>
+    </a>
   );
 }
 

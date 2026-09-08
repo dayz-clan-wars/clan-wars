@@ -5,6 +5,7 @@ import { when } from "@/lib/format";
 import { NO_SEASONS } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
 import { Page, PageHead, Body, Panel, Rank, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — seasons" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -18,7 +19,7 @@ export default async function SeasonsPage() {
 
   return (
     <Page wide>
-      <PageHead kicker="Seasons" title="Past seasons" aside={<ScoringNav current="/seasons" />} />
+      <PageHead guide={guideLinkFor("/seasons")} kicker="Seasons" title="Past seasons" aside={<ScoringNav current="/seasons" />} />
       <Body className="flex flex-col gap-4 lg:gap-6">
         {closed.length === 0 ? (
           <p className="text-ink-2">{NO_SEASONS}</p>

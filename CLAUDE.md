@@ -119,7 +119,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
   pinned by `apps/web/test/map-route-headers.test.ts`, with ownership as a WHERE predicate
   in `map.ts`, never a post-filter. Tiles are a static host prerequisite, mirrored from One
   Life and shared with dayzonelife.com; absent tiles render the map with a dark ground, not
-  broken. `POSITION_RETENTION_MS` is deliberately absent from `docs/guide-numbers.json` —
+  broken. `POSITION_RETENTION_MS` is deliberately absent from `packages/domain/src/guide-numbers.ts` —
   it is a housekeeping constant, not a player-facing number.
   Since 6, `membership-tick.ts` runs **before** presence (it reconciles the roster against
   `membership_history`, opening and closing spans as members join and leave; presence must
@@ -239,7 +239,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | The raid window, flipped by hand twice a week | `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
-| The guide's numbers, vendored | `docs/guide-numbers.json` — regenerate with `pnpm guide:numbers` |
+| The guide's numbers | `packages/domain/src/guide-numbers.ts` — the appendix table and the chapters' `{{KEY\|format}}` tokens both render from it; `apps/web/test/guide.test.ts` fails on a hand-typed number |
 | The wipe, the launch grace stamp, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm launch --server <id> --at <ISO>` (`scripts/launch.ts`; stamps every pole on the server to `--at` + 7 days, spec §4.2; same `--at`-is-required rule, idempotent for the same instant), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — all three refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
@@ -267,10 +267,13 @@ there should be a test that fails when they disagree. See
 the `@theme` block against the palette; a dropped token renders a browser default
 silently.
 
-**Every guide number lives in `packages/domain/src/rules.ts`.** `docs/guide-numbers.json`
-is a vendored copy of the guide's numbers table (`pnpm guide:numbers` regenerates it) and
-`packages/domain/test/guide-numbers-drift.test.ts` holds the two together. A new number
-goes in `rules.ts` and in the guide, never as a literal in the module that uses it.
+**Every guide number lives in `packages/domain/src/rules.ts`** and reaches the guide through
+`packages/domain/src/guide-numbers.ts`: the "Every number" appendix renders `GUIDE_NUMBERS`, and
+the chapters carry `{{KEY|format}}` tokens that `apps/web/app/guide/render.ts` resolves at build
+time (an unknown key throws). A new number goes in `rules.ts`, then a row in `guide-numbers.ts`,
+then a token in the chapter — never a literal. `apps/web/test/guide.test.ts` fails on a hand-typed
+rule number in any chapter; the old vendored `docs/guide-numbers.json` and its drift test are gone
+(2026-09-07).
 
 **Every package `apps/web` transpiles (`transpilePackages` in `apps/web/next.config.ts`)
 must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →

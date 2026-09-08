@@ -2,6 +2,8 @@
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { barFor, isCurrent, menuFor, signInHref } from "@/lib/menu";
+import { GuideSearch } from "@/app/guide/search";
+import type { SearchEntry } from "@/app/guide/index";
 
 function useHere() {
   const pathname = usePathname();
@@ -45,7 +47,7 @@ export function BarNav({ signedIn }: { signedIn: boolean }) {
  * navigation; this adds Escape, click-outside, and the dimmed backdrop. The
  * summary reads "Menu" closed and "Close" open, filled gold when open.
  */
-export function Drawer({ signedIn }: { signedIn: boolean }) {
+export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex?: SearchEntry[] }) {
   const { pathname, here } = useHere();
   const root = useRef<HTMLDetailsElement>(null);
 
@@ -69,6 +71,7 @@ export function Drawer({ signedIn }: { signedIn: boolean }) {
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
       <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
       <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] w-[300px] max-w-[calc(100vw-24px)] border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+        {guideIndex && <div className="border-b-2 border-rule-2 p-3"><GuideSearch index={guideIndex} compact /></div>}
         {menuFor(signedIn).map((group, gi) => (
           <ul key={gi} className={`py-2 ${gi > 0 ? "border-t-2 border-rule-2" : ""}`}>
             {group.map((m) => {

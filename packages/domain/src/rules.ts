@@ -1,8 +1,8 @@
 /**
  * Every timer, cap, radius and cooldown the player's guide promises, in one
- * place. The guide (apps/web/content/guide/numbers.html) is the authority; this file
- * is its mirror in code, and `test/guide-numbers-drift.test.ts` fails when
- * the two disagree.
+ * place. The guide renders every number FROM this file, through
+ * `guide-numbers.ts` (the appendix table and the chapters' `{{KEY|format}}`
+ * tokens), so the guide and the code cannot disagree.
  *
  * ⚠️ No other module may state one of these numbers as a literal. A number
  * stated twice will drift, and the symptom is a clock that fires a day early
@@ -86,7 +86,7 @@ export const PIN_TTL_MS = 7 * DAY;
 /**
  * How long `player_positions` rows are kept (spec §4.9). Operational, not a
  * promise the guide makes, so it is deliberately absent from
- * docs/guide-numbers.json — the drift test covers only promised numbers.
+ * guide-numbers.ts — the guide states only promised numbers.
  */
 export const POSITION_RETENTION_MS = 30 * DAY;
 export const PIN_ICONS = ["loot", "vehicle", "enemy", "meet", "danger", "note"] as const;

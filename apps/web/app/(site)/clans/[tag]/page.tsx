@@ -8,6 +8,7 @@ import { when, days } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { ALPHA_BADGE, duration } from "@/lib/scoring-copy";
 import { Page, PageHead, Panel, PanelBody, Notice, Facts, Stat, btnCta, link, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — clan" };
 /** ⚠️ Public but viewer-aware (canRequest), so per request. See lib/viewer.ts. */
@@ -42,7 +43,7 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
 
   return (
     <Page wide>
-      <PageHead
+      <PageHead guide={guideLinkFor("/clans/[tag]")}
         icon={<img src={`/${flagImagePath(clan.texture)}`} alt="" width={96} height={96} className="h-16 w-16 flex-none object-contain lg:h-24 lg:w-24" />}
         kicker={<>[{clan.tag}] · {clan.status}{clan.alpha && <> · <span className="text-gold">{ALPHA_BADGE}</span></>}</>}
         title={clan.name}

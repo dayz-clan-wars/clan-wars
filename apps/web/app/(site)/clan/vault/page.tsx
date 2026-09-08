@@ -8,6 +8,8 @@ import { VAULT_ROLES } from "@/lib/vault-form";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
+import { guideLinkFor } from "@/lib/guide-links";
+import { GuideLine } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -46,6 +48,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     <main className="mx-auto max-w-[64rem] px-5 py-7 lg:px-8 lg:py-10">
       <p className={label}>Vault</p>
       <h1 className="mt-2 font-display text-[40px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">Your clan&rsquo;s vault</h1>
+      <GuideLine guide={guideLinkFor("/clan/vault")} className="mt-3" />
       <p className="mt-3 text-sm text-ink-2">{VAULT_INTRO}</p>
       {notice && <p role="status" className="mt-6 border border-rule-2 bg-surface px-4 py-3 text-sm text-ink">{notice}</p>}
 

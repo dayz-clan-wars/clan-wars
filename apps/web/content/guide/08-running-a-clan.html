@@ -14,7 +14,7 @@
 <li><strong>Invite</strong> — an officer invites a linked player from the site. The player gets a DM and accepts on the site.</li>
 <li><strong>Request</strong> — a linked player presses <em>Request to join</em> on a recruiting clan's page. Officers accept or decline.</li>
 </ul>
-<p>Either way you are <strong>pending</strong> until the log sees you <strong>at the clan's base</strong> — anything the log records you doing within 50 m of the pole. Then you are a full member: Discord role, channel, map, vault. An invite or request that is not acted on expires after <strong>7 days</strong>; a pending member who never shows up at the base drops off after 7 days too.</p>
+<p>Either way you are <strong>pending</strong> until the log sees you <strong>at the clan's base</strong> — anything the log records you doing within {{JOIN_PRESENCE_RADIUS_M|m}} of the pole. Then you are a full member: Discord role, channel, map, vault. An invite or request that is not acted on expires after <strong>{{PENDING_EXPIRY_MS|days}}</strong>; a pending member who never shows up at the base drops off after {{PENDING_EXPIRY_MS|days}} too.</p>
 <div class="rule"><p><strong>Everyone on a roster has stood at the base at least once.</strong> That is the point.</p></div>
 <p><strong>One clan per player.</strong> Joining another means leaving first.</p>
 
@@ -26,7 +26,7 @@
 <p>The leader can hand leadership to any full member at any time, with a confirmation step.</p>
 
 <h3>If the leader goes quiet</h3>
-<p>If the leader has <strong>no in-game activity for 7 days</strong>, any officer — or any member, if there are no officers — can <em>claim leadership</em> on the site. The clan channel is told. The leader has <strong>48 hours</strong> to show up in the game; if the log shows them doing anything in game, the claim is cancelled. Otherwise the claimant is leader.</p>
+<p>If the leader has <strong>no in-game activity for {{LEADER_SILENT_MS|days}}</strong>, any officer — or any member, if there are no officers — can <em>claim leadership</em> on the site. The clan channel is told. The leader has <strong>{{SUCCESSION_WINDOW_MS|hours}}</strong> to show up in the game; if the log shows them doing anything in game, the claim is cancelled. Otherwise the claimant is leader.</p>
 
 <h3>If the leader is removed from the Discord</h3>
 <p>A leader who is banned, or who leaves the Discord, is gone from the clan at once. Leadership passes immediately to the longest-serving officer, or to the longest-serving member if there are no officers. No window, no vote — a clan is never left without a leader.</p>
@@ -34,24 +34,24 @@
 <h3>No-confidence vote</h3>
 <p>Any time, for any reason. Any full member nominates a replacement — themselves included — and that opens a vote.</p>
 <ul>
-<li>The vote runs <strong>48 hours</strong>, in the clan channel and on the site. Every full member votes except the leader. The leader is told at once and can make their case.</li>
+<li>The vote runs <strong>{{VOTE_LENGTH_MS|hours}}</strong>, in the clan channel and on the site. Every full member votes except the leader. The leader is told at once and can make their case.</li>
 <li>It passes on <strong>two-thirds of all full members</strong> — not just those who voted. With ten on the roster that is six of nine.</li>
 <li>The electorate is fixed when the vote opens. Members who leave mid-vote drop out of the count; nobody can be added to it.</li>
 <li><strong>While a vote is open, the leader cannot kick anyone, hand over leadership, or disband the clan.</strong> Invites still work; arrivals do not vote in that one.</li>
 <li>On success the nominee leads and the ex-leader <strong>stays as an officer</strong>. Replacing is not expelling.</li>
-<li>A failed vote means <strong>14 days</strong> before another. One open vote at a time.</li>
+<li>A failed vote means <strong>{{FAILED_VOTE_COOLDOWN_MS|days}}</strong> before another. One open vote at a time.</li>
 </ul>
 <p>Two consequences, stated so nobody is surprised: the founder can be voted out by the people they invited — the clan is the people, not the founder — and the base declaration does not move, because it is the clan's, not the leader's.</p>
 
 <h2>Rename</h2>
-<p>Leader only. Name and/or tag, <strong>once per 30 days</strong>. The feed announces it. Your old name and tag are held for the rest of the season so nobody can impersonate you.</p>
+<p>Leader only. Name and/or tag, <strong>once per {{RENAME_COOLDOWN_MS|days}}</strong>. The feed announces it. Your old name and tag are held for the rest of the season so nobody can impersonate you.</p>
 
 <h2>Moving your base</h2>
-<p>A member raises your <strong>clan's own flag</strong> at a pole nobody holds. The leader confirms the move on the site within <strong>24 hours</strong>. Your base is now the new pole; supplies follow at the next restart. <strong>7 days</strong> between moves. The new pole must be 200 m from any declared base.</p>
+<p>A member raises your <strong>clan's own flag</strong> at a pole nobody holds. The leader confirms the move on the site within <strong>{{REBIND_CONFIRM_MS|hours}}</strong>. Your base is now the new pole; supplies follow at the next restart. <strong>{{REBIND_COOLDOWN_MS|days}}</strong> between moves. The new pole must be {{MIN_BASE_SPACING_M|m}} from any declared base.</p>
 <p>The old base gets its 3-day grace before going public — nobody can teleport their loot, and publishing the old spot the instant you leave would make moving so dangerous that nobody would. The 7-day cooldown is deliberately longer than the 3-day grace, so nobody can bounce between two poles and keep both private.</p>
 
 <h2>Disband</h2>
-<p>Leader only, with confirmation. The flag returns to the pool immediately; the channel is deleted; the base goes public after 3 days; nobody gets a cooldown. The name and tag are <strong>held for the rest of the season</strong>, same as after a rename, so nobody can wear a disbanded clan's colors the next day.</p>
+<p>Leader only, with confirmation. The flag returns to the pool immediately; the channel is deleted; the base goes public after {{RELEASED_POLE_GRACE_MS|days}}; nobody gets a cooldown. The name and tag are <strong>held for the rest of the season</strong>, same as after a rename, so nobody can wear a disbanded clan's colors the next day.</p>
 
 <h2>Recruiting post</h2>
 <p>Officers set <em>Recruiting: yes or no</em>, a play window, a language, and a one-line pitch. It shows on the directory and turns on the <em>Request to join</em> button.</p>

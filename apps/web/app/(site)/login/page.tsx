@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = {
   title: "Clan Wars — sign in",
@@ -33,6 +34,7 @@ export default async function LoginPage({
         actionHref={`/api/auth/discord?next=${encodeURIComponent(next)}`}
         footnote="One character per account. You need to be in the Clan Wars Discord — we will offer to add you if you are not."
         error={ERRORS[rawError]}
+        guide={guideLinkFor("/login")}
       />
     </main>
   );

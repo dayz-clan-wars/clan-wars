@@ -3,6 +3,7 @@ import { warLog, type WarLogEntry } from "@factions/roster";
 import { EMPTY_WAR_LOG, duration } from "@/lib/scoring-copy";
 import { WarLogLine } from "./entry";
 import { Page, PageHead, Body, Panel, kicker, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — war log" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -33,7 +34,7 @@ export default async function WarLogPage() {
 
   return (
     <Page wide>
-      <PageHead kicker="War log" title="Recent action" aside={
+      <PageHead guide={guideLinkFor("/war-log")} kicker="War log" title="Recent action" aside={
         <div className={`hidden gap-6 lg:flex lg:pb-2 ${kicker}`}>
           <span><span className="mr-2 inline-block h-2 w-2 bg-gold" />Raid</span>
           <span><span className="mr-2 inline-block h-2 w-2 bg-olive" />Defense</span>

@@ -4,6 +4,7 @@ import { parseSeasonParam } from "@/lib/stat-scope";
 import { StatBoards, ScopePicker } from "@/app/components/stat-boards";
 import { FindPlayer } from "@/app/components/find-player";
 import { Page, PageHead, Body } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — players" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -21,7 +22,7 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
 
   return (
     <Page wide>
-      <PageHead kicker="Players" title="Player boards" aside={<ScopePicker seasons={boards.seasons} basePath="/players" current={boards.scope} />} />
+      <PageHead guide={guideLinkFor("/players")} kicker="Players" title="Player boards" aside={<ScopePicker seasons={boards.seasons} basePath="/players" current={boards.scope} />} />
       <Body>
         <StatBoards boards={boards} extra={<FindPlayer />} />
       </Body>

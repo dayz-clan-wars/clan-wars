@@ -5,33 +5,33 @@
 <li>You cannot unlink while in a clan.</li>
 </ul>
 <h2>Founding</h2><ul>
-<li>Three linked players each lower and raise the white flag at one unbound pole within 10 minutes.</li>
-<li>Claim on the site within 24 hours: name, tag, one of the 33 flags, roster.</li>
-<li>Raise your flag at that pole within 24 hours of claiming, or the reservation lapses.</li>
+<li>Three linked players each lower and raise the white flag at one unbound pole within {{CEREMONY_WINDOW_MS|minutes}}.</li>
+<li>Claim on the site within {{CLAIM_WINDOW_MS|hours}}: name, tag, one of the {{FLAG_POOL_SIZE|n}} flags, roster.</li>
+<li>Raise your flag at that pole within {{ACTIVATION_WINDOW_MS|hours}} of claiming, or the reservation lapses.</li>
 <li>Active clans get the same supply kit at every restart. Rank buys nothing.</li>
 </ul>
 <h2>Bases</h2><ul>
 <li>Every flagpole is a base. Declared is private; everything else is public, with the flag flying there.</li>
 <li>One declaration per player: your clan's base, or one solo base.</li>
-<li>New poles get 7 days before going public; released poles get 3.</li>
-<li>No two declared bases within 200 m. First declared wins.</li>
+<li>New poles get {{NEW_POLE_GRACE_MS|days}} before going public; released poles get {{RELEASED_POLE_GRACE_MS|n}}.</li>
+<li>No two declared bases within {{MIN_BASE_SPACING_M|m}}. First declared wins.</li>
 <li>A solo base becomes a clan base by ceremony, only if the declarant takes part.</li>
 <li>Joining a clan releases your solo declaration.</li>
-<li>A solo declaration lapses after 7 days without a raise by the declarant.</li>
+<li>A solo declaration lapses after {{SOLO_LAPSE_MS|days}} without a raise by the declarant.</li>
 </ul>
 <h2>Raiding</h2><ul>
 <li>A raid is a non-member lowering a clan's flag at its declared base.</li>
-<li>A clan scores at most once against the same victim in any 24 hours.</li>
+<li>A clan scores at most once against the same victim in any {{RAID_DEDUP_MS|hours}}.</li>
 <li>Solo raiders are announced but score nothing.</li>
 <li>Base damage is on Friday 00:00 UTC to Monday 00:00 UTC. Boosting in and lowering flags is legal all week.</li>
 <li>Announcements name clans and players, never places.</li>
 </ul>
 <h2>Defending</h2><ul>
-<li>Flag down: re-raise within 24 hours for a defense, or go dormant.</li>
-<li>No member raise for 7 days: dormant.</li>
+<li>Flag down: re-raise within {{FLAG_DOWN_MS|hours}} for a defense, or go dormant.</li>
+<li>No member raise for {{DORMANT_AFTER_MS|days}}: dormant.</li>
 <li>Dormant: supplies stop, unranked, name, tag and flag kept.</li>
 <li>Any member raise revives you with points intact.</li>
-<li>Dormant 14 days: disbanded, flag back to the pool; name and tag held until season end.</li>
+<li>Dormant {{DISBAND_AFTER_DORMANT_MS|days}}: disbanded, flag back to the pool; name and tag held until season end.</li>
 <li>Only a member's raise counts. Getting raided never costs your name, tag or flag.</li>
 </ul>
 <h2>The scoreboard</h2><ul>
@@ -43,24 +43,24 @@
 </ul>
 <h2>Running a clan</h2><ul>
 <li>Ten players, hard cap.</li>
-<li>Joiners are pending until seen within 50 m of the base. Invites, requests and no-shows expire after 7 days.</li>
+<li>Joiners are pending until seen within {{JOIN_PRESENCE_RADIUS_M|m}} of the base. Invites, requests and no-shows expire after {{PENDING_EXPIRY_MS|days}}.</li>
 <li>A leader removed from the Discord is replaced at once by the longest-serving officer, then member.</li>
 <li>Leaving or being kicked: 3-day cooldown. Disbanding: none.</li>
-<li>Leader silent 7 days: an officer can claim; the leader has 48 hours to show up in game.</li>
-<li>No-confidence vote: 48 hours, two-thirds of all full members, ex-leader stays as officer, 14 days between failed votes. Kicks and transfers frozen while a vote is open.</li>
-<li>Rename once per 30 days. Old names and tags — renamed or disbanded — are held until season end.</li>
-<li>Moving your base: raise your own flag at a free pole, leader confirms within 24 hours, 7 days between moves.</li>
+<li>Leader silent {{LEADER_SILENT_MS|days}}: an officer can claim; the leader has {{SUCCESSION_WINDOW_MS|hours}} to show up in game.</li>
+<li>No-confidence vote: {{VOTE_LENGTH_MS|hours}}, two-thirds of all full members, ex-leader stays as officer, {{FAILED_VOTE_COOLDOWN_MS|days}} between failed votes. Kicks and transfers frozen while a vote is open.</li>
+<li>Rename once per {{RENAME_COOLDOWN_MS|days}}. Old names and tags — renamed or disbanded — are held until season end.</li>
+<li>Moving your base: raise your own flag at a free pole, leader confirms within {{REBIND_CONFIRM_MS|hours}}, {{REBIND_COOLDOWN_MS|days}} between moves.</li>
 <li>The vault never posts a code to Discord. Departed members' locks are flagged until rotated.</li>
 </ul>
 <h2>Discord</h2><ul>
-<li>One text and one voice channel per clan. Guest passes are voice only, 24 hours.</li>
+<li>One text and one voice channel per clan. Guest passes are voice only, {{GUEST_PASS_MS|hours}}.</li>
 <li>Nicknames are gamertags with your clan tag in front.</li>
 <li>No management commands. The site is the tool.</li>
 </ul>
 <h2>The map</h2><ul>
-<li>Positions are last known, once every 5 minutes, and always show their age.</li>
-<li>You see your clanmates, your base, intruders in your 100 m watch zone, public bases, and clan pins. Nothing else.</li>
-<li>Pins are clan-only and expire after 7 days.</li>
+<li>Positions are last known, once every {{POSITION_FIX_MS|minutes}}, and always show their age.</li>
+<li>You see your clanmates, your base, intruders in your {{WATCH_ZONE_RADIUS_M|m}} watch zone, public bases, and clan pins. Nothing else.</li>
+<li>Pins are clan-only and expire after {{PIN_TTL_MS|days}}.</li>
 </ul>
 <h2>Getting around</h2><ul>
 <li>Stand at an outhouse, well pump or bus stop, relog, and you are at the Hub. Pick a town door, relog again. All 209 travel points are a map layer.</li>

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { SignInCard } from "@/app/components/sign-in-card";
 import { safeNextPath } from "@/lib/auth/next-path";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = {
   title: "Clan Wars — join the Discord",
@@ -30,6 +31,7 @@ export default async function JoinPage({
         actionHref={`/api/auth/discord?mode=join&next=${encodeURIComponent(next)}`}
         footnote="You can leave the server at any time from Discord. Leaving also ends your access here."
         cardLabel="Join"
+        guide={guideLinkFor("/join")}
       />
     </main>
   );

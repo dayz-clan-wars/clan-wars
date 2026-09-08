@@ -1,3 +1,4 @@
+import type { SearchEntry } from "@/app/guide/index";
 import { BarNav, Drawer } from "./menu-list";
 
 /**
@@ -15,7 +16,8 @@ import { BarNav, Drawer } from "./menu-list";
  * paint over all of them or the menu is unreachable from the one page a
  * player spends the most time on.
  */
-export function SiteBar({ signedIn, crumb, extra }: { signedIn: boolean; crumb?: string; extra?: React.ReactNode }) {
+/** `guideIndex`: the guide search box at the top of the phone drawer. Omit it and the drawer has no search (the guide layout carries its own). */
+export function SiteBar({ signedIn, crumb, extra, guideIndex }: { signedIn: boolean; crumb?: string; extra?: React.ReactNode; guideIndex?: SearchEntry[] }) {
   return (
     <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame pl-4 pr-4 lg:pl-8 lg:pr-8">
       <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href={signedIn ? "/me" : "/"}>
@@ -26,7 +28,7 @@ export function SiteBar({ signedIn, crumb, extra }: { signedIn: boolean; crumb?:
       <div className="hidden h-full lg:block"><BarNav signedIn={signedIn} /></div>
       <div className="flex items-center gap-2 lg:hidden">
         {extra}
-        <Drawer signedIn={signedIn} />
+        <Drawer signedIn={signedIn} guideIndex={guideIndex} />
       </div>
     </header>
   );

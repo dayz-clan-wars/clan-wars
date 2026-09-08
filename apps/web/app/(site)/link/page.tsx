@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import { linkStatus } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
-import { Page } from "@/app/components/ui";
+import { Page, GuideLine } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 import { LinkFlow } from "./link-flow";
 
 export const metadata: Metadata = {
@@ -25,6 +26,7 @@ export default async function LinkPage() {
   // Dates cross to the client as strings; the component parses them.
   return (
     <Page wide>
+      <div className="px-5 pt-6 lg:px-8 lg:pt-8"><GuideLine guide={guideLinkFor("/link")} /></div>
       <LinkFlow initial={JSON.parse(JSON.stringify(status))} />
     </Page>
   );

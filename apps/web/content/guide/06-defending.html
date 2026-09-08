@@ -1,24 +1,24 @@
 <h2>Flag down</h2>
-<p>The moment a non-member lowers your flag, your clan is told — clan channel and a DM to every member: <em>your flag is down, re-raise within 24 hours or go dormant.</em> Your supplies pause immediately.</p>
+<p>The moment a non-member lowers your flag, your clan is told — clan channel and a DM to every member: <em>your flag is down, re-raise within {{FLAG_DOWN_MS|hours}} or go dormant.</em> Your supplies pause immediately.</p>
 
-<div class="rule"><p><strong>Re-raise within 24 hours and it is a defense.</strong> Any member, your flag, your pole. It is announced, it goes on your clan page, and supplies resume at the next restart.</p></div>
+<div class="rule"><p><strong>Re-raise within {{FLAG_DOWN_MS|hours}} and it is a defense.</strong> Any member, your flag, your pole. It is announced, it goes on your clan page, and supplies resume at the next restart.</p></div>
 <div class="post"><span class="ch">#war-log</span>🛡️ <strong>The Nest</strong> raised their colors again — 4h under siege</div>
 
-<p>Miss the 24 hours and you are <strong>dormant</strong>: supplies stop, you are marked dormant on the directory and the scoreboard, and you are unranked until you revive. Your flag, name, tag and base stay yours.</p>
+<p>Miss the {{FLAG_DOWN_MS|hours}} and you are <strong>dormant</strong>: supplies stop, you are marked dormant on the directory and the scoreboard, and you are unranked until you revive. Your flag, name, tag and base stay yours.</p>
 
 <div class="rule"><p><strong>Getting raided never costs you your name, tag or flag.</strong> Only abandonment does.</p></div>
 
 <h2>Dormant from inactivity</h2>
-<p>Separately from raids: if <strong>no member raises your flag at your pole for 7 days</strong>, you go dormant on inactivity — same effects. DayZ's own base decay runs on the same seven-day clock, so this is a raise you were making anyway.</p>
+<p>Separately from raids: if <strong>no member raises your flag at your pole for {{DORMANT_AFTER_MS|days}}</strong>, you go dormant on inactivity — same effects. DayZ's own base decay runs on the same seven-day clock, so this is a raise you were making anyway.</p>
 
 <h2>Revive</h2>
 <p>Any member raises your flag at your pole. Active again instantly, supplies back at the next restart, back on the board with your season points intact.</p>
 
 <h2>Disband by abandonment</h2>
-<p>Dormant for <strong>14 days straight</strong> and the clan is disbanded: the flag returns to the pool, the name and tag are held until season end, the Discord channel is deleted, and the base goes public after its 3-day grace. This is the only way to lose your flag, and it only happens to a clan nobody walked out to save in three weeks.</p>
+<p>Dormant for <strong>{{DISBAND_AFTER_DORMANT_MS|days}} straight</strong> and the clan is disbanded: the flag returns to the pool, the name and tag are held until season end, the Discord channel is deleted, and the base goes public after its {{RELEASED_POLE_GRACE_MS|n}}-day grace. This is the only way to lose your flag, and it only happens to a clan nobody walked out to save in three weeks.</p>
 
 <div class="log"><span class="t">What the server can see</span>
-<p>The log records a flag being raised or lowered by a person. It does not record a flag simply running out — so if your flag simply runs out on its own, the log sees nothing — and nothing for 7 days is what makes you dormant.</p>
+<p>The log records a flag being raised or lowered by a person. It does not record a flag simply running out — so if your flag simply runs out on its own, the log sees nothing — and nothing for {{DORMANT_AFTER_MS|days}} is what makes you dormant.</p>
 <p>If the server itself goes dark — no log at all — the dormancy clocks pause. Nobody is disbanded for an outage.</p></div>
 
 <h2>Only your own members keep you alive</h2>

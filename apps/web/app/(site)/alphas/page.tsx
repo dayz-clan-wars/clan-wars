@@ -4,6 +4,7 @@ import { flagImagePath } from "@/src/flag-images";
 import { NO_ALPHAS_WEEK, EMPTY_SCOREBOARD } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
 import { Page, PageHead, Body, Panel, linkMono, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — alphas" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -17,7 +18,7 @@ export default async function AlphasPage() {
 
   return (
     <Page wide>
-      <PageHead kicker={season ? <>Alphas · Season {season.number}</> : "Alphas"} title={season ? "Week by week" : "No season"} aside={<ScoringNav current="/alphas" />} />
+      <PageHead guide={guideLinkFor("/alphas")} kicker={season ? <>Alphas · Season {season.number}</> : "Alphas"} title={season ? "Week by week" : "No season"} aside={<ScoringNav current="/alphas" />} />
       <Body className="grid gap-4 lg:grid-cols-3 lg:gap-6">
         {weeks.map((w, i) => (
           <Panel key={w.weekStart.toISOString()} title={`Week of ${weekOf(w.weekStart)}`} tone={i === 0 ? "gold" : "plain"} aside={i === 0 ? <span className={`${kickerSm} !text-gold`}>Latest</span> : undefined}>

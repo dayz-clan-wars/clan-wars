@@ -1,4 +1,4 @@
-import * as R from "./rules.js";
+import * as R from "./rules";
 
 /**
  * Every number the player's guide promises, stated ONCE, computed from

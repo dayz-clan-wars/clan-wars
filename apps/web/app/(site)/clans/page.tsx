@@ -4,6 +4,7 @@ import { FLAG_POOL_SIZE } from "@factions/domain";
 import { flagImagePath } from "@/src/flag-images";
 import { ALPHA_BADGE } from "@/lib/scoring-copy";
 import { Page, PageHead, Panel, Facts, kicker, kickerSm } from "@/app/components/ui";
+import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — clans" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -16,7 +17,7 @@ export default async function ClansPage() {
 
   return (
     <Page wide>
-      <PageHead
+      <PageHead guide={guideLinkFor("/clans")}
         kicker="Clans"
         title={`${clans.length} on the server`}
         aside={<div className={`${kicker} lg:pb-2`}>{flags.taken.length} of {FLAG_POOL_SIZE} flags flying · {recruiting.length} recruiting</div>}

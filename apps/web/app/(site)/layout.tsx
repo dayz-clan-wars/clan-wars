@@ -1,5 +1,6 @@
 import { currentSession } from "@/lib/viewer";
 import { SiteBar } from "./site-bar";
+import { buildIndex } from "@/app/guide/index";
 
 /**
  * The site shell: one top bar with the menu, over every page except the
@@ -17,7 +18,7 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const session = await currentSession();
   return (
     <>
-      <SiteBar signedIn={session !== null} />
+      <SiteBar signedIn={session !== null} guideIndex={buildIndex()} />
       {children}
     </>
   );
