@@ -203,7 +203,7 @@ describe("roster player stats", () => {
   });
 
   describe("playerBoards", () => {
-    it("all-time: raiders, killers, K/D, play time and friendly fire", async () => {
+    it("all-time: raiders, killers, deaths, K/D, play time and friendly fire", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
 
       expect(boards.scope).toEqual(ALL);
@@ -216,12 +216,21 @@ describe("roster player stats", () => {
       ]);
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
+      // R died to A twelve times, A to R three, B to A's friendly kill once.
+      // R's self-kill and the two killer-less deaths are not PvP deaths.
+      expect(boards.deaths).toEqual([
+        { dayzId: R, gamertag: "Romeo", value: 12 },
+        { dayzId: A, gamertag: "Alpha", value: 3 },
+        { dayzId: B, gamertag: "Bravo", value: 1 },
+      ]);
     });
 
-    it("the K/D board holds only players at or above KD_MIN_KILLS", async () => {
+    it("the K/D board holds only players at or above KD_MIN_KILLS, and friendly fire earns nothing on it", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
       expect(KD_MIN_KILLS).toBe(10);
-      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4.33, kills: 13, deaths: 3 }]);
+      // A has 13 PvP kills but one is friendly: 12 / 3. The killers board still says 13.
+      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
+      expect(boards.killers[0]).toEqual({ dayzId: A, gamertag: "Alpha", value: 13 });
       // R has 3 kills — under the gate, so no K/D row at all.
       expect(boards.kd.map((r) => r.dayzId)).not.toContain(R);
     });
@@ -235,6 +244,7 @@ describe("roster player stats", () => {
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_SEASON_2 }]);
       expect(boards.friendlyFire).toEqual([]);
       expect(boards.kd).toEqual([]);
+      expect(boards.deaths).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
     });
 
     it("season 1 counts only what happened inside it", async () => {
@@ -244,6 +254,7 @@ describe("roster player stats", () => {
       // Only the near side of the straddling session and of the open one.
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_SEASON_1 }]);
       expect(boards.friendlyFire).toEqual([]);
+      expect(boards.deaths).toEqual([{ dayzId: R, gamertag: "Romeo", value: 12 }]);
     });
 
     it("an unknown season number is an empty window, not every row", async () => {
@@ -251,6 +262,7 @@ describe("roster player stats", () => {
       expect(boards.killers).toEqual([]);
       expect(boards.raiders).toEqual([]);
       expect(boards.playTime).toEqual([]);
+      expect(boards.deaths).toEqual([]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 
@@ -274,7 +286,8 @@ describe("roster player stats", () => {
       expect(p.lastSeenAt).toEqual(aLastSeen);
       expect(p.pvpKills).toBe(13);
       expect(p.pvpDeaths).toBe(3);
-      expect(p.kd).toBe(4.33);
+      // 13 PvP kills less the friendly one, over 3 deaths — the board's rule.
+      expect(p.kd).toBe(4);
       expect(p.killedBy).toEqual([{ gamertag: "Romeo", count: 3 }]);
       expect(p.killed).toEqual([{ gamertag: "Romeo", count: 12 }, { gamertag: "Bravo", count: 1 }]);
       expect(p.friendlyFireKills).toBe(1);
@@ -361,7 +374,12 @@ describe("roster player stats", () => {
       expect(boards.raiders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 2 }]);
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
-      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4.33, kills: 13, deaths: 3 }]);
+      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
+      // Roster on the VICTIM: A's deaths to R (WOLF) still count; R's own deaths do not appear.
+      expect(boards.deaths).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 3 },
+        { dayzId: B, gamertag: "Bravo", value: 1 },
+      ]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 

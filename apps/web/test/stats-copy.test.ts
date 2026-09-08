@@ -3,10 +3,11 @@ import { KD_MIN_KILLS } from "@factions/domain";
 import { BOARD_LABELS, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
 
 describe("BOARD_LABELS", () => {
-  it("names all five boards", () => {
+  it("names all six boards", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
+      deaths: "Most PvP deaths",
       kd: "Best K/D",
       playTime: "Most play time",
       friendlyFire: "Most friendly fire",
