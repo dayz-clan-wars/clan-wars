@@ -165,7 +165,11 @@ describe("roster base writes", () => {
 
   it("shows lapsed: a solo_lapsed notice from an hour ago with no declaration", async () => {
     const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now }).returning();
-    const lapsedAt = ago(60 * 60 * 1000); // 1 hour ago
+    // ⚠️ Against the REAL clock, not the fixture's `now`: baseForDb reads
+    // `new Date()` and only shows a notice inside RELEASED_POLE_GRACE_MS. A
+    // notice pinned to the fixture date fell out of that window three days
+    // after it was written, and the test failed on a calendar day.
+    const lapsedAt = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
     await db.insert(clanNotices).values({
       serverId, factionId: f!.id, target: "dm", discordTargetId: "d1", kind: "solo_lapsed",
       occurredAt: lapsedAt, payload: {},
@@ -194,7 +198,11 @@ describe("roster base writes", () => {
     await raise(UID_A, P1, 5000, 5000, ago(1000));
     await declareSoloDb(db, "d1", P1, now);
     const [f] = await db.insert(factions).values({ serverId, name: "Bears", tag: "BEAR", texture: "Flag_Bear", status: "active", leaderDiscordId: "d9", createdAt: now }).returning();
-    const lapsedAt = ago(60 * 60 * 1000); // 1 hour ago
+    // ⚠️ Against the REAL clock, not the fixture's `now`: baseForDb reads
+    // `new Date()` and only shows a notice inside RELEASED_POLE_GRACE_MS. A
+    // notice pinned to the fixture date fell out of that window three days
+    // after it was written, and the test failed on a calendar day.
+    const lapsedAt = new Date(Date.now() - 60 * 60 * 1000); // 1 hour ago
     await db.insert(clanNotices).values({
       serverId, factionId: f!.id, target: "dm", discordTargetId: "d1", kind: "solo_lapsed",
       occurredAt: lapsedAt, payload: {},
