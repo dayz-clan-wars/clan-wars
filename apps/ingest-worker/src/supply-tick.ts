@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
 import { declarations, factions, supplyUploads } from "@factions/db";
-import { and, eq, isNull, asc } from "drizzle-orm";
+import { and, eq, inArray, isNull, asc } from "drizzle-orm";
 import { generateSupplies, type SpawnObject, type SupplyFaction } from "./supplies.js";
 
 /** What the game server reports about a file it holds. */
@@ -53,13 +53,20 @@ export async function supplyTick(db: Database, deps: {
     .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
     .where(and(
       eq(factions.serverId, deps.serverId),
-      // ⚠️ SUPPLIED, not HOLDING: the predicate is "status = 'active' and
-      // flag_down_since is null" (@factions/domain's SUPPLIED_PREDICATE,
-      // spec §4.3). A dormant faction still holds its flag, tag and pole —
-      // that is what HOLDING means — but it does not get a kit. A raided
-      // faction stays 'active' for its 24 h clock and drops out the moment
-      // its flag goes down. This is the whole supply half of both mechanisms.
-      eq(factions.status, "active"),
+      // ⚠️ SUPPLIED, not HOLDING: the predicate is "status in ('reserved',
+      // 'active') and flag_down_since is null" (@factions/domain's
+      // SUPPLIED_PREDICATE). A dormant faction still holds its flag, tag and
+      // pole — that is what HOLDING means — but it does not get a kit. A
+      // raided faction stays 'active' for its 24 h clock and drops out the
+      // moment its flag goes down. This is the whole supply half of both
+      // mechanisms.
+      //
+      // ⚠️ `reserved` must stay in. The kit is the only place a clan's own
+      // flag comes from (generateSupplies swaps the template's white flag for
+      // the clan's texture), and raising that flag is the activation. Narrow
+      // this to `active` and every new clan sits reserved with nothing to
+      // raise until it lapses — silently, since an empty file uploads fine.
+      inArray(factions.status, ["reserved", "active"]),
       isNull(factions.flagDownSince),
     ))
     // Stable order, or the bytes differ between ticks and we upload forever.

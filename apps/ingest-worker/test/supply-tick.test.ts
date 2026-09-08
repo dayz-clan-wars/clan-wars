@@ -178,16 +178,20 @@ describe("supplyTick", () => {
     expect(objects).toEqual([]);
   });
 
-  it("⚠️ omits a reserved faction — SUPPLIED_PREDICATE narrows the old status list", async () => {
-    // Under the old SUPPLIED_STATUSES a reserved clan was supplied; under the
-    // new predicate ("status = 'active' and flag_down_since is null") it is
-    // not. This pins that narrowing so it cannot silently widen back.
+  it("⚠️ spawns the kit for a reserved faction — the kit is where its flag comes from", async () => {
+    // The clan's own flag reaches players only inside the kit, and raising
+    // that flag is what activates the clan. An active-only predicate (the
+    // 2026-09-04 spec's §4.3) left COK and NIGHT reserved with no flag to
+    // raise on 2026-09-08. The kit's flag entries carry the clan's texture,
+    // so the reserved clan's own flag is in the crate.
     await seedFaction({ tag: "RSV", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "reserved" });
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 0, uploaded: true });
-    expect(JSON.parse(bodies[0]!)).toEqual({ Objects: [] });
+    expect(r).toEqual({ factions: 1, uploaded: true });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects.filter((o: any) => o.name === "Flag_Rooster")).toHaveLength(2);
+    expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["RSV"]);
   });
 
   it("⚠️ omits an active clan whose flag is down", async () => {

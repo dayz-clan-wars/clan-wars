@@ -289,10 +289,14 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **`HOLDING_STATUSES` (`reserved, active, dormant`) means identity — holds flag, tag
   and pole — and nothing else.** It is mirrored by two partial unique indexes plus the
   existence of a `declarations` row. Do not narrow it to change behaviour; add a set.
-  Supply kits are governed by a predicate, not a status set: `status = 'active' and
-  flag_down_since is null` (`SUPPLIED_PREDICATE` in `packages/domain`, spelled in SQL by
-  the worker and pinned by `holding-index-drift.test.ts`) — a raided clan keeps
-  `status = 'active'` but loses its kit the moment its flag comes down.
+  Supply kits are governed by a predicate, not a status set: `status in ('reserved',
+  'active') and flag_down_since is null` (`SUPPLIED_PREDICATE` in `packages/domain`,
+  spelled in SQL by the worker and pinned by `holding-index-drift.test.ts`) — a raided
+  clan keeps `status = 'active'` but loses its kit the moment its flag comes down.
+  ⚠️ `reserved` is in on purpose (2026-09-08): the kit is the only source of a clan's own
+  flag and raising it is the activation, so an active-only predicate leaves every new clan
+  unable to activate. The 2026-09-04 spec's §4.3 shipped with `active` alone and did
+  exactly that to COK and NIGHT; it is amended.
 - **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →

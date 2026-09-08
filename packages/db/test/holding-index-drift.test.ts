@@ -53,9 +53,14 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
     expect(rows.length).toBe(3);
   });
 
-  it("the supplied predicate is 'active and flag_down_since is null', spelled in the worker's query", () => {
+  it("the supplied predicate is 'reserved or active, and flag_down_since is null', spelled in the worker's query", () => {
     const worker = readFileSync(join(import.meta.dirname, "..", "..", "..", "apps", "ingest-worker", "src", "supply-tick.ts"), "utf8");
-    expect(worker).toMatch(/eq\(factions\.status, "active"\)/u);
+    // ⚠️ Both statuses, in this order — the same two SUPPLIED_PREDICATE names.
+    // A worker that drifts back to `eq(factions.status, "active")` compiles,
+    // passes its own tests against active fixtures, and quietly starves
+    // every reserved clan of the flag it needs to activate.
+    expect(worker).toMatch(/inArray\(factions\.status, \["reserved", "active"\]\)/u);
+    expect(worker).not.toMatch(/eq\(factions\.status, "active"\)/u);
     expect(worker).toMatch(/isNull\(factions\.flagDownSince\)/u);
     expect(worker).not.toMatch(/SUPPLIED_STATUSES/u);
   });
