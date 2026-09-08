@@ -24,16 +24,16 @@ export default async function LoginPage({
   const rawError = typeof params.error === "string" ? params.error : "";
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
+    <main className="mx-auto w-full max-w-[1280px]">
       <SignInCard
-        step="Sign in"
-        heading="Link your character"
+        step="Step 1 of 3"
+        heading="Link your character."
         body="Sign in with the Discord account you use on the server. Your clan, roster and map all hang off this one link."
         action="Continue with Discord"
         actionHref={`/api/auth/discord?next=${encodeURIComponent(next)}`}
         footnote="One character per account. You need to be in the Clan Wars Discord — we will offer to add you if you are not."
         error={ERRORS[rawError]}
       />
-    </div>
+    </main>
   );
 }

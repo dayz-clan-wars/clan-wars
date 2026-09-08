@@ -16,7 +16,7 @@ export default async function JoinPage({
   const next = safeNextPath(typeof params.next === "string" ? params.next : null);
 
   return (
-    <div className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
+    <main className="mx-auto w-full max-w-[1280px]">
       {/*
         ⚠️ The button is the consent. Discord will ask for "Join servers for
         you" on the round this starts, and that prompt should follow something
@@ -24,12 +24,13 @@ export default async function JoinPage({
       */}
       <SignInCard
         step="One step left"
-        heading="Join the Discord"
+        heading="Join the Discord."
         body="Clan Wars runs out of its Discord server, and the site is for players who are in it. We can add you now — Discord will ask you to confirm."
         action="Join and continue"
         actionHref={`/api/auth/discord?mode=join&next=${encodeURIComponent(next)}`}
         footnote="You can leave the server at any time from Discord. Leaving also ends your access here."
+        cardLabel="Join"
       />
-    </div>
+    </main>
   );
 }

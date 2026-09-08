@@ -1,28 +1,56 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { menuFor, signInHref } from "@/lib/menu";
+import { barFor, isCurrent, menuFor, signInHref } from "@/lib/menu";
 
-// ⚠️ Colour is chosen, not layered: text-ink and text-gold are the same
-// specificity, so stacking both leaves the stylesheet order to decide — and it
-// decided against gold in production.
-const item = "flex min-h-[44px] items-center rounded px-3 hover:bg-frame";
-const quiet = "flex min-h-[44px] w-full items-center rounded px-3 font-mono text-xs uppercase tracking-[0.18em] text-muted hover:bg-frame";
-
-/**
- * The drawer's contents. Client-side for three things the server cannot do:
- * mark the current page, carry the current path into the sign-in link, and
- * close the <details> on Escape or a click outside it. Links are plain <a>
- * — a full navigation closes the drawer by itself.
- */
-export function MenuList({ signedIn }: { signedIn: boolean }) {
+function useHere() {
   const pathname = usePathname();
   const search = useSearchParams().toString();
-  const here = search ? `${pathname}?${search}` : pathname;
-  const root = useRef<HTMLDivElement>(null);
+  return { pathname, here: search ? `${pathname}?${search}` : pathname };
+}
+
+/** The desktop bar's items. Client-side only to mark the current page and carry the path into Sign in. */
+export function BarNav({ signedIn }: { signedIn: boolean }) {
+  const { pathname, here } = useHere();
+  const cell = "flex h-full items-center border-l border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em]";
+  return (
+    <nav aria-label="Site" className="flex h-full items-stretch whitespace-nowrap">
+      {barFor(signedIn).map((group, gi) => (
+        <div key={gi} className={`flex items-stretch ${gi > 0 ? "ml-4" : ""}`}>
+          {group.map((m) => {
+            const on = isCurrent(m, pathname);
+            return (
+              <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
+                className={`${cell} ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
+                {m.label}
+              </a>
+            );
+          })}
+        </div>
+      ))}
+      {signedIn ? (
+        // POST only: the logout route refuses GET (app/api/auth/logout/route.ts).
+        <form action="/api/auth/logout" method="post" className="flex items-stretch border-l border-rule-2">
+          <button type="submit" className="flex h-full items-center pl-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Sign out</button>
+        </form>
+      ) : (
+        <a href={signInHref(here)} className="ml-4 flex items-center bg-gold px-5 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Sign in</a>
+      )}
+    </nav>
+  );
+}
+
+/**
+ * The phone drawer: a <details> so it works without JavaScript and closes on
+ * navigation; this adds Escape, click-outside, and the dimmed backdrop. The
+ * summary reads "Menu" closed and "Close" open, filled gold when open.
+ */
+export function Drawer({ signedIn }: { signedIn: boolean }) {
+  const { pathname, here } = useHere();
+  const root = useRef<HTMLDetailsElement>(null);
 
   useEffect(() => {
-    const details = root.current?.closest("details");
+    const details = root.current;
     if (!details) return;
     const close = () => details.removeAttribute("open");
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
@@ -32,30 +60,39 @@ export function MenuList({ signedIn }: { signedIn: boolean }) {
     return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("click", onClick); };
   }, []);
 
+  const item = "flex min-h-[48px] items-center justify-between px-5 font-display text-sm uppercase tracking-[0.06em]";
   return (
-    <div ref={root}>
-      <nav aria-label="Site">
-        {menuFor(signedIn).map((group, i) => (
-          <ul key={i} className={i > 0 ? "mt-2 border-t border-rule-2 pt-2" : undefined}>
+    <details ref={root} className="group">
+      <summary className="flex min-h-[36px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
+        <span className="group-open:hidden">Menu</span><span className="hidden group-open:inline">Close</span>
+      </summary>
+      {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
+      <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
+      <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] w-[300px] max-w-[calc(100vw-24px)] border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+        {menuFor(signedIn).map((group, gi) => (
+          <ul key={gi} className={`py-2 ${gi > 0 ? "border-t-2 border-rule-2" : ""}`}>
             {group.map((m) => {
-              const on = pathname === m.href || (m.href !== "/" && pathname.startsWith(`${m.href}/`));
+              const on = isCurrent(m, pathname);
               return (
                 <li key={m.href}>
-                  <a className={`${item} ${on ? "text-gold" : "text-ink"}`} href={m.href} aria-current={on ? "page" : undefined}>{m.label}</a>
+                  <a href={m.href} aria-current={on ? "page" : undefined} className={`${item} ${on ? "text-gold" : "text-ink"}`}>
+                    {m.label}{on && <span className="font-mono text-[10px] tracking-[0.18em]">Here</span>}
+                  </a>
                 </li>
               );
             })}
+            {gi === menuFor(signedIn).length - 1 && (
+              <li>
+                {signedIn ? (
+                  <form action="/api/auth/logout" method="post"><button type="submit" className="flex min-h-[48px] w-full items-center px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted">Sign out</button></form>
+                ) : (
+                  <a href={signInHref(here)} className="flex min-h-[48px] items-center px-5 font-mono text-[11px] uppercase tracking-[0.18em] text-gold">Sign in</a>
+                )}
+              </li>
+            )}
           </ul>
         ))}
       </nav>
-      <div className="mt-2 border-t border-rule-2 pt-2">
-        {signedIn ? (
-          // POST only: the logout route refuses GET (app/api/auth/logout/route.ts).
-          <form action="/api/auth/logout" method="post"><button className={quiet} type="submit">Sign out</button></form>
-        ) : (
-          <a className={quiet} href={signInHref(here)}>Sign in</a>
-        )}
-      </div>
-    </div>
+    </details>
   );
 }

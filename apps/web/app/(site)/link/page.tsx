@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { linkStatus } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
+import { Page } from "@/app/components/ui";
 import { LinkFlow } from "./link-flow";
 
 export const metadata: Metadata = {
@@ -15,7 +16,7 @@ export default async function LinkPage() {
   const session = await currentSession();
   if (!session) {
     return (
-      <main className="mx-auto max-w-[34rem] px-4 py-10">
+      <main className="mx-auto max-w-[34rem] px-5 py-10">
         <p className="text-ink-2">Your session could not be read. <a className="text-gold underline-offset-4 hover:underline" href="/login?next=/link">Sign in again</a>.</p>
       </main>
     );
@@ -23,8 +24,8 @@ export default async function LinkPage() {
   const status = await linkStatus(session.sub);
   // Dates cross to the client as strings; the component parses them.
   return (
-    <main className="flex min-h-[calc(100dvh-var(--spacing-bar))] flex-col items-center px-4 pb-18 pt-7">
+    <Page wide>
       <LinkFlow initial={JSON.parse(JSON.stringify(status))} />
-    </main>
+    </Page>
   );
 }
