@@ -1,7 +1,7 @@
 import { KD_MIN_KILLS } from "@factions/domain";
 import type { Boards, ResolvedScope } from "@factions/roster";
 
-/** Section headings for the seven boards (spec §11, plus deaths and builders), in display order. */
+/** Section headings for the nine boards (spec §11, plus deaths, builders, streaks and range), in display order. */
 export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, string> = {
   raiders: "Top raiders",
   killers: "Top killers",
@@ -10,7 +10,12 @@ export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, strin
   playTime: "Most play time",
   friendlyFire: "Most friendly fire",
   builders: "Top builders",
+  streaks: "Best killstreak",
+  longestKills: "Longest kill",
 };
+
+/** Under the streaks board: what ends one. */
+export const STREAK_NOTE = "Ends on a PvP death";
 
 /** Under the builders board: what a point is. */
 export const BUILD_NOTE = "1 point per build step";

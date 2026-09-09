@@ -42,6 +42,8 @@ export type StatScope = { kind: "all" } | { kind: "season"; number: number } | {
 export type ResolvedScope = { kind: "all" } | { kind: "season"; number: number };
 export type BoardRow = { dayzId: string; gamertag: string; value: number };
 export type KdRow = BoardRow & { kills: number; deaths: number };
+/** `value` is the distance in metres; `weapon` is what the log named for that kill. */
+export type LongestKillRow = BoardRow & { weapon: string | null };
 export type Boards = {
   /** ⚠️ The RESOLVED scope: a `"current"` request comes back as the season (or all-time) it named. */
   scope: ResolvedScope;
@@ -62,6 +64,15 @@ export type Boards = {
    * log can tell from five steps. Dismantles subtract nothing.
    */
   builders: BoardRow[];
+  /**
+   * Best killstreak: the most PvP kills in a row without a PvP death, inside
+   * the window. Friendly fire neither extends a streak nor breaks it; a death
+   * to anything but another player (infected, a fall, bleeding out) breaks
+   * nothing — only being killed does, the same rule as the deaths board.
+   */
+  streaks: BoardRow[];
+  /** Longest kill: each player's single farthest PvP kill, with its weapon. Friendly fire is not one. */
+  longestKills: LongestKillRow[];
 };
 export type PlayerProfile = {
   dayzId: string; gamertag: string; linked: boolean; scope: ResolvedScope; seasons: number[];
@@ -72,6 +83,10 @@ export type PlayerProfile = {
   raidCredits: number; upkeepRaises: number;
   /** The builders board's rule: `base.built` events by this player in the window. */
   buildPoints: number;
+  /** The streaks board's rule, for this player. */
+  bestStreak: number;
+  /** The longest-kill board's rule, for this player; null with no PvP kill in the window. */
+  longestKill: { distanceM: number; weapon: string | null } | null;
   clanHistory: { tag: string; name: string; joinedAt: Date; leftAt: Date | null }[];
 };
 
@@ -187,6 +202,60 @@ const sessionOverlaps = (w: Window, now: Date): SQL => sql`
   ${playerSessions.connectedAt} < ${tsOrInfinity(w.to)}
   and coalesce(${playerSessions.disconnectedAt}, ${ts(now)}) > ${ts(w.from)}`;
 
+/**
+ * Streaks, in time order over every PvP kill in the window. One pass: a
+ * non-friendly kill extends the killer's run, and every PvP death — friendly
+ * fire included, the deaths board's rule — ends the victim's. Returns each
+ * player's best run; a player with no run has no row.
+ */
+async function bestStreaks(db: Database, serverId: number, w: Window): Promise<Map<string, number>> {
+  const rows = await db.select({ killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire })
+    .from(kills)
+    .where(and(eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w)))
+    .orderBy(asc(kills.occurredAt), asc(kills.id));
+  const run = new Map<string, number>();
+  const best = new Map<string, number>();
+  for (const r of rows) {
+    if (!r.friendlyFire) {
+      const n = (run.get(r.killer!) ?? 0) + 1;
+      run.set(r.killer!, n);
+      if (n > (best.get(r.killer!) ?? 0)) best.set(r.killer!, n);
+    }
+    run.set(r.victim, 0);
+  }
+  return best;
+}
+
+async function streakBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<BoardRow[]> {
+  const best = await bestStreaks(db, serverId, w);
+  const ids = [...best.keys()].filter((id) => roster === null || roster.includes(id));
+  if (ids.length === 0) return [];
+  const names = await db.select({ dayzId: players.dayzId, gamertag: players.gamertag }).from(players).where(inArray(players.dayzId, ids));
+  const nameOf = new Map(names.map((n) => [n.dayzId, n.gamertag]));
+  return ids.map((id) => ({ dayzId: id, gamertag: nameOf.get(id) ?? id, value: best.get(id)! }))
+    .sort((a, b) => b.value - a.value || a.gamertag.localeCompare(b.gamertag))
+    .slice(0, limit);
+}
+
+/** ⚠️ A non-friendly PvP kill with a distance the log recorded — the only kill that counts for range. */
+const rangedKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), isNotNull(kills.distanceM))!;
+
+/** Each killer's farthest kill (`distinct on`), then the farthest killers first. */
+async function longestKillBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<LongestKillRow[]> {
+  const rows = await db.execute<{ dayz_id: string; gamertag: string; distance_m: string; weapon: string | null }>(sql`
+    select f.killer_dayz_id as dayz_id, coalesce(p.gamertag, f.killer_dayz_id) as gamertag, f.distance_m, f.weapon
+    from (
+      select distinct on (${kills.killerDayzId}) ${kills.killerDayzId} as killer_dayz_id, ${kills.distanceM} as distance_m, ${kills.weapon} as weapon
+      from ${kills}
+      where ${and(eq(kills.serverId, serverId), rangedKill, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster))}
+      order by ${kills.killerDayzId}, ${kills.distanceM} desc, ${kills.occurredAt} desc
+    ) f
+    left join ${players} p on p.dayz_id = f.killer_dayz_id
+    order by f.distance_m desc, gamertag asc
+    limit ${limit}`);
+  return [...rows].map((r) => ({ dayzId: r.dayz_id, gamertag: r.gamertag, value: Number(r.distance_m), weapon: r.weapon }));
+}
+
 /** The builder's id lives in the event payload; the board keys on it the way the others key on a column. */
 const builderId = sql<string>`${events.payload}->>'dayzId'`;
 const builtInScope = (serverId: number, w: Window): SQL =>
@@ -265,7 +334,7 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
     .slice(0, limit);
 }
 
-/** The seven boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+/** The nine boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const serverId = await activeServerId(db);
   // ⚠️ The season list first, alone: `{ kind: "current" }` is resolved from it,
@@ -274,7 +343,7 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
   const resolved = resolveScope(scope, seasonList);
   const w = await windowFor(db, serverId, resolved, now);
 
-  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders] = await Promise.all([
+  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills] = await Promise.all([
     countBoard(db, raids.raiderDayzId, raids, and(
       eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
     )!, limit),
@@ -293,9 +362,11 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
       inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
     )!, limit),
     buildersBoard(db, serverId, w, roster, limit),
+    streakBoard(db, serverId, w, roster, limit),
+    longestKillBoard(db, serverId, w, roster, limit),
   ]);
 
-  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire, builders };
+  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills };
 }
 
 /** The public boards (spec §11). */
@@ -403,7 +474,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
 
   const [
     lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
-    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, clanHistory,
+    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, streaks, longest, clanHistory,
   ] = await Promise.all([
     db.select({ lastSeenAt: players.lastSeenAt }).from(players).where(eq(players.dayzId, dayzId)),
     db.select({
@@ -423,6 +494,10 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
       .where(and(eq(raids.serverId, serverId), eq(raids.raiderDayzId, dayzId), raidsInScope(w))),
     upkeepRaiseCount(db, serverId, dayzId, w),
     db.select({ n: sql<number>`count(*)::int` }).from(events).where(and(builtInScope(serverId, w), sql`${builderId} = ${dayzId}`)),
+    bestStreaks(db, serverId, w),
+    db.select({ distanceM: kills.distanceM, weapon: kills.weapon }).from(kills)
+      .where(and(mine, inW, rangedKill, eq(kills.killerDayzId, dayzId)))
+      .orderBy(desc(kills.distanceM), desc(kills.occurredAt)).limit(1),
     // ⚠️ The whole history, not the window's slice: "which clans has this
     // player belonged to" is not a per-season number.
     db.select({ tag: factions.tag, name: factions.name, joinedAt: membershipHistory.joinedAt, leftAt: membershipHistory.leftAt })
@@ -444,6 +519,8 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     raidCredits: Number(raidCredits[0]?.n ?? 0),
     upkeepRaises,
     buildPoints: Number(buildPoints[0]?.n ?? 0),
+    bestStreak: streaks.get(dayzId) ?? 0,
+    longestKill: longest[0] ? { distanceM: Number(longest[0].distanceM), weapon: longest[0].weapon } : null,
     clanHistory,
   };
 }

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
 import { clanByTag, scoreboard, warLog, type ClanPage } from "@factions/roster";
 import { WarLogLine, WarLogKicker } from "@/app/(site)/war-log/entry";
@@ -26,7 +27,7 @@ const REQUEST_HINT: Record<Exclude<ClanPage["canRequest"], "yes">, string> = {
 };
 
 export default async function ClanDetailPage({ params, searchParams }: { params: Promise<{ tag: string }>; searchParams: Promise<{ result?: string }> }) {
-  const { tag } = await params;
+  const tag = decodeParam((await params).tag);
   const { result } = await searchParams;
   // ⚠️ Anonymous is fine here: /clans/ is public. The session only decides canRequest.
   const session = await currentSession();

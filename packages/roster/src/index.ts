@@ -58,7 +58,7 @@ import {
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import {
   playerBoardsDb, playerProfileDb, clanBoardDb,
-  type StatScope, type ResolvedScope, type BoardRow, type KdRow, type Boards, type PlayerProfile,
+  type StatScope, type ResolvedScope, type BoardRow, type KdRow, type LongestKillRow, type Boards, type PlayerProfile,
 } from "./stats";
 import {
   claimSuccessionDbFor, openVoteDbFor, castVoteDbFor,
@@ -85,7 +85,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
-export type { StatScope, ResolvedScope, BoardRow, KdRow, Boards, PlayerProfile };
+export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
