@@ -21,7 +21,7 @@ function FeedLine({ e }: { e: FeedEntry }) {
     }
     case "death": {
       const s = shot(e.distanceM, e.weapon);
-      if (e.other === null) return <>Died {deathCause(e.cause)}</>;
+      if (e.other === null) { const c = deathCause(e.cause); return <>Died{c && ` ${c}`}</>; }
       return <>Killed by <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
     }
     case "raid": return <>Lowered <strong className="font-bold text-ink">{e.victim.name}</strong>&rsquo;s flag</>;

@@ -14,14 +14,23 @@ export const EMPTY_FEED = "Nothing in the log for this scope.";
 export const FEED_TITLE = "Feed";
 export const FRIENDLY_FIRE_MARK = "friendly fire";
 
-/** What the log called a killer-less death. Unknown causes are shown as the log wrote them. */
+/**
+ * What the log called a killer-less death — the adm parser's `DeathCause`,
+ * plus `pvp`, which the kills consumer writes on a self-kill. `died` is the
+ * parser's "no cause on the line" and reads as nothing more. An unknown value
+ * is shown as the log wrote it.
+ */
 export const DEATH_CAUSE: Record<string, string> = {
-  infected: "to the infected",
-  fall: "from a fall",
-  bled: "bled out",
-  explosion: "in an explosion",
+  bled_out: "bled out",
+  drowned: "drowned",
   suicide: "by their own hand",
   pvp: "by their own hand",
+  infected: "to the infected",
+  animal: "to an animal",
+  fall: "from a fall",
+  vehicle: "under a vehicle",
+  environment: "to the environment",
+  died: "",
 };
 export const deathCause = (cause: string | null): string => (cause === null ? "" : DEATH_CAUSE[cause] ?? cause);
 
