@@ -1,7 +1,7 @@
 import { KD_MIN_KILLS } from "@factions/domain";
 import type { Boards, ResolvedScope } from "@factions/roster";
 
-/** Section headings for the six boards (spec §11, plus deaths), in display order. */
+/** Section headings for the seven boards (spec §11, plus deaths and builders), in display order. */
 export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, string> = {
   raiders: "Top raiders",
   killers: "Top killers",
@@ -9,7 +9,11 @@ export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, strin
   kd: "Best K/D",
   playTime: "Most play time",
   friendlyFire: "Most friendly fire",
+  builders: "Top builders",
 };
+
+/** Under the builders board: what a point is. */
+export const BUILD_NOTE = "1 point per build step";
 
 /** The K/D board's kill floor, spelled out under its table. */
 export const KD_NOTE = `K/D needs ${KD_MIN_KILLS} kills`;

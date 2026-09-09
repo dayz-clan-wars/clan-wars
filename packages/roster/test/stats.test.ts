@@ -196,6 +196,14 @@ describe("roster player stats", () => {
     // ⚠️ A raised BEAR's colors an hour before their membership span opens: not
     // an upkeep raise, and the only row that exercises `joined_at <= occurred_at`.
     await mkEvent({ type: "flag.raised", at: h(t0, -3), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
+    // Build points: A builds three steps in season 1 and one in season 2; R
+    // (WOLF) two in season 2; N (no clan) one in season 1. A dismantle is not a step.
+    for (let i = 10; i <= 12; i++) await mkEvent({ type: "base.built", at: h(t0, i), payload: { dayzId: A, gamertag: "Alpha", action: "built", part: "wall_base_down", structure: "Fence" } });
+    await mkEvent({ type: "base.built", at: h(t50, 7), payload: { dayzId: A, gamertag: "Alpha", action: "built", part: "wall_gate", structure: "Fence" } });
+    await mkEvent({ type: "base.built", at: h(t50, 8), payload: { dayzId: R, gamertag: "Romeo", action: "built", part: "base", structure: "Fence" } });
+    await mkEvent({ type: "base.built", at: h(t50, 9), payload: { dayzId: R, gamertag: "Romeo", action: "built", part: "level_1_base", structure: "Watchtower" } });
+    await mkEvent({ type: "base.built", at: h(t0, 13), payload: { dayzId: N, gamertag: "November", action: "built", part: "base", structure: "Fence" } });
+    await mkEvent({ type: "base.dismantled", at: h(t0, 14), payload: { dayzId: A, gamertag: "Alpha", action: "dismantled", part: "wall_base_down", structure: "Fence" } });
     // B: inside the first span, in the gap after they left, inside the second.
     await mkEvent({ type: "flag.raised", at: h(t0, 55), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
     await mkEvent({ type: "flag.raised", at: h(t0, 65), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
@@ -205,6 +213,11 @@ describe("roster player stats", () => {
   describe("playerBoards", () => {
     it("all-time: raiders, killers, deaths, K/D, play time and friendly fire", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(boards.builders).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 4 },
+        { dayzId: R, gamertag: "Romeo", value: 2 },
+        { dayzId: N, gamertag: "November", value: 1 },
+      ]);
 
       expect(boards.scope).toEqual(ALL);
       expect(boards.seasons).toEqual([2, 1]);
@@ -245,6 +258,7 @@ describe("roster player stats", () => {
       expect(boards.friendlyFire).toEqual([]);
       expect(boards.kd).toEqual([]);
       expect(boards.deaths).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
+      expect(boards.builders).toEqual([{ dayzId: R, gamertag: "Romeo", value: 2 }, { dayzId: A, gamertag: "Alpha", value: 1 }]);
     });
 
     it("season 1 counts only what happened inside it", async () => {
@@ -255,6 +269,7 @@ describe("roster player stats", () => {
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_SEASON_1 }]);
       expect(boards.friendlyFire).toEqual([]);
       expect(boards.deaths).toEqual([{ dayzId: R, gamertag: "Romeo", value: 12 }]);
+      expect(boards.builders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }, { dayzId: N, gamertag: "November", value: 1 }]);
     });
 
     it("an unknown season number is an empty window, not every row", async () => {
@@ -263,6 +278,7 @@ describe("roster player stats", () => {
       expect(boards.raiders).toEqual([]);
       expect(boards.playTime).toEqual([]);
       expect(boards.deaths).toEqual([]);
+      expect(boards.builders).toEqual([]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 
@@ -294,6 +310,7 @@ describe("roster player stats", () => {
       expect(p.friendlyFireDeaths).toBe(0);
       expect(p.raidCredits).toBe(2);
       expect(p.upkeepRaises).toBe(3);
+      expect(p.buildPoints).toBe(4);
       expect(p.clanHistory).toEqual([{ tag: "BEAR", name: "BEAR", joinedAt: h(t0, -2), leftAt: null }]);
     });
 
@@ -380,6 +397,8 @@ describe("roster player stats", () => {
         { dayzId: A, gamertag: "Alpha", value: 3 },
         { dayzId: B, gamertag: "Bravo", value: 1 },
       ]);
+      // A and B only, again: R's and N's build steps are not on BEAR's board.
+      expect(boards.builders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4 }]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 

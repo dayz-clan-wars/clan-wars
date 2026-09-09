@@ -54,6 +54,14 @@ export type Boards = {
   kd: KdRow[];
   playTime: BoardRow[];
   friendlyFire: BoardRow[];
+  /**
+   * Build points: one per build step the log records (`base.built` — a kit
+   * placed, a frame half, a panel half, a gate, a watchtower level), at any
+   * pole, by the builder. Flat on purpose: a weight per part would be our
+   * judgment layered on the log, and a finished fence is not something the
+   * log can tell from five steps. Dismantles subtract nothing.
+   */
+  builders: BoardRow[];
 };
 export type PlayerProfile = {
   dayzId: string; gamertag: string; linked: boolean; scope: ResolvedScope; seasons: number[];
@@ -62,6 +70,8 @@ export type PlayerProfile = {
   killedBy: { gamertag: string; count: number }[]; killed: { gamertag: string; count: number }[];
   friendlyFireKills: number; friendlyFireDeaths: number;
   raidCredits: number; upkeepRaises: number;
+  /** The builders board's rule: `base.built` events by this player in the window. */
+  buildPoints: number;
   clanHistory: { tag: string; name: string; joinedAt: Date; leftAt: Date | null }[];
 };
 
@@ -177,6 +187,26 @@ const sessionOverlaps = (w: Window, now: Date): SQL => sql`
   ${playerSessions.connectedAt} < ${tsOrInfinity(w.to)}
   and coalesce(${playerSessions.disconnectedAt}, ${ts(now)}) > ${ts(w.from)}`;
 
+/** The builder's id lives in the event payload; the board keys on it the way the others key on a column. */
+const builderId = sql<string>`${events.payload}->>'dayzId'`;
+const builtInScope = (serverId: number, w: Window): SQL =>
+  and(eq(events.serverId, serverId), eq(events.type, "base.built"), inWindow(events.occurredAt, w))!;
+
+/** Build points: `count(*)` of `base.built` per builder, joined to `players` for the name. */
+async function buildersBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<BoardRow[]> {
+  const value = sql<number>`count(*)::int`;
+  const gamertag = sql<string>`coalesce(${players.gamertag}, ${builderId})`;
+  const rosterWhere = roster === null ? undefined : roster.length === 0 ? sql`false` : sql`${builderId} in ${roster}`;
+  const rows = await db.select({ dayzId: builderId, gamertag, value })
+    .from(events)
+    .leftJoin(players, eq(players.dayzId, builderId))
+    .where(and(builtInScope(serverId, w), rosterWhere))
+    .groupBy(builderId, players.gamertag)
+    .orderBy(desc(value), asc(gamertag))
+    .limit(limit);
+  return rows.map((r) => ({ dayzId: r.dayzId, gamertag: r.gamertag, value: Number(r.value) }));
+}
+
 async function playTimeBoard(db: Database, serverId: number, w: Window, now: Date, roster: string[] | null, limit: number): Promise<BoardRow[]> {
   const value = sql<number>`sum(${clippedSeconds(w, now)})::bigint`;
   const gamertag = gamertagOf(playerSessions.dayzId);
@@ -235,7 +265,7 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
     .slice(0, limit);
 }
 
-/** The six boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+/** The seven boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const serverId = await activeServerId(db);
   // ⚠️ The season list first, alone: `{ kind: "current" }` is resolved from it,
@@ -244,7 +274,7 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
   const resolved = resolveScope(scope, seasonList);
   const w = await windowFor(db, serverId, resolved, now);
 
-  const [raiders, killers, deaths, kd, playTime, friendlyFire] = await Promise.all([
+  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders] = await Promise.all([
     countBoard(db, raids.raiderDayzId, raids, and(
       eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
     )!, limit),
@@ -262,9 +292,10 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
       eq(kills.serverId, serverId), eq(kills.friendlyFire, true), byAnotherPlayer,
       inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
     )!, limit),
+    buildersBoard(db, serverId, w, roster, limit),
   ]);
 
-  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire };
+  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire, builders };
 }
 
 /** The public boards (spec §11). */
@@ -372,7 +403,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
 
   const [
     lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
-    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, clanHistory,
+    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, clanHistory,
   ] = await Promise.all([
     db.select({ lastSeenAt: players.lastSeenAt }).from(players).where(eq(players.dayzId, dayzId)),
     db.select({
@@ -391,6 +422,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     db.select({ n: sql<number>`count(*)::int` }).from(raids)
       .where(and(eq(raids.serverId, serverId), eq(raids.raiderDayzId, dayzId), raidsInScope(w))),
     upkeepRaiseCount(db, serverId, dayzId, w),
+    db.select({ n: sql<number>`count(*)::int` }).from(events).where(and(builtInScope(serverId, w), sql`${builderId} = ${dayzId}`)),
     // ⚠️ The whole history, not the window's slice: "which clans has this
     // player belonged to" is not a per-season number.
     db.select({ tag: factions.tag, name: factions.name, joinedAt: membershipHistory.joinedAt, leftAt: membershipHistory.leftAt })
@@ -411,6 +443,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     friendlyFireKills, friendlyFireDeaths,
     raidCredits: Number(raidCredits[0]?.n ?? 0),
     upkeepRaises,
+    buildPoints: Number(buildPoints[0]?.n ?? 0),
     clanHistory,
   };
 }
