@@ -59,7 +59,7 @@ import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type Dr
 import {
   playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, BOARD_KINDS, BOARD_PAGE_SIZE,
   type StatScope, type ResolvedScope, type BoardRow, type KdRow, type LongestKillRow, type Boards, type PlayerProfile,
-  type BoardKind, type BoardPage,
+  type BoardKind, type BoardPage, type RowClan, type RowClans,
 } from "./stats";
 import {
   claimSuccessionDbFor, openVoteDbFor, castVoteDbFor,
@@ -86,7 +86,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
-export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage };
+export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage, RowClan, RowClans };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };

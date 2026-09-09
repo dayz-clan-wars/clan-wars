@@ -1,4 +1,5 @@
-import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow } from "@factions/roster";
+import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow, type RowClans } from "@factions/roster";
+import { flagImagePath } from "@/src/flag-images";
 import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, playTime, scopeLabel } from "@/lib/stats-copy";
 import { BOARD_SLUGS, seasonQuery } from "@/lib/board-page";
 import { Panel, Rank, SegNav, linkMono } from "./ui";
@@ -27,8 +28,14 @@ function formatValue(kind: Kind, value: number): string {
   return String(value);
 }
 
-/** The rows of one board: rank, name, the number. `first` is the rank of the first row — a later page starts higher. */
-export function BoardRows({ kind, rows, first = 1 }: { kind: Kind; rows: BoardRow[] | KdRow[] | LongestKillRow[]; first?: number }) {
+/** The row's clan flag, or a blank of the same size so names line up. The tag is the alt text and the tooltip. */
+function RowFlag({ clan }: { clan: { tag: string; texture: string } | undefined }) {
+  if (!clan) return <span aria-hidden="true" className="h-6 w-6 flex-none" />;
+  return <img src={`/${flagImagePath(clan.texture)}`} alt={`[${clan.tag}]`} title={clan.tag} width={24} height={24} className="h-6 w-6 flex-none object-contain" />;
+}
+
+/** The rows of one board: rank, flag, name, the number. `first` is the rank of the first row — a later page starts higher. */
+export function BoardRows({ kind, rows, clans, first = 1 }: { kind: Kind; rows: BoardRow[] | KdRow[] | LongestKillRow[]; clans: RowClans; first?: number }) {
   if (rows.length === 0) return <p className="px-4 py-3 text-sm text-ink-2 lg:px-5">{EMPTY_BOARD}</p>;
   return (
     <ol>
@@ -38,7 +45,8 @@ export function BoardRows({ kind, rows, first = 1 }: { kind: Kind; rows: BoardRo
         return (
           <li key={r.dayzId} className="flex min-h-[52px] items-center gap-3.5 border-t border-rule-2 px-4 first:border-t-0 lg:px-5">
             <span className="w-7"><Rank n={n} /></span>
-            <a className="font-mono text-sm text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
+            <RowFlag clan={clans[r.dayzId]} />
+            <a className="truncate font-mono text-sm text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
             {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs text-muted">{r.kills} / {r.deaths}</span>}
             {kind === "longestKills" && "weapon" in r && r.weapon && <span className="ml-auto truncate font-mono text-xs text-muted">{r.weapon}</span>}
             <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{formatValue(kind, r.value)}</span>
@@ -50,10 +58,10 @@ export function BoardRows({ kind, rows, first = 1 }: { kind: Kind; rows: BoardRo
 }
 
 /** A top-N panel. `seeAll` is the board's own page, where every player is listed — a footer row, so the header keeps its note. */
-function BoardPanel({ kind, rows, seeAll }: { kind: Kind; rows: BoardRow[] | KdRow[] | LongestKillRow[]; seeAll: string }) {
+function BoardPanel({ kind, rows, clans, seeAll }: { kind: Kind; rows: BoardRow[] | KdRow[] | LongestKillRow[]; clans: RowClans; seeAll: string }) {
   return (
     <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={NOTE[kind] ? <span className="text-[11px]">{NOTE[kind]}</span> : undefined} className="flex flex-col">
-      <BoardRows kind={kind} rows={rows} />
+      <BoardRows kind={kind} rows={rows} clans={clans} />
       <p className="mt-auto border-t border-rule-2 px-4 lg:px-5">
         <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={seeAll}>{SEE_ALL} &rarr;</a>
       </p>
@@ -73,7 +81,7 @@ export function StatBoards({ boards, boardsPath, extra }: { boards: Boards; boar
     <>
       <p className="sr-only">{scopeLabel(boards.scope)}</p>
       <div className="grid gap-4 lg:grid-cols-3 lg:gap-6">
-        {BOARD_KINDS.map((kind) => <BoardPanel key={kind} kind={kind} rows={boards[kind]} seeAll={seeAll(kind)} />)}
+        {BOARD_KINDS.map((kind) => <BoardPanel key={kind} kind={kind} rows={boards[kind]} clans={boards.clans} seeAll={seeAll(kind)} />)}
         {extra}
       </div>
     </>

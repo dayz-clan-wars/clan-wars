@@ -399,6 +399,25 @@ describe("roster player stats", () => {
     });
   });
 
+  describe("row clans", () => {
+    it("names each row's current full clan, and no clan for the clanless", async () => {
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      // A and B are BEAR, R is WOLF; N is in no clan and P is only pending, so neither has an entry.
+      expect(boards.clans).toEqual({
+        [A]: { tag: "BEAR", texture: "Flag_Bear" },
+        [B]: { tag: "BEAR", texture: "Flag_Bear" },
+        [R]: { tag: "WOLF", texture: "Flag_Wolf" },
+      });
+      expect(boards.builders.map((r) => r.dayzId)).toContain(N);
+    });
+
+    it("a page carries the clans of its own rows only", async () => {
+      const page = await boardPageDb(db, "deaths", ALL, 2, now, 2);
+      expect(page.clans).toEqual({ [B]: { tag: "BEAR", texture: "Flag_Bear" } });
+      expect((await boardPageDb(db, "deaths", ALL, 3, now, 2)).clans).toEqual({});
+    });
+  });
+
   describe("boardPage", () => {
     it("every kind's first page is that board, in that board's order", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
