@@ -1,8 +1,8 @@
 import { KD_MIN_KILLS } from "@factions/domain";
-import type { Boards, ResolvedScope } from "@factions/roster";
+import type { BoardKind, ResolvedScope } from "@factions/roster";
 
 /** Section headings for the nine boards (spec §11, plus deaths, builders, streaks and range), in display order. */
-export const BOARD_LABELS: Record<keyof Omit<Boards, "scope" | "seasons">, string> = {
+export const BOARD_LABELS: Record<BoardKind, string> = {
   raiders: "Top raiders",
   killers: "Top killers",
   deaths: "Most PvP deaths",

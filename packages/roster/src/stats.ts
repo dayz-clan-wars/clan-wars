@@ -44,7 +44,14 @@ export type BoardRow = { dayzId: string; gamertag: string; value: number };
 export type KdRow = BoardRow & { kills: number; deaths: number };
 /** `value` is the distance in metres; `weapon` is what the log named for that kill. */
 export type LongestKillRow = BoardRow & { weapon: string | null };
+/** A player's current clan, for the flag beside their name. */
+export type RowClan = { tag: string; texture: string };
+/** Current full clan per player id, for every row on a board. A clanless or unlinked player has no entry. */
+export type RowClans = Record<string, RowClan>;
+
 export type Boards = {
+  /** The clan behind each row's `dayzId`, across all nine boards. */
+  clans: RowClans;
   /** ⚠️ The RESOLVED scope: a `"current"` request comes back as the season (or all-time) it named. */
   scope: ResolvedScope;
   /** The numbers available for the picker, newest first. */
@@ -82,6 +89,7 @@ export const BOARD_PAGE_SIZE = 50;
 /** One page of one board. `rows` is typed by kind at the edge: `kd` rows are `KdRow`, `longestKills` rows `LongestKillRow`. */
 export type BoardPage = {
   scope: ResolvedScope;
+  clans: RowClans;
   seasons: number[];
   kind: BoardKind;
   page: number;
@@ -378,6 +386,17 @@ function boardRows(
   }
 }
 
+/** The current full clan of each of these players — one query, keyed by id. */
+async function clansOf(db: Database, ids: string[]): Promise<RowClans> {
+  const unique = [...new Set(ids)];
+  if (unique.length === 0) return {};
+  const rows = await db.select({ dayzId: factionMembers.dayzId, tag: factions.tag, texture: factions.texture })
+    .from(factionMembers)
+    .innerJoin(factions, eq(factions.id, factionMembers.factionId))
+    .where(and(eq(factionMembers.status, "full"), inArray(factionMembers.dayzId, unique)));
+  return Object.fromEntries(rows.map((r) => [r.dayzId, { tag: r.tag, texture: r.texture }]));
+}
+
 /** The server, the season list, and the window one scope resolves to — the preamble every board read shares. */
 async function scopeWindow(db: Database, scope: StatScope, now: Date) {
   const serverId = await activeServerId(db);
@@ -397,7 +416,9 @@ async function boardsFor(db: Database, scope: StatScope, limit: number, now: Dat
     rows("raiders"), rows("killers"), rows("deaths"), kdBoard(db, serverId, w, roster, limit), rows("playTime"),
     rows("friendlyFire"), rows("builders"), rows("streaks"), longestKillBoard(db, serverId, w, roster, limit),
   ]);
-  return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills };
+  const all = [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills];
+  const clans = await clansOf(db, all.flatMap((rows) => rows.map((r) => r.dayzId)));
+  return { scope: resolved, seasons: seasonList, clans, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills };
 }
 
 /**
@@ -411,9 +432,11 @@ async function boardPageFor(
   const { seasonList, serverId, resolved, w } = await scopeWindow(db, scope, now);
   const offset = (page - 1) * perPage;
   const rows = await boardRows(db, kind, serverId, w, now, roster, perPage + 1, offset);
+  const shown = rows.slice(0, perPage);
   return {
     scope: resolved, seasons: seasonList, kind, page, perPage,
-    rows: rows.slice(0, perPage), hasNext: rows.length > perPage,
+    clans: await clansOf(db, shown.map((r) => r.dayzId)),
+    rows: shown, hasNext: rows.length > perPage,
   };
 }
 

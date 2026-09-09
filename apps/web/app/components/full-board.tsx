@@ -13,7 +13,7 @@ export function FullBoard({ page, basePath }: { page: BoardPage; basePath: strin
   const note = BOARD_NOTE[page.kind];
   return (
     <Panel num={BOARD_NUM[page.kind]} title={BOARD_LABELS[page.kind]} aside={note ? <span className="text-[11px]">{note}</span> : undefined}>
-      <BoardRows kind={page.kind} rows={page.rows} first={(page.page - 1) * page.perPage + 1} />
+      <BoardRows kind={page.kind} rows={page.rows} clans={page.clans} first={(page.page - 1) * page.perPage + 1} />
       {(page.page > 1 || page.hasNext) && (
         <Pager page={page.page} prevHref={page.page > 1 ? href(page.page - 1) : null} nextHref={page.hasNext ? href(page.page + 1) : null} labels={PAGER} />
       )}
