@@ -17,7 +17,12 @@ Every other page sits in the `app/(site)/` route group, whose layout reads the
 session and renders the top bar and menu (`site-bar.tsx`, `menu-list.tsx`;
 `lib/menu.ts` is the menu's contents, pinned by `test/menu.test.ts`). Gated
 behind Discord login and guild membership (`lib/auth`, `middleware.ts`): `/me`,
-which shows the viewer's link and clan, read through `@factions/roster`.
+which shows the viewer's link and clan, read through `@factions/roster`. Since
+2026-09-09 `/me` is a route handler, not a page: it forwards a linked member to
+their own public player page and an unlinked one to `/link` (`lib/own-page.ts`).
+The player page renders the owner's controls — next step, invites, requests,
+unlink, sign out (`app/components/owner.tsx`) — only when the session's linked
+gamertag is the page's.
 
 Since increment 2b, also gated: `/link` (start or cancel a challenge, unclaimed
 gamertag autocomplete, a 5 s status poll) and `/base` (declare or release a solo
