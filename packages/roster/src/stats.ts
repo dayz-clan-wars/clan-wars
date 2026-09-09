@@ -119,6 +119,35 @@ export type PlayerProfile = {
   clanHistory: { tag: string; name: string; joinedAt: Date; leftAt: Date | null }[];
   /** The current full clan, for the page's hero: tag, name and flag texture. Null for the clanless (a pending member included). */
   clan: { tag: string; name: string; texture: string } | null;
+  /** Every PvP kill in the window this player was in, either side, newest first — the expandable rows under Killed / Killed by. */
+  encounters: Encounter[];
+};
+
+/** One PvP kill between this player and another, either way round. Names, not ids: the page links them. */
+export type Encounter = {
+  at: Date; killer: string; victim: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean;
+};
+
+/**
+ * One line of a player's feed: what the log recorded about them, in time.
+ * `death.other` is null for a death with no other player (infected, a fall,
+ * their own grenade), and `cause` then says what the log called it. Build
+ * steps and dismantles are grouped by the hour they fell in, `steps` each.
+ */
+export type FeedEntry =
+  | { kind: "kill"; at: Date; other: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean }
+  | { kind: "death"; at: Date; other: string | null; weapon: string | null; distanceM: number | null; friendlyFire: boolean; cause: string | null }
+  | { kind: "raid"; at: Date; victim: { tag: string; name: string } }
+  | { kind: "raised"; at: Date }
+  | { kind: "built"; at: Date; steps: number }
+  | { kind: "dismantled"; at: Date; steps: number };
+
+/** Entries per page of a player's feed. */
+export const FEED_PAGE_SIZE = 25;
+
+export type PlayerFeed = {
+  gamertag: string; scope: ResolvedScope; seasons: number[];
+  page: number; perPage: number; entries: FeedEntry[]; hasNext: boolean;
 };
 
 const DEFAULT_LIMIT = 25;
@@ -575,7 +604,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
 
   const [
     lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
-    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, streaks, longest, clanHistory, clanNow,
+    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, streaks, longest, clanHistory, clanNow, encounters,
   ] = await Promise.all([
     db.select({ lastSeenAt: players.lastSeenAt }).from(players).where(eq(players.dayzId, dayzId)),
     db.select({
@@ -608,6 +637,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     db.select({ tag: factions.tag, name: factions.name, texture: factions.texture })
       .from(factionMembers).innerJoin(factions, eq(factions.id, factionMembers.factionId))
       .where(and(eq(factionMembers.dayzId, dayzId), eq(factionMembers.status, "full"))).limit(1),
+    encountersOf(db, serverId, dayzId, w),
   ]);
 
   return {
@@ -627,5 +657,95 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     longestKill: longest[0] ? { distanceM: Number(longest[0].distanceM), weapon: longest[0].weapon } : null,
     clanHistory,
     clan: clanNow[0] ?? null,
+    encounters,
+  };
+}
+
+/** Every PvP kill in the window with this player on either side, newest first, both names resolved. */
+async function encountersOf(db: Database, serverId: number, dayzId: string, w: Window): Promise<Encounter[]> {
+  const rows = await db.select({
+    at: kills.occurredAt, killer: kills.killerDayzId, victim: kills.victimDayzId,
+    weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire,
+  }).from(kills)
+    .where(and(
+      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w),
+      sql`(${kills.killerDayzId} = ${dayzId} or ${kills.victimDayzId} = ${dayzId})`,
+    ))
+    .orderBy(desc(kills.occurredAt), desc(kills.id));
+  if (rows.length === 0) return [];
+  const ids = [...new Set(rows.flatMap((r) => [r.killer!, r.victim]))];
+  const names = await db.select({ dayzId: players.dayzId, gamertag: players.gamertag }).from(players).where(inArray(players.dayzId, ids));
+  const nameOf = new Map(names.map((n) => [n.dayzId, n.gamertag]));
+  return rows.map((r) => ({
+    at: r.at, killer: nameOf.get(r.killer!) ?? r.killer!, victim: nameOf.get(r.victim) ?? r.victim,
+    weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM), friendlyFire: r.friendlyFire,
+  }));
+}
+
+/**
+ * One page of a player's feed (newest first): kills, deaths, raids, colours
+ * raised, and build steps / dismantles grouped by hour — one `union all`,
+ * every branch bounded by the window, ordered and paged in SQL. Fetches one
+ * row past the page for `hasNext`. Null when the log has never seen the name.
+ */
+export async function playerFeedDb(
+  db: Database, gamertag: string, scope: StatScope, page: number, now: Date, perPage = FEED_PAGE_SIZE,
+): Promise<PlayerFeed | null> {
+  const who = await resolvePlayer(db, gamertag);
+  if (!who) return null;
+  const { dayzId } = who;
+  const { serverId, seasonList, resolved, w } = await scopeWindow(db, scope, now);
+  const offset = (page - 1) * perPage;
+  const me = sql`${dayzId}`;
+
+  type Raw = {
+    kind: FeedEntry["kind"]; at: Date; other: string | null; weapon: string | null; distance_m: string | null;
+    friendly_fire: boolean; cause: string | null; tag: string | null; name: string | null; n: number;
+  };
+  const rows = await db.execute<Raw>(sql`
+    select kind, at, other, weapon, distance_m, friendly_fire, cause, tag, name, n from (
+      select 'kill' as kind, ${kills.occurredAt} as at, coalesce(${players.gamertag}, ${kills.victimDayzId}) as other,
+        ${kills.weapon} as weapon, ${kills.distanceM} as distance_m, ${kills.friendlyFire} as friendly_fire,
+        null::text as cause, null::text as tag, null::text as name, 1 as n
+      from ${kills} left join ${players} on ${players.dayzId} = ${kills.victimDayzId}
+      where ${kills.serverId} = ${serverId} and ${kills.killerDayzId} = ${me} and ${kills.victimDayzId} <> ${me} and ${inWindow(kills.occurredAt, w)}
+      union all
+      select 'death', ${kills.occurredAt},
+        case when ${kills.killerDayzId} is null or ${kills.killerDayzId} = ${kills.victimDayzId} then null else coalesce(${players.gamertag}, ${kills.killerDayzId}) end,
+        ${kills.weapon}, ${kills.distanceM}, ${kills.friendlyFire}, ${kills.cause}, null, null, 1
+      from ${kills} left join ${players} on ${players.dayzId} = ${kills.killerDayzId}
+      where ${kills.serverId} = ${serverId} and ${kills.victimDayzId} = ${me} and ${inWindow(kills.occurredAt, w)}
+      union all
+      select 'raid', ${raids.firstLowerAt}, null, null, null, false, null, ${factions.tag}, ${factions.name}, 1
+      from ${raids} join ${factions} on ${factions.id} = ${raids.victimFactionId}
+      where ${raids.serverId} = ${serverId} and ${raids.raiderDayzId} = ${me} and ${raidsInScope(w)}
+      union all
+      select 'raised', ${events.occurredAt}, null, null, null, false, null, null, null, 1
+      from ${events}
+      where ${events.serverId} = ${serverId} and ${events.type} = 'flag.raised' and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
+      union all
+      select case when ${events.type} = 'base.built' then 'built' else 'dismantled' end, max(${events.occurredAt}), null, null, null, false, null, null, null, count(*)::int
+      from ${events}
+      where ${events.serverId} = ${serverId} and ${events.type} in ('base.built', 'base.dismantled') and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
+      group by ${events.type}, date_trunc('hour', ${events.occurredAt})
+    ) feed
+    order by at desc
+    limit ${perPage + 1} offset ${offset}`);
+
+  const all = [...rows].map((r): FeedEntry => {
+    const at = new Date(r.at);
+    const distanceM = r.distance_m === null ? null : Number(r.distance_m);
+    switch (r.kind) {
+      case "kill": return { kind: "kill", at, other: r.other!, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire };
+      case "death": return { kind: "death", at, other: r.other, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, cause: r.cause };
+      case "raid": return { kind: "raid", at, victim: { tag: r.tag!, name: r.name! } };
+      case "raised": return { kind: "raised", at };
+      case "built": return { kind: "built", at, steps: Number(r.n) };
+      case "dismantled": return { kind: "dismantled", at, steps: Number(r.n) };
+    }
+  });
+  return {
+    gamertag: who.gamertag, scope: resolved, seasons: seasonList, page, perPage,
+    entries: all.slice(0, perPage), hasNext: all.length > perPage,
   };
 }

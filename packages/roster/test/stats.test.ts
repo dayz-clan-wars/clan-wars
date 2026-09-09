@@ -7,7 +7,7 @@ import {
 } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { KD_MIN_KILLS } from "@factions/domain";
-import { playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, BOARD_KINDS, BOARD_PAGE_SIZE } from "../src/stats";
+import { playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, playerFeedDb, BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE } from "../src/stats";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -422,6 +422,84 @@ describe("roster player stats", () => {
       const page = await boardPageDb(db, "deaths", ALL, 2, now, 2);
       expect(page.clans).toEqual({ [B]: { tag: "BEAR", texture: "Flag_Bear" } });
       expect((await boardPageDb(db, "deaths", ALL, 3, now, 2)).clans).toEqual({});
+    });
+  });
+
+  describe("encounters", () => {
+    it("all-time: every PvP kill on either side, newest first, names resolved", async () => {
+      const p = (await playerProfileDb(db, "Alpha", ALL, now))!;
+      // 3 deaths to R (season 2), 12 kills on R (season 1), the friendly kill on B before season 1. Self-kills and killer-less deaths are not encounters.
+      expect(p.encounters).toHaveLength(16);
+      expect(p.encounters[0]).toEqual({ at: h(t50, 3), killer: "Romeo", victim: "Alpha", weapon: null, distanceM: null, friendlyFire: false });
+      expect(p.encounters[1]).toEqual({ at: h(t50, 2), killer: "Romeo", victim: "Alpha", weapon: "SKS", distanceM: 75.5, friendlyFire: false });
+      expect(p.encounters[10]).toEqual({ at: h(t0, 5), killer: "Alpha", victim: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false });
+      expect(p.encounters[15]).toEqual({ at: h(t0, -1), killer: "Alpha", victim: "Bravo", weapon: null, distanceM: null, friendlyFire: true });
+    });
+    it("season 2: only the three deaths", async () => {
+      const p = (await playerProfileDb(db, "Alpha", SEASON_2, now))!;
+      expect(p.encounters.map((e) => [e.killer, e.victim])).toEqual([["Romeo", "Alpha"], ["Romeo", "Alpha"], ["Romeo", "Alpha"]]);
+    });
+  });
+
+  describe("playerFeed", () => {
+    it("season 2: deaths, raids, colours raised and one hour of building, newest first", async () => {
+      const feed = (await playerFeedDb(db, "Alpha", SEASON_2, 1, now))!;
+      expect(feed.gamertag).toBe("Alpha");
+      expect(feed.scope).toEqual(SEASON_2);
+      expect(feed.perPage).toBe(FEED_PAGE_SIZE);
+      expect(feed.hasNext).toBe(false);
+      expect(feed.entries).toEqual([
+        { kind: "raised", at: h(t50, 10) },
+        { kind: "built", at: h(t50, 7), steps: 1 },
+        { kind: "raid", at: h(t50, 6), victim: { tag: "WOLF", name: "WOLF" } },
+        { kind: "raid", at: h(t50, 5), victim: { tag: "WOLF", name: "WOLF" } },
+        { kind: "death", at: h(t50, 3), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" },
+        { kind: "death", at: h(t50, 2), other: "Romeo", weapon: "SKS", distanceM: 75.5, friendlyFire: false, cause: "pvp" },
+        { kind: "death", at: h(t50, 1), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" },
+      ]);
+    });
+
+    it("season 1: kills with their range, a killer-less death with its cause, three build steps as one hour, a dismantle", async () => {
+      const feed = (await playerFeedDb(db, "Alpha", SEASON_1, 1, now))!;
+      const kinds = feed.entries.map((e) => e.kind);
+      // Newest first: two colours raises (h50, h51; the Flag_Wolf raise at h52 is still a raise BY Alpha), the killer-less death at h21, the dismantle at h14, the build hour, twelve kills.
+      expect(kinds.slice(0, 3)).toEqual(["raised", "raised", "raised"]);
+      expect(feed.entries[3]).toEqual({ kind: "death", at: h(t0, 21), other: null, weapon: null, distanceM: null, friendlyFire: false, cause: "infected" });
+      expect(feed.entries[4]).toEqual({ kind: "dismantled", at: h(t0, 14), steps: 1 });
+      expect(feed.entries[5]).toEqual({ kind: "built", at: h(t0, 12), steps: 1 });
+      expect(feed.entries.filter((e) => e.kind === "built").map((e) => (e as { steps: number }).steps)).toEqual([1, 1, 1]);
+      expect(feed.entries.filter((e) => e.kind === "kill")).toHaveLength(12);
+      expect(feed.entries.find((e) => e.kind === "kill" && e.at.getTime() === h(t0, 5).getTime()))
+        .toEqual({ kind: "kill", at: h(t0, 5), other: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false });
+    });
+
+    it("groups build steps by the hour they fell in", async () => {
+      // Two more steps in the hour of h(t0, 12): that hour becomes one entry of three.
+      for (const m of [5, 25]) {
+        await db.insert(events).values({ serverId, admFileId: (await db.select({ id: admFiles.id }).from(admFiles))[0]!.id, lineIndex: 9000 + m, type: "base.built" as never, occurredAt: new Date(h(t0, 12).getTime() + m * 60_000), payload: { dayzId: A, gamertag: "Alpha", action: "built", part: "wall_base_up", structure: "Fence" } });
+      }
+      const feed = (await playerFeedDb(db, "Alpha", SEASON_1, 1, now))!;
+      const built = feed.entries.filter((e) => e.kind === "built") as { at: Date; steps: number }[];
+      expect(built.map((b) => b.steps)).toEqual([3, 1, 1]);
+      expect(built[0]!.at).toEqual(new Date(h(t0, 12).getTime() + 25 * 60_000));
+    });
+
+    it("pages by offset with a next flag, and is null for a name never seen", async () => {
+      const first = await playerFeedDb(db, "Alpha", SEASON_2, 1, now, 3);
+      expect(first!.entries.map((e) => e.kind)).toEqual(["raised", "built", "raid"]);
+      expect(first!.hasNext).toBe(true);
+      const third = await playerFeedDb(db, "Alpha", SEASON_2, 3, now, 3);
+      expect(third!.entries.map((e) => e.kind)).toEqual(["death"]);
+      expect(third!.hasNext).toBe(false);
+      expect(await playerFeedDb(db, "Nobody", ALL, 1, now)).toBeNull();
+    });
+
+    it("the friendly kill and the self-kill read as the log had them", async () => {
+      // All-time is longer than a page: read it wide.
+      const feed = (await playerFeedDb(db, "Alpha", ALL, 1, now, 100))!;
+      expect(feed.entries.find((e) => e.kind === "kill" && e.friendlyFire)).toEqual({ kind: "kill", at: h(t0, -1), other: "Bravo", weapon: null, distanceM: null, friendlyFire: true });
+      const romeo = (await playerFeedDb(db, "Romeo", SEASON_2, 1, now))!;
+      expect(romeo.entries.find((e) => e.kind === "death")).toEqual({ kind: "death", at: h(t50, 4), other: null, weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" });
     });
   });
 
