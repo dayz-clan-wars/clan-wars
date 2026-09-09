@@ -3,8 +3,15 @@ import { archivo, archivoBlack, spaceMono } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
+  // Absolute base for the share images below; Next resolves the file-convention
+  // paths against it, and without it the og:image is a relative URL that
+  // Discord and Twitter refuse.
+  metadataBase: new URL("https://dayzclanwars.com"),
   title: "Clan Wars",
   description: "Clans, bases and consequence on a DayZ server.",
+  // Share previews come from opengraph-image.png and twitter-image.png beside
+  // this file (1200x630, the "Your clan. Your war." card), one image for the
+  // whole site.
   // The icons come from the file conventions beside this file: favicon.ico
   // and icon.png (the CW monogram, for tabs), apple-icon.png (the logo, for
   // a phone's home screen), manifest.ts (the same logo at 192 and 512).
