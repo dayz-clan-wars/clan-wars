@@ -23,8 +23,9 @@ export default async function PlayersPage({ searchParams }: { searchParams: Prom
   return (
     <Page wide>
       <PageHead guide={guideLinkFor("/players")} kicker="Players" title="Player boards" aside={<ScopePicker seasons={boards.seasons} basePath="/players" current={boards.scope} />} />
-      <Body>
-        <StatBoards boards={boards} extra={<FindPlayer />} />
+      <Body className="flex flex-col gap-4 lg:gap-6">
+        <FindPlayer />
+        <StatBoards boards={boards} />
       </Body>
     </Page>
   );
