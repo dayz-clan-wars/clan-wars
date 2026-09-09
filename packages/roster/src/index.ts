@@ -31,6 +31,8 @@ import {
   linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb,
   type LinkStatus, type LinkStep, type UnlinkOutcome,
 } from "./link";
+import { suggestGamertagsDb, type SuggestScope } from "./suggest";
+export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
 import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSoloOutcome, type DeclareSoloReason } from "./base";
 export { DECLARE_SOLO_REASONS } from "./base";
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
@@ -117,6 +119,10 @@ export function unlink(discordId: string): Promise<UnlinkOutcome> {
 }
 export function searchGamertags(prefix: string): Promise<{ dayzId: string; gamertag: string }[]> {
   return searchGamertagsDb(db(), prefix);
+}
+/** Autocomplete names for a gamertag box: `seen` for the public player search, `linked` for invites and guest passes. */
+export function suggestGamertags(prefix: string, scope: SuggestScope): Promise<string[]> {
+  return suggestGamertagsDb(db(), prefix, scope);
 }
 
 /** /base's one read: your raises, your declaration. */

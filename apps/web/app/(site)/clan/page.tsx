@@ -6,6 +6,7 @@ import { RESULT_COPY } from "@/lib/clan-copy";
 import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
+import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
@@ -116,7 +117,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             <Panel title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
-                  <input {...invalid(err, "gamertag")} className={`${field} !mt-0 min-w-0 flex-1 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
+                  <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
                   <button className={`${btnPrimary} min-h-[52px] flex-none`} type="submit">Invite</button>
                 </form>
                 <FieldError err={err} name="gamertag" />

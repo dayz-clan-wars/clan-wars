@@ -33,9 +33,11 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * (`app/guide/[slug]`), served by this app since 2026-09-07 — before that
  * every subpath was a permanent redirect to the guide's own host. `/hero/`
  * is the landing page's terrain still (public/hero/, one webp): the page is
- * public, so its picture must be too.
+ * public, so its picture must be too. `/api/players/` is the gamertag
+ * autocomplete behind the public player search; its `linked` scope checks
+ * the session itself (app/api/players/suggest/route.ts).
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should
