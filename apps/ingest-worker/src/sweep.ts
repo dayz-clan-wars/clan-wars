@@ -4,6 +4,9 @@ import { and, eq, isNotNull } from "drizzle-orm";
 import { ingestTick, type NitradoLike } from "./tick.js";
 import { supplyTick, type SupplyUploader, type SupplyTickResult, type SupplyDrift } from "./supply-tick.js";
 import type { SpawnObject } from "./supplies.js";
+import { travelTick, type TravelTickResult } from "./travel-tick.js";
+import type { TravelTemplate } from "./travel.js";
+import type { ProjectionDrift } from "./projection-upload.js";
 
 export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
 
@@ -57,6 +60,15 @@ export type SweepDeps = {
    * rollback) has almost certainly touched more than this one file.
    */
   onSupplyDrift?: (serverId: number, drift: SupplyDrift) => void;
+  /** The second projected file: the fast-travel config with active clans' poles. Absent in tests that only exercise ingestion. */
+  travel?: {
+    clientFor: (nitradoServiceId: number) => SupplyClient;
+    template: TravelTemplate;
+    fileName: string;
+  };
+  onTravelError?: (serverId: number, err: unknown) => void;
+  onTravelUploaded?: (serverId: number, result: TravelTickResult) => void;
+  onTravelDrift?: (serverId: number, drift: ProjectionDrift) => void;
 };
 
 /** One sweep across every active server. The database decides which those are. */
@@ -115,6 +127,27 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         if (result.uploaded) deps.onSupplyUploaded?.(s.id, result);
       } catch (err) {
         deps.onSupplyError?.(s.id, err);
+      }
+    }
+
+    // The travel file, by the same rules: its own try/catch, its own
+    // directory lookup, and never a reason to lose a log event.
+    if (deps.travel) {
+      try {
+        const client = deps.travel.clientFor(s.nitradoServiceId!);
+        const remoteDir = await client.missionCustomDir();
+        const result = await travelTick(db, {
+          serverId: s.id,
+          client,
+          template: deps.travel.template,
+          remoteDir,
+          fileName: deps.travel.fileName,
+          now: new Date(),
+          onDrift: (d) => deps.onTravelDrift?.(s.id, d),
+        });
+        if (result.uploaded) deps.onTravelUploaded?.(s.id, result);
+      } catch (err) {
+        deps.onTravelError?.(s.id, err);
       }
     }
   }
