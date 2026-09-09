@@ -117,6 +117,8 @@ export type PlayerProfile = {
   /** The longest-kill board's rule, for this player; null with no PvP kill in the window. */
   longestKill: { distanceM: number; weapon: string | null } | null;
   clanHistory: { tag: string; name: string; joinedAt: Date; leftAt: Date | null }[];
+  /** The current full clan, for the page's hero: tag, name and flag texture. Null for the clanless (a pending member included). */
+  clan: { tag: string; name: string; texture: string } | null;
 };
 
 const DEFAULT_LIMIT = 25;
@@ -573,7 +575,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
 
   const [
     lastSeen, session, pvpKills, pvpDeaths, killed, killedBy,
-    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, streaks, longest, clanHistory,
+    friendlyFireKills, friendlyFireDeaths, raidCredits, upkeepRaises, buildPoints, streaks, longest, clanHistory, clanNow,
   ] = await Promise.all([
     db.select({ lastSeenAt: players.lastSeenAt }).from(players).where(eq(players.dayzId, dayzId)),
     db.select({
@@ -603,6 +605,9 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
       .from(membershipHistory).innerJoin(factions, eq(factions.id, membershipHistory.factionId))
       .where(and(eq(membershipHistory.serverId, serverId), eq(membershipHistory.dayzId, dayzId)))
       .orderBy(desc(membershipHistory.joinedAt)),
+    db.select({ tag: factions.tag, name: factions.name, texture: factions.texture })
+      .from(factionMembers).innerJoin(factions, eq(factions.id, factionMembers.factionId))
+      .where(and(eq(factionMembers.dayzId, dayzId), eq(factionMembers.status, "full"))).limit(1),
   ]);
 
   return {
@@ -621,5 +626,6 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     bestStreak: streaks.get(dayzId) ?? 0,
     longestKill: longest[0] ? { distanceM: Number(longest[0].distanceM), weapon: longest[0].weapon } : null,
     clanHistory,
+    clan: clanNow[0] ?? null,
   };
 }
