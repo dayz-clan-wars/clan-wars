@@ -1,19 +1,29 @@
 import { describe, it, expect } from "vitest";
 import { KD_MIN_KILLS } from "@factions/domain";
+import { BOARD_KINDS } from "@factions/roster";
 import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, SEE_ALL, PAGER, playTime, scopeLabel } from "../lib/stats-copy";
+
+describe("board order", () => {
+  it("is raiding, offensive PvP, building, play time, then the shameful two", () => {
+    expect([...BOARD_KINDS]).toEqual(["raiders", "killers", "kd", "streaks", "longestKills", "builders", "playTime", "deaths", "friendlyFire"]);
+  });
+  it("BOARD_LABELS is written in the same order", () => {
+    expect(Object.keys(BOARD_LABELS)).toEqual([...BOARD_KINDS]);
+  });
+});
 
 describe("BOARD_LABELS", () => {
   it("names all nine boards", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
-      deaths: "Most PvP deaths",
       kd: "Best K/D",
-      playTime: "Most play time",
-      friendlyFire: "Most friendly fire",
-      builders: "Top builders",
       streaks: "Best killstreak",
       longestKills: "Longest kill",
+      builders: "Top builders",
+      playTime: "Most play time",
+      deaths: "Most PvP deaths",
+      friendlyFire: "Most friendly fire",
     });
   });
 });
