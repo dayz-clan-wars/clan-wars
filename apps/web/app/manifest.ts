@@ -1,4 +1,5 @@
 import type { MetadataRoute } from "next";
+import { SITE_NAME, SITE_DESCRIPTION } from "@/lib/site-meta";
 
 /**
  * The web app manifest, so a phone can put Clan Wars on its home screen with
@@ -8,9 +9,9 @@ import type { MetadataRoute } from "next";
  */
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Clan Wars",
-    short_name: "Clan Wars",
-    description: "Clans, bases and consequence on a DayZ server.",
+    name: SITE_NAME,
+    short_name: SITE_NAME,
+    description: SITE_DESCRIPTION,
     start_url: "/",
     display: "standalone",
     background_color: "#050505",

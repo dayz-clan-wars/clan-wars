@@ -31,9 +31,11 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * (`/players/{gamertag}`, spec §10.2); `/clan/board` (under `/clan`, not
  * `/players`) stays gated. `/guide/` is the field guide's chapters
  * (`app/guide/[slug]`), served by this app since 2026-09-07 — before that
- * every subpath was a permanent redirect to the guide's own host.
+ * every subpath was a permanent redirect to the guide's own host. `/hero/`
+ * is the landing page's terrain still (public/hero/, one webp): the page is
+ * public, so its picture must be too.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should

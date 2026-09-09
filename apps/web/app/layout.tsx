@@ -1,14 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import { archivo, archivoBlack, spaceMono } from "./fonts";
 import "./globals.css";
+import { SITE_NAME, SITE_TAGLINE, SITE_DESCRIPTION } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
   // Absolute base for the share images below; Next resolves the file-convention
   // paths against it, and without it the og:image is a relative URL that
   // Discord and Twitter refuse.
   metadataBase: new URL("https://dayzclanwars.com"),
-  title: "Clan Wars",
-  description: "Clans, bases and consequence on a DayZ server.",
+  title: SITE_NAME,
+  description: SITE_DESCRIPTION,
+  // The share card reads "Your clan. Your war." — the preview's title says
+  // the same, so the text under the picture does not repeat the site name.
+  openGraph: { siteName: SITE_NAME, title: `${SITE_NAME} — ${SITE_TAGLINE}`, description: SITE_DESCRIPTION, type: "website", url: "/" },
+  twitter: { card: "summary_large_image", title: `${SITE_NAME} — ${SITE_TAGLINE}`, description: SITE_DESCRIPTION },
   // Share previews come from opengraph-image.png and twitter-image.png beside
   // this file (1200x630, the "Your clan. Your war." card), one image for the
   // whole site.
