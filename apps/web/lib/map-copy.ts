@@ -15,6 +15,20 @@ export const LAYER_LABELS = {
   publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
 } as const;
 
+/** Why a switch is missing from the layers panel (App Review §03): what would put the layer there. */
+export const LAYER_REASONS: Record<"base" | "clanmates" | "intruders" | "pins", string> = {
+  base: "declare a base", clanmates: "join a clan", intruders: "declare a base", pins: "join a clan",
+};
+
+/** The one-time hint over a first map with nothing of the player's on it. */
+export const MAP_HINT = {
+  kicker: "Your map, so far",
+  before: "This is you, last seen by the server. Raise a flag at a pole and ",
+  cta: "declare it",
+  after: " — the map then shows your base, its watch zone, and anyone who walks into it.",
+  more: "In a clan you also see clanmates and shared pins.",
+} as const;
+
 export const PIN_ICON_LABELS: Record<PinIcon, string> = { loot: "Loot", vehicle: "Vehicle", enemy: "Enemy seen", meet: "Meet here", danger: "Danger", note: "Note" };
 /** The glyph for each icon is an SVG, not an emoji: `PIN_GLYPHS` in map-icons.ts. */
 

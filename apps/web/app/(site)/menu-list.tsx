@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { barFor, isCurrent, menuFor, signInHref } from "@/lib/menu";
+import { barFor, isCurrent, menuFor, signInHref, type Counts } from "@/lib/menu";
 import { GuideSearch } from "@/app/guide/search";
 import type { SearchEntry } from "@/app/guide/index";
 
@@ -12,7 +12,14 @@ function useHere() {
 }
 
 /** The desktop bar's items. Client-side only to mark the current page and carry the path into Sign in. */
-export function BarNav({ signedIn }: { signedIn: boolean }) {
+/** The gold count on an item: things waiting there. Hidden at zero. */
+function Badge({ n, label }: { n: number; label: string }) {
+  if (n <= 0) return null;
+  return <span className="inline-flex h-[18px] min-w-[18px] items-center justify-center bg-gold px-1.5 font-mono text-[11px] font-bold text-ground"><span className="sr-only">{label}: </span>{n}</span>;
+}
+const countFor = (badge: "you" | "clan" | undefined, counts: Counts) => (badge ? counts[badge] : 0);
+
+export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: boolean; counts?: Counts }) {
   const { pathname, here } = useHere();
   const cell = "flex h-full items-center border-l border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em]";
   return (
@@ -23,8 +30,8 @@ export function BarNav({ signedIn }: { signedIn: boolean }) {
             const on = isCurrent(m, pathname);
             return (
               <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
-                className={`${cell} ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
-                {m.label}
+                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
+                {m.label}<Badge n={countFor(m.badge, counts)} label="waiting" />
               </a>
             );
           })}
@@ -47,7 +54,7 @@ export function BarNav({ signedIn }: { signedIn: boolean }) {
  * navigation; this adds Escape, click-outside, and the dimmed backdrop. The
  * summary reads "Menu" closed and "Close" open, filled gold when open.
  */
-export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex?: SearchEntry[] }) {
+export function Drawer({ signedIn, guideIndex, counts = { you: 0, clan: 0 } }: { signedIn: boolean; guideIndex?: SearchEntry[]; counts?: Counts }) {
   const { pathname, here } = useHere();
   const root = useRef<HTMLDetailsElement>(null);
 
@@ -65,8 +72,9 @@ export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex
   const item = "flex min-h-[48px] items-center justify-between px-5 font-display text-sm uppercase tracking-[0.06em]";
   return (
     <details ref={root} className="group">
-      <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
+      <summary className="relative flex min-h-[44px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">Menu</span><span className="hidden group-open:inline">Close</span>
+        {counts.you + counts.clan > 0 && <span className="absolute -right-2 -top-2 group-open:hidden"><Badge n={counts.you + counts.clan} label="waiting" /></span>}
       </summary>
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
       <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
@@ -79,7 +87,7 @@ export function Drawer({ signedIn, guideIndex }: { signedIn: boolean; guideIndex
               return (
                 <li key={m.href}>
                   <a href={m.href} aria-current={on ? "page" : undefined} className={`${item} ${on ? "text-gold" : "text-ink"}`}>
-                    {m.label}{on && <span className="font-mono text-[11px] tracking-[0.18em]">Here</span>}
+                    <span className="flex items-center gap-2.5">{m.label}<Badge n={countFor(m.badge, counts)} label="waiting" /></span>{on && <span className="font-mono text-[11px] tracking-[0.18em]">Here</span>}
                   </a>
                 </li>
               );

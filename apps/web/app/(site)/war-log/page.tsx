@@ -48,7 +48,7 @@ export default async function WarLogPage() {
             <Panel>
               {byDay(entries).map(([day, list]) => (
                 <div key={day}>
-                  <div className={`border-b-2 border-rule-2 px-4 py-2 lg:px-6 lg:py-2.5 ${kickerSm} !text-dim`}>{day}</div>
+                  <div className={`flex justify-between border-b-2 border-rule-2 px-4 py-2 lg:px-6 lg:py-2.5 ${kickerSm} !text-dim`}><span>{day}</span><span>UTC</span></div>
                   {list.map((e, i) => (
                     <div key={i} className="border-b border-rule-2 last:border-b-0">
                       {/* Desktop: time | dot | sentence | outcome. */}

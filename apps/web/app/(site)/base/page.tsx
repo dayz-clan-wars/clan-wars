@@ -6,7 +6,7 @@ import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, btnPrimary, btnDanger, link, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -54,10 +54,9 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                     <p className="font-mono text-lg text-ink">{at(view.declaration.x, view.declaration.z)}</p>
                     <p className="mt-1 text-sm text-ink-2">Declared {when(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
                     <form className="mt-4 border-t border-rule-2 pt-4" action="/api/base/release" method="post">
-                      <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2">
-                        <input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand the pole goes public if nobody declares it within the grace period.
-                      </label>
-                      <button className={`mt-3 ${btnDanger}`} type="submit">Release this base</button>
+                      <input type="hidden" name="confirm" value="yes" />
+                      <p className="text-sm leading-relaxed text-ink-2">Releasing makes the pole public if nobody declares it within the grace period.</p>
+                      <ConfirmButton confirm="Release it?" className={`mt-3 ${btnDanger}`}>Release this base</ConfirmButton>
                     </form>
                   </>
                 ) : (

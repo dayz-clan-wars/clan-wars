@@ -3,7 +3,7 @@ import { clanFor } from "@factions/roster";
 import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
-import { LEADERSHIP_RESULT_COPY, CLAIM_REFUSAL } from "@/lib/leadership-copy";
+import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
@@ -88,7 +88,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
 
       <div className="grid gap-4 px-5 py-5 lg:grid-cols-[7fr_5fr] lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="flex flex-col gap-4 lg:gap-6">
-          <Panel num="01" title="Roster" aside={<>{full.length} full{pending.length > 0 && `, ${pending.length} pending`}</>}>
+          <Panel title="Roster" aside={<>{full.length} full{pending.length > 0 && `, ${pending.length} pending`}</>}>
             <ul>
               {[...full, ...pending].map((r) => {
                 const self = r.discordId === session.sub;
@@ -113,7 +113,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
           </Panel>
 
           {officer && (
-            <Panel num="02" title="Invite">
+            <Panel title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
                   <input {...invalid(err, "gamertag")} className={`${field} !mt-0 min-w-0 flex-1 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
@@ -138,7 +138,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
 
         <div className="flex flex-col gap-4 lg:gap-6">
           {officer && (
-            <Panel num="03" title="Requests to join" aside={<span className="font-display text-lg text-gold">{requestsIn.length}</span>}>
+            <Panel title="Requests to join" aside={<span className="font-display text-lg text-gold">{requestsIn.length}</span>}>
               {requestsIn.length === 0
                 ? <PanelBody className="!py-3"><p className="text-sm text-ink-2">{clan.recruiting ? "None open." : "Turn recruiting on in settings to receive requests."}</p></PanelBody>
                 : (
@@ -158,25 +158,28 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
           )}
 
           {me.status === "full" && (
-            <Panel num={officer ? "04" : "02"} title="Leadership">
+            <Panel title="Leadership">
               <PanelBody>
+                {/* Succession is said only when it can happen (App Review §02): an open claim, or a leader silent long enough. */}
                 <Facts items={[
                   ["Leader", <span key="l" className="font-mono text-ink">{full.find((r) => r.role === "leader")?.gamertag ?? "unknown"}</span>],
-                  ["Last seen", <span key="s" className="text-ink">{leadership.leaderLastSeenAt ? when(leadership.leaderLastSeenAt) : "never"}</span>],
+                  ["Last seen", <span key="s" className="text-ink">{leadership.leaderLastSeenAt ? when(leadership.leaderLastSeenAt) : "never"}{leadership.canClaim === "leader-active" && <span className={`${kickerSm} ml-2 !text-olive`}>active</span>}</span>],
                   ...(leadership.openClaim
                     ? [["Succession", <span key="c" className="text-ink">{leadership.openClaim.claimantGamertag} has claimed the seat from {leadership.openClaim.leaderGamertag}. Resolves {when(leadership.openClaim.resolvesAt)}.</span>] as [React.ReactNode, React.ReactNode]]
-                    : (leadership.canClaim === "not-eligible" || leadership.canClaim === "leader-active")
-                      ? [["Succession", CLAIM_REFUSAL[leadership.canClaim]] as [React.ReactNode, React.ReactNode]]
-                      : []),
+                    : []),
                 ]} />
                 {!leadership.openClaim && leadership.canClaim === "eligible" && (
                   <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/claim-succession" method="post">
-                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand this opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if the leader is seen in game.</label>
-                    <button className={`mt-3 ${btnPrimary}`} type="submit">Claim leadership — the leader has been silent for {days(LEADER_SILENT_MS)}</button>
+                    <input type="hidden" name="confirm" value="yes" />
+                    <p className="text-sm leading-relaxed text-ink-2">The leader has been silent for {days(LEADER_SILENT_MS)}. Claiming opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if they are seen in game.</p>
+                    <ConfirmButton confirm="Claim it?" className={`mt-3 ${btnPrimary}`}>Claim leadership</ConfirmButton>
                   </form>
                 )}
+              </PanelBody>
 
-                <div className="mt-4 border-t border-rule-2 pt-4">
+              {/* The vote: the live tally when one is open, otherwise folded — it is rare, and the form was under every roster every visit. */}
+              {leadership.openVote || leader ? (
+                <PanelBody className="border-t border-rule-2">
                   <div className={kickerSm}>No-confidence vote</div>
                   {leadership.openVote ? (
                     <>
@@ -184,37 +187,42 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <p className="mt-1 text-sm text-ink-2">{leadership.openVote.ballots} of {leadership.openVote.threshold} needed (electorate {leadership.openVote.electorateSize}) · closes {when(leadership.openVote.closesAt)}</p>
                       {leadership.openVote.inElectorate && !leadership.openVote.myBallot && (
                         <form className="mt-3" action="/api/clan/cast-vote" method="post">
-                          <label className="flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> I confirm my vote.</label>
-                          <button className={`mt-3 ${btnPrimary}`} type="submit">Vote yes</button>
+                          <input type="hidden" name="confirm" value="yes" />
+                          <ConfirmButton confirm="Cast it?" className={btnPrimary}>Vote yes</ConfirmButton>
                         </form>
                       )}
                       {leadership.openVote.myBallot && <p className="mt-2 text-sm text-ink-2">You voted.</p>}
                       {!leadership.openVote.inElectorate && !leader && <p className="mt-2 text-sm text-ink-2">Members who joined after the vote opened do not vote in it.</p>}
                       {leader && <p className="mt-2 text-sm text-ink-2">You can make your case in the clan channel.</p>}
                     </>
-                  ) : leader ? (
-                    <p className="mt-1.5 text-sm leading-relaxed text-ink-2">None open.</p>
                   ) : (
-                    <form className="mt-1.5" action="/api/clan/open-vote" method="post">
-                      <p className="text-sm leading-relaxed text-ink-2">None open. Any member can nominate a replacement.</p>
-                      <label className="mt-3 block"><span className={kickerSm}>Nominee</span>
-                        <select className={field} name="target" required disabled={voteBlocked}>
-                          {full.filter((r) => r.role !== "leader").map((r) => (
-                            <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="mt-3 flex items-center gap-3 text-sm text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={checkbox} /> I understand this opens a no-confidence vote.</label>
-                      <button className={`mt-3 ${btnSecondary}`} type="submit" disabled={voteBlocked}>Nominate</button>
-                      {voteBlocked && <p className="mt-2 text-xs text-muted">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt!)}.</p>}
-                    </form>
+                    <p className="mt-1.5 text-sm leading-relaxed text-ink-2">None open.</p>
                   )}
-                </div>
-              </PanelBody>
+                </PanelBody>
+              ) : (
+                <details className="group border-t border-rule-2">
+                  <summary className="flex min-h-[48px] cursor-pointer list-none items-center justify-between px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink lg:px-5 [&::-webkit-details-marker]:hidden">
+                    Open a no-confidence vote <span aria-hidden="true" className="group-open:hidden">▾</span><span aria-hidden="true" className="hidden group-open:inline">▴</span>
+                  </summary>
+                  <form className="border-t border-rule-2 p-4 lg:p-5" action="/api/clan/open-vote" method="post">
+                    <input type="hidden" name="confirm" value="yes" />
+                    <p className="text-sm leading-relaxed text-ink-2">Any member can nominate a replacement. The roster freezes for the length of the vote.</p>
+                    <label className="mt-3 block"><span className={kickerSm}>Nominee</span>
+                      <select className={field} name="target" required disabled={voteBlocked}>
+                        {full.filter((r) => r.role !== "leader").map((r) => (
+                          <option key={r.discordId} value={r.discordId}>{r.gamertag ?? "unknown"}</option>
+                        ))}
+                      </select>
+                    </label>
+                    <ConfirmButton confirm="Open the vote?" className={`mt-3 ${btnSecondary}`} disabled={voteBlocked}>Nominate</ConfirmButton>
+                    {voteBlocked && <p className="mt-2 text-xs text-muted">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt!)}.</p>}
+                  </form>
+                </details>
+              )}
             </Panel>
           )}
 
-          <Panel num={officer ? "05" : me.status === "full" ? "03" : "02"} title="Leave">
+          <Panel title="Leave">
             <PanelBody>
               {leader
                 ? <p className="text-sm leading-relaxed text-ink-2">A leader cannot leave. <a className={link} href="/clan/settings">Transfer leadership</a> first, or disband.</p>

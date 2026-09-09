@@ -1,5 +1,6 @@
 import "./guide.css";
 import { currentSession } from "@/lib/viewer";
+import { attention } from "@factions/roster";
 import { SiteBar } from "@/app/(site)/site-bar";
 import { buildIndex } from "./index";
 import { GuideSearch } from "./search";
@@ -12,7 +13,8 @@ import { SkipLink } from "@/app/components/ui";
  * with search and the chapter list, and the reading column.
  *
  * ⚠️ Reads the session for the bar's signed-in state, so the guide renders
- * per request like the rest of the site. It reads no database. The search
+ * per request like the rest of the site. Its one database read is the bar's
+ * attention counts, the same as every other page's. The search
  * index is built here from the fragments — at request time, but from files,
  * and it is a few kilobytes.
  */
@@ -20,10 +22,11 @@ export const dynamic = "force-dynamic";
 
 export default async function GuideLayout({ children }: { children: React.ReactNode }) {
   const [session, index] = [await currentSession(), buildIndex(true)];
+  const counts = session ? await attention(session.sub).catch(() => undefined) : undefined;
   return (
     <>
       <SkipLink />
-      <SiteBar signedIn={session !== null} crumb="Field guide" extra={
+      <SiteBar signedIn={session !== null} crumb="Field guide" counts={counts} extra={
         <details className="group relative">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-rule-3 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
           <div className="absolute right-0 top-[calc(100%+8px)] z-[1300] max-h-[75dvh] w-[min(86vw,320px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">

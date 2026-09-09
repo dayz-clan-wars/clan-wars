@@ -11,7 +11,7 @@ const REVEAL_MS = 30_000;
  * stream that catches this frame catches nothing for long. The seconds
  * left are counted down beside the code so the hiding is never a surprise.
  */
-export function RevealButton({ lockId }: { lockId: number }) {
+export function RevealButton({ lockId, className = btnSecondary }: { lockId: number; className?: string }) {
   const [code, setCode] = useState<string | null>(null);
   const [left, setLeft] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -56,7 +56,7 @@ export function RevealButton({ lockId }: { lockId: number }) {
   // kept OUT of it (aria-hidden) so a reader is not told a number every second.
   if (code) {
     return (
-      <div role="status" className="flex min-h-[44px] flex-wrap items-center gap-3">
+      <div role="status" className="flex min-h-[48px] flex-wrap items-center gap-3 px-4">
         <span className="font-mono text-lg tracking-[0.2em] text-gold">{code}</span>
         <span aria-hidden="true" className="font-mono text-xs tabular-nums text-muted">hides in {left} s</span>
         <button type="button" className="font-mono text-xs uppercase tracking-[0.18em] text-muted hover:text-ink" onClick={() => { stop(); setCode(null); }}>Hide now</button>
@@ -65,8 +65,8 @@ export function RevealButton({ lockId }: { lockId: number }) {
   }
 
   return (
-    <div role="status" className="flex flex-wrap items-center gap-3">
-      <button type="button" className={btnSecondary} onClick={reveal} disabled={busy}>
+    <div role="status" className="flex flex-1 flex-wrap items-center gap-3">
+      <button type="button" className={className} onClick={reveal} disabled={busy}>
         {busy ? "Revealing…" : "Reveal code"}
       </button>
       {error && <span className="text-sm text-ink">{error}</span>}
