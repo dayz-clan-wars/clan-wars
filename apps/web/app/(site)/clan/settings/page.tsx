@@ -5,7 +5,7 @@ import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
-import { when, days, hours } from "@/lib/format";
+import { when, days, hours, ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
@@ -114,7 +114,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <ul className="border-t border-rule-2">
                   {rebindCandidates.map((c) => (
                     <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
-                      <span>raised by <span className="font-mono">{c.by}</span> {when(c.raisedAt)}</span>
+                      <span>raised by <span className="font-mono">{c.by}</span> {ago(c.raisedAt)}</span>
                       <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><button className={`${btnPrimary} !px-3.5`} type="submit">Move here</button></form>
                     </li>
                   ))}

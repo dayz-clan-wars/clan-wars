@@ -30,7 +30,7 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
             const on = isCurrent(m, pathname);
             return (
               <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
-                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
+                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"} ${m.quiet ? "!hidden xl:!flex" : ""}`}>
                 {m.label}<Badge n={countFor(m.badge, counts)} label="waiting" />
               </a>
             );
@@ -78,7 +78,7 @@ export function Drawer({ signedIn, guideIndex, counts = { you: 0, clan: 0 } }: {
       </summary>
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
       <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
-      <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] w-[300px] max-w-[calc(100vw-24px)] border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+      <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] max-h-[calc(100dvh-72px)] w-[300px] max-w-[calc(100vw-24px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
         {guideIndex && <div className="border-b-2 border-rule-2 p-3"><GuideSearch index={guideIndex} compact /></div>}
         {menuFor(signedIn).map((group, gi) => (
           <ul key={gi} className={`py-2 ${gi > 0 ? "border-t-2 border-rule-2" : ""}`}>

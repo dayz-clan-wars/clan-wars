@@ -6,7 +6,7 @@ import { REFUSAL } from "@/lib/clan-copy";
 import { VAULT_INTRO, VAULT_RESULT_COPY } from "@/lib/vault-copy";
 import { VAULT_ROLES } from "@/lib/vault-form";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when } from "@/lib/format";
+import { when, ago } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
@@ -75,7 +75,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             {(lock.note || lock.rotatedAt || lock.createdAt) && (
               <p className="m-0 px-4 pb-3 text-[13px] leading-relaxed text-ink-2 lg:px-5">
                 {lock.note && <>{lock.note} </>}
-                <span className="text-muted">{lock.rotatedAt ? `rotated ${when(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${when(lock.createdAt)} by ${lock.createdBy}`}</span>
+                <span className="text-muted">{lock.rotatedAt ? `rotated ${ago(lock.rotatedAt)} by ${lock.rotatedBy}` : `added ${ago(lock.createdAt)} by ${lock.createdBy}`}</span>
               </p>
             )}
             <div className="flex items-stretch border-t border-rule-2">

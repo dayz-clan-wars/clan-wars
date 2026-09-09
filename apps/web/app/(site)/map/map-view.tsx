@@ -1,8 +1,9 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import type * as L from "leaflet";
 import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
-import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX } from "@/lib/map-projection";
+import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { LAYER_REASONS, MAP_HINT, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
@@ -51,7 +52,6 @@ function loadSwitches(): Record<LayerKey, boolean> {
   }
 }
 
-const bar = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
 /** The settings sprocket: an eight-tooth gear in the chip's stroke, currentColor so the button colours it. */
 /** The zoom "Center on me" lands at: about 5 m per pixel, a couple of kilometres across a phone. */
@@ -92,6 +92,15 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     try { setHint(localStorage.getItem(HINT_KEY) !== "1"); } catch { setHint(true); }
   }, [bare]);
   const dismissHint = () => { setHint(false); try { localStorage.setItem(HINT_KEY, "1"); } catch { /* a private window forgets; fine */ } };
+  // `/map?at=043087` (from /base's "Map →") opens on that grid square. Read
+  // once, client-side: the HTML still carries no metre coordinate, and a
+  // bad key is simply the whole map.
+  const at = useSearchParams().get("at");
+  const atRef = useRef(at);
+  atRef.current = at;
+  // "Refreshed · just now" on the grid cell for two seconds after a tap.
+  const [flash, setFlash] = useState(false);
+  const refreshTap = () => { void load(); setFlash(true); setTimeout(() => setFlash(false), 2_000); };
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
@@ -340,6 +349,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
         applyFloor();
         m.fitBounds(world);
+        const open = parseGridRef(atRef.current, size);
+        if (open) m.setView(ll(open.x, open.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: false });
         far();
         drawPlaces();
         redraw();
@@ -582,7 +593,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
             {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
             {layersOpen && (
-              <div id="map-layers-sheet" className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
+              <div id="map-layers-sheet">
+              <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
                 {visible.map((key) => (
                   <label key={key} className={`flex min-h-[44px] flex-none cursor-pointer items-center gap-2 border-2 px-3 font-mono text-[11px] uppercase tracking-[0.12em] has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold ${enabled[key] ? "border-gold text-ink" : "border-rule-3 text-muted"}`}>
                     <input type="checkbox" className="sr-only" checked={enabled[key]} onChange={() => toggle(key)} />
@@ -591,8 +603,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
+                <span>Last known, not live.</span>
+                {layers.pins && <span>Press and hold to drop a pin.</span>}
+                {guide && <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a>}
+              </div>
+              </div>
             )}
-            <div className={`flex flex-wrap items-center gap-4 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
+            <div className={`flex items-center gap-2 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
               <button
                 type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"
                 className={`flex h-11 w-11 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-3 text-ink"}`}
@@ -605,11 +623,13 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 <Reticle size={18} />
                 <span className="sr-only">Center on me</span>
               </button>
-              <span className={`${bar} flex min-h-[44px] items-center`}>Grid {centre}</span>
-              <button type="button" onClick={() => void load()} className={`${bar} flex min-h-[44px] items-center text-ink`}>Refresh</button>
+              {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
+              <button type="button" onClick={refreshTap} aria-live="polite" title="Refresh"
+                className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
+                <span className="sr-only">Grid {centre}. Refresh</span>
+              </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
-              {layers.pins && <span className={`${bar} flex min-h-[44px] items-center`}>Hold to pin</span>}
-              {guide && <a className={`${bar} flex min-h-[44px] items-center text-gold`} href={guide.href}>Guide</a>}
             </div>
           </div>
         </>

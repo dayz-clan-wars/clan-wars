@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { warLog, type WarLogEntry } from "@factions/roster";
 import { EMPTY_WAR_LOG, duration } from "@/lib/scoring-copy";
 import { WarLogLine } from "./entry";
-import { Page, PageHead, Body, Panel, kicker, kickerSm } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, SegNav, kickerSm } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — war log" };
@@ -29,17 +29,30 @@ function Outcome({ e }: { e: WarLogEntry }) {
   return <span className="font-display text-lg text-ink">{e.points} <span className="font-mono text-[11px] text-muted">pts</span></span>;
 }
 
-export default async function WarLogPage() {
-  const entries = await warLog(200);
+const TAG_RE = /^[A-Za-z0-9]{1,8}$/u;
+
+export default async function WarLogPage({ searchParams }: { searchParams: Promise<{ clan?: string | string[]; kind?: string | string[] }> }) {
+  const sp = await searchParams;
+  // ⚠️ Both are attacker-supplied: the tag is matched, never echoed unmatched, and the kind is one of two words or nothing.
+  const rawTag = typeof sp.clan === "string" && TAG_RE.test(sp.clan) ? sp.clan.toUpperCase() : undefined;
+  const kind = sp.kind === "raid" || sp.kind === "defense" ? sp.kind : undefined;
+  const entries = await warLog(200, { clanTag: rawTag, kind });
+  const asRaider = entries.find((e) => e.kind === "raid" && e.raider?.tag === rawTag);
+  const clanName = rawTag ? (entries.find((e) => e.victim.tag === rawTag)?.victim.name ?? (asRaider?.kind === "raid" ? asRaider.raider?.name : undefined) ?? null) : null;
+  const href = (k?: string) => {
+    const q = [rawTag && `clan=${encodeURIComponent(rawTag)}`, k && `kind=${k}`].filter(Boolean);
+    return `/war-log${q.length ? `?${q.join("&")}` : ""}`;
+  };
 
   return (
     <Page wide>
-      <PageHead guide={guideLinkFor("/war-log")} kicker="War log" title="Recent action" aside={
-        <div className={`hidden gap-6 lg:flex lg:pb-2 ${kicker}`}>
-          <span><span className="mr-2 inline-block h-2 w-2 bg-gold" />Raid</span>
-          <span><span className="mr-2 inline-block h-2 w-2 bg-olive" />Defense</span>
-        </div>
-      } />
+      <PageHead guide={guideLinkFor("/war-log")} kicker="War log" title="Recent action"
+        sub={rawTag ? <>{clanName ?? `[${rawTag}]`} only · <a className="text-gold underline-offset-4 hover:underline" href={href(kind)}>every clan</a></> : undefined}
+        aside={<SegNav label="Kind" items={[
+          { label: "All", href: href(), current: !kind },
+          { label: "Raids", href: href("raid"), current: kind === "raid" },
+          { label: "Defenses", href: href("defense"), current: kind === "defense" },
+        ]} />} />
       <Body>
         {entries.length === 0 ? (
           <p className="text-ink-2">{EMPTY_WAR_LOG}</p>
@@ -73,7 +86,7 @@ export default async function WarLogPage() {
                 </div>
               ))}
             </Panel>
-            <p className="mt-4 font-mono text-[11px] text-muted">The last 200 entries. Older action lives in the season records.</p>
+            <p className="mt-4 font-mono text-[11px] text-muted">The last 200 {kind === "raid" ? "raids" : kind === "defense" ? "defenses" : "entries"}{rawTag ? ` involving ${clanName ?? rawTag}` : ""}. Older action lives in the season records.</p>
           </>
         )}
       </Body>

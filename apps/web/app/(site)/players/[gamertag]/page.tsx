@@ -4,7 +4,7 @@ import { playerProfile } from "@factions/roster";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
-import { when } from "@/lib/format";
+import { ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, kickerSm } from "@/app/components/ui";
 
@@ -56,30 +56,30 @@ export default async function PlayerProfilePage({
         <p className="sr-only">{scopeLabel(profile.scope)}</p>
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col gap-4 lg:gap-6">
-            <Panel num="01" title="Activity"><PanelBody>
-              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? when(profile.lastSeenAt) : "—"]]} />
+            <Panel title="Activity"><PanelBody>
+              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
             </PanelBody></Panel>
-            <Panel num="02" title="PvP"><PanelBody>
+            <Panel title="PvP"><PanelBody>
               <Facts items={[["Kills", profile.pvpKills], ["Deaths", profile.pvpDeaths], ["K/D", profile.kd ?? "—"]]} />
             </PanelBody></Panel>
-            <Panel num="03" title="Friendly fire"><PanelBody>
+            <Panel title="Friendly fire"><PanelBody>
               <Facts items={[["Kills", profile.friendlyFireKills], ["Deaths", profile.friendlyFireDeaths]]} />
             </PanelBody></Panel>
-            <Panel num="04" title="Raiding"><PanelBody>
+            <Panel title="Raiding"><PanelBody>
               <Facts items={[["Raid credits", profile.raidCredits], ["Upkeep raises", profile.upkeepRaises]]} />
             </PanelBody></Panel>
           </div>
           <div className="flex flex-col gap-4 lg:gap-6">
-            <Panel num="05" title="Killed by"><PanelBody><OpponentList items={profile.killedBy} /></PanelBody></Panel>
-            <Panel num="06" title="Killed"><PanelBody><OpponentList items={profile.killed} /></PanelBody></Panel>
-            <Panel num="07" title="Clan history"><PanelBody>
+            <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} /></PanelBody></Panel>
+            <Panel title="Killed"><PanelBody><OpponentList items={profile.killed} /></PanelBody></Panel>
+            <Panel title="Clan history"><PanelBody>
               {profile.clanHistory.length === 0 ? (
                 <p className="text-sm text-ink-2">{EMPTY_BOARD}</p>
               ) : (
                 <ul className="flex flex-col gap-1.5">
                   {profile.clanHistory.map((c, i) => (
                     <li key={`${c.tag}-${i}`} className="text-sm text-ink">
-                      <span className="font-mono text-ink-2">[{c.tag}]</span> {c.name} <span className={`${kickerSm} ml-1`}>joined {when(c.joinedAt)} · {c.leftAt ? `left ${when(c.leftAt)}` : "still a member"}</span>
+                      <span className="font-mono text-ink-2">[{c.tag}]</span> {c.name} <span className={`${kickerSm} ml-1`}>joined {ago(c.joinedAt)} · {c.leftAt ? `left ${ago(c.leftAt)}` : "still a member"}</span>
                     </li>
                   ))}
                 </ul>

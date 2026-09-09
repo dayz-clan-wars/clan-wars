@@ -5,7 +5,7 @@ import { ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH,
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when, days } from "@/lib/format";
+import { when, days, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
@@ -31,7 +31,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
   return (
     <Page>
       <PageHead guide={guideLinkFor("/claim/[ceremony]")} kicker="Found your clan" title={`${ctx.ceremony.participants.length} of you raised the flag`}
-        sub={<>Witnessed {when(ctx.ceremony.detectedAt)}. Claim it before {when(ctx.ceremony.expiresAt)}. Whoever claims becomes leader.</>} />
+        sub={<>Witnessed {ago(ctx.ceremony.detectedAt)}. Claim it before {when(ctx.ceremony.expiresAt)}. Whoever claims becomes leader.</>} />
       <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
         {notice && <Notice focus={err === null}>{notice}</Notice>}
 

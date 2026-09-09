@@ -1,4 +1,5 @@
 import data from "./map-places.json";
+import { latLngToWorld } from "./map-projection";
 
 /**
  * Place names for the map, vendored from DZMap's location data by
@@ -40,6 +41,23 @@ export function placesFor(map: string, zoom: number): MapPlace[] {
   const all = PLACES[map];
   if (!all) return [];
   return all.filter((p) => zoom >= placeMinZoom(p.kind));
+}
+
+/**
+ * The settlement nearest a point, for "near Topolin" on /base. Settlements
+ * only — a hill or a ruin is not what a player says. Null off an unknown map.
+ */
+export function nearestPlace(map: string, x: number, z: number, size: number): { name: string; distanceM: number } | null {
+  const all = PLACES[map];
+  if (!all) return null;
+  let best: { name: string; distanceM: number } | null = null;
+  for (const p of all) {
+    if (p.kind !== "capital" && p.kind !== "city" && p.kind !== "village" && p.kind !== "local") continue;
+    const w = latLngToWorld(p.lat, p.lng, size);
+    const d = Math.hypot(w.x - x, w.z - z);
+    if (!best || d < best.distanceM) best = { name: p.name, distanceM: d };
+  }
+  return best;
 }
 
 /** The label's weight: settlements read louder than terrain features. */

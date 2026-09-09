@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CANVAS_PX, MAX_ZOOM, worldToPixel, worldToLatLng, latLngToWorld, gridRef } from "../lib/map-projection";
+import { CANVAS_PX, MAX_ZOOM, worldToPixel, worldToLatLng, latLngToWorld, gridRef, gridRefKey, parseGridRef } from "../lib/map-projection";
 
 /**
  * ⚠️ The whole map hangs off these four functions. A sign error here does not
@@ -66,5 +66,18 @@ describe("gridRef", () => {
   it("clamps negatives rather than printing a minus sign", () => {
     // Panning past the world's edge is ordinary; a "-01 -02" readout is not.
     expect(gridRef(-5, -1200)).toBe("000 000");
+  });
+});
+
+describe("grid refs both ways", () => {
+  it("keys drop the space and parse back to the cell's centre", () => {
+    expect(gridRefKey(4321, 8765)).toBe("043087");
+    expect(parseGridRef("043087", SIZE)).toEqual({ x: 4350, z: 8750 });
+  });
+  it("refuses anything that is not six digits inside the world", () => {
+    expect(parseGridRef("43087", SIZE)).toBeNull();
+    expect(parseGridRef("999999", SIZE)).toBeNull();
+    expect(parseGridRef(null, SIZE)).toBeNull();
+    expect(parseGridRef("04308a", SIZE)).toBeNull();
   });
 });

@@ -1,10 +1,12 @@
 import type { Metadata } from "next";
 import { baseFor } from "@factions/roster";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { gridRef, gridRefKey } from "@/lib/map-projection";
+import { nearestPlace } from "@/lib/map-places";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when } from "@/lib/format";
+import { ago } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
 
@@ -16,8 +18,19 @@ export const metadata: Metadata = {
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-/** Metres, whole. These are the viewer's own raises; nobody else's pole reaches this page. */
-const at = (x: number, z: number) => `${Math.round(x)}, ${Math.round(z)}`;
+/** Livonia, metres; the map's own constant (App Review R2: the site speaks in grid squares, not metres). */
+const WORLD = { map: "enoch", size: 12800 };
+/** "Grid 043 087 · near Topolin", and the map opened on that square. These are the viewer's own raises; nobody else's pole reaches this page. */
+function Pole({ x, z }: { x: number; z: number }) {
+  const near = nearestPlace(WORLD.map, x, z, WORLD.size);
+  return (
+    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+      <span className="font-mono text-ink">Grid {gridRef(x, z)}</span>
+      {near && <span className="text-xs text-muted">near {near.name}</span>}
+      <a className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:underline underline-offset-4" href={`/map?at=${gridRefKey(x, z)}`}>Map →</a>
+    </div>
+  );
+}
 
 export default async function BasePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await currentSession();
@@ -51,8 +64,8 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
               <PanelBody>
                 {view.declaration ? (
                   <>
-                    <p className="font-mono text-lg text-ink">{at(view.declaration.x, view.declaration.z)}</p>
-                    <p className="mt-1 text-sm text-ink-2">Declared {when(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
+                    <Pole x={view.declaration.x} z={view.declaration.z} />
+                    <p className="mt-1 text-sm text-ink-2">Declared {ago(view.declaration.declaredAt)}. Your {WATCH_ZONE_RADIUS_M} m watch zone is live.</p>
                     <form className="mt-4 border-t border-rule-2 pt-4" action="/api/base/release" method="post">
                       <input type="hidden" name="confirm" value="yes" />
                       <p className="text-sm leading-relaxed text-ink-2">Releasing makes the pole public if nobody declares it within the grace period.</p>
@@ -73,8 +86,8 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                   {view.candidates.map((c) => (
                     <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
                       <div>
-                        <div className="font-mono text-ink">{at(c.x, c.z)}</div>
-                        <div className="text-xs text-muted">raised {when(c.raisedAt)}</div>
+                        <Pole x={c.x} z={c.z} />
+                        <div className="text-xs text-muted">raised {ago(c.raisedAt)}</div>
                       </div>
                       <form action="/api/base/declare" method="post">
                         <input type="hidden" name="poleKey" value={c.poleKey} />
