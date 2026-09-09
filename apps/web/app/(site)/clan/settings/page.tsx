@@ -7,7 +7,8 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
+import { fieldError } from "@/lib/field-errors";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -18,6 +19,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const session = await currentSession();
   if (!session) return <SessionLost next="/clan/settings" />;
   const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
+  // A result about one field is shown under that field too, and the field takes focus instead of the notice.
+  const err = fieldError(result, RESULT_COPY);
   const view = await clanFor(session.sub);
   const officer = typeof view !== "string" && view.me.status === "full" && (view.me.role === "officer" || view.me.role === "leader");
   if (typeof view === "string" || !officer) {
@@ -39,7 +42,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
     <Page>
       <PageHead guide={guideLinkFor("/clan/settings")} kicker={<>[{clan.tag}] · settings</>} title={clan.name} />
       <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
-        {notice && <Notice>{notice}</Notice>}
+        {notice && <Notice focus={err === null}>{notice}</Notice>}
 
         <Panel num="01" title="Recruiting post">
           <PanelBody>
@@ -57,7 +60,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <PanelBody>
             <p id="guest-note" className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
             <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
-              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><input className={field} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby="guest-note" /></label>
+              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><input {...invalid(err, "target")} className={`${field} ${invalid(err, "target").className ?? ""}`} name="target" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby={err?.field === "target" ? "err-target guest-note" : "guest-note"} /><FieldError err={err} name="target" /></label>
               <button className={`${btnPrimary} self-start`} type="submit">Grant pass</button>
             </form>
           </PanelBody>
@@ -78,8 +81,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <Panel num="03" title="Rename" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
               <PanelBody>
                 <form className="flex flex-col gap-3" action="/api/clan/rename" method="post">
-                  <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /></label>
-                  <label className="block"><span className={fieldLabel}>Tag</span><input className={`${field} uppercase`} name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} aria-describedby="rename-note" /></label>
+                  <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err, "name")} className={`${field} ${invalid(err, "name").className ?? ""}`} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /><FieldError err={err} name="name" /></label>
+                  <label className="block"><span className={fieldLabel}>Tag</span><input name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} {...invalid(err, "tag")} className={`${field} uppercase ${invalid(err, "tag").className ?? ""}`} aria-describedby={err?.field === "tag" ? "err-tag rename-note" : "rename-note"} /><FieldError err={err} name="tag" /></label>
                   <p id="rename-note" className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
                   <button className={`${btnSecondary} self-start`} type="submit">Rename</button>
                 </form>

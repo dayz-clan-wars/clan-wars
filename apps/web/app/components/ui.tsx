@@ -27,6 +27,19 @@ export const field = "mt-1 block min-h-[52px] w-full border-2 border-rule-3 bg-g
 export const checkbox = "h-5 w-5 flex-none border-2 border-rule-3 bg-ground accent-gold";
 /** A form label's caption, over its field. */
 export const fieldLabel = "block font-mono text-[11px] uppercase tracking-[0.18em] text-muted";
+/**
+ * A field the server refused. `invalid(err, name)` spreads onto the input:
+ * aria-invalid, a link to the sentence, a rust edge, and focus on load (the
+ * page's Notice yields — see `fieldError`). `<FieldError>` is the sentence,
+ * under the field, and is what `aria-describedby` points at.
+ */
+export function invalid(err: { field: string } | null, name: string): { "aria-invalid"?: true; "aria-describedby"?: string; autoFocus?: true; className?: string } {
+  return err?.field === name ? { "aria-invalid": true, "aria-describedby": `err-${name}`, autoFocus: true, className: "!border-rust" } : {};
+}
+export function FieldError({ err, name }: { err: { field: string; message: string } | null; name: string }) {
+  if (err?.field !== name) return null;
+  return <p id={`err-${name}`} className="mt-1.5 text-xs leading-relaxed text-rust-2">{err.message}</p>;
+}
 /** The "Your clan" / "Your page" way-back line every gated page ends on. */
 export function BackLine({ href, children }: { href: string; children: React.ReactNode }) {
   return <p className="mt-8"><a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={href}>&larr; {children}</a></p>;
