@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { clanFor } from "@factions/roster";
+import { clanFor, scoreboard } from "@factions/roster";
 import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
@@ -12,6 +12,8 @@ import { flagImagePath } from "@/src/flag-images";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
+import { gridRef } from "@/lib/map-projection";
+import { ClanHero, Lit } from "@/app/components/clan-hero";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -69,14 +71,23 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
     ...(me.status === "full" ? [{ label: "Vault", href: "/clan/vault" }] : []),
     ...(officer ? [{ label: "Settings", href: "/clan/settings" }] : []),
   ];
+  // This season's standing, for the hero: rank on the board and points.
+  const standing = (await scoreboard()).rows.find((r) => r.tag === clan.tag) ?? null;
 
   return (
     <Page wide>
-      <PageHead guide={guideLinkFor("/clan")}
-        icon={<img src={`/${flagImagePath(clan.texture)}`} alt="" width={96} height={96} className="h-16 w-16 flex-none object-contain lg:h-24 lg:w-24" />}
-        kicker={<>[{clan.tag}] · {clan.status} · you are {me.status === "pending" ? "pending" : me.role}</>}
+      <ClanHero
+        flagSrc={`/${flagImagePath(clan.texture)}`}
+        guide={guideLinkFor("/clan")}
+        kicker={<>[{clan.tag}] · {clan.status} · you are {me.status === "pending" ? "pending" : me.role}{standing?.alpha && <> · <span className="text-gold">Alpha</span></>}</>}
         title={clan.name}
-        aside={<SegNav label="Clan pages" items={tabs} />}
+        facts={[
+          ...(standing?.rank ? [<><Lit>#{standing.rank}</Lit> on the board</>] : []),
+          <><Lit>{full.length}</Lit> members</>,
+          ...(standing ? [<><Lit>{standing.points}</Lit> points</>] : []),
+          ...(clan.base ? [<>Base at <Lit>{gridRef(clan.base.x, clan.base.z)}</Lit></>] : []),
+        ]}
+        aside={<SegNav label="Clan pages" items={tabs} className="bg-frame/90" />}
       />
 
       {(notice || clan.status === "reserved" || me.status === "pending") && (

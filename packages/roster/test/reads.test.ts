@@ -80,6 +80,7 @@ describe("the roster package's page reads", () => {
       const view = await clanForDb(db, "d1", now);
       if (view === "not-linked" || view === "not-in-clan") throw new Error("expected a ClanView");
       expect(view.me).toEqual({ role: "leader", status: "full" });
+      expect(view.clan.base).toEqual({ x: expect.any(Number), z: expect.any(Number) });
       expect(view.invitesOut).toHaveLength(1);
       expect(view.requestsIn).toHaveLength(1);
       expect(view.roster.map((r) => r.dayzId).sort()).toEqual([UID_L, UID_T].sort());

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { clanByTag, warLog, type ClanPage } from "@factions/roster";
+import { clanByTag, scoreboard, warLog, type ClanPage } from "@factions/roster";
 import { WarLogLine, WarLogKicker } from "@/app/(site)/war-log/entry";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
@@ -8,7 +8,8 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { days, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { ALPHA_BADGE, duration } from "@/lib/scoring-copy";
-import { Page, PageHead, Panel, PanelBody, Notice, Facts, Stat, btnCta, link, linkMono, kickerSm } from "@/app/components/ui";
+import { Page, Panel, PanelBody, Notice, Facts, Stat, btnCta, link, linkMono, kickerSm } from "@/app/components/ui";
+import { ClanHero, Lit } from "@/app/components/clan-hero";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — clan" };
@@ -35,23 +36,34 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
   const back = `/clans/${encodeURIComponent(clan.tag)}`;
   // The clan's own action (App Review R2 §7): the five most recent entries it was in, and the way to the rest.
   const log = await warLog(5, { clanTag: clan.tag });
+  // This season's standing, for the hero's "#1 · 48 pts". Unranked clans have no rank; a clan yet to score shows its points as 0.
+  const standing = (await scoreboard()).rows.find((r) => r.tag === clan.tag) ?? null;
   const logHref = `/war-log?clan=${encodeURIComponent(clan.tag)}`;
 
   const request = clan.canRequest === "yes" ? (
-    <form action={`/api/clans/${encodeURIComponent(clan.tag)}/request`} method="post">
-      <button className={`${btnCta} w-full lg:w-auto lg:justify-start`} type="submit">Request to join <span className="font-mono normal-case">→</span></button>
-    </form>
+    <>
+      <form action={`/api/clans/${encodeURIComponent(clan.tag)}/request`} method="post">
+        <button className={`${btnCta} w-full`} type="submit">Request to join <span className="font-mono normal-case">→</span></button>
+      </form>
+      <p className="font-mono text-[11px] leading-relaxed text-muted lg:[text-shadow:0_1px_12px_rgba(5,5,5,.9)]">Officers decide. Accepted, you stand at their base in game to become a full member.</p>
+    </>
   ) : (
-    <p className="max-w-[28rem] text-sm leading-relaxed text-ink-2">{REQUEST_HINT[clan.canRequest]}{clan.canRequest === "not-linked" && <> <a className={link} href={`/login?next=${encodeURIComponent(back)}`}>Sign in</a>.</>}</p>
+    <p className="text-sm leading-relaxed text-ink-2 lg:[text-shadow:0_1px_12px_rgba(5,5,5,.9)]">{REQUEST_HINT[clan.canRequest]}{clan.canRequest === "not-linked" && <> <a className={link} href={`/login?next=${encodeURIComponent(back)}`}>Sign in</a>.</>}</p>
   );
 
   return (
     <Page wide>
-      <PageHead guide={guideLinkFor("/clans/[tag]")}
-        icon={<img src={`/${flagImagePath(clan.texture)}`} alt="" width={96} height={96} className="h-16 w-16 flex-none object-contain lg:h-24 lg:w-24" />}
-        kicker={<>[{clan.tag}] · {clan.status}{clan.alpha && <> · <span className="text-gold">{ALPHA_BADGE}</span></>}</>}
+      <ClanHero
+        flagSrc={`/${flagImagePath(clan.texture)}`}
+        guide={guideLinkFor("/clans/[tag]")}
+        kicker={<>[{clan.tag}] · {clan.status}{clan.alpha && <> · <span className="text-gold">{ALPHA_BADGE}</span></>}{clan.recruiting && <> · <span className="text-olive">Recruiting</span></>}</>}
         title={clan.name}
-        sub={<>Founded {ago(clan.createdAt)} · {clan.memberCount} members</>}
+        facts={[
+          <>Founded <Lit>{ago(clan.createdAt)}</Lit></>,
+          <><Lit>{clan.memberCount}</Lit> members</>,
+          ...(standing ? [<>{standing.rank !== null ? <><Lit>#{standing.rank}</Lit> · </> : null}<Lit>{standing.points}</Lit> pts</>] : []),
+          ...(clan.recruiting && clan.playWindow ? [<>Plays <Lit>{clan.playWindow}</Lit></>] : []),
+        ]}
         aside={request}
       />
       {notice && <div className="px-5 pt-5 lg:px-8 lg:pt-6"><Notice>{notice}</Notice></div>}
