@@ -165,3 +165,16 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
     repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 70px),
     repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 70px);
 }
+/*
+ * A clan page's hero (app/components/clan-hero.tsx): the flag blurred
+ * behind the name. On a phone the strip fades top and bottom; on desktop
+ * the ground fades left-to-right under the name and down to the copy.
+ */
+.clan-hero-fade { background: linear-gradient(180deg, rgba(5,5,5,.6) 0%, rgba(5,5,5,.15) 40%, rgba(5,5,5,.3) 75%, rgba(5,5,5,.95) 100%); }
+@media (min-width: 1024px) {
+  .clan-hero-fade {
+    background:
+      linear-gradient(180deg, rgba(5,5,5,.5) 0%, rgba(5,5,5,0) 35%, rgba(5,5,5,.2) 70%, rgba(5,5,5,.95) 100%),
+      linear-gradient(90deg, rgba(5,5,5,.97) 0%, rgba(5,5,5,.88) 45%, rgba(5,5,5,.35) 72%, rgba(5,5,5,.2) 100%);
+  }
+}

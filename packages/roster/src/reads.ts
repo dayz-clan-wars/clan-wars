@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import {
-  ceremonies, factionJoinRequests, factionMembers, factionVoteBallots, factions, identityLinks, players, rosterCooldowns,
+  ceremonies, declarations, factionJoinRequests, factionMembers, factionVoteBallots, factions, identityLinks, players, rosterCooldowns,
 } from "@factions/db";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, CLAN_SIZE_CAP, HOLDING_STATUSES, REBIND_CONFIRM_MS, type MemberStatus } from "@factions/domain";
@@ -24,6 +24,8 @@ export type ClanView = {
     id: number; name: string; tag: string; texture: string; status: string;
     createdAt: Date; activatedAt: Date | null; recruiting: boolean;
     playWindow: string | null; language: string | null; pitch: string | null;
+    /** The clan's declared pole, for its own members' eyes (the hero's "Base at"). Null while reserved. */
+    base: { x: number; z: number } | null;
   };
   me: { role: Role; status: MemberStatus };
   roster: RosterRow[];
@@ -148,6 +150,10 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const status = m.status as MemberStatus;
   const officerPlus = status === "full" && (role === "leader" || role === "officer");
 
+  // ⚠️ Members only, by construction: this read is reached through the actor's own roster row.
+  const [decl] = await db.select({ x: declarations.x, z: declarations.z }).from(declarations).where(eq(declarations.ownerFactionId, m.factionId));
+  const base = decl ? { x: Number(decl.x), z: Number(decl.z) } : null;
+
   const roster = await rosterWithLastSeen(db, m.factionId);
   const invitesOut = officerPlus ? await new PgRosterStore(db).invitesOut(m.factionId, now) : [];
   const requestsIn = officerPlus ? await openRequestsFor(db, m.factionId, now) : [];
@@ -155,7 +161,7 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const leadership = status === "full" ? await leadershipFor(db, m.factionId, link.dayzId, now) : PENDING_LEADERSHIP;
   const guestPasses = officerPlus ? await openGuestPassesDb(db, m.factionId, now) : [];
 
-  return { clan: clan!, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses };
+  return { clan: { ...clan!, base }, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses };
 }
 
 /**
