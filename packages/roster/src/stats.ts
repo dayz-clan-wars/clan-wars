@@ -81,8 +81,13 @@ export type Boards = {
   /** Longest kill: each player's single farthest PvP kill, with its weapon. Friendly fire is not one. */
   longestKills: LongestKillRow[];
 };
-/** The nine board names, in display order. The URL segment of a full-board page is one of these. */
-export const BOARD_KINDS = ["raiders", "killers", "deaths", "kd", "playTime", "friendlyFire", "builders", "streaks", "longestKills"] as const;
+/**
+ * The nine board names, in display order: raiding first, then offensive PvP
+ * (kills, K/D, streak, range), building, play time, and last the two
+ * shameful boards (deaths, friendly fire). The URL segment of a full-board
+ * page is one of these.
+ */
+export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "builders", "playTime", "deaths", "friendlyFire"] as const;
 export type BoardKind = (typeof BOARD_KINDS)[number];
 /** Rows per page on a full-board page. */
 export const BOARD_PAGE_SIZE = 50;

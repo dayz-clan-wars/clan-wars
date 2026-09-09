@@ -18,7 +18,8 @@ export function ScopePicker({ seasons, basePath, current }: { seasons: number[];
 }
 
 type Kind = BoardKind;
-const NUM: Record<Kind, string> = { raiders: "01", killers: "02", deaths: "03", kd: "04", playTime: "05", friendlyFire: "06", builders: "07", streaks: "08", longestKills: "09" };
+/** The panel numbers follow `BOARD_KINDS`' order. */
+const NUM = Object.fromEntries(BOARD_KINDS.map((k, i) => [k, String(i + 1).padStart(2, "0")])) as Record<Kind, string>;
 const NOTE: Partial<Record<Kind, string>> = { kd: KD_NOTE, builders: BUILD_NOTE, streaks: STREAK_NOTE };
 export { NUM as BOARD_NUM, NOTE as BOARD_NOTE };
 

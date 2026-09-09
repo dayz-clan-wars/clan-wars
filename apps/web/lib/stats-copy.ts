@@ -1,17 +1,17 @@
 import { KD_MIN_KILLS } from "@factions/domain";
 import type { BoardKind, ResolvedScope } from "@factions/roster";
 
-/** Section headings for the nine boards (spec §11, plus deaths, builders, streaks and range), in display order. */
+/** Section headings for the nine boards, in `BOARD_KINDS` order: raiding, offensive PvP, building, play time, then the shameful two. */
 export const BOARD_LABELS: Record<BoardKind, string> = {
   raiders: "Top raiders",
   killers: "Top killers",
-  deaths: "Most PvP deaths",
   kd: "Best K/D",
-  playTime: "Most play time",
-  friendlyFire: "Most friendly fire",
-  builders: "Top builders",
   streaks: "Best killstreak",
   longestKills: "Longest kill",
+  builders: "Top builders",
+  playTime: "Most play time",
+  deaths: "Most PvP deaths",
+  friendlyFire: "Most friendly fire",
 };
 
 /** Under the streaks board: what ends one. */
