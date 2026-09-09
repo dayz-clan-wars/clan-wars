@@ -23,6 +23,11 @@ export const BUILD_NOTE = "1 point per build step";
 /** The K/D board's kill floor, spelled out under its table. */
 export const KD_NOTE = `K/D needs ${KD_MIN_KILLS} kills`;
 
+/** The panel's link to the board's own page, where every player is listed. */
+export const SEE_ALL = "See all";
+/** Page links on a full board. */
+export const PAGER = { prev: "Previous", next: "Next", page: (n: number) => `Page ${n}` } as const;
+
 export const EMPTY_BOARD = "Nothing yet.";
 export const NO_PROFILE = "No player by that name.";
 

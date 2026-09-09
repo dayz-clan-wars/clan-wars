@@ -7,7 +7,7 @@ import {
 } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { KD_MIN_KILLS } from "@factions/domain";
-import { playerBoardsDb, playerProfileDb, clanBoardDb } from "../src/stats";
+import { playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, BOARD_KINDS, BOARD_PAGE_SIZE } from "../src/stats";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -396,6 +396,58 @@ describe("roster player stats", () => {
 
     it("is null for a name the log has never seen", async () => {
       expect(await playerProfileDb(db, "nobody", ALL, now)).toBeNull();
+    });
+  });
+
+  describe("boardPage", () => {
+    it("every kind's first page is that board, in that board's order", async () => {
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      for (const kind of BOARD_KINDS) {
+        const page = await boardPageDb(db, kind, ALL, 1, now);
+        expect(page.kind).toBe(kind);
+        expect(page.rows).toEqual(boards[kind]);
+        expect(page.page).toBe(1);
+        expect(page.perPage).toBe(BOARD_PAGE_SIZE);
+        expect(page.hasNext).toBe(false);
+        expect(page.scope).toEqual(ALL);
+        expect(page.seasons).toEqual([2, 1]);
+      }
+    });
+
+    it("pages a SQL board by offset, and knows whether a next page exists without a count", async () => {
+      const first = await boardPageDb(db, "deaths", ALL, 1, now, 2);
+      expect(first.rows).toEqual([{ dayzId: R, gamertag: "Romeo", value: 12 }, { dayzId: A, gamertag: "Alpha", value: 3 }]);
+      expect(first.hasNext).toBe(true);
+      const second = await boardPageDb(db, "deaths", ALL, 2, now, 2);
+      expect(second.rows).toEqual([{ dayzId: B, gamertag: "Bravo", value: 1 }]);
+      expect(second.hasNext).toBe(false);
+      const third = await boardPageDb(db, "deaths", ALL, 3, now, 2);
+      expect(third.rows).toEqual([]);
+      expect(third.hasNext).toBe(false);
+    });
+
+    it("pages the in-memory boards (K/D, streaks) and the ranged one the same way", async () => {
+      expect((await boardPageDb(db, "streaks", ALL, 2, now, 1)).rows).toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
+      expect((await boardPageDb(db, "streaks", ALL, 1, now, 1)).hasNext).toBe(true);
+      expect((await boardPageDb(db, "longestKills", ALL, 2, now, 1)).rows).toEqual([{ dayzId: R, gamertag: "Romeo", value: 75.5, weapon: "SKS" }]);
+      expect((await boardPageDb(db, "builders", ALL, 2, now, 2)).rows).toEqual([{ dayzId: N, gamertag: "November", value: 1 }]);
+      const kd = await boardPageDb(db, "kd", ALL, 1, now);
+      expect(kd.rows).toEqual((await playerBoardsDb(db, ALL, undefined, now)).kd);
+    });
+
+    it("resolves 'current' to the newest season, like the boards", async () => {
+      const page = await boardPageDb(db, "streaks", { kind: "current" }, 1, now);
+      expect(page.scope).toEqual(SEASON_2);
+      expect(page.rows).toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
+    });
+
+    it("the clan page is narrowed to the roster, with the clan board's refusals", async () => {
+      const page = await clanBoardPageDb(db, "dB", "deaths", ALL, 1, now);
+      if (typeof page === "string") throw new Error(page);
+      expect(page.rows).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }, { dayzId: B, gamertag: "Bravo", value: 1 }]);
+      expect(await clanBoardPageDb(db, "dP", "deaths", ALL, 1, now)).toBe("pending");
+      expect(await clanBoardPageDb(db, "dN", "deaths", ALL, 1, now)).toBe("not-in-clan");
+      expect(await clanBoardPageDb(db, "dZ", "deaths", ALL, 1, now)).toBe("not-linked");
     });
   });
 

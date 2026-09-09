@@ -3,6 +3,7 @@ import { clanBoard, clanFor, type Boards, type ActorRefusal } from "@factions/ro
 import { currentSession } from "@/lib/viewer";
 import { REFUSAL } from "@/lib/clan-copy";
 import { parseSeasonParam } from "@/lib/stat-scope";
+import { BOARD_TOP } from "@/lib/board-page";
 import { StatBoards, ScopePicker } from "@/app/components/stat-boards";
 import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, BackLine, SessionLost, link } from "@/app/components/ui";
@@ -25,7 +26,7 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
   // ⚠️ ONE call on every path, refusal included: `{ kind: "current" }` is
   // resolved inside the roster from its own `seasons` list, so a "default"
   // parse no longer needs an all-time probe first.
-  const boards = await clanBoard(session.sub, parsed === "default" ? { kind: "current" } : parsed);
+  const boards = await clanBoard(session.sub, parsed === "default" ? { kind: "current" } : parsed, BOARD_TOP);
   if (isRefusal(boards)) {
     return (
       <Page>
@@ -49,7 +50,7 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
           <h2 className="font-display text-sm uppercase tracking-[0.06em] text-ink">Your clan&rsquo;s boards</h2>
           <ScopePicker seasons={boards.seasons} basePath="/clan/board" current={boards.scope} />
         </div>
-        <StatBoards boards={boards} />
+        <StatBoards boards={boards} boardsPath="/clan/board" />
         <BackLine href="/clan">Your clan</BackLine>
       </Body>
     </Page>

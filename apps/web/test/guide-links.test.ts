@@ -27,7 +27,7 @@ describe("GUIDE_LINKS", () => {
     expect(guideLinkFor("/me")).toEqual({ href: "/guide", label: "1. What this is" });
   });
   it("covers every page that has a page head", () => {
-    for (const route of ["/base", "/link", "/login", "/join", "/me", "/clan", "/clan/settings", "/clan/vault", "/clan/board", "/players", "/players/[gamertag]", "/clans", "/clans/[tag]", "/claim/[ceremony]", "/scoreboard", "/alphas", "/seasons", "/war-log", "/map"]) {
+    for (const route of ["/base", "/link", "/login", "/join", "/me", "/clan", "/clan/settings", "/clan/vault", "/clan/board", "/clan/board/[board]", "/players", "/players/boards/[board]", "/players/[gamertag]", "/clans", "/clans/[tag]", "/claim/[ceremony]", "/scoreboard", "/alphas", "/seasons", "/war-log", "/map"]) {
       expect(GUIDE_LINKS[route], route).toBeDefined();
     }
   });

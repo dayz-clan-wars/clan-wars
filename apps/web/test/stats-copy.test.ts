@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { KD_MIN_KILLS } from "@factions/domain";
-import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, SEE_ALL, PAGER, playTime, scopeLabel } from "../lib/stats-copy";
 
 describe("BOARD_LABELS", () => {
   it("names all nine boards", () => {
@@ -30,6 +30,16 @@ describe("KD_NOTE", () => {
   it("names the kill floor", () => {
     expect(KD_NOTE).toBe(`K/D needs ${KD_MIN_KILLS} kills`);
   });
+});
+
+it("SEE_ALL", () => {
+  expect(SEE_ALL).toBe("See all");
+});
+
+it("PAGER", () => {
+  expect(PAGER.prev).toBe("Previous");
+  expect(PAGER.next).toBe("Next");
+  expect(PAGER.page(3)).toBe("Page 3");
 });
 
 it("EMPTY_BOARD", () => {
