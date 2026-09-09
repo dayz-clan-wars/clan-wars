@@ -131,7 +131,13 @@ turbo gate stays the gate, because it runs `typecheck` too.
   events into `player_sessions` rows (opening on connect, closing on disconnect/restart/
   duplicate-connect); `kills-tick.ts` projects `player.killed` and `player.died` events
   into `kills` rows, resolving faction membership and friendly fire (self-kills are never
-  friendly fire, never PvP). `membership_history` is a projection the roster never writes
+  friendly fire, never PvP). Since 2026-09-10 the parser also keeps `hit by` lines
+  (`player.hit`) and knockouts (`player.unconscious`), and the `Stats>` tail of a bare
+  `died.`; the kills consumer hands a bare `died` to `@factions/domain`'s `classifyDeath`
+  (lifted from One Life) with the victim's hits and knockouts from the two minutes before,
+  and writes the verdict — `mauled`, `starvation`, `dehydration`, `fall` — into
+  `kills.cause`. Evidence is matched by `occurred_at` and victim id, never by event id, so a
+  reparse-then-rebuild attributes history too: `docs/deploy/2026-09-10-death-causes.md`. `membership_history` is a projection the roster never writes
   — only the bot writes it, once per tick. Rebuild scripts `pnpm rebuild:sessions --server
   <id>` and `pnpm rebuild:kills --server <id>` (single-server only, `factions_live` guard,
   idempotent) clear and backfill from the log head; use them after a migration or to wipe

@@ -1,7 +1,8 @@
 import type { Database } from "@factions/db";
-import { kills } from "@factions/db";
+import { kills, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { eq } from "drizzle-orm";
+import { classifyDeath, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
+import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
@@ -15,7 +16,8 @@ export type KillsTickResult = {
 };
 
 type KilledPayload = { victimDayzId: string; killerDayzId: string; weapon: string | null; distanceM: number | null };
-type DiedPayload = { victimDayzId: string; cause: string };
+type DiedPayload = { victimDayzId: string; cause: string; water: number | null; energy: number | null; bleedSources: number | null };
+const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
 function readKilledPayload(payload: unknown): KilledPayload | null {
   if (typeof payload !== "object" || payload === null) return null;
@@ -35,7 +37,41 @@ function readDiedPayload(payload: unknown): DiedPayload | null {
   const p = payload as Record<string, unknown>;
   if (typeof p.victimDayzId !== "string" || p.victimDayzId === "") return null;
   if (typeof p.cause !== "string" || p.cause === "") return null;
-  return { victimDayzId: p.victimDayzId, cause: p.cause };
+  return { victimDayzId: p.victimDayzId, cause: p.cause, water: num(p.water), energy: num(p.energy), bleedSources: num(p.bleedSources) };
+}
+
+/**
+ * What the log said "died." meant: the victim's hits and knockouts in the
+ * RECENT_HIT_WINDOW_S before the death, handed to the domain's ladder with
+ * the death line's own stats. Only a bare `died` is looked up — a stated
+ * cause passes straight through classifyDeath.
+ *
+ * ⚠️ Evidence is matched by occurred_at and the victim's id, never by event
+ * id order: a reparse backfills hit events at the head of the log with
+ * their true occurred_at, and a rebuild after it must still find them.
+ */
+async function causeOf(db: Database, serverId: number, payload: DiedPayload, at: Date): Promise<string> {
+  if (payload.cause !== "died") return payload.cause;
+  const from = new Date(at.getTime() - RECENT_HIT_WINDOW_S * 1000);
+  const rows = await db.select({ type: events.type, occurredAt: events.occurredAt, payload: events.payload }).from(events).where(and(
+    eq(events.serverId, serverId),
+    inArray(events.type, ["player.hit", "player.unconscious"]),
+    gte(events.occurredAt, from), lte(events.occurredAt, at),
+    sql`coalesce(${events.payload}->>'victimDayzId', ${events.payload}->>'dayzId') = ${payload.victimDayzId}`,
+  ));
+  const secondsBefore = (t: Date) => Math.round((at.getTime() - t.getTime()) / 1000);
+  const hits: RecentHit[] = []; const outs: RecentUnconscious[] = [];
+  for (const r of rows) {
+    const p = r.payload as Record<string, unknown>;
+    if (r.type === "player.hit") {
+      const type = p.attackerType;
+      hits.push({ attackerType: type === "player" || type === "infected" ? type : "environment", attackerLabel: typeof p.attackerLabel === "string" ? p.attackerLabel : null,
+        victimHp: num(p.victimHp), secondsBeforeDeath: secondsBefore(r.occurredAt) });
+    } else {
+      outs.push({ disconnecting: p.disconnecting === true, secondsBeforeDeath: secondsBefore(r.occurredAt) });
+    }
+  }
+  return classifyDeath({ mechanism: payload.cause, water: payload.water, energy: payload.energy, bleedSources: payload.bleedSources }, hits, outs);
 }
 
 /**
@@ -109,7 +145,10 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
         if (!payload) continue;
         out.scanned++;
 
-        const victimFactionId = await membershipAt(db, ev.serverId, payload.victimDayzId, ev.occurredAt);
+        const [victimFactionId, cause] = await Promise.all([
+          membershipAt(db, ev.serverId, payload.victimDayzId, ev.occurredAt),
+          causeOf(db, ev.serverId, payload, ev.occurredAt),
+        ]);
 
         const inserted = await db
           .insert(kills)
@@ -121,7 +160,8 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             killerDayzId: null,
             weapon: null,
             distanceM: null,
-            cause: payload.cause,
+            // `DeathCauseWord` (@factions/domain): the parser's word, or the verdict's for a bare `died`.
+            cause,
             victimFactionId,
             killerFactionId: null,
             friendlyFire: false,

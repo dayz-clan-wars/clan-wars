@@ -53,6 +53,21 @@ describe("ingestFile", () => {
     expect(rows[1]?.occurredAt.toISOString()).toBe("2026-07-22T10:21:40.000Z");
   });
 
+  it("a hit, a knockout and a bare death land with the evidence the verdict reads", async () => {
+    const lines = [
+      "AdminLog started on 2026-07-22 at 07:01:37",
+      `12:26:14 | Player "YrJustBad" (id=${ID} pos=<10848.6, 11077, 174.9>)[HP: 92.35] hit by Infected into Torso(1) for 7.65 damage (MeleeInfected)`,
+      `12:26:40 | Player "YrJustBad" (id=${ID} pos=<10848.6, 11077, 174.9>) is unconscious`,
+      `12:27:05 | Player "YrJustBad" (DEAD) (id=${ID} pos=<10848.6, 11077, 174.9>) died. Stats> Water: 598.786 Energy: 0 Bleed sources: 1`,
+    ];
+    await ingestFile(db, { ...opts(), lines });
+    const rows = await db.select().from(events).orderBy(events.lineIndex);
+    expect(rows.map((r) => r.type)).toEqual(["player.hit", "player.unconscious", "player.died"]);
+    expect(rows[0]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso" });
+    expect(rows[1]!.payload).toEqual({ dayzId: ID, gamertag: "YrJustBad", disconnecting: false });
+    expect(rows[2]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", cause: "died", entity: null, water: 598.786, energy: 0, bleedSources: 1 });
+  });
+
   it("stores the flag texture and pole key in the payload", async () => {
     await ingestFile(db, opts());
     const rows = await db.select().from(events).orderBy(events.lineIndex);

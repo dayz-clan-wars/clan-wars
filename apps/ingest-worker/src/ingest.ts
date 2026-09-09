@@ -186,7 +186,14 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
             victimGamertag: line.event.victimGamertag,
             cause: line.event.cause,
             entity: line.event.entity,
+            water: line.event.water,
+            energy: line.event.energy,
+            bleedSources: line.event.bleedSources,
           };
+    case "hit":
+      return { ...line.event };
+    case "unconscious":
+      return { ...line.event };
     case "session":
       return { dayzId: line.event.dayzId, gamertag: line.event.gamertag };
     case "teleport":
