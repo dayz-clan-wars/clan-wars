@@ -41,14 +41,14 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
   const logHref = `/war-log?clan=${encodeURIComponent(clan.tag)}`;
 
   const request = clan.canRequest === "yes" ? (
-    <>
+    <div className="flex flex-col gap-2.5 lg:w-[320px]">
       <form action={`/api/clans/${encodeURIComponent(clan.tag)}/request`} method="post">
         <button className={`${btnCta} w-full`} type="submit">Request to join <span className="font-mono normal-case">→</span></button>
       </form>
       <p className="font-mono text-[11px] leading-relaxed text-muted lg:[text-shadow:0_1px_12px_rgba(5,5,5,.9)]">Officers decide. Accepted, you stand at their base in game to become a full member.</p>
-    </>
+    </div>
   ) : (
-    <p className="text-sm leading-relaxed text-ink-2 lg:[text-shadow:0_1px_12px_rgba(5,5,5,.9)]">{REQUEST_HINT[clan.canRequest]}{clan.canRequest === "not-linked" && <> <a className={link} href={`/login?next=${encodeURIComponent(back)}`}>Sign in</a>.</>}</p>
+    <p className="text-sm leading-relaxed text-ink-2 lg:w-[320px] lg:[text-shadow:0_1px_12px_rgba(5,5,5,.9)]">{REQUEST_HINT[clan.canRequest]}{clan.canRequest === "not-linked" && <> <a className={link} href={`/login?next=${encodeURIComponent(back)}`}>Sign in</a>.</>}</p>
   );
 
   return (

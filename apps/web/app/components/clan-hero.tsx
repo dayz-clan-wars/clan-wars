@@ -10,7 +10,8 @@ import { GuideLine, kicker } from "./ui";
  * `facts` are the mono line under the name — "#1 · 48 pts", "6 members" —
  * each with its value lit (`Lit`). `aside` is the right-hand column: the
  * request-to-join button on the public page, the clan's own page tabs on
- * yours. It renders in the hero on desktop and under the copy on a phone.
+ * yours. It renders at the right of the hero on desktop, hugging its own
+ * width, and under the copy on a phone.
  *
  * ⚠️ The flag src is one of the 33 committed textures (src/flag-images.ts),
  * never a user-supplied URL — which is the only reason it goes into a
@@ -55,7 +56,7 @@ export function ClanHero({ flagSrc, kicker: k, title, facts, aside, guide }: {
             </div>
           )}
         </div>
-        {aside && <div className="mt-2 flex flex-none flex-col gap-2.5 lg:mt-0 lg:w-[320px] lg:items-stretch">{aside}</div>}
+        {aside && <div className="mt-2 flex flex-none flex-col gap-2.5 lg:mt-0 lg:items-end">{aside}</div>}
       </div>
     </section>
   );

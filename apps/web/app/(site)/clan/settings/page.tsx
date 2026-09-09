@@ -10,6 +10,7 @@ import { when, days, hours, ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
+import { OwnClanHero } from "@/app/components/own-clan-hero";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -40,8 +41,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
   const others = roster.filter((r) => r.status === "full" && r.discordId !== session.sub);
 
   return (
-    <Page>
-      <PageHead guide={guideLinkFor("/clan/settings")} kicker={<>[{clan.tag}] · settings</>} title={clan.name} />
+    <Page wide>
+      <OwnClanHero view={view} current="settings" guide={guideLinkFor("/clan/settings")} />
       <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
         {notice && <Notice focus={err === null}>{notice}</Notice>}
 

@@ -10,6 +10,7 @@ import { when, ago } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
+import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { Page, PageHead, Body, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
@@ -57,9 +58,15 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   const addOpen = err !== null;
 
   return (
-    <Page>
-      <PageHead guide={guideLinkFor("/clan/vault")} kicker="Vault" title={<>Your clan&rsquo;s vault</>} sub={VAULT_INTRO} />
+    <Page wide>
+      {typeof clan === "string"
+        ? <PageHead guide={guideLinkFor("/clan/vault")} kicker="Vault" title={<>Your clan&rsquo;s vault</>} sub={VAULT_INTRO} />
+        : <OwnClanHero view={clan} current="vault" guide={guideLinkFor("/clan/vault")} />}
       <Body className="flex max-w-[44rem] flex-col gap-3 lg:gap-4">
+        <div>
+          <h2 className="font-display text-sm uppercase tracking-[0.06em] text-ink">Your clan&rsquo;s vault</h2>
+          <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{VAULT_INTRO}</p>
+        </div>
         {notice && <Notice focus={err === null}>{notice}</Notice>}
 
         {locks.length === 0 && <p className="text-sm text-ink-2">No locks your rank can see yet.</p>}
