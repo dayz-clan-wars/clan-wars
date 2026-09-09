@@ -17,8 +17,10 @@ import { GuideLine, kicker } from "./ui";
  * never a user-supplied URL — which is the only reason it goes into a
  * `background-image` style.
  */
-export function ClanHero({ flagSrc, kicker: k, title, facts, aside, guide }: {
+export function ClanHero({ flagSrc, kicker: k, title, facts, aside, guide, compact = false }: {
   flagSrc: string;
+  /** A smaller title, for names that are one long word (gamertags), so they do not break mid-word. */
+  compact?: boolean;
   kicker: React.ReactNode;
   title: string;
   facts: React.ReactNode[];
@@ -46,10 +48,11 @@ export function ClanHero({ flagSrc, kicker: k, title, facts, aside, guide }: {
       </div>
 
       <div className="relative flex flex-col gap-3 px-5 pb-5 pt-5 lg:flex-row lg:items-end lg:justify-between lg:gap-8 lg:px-8 lg:pb-7 lg:pt-0">
-        <div className="min-w-0">
+        {/* ⚠️ Capped on desktop so the copy never runs under the flag on its pole (416px flag + pole + the right inset). */}
+        <div className="min-w-0 lg:max-w-[calc(100%-480px)]">
           {guide && <GuideLine guide={guide} className="mb-3 lg:mb-4" />}
           <div className={`${kicker} leading-relaxed`}>{k}</div>
-          <h1 className="mt-2 font-display text-[48px] uppercase leading-[.9] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] lg:mt-3 lg:text-[clamp(56px,7.5vw,96px)] lg:leading-[.86] lg:[text-shadow:0_2px_24px_rgba(5,5,5,.9)]">{title}</h1>
+          <h1 className={`mt-2 font-display uppercase leading-[.9] tracking-[-0.02em] text-ink [overflow-wrap:anywhere] lg:mt-3 lg:leading-[.86] lg:[text-shadow:0_2px_24px_rgba(5,5,5,.9)] ${compact ? "text-[36px] lg:text-[clamp(36px,3.6vw,64px)]" : "text-[48px] lg:text-[clamp(56px,7.5vw,96px)]"}`}>{title}</h1>
           {facts.length > 0 && (
             <div className={`${kicker} mt-3 flex flex-wrap gap-x-5 gap-y-2 lg:mt-5 lg:gap-x-7`}>
               {facts.map((f, i) => <span key={i}>{f}</span>)}

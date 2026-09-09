@@ -67,7 +67,7 @@ export default async function PlayerProfilePage({
     <Page wide>
       {profile.clan ? (
         // A member: their clan's colours, the way the clan pages wear them, with the clan named and linked in the kicker.
-        <ClanHero flagSrc={`/${flagImagePath(profile.clan.texture)}`} guide={guide} title={profile.gamertag} facts={facts} aside={picker}
+        <ClanHero compact flagSrc={`/${flagImagePath(profile.clan.texture)}`} guide={guide} title={profile.gamertag} facts={facts} aside={picker}
           kicker={<>Player · [{profile.clan.tag}] <a className={link} href={`/clans/${encodeURIComponent(profile.clan.tag)}`}>{profile.clan.name}</a>{notLinked}</>} />
       ) : (
         <PageHead guide={guide} kicker={<>Player · no clan{notLinked}</>} title={profile.gamertag} aside={picker}
