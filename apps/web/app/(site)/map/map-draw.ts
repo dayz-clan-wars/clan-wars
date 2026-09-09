@@ -231,10 +231,16 @@ export function drawBase({ L, group, pt, data, p }: Ctx): void {
 }
 
 export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
-  for (const m of data.clanmates) {
+  // Oldest fix first, newest last: a name tag is a DOM node in the tooltip
+  // pane, painted in insertion order, so the clanmate seen most recently
+  // lands on top of anyone who logged off hours ago. The marker itself gets
+  // the same order as a z-index offset, since Leaflet otherwise stacks
+  // markers by latitude alone.
+  const ordered = [...data.clanmates].sort((a, b) => a.fix.at.getTime() - b.fix.at.getTime());
+  ordered.forEach((m, i) => {
     const step = ageStep(now - m.fix.at.getTime(), DIM_AFTER_MS);
     const name = escapeHtml(m.gamertag);
-    const marker = L.marker(pt(m.fix.x, m.fix.z), { icon: chipIcon(L, clanmateIcon(p), ICON.clanmate, "cw-mk-clanmate"), keyboard: false });
+    const marker = L.marker(pt(m.fix.x, m.fix.z), { icon: chipIcon(L, clanmateIcon(p), ICON.clanmate, "cw-mk-clanmate"), keyboard: false, zIndexOffset: i * 1000 });
     // The permanent tag is the gamertag alone and never changes; the age lives
     // in the popup, which is the only part a tick rewrites.
     marker.bindTooltip(name, tag(""));
@@ -248,7 +254,7 @@ export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
     // applied after addTo.
     applyStep(marker, step);
     ages.push({ at: m.fix.at, layer: marker, popup: text, dim: marker, last: age, step });
-  }
+  });
 }
 
 export function drawIntruders({ L, group, pt, data, now, ages, p }: Ctx): void {
