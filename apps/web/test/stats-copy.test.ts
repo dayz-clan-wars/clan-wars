@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { KD_MIN_KILLS } from "@factions/domain";
-import { BOARD_LABELS, BUILD_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
 
 describe("BOARD_LABELS", () => {
-  it("names all seven boards", () => {
+  it("names all nine boards", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
@@ -12,8 +12,14 @@ describe("BOARD_LABELS", () => {
       playTime: "Most play time",
       friendlyFire: "Most friendly fire",
       builders: "Top builders",
+      streaks: "Best killstreak",
+      longestKills: "Longest kill",
     });
   });
+});
+
+it("STREAK_NOTE", () => {
+  expect(STREAK_NOTE).toBe("Ends on a PvP death");
 });
 
 it("BUILD_NOTE", () => {

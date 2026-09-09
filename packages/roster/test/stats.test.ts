@@ -71,11 +71,12 @@ describe("roster player stats", () => {
   const mkKill = async (a: {
     at: Date; victim: string; killer: string | null; cause?: string;
     victimFactionId?: number | null; killerFactionId?: number | null; friendlyFire?: boolean;
+    distanceM?: number; weapon?: string;
   }) => {
     const eventId = await mkEvent({ type: a.killer ? "player.killed" : "player.died", at: a.at });
     await db.insert(kills).values({
       serverId, eventId, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
-      weapon: null, distanceM: null, cause: a.cause ?? (a.killer ? "pvp" : "infected"),
+      weapon: a.weapon ?? null, distanceM: a.distanceM === undefined ? null : String(a.distanceM), cause: a.cause ?? (a.killer ? "pvp" : "infected"),
       victimFactionId: a.victimFactionId ?? null, killerFactionId: a.killerFactionId ?? null,
       friendlyFire: a.friendlyFire ?? false,
     });
@@ -157,13 +158,14 @@ describe("roster player stats", () => {
       { serverId, factionId: wolfId, dayzId: R, joinedAt, leftAt: null },
     ]);
 
-    // A kills R twelve times in season 1.
+    // A kills R twelve times in season 1 — one at 250 m with a DMR, one at 120 m.
     for (let i = 1; i <= 12; i++) {
-      await mkKill({ at: h(t0, i), victim: R, killer: A, victimFactionId: wolfId, killerFactionId: bearId });
+      const range = i === 5 ? { distanceM: 250, weapon: "DMR" } : i === 6 ? { distanceM: 120, weapon: "M4-A1" } : {};
+      await mkKill({ at: h(t0, i), victim: R, killer: A, victimFactionId: wolfId, killerFactionId: bearId, ...range });
     }
-    // R kills A three times in season 2.
+    // R kills A three times in season 2, the second from 75.5 m.
     for (let i = 1; i <= 3; i++) {
-      await mkKill({ at: h(t50, i), victim: A, killer: R, victimFactionId: bearId, killerFactionId: wolfId });
+      await mkKill({ at: h(t50, i), victim: A, killer: R, victimFactionId: bearId, killerFactionId: wolfId, ...(i === 2 ? { distanceM: 75.5, weapon: "SKS" } : {}) });
     }
     // ⚠️ A's friendly kill of B happened BEFORE season 1 opened: it is on the
     // all-time boards and on neither season's.
@@ -218,6 +220,14 @@ describe("roster player stats", () => {
         { dayzId: R, gamertag: "Romeo", value: 2 },
         { dayzId: N, gamertag: "November", value: 1 },
       ]);
+      // A's twelve in a row: the friendly kill before them neither counts nor breaks,
+      // the killer-less death at h(t0, 21) breaks nothing. R's three in season 2 come
+      // after R's own twelve PvP deaths; R's self-kill after them is not a PvP death.
+      expect(boards.streaks).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }, { dayzId: R, gamertag: "Romeo", value: 3 }]);
+      expect(boards.longestKills).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 250, weapon: "DMR" },
+        { dayzId: R, gamertag: "Romeo", value: 75.5, weapon: "SKS" },
+      ]);
 
       expect(boards.scope).toEqual(ALL);
       expect(boards.seasons).toEqual([2, 1]);
@@ -259,6 +269,8 @@ describe("roster player stats", () => {
       expect(boards.kd).toEqual([]);
       expect(boards.deaths).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
       expect(boards.builders).toEqual([{ dayzId: R, gamertag: "Romeo", value: 2 }, { dayzId: A, gamertag: "Alpha", value: 1 }]);
+      expect(boards.streaks).toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
+      expect(boards.longestKills).toEqual([{ dayzId: R, gamertag: "Romeo", value: 75.5, weapon: "SKS" }]);
     });
 
     it("season 1 counts only what happened inside it", async () => {
@@ -270,6 +282,8 @@ describe("roster player stats", () => {
       expect(boards.friendlyFire).toEqual([]);
       expect(boards.deaths).toEqual([{ dayzId: R, gamertag: "Romeo", value: 12 }]);
       expect(boards.builders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }, { dayzId: N, gamertag: "November", value: 1 }]);
+      expect(boards.streaks).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
+      expect(boards.longestKills).toEqual([{ dayzId: A, gamertag: "Alpha", value: 250, weapon: "DMR" }]);
     });
 
     it("an unknown season number is an empty window, not every row", async () => {
@@ -279,6 +293,8 @@ describe("roster player stats", () => {
       expect(boards.playTime).toEqual([]);
       expect(boards.deaths).toEqual([]);
       expect(boards.builders).toEqual([]);
+      expect(boards.streaks).toEqual([]);
+      expect(boards.longestKills).toEqual([]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 
@@ -311,6 +327,8 @@ describe("roster player stats", () => {
       expect(p.raidCredits).toBe(2);
       expect(p.upkeepRaises).toBe(3);
       expect(p.buildPoints).toBe(4);
+      expect(p.bestStreak).toBe(12);
+      expect(p.longestKill).toEqual({ distanceM: 250, weapon: "DMR" });
       expect(p.clanHistory).toEqual([{ tag: "BEAR", name: "BEAR", joinedAt: h(t0, -2), leftAt: null }]);
     });
 
@@ -399,6 +417,8 @@ describe("roster player stats", () => {
       ]);
       // A and B only, again: R's and N's build steps are not on BEAR's board.
       expect(boards.builders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4 }]);
+      expect(boards.streaks).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
+      expect(boards.longestKills).toEqual([{ dayzId: A, gamertag: "Alpha", value: 250, weapon: "DMR" }]);
       expect(boards.seasons).toEqual([2, 1]);
     });
 
