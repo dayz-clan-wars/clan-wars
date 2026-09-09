@@ -1,5 +1,5 @@
 import type { Boards, BoardRow, KdRow } from "@factions/roster";
-import { BOARD_LABELS, EMPTY_BOARD, KD_NOTE, playTime, scopeLabel } from "@/lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, playTime, scopeLabel } from "@/lib/stats-copy";
 import { Panel, Rank, SegNav } from "./ui";
 
 /** `?season=` links for every season the roster knows about, plus all-time. No JS: a `<nav>` of plain anchors. */
@@ -16,7 +16,8 @@ export function ScopePicker({ seasons, basePath, current }: { seasons: number[];
 }
 
 type Kind = keyof Omit<Boards, "scope" | "seasons">;
-const NUM: Record<Kind, string> = { raiders: "01", killers: "02", deaths: "03", kd: "04", playTime: "05", friendlyFire: "06" };
+const NUM: Record<Kind, string> = { raiders: "01", killers: "02", deaths: "03", kd: "04", playTime: "05", friendlyFire: "06", builders: "07" };
+const NOTE: Partial<Record<Kind, string>> = { kd: KD_NOTE, builders: BUILD_NOTE };
 
 function formatValue(kind: Kind, value: number): string {
   return kind === "playTime" ? playTime(value) : String(value);
@@ -24,7 +25,7 @@ function formatValue(kind: Kind, value: number): string {
 
 function BoardPanel({ kind, rows }: { kind: Kind; rows: BoardRow[] | KdRow[] }) {
   return (
-    <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={kind === "kd" ? <span className="text-[11px]">{KD_NOTE}</span> : undefined}>
+    <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={NOTE[kind] ? <span className="text-[11px]">{NOTE[kind]}</span> : undefined}>
       {rows.length === 0 ? (
         <p className="px-4 py-3 text-sm text-ink-2 lg:px-5">{EMPTY_BOARD}</p>
       ) : (
@@ -46,7 +47,7 @@ function BoardPanel({ kind, rows }: { kind: Kind; rows: BoardRow[] | KdRow[] }) 
   );
 }
 
-/** The six boards (spec §11, plus deaths), in the order `BOARD_LABELS` names them, in a three-column grid on desktop. */
+/** The seven boards (spec §11, plus deaths and builders), in the order `BOARD_LABELS` names them, in a three-column grid on desktop. */
 export function StatBoards({ boards, extra }: { boards: Boards; extra?: React.ReactNode }) {
   return (
     <>
@@ -58,6 +59,7 @@ export function StatBoards({ boards, extra }: { boards: Boards; extra?: React.Re
         <BoardPanel kind="kd" rows={boards.kd} />
         <BoardPanel kind="playTime" rows={boards.playTime} />
         <BoardPanel kind="friendlyFire" rows={boards.friendlyFire} />
+        <BoardPanel kind="builders" rows={boards.builders} />
         {extra}
       </div>
     </>

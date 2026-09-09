@@ -1,9 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { KD_MIN_KILLS } from "@factions/domain";
-import { BOARD_LABELS, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "../lib/stats-copy";
 
 describe("BOARD_LABELS", () => {
-  it("names all six boards", () => {
+  it("names all seven boards", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
@@ -11,8 +11,13 @@ describe("BOARD_LABELS", () => {
       kd: "Best K/D",
       playTime: "Most play time",
       friendlyFire: "Most friendly fire",
+      builders: "Top builders",
     });
   });
+});
+
+it("BUILD_NOTE", () => {
+  expect(BUILD_NOTE).toBe("1 point per build step");
 });
 
 describe("KD_NOTE", () => {

@@ -68,6 +68,9 @@ export default async function PlayerProfilePage({
             <Panel title="Raiding"><PanelBody>
               <Facts items={[["Raid credits", profile.raidCredits], ["Upkeep raises", profile.upkeepRaises]]} />
             </PanelBody></Panel>
+            <Panel title="Building"><PanelBody>
+              <Facts items={[["Build points", profile.buildPoints]]} />
+            </PanelBody></Panel>
           </div>
           <div className="flex flex-col gap-4 lg:gap-6">
             <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} /></PanelBody></Panel>
