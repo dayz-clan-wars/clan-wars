@@ -1,0 +1,10 @@
+[Unit]
+Description=Hourly: field guide → Discord
+
+[Timer]
+OnCalendar=hourly
+RandomizedDelaySec=5m
+Persistent=true
+
+[Install]
+WantedBy=timers.target

@@ -8,7 +8,8 @@
     "test": "vitest run",
     "dev": "next dev",
     "build": "next build",
-    "start": "next start"
+    "start": "next start",
+    "guide:publish": "tsx scripts/publish-guide.ts"
   },
   "dependencies": {
     "@factions/domain": "workspace:*",
