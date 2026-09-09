@@ -21,7 +21,10 @@ const WEEK = 7 * 86_400_000;
 export default async function Home() {
   const [{ clans, flags }, board, log, session] = await Promise.all([directory(), scoreboard(), warLog(4), currentSession()]);
   const week = board.season ? Math.floor((Date.now() - board.season.startedAt.getTime()) / WEEK) + 1 : null;
-  const raids = board.rows.reduce((n, r) => n + r.raids, 0);
+  // ⚠️ Victims, not raiders: a solo raider is in no clan, so their raid is
+  // credited to no row's `raids` — but it is always one row's `timesRaided`.
+  // Summing victims is the count that cannot disagree with the war log.
+  const raids = board.rows.reduce((n, r) => n + r.timesRaided, 0);
   const alphas = board.rows.filter((r) => r.alpha).length;
   const top = board.rows.slice(0, 5);
 
