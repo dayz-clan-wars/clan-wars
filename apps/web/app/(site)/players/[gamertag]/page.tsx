@@ -1,7 +1,13 @@
 import type { Metadata } from "next";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile, playerFeed, type PlayerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, viewerFor, type PlayerProfile } from "@factions/roster";
+import { currentSession } from "@/lib/viewer";
+import { isOwnPage } from "@/lib/own-page";
+import { UNLINK_COPY } from "@/lib/link-copy";
+import { RESULT_COPY } from "@/lib/clan-copy";
+import { lookupCopy } from "@/lib/copy-lookup";
+import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
 import { parseSeasonParam } from "@/lib/stat-scope";
@@ -9,12 +15,20 @@ import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, kickerSm, kicker, link } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, Footer, kickerSm, kicker, link } from "@/app/components/ui";
 import { ClanHero, Lit } from "@/app/components/clan-hero";
 import { flagImagePath } from "@/src/flag-images";
 
 export const metadata: Metadata = { title: "Clan Wars — player" };
-/** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
+/**
+ * ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster
+ * into a static chunk (spec §10.1). Also the signed-in owner's home: when the
+ * viewer's linked gamertag is this page's (lib/own-page.ts), their controls
+ * render here too — the next step, invites, requests, unlink, sign out.
+ * Anyone else sees the plain profile. The middleware does not gate this
+ * path, so the session is read here; every control posts to a route that
+ * checks it again.
+ */
 export const dynamic = "force-dynamic";
 
 /** Killed-by / killed lists are uncapped in the package; render at most this many, "and N more" for the rest. */
@@ -38,24 +52,30 @@ export default async function PlayerProfilePage({
   params, searchParams,
 }: {
   params: Promise<{ gamertag: string }>;
-  searchParams: Promise<{ season?: string | string[]; page?: string | string[] }>;
+  searchParams: Promise<{ season?: string | string[]; page?: string | string[]; unlink?: string; result?: string }>;
 }) {
   // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
   const gamertag = decodeParam((await params).gamertag);
-  const { season, page: rawPage } = await searchParams;
+  const { season, page: rawPage, unlink: unlinkCode, result } = await searchParams;
   const parsed = parseSeasonParam(season);
   const scope = parsed === "default" ? { kind: "current" as const } : parsed;
 
   // ⚠️ Same as /players: `{ kind: "current" }` is resolved inside the roster.
   // The profile and its feed page are the two reads, side by side.
-  const [profile, feed] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage))]);
+  const [profile, feed, session] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession()]);
 
   if (!profile || !feed) notFound();
+  // The viewer's link decides ownership; the rest of the owner's state is only read once it does.
+  const viewer = session ? await viewerFor(session.sub) : null;
+  const owner = session && viewer && isOwnPage(viewer.link?.gamertag, profile.gamertag) ? await loadOwner(session, viewer) : null;
+  // ⚠️ Looked up, never echoed: ?unlink= and ?result= are attacker-supplied (see lib/copy-lookup.ts). Only the owner's notices, on the owner's page.
+  const notices = owner ? [unlinkCode ? lookupCopy(UNLINK_COPY, unlinkCode) : undefined, result ? lookupCopy(RESULT_COPY, result) : undefined] : [];
   const basePath = `/players/${encodeURIComponent(profile.gamertag)}`;
 
   const guide = guideLinkFor("/players/[gamertag]");
   const picker = <ScopePicker seasons={profile.seasons} basePath={basePath} current={profile.scope} />;
   const notLinked = !profile.linked && " · not linked";
+  const who = owner ? "You" : "Player";
   // The mono line under the name, on both heads: the scope's headline numbers.
   const facts = [
     <><Lit>{playTime(profile.playTimeSeconds)}</Lit> played</>,
@@ -69,15 +89,17 @@ export default async function PlayerProfilePage({
       {profile.clan ? (
         // A member: their clan's colours, the way the clan pages wear them, with the clan named and linked in the kicker.
         <ClanHero compact flagSrc={`/${flagImagePath(profile.clan.texture)}`} guide={guide} title={profile.gamertag} facts={facts} aside={picker}
-          kicker={<>Player · [{profile.clan.tag}] <a className={link} href={`/clans/${encodeURIComponent(profile.clan.tag)}`}>{profile.clan.name}</a>{notLinked}</>} />
+          kicker={<>{who} · [{profile.clan.tag}] <a className={link} href={`/clans/${encodeURIComponent(profile.clan.tag)}`}>{profile.clan.name}</a>{notLinked}</>} />
       ) : (
-        <PageHead guide={guide} kicker={<>Player · no clan{notLinked}</>} title={profile.gamertag} aside={picker}
+        <PageHead guide={guide} kicker={<>{who} · no clan{notLinked}</>} title={profile.gamertag} aside={picker}
           sub={<div className={`${kicker} flex flex-wrap gap-x-5 gap-y-2`}>{facts.map((f, i) => <span key={i}>{f}</span>)}</div>} />
       )}
       <Body>
         <p className="sr-only">{scopeLabel(profile.scope)}</p>
+        {owner && <div className="mb-4 empty:hidden lg:mb-6"><OwnerStrip owner={owner} notices={notices} /></div>}
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col gap-4 lg:gap-6">
+            {owner && <AccountPanel owner={owner} />}
             <Panel title="Activity"><PanelBody>
               <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
             </PanelBody></Panel>
@@ -95,6 +117,7 @@ export default async function PlayerProfilePage({
             </PanelBody></Panel>
           </div>
           <div className="flex flex-col gap-4 lg:gap-6">
+            {owner && <OwnerPanels owner={owner} />}
             <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} encounters={profile.encounters} me={profile.gamertag} side="killedBy" /></PanelBody></Panel>
             <Panel title="Killed"><PanelBody><OpponentList items={profile.killed} encounters={profile.encounters} me={profile.gamertag} side="killed" /></PanelBody></Panel>
             <Panel title="Clan history"><PanelBody>
@@ -117,6 +140,7 @@ export default async function PlayerProfilePage({
         </div>
         <BackLine href="/players">Player boards</BackLine>
       </Body>
+      {owner && <Footer><SignOut /></Footer>}
     </Page>
   );
 }

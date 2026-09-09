@@ -21,7 +21,7 @@ export const ENDED_COPY = {
   "already-linked": "Your last challenge was canceled: that character is already linked to another Discord account. If it is yours — you changed Discord accounts, say — ask an admin to move the link.",
 } as const;
 
-/** What /me says after an unlink attempt, keyed by the ?unlink= code. Never echoes the raw value. */
+/** What the page /me forwards to says after an unlink attempt, keyed by the ?unlink= code. Never echoes the raw value. */
 export const UNLINK_COPY: Record<string, string> = {
   ok: "Unlinked. Your solo base, if you had one, has been released.",
   "in-clan": "You are in a clan. Leave it before unlinking — a clan's leader is identified by this link.",

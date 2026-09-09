@@ -28,8 +28,8 @@ describe("pages that depend on the viewer render at request time", () => {
     const text = readFileSync(f, "utf8");
     return text.includes("currentSession(") || text.includes("viewerFor(") || text.includes('from "@factions/roster"');
   });
-  it("finds at least /me", () => {
-    expect(viewerPages.some((f) => f.endsWith(`${join("me", "page.tsx")}`))).toBe(true);
+  it("finds at least /players/[gamertag]", () => {
+    expect(viewerPages.some((f) => f.endsWith(`${join("[gamertag]", "page.tsx")}`))).toBe(true);
   });
   it.each(viewerPages)("%s is force-dynamic", (file) => {
     expect(readFileSync(file, "utf8")).toMatch(/export const dynamic = "force-dynamic"/u);
