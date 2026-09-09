@@ -74,6 +74,22 @@ export type Boards = {
   /** Longest kill: each player's single farthest PvP kill, with its weapon. Friendly fire is not one. */
   longestKills: LongestKillRow[];
 };
+/** The nine board names, in display order. The URL segment of a full-board page is one of these. */
+export const BOARD_KINDS = ["raiders", "killers", "deaths", "kd", "playTime", "friendlyFire", "builders", "streaks", "longestKills"] as const;
+export type BoardKind = (typeof BOARD_KINDS)[number];
+/** Rows per page on a full-board page. */
+export const BOARD_PAGE_SIZE = 50;
+/** One page of one board. `rows` is typed by kind at the edge: `kd` rows are `KdRow`, `longestKills` rows `LongestKillRow`. */
+export type BoardPage = {
+  scope: ResolvedScope;
+  seasons: number[];
+  kind: BoardKind;
+  page: number;
+  perPage: number;
+  rows: BoardRow[] | KdRow[] | LongestKillRow[];
+  hasNext: boolean;
+};
+
 export type PlayerProfile = {
   dayzId: string; gamertag: string; linked: boolean; scope: ResolvedScope; seasons: number[];
   playTimeSeconds: number; sessions: number; lastSeenAt: Date | null;
@@ -174,7 +190,7 @@ const round2 = (v: number) => Math.round(v * 100) / 100;
 
 /** Counted rows keyed on one player column, joined to `players` for the name. */
 async function countBoard(
-  db: Database, col: PgColumn, table: PgTable, where: SQL, limit: number,
+  db: Database, col: PgColumn, table: PgTable, where: SQL, limit: number, offset = 0,
 ): Promise<BoardRow[]> {
   const value = sql<number>`count(*)::int`;
   const gamertag = gamertagOf(col);
@@ -184,7 +200,7 @@ async function countBoard(
     .where(where)
     .groupBy(col, players.gamertag)
     .orderBy(desc(value), asc(gamertag))
-    .limit(limit);
+    .limit(limit).offset(offset);
   return rows.map((r) => ({ dayzId: r.dayzId, gamertag: r.gamertag, value: Number(r.value) }));
 }
 
@@ -226,7 +242,7 @@ async function bestStreaks(db: Database, serverId: number, w: Window): Promise<M
   return best;
 }
 
-async function streakBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<BoardRow[]> {
+async function streakBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<BoardRow[]> {
   const best = await bestStreaks(db, serverId, w);
   const ids = [...best.keys()].filter((id) => roster === null || roster.includes(id));
   if (ids.length === 0) return [];
@@ -234,14 +250,14 @@ async function streakBoard(db: Database, serverId: number, w: Window, roster: st
   const nameOf = new Map(names.map((n) => [n.dayzId, n.gamertag]));
   return ids.map((id) => ({ dayzId: id, gamertag: nameOf.get(id) ?? id, value: best.get(id)! }))
     .sort((a, b) => b.value - a.value || a.gamertag.localeCompare(b.gamertag))
-    .slice(0, limit);
+    .slice(offset, offset + limit);
 }
 
 /** ⚠️ A non-friendly PvP kill with a distance the log recorded — the only kill that counts for range. */
 const rangedKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), isNotNull(kills.distanceM))!;
 
 /** Each killer's farthest kill (`distinct on`), then the farthest killers first. */
-async function longestKillBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<LongestKillRow[]> {
+async function longestKillBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<LongestKillRow[]> {
   const rows = await db.execute<{ dayz_id: string; gamertag: string; distance_m: string; weapon: string | null }>(sql`
     select f.killer_dayz_id as dayz_id, coalesce(p.gamertag, f.killer_dayz_id) as gamertag, f.distance_m, f.weapon
     from (
@@ -252,7 +268,7 @@ async function longestKillBoard(db: Database, serverId: number, w: Window, roste
     ) f
     left join ${players} p on p.dayz_id = f.killer_dayz_id
     order by f.distance_m desc, gamertag asc
-    limit ${limit}`);
+    limit ${limit} offset ${offset}`);
   return [...rows].map((r) => ({ dayzId: r.dayz_id, gamertag: r.gamertag, value: Number(r.distance_m), weapon: r.weapon }));
 }
 
@@ -262,7 +278,7 @@ const builtInScope = (serverId: number, w: Window): SQL =>
   and(eq(events.serverId, serverId), eq(events.type, "base.built"), inWindow(events.occurredAt, w))!;
 
 /** Build points: `count(*)` of `base.built` per builder, joined to `players` for the name. */
-async function buildersBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<BoardRow[]> {
+async function buildersBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<BoardRow[]> {
   const value = sql<number>`count(*)::int`;
   const gamertag = sql<string>`coalesce(${players.gamertag}, ${builderId})`;
   const rosterWhere = roster === null ? undefined : roster.length === 0 ? sql`false` : sql`${builderId} in ${roster}`;
@@ -272,11 +288,11 @@ async function buildersBoard(db: Database, serverId: number, w: Window, roster: 
     .where(and(builtInScope(serverId, w), rosterWhere))
     .groupBy(builderId, players.gamertag)
     .orderBy(desc(value), asc(gamertag))
-    .limit(limit);
+    .limit(limit).offset(offset);
   return rows.map((r) => ({ dayzId: r.dayzId, gamertag: r.gamertag, value: Number(r.value) }));
 }
 
-async function playTimeBoard(db: Database, serverId: number, w: Window, now: Date, roster: string[] | null, limit: number): Promise<BoardRow[]> {
+async function playTimeBoard(db: Database, serverId: number, w: Window, now: Date, roster: string[] | null, limit: number, offset = 0): Promise<BoardRow[]> {
   const value = sql<number>`sum(${clippedSeconds(w, now)})::bigint`;
   const gamertag = gamertagOf(playerSessions.dayzId);
   const rows = await db.select({ dayzId: playerSessions.dayzId, gamertag, value })
@@ -286,7 +302,7 @@ async function playTimeBoard(db: Database, serverId: number, w: Window, now: Dat
     .groupBy(playerSessions.dayzId, players.gamertag)
     .having(sql`sum(${clippedSeconds(w, now)}) > 0`)
     .orderBy(desc(value), asc(gamertag))
-    .limit(limit);
+    .limit(limit).offset(offset);
   return rows.map((r) => ({ dayzId: r.dayzId, gamertag: r.gamertag, value: Number(r.value) }));
 }
 
@@ -303,7 +319,7 @@ async function playTimeBoard(db: Database, serverId: number, w: Window, now: Dat
  * profile's `kd` follows the same rule.
  */
 const kdKill = and(byAnotherPlayer, eq(kills.friendlyFire, false))!;
-async function kdBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number): Promise<KdRow[]> {
+async function kdBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<KdRow[]> {
   const killCount = sql<number>`count(*)::int`;
   const killerRows = await db.select({ dayzId: sql<string>`${kills.killerDayzId}`, gamertag: gamertagOf(kills.killerDayzId), kills: killCount })
     .from(kills)
@@ -331,42 +347,90 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
       return { dayzId: r.dayzId, gamertag: r.gamertag, value: round2(k / Math.max(deaths, 1)), kills: k, deaths };
     })
     .sort((a, b) => b.value - a.value || a.gamertag.localeCompare(b.gamertag))
-    .slice(0, limit);
+    .slice(offset, offset + limit);
 }
 
-/** The nine boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
-async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
+/** One board's rows, by kind, in its own order, from `offset`. Every kind carries the same window and roster predicate. */
+function boardRows(
+  db: Database, kind: BoardKind, serverId: number, w: Window, now: Date, roster: string[] | null, limit: number, offset = 0,
+): Promise<BoardRow[] | KdRow[] | LongestKillRow[]> {
+  switch (kind) {
+    case "raiders": return countBoard(db, raids.raiderDayzId, raids, and(
+      eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
+    )!, limit, offset);
+    case "killers": return countBoard(db, kills.killerDayzId, kills, and(
+      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
+    )!, limit, offset);
+    // ⚠️ The ROSTER predicate is on the victim: a member's deaths count
+    // whoever killed them, the same rule the K/D board's denominator uses.
+    case "deaths": return countBoard(db, kills.victimDayzId, kills, and(
+      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.victimDayzId, roster),
+    )!, limit, offset);
+    case "kd": return kdBoard(db, serverId, w, roster, limit, offset);
+    case "playTime": return playTimeBoard(db, serverId, w, now, roster, limit, offset);
+    case "friendlyFire": return countBoard(db, kills.killerDayzId, kills, and(
+      eq(kills.serverId, serverId), eq(kills.friendlyFire, true), byAnotherPlayer,
+      inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
+    )!, limit, offset);
+    case "builders": return buildersBoard(db, serverId, w, roster, limit, offset);
+    case "streaks": return streakBoard(db, serverId, w, roster, limit, offset);
+    case "longestKills": return longestKillBoard(db, serverId, w, roster, limit, offset);
+  }
+}
+
+/** The server, the season list, and the window one scope resolves to — the preamble every board read shares. */
+async function scopeWindow(db: Database, scope: StatScope, now: Date) {
   const serverId = await activeServerId(db);
   // ⚠️ The season list first, alone: `{ kind: "current" }` is resolved from it,
   // and the resolved scope is what every query below (and `Boards.scope`) uses.
   const seasonList = await seasonNumbers(db, serverId);
   const resolved = resolveScope(scope, seasonList);
   const w = await windowFor(db, serverId, resolved, now);
+  return { serverId, seasonList, resolved, w };
+}
 
+/** The nine boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
+  const { serverId, seasonList, resolved, w } = await scopeWindow(db, scope, now);
+  const rows = (kind: BoardKind) => boardRows(db, kind, serverId, w, now, roster, limit);
   const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills] = await Promise.all([
-    countBoard(db, raids.raiderDayzId, raids, and(
-      eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
-    )!, limit),
-    countBoard(db, kills.killerDayzId, kills, and(
-      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
-    )!, limit),
-    // ⚠️ The ROSTER predicate is on the victim: a member's deaths count
-    // whoever killed them, the same rule the K/D board's denominator uses.
-    countBoard(db, kills.victimDayzId, kills, and(
-      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.victimDayzId, roster),
-    )!, limit),
-    kdBoard(db, serverId, w, roster, limit),
-    playTimeBoard(db, serverId, w, now, roster, limit),
-    countBoard(db, kills.killerDayzId, kills, and(
-      eq(kills.serverId, serverId), eq(kills.friendlyFire, true), byAnotherPlayer,
-      inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
-    )!, limit),
-    buildersBoard(db, serverId, w, roster, limit),
-    streakBoard(db, serverId, w, roster, limit),
-    longestKillBoard(db, serverId, w, roster, limit),
+    rows("raiders"), rows("killers"), rows("deaths"), kdBoard(db, serverId, w, roster, limit), rows("playTime"),
+    rows("friendlyFire"), rows("builders"), rows("streaks"), longestKillBoard(db, serverId, w, roster, limit),
   ]);
-
   return { scope: resolved, seasons: seasonList, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills };
+}
+
+/**
+ * One page of one board. Fetches one row past the page to learn whether a
+ * next page exists — no count query. `page` is 1-based; the caller has
+ * already turned an attacker-supplied value into a positive integer.
+ */
+async function boardPageFor(
+  db: Database, kind: BoardKind, scope: StatScope, page: number, now: Date, roster: string[] | null, perPage: number,
+): Promise<BoardPage> {
+  const { seasonList, serverId, resolved, w } = await scopeWindow(db, scope, now);
+  const offset = (page - 1) * perPage;
+  const rows = await boardRows(db, kind, serverId, w, now, roster, perPage + 1, offset);
+  return {
+    scope: resolved, seasons: seasonList, kind, page, perPage,
+    rows: rows.slice(0, perPage), hasNext: rows.length > perPage,
+  };
+}
+
+/** One page of one public board. `perPage` is for tests; the site always pages by `BOARD_PAGE_SIZE`. */
+export function boardPageDb(
+  db: Database, kind: BoardKind, scope: StatScope, page: number, now: Date, perPage = BOARD_PAGE_SIZE,
+): Promise<BoardPage> {
+  return boardPageFor(db, kind, scope, page, now, null, perPage);
+}
+
+/** One page of one board, narrowed to the actor's own clan's current full roster, with `clanBoardDb`'s refusals. */
+export async function clanBoardPageDb(
+  db: Database, discordId: string, kind: BoardKind, scope: StatScope, page: number, now: Date, perPage = BOARD_PAGE_SIZE,
+): Promise<BoardPage | ActorRefusal> {
+  const roster = await clanRoster(db, discordId);
+  if (typeof roster === "string") return roster;
+  return boardPageFor(db, kind, scope, page, now, roster, perPage);
 }
 
 /** The public boards (spec §11). */
@@ -383,11 +447,18 @@ export function playerBoardsDb(db: Database, scope: StatScope, limit = DEFAULT_L
 export async function clanBoardDb(
   db: Database, discordId: string, scope: StatScope, limit = DEFAULT_LIMIT, now: Date,
 ): Promise<Boards | ActorRefusal> {
+  const roster = await clanRoster(db, discordId);
+  if (typeof roster === "string") return roster;
+  return boardsFor(db, scope, limit, now, roster);
+}
+
+/** The current full roster of the actor's own clan, or why there is none. */
+async function clanRoster(db: Database, discordId: string): Promise<string[] | ActorRefusal> {
   const a = await actorFor(db, discordId);
   if (isRefusal(a)) return a;
   const roster = await db.select({ dayzId: factionMembers.dayzId }).from(factionMembers)
     .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.status, "full")));
-  return boardsFor(db, scope, limit, now, roster.map((r) => r.dayzId));
+  return roster.map((r) => r.dayzId);
 }
 
 /**

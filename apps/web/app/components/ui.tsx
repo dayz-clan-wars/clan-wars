@@ -188,6 +188,28 @@ export function Rank({ n, size = "md" }: { n: number | null; size?: "md" | "lg" 
   return <span className={`font-display leading-none ${size === "lg" ? "text-[22px] lg:text-[28px]" : "text-lg"} ${podium ? "text-gold" : "text-dim"}`}>{n ?? "—"}</span>;
 }
 
+/**
+ * Previous / page N / Next, for a paged list. A missing href renders the
+ * word dimmed, not a link, so the row keeps its shape on the first and last page.
+ */
+export function Pager({ page, prevHref, nextHref, labels }: {
+  page: number; prevHref: string | null; nextHref: string | null; labels: { prev: string; next: string; page: (n: number) => string };
+}) {
+  const side = (label: string, href: string | null, arrow: "left" | "right") => {
+    const text = arrow === "left" ? <>&larr; {label}</> : <>{label} &rarr;</>;
+    return href
+      ? <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={href}>{text}</a>
+      : <span aria-disabled="true" className="inline-flex min-h-[44px] items-center font-mono text-[11px] uppercase tracking-[0.18em] text-dim">{text}</span>;
+  };
+  return (
+    <nav aria-label="Pages" className="flex items-center justify-between gap-4 border-t-2 border-rule-2 px-4 lg:px-5">
+      {side(labels.prev, prevHref, "left")}
+      <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted">{labels.page(page)}</span>
+      {side(labels.next, nextHref, "right")}
+    </nav>
+  );
+}
+
 /** The line every page ends on. */
 export const HONEST = "Nothing on this page is invented: it is what the server log has recorded.";
 export function Footer({ children }: { children?: React.ReactNode }) {

@@ -57,8 +57,9 @@ import {
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import {
-  playerBoardsDb, playerProfileDb, clanBoardDb,
+  playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, BOARD_KINDS, BOARD_PAGE_SIZE,
   type StatScope, type ResolvedScope, type BoardRow, type KdRow, type LongestKillRow, type Boards, type PlayerProfile,
+  type BoardKind, type BoardPage,
 } from "./stats";
 import {
   claimSuccessionDbFor, openVoteDbFor, castVoteDbFor,
@@ -85,7 +86,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
-export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile };
+export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
@@ -264,9 +265,18 @@ export function playerProfile(gamertag: string, scope: StatScope): Promise<Playe
   return playerProfileDb(db(), gamertag, scope, new Date());
 }
 /** The same boards, narrowed to the viewer's own clan's current full roster. Full members only. */
-export function clanBoard(discordId: string, scope: StatScope): Promise<Boards | "not-linked" | "not-in-clan" | "pending"> {
-  return clanBoardDb(db(), discordId, scope, undefined, new Date());
+export function clanBoard(discordId: string, scope: StatScope, limit?: number): Promise<Boards | "not-linked" | "not-in-clan" | "pending"> {
+  return clanBoardDb(db(), discordId, scope, limit, new Date());
 }
+/** One page (`BOARD_PAGE_SIZE` rows, 1-based) of one public board — the "see all" page behind a top-N panel. */
+export function boardPage(kind: BoardKind, scope: StatScope, page: number): Promise<BoardPage> {
+  return boardPageDb(db(), kind, scope, page, new Date());
+}
+/** The same page, narrowed to the viewer's own clan's current full roster. Full members only. */
+export function clanBoardPage(discordId: string, kind: BoardKind, scope: StatScope, page: number): Promise<BoardPage | "not-linked" | "not-in-clan" | "pending"> {
+  return clanBoardPageDb(db(), discordId, kind, scope, page, new Date());
+}
+export { BOARD_KINDS, BOARD_PAGE_SIZE };
 
 /** Claim a silent leader's seat (guide ch. 3/8). Full members only; every eligibility rule is inside `claimSuccessionDb`. */
 export function claimSuccession(discordId: string) {
