@@ -1,0 +1,19 @@
+[Unit]
+# Reconcile the field guide's Discord channels with the site's content
+# (apps/web/scripts/publish-guide.ts). Idempotent: when the two already
+# agree it reads and writes nothing. deploy/deploy-web.sh runs the same
+# command at the end of every web deploy; this unit, on its timer, is the
+# net under a deploy done by hand without the script.
+Description=Clan Wars field guide → Discord
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acab
+WorkingDirectory=/opt/clan-wars
+# ⚠️ Same three-parser caveat as clan-wars-bot.service: keep .env plain.
+EnvironmentFile=/opt/clan-wars/.env
+ExecStart=/home/acab/.local/bin/pnpm --filter @factions/web guide:publish
+StandardOutput=journal
+StandardError=journal
