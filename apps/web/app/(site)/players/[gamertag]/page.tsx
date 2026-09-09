@@ -1,7 +1,9 @@
 import type { Metadata } from "next";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, type PlayerProfile } from "@factions/roster";
+import { parsePageParam } from "@/lib/board-page";
+import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
@@ -18,20 +20,17 @@ export const dynamic = "force-dynamic";
 /** Killed-by / killed lists are uncapped in the package; render at most this many, "and N more" for the rest. */
 const LIST_LIMIT = 10;
 
-function OpponentList({ items }: { items: { gamertag: string; count: number }[] }) {
+function OpponentList({ items, encounters, me, side }: {
+  items: { gamertag: string; count: number }[]; encounters: PlayerProfile["encounters"]; me: string; side: "killed" | "killedBy";
+}) {
   if (items.length === 0) return <p className="text-sm text-ink-2">{EMPTY_BOARD}</p>;
   const shown = items.slice(0, LIST_LIMIT);
   const rest = items.length - shown.length;
   return (
-    <ul className="flex flex-col">
-      {shown.map((o) => (
-        <li key={o.gamertag} className="flex min-h-[40px] items-center justify-between border-t border-rule-2 text-sm text-ink first:border-t-0">
-          <a className="underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(o.gamertag)}`}>{o.gamertag}</a>
-          <span className="font-mono text-ink-2">{o.count}</span>
-        </li>
-      ))}
-      {rest > 0 && <li className="text-xs text-ink-2">and {rest} more</li>}
-    </ul>
+    <>
+      <OpponentRows items={shown} encounters={encounters} me={me} side={side} />
+      {rest > 0 && <p className="mt-2 text-xs text-ink-2">and {rest} more</p>}
+    </>
   );
 }
 
@@ -39,21 +38,23 @@ export default async function PlayerProfilePage({
   params, searchParams,
 }: {
   params: Promise<{ gamertag: string }>;
-  searchParams: Promise<{ season?: string | string[] }>;
+  searchParams: Promise<{ season?: string | string[]; page?: string | string[] }>;
 }) {
   // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
   const gamertag = decodeParam((await params).gamertag);
-  const { season } = await searchParams;
+  const { season, page: rawPage } = await searchParams;
   const parsed = parseSeasonParam(season);
+  const scope = parsed === "default" ? { kind: "current" as const } : parsed;
 
-  // ⚠️ Same as /players: `{ kind: "current" }` is resolved inside the roster,
-  // so this is ONE call on every path — `resolvePlayer` runs once, not twice.
-  const profile = await playerProfile(gamertag, parsed === "default" ? { kind: "current" } : parsed);
+  // ⚠️ Same as /players: `{ kind: "current" }` is resolved inside the roster.
+  // The profile and its feed page are the two reads, side by side.
+  const [profile, feed] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage))]);
 
-  if (!profile) notFound();
+  if (!profile || !feed) notFound();
+  const basePath = `/players/${encodeURIComponent(profile.gamertag)}`;
 
   const guide = guideLinkFor("/players/[gamertag]");
-  const picker = <ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} current={profile.scope} />;
+  const picker = <ScopePicker seasons={profile.seasons} basePath={basePath} current={profile.scope} />;
   const notLinked = !profile.linked && " · not linked";
   // The mono line under the name, on both heads: the scope's headline numbers.
   const facts = [
@@ -94,8 +95,8 @@ export default async function PlayerProfilePage({
             </PanelBody></Panel>
           </div>
           <div className="flex flex-col gap-4 lg:gap-6">
-            <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} /></PanelBody></Panel>
-            <Panel title="Killed"><PanelBody><OpponentList items={profile.killed} /></PanelBody></Panel>
+            <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} encounters={profile.encounters} me={profile.gamertag} side="killedBy" /></PanelBody></Panel>
+            <Panel title="Killed"><PanelBody><OpponentList items={profile.killed} encounters={profile.encounters} me={profile.gamertag} side="killed" /></PanelBody></Panel>
             <Panel title="Clan history"><PanelBody>
               {profile.clanHistory.length === 0 ? (
                 <p className="text-sm text-ink-2">{EMPTY_BOARD}</p>
@@ -110,6 +111,9 @@ export default async function PlayerProfilePage({
               )}
             </PanelBody></Panel>
           </div>
+        </div>
+        <div className="mt-4 lg:mt-6">
+          <PlayerFeedPanel feed={feed} basePath={basePath} />
         </div>
         <BackLine href="/players">Player boards</BackLine>
       </Body>

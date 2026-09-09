@@ -57,9 +57,9 @@ import {
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import {
-  playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, BOARD_KINDS, BOARD_PAGE_SIZE,
+  playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, playerFeedDb, BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE,
   type StatScope, type ResolvedScope, type BoardRow, type KdRow, type LongestKillRow, type Boards, type PlayerProfile,
-  type BoardKind, type BoardPage, type RowClan, type RowClans,
+  type BoardKind, type BoardPage, type RowClan, type RowClans, type Encounter, type FeedEntry, type PlayerFeed,
 } from "./stats";
 import {
   claimSuccessionDbFor, openVoteDbFor, castVoteDbFor,
@@ -86,7 +86,7 @@ export type {
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
-export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage, RowClan, RowClans };
+export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage, RowClan, RowClans, Encounter, FeedEntry, PlayerFeed };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
@@ -276,7 +276,11 @@ export function boardPage(kind: BoardKind, scope: StatScope, page: number): Prom
 export function clanBoardPage(discordId: string, kind: BoardKind, scope: StatScope, page: number): Promise<BoardPage | "not-linked" | "not-in-clan" | "pending"> {
   return clanBoardPageDb(db(), discordId, kind, scope, page, new Date());
 }
-export { BOARD_KINDS, BOARD_PAGE_SIZE };
+export { BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE };
+/** One page (`FEED_PAGE_SIZE` entries, 1-based, newest first) of what the log recorded about one player. Null for a name it has never seen. */
+export function playerFeed(gamertag: string, scope: StatScope, page: number): Promise<PlayerFeed | null> {
+  return playerFeedDb(db(), gamertag, scope, page, new Date());
+}
 
 /** Claim a silent leader's seat (guide ch. 3/8). Full members only; every eligibility rule is inside `claimSuccessionDb`. */
 export function claimSuccession(discordId: string) {
