@@ -14,8 +14,11 @@
  * The app icons and manifest (app/icon.png, app/apple-icon.png,
  * app/manifest.ts) are fetched by the browser before any login, so they are
  * public too — a 303 there is a broken tab icon, not a leak prevented.
+ * The share images (app/opengraph-image.png, app/twitter-image.png) are
+ * fetched by Discord's and Twitter's crawlers, which never have a session —
+ * gated, a pasted link unfurls with no picture.
  */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest"] as const;
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match

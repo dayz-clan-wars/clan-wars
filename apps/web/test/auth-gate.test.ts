@@ -10,7 +10,7 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"]);
   });
 
   it("pins the public prefixes", () => {
@@ -74,6 +74,11 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/players/SomeGamertag")).toBe(true);
     expect(pathIsPublic("/clan/board")).toBe(false);
     expect(pathIsPublic("/playersomething")).toBe(false);
+  });
+
+  it("lets the share images through for link crawlers", () => {
+    expect(pathIsPublic("/opengraph-image.png")).toBe(true);
+    expect(pathIsPublic("/twitter-image.png")).toBe(true);
   });
 
   it("lets the guide and its chapters through", () => {
