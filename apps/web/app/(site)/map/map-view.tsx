@@ -132,6 +132,27 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   nowRef.current = now;
 
   const observer = useRef<ResizeObserver | null>(null);
+  const barObserver = useRef<ResizeObserver | null>(null);
+
+  // ⚠️ The phone bar must sit BESIDE the map's box, not over it. The world
+  // has a hard edge (maxBoundsViscosity 1) and the zoom floor fits the whole
+  // map to the container, so anything drawn over the container's bottom
+  // hides the south of the map with no way to pan it into view. The bar's
+  // height varies (a notice, the layer chips), so it is measured and the map
+  // element's bottom inset follows it; the map's own ResizeObserver then
+  // re-measures Leaflet and the floor. On desktop the bar is display:none
+  // and measures 0. A callback ref, because the bar unmounts while the pin
+  // sheet is open and comes back as a new element.
+  const phoneBar = useCallback((bar: HTMLDivElement | null) => {
+    barObserver.current?.disconnect();
+    barObserver.current = null;
+    if (!bar || typeof ResizeObserver === "undefined") return;
+    const fit = () => { if (el.current) el.current.style.bottom = `${bar.offsetHeight}px`; };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(bar);
+    barObserver.current = ro;
+  }, []);
   // `layers` comes from the server render and never changes for a mounted
   // MapView, but the creation effect deliberately depends on `size` alone —
   // reading it through a ref keeps that honest.
@@ -483,7 +504,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           </div>
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
-          <div className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame lg:hidden">
+          <div ref={phoneBar} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
             {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
             {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
             {layersOpen && (
