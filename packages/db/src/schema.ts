@@ -1066,6 +1066,21 @@ export const supplyUploads = pgTable("supply_uploads", {
 });
 
 /**
+ * The same shape as `supply_uploads`, for the second projected file: the
+ * fast-travel config (`pra-teleport-hub.json`), which carries every ACTIVE
+ * clan's declared pole as a travel point on top of the 209 fixed ones. One
+ * row per server; same hash-then-baseline contract, same hazards — see
+ * `supply_uploads` above and apps/ingest-worker/src/projection-upload.ts.
+ */
+export const travelUploads = pgTable("travel_uploads", {
+  serverId: integer("server_id").primaryKey().references(() => servers.id),
+  contentHash: text("content_hash").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+  remoteSize: integer("remote_size"),
+  remoteModifiedAt: timestamp("remote_modified_at", { withTimezone: true }),
+});
+
+/**
  * The confirmed roster.
  *
  * Created in this plan only because activation must verify that the UID which
