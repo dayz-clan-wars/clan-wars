@@ -10,12 +10,17 @@ describe("parseDeath", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V}) killed by Player "Kil" (id=${K}) with Knife`)).toMatchObject({ kind: "killed", weapon: "Knife", distanceM: null });
   });
   it.each([
-    [`killed by Zmb_Male_Farmer`, "infected", "Zmb_Male_Farmer"], [`killed by Animal_UrsusArctos`, "animal", "Animal_UrsusArctos"],
+    [`killed by Zmb_Male_Farmer`, "infected", "Zmb_Male_Farmer"], [`killed by Animal_UrsusArctos`, "bear", "Animal_UrsusArctos"],
+    [`killed by Animal_CanisLupus_Grey`, "wolf", "Animal_CanisLupus_Grey"], [`killed by Animal_CapreolusCapreolus`, "animal", "Animal_CapreolusCapreolus"],
     [`killed by FallDamage`, "fall", "FallDamage"], [`killed by CivilianSedan`, "vehicle", "CivilianSedan"],
     [`killed by SomethingNew`, "environment", "SomethingNew"], [`bled out`, "bled_out", null], [`drowned`, "drowned", null],
     [`committed suicide`, "suicide", null], [`died.`, "died", null],
   ])("classifies '%s' as %s", (tail, cause, entity) => {
-    expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) ${tail}`)).toEqual({ kind: "died", victimDayzId: V, victimGamertag: "Vic", cause, entity });
+    expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) ${tail}`)).toEqual({ kind: "died", victimDayzId: V, victimGamertag: "Vic", cause, entity, water: null, energy: null, bleedSources: null });
+  });
+  it("reads the Stats> tail of a bare death — the evidence for what it died of", () => {
+    expect(parseDeath(`16:06:05 | Player "Vic" (DEAD) (id=${V} pos=<6477.3, 11497.8, 189.1>) died. Stats> Water: 598.786 Energy: 0 Bleed sources: 1`))
+      .toMatchObject({ kind: "died", cause: "died", water: 598.786, energy: 0, bleedSources: 1 });
   });
   it("a bare (DEAD) marker with no death verb is not a death", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>)`)).toBeNull();

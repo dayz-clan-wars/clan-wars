@@ -13,4 +13,6 @@ export type EventType =
   | "player.disconnected"
   | "player.killed"
   | "player.died"
+  | "player.hit"
+  | "player.unconscious"
   | "player.teleported";

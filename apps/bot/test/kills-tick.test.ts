@@ -99,6 +99,26 @@ describe("killsTick", () => {
     expect(row.victimDayzId).toBe(A);
   });
 
+  it("3b. a bare `died` is attributed from the hits and knockouts in the two minutes before it", async () => {
+    const t = (s: number) => new Date(t1.getTime() + s * 1000);
+    // A, mauled: an infected hit, then a knockout, then a bare death with the bleed still open.
+    await ev("player.hit", { victimDayzId: A, victimGamertag: "A", victimHp: 80, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso" }, t(0));
+    await ev("player.unconscious", { dayzId: A, gamertag: "A", disconnecting: false }, t(20));
+    await ev("player.died", { victimDayzId: A, victimGamertag: "A", cause: "died", entity: null, water: 500, energy: 500, bleedSources: 1 }, t(40));
+    // R, starved: no hits, energy 0.
+    await ev("player.died", { victimDayzId: R, victimGamertag: "R", cause: "died", entity: null, water: 500, energy: 0, bleedSources: 0 }, t(60));
+    // S, a fall: a FallDamage hit to 0 HP, then a bare death.
+    await ev("player.hit", { victimDayzId: S, victimGamertag: "S", victimHp: 0, attackerType: "environment", attackerDayzId: null, attackerGamertag: null, attackerLabel: "FallDamageHealth", damage: null, bodyPart: null }, t(70));
+    await ev("player.died", { victimDayzId: S, victimGamertag: "S", cause: "died", entity: null, water: 500, energy: 500, bleedSources: 0 }, t(71));
+    // B, unexplained: A's infected hit is another player's evidence, and B's own hit is outside the window.
+    await ev("player.hit", { victimDayzId: B, victimGamertag: "B", victimHp: 50, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso" }, t(100));
+    await ev("player.died", { victimDayzId: B, victimGamertag: "B", cause: "died", entity: null, water: 500, energy: 500, bleedSources: 1 }, t(100 + 121));
+    const result = await killsTick(db);
+    expect(result.scanned).toBe(4);
+    const rows = await db.select({ victim: kills.victimDayzId, cause: kills.cause }).from(kills).orderBy(kills.occurredAt);
+    expect(rows).toEqual([{ victim: A, cause: "mauled" }, { victim: R, cause: "starvation" }, { victim: S, cause: "fall" }, { victim: B, cause: "died" }]);
+  });
+
   it("4. a stranger with no membership history on both sides: both faction ids null", async () => {
     await ev("player.killed", { victimDayzId: S, victimGamertag: "S", killerDayzId: "X".repeat(40), killerGamertag: "X", weapon: null, distanceM: null }, t1);
     await killsTick(db);

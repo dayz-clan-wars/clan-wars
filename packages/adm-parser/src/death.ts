@@ -1,7 +1,10 @@
-export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "fall" | "vehicle" | "environment" | "died";
+import { classifyEntityLabel } from "@factions/domain";
+
+export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "environment" | "died";
 export type DeathLine =
   | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null }
-  | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null };
+  /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads. */
+  | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null };
 
 const ID = "[0-9A-F]{40}";
 // ⚠️ Both identities anchored on their 40-hex ids; the victim's `(DEAD)` marker sits between the name and the id.
@@ -10,8 +13,11 @@ const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\)(.
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
 const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
 const VERB_RE = /\b(died|committed suicide|bled out|drowned|killed by)\b/u;
+const STATS_RE = /Stats>\s*Water:\s*([\d.]+)\s*Energy:\s*([\d.]+)\s*Bleed sources:\s*(\d+)/u;
+// Animals go through @factions/domain's classifyEntityLabel first (wolf, bear, animal) — the same
+// rules the verdict applies to hit labels — so the prefixes here are disjoint from `Animal_`.
 const ENTITY_CAUSES: readonly [RegExp, DeathCause][] = [
-  [/^Zmb/u, "infected"], [/^Animal_/u, "animal"], [/^FallDamage$/u, "fall"],
+  [/^Zmb/u, "infected"], [/^FallDamage$/u, "fall"],
   [/^(CivilianSedan|Hatchback_|Sedan_|Offroad|Truck_|Boat_)/u, "vehicle"],
 ];
 
@@ -30,7 +36,9 @@ export function parseDeath(raw: string): DeathLine | null {
   const entity = ENTITY_RE.exec(tail)?.[1] ?? null;
   const cause: DeathCause =
     lower.includes("bled out") ? "bled_out" : lower.includes("drowned") ? "drowned" : lower.includes("committed suicide") ? "suicide"
-    : lower.includes("killed by") ? (entity ? (ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
+    : lower.includes("killed by") ? (entity ? (classifyEntityLabel(entity) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
     : "died";
-  return { kind: "died", victimGamertag: m[1]!, victimDayzId: m[2]!, cause, entity: lower.includes("killed by") ? entity : null };
+  const s = STATS_RE.exec(tail);
+  return { kind: "died", victimGamertag: m[1]!, victimDayzId: m[2]!, cause, entity: lower.includes("killed by") ? entity : null,
+    water: s ? parseFloat(s[1]!) : null, energy: s ? parseFloat(s[2]!) : null, bleedSources: s ? parseInt(s[3]!, 10) : null };
 }

@@ -110,4 +110,18 @@ describe("eventTypeFor", () => {
   it("returns null for a roster header, which is not persisted", () => {
     expect(eventTypeFor({ kind: "roster", count: 2 })).toBeNull();
   });
+
+  it("yields a hit entry for a hit line, and never a position for it", () => {
+    const raw = `12:26:14 | Player "Vic" (id=${ID} pos=<10848.6, 11077, 174.9>)[HP: 92.35] hit by Infected into Torso(1) for 7.65 damage (MeleeInfected)`;
+    const out = parseLine(raw);
+    expect(out).toHaveLength(1);
+    expect(out[0]?.kind).toBe("hit");
+    expect(eventTypeFor(out[0]!)).toBe("player.hit");
+  });
+
+  it("yields an unconscious entry", () => {
+    const out = parseLine(`16:02:44 | Player "Vic" (id=${ID} pos=<1936.9, 7275.4, 229.3>) is unconscious`);
+    expect(out).toHaveLength(1);
+    expect(eventTypeFor(out[0]!)).toBe("player.unconscious");
+  });
 });

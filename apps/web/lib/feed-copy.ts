@@ -15,10 +15,12 @@ export const FEED_TITLE = "Feed";
 export const FRIENDLY_FIRE_MARK = "friendly fire";
 
 /**
- * What the log called a killer-less death — the adm parser's `DeathCause`,
- * plus `pvp`, which the kills consumer writes on a self-kill. `died` is the
- * parser's "no cause on the line" and reads as nothing more. An unknown value
- * is shown as the log wrote it.
+ * What a killer-less death was — every word `kills.cause` may hold
+ * (`DEATH_CAUSES` in @factions/domain; test/feed-copy.test.ts holds this
+ * table to that set): the adm parser's stated causes, the verdict's inferred
+ * ones for a bare "died.", and `pvp`, which the kills consumer writes on a
+ * self-kill. `died` is "the log said no more than that" and reads as nothing
+ * more. An unknown value is shown as the log wrote it.
  */
 export const DEATH_CAUSE: Record<string, string> = {
   bled_out: "bled out",
@@ -26,9 +28,14 @@ export const DEATH_CAUSE: Record<string, string> = {
   suicide: "by their own hand",
   pvp: "by their own hand",
   infected: "to the infected",
+  mauled: "mauled by the infected",
   animal: "to an animal",
+  wolf: "to a wolf",
+  bear: "to a bear",
   fall: "from a fall",
   vehicle: "under a vehicle",
+  starvation: "of starvation",
+  dehydration: "of thirst",
   environment: "to the environment",
   died: "",
 };

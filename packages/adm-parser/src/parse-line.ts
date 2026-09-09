@@ -5,6 +5,8 @@ import { parseStructure, type StructureEvent } from "./structure.js";
 import { parseRosterHeader, parsePlayerListEntry } from "./playerlist.js";
 import { parseEmote, type EmotePerformed } from "./emote.js";
 import { parseDeath, type DeathLine } from "./death.js";
+import { parseHit, type HitLine } from "./hit.js";
+import { parseUnconscious, type UnconsciousLine } from "./unconscious.js";
 import { parseSession, type SessionEvent } from "./session.js";
 import { parseTeleport, type TeleportEvent } from "./teleport.js";
 
@@ -16,6 +18,8 @@ export type ParsedLine =
   | { kind: "position"; gamertag: string; dayzId: string; pos: Vec3 }
   | { kind: "emote"; event: EmotePerformed }
   | { kind: "death"; event: DeathLine }
+  | { kind: "hit"; event: HitLine }
+  | { kind: "unconscious"; event: UnconsciousLine }
   | { kind: "session"; event: SessionEvent }
   | { kind: "teleport"; event: TeleportEvent };
 
@@ -40,6 +44,12 @@ export function parseLine(raw: string): ParsedLine[] {
 
   const death = parseDeath(raw);
   if (death) return [{ kind: "death", event: death }];
+
+  const hit = parseHit(raw);
+  if (hit) return [{ kind: "hit", event: hit }];
+
+  const unconscious = parseUnconscious(raw);
+  if (unconscious) return [{ kind: "unconscious", event: unconscious }];
 
   const session = parseSession(raw);
   if (session) return [{ kind: "session", event: session }];
@@ -79,6 +89,10 @@ export function eventTypeFor(line: ParsedLine): EventType | null {
       return "emote.performed";
     case "death":
       return line.event.kind === "killed" ? "player.killed" : "player.died";
+    case "hit":
+      return "player.hit";
+    case "unconscious":
+      return "player.unconscious";
     case "session":
       return line.event.kind === "connected" ? "player.connected" : "player.disconnected";
     case "teleport":
