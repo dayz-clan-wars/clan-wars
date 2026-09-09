@@ -53,6 +53,20 @@ function loadSwitches(): Record<LayerKey, boolean> {
 const bar = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
 /** The settings sprocket: an eight-tooth gear in the chip's stroke, currentColor so the button colours it. */
+/** The zoom "Centre on you" lands at: about 5 m per pixel, a couple of kilometres across a phone. */
+const RECENTRE_ZOOM = 4;
+
+/** The reticle from the "you" marker, in currentColor, for the recentre button. */
+function Reticle({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true">
+      <circle cx="14" cy="14" r="3" fill="currentColor" stroke="none" />
+      <circle cx="14" cy="14" r="8.5" />
+      <path d="M14 1v5M14 22v5M1 14h5M22 14h5" />
+    </svg>
+  );
+}
+
 function Sprocket({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true">
@@ -112,6 +126,19 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     const id = setInterval(() => setNow(Date.now()), AGE_TICK_MS);
     return () => clearInterval(id);
   }, []);
+
+  /**
+   * Centre on your last known position and zoom in. The fix is whatever the
+   * server log last recorded — not live — so the marker's tooltip, which
+   * says how old it is, stays the honest part; this only moves the view.
+   */
+  const recentre = () => {
+    const m = map.current, Lm = leaflet.current, d = dataRef.current;
+    const fix = d?.you.fix;
+    if (!m || !Lm || !d || !fix) return;
+    m.setView(ptFor(Lm, d.world.size)(fix.x, fix.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: true });
+  };
+  const hasFix = data?.you.fix != null;
 
   const toggle = (key: LayerKey) => {
     setEnabled((prev) => {
@@ -499,6 +526,10 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
+            <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Centre on your last known position" : "No position for you yet"}
+              className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
+              <Reticle size={16} /> Centre on me
+            </button>
             <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
             <a className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold" href="/clan">Your clan</a>
           </div>
@@ -525,6 +556,11 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
               >
                 <Sprocket size={18} />
                 <span className="sr-only">Layers</span>
+              </button>
+              <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Centre on your last known position" : "No position for you yet"}
+                className="flex h-11 w-11 items-center justify-center border-2 border-rule-3 text-ink disabled:opacity-40">
+                <Reticle size={18} />
+                <span className="sr-only">Centre on me</span>
               </button>
               <span className={`${bar} flex min-h-[44px] items-center`}>Grid {centre}</span>
               <button type="button" onClick={() => void load()} className={`${bar} flex min-h-[44px] items-center text-ink`}>Refresh</button>
