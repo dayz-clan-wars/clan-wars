@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { clanFor, scoreboard } from "@factions/roster";
+import { clanFor } from "@factions/roster";
 import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
@@ -8,12 +8,10 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
-import { flagImagePath } from "@/src/flag-images";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
-import { gridRef } from "@/lib/map-projection";
-import { ClanHero, Lit } from "@/app/components/clan-hero";
+import { OwnClanHero } from "@/app/components/own-clan-hero";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -65,30 +63,9 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
   const pending = roster.filter((r) => r.status === "pending");
   const voteBlocked = leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now();
 
-  const tabs = [
-    { label: "Map", href: "/map" },
-    { label: "Board", href: "/clan/board" },
-    ...(me.status === "full" ? [{ label: "Vault", href: "/clan/vault" }] : []),
-    ...(officer ? [{ label: "Settings", href: "/clan/settings" }] : []),
-  ];
-  // This season's standing, for the hero: rank on the board and points.
-  const standing = (await scoreboard()).rows.find((r) => r.tag === clan.tag) ?? null;
-
   return (
     <Page wide>
-      <ClanHero
-        flagSrc={`/${flagImagePath(clan.texture)}`}
-        guide={guideLinkFor("/clan")}
-        kicker={<>[{clan.tag}] · {clan.status} · you are {me.status === "pending" ? "pending" : me.role}{standing?.alpha && <> · <span className="text-gold">Alpha</span></>}</>}
-        title={clan.name}
-        facts={[
-          ...(standing?.rank ? [<><Lit>#{standing.rank}</Lit> on the board</>] : []),
-          <><Lit>{full.length}</Lit> members</>,
-          ...(standing ? [<><Lit>{standing.points}</Lit> points</>] : []),
-          ...(clan.base ? [<>Base at <Lit>{gridRef(clan.base.x, clan.base.z)}</Lit></>] : []),
-        ]}
-        aside={<SegNav label="Clan pages" items={tabs} className="bg-frame/90" />}
-      />
+      <OwnClanHero view={view} current="clan" guide={guideLinkFor("/clan")} />
 
       {(notice || clan.status === "reserved" || me.status === "pending") && (
         <div className="flex flex-col gap-2 px-5 pt-5 lg:px-8 lg:pt-6">
