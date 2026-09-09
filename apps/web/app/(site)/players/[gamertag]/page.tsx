@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
 import { playerProfile } from "@factions/roster";
 import { parseSeasonParam } from "@/lib/stat-scope";
@@ -38,7 +39,8 @@ export default async function PlayerProfilePage({
   params: Promise<{ gamertag: string }>;
   searchParams: Promise<{ season?: string | string[] }>;
 }) {
-  const { gamertag } = await params;
+  // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
+  const gamertag = decodeParam((await params).gamertag);
   const { season } = await searchParams;
   const parsed = parseSeasonParam(season);
 
@@ -60,7 +62,7 @@ export default async function PlayerProfilePage({
               <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
             </PanelBody></Panel>
             <Panel title="PvP"><PanelBody>
-              <Facts items={[["Kills", profile.pvpKills], ["Deaths", profile.pvpDeaths], ["K/D", profile.kd ?? "—"]]} />
+              <Facts items={[["Kills", profile.pvpKills], ["Deaths", profile.pvpDeaths], ["K/D", profile.kd ?? "—"], ["Best streak", profile.bestStreak], ["Longest kill", profile.longestKill ? <>{profile.longestKill.distanceM} m{profile.longestKill.weapon && <span className="text-muted"> · {profile.longestKill.weapon}</span>}</> : "—"]]} />
             </PanelBody></Panel>
             <Panel title="Friendly fire"><PanelBody>
               <Facts items={[["Kills", profile.friendlyFireKills], ["Deaths", profile.friendlyFireDeaths]]} />
