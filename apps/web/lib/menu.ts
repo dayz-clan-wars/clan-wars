@@ -19,12 +19,17 @@ export type MenuItem = {
   also?: readonly string[];
   /** The bar draws this one quieter (the guide is a different kind of place). */
   quiet?: boolean;
+  /** Which of the site's two attention counts sits on this item (App Review §01). */
+  badge?: "you" | "clan";
 };
 
+/** The counts the bar shows: things waiting on you (/me) and on your clan (/clan). */
+export type Counts = { you: number; clan: number };
+
 const MINE: readonly MenuItem[] = [
-  { label: "You", href: "/me" },
+  { label: "You", href: "/me", badge: "you" },
   { label: "Map", href: "/map" },
-  { label: "Your clan", href: "/clan" },
+  { label: "Your clan", href: "/clan", badge: "clan" },
 ];
 
 const BOARDS: readonly MenuItem[] = [

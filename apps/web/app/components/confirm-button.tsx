@@ -14,12 +14,12 @@ const ARM_MS = 4_000;
  * No dialog: a `confirm()` blocks the page and reads badly on a phone, and
  * the site's forms otherwise never need script to submit.
  */
-export function ConfirmButton({ confirm, className, children }: { confirm: string; className: string; children: React.ReactNode }) {
+export function ConfirmButton({ confirm, className, children, disabled = false }: { confirm: string; className: string; children: React.ReactNode; disabled?: boolean }) {
   const [armed, setArmed] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
   return (
-    <button type="submit" className={className} aria-live="polite"
+    <button type="submit" className={className} aria-live="polite" disabled={disabled}
       onClick={(e) => {
         if (armed) return;
         e.preventDefault();

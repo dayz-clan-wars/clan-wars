@@ -71,6 +71,7 @@ import {
   grantGuestPassDbFor, revokeGuestPassDbFor,
   type GuestGrantOutcome, type GuestTargetRef,
 } from "./guest";
+import { attentionDb, type Attention } from "./attention";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -87,6 +88,12 @@ export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
 export type { GuestGrantOutcome, GuestTargetRef };
+export type { Attention };
+
+/** The site bar's two counts: what is waiting on you (/me) and on your clan (/clan). Read on every page, so it is cheap. */
+export function attention(discordId: string): Promise<Attention> {
+  return attentionDb(db(), discordId, new Date());
+}
 
 /** Who is looking: their link and their clan, or null for either. */
 export function viewerFor(discordId: string): Promise<Viewer> {

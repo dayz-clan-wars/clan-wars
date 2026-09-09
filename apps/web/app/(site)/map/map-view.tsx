@@ -2,9 +2,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type * as L from "leaflet";
 import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
-import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor } from "@/lib/map-projection";
+import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
-import { LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
+import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { LAYER_REASONS, MAP_HINT, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
@@ -53,7 +54,7 @@ function loadSwitches(): Record<LayerKey, boolean> {
 const bar = "font-mono text-xs uppercase tracking-[0.18em] text-muted";
 
 /** The settings sprocket: an eight-tooth gear in the chip's stroke, currentColor so the button colours it. */
-/** The zoom "Centre on you" lands at: about 5 m per pixel, a couple of kilometres across a phone. */
+/** The zoom "Center on me" lands at: about 5 m per pixel, a couple of kilometres across a phone. */
 const RECENTRE_ZOOM = 4;
 
 /** The reticle from the "you" marker, in currentColor, for the recentre button. */
@@ -77,7 +78,20 @@ function Sprocket({ size = 20 }: { size?: number }) {
   );
 }
 
-export default function MapView({ layers, notice, guide }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string } }) {
+const HINT_KEY = "cw-map-hint-v1";
+
+/** The bar's last slot: the player's next step, not always "Your clan" (App Review §03). */
+export type MapNext = { label: string; href: string };
+
+export default function MapView({ layers, notice, guide, next }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string }; next: MapNext }) {
+  // A first map with nothing of the player's on it says what would change that; dismissed once, remembered beside the layer switches.
+  const bare = !layers.base && !layers.clanmates;
+  const [hint, setHint] = useState(false);
+  useEffect(() => {
+    if (!bare) return;
+    try { setHint(localStorage.getItem(HINT_KEY) !== "1"); } catch { setHint(true); }
+  }, [bare]);
+  const dismissHint = () => { setHint(false); try { localStorage.setItem(HINT_KEY, "1"); } catch { /* a private window forgets; fine */ } };
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
@@ -90,6 +104,8 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   const [layersOpen, setLayersOpen] = useState(false);
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
+  // The switches that would do nothing, with what would put them there.
+  const missing = (Object.keys(LAYER_REASONS) as (keyof typeof LAYER_REASONS)[]).filter((k) => !layers[k]);
 
   // ── The fetch loop ────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -128,7 +144,7 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   }, []);
 
   /**
-   * Centre on your last known position and zoom in. The fix is whatever the
+   * Center on your last known position and zoom in. The fix is whatever the
    * server log last recorded — not live — so the marker's tooltip, which
    * says how old it is, stays the honest part; this only moves the view.
    */
@@ -154,6 +170,8 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
   const groups = useRef<Partial<Record<LayerKey, L.LayerGroup>>>({});
   const gridDrawn = useRef(false);
   const dataRef = useRef<MapData | null>(null);
+  const hintRef = useRef(false);
+  hintRef.current = hint;
   dataRef.current = data;
   const nowRef = useRef(now);
   nowRef.current = now;
@@ -219,6 +237,11 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
     // Places are the zoom's, not the data's: zoomend redraws them, not a poll.
     for (const key of ALL_KEYS) if (key !== "terrain" && key !== "places") groups.current[key]!.clearLayers();
     drawYou(ctx("you"));
+    // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
+    if (hintRef.current && d.you.fix) {
+      const units = WATCH_ZONE_RADIUS_M * (CANVAS_PX / d.world.size) / 2 ** MAX_ZOOM;
+      Lm.circle(pt(d.you.fix.x, d.you.fix.z), { radius: units, color: p.gold, opacity: 0.35, weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(groups.current.you!);
+    }
     drawBase(ctx("base"));
     drawClanmates(ctx("clanmates"));
     drawIntruders(ctx("intruders"));
@@ -513,10 +536,30 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
                     </li>
                   ))}
                 </ul>
+                {missing.length > 0 && (
+                  <ul className="border-t border-rule-2 py-1.5" aria-label="Not on your map yet">
+                    {missing.map((key) => (
+                      <li key={key} className="flex min-h-[36px] items-center gap-3 px-5 text-sm text-dim">
+                        <span aria-hidden="true" className="flex flex-none opacity-40" dangerouslySetInnerHTML={{ __html: layerIcon(pal, key) }} />
+                        {LAYER_LABELS[key]} <span className="font-mono text-[11px] text-muted">— {LAYER_REASONS[key]}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
           </div>
+          {hint && (
+            <div role="note" className="absolute inset-x-4 top-[calc(50%-40px)] z-[1100] border-2 border-gold bg-frame px-4 py-3.5 lg:inset-x-auto lg:left-6 lg:top-auto lg:bottom-24 lg:w-[360px]">
+              <div className="flex items-baseline justify-between gap-4">
+                <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">{MAP_HINT.kicker}</span>
+                <button type="button" onClick={dismissHint} className="-mr-2 flex h-9 w-9 items-center justify-center font-mono text-sm text-muted hover:text-ink" aria-label="Dismiss">✕</button>
+              </div>
+              <p className="mt-1.5 text-sm leading-relaxed text-ink">{MAP_HINT.before}<a className="text-gold hover:underline" href="/base">{MAP_HINT.cta}</a>{MAP_HINT.after}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted">{MAP_HINT.more}</p>
+            </div>
+          )}
           {/* Notices stay visible with the panel closed: a failed refresh is not a setting. */}
           {(notice || error === "failed") && (
             <div className="absolute left-6 top-6 z-[1100] hidden w-[360px] lg:block">
@@ -526,12 +569,12 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
           )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
-            <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Centre on your last known position" : "No position for you yet"}
+            <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
-              <Reticle size={16} /> Centre on me
+              <Reticle size={16} /> Center on me
             </button>
             <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
-            <a className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold" href="/clan">Your clan</a>
+            <a className="flex min-h-[44px] items-center border-l border-rule-2 bg-gold px-4 text-ground hover:bg-gold-hover" href={next.href}>{next.label}</a>
           </div>
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
@@ -557,14 +600,14 @@ export default function MapView({ layers, notice, guide }: { layers: MapData["la
                 <Sprocket size={18} />
                 <span className="sr-only">Layers</span>
               </button>
-              <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Centre on your last known position" : "No position for you yet"}
+              <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
                 className="flex h-11 w-11 items-center justify-center border-2 border-rule-3 text-ink disabled:opacity-40">
                 <Reticle size={18} />
-                <span className="sr-only">Centre on me</span>
+                <span className="sr-only">Center on me</span>
               </button>
               <span className={`${bar} flex min-h-[44px] items-center`}>Grid {centre}</span>
               <button type="button" onClick={() => void load()} className={`${bar} flex min-h-[44px] items-center text-ink`}>Refresh</button>
-              <a className={`${bar} flex min-h-[44px] items-center text-ink`} href="/clan">Your clan</a>
+              <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
               {layers.pins && <span className={`${bar} flex min-h-[44px] items-center`}>Hold to pin</span>}
               {guide && <a className={`${bar} flex min-h-[44px] items-center text-gold`} href={guide.href}>Guide</a>}
             </div>

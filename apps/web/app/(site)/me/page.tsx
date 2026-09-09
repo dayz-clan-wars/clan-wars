@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { viewerFor, myInvites, myRequests, claimContext } from "@factions/roster";
+import { viewerFor, myInvites, myRequests, claimContext, linkStatus } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { LINK_TTL_MS, LINK_EMOTES, JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS } from "@factions/domain";
 import { UNLINK_COPY } from "@/lib/link-copy";
@@ -9,6 +9,8 @@ import { when, days } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { Page, Panel, PanelBody, Notice, Footer, GuideLine, SessionLost, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
+import { nextStepFor } from "@/lib/next-step";
+import { NextStepStrip } from "@/app/components/next-step";
 
 export const metadata: Metadata = {
   title: "Clan Wars — you",
@@ -35,8 +37,14 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
     return <SessionLost next="/me" />;
   }
   const viewer = await viewerFor(session.sub);
-  const [invites, requests, claim] = await Promise.all([myInvites(session.sub), myRequests(session.sub), claimContext(session.sub)]);
+  const [invites, requests, claim, linkState] = await Promise.all([myInvites(session.sub), myRequests(session.sub), claimContext(session.sub), viewer.link ? null : linkStatus(session.sub)]);
   const showInvites = invites.length > 0 && viewer.clan === null && viewer.pending === null;
+  // What to do next (App Review §01): one state, picked in order, or nothing for a full member.
+  const next = nextStepFor({
+    linked: viewer.link !== null, challengeOpen: linkState?.challenge != null, inClan: viewer.clan !== null,
+    pending: viewer.pending ? { name: viewer.pending.name } : null, ceremonyId: claim?.ceremony.id ?? null,
+    invites: showInvites ? invites.map((i) => ({ id: i.id, clanName: i.clanName })) : [], requests: requests.map((r) => ({ clanName: r.clanName })),
+  });
 
   return (
     <Page wide>
@@ -54,16 +62,17 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
         </div>
       </div>
 
-      {(unlinkNotice || resultNotice) && (
-        <div className="mt-6 flex flex-col gap-2 px-5 lg:px-8">
+      {(unlinkNotice || resultNotice || next) && (
+        <div className="mt-6 flex flex-col gap-3 px-5 lg:px-8">
           {unlinkNotice && <Notice>{unlinkNotice}</Notice>}
           {resultNotice && <Notice>{resultNotice}</Notice>}
+          {next && <NextStepStrip step={next} />}
         </div>
       )}
 
       <div className="grid gap-4 px-5 pb-8 pt-5 lg:grid-cols-2 lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="flex flex-col gap-4 lg:gap-6">
-          <Panel num="01" title="Your character">
+          <Panel title="Your character">
             <PanelBody>
               {viewer.link ? (
                 <>
@@ -88,7 +97,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
             </PanelBody>
           </Panel>
 
-          <Panel num="02" title="Your clan">
+          <Panel title="Your clan">
             {viewer.clan ? (
               <>
                 <PanelBody className="flex items-center gap-4">
@@ -129,7 +138,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
 
         <div className="flex flex-col gap-4 lg:gap-6">
           {claim && (
-            <Panel num="03" title="A ceremony is waiting" tone="gold">
+            <Panel title="A ceremony is waiting" tone={next ? "plain" : "gold"}>
               <PanelBody>
                 <p className="text-base leading-relaxed text-ink">{claim.ceremony.participants.length} linked players raised the neutral flag together. Any one of you can found the clan until <span className="font-mono">{when(claim.ceremony.expiresAt)}</span>.</p>
                 <a className={`mt-4 ${btnCta} min-h-[52px]`} href={`/claim/${claim.ceremony.id}`}>Found the clan <span className="font-mono normal-case">→</span></a>
@@ -138,8 +147,8 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           )}
 
           {showInvites && (
-            <Panel num={claim ? "04" : "03"} title="Invites" aside={`${invites.length} open`}>
-              <ul>
+            <Panel title="Invites" aside={`${invites.length} open`}>
+              <ul id="invites">
                 {invites.map((inv) => (
                   <li key={inv.id} className="flex min-h-[64px] flex-wrap items-center gap-3.5 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
                     <div className="min-w-0 flex-1">
@@ -155,7 +164,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
           )}
 
           {requests.length > 0 && (
-            <Panel num={claim && showInvites ? "05" : claim || showInvites ? "04" : "03"} title="Your requests" aside={`${requests.length} open`}>
+            <Panel title="Your requests" aside={`${requests.length} open`}>
               <ul>
                 {requests.map((r) => (
                   <li key={r.id} className="flex min-h-[64px] flex-wrap items-center gap-3.5 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">

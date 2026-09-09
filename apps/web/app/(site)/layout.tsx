@@ -1,4 +1,5 @@
 import { currentSession } from "@/lib/viewer";
+import { attention } from "@factions/roster";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
@@ -18,10 +19,13 @@ export const dynamic = "force-dynamic";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
   const session = await currentSession();
+  // The bar's two counts (App Review §01): a handful of lookups, and never a
+  // reason to fail the page — an unreachable count is a bar with no badge.
+  const counts = session ? await attention(session.sub).catch(() => undefined) : undefined;
   return (
     <>
       <SkipLink />
-      <SiteBar signedIn={session !== null} guideIndex={buildIndex()} />
+      <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
       <InstallStrip />
       {children}
     </>

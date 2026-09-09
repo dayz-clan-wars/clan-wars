@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
-import { mapState } from "@factions/roster";
+import { mapState, claimContext } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/map-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import MapView from "./map-view";
+import MapView, { type MapNext } from "./map-view";
 import { guideLinkFor } from "@/lib/guide-links";
 import { GUIDE_INLINE, guideLink } from "@/lib/guide-links";
 import { link, Page, PageHead, Body, SessionLost } from "@/app/components/ui";
@@ -35,5 +35,12 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
       </Page>
     );
   }
-  return <MapView layers={state.layers} notice={notice} guide={guideLinkFor("/map")} />;
+  // The bar's last slot is the next step (App Review §03): found the waiting
+  // clan → declare a base (solo, none declared) → your base (solo) → your clan.
+  const ceremony = state.layers.clanmates ? null : await claimContext(session.sub);
+  const next: MapNext = ceremony ? { label: "Found a clan", href: `/claim/${ceremony.ceremony.id}` }
+    : state.layers.clanmates ? { label: "Your clan", href: "/clan" }
+    : state.layers.base ? { label: "Your base", href: "/base" }
+    : { label: "Declare base", href: "/base" };
+  return <MapView layers={state.layers} notice={notice} guide={guideLinkFor("/map")} next={next} />;
 }
