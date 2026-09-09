@@ -330,6 +330,12 @@ describe("roster player stats", () => {
       expect(p.bestStreak).toBe(12);
       expect(p.longestKill).toEqual({ distanceM: 250, weapon: "DMR" });
       expect(p.clanHistory).toEqual([{ tag: "BEAR", name: "BEAR", joinedAt: h(t0, -2), leftAt: null }]);
+      expect(p.clan).toEqual({ tag: "BEAR", name: "BEAR", texture: "Flag_Bear" });
+    });
+
+    it("a pending member has no clan on their page", async () => {
+      const p = (await playerProfileDb(db, "Papa", ALL, now))!;
+      expect(p.clan).toBeNull();
     });
 
     it("season 1: the window narrows every aggregate", async () => {
@@ -392,6 +398,7 @@ describe("roster player stats", () => {
       expect(p.pvpDeaths).toBe(0);
       expect(p.kd).toBeNull();
       expect(p.clanHistory).toEqual([]);
+      expect(p.clan).toBeNull();
     });
 
     it("is null for a name the log has never seen", async () => {

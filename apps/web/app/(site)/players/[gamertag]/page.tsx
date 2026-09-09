@@ -7,7 +7,9 @@ import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, kickerSm } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, kickerSm, kicker, link } from "@/app/components/ui";
+import { ClanHero, Lit } from "@/app/components/clan-hero";
+import { flagImagePath } from "@/src/flag-images";
 
 export const metadata: Metadata = { title: "Clan Wars — player" };
 /** ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster into a static chunk (spec §10.1). */
@@ -50,10 +52,27 @@ export default async function PlayerProfilePage({
 
   if (!profile) notFound();
 
+  const guide = guideLinkFor("/players/[gamertag]");
+  const picker = <ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} current={profile.scope} />;
+  const notLinked = !profile.linked && " · not linked";
+  // The mono line under the name, on both heads: the scope's headline numbers.
+  const facts = [
+    <><Lit>{playTime(profile.playTimeSeconds)}</Lit> played</>,
+    <><Lit>{profile.pvpKills}</Lit> kills</>,
+    <><Lit>{profile.pvpDeaths}</Lit> deaths</>,
+    ...(profile.lastSeenAt ? [<>Seen <Lit>{ago(profile.lastSeenAt)}</Lit></>] : []),
+  ];
+
   return (
     <Page wide>
-      <PageHead guide={guideLinkFor("/players/[gamertag]")} kicker={<>Player{!profile.linked && " · not linked"}</>} title={profile.gamertag}
-        aside={<ScopePicker seasons={profile.seasons} basePath={`/players/${encodeURIComponent(profile.gamertag)}`} current={profile.scope} />} />
+      {profile.clan ? (
+        // A member: their clan's colours, the way the clan pages wear them, with the clan named and linked in the kicker.
+        <ClanHero flagSrc={`/${flagImagePath(profile.clan.texture)}`} guide={guide} title={profile.gamertag} facts={facts} aside={picker}
+          kicker={<>Player · [{profile.clan.tag}] <a className={link} href={`/clans/${encodeURIComponent(profile.clan.tag)}`}>{profile.clan.name}</a>{notLinked}</>} />
+      ) : (
+        <PageHead guide={guide} kicker={<>Player · no clan{notLinked}</>} title={profile.gamertag} aside={picker}
+          sub={<div className={`${kicker} flex flex-wrap gap-x-5 gap-y-2`}>{facts.map((f, i) => <span key={i}>{f}</span>)}</div>} />
+      )}
       <Body>
         <p className="sr-only">{scopeLabel(profile.scope)}</p>
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
