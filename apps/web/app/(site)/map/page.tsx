@@ -38,9 +38,10 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
   // The bar's last slot is the next step (App Review §03): found the waiting
   // clan → declare a base (solo, none declared) → your base (solo) → your clan.
   const ceremony = state.layers.clanmates ? null : await claimContext(session.sub);
-  const next: MapNext = ceremony ? { label: "Found a clan", href: `/claim/${ceremony.ceremony.id}` }
+  // One word each: the phone bar has room for four things (App Review R2, mockup B).
+  const next: MapNext = ceremony ? { label: "Found", href: `/claim/${ceremony.ceremony.id}` }
     : state.layers.clanmates ? { label: "Your clan", href: "/clan" }
     : state.layers.base ? { label: "Your base", href: "/base" }
-    : { label: "Declare base", href: "/base" };
+    : { label: "Declare", href: "/base" };
   return <MapView layers={state.layers} notice={notice} guide={guideLinkFor("/map")} next={next} />;
 }

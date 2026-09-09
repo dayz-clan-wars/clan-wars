@@ -63,6 +63,20 @@ export function zoomFloor(width: number, height: number, snap = ZOOM_SNAP, maxZo
   return Math.max(0, floor);
 }
 
+/** "043087": the grid ref with no space, for a URL (`/map?at=043087`). Six digits, so it can carry no metre coordinate. */
+export function gridRefKey(x: number, z: number): string {
+  return gridRef(x, z).replace(" ", "");
+}
+
+/** The centre of the cell a grid ref names, in metres — or null for anything that is not six digits inside the world. */
+export function parseGridRef(key: string | null | undefined, size: number): { x: number; z: number } | null {
+  if (!key || !/^\d{6}$/u.test(key)) return null;
+  const cx = Number(key.slice(0, 3)), cz = Number(key.slice(3));
+  const x = cx * 100 + 50, z = cz * 100 + 50;
+  if (x > size || z > size) return null;
+  return { x, z };
+}
+
 /** "067 023": metres ÷ 100, truncated, zero-padded — what players say out loud. */
 export function gridRef(x: number, z: number): string {
   const cell = (v: number) => String(Math.max(0, Math.floor(v / 100))).padStart(3, "0");

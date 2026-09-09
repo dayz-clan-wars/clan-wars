@@ -6,7 +6,7 @@ import { RESULT_COPY } from "@/lib/clan-copy";
 import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
-import { when, days, hours } from "@/lib/format";
+import { when, days, hours, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
@@ -99,7 +99,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <span className={`font-mono text-sm lg:text-[15px] ${isPending ? "text-ink-2" : "text-ink"}`}>{r.gamertag ?? "unknown"}</span>
                       <span className={`ml-2.5 ${kickerSm} ${isPending || r.role === "leader" ? "!text-gold" : ""}`}>{isPending ? "pending" : r.role}{self && " · you"}</span>
                       <div className="mt-0.5 text-xs text-muted">
-                        {isPending ? <>asked {when(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {when(r.joinedAt)}{r.lastSeenAt && ` · seen ${when(r.lastSeenAt)}`}</>}
+                        {isPending ? <>asked {ago(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {ago(r.joinedAt)}{r.lastSeenAt && ` · seen ${ago(r.lastSeenAt)}`}</>}
                       </div>
                     </div>
                     {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
@@ -145,7 +145,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                   <ul>
                     {requestsIn.map((r) => (
                       <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-3 first:border-t-0 lg:px-5">
-                        <span><span className="font-mono text-sm text-ink">{r.gamertag ?? "unknown"}</span><div className="text-xs text-muted">asked {when(r.createdAt)}</div></span>
+                        <span><span className="font-mono text-sm text-ink">{r.gamertag ?? "unknown"}</span><div className="text-xs text-muted">asked {ago(r.createdAt)}</div></span>
                         <span className="flex gap-2">
                           <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="accepted" /><button className={`${btnPrimary} !px-3.5`} type="submit">Accept</button></form>
                           <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="declined" /><button className={`${btnSecondary} !px-3.5`} type="submit">Decline</button></form>
@@ -163,7 +163,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                 {/* Succession is said only when it can happen (App Review §02): an open claim, or a leader silent long enough. */}
                 <Facts items={[
                   ["Leader", <span key="l" className="font-mono text-ink">{full.find((r) => r.role === "leader")?.gamertag ?? "unknown"}</span>],
-                  ["Last seen", <span key="s" className="text-ink">{leadership.leaderLastSeenAt ? when(leadership.leaderLastSeenAt) : "never"}{leadership.canClaim === "leader-active" && <span className={`${kickerSm} ml-2 !text-olive`}>active</span>}</span>],
+                  ["Last seen", <span key="s" className="text-ink">{leadership.leaderLastSeenAt ? ago(leadership.leaderLastSeenAt) : "never"}{leadership.canClaim === "leader-active" && <span className={`${kickerSm} ml-2 !text-olive`}>active</span>}</span>],
                   ...(leadership.openClaim
                     ? [["Succession", <span key="c" className="text-ink">{leadership.openClaim.claimantGamertag} has claimed the seat from {leadership.openClaim.leaderGamertag}. Resolves {when(leadership.openClaim.resolvesAt)}.</span>] as [React.ReactNode, React.ReactNode]]
                     : []),

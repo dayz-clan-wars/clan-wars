@@ -3,7 +3,7 @@ import {
   alphaWeeks, declarations, defenses, factions, players, raids, seasonResults, seasonStandings, seasons,
 } from "@factions/db";
 import { alias } from "drizzle-orm/pg-core";
-import { and, asc, desc, eq, inArray, isNull, isNotNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, or } from "drizzle-orm";
 import { weekStartOf } from "@factions/domain";
 import { activeServerId } from "./server";
 
@@ -167,13 +167,17 @@ export async function seasonsDb(db: Database): Promise<SeasonSummary[]> {
 }
 
 /** Raids and defenses of the open season, newest first, from raids + defenses (never from the queue). */
-export async function warLogDb(db: Database, limit = 100): Promise<WarLogEntry[]> {
+/** A war log filter: one clan (as raider or victim), one kind, or both. Filtered in SQL so the limit counts matching rows. */
+export type WarLogFilter = { clanTag?: string; kind?: "raid" | "defense" };
+
+export async function warLogDb(db: Database, limit = 100, filter: WarLogFilter = {}): Promise<WarLogEntry[]> {
   const serverId = await activeServerId(db);
   const season = await openSeasonFor(db, serverId);
   if (!season) return [];
+  const tag = filter.clanTag?.toUpperCase();
 
   const raiderFactions = alias(factions, "raider_factions");
-  const raidRows = await db.select({
+  const raidRows = filter.kind === "defense" ? [] : await db.select({
     at: raids.firstLowerAt, points: raids.points, lowers: raids.lowerCount,
     victimTag: factions.tag, victimName: factions.name, victimTexture: factions.texture,
     raiderTag: raiderFactions.tag, raiderName: raiderFactions.name,
@@ -182,18 +186,18 @@ export async function warLogDb(db: Database, limit = 100): Promise<WarLogEntry[]
     .innerJoin(factions, eq(factions.id, raids.victimFactionId))
     .leftJoin(raiderFactions, eq(raiderFactions.id, raids.raiderFactionId))
     .leftJoin(players, eq(players.dayzId, raids.raiderDayzId))
-    .where(eq(raids.seasonId, season.id))
+    .where(tag ? and(eq(raids.seasonId, season.id), or(eq(factions.tag, tag), eq(raiderFactions.tag, tag))) : eq(raids.seasonId, season.id))
     .orderBy(desc(raids.firstLowerAt))
     .limit(limit);
 
-  const defenseRows = await db.select({
+  const defenseRows = filter.kind === "raid" ? [] : await db.select({
     at: defenses.defendedAt, durationSeconds: defenses.siegeSeconds,
     victimTag: factions.tag, victimName: factions.name, victimTexture: factions.texture,
     gamertag: players.gamertag,
   }).from(defenses)
     .innerJoin(factions, eq(factions.id, defenses.factionId))
     .leftJoin(players, eq(players.dayzId, defenses.raisedByDayzId))
-    .where(eq(defenses.seasonId, season.id))
+    .where(tag ? and(eq(defenses.seasonId, season.id), eq(factions.tag, tag)) : eq(defenses.seasonId, season.id))
     .orderBy(desc(defenses.defendedAt))
     .limit(limit);
 

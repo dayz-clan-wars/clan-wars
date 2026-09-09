@@ -27,7 +27,7 @@ export default async function ClansPage() {
       <div className="grid gap-4 px-5 py-5 lg:grid-cols-[5fr_7fr] lg:items-start lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="flex flex-col gap-4 lg:gap-6">
           {recruiting.length > 0 && (
-            <Panel num="01" title="Recruiting" tone="gold">
+            <Panel title="Recruiting" tone="gold">
               <ul>
                 {recruiting.map((c) => (
                   <li key={c.tag} className="border-t border-rule-2 px-4 py-3.5 first:border-t-0 lg:px-5 lg:py-4">
@@ -50,7 +50,7 @@ export default async function ClansPage() {
             </Panel>
           )}
 
-          <Panel num={recruiting.length > 0 ? "03" : "02"} title="The flag pool" aside={`${flags.free.length} free`} className="order-last lg:order-none">
+          <Panel title="The flag pool" aside={`${flags.free.length} free`} className="order-last lg:order-none">
             <div className="flex flex-wrap gap-2.5 p-4 lg:p-5">
               {flags.free.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={f} title={f} width={40} height={40} className="h-9 w-9 object-contain lg:h-10 lg:w-10" />)}
               {flags.taken.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={`${f} (taken)`} title={`${f} — taken`} width={40} height={40} className="h-9 w-9 object-contain opacity-30 lg:h-10 lg:w-10" />)}
@@ -59,7 +59,7 @@ export default async function ClansPage() {
           </Panel>
         </div>
 
-        <Panel num={recruiting.length > 0 ? "02" : "01"} title="Every clan" aside="By members">
+        <Panel title="Every clan" aside="By members">
           <ul>
             {clans.map((c) => {
               const dormant = c.status === "dormant";

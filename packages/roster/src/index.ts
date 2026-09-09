@@ -51,7 +51,7 @@ import {
 } from "./reads";
 import {
   scoreboardDb, alphasDb, seasonsDb, warLogDb,
-  type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry,
+  type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry, type WarLogFilter,
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import {
@@ -82,7 +82,7 @@ export type {
   SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
-export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry };
+export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
 export type { StatScope, ResolvedScope, BoardRow, KdRow, Boards, PlayerProfile };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };
@@ -238,8 +238,8 @@ export function seasons(): Promise<SeasonSummary[]> {
   return seasonsDb(db());
 }
 /** Raids and defenses of the open season, newest first. */
-export function warLog(limit?: number): Promise<WarLogEntry[]> {
-  return warLogDb(db(), limit);
+export function warLog(limit?: number, filter?: WarLogFilter): Promise<WarLogEntry[]> {
+  return warLogDb(db(), limit, filter);
 }
 
 /** The map, scoped to who is looking (spec §10.3). */

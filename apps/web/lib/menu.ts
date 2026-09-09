@@ -17,7 +17,7 @@ export type MenuItem = {
   href: string;
   /** Paths that light this item up besides its own prefix (Scoreboard owns /alphas and /seasons). */
   also?: readonly string[];
-  /** The bar draws this one quieter (the guide is a different kind of place). */
+  /** The bar draws this one quieter (the guide is a different kind of place) and, below xl, not at all: signed in, nine cells and Sign out already fill 1024px. It stays in the drawer and the footer. */
   quiet?: boolean;
   /** Which of the site's two attention counts sits on this item (App Review §01). */
   badge?: "you" | "clan";

@@ -5,7 +5,7 @@ import { LINK_TTL_MS, LINK_EMOTES, JOIN_PRESENCE_RADIUS_M, PENDING_EXPIRY_MS } f
 import { UNLINK_COPY } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { when, days } from "@/lib/format";
+import { when, days, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { Page, Panel, PanelBody, Notice, Footer, GuideLine, SessionLost, btnCta, btnPrimary, btnSecondary, btnQuiet, link, kicker, kickerSm } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
@@ -170,7 +170,7 @@ export default async function MePage({ searchParams }: { searchParams: Promise<{
                   <li key={r.id} className="flex min-h-[64px] flex-wrap items-center gap-3.5 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:px-5">
                     <div className="min-w-0 flex-1">
                       <div className="font-display text-[15px] text-ink">{r.clanName} <span className="font-mono text-xs text-ink-2">[{r.tag}]</span></div>
-                      <div className="font-mono text-xs text-muted">asked {when(r.createdAt)} · expires {when(r.expiresAt)}</div>
+                      <div className="font-mono text-xs text-muted">asked {ago(r.createdAt)} · expires {when(r.expiresAt)}</div>
                     </div>
                     <form action="/api/me/request/withdraw" method="post"><input type="hidden" name="requestId" value={r.id} /><button className={btnSecondary} type="submit">Withdraw</button></form>
                   </li>
