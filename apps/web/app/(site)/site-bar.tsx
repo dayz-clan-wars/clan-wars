@@ -21,7 +21,7 @@ import type { Counts } from "@/lib/menu";
 export function SiteBar({ signedIn, crumb, extra, guideIndex, counts }: { signedIn: boolean; crumb?: string; extra?: React.ReactNode; guideIndex?: SearchEntry[]; counts?: Counts }) {
   return (
     <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame pl-4 pr-4 lg:pl-8 lg:pr-8">
-      <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href={signedIn ? "/me" : "/"}>
+      <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href="/">
         <img src="/mark.png" alt="" width={28} height={28} />
         Clan Wars
         {crumb && <span className="ml-1.5 hidden text-muted lg:inline">/ {crumb}</span>}
