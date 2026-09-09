@@ -11,15 +11,15 @@ const CODE_RE = new RegExp(`^\\d{${VAULT_CODE_DIGITS}}$`, "u");
 export async function POST(req: NextRequest): Promise<NextResponse> {
   return formAction(req, "/clan/vault", async (session, form) => {
     const name = text(form, "name", VAULT_NAME_MAX);
-    if (!name) return vaultCode("input", "bad-input");
+    if (!name) return vaultCode("add", "bad-name");
     const note = optionalText(form, "note", VAULT_NOTE_MAX);
-    if (note === "too-long") return vaultCode("input", "bad-input");
+    if (note === "too-long") return vaultCode("add", "bad-note");
     const minRole = minRoleFrom(form);
     if (!minRole) return vaultCode("input", "bad-input");
     const rawCode = form.get("code");
     let code: string | undefined;
     if (typeof rawCode === "string" && rawCode.trim() !== "") {
-      if (!CODE_RE.test(rawCode.trim())) return vaultCode("input", "bad-input");
+      if (!CODE_RE.test(rawCode.trim())) return vaultCode("add", "bad-code");
       code = rawCode.trim();
     }
     const { outcome } = await addLock(session.sub, { name, note, minRole, code });

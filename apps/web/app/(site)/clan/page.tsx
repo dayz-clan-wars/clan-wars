@@ -8,8 +8,9 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { when, days, hours } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, SegNav, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
+import { fieldError } from "@/lib/field-errors";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -36,6 +37,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
     return <SessionLost next="/clan" />;
   }
   const notice = result ? (lookupCopy(RESULT_COPY, result) ?? lookupCopy(LEADERSHIP_RESULT_COPY, result)) : undefined;
+  // A result about the invite's gamertag is shown under that field too, and it takes focus instead of the notice.
+  const err = fieldError(result, RESULT_COPY);
   const view = await clanFor(session.sub);
 
   if (view === "not-linked" || view === "not-in-clan") {
@@ -77,7 +80,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
 
       {(notice || clan.status === "reserved" || me.status === "pending") && (
         <div className="flex flex-col gap-2 px-5 pt-5 lg:px-8 lg:pt-6">
-          {notice && <Notice>{notice}</Notice>}
+          {notice && <Notice focus={err === null}>{notice}</Notice>}
           {clan.status === "reserved" && <Notice tone="gold" focus={false}>Reserved. Raise your flag at the pole within {days(ACTIVATION_WINDOW_MS)} of the claim to activate the clan. Until then nobody else can take the name, tag, flag or pole.</Notice>}
           {me.status === "pending" && <Notice tone="gold" focus={false}>You are pending. Stand within {JOIN_PRESENCE_RADIUS_M} m of the clan&rsquo;s base in game and the server log will make you a full member. Unseen for {days(PENDING_EXPIRY_MS)}, the spot expires.</Notice>}
         </div>
@@ -113,9 +116,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             <Panel num="02" title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
-                  <input className={`${field} !mt-0 min-w-0 flex-1`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby="invite-note" />
+                  <input {...invalid(err, "gamertag")} className={`${field} !mt-0 min-w-0 flex-1 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} autoComplete="off" aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
                   <button className={`${btnPrimary} min-h-[52px] flex-none`} type="submit">Invite</button>
                 </form>
+                <FieldError err={err} name="gamertag" />
                 <p id="invite-note" className="mt-2.5 text-xs text-muted">They must have linked their character on the site.</p>
                 {invitesOut.length > 0 && (
                   <ul className="mt-4 border-t border-rule-2">

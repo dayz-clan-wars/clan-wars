@@ -9,7 +9,8 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { when } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
+import { fieldError } from "@/lib/field-errors";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -24,6 +25,8 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   const session = await currentSession();
   if (!session) return <SessionLost next="/clan/vault" />;
   const notice = result ? lookupCopy(VAULT_RESULT_COPY, result) : undefined;
+  // Only the Add form's refusals name a field: an edit's would need the lock id to find its form.
+  const err = fieldError(result, VAULT_RESULT_COPY);
   const view = await vaultFor(session.sub);
 
   if (typeof view === "string") {
@@ -47,7 +50,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     <Page>
       <PageHead guide={guideLinkFor("/clan/vault")} kicker="Vault" title={<>Your clan&rsquo;s vault</>} sub={VAULT_INTRO} />
       <Body className="flex max-w-[44rem] flex-col gap-4 lg:gap-6">
-        {notice && <Notice>{notice}</Notice>}
+        {notice && <Notice focus={err === null}>{notice}</Notice>}
 
         {locks.length === 0 && <p className="text-sm text-ink-2">No locks your rank can see yet.</p>}
         {locks.map((lock) => (
@@ -105,14 +108,14 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             <Panel num={num(++n)} title="Add lock">
               <PanelBody>
                 <form className="flex flex-col gap-3" action="/api/vault/add" method="post">
-                  <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" required maxLength={VAULT_NAME_MAX} /></label>
-                  <label className="block"><span className={fieldLabel}>Note</span><input className={field} name="note" maxLength={VAULT_NOTE_MAX} /></label>
+                  <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err, "name")} className={`${field} ${invalid(err, "name").className ?? ""}`} name="name" required maxLength={VAULT_NAME_MAX} /><FieldError err={err} name="name" /></label>
+                  <label className="block"><span className={fieldLabel}>Note</span><input {...invalid(err, "note")} className={`${field} ${invalid(err, "note").className ?? ""}`} name="note" maxLength={VAULT_NOTE_MAX} /><FieldError err={err} name="note" /></label>
                   <label className="block"><span className={fieldLabel}>Minimum rank</span>
                     <select className={field} name="minRole" defaultValue="member" required>
                       {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </label>
-                  <label className="block"><span className={fieldLabel}>Code</span><input className={field} name="code" pattern={CODE_PATTERN} inputMode="numeric" title={`${VAULT_CODE_DIGITS} digits`} aria-describedby="code-note" /></label>
+                  <label className="block"><span className={fieldLabel}>Code</span><input {...invalid(err, "code")} className={`${field} ${invalid(err, "code").className ?? ""}`} name="code" pattern={CODE_PATTERN} inputMode="numeric" title={`${VAULT_CODE_DIGITS} digits`} aria-describedby={err?.field === "code" ? "err-code code-note" : "code-note"} /><FieldError err={err} name="code" /></label>
                   <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS} digits. Leave it blank and one is generated.</p>
                   <button className={`${btnPrimary} self-start`} type="submit">Add lock</button>
                 </form>
