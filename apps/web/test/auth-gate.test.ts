@@ -14,7 +14,7 @@ describe("the public allowlist is exactly this", () => {
   });
 
   it("pins the public prefixes", () => {
-    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/"]);
+    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/"]);
   });
 
   it("pins the auth pages", () => {
@@ -74,6 +74,11 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/players/SomeGamertag")).toBe(true);
     expect(pathIsPublic("/clan/board")).toBe(false);
     expect(pathIsPublic("/playersomething")).toBe(false);
+  });
+
+  it("lets the landing hero's terrain through", () => {
+    expect(pathIsPublic("/hero/terrain.webp")).toBe(true);
+    expect(pathIsPublic("/herosomething")).toBe(false);
   });
 
   it("lets the share images through for link crawlers", () => {

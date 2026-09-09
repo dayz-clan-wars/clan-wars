@@ -145,3 +145,23 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
 .cw-map-popup .leaflet-popup-content { margin: 0; line-height: normal; }
 .cw-map-popup .leaflet-popup-close-button { color: var(--color-muted); }
 .cw-map-popup .leaflet-popup-close-button:hover { color: var(--color-ink); }
+/*
+ * The landing hero (app/components/hero-map.tsx). On a phone the terrain is
+ * a 240px strip above the copy, faded top and bottom; on desktop it is the
+ * whole 620px ground, faded left-to-right so the headline sits on near-black
+ * and the map shows through only on the right. Two gradients on desktop:
+ * the vertical one is listed first, so it paints on top.
+ */
+.hero-fade { background: linear-gradient(180deg, rgba(5,5,5,.55) 0%, rgba(5,5,5,.15) 40%, rgba(5,5,5,.25) 75%, rgba(5,5,5,.9) 100%); }
+@media (min-width: 1024px) {
+  .hero-fade {
+    background:
+      linear-gradient(180deg, rgba(5,5,5,.35) 0%, rgba(5,5,5,0) 30%, rgba(5,5,5,.2) 60%, rgba(5,5,5,.97) 100%),
+      linear-gradient(90deg, #050505 0%, rgba(5,5,5,.97) 50%, rgba(5,5,5,.45) 78%, rgba(5,5,5,.2) 100%);
+  }
+}
+.hero-grid {
+  background-image:
+    repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 70px),
+    repeating-linear-gradient(90deg, rgba(255,255,255,.03) 0 1px, transparent 1px 70px);
+}
