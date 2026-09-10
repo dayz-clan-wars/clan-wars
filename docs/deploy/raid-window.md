@@ -17,6 +17,19 @@ walls, gates and containers take damage.
 | Friday 00:00 UTC | Friday 07:00 | `false` | restart the server |
 | Monday 00:00 UTC | Monday 07:00 | `true` | restart the server |
 
+## Exceptions, by decision
+
+| Boundary skipped | Decided | What happens instead |
+|---|---|---|
+| 2026-09-11 and 2026-09-14 (the first weekend after the 2026-09-08 launch) | 2026-09-10 | Neither flip is made. `disableBaseDamage` stays `true` all week. The first window opens **Friday 2026-09-18 00:00 UTC**, and the normal twice-weekly cadence starts from there. |
+
+A skipped weekend is a decision recorded here, never a missed flip to catch up (see below):
+do not open a window on a different day to compensate. Everything else keeps its normal
+clock: flag lowering scores all week, and the week tick closes week one at Monday
+2026-09-14 00:00 UTC from whatever non-destructive raids landed. Say so in Discord before
+the Friday, in plain words: no base damage this weekend, first raid weekend is 18–21
+September, lowering flags counts as always.
+
 The setting is read at server start. Editing the file without a restart changes nothing;
 restarting without editing the file changes nothing. Do both, in that order.
 

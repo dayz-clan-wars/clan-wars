@@ -943,3 +943,19 @@ oversight.
 
 Closed by increment 2a: the prototypes are deleted, the rebuilt pages say clan, and
 `apps/web/test/copy-vocabulary.test.ts` scans every file under `app/`.
+
+## 38. First raid weekend delayed one week — DECIDED 2026-09-10, moot after 2026-09-18
+
+The launch instant was 2026-09-08T00:39:17Z, so the runbook's cadence would have opened base
+damage on Friday 2026-09-11. Decision: skip the 2026-09-11 and 2026-09-14 flips;
+`disableBaseDamage` stays `true` and the first window opens Friday 2026-09-18 00:00 UTC.
+Recorded in `docs/deploy/raid-window.md` ("Exceptions") and the 2026-09-08 launch acceptance.
+
+Scope is base damage only. Deliberately **not** moved: the launch grace (poles public from
+2026-09-15), flag-lowering raids (legal and scoring all week), and the week-one close and
+Alphas on 2026-09-14. Nothing in code or the database changed, because the window lives only
+in the game server's `cfggameplay.json` and the runbook.
+
+⚠️ This is a recorded decision, not a missed flip: whoever runs the runbook must not "catch up"
+by opening a window on another day. The item closes itself once the 2026-09-18 flip is made.
+
