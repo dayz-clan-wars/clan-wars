@@ -28,9 +28,10 @@ feed will post the four historical ones once the rebuild lands — see step 4.
    events (their payloads gain `weapon`/`distanceM`, and three were mis-typed), and the four
    `player.died` rows whose cause was `environment` (two mutual kills, two grenades):
 
-       delete from events where type in ('player.hit', 'player.unconscious');
-       delete from events where type = 'player.died' and payload->>'cause' = 'environment';
-       -- expect ~505 + 4 rows
+       delete from events where type in ('player.hit', 'player.unconscious');            -- 505 rows on 2026-09-10
+       -- kills rows reference events (kills_event_id_events_id_fk): drop the four stale rows first — the rebuild recreates them
+       delete from kills where event_id in (select id from events where type = 'player.died' and payload->>'cause' = 'environment');
+       delete from events where type = 'player.died' and payload->>'cause' = 'environment'; -- 4 rows
 
    Nothing consumes those rows by id — the kills consumer matches evidence by `occurred_at` —
    and no consumer cursor needs moving: the reparse appends fresh rows at the head of the log.
@@ -59,6 +60,7 @@ feed will post the four historical ones once the rebuild lands — see step 4.
 
        select cause, count(*) from kills group by 1 order by 2 desc;
 
-   Expect `environment` gone, `explosion 2`, `finished 4`, `pvp 29`.
+   Expect `environment` gone, `explosion 2`, `finished 4`, `pvp 29`. (Ran 2026-09-10: exactly that;
+   `died` 43 → 38. The kill feed's cursor was parked at `max(event_id)`, so nothing posted.)
 
 6. **Deploy web** (`deploy/deploy-web.sh`).
