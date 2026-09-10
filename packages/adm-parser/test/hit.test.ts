@@ -4,11 +4,15 @@ const V = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", K = "BBBBBBBBBBBBBBBBBBBBB
 describe("parseHit", () => {
   it("a player's hit: attacker anchored on their id, HP after, damage, body part", () => {
     expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 61.9] hit by Player "Kil" (id=${K} pos=<4.0, 5.0, 6.0>) into Torso(1) for 38.1 damage (Bullet_556x45) with M4A1 from 12.3 meters`))
-      .toEqual({ victimDayzId: V, victimGamertag: "Vic", victimHp: 61.9, attackerType: "player", attackerDayzId: K, attackerGamertag: "Kil", attackerLabel: null, damage: 38.1, bodyPart: "Torso" });
+      .toEqual({ victimDayzId: V, victimGamertag: "Vic", victimHp: 61.9, attackerType: "player", attackerDayzId: K, attackerGamertag: "Kil", attackerLabel: null, damage: 38.1, bodyPart: "Torso", weapon: "M4A1", distanceM: 12.3 });
+  });
+  it("⚠️ a hit from a player who is (DEAD) themselves is still that player's hit", () => {
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 20.5] hit by Player "Kil" (DEAD) (id=${K} pos=<4.0, 5.0, 6.0>) into Torso(1) for 38.59 damage (Bullet_9x19) with SCR 17`))
+      .toMatchObject({ attackerType: "player", attackerDayzId: K, weapon: "SCR 17", distanceM: null });
   });
   it("an infected's hit", () => {
     expect(parseHit(`12:26:14 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 92.35] hit by Infected into Torso(1) for 7.65 damage (MeleeInfected)`))
-      .toMatchObject({ victimDayzId: V, victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso" });
+      .toMatchObject({ victimDayzId: V, victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso", weapon: null, distanceM: null });
   });
   it("the environment: a fall, a fence, a car — the class name is the label", () => {
     expect(parseHit(`20:43:56 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 65.3546] hit by FallDamageHealth`))

@@ -137,7 +137,15 @@ turbo gate stays the gate, because it runs `typecheck` too.
   (lifted from One Life) with the victim's hits and knockouts from the two minutes before,
   and writes the verdict — `mauled`, `starvation`, `dehydration`, `fall` — into
   `kills.cause`. Evidence is matched by `occurred_at` and victim id, never by event id, so a
-  reparse-then-rebuild attributes history too: `docs/deploy/2026-09-10-death-causes.md`. `membership_history` is a projection the roster never writes
+  reparse-then-rebuild attributes history too: `docs/deploy/2026-09-10-death-causes.md`.
+  A bare `died` after a player's hit that left the victim at `FINISH_HP_MAX` (25) or below, or
+  a knockout after it, with nothing but a player hurting them since, is a credited kill
+  (`finishedBy`): killer, weapon and range from the hit, `cause = 'finished'`, and it counts
+  as a kill everywhere `killer_dayz_id` does. ⚠️ A reparse never corrects a misparsed line —
+  the idempotency index is on file + line, not type — delete the wrong events first
+  (`docs/deploy/2026-09-10-credited-kills.md`). ⚠️ `pnpm rebuild:kills` fails from the
+  workspace root (`drizzle-orm` unresolvable, pre-existing); the runbook shows the bot-package
+  form that works. `membership_history` is a projection the roster never writes
   — only the bot writes it, once per tick. Rebuild scripts `pnpm rebuild:sessions --server
   <id>` and `pnpm rebuild:kills --server <id>` (single-server only, `factions_live` guard,
   idempotent) clear and backfill from the log head; use them after a migration or to wipe

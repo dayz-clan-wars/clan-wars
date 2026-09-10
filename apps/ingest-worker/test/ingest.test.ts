@@ -63,7 +63,7 @@ describe("ingestFile", () => {
     await ingestFile(db, { ...opts(), lines });
     const rows = await db.select().from(events).orderBy(events.lineIndex);
     expect(rows.map((r) => r.type)).toEqual(["player.hit", "player.unconscious", "player.died"]);
-    expect(rows[0]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso" });
+    expect(rows[0]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso", weapon: null, distanceM: null });
     expect(rows[1]!.payload).toEqual({ dayzId: ID, gamertag: "YrJustBad", disconnecting: false });
     expect(rows[2]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", cause: "died", entity: null, water: 598.786, energy: 0, bleedSources: 1 });
   });

@@ -6,6 +6,14 @@ describe("parseDeath", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Player "Kil" (id=${K} pos=<4.0, 5.0, 6.0>) with M4A1 from 153.4 meters`))
       .toEqual({ kind: "killed", victimDayzId: V, victimGamertag: "Vic", killerDayzId: K, killerGamertag: "Kil", weapon: "M4A1", distanceM: 153.4 });
   });
+  it("⚠️ a mutual kill — the killer is (DEAD) too — is still a kill by that player, never 'environment'", () => {
+    expect(parseDeath(`13:41:04 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Player "Kil" (DEAD) (id=${K} pos=<4.0, 5.0, 6.0>) with SCR 17 from 4.6558 meters`))
+      .toEqual({ kind: "killed", victimDayzId: V, victimGamertag: "Vic", killerDayzId: K, killerGamertag: "Kil", weapon: "SCR 17", distanceM: 4.6558 });
+  });
+  it("a grenade names no thrower: an explosion, not the environment", () => {
+    expect(parseDeath(`17:44:37 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by 6-M7 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion", entity: "6" });
+    expect(parseDeath(`15:19:45 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by EGD-5 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion" });
+  });
   it("reads a PvP kill without distance (melee)", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V}) killed by Player "Kil" (id=${K}) with Knife`)).toMatchObject({ kind: "killed", weapon: "Knife", distanceM: null });
   });

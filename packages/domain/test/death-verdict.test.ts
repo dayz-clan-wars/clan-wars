@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { classifyDeath, classifyEntityLabel, DEATH_CAUSES, RECENT_HIT_WINDOW_S, type RecentHit } from "../src/death-verdict";
+import { classifyDeath, classifyEntityLabel, finishedBy, DEATH_CAUSES, RECENT_HIT_WINDOW_S, FINISH_HP_MAX, type RecentHit } from "../src/death-verdict";
 
 const hit = (o: Partial<RecentHit>): RecentHit => ({ attackerType: "infected", attackerLabel: "Infected", secondsBeforeDeath: 10, victimHp: 50, ...o });
 const plain = { mechanism: "died", energy: 500, water: 500, bleedSources: 0 };
@@ -56,8 +56,39 @@ describe("classifyDeath: a bare `died` is inferred from the two minutes before i
 
 describe("DEATH_CAUSES is the whole vocabulary the kills column may hold", () => {
   it("contains every verdict", () => {
-    for (const c of ["pvp", "suicide", "bled_out", "drowned", "environment", "infected", "animal", "wolf", "bear", "fall", "vehicle", "starvation", "dehydration", "mauled", "died"]) {
+    for (const c of ["pvp", "suicide", "bled_out", "drowned", "environment", "explosion", "infected", "animal", "wolf", "bear", "fall", "vehicle", "starvation", "dehydration", "mauled", "finished", "died"]) {
       expect(DEATH_CAUSES.has(c), c).toBe(true);
     }
+  });
+});
+
+describe("finishedBy: a bare death credited to the player who shot them", () => {
+  const shot = (o: Partial<RecentHit>): RecentHit => hit({ attackerType: "player", attackerLabel: null, attackerId: "K", weapon: "DMR", distanceM: 40, ...o });
+  it("the last player hit left them at FINISH_HP_MAX or below, nothing else hurt them after: credited", () => {
+    expect(finishedBy([shot({ secondsBeforeDeath: 103, victimHp: 11.3 })], [])?.attackerId).toBe("K");
+    expect(finishedBy([shot({ secondsBeforeDeath: 50, victimHp: 70 }), shot({ secondsBeforeDeath: 24, victimHp: FINISH_HP_MAX })], [])?.secondsBeforeDeath).toBe(24);
+  });
+  it("a knockout after the hit credits it even from higher HP", () => {
+    expect(finishedBy([shot({ secondsBeforeDeath: 24, victimHp: 60 })], [{ secondsBeforeDeath: 10, disconnecting: false }])?.attackerId).toBe("K");
+    expect(finishedBy([shot({ secondsBeforeDeath: 24, victimHp: 60 })], [{ secondsBeforeDeath: 30, disconnecting: false }])).toBeNull(); // the knockout came first
+  });
+  it("not credited: high HP and no knockout; a hit outside the window; an unknown attacker", () => {
+    expect(finishedBy([shot({ secondsBeforeDeath: 24, victimHp: 60 })], [])).toBeNull();
+    expect(finishedBy([shot({ secondsBeforeDeath: RECENT_HIT_WINDOW_S + 1, victimHp: 5 })], [])).toBeNull();
+    expect(finishedBy([shot({ secondsBeforeDeath: 24, victimHp: 5, attackerId: null })], [])).toBeNull();
+  });
+  it("⚠️ anything but a player hurting them AFTER the last shot breaks the credit — the infected or the fall finished it", () => {
+    expect(finishedBy([shot({ secondsBeforeDeath: 60, victimHp: 5 }), hit({ secondsBeforeDeath: 20, victimHp: 3 })], [])).toBeNull();
+    expect(finishedBy([hit({ secondsBeforeDeath: 90, victimHp: 80 }), shot({ secondsBeforeDeath: 60, victimHp: 5 })], [])?.attackerId).toBe("K"); // before it is fine
+  });
+  it("⚠️ a burst logs several hits in one second: the lowest HP is the last of them", () => {
+    // As logged for YrJustBad on 2026-09-01: four hits at the same second, 56 → 38 → 21 → 3.6.
+    const burst = [56.1, 38.6, 21.1, 3.6].map((hp) => shot({ secondsBeforeDeath: 87, victimHp: hp }));
+    expect(finishedBy(burst, [])?.victimHp).toBe(3.6);
+    expect(finishedBy([...burst].reverse(), [])?.victimHp).toBe(3.6);
+  });
+  it("the credit goes to the LAST player to hit them, with that hit's weapon", () => {
+    const f = finishedBy([shot({ secondsBeforeDeath: 80, victimHp: 30, attackerId: "K1", weapon: "KA-74" }), shot({ secondsBeforeDeath: 20, victimHp: 4, attackerId: "K2", weapon: "SCR 17" })], []);
+    expect(f).toMatchObject({ attackerId: "K2", weapon: "SCR 17" });
   });
 });

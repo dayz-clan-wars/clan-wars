@@ -135,7 +135,8 @@ export type Encounter = {
  * steps and dismantles are grouped by the hour they fell in, `steps` each.
  */
 export type FeedEntry =
-  | { kind: "kill"; at: Date; other: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean }
+  /** `cause` is `finished` for a credited kill (the victim was shot to near-zero and left to die), else the log's word. */
+  | { kind: "kill"; at: Date; other: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean; cause: string | null }
   | { kind: "death"; at: Date; other: string | null; weapon: string | null; distanceM: number | null; friendlyFire: boolean; cause: string | null }
   | { kind: "raid"; at: Date; victim: { tag: string; name: string } }
   | { kind: "raised"; at: Date }
@@ -706,7 +707,7 @@ export async function playerFeedDb(
     select kind, at, other, weapon, distance_m, friendly_fire, cause, tag, name, n from (
       select 'kill' as kind, ${kills.occurredAt} as at, coalesce(${players.gamertag}, ${kills.victimDayzId}) as other,
         ${kills.weapon} as weapon, ${kills.distanceM} as distance_m, ${kills.friendlyFire} as friendly_fire,
-        null::text as cause, null::text as tag, null::text as name, 1 as n
+        ${kills.cause} as cause, null::text as tag, null::text as name, 1 as n
       from ${kills} left join ${players} on ${players.dayzId} = ${kills.victimDayzId}
       where ${kills.serverId} = ${serverId} and ${kills.killerDayzId} = ${me} and ${kills.victimDayzId} <> ${me} and ${inWindow(kills.occurredAt, w)}
       union all
@@ -736,7 +737,7 @@ export async function playerFeedDb(
     const at = new Date(r.at);
     const distanceM = r.distance_m === null ? null : Number(r.distance_m);
     switch (r.kind) {
-      case "kill": return { kind: "kill", at, other: r.other!, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire };
+      case "kill": return { kind: "kill", at, other: r.other!, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, cause: r.cause };
       case "death": return { kind: "death", at, other: r.other, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, cause: r.cause };
       case "raid": return { kind: "raid", at, victim: { tag: r.tag!, name: r.name! } };
       case "raised": return { kind: "raised", at };

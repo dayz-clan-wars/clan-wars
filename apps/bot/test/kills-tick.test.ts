@@ -119,6 +119,31 @@ describe("killsTick", () => {
     expect(rows).toEqual([{ victim: A, cause: "mauled" }, { victim: R, cause: "starvation" }, { victim: S, cause: "fall" }, { victim: B, cause: "died" }]);
   });
 
+  it("3c. a bare `died` after a player's shot to near-zero is a credited kill: killer, weapon, faction, friendly fire", async () => {
+    const t = (s: number) => new Date(t1.getTime() + s * 1000);
+    const shot = (victim: string, killer: string, hp: number, at: Date, weapon = "DMR") =>
+      ev("player.hit", { victimDayzId: victim, victimGamertag: victim, victimHp: hp, attackerType: "player", attackerDayzId: killer, attackerGamertag: killer, attackerLabel: null, damage: 40, bodyPart: "Torso", weapon, distanceM: 41.5 }, at);
+    const bare = (victim: string, at: Date) => ev("player.died", { victimDayzId: victim, victimGamertag: victim, cause: "died", entity: null, water: 500, energy: 500, bleedSources: 1 }, at);
+    // R (WOLF) shot by A (BEAR) to 11 HP, died 100 s later: A's kill, not friendly fire.
+    await shot(R, A, 11, t(0)); await bare(R, t(100));
+    // B (still BEAR at t1) shot by A (BEAR) to 20 HP, knocked out, died: A's kill, friendly fire.
+    await shot(B, A, 20, t(110)); await ev("player.unconscious", { dayzId: B, gamertag: "B", disconnecting: false }, t(120)); await bare(B, t(130));
+    // S shot by A to 5 HP, then an infected hit, then died: NOT credited — the infected finished it (mauled: bleeding + hunted).
+    await shot(S, A, 5, t(200));
+    await ev("player.hit", { victimDayzId: S, victimGamertag: "S", victimHp: 2, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 3, bodyPart: "Torso", weapon: null, distanceM: null }, t(220));
+    await bare(S, t(240));
+    const result = await killsTick(db);
+    expect(result.scanned).toBe(3);
+    const [bear] = await db.select().from(factions).where(sql`tag = 'BEAR'`);
+    const [wolf] = await db.select().from(factions).where(sql`tag = 'WOLF'`);
+    const rows = await db.select({ victim: kills.victimDayzId, killer: kills.killerDayzId, cause: kills.cause, weapon: kills.weapon, distanceM: kills.distanceM, kf: kills.killerFactionId, vf: kills.victimFactionId, ff: kills.friendlyFire }).from(kills).orderBy(kills.occurredAt);
+    expect(rows).toEqual([
+      { victim: R, killer: A, cause: "finished", weapon: "DMR", distanceM: "41.5", kf: bear!.id, vf: wolf!.id, ff: false },
+      { victim: B, killer: A, cause: "finished", weapon: "DMR", distanceM: "41.5", kf: bear!.id, vf: bear!.id, ff: true },
+      { victim: S, killer: null, cause: "mauled", weapon: null, distanceM: null, kf: null, vf: null, ff: false },
+    ]);
+  });
+
   it("4. a stranger with no membership history on both sides: both faction ids null", async () => {
     await ev("player.killed", { victimDayzId: S, victimGamertag: "S", killerDayzId: "X".repeat(40), killerGamertag: "X", weapon: null, distanceM: null }, t1);
     await killsTick(db);

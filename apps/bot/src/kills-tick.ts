@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { kills, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { classifyDeath, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
+import { classifyDeath, finishedBy, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
 import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 
@@ -40,18 +40,23 @@ function readDiedPayload(payload: unknown): DiedPayload | null {
   return { victimDayzId: p.victimDayzId, cause: p.cause, water: num(p.water), energy: num(p.energy), bleedSources: num(p.bleedSources) };
 }
 
+/** What a bare `died` resolves to: a cause word, or a credited kill with the finishing player's hit. */
+type Verdict = { cause: string; finisher: RecentHit | null };
+
 /**
  * What the log said "died." meant: the victim's hits and knockouts in the
- * RECENT_HIT_WINDOW_S before the death, handed to the domain's ladder with
- * the death line's own stats. Only a bare `died` is looked up — a stated
- * cause passes straight through classifyDeath.
+ * RECENT_HIT_WINDOW_S before the death, handed to the domain's two rules
+ * with the death line's own stats — `finishedBy` first (a player shot them
+ * to near-zero and nothing else touched them: a kill, `cause = 'finished'`),
+ * then `classifyDeath`'s ladder. Only a bare `died` is looked up — a stated
+ * cause passes straight through.
  *
  * ⚠️ Evidence is matched by occurred_at and the victim's id, never by event
  * id order: a reparse backfills hit events at the head of the log with
  * their true occurred_at, and a rebuild after it must still find them.
  */
-async function causeOf(db: Database, serverId: number, payload: DiedPayload, at: Date): Promise<string> {
-  if (payload.cause !== "died") return payload.cause;
+async function verdictOf(db: Database, serverId: number, payload: DiedPayload, at: Date): Promise<Verdict> {
+  if (payload.cause !== "died") return { cause: payload.cause, finisher: null };
   const from = new Date(at.getTime() - RECENT_HIT_WINDOW_S * 1000);
   const rows = await db.select({ type: events.type, occurredAt: events.occurredAt, payload: events.payload }).from(events).where(and(
     eq(events.serverId, serverId),
@@ -66,12 +71,16 @@ async function causeOf(db: Database, serverId: number, payload: DiedPayload, at:
     if (r.type === "player.hit") {
       const type = p.attackerType;
       hits.push({ attackerType: type === "player" || type === "infected" ? type : "environment", attackerLabel: typeof p.attackerLabel === "string" ? p.attackerLabel : null,
-        victimHp: num(p.victimHp), secondsBeforeDeath: secondsBefore(r.occurredAt) });
+        victimHp: num(p.victimHp), secondsBeforeDeath: secondsBefore(r.occurredAt),
+        attackerId: typeof p.attackerDayzId === "string" ? p.attackerDayzId : null, weapon: typeof p.weapon === "string" ? p.weapon : null, distanceM: num(p.distanceM) });
     } else {
       outs.push({ disconnecting: p.disconnecting === true, secondsBeforeDeath: secondsBefore(r.occurredAt) });
     }
   }
-  return classifyDeath({ mechanism: payload.cause, water: payload.water, energy: payload.energy, bleedSources: payload.bleedSources }, hits, outs);
+  // A player cannot finish themselves: their own hit (a self-inflicted wound) is not a credit.
+  const finisher = finishedBy(hits.filter((h) => h.attackerId !== payload.victimDayzId), outs);
+  if (finisher) return { cause: "finished", finisher };
+  return { cause: classifyDeath({ mechanism: payload.cause, water: payload.water, energy: payload.energy, bleedSources: payload.bleedSources }, hits, outs), finisher: null };
 }
 
 /**
@@ -145,10 +154,15 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
         if (!payload) continue;
         out.scanned++;
 
-        const [victimFactionId, cause] = await Promise.all([
+        const [victimFactionId, { cause, finisher }] = await Promise.all([
           membershipAt(db, ev.serverId, payload.victimDayzId, ev.occurredAt),
-          causeOf(db, ev.serverId, payload, ev.occurredAt),
+          verdictOf(db, ev.serverId, payload, ev.occurredAt),
         ]);
+        // A credited kill is a kill: killer set, faction and friendly fire resolved exactly as for a
+        // `player.killed` line. The stats and the kill feed key on `killer_dayz_id`, so it counts.
+        const killerDayzId = finisher?.attackerId ?? null;
+        const killerFactionId = killerDayzId === null ? null : await membershipAt(db, ev.serverId, killerDayzId, ev.occurredAt);
+        const friendlyFire = killerFactionId !== null && killerFactionId === victimFactionId;
 
         const inserted = await db
           .insert(kills)
@@ -157,14 +171,15 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             eventId: ev.id,
             occurredAt: ev.occurredAt,
             victimDayzId: payload.victimDayzId,
-            killerDayzId: null,
-            weapon: null,
-            distanceM: null,
-            // `DeathCauseWord` (@factions/domain): the parser's word, or the verdict's for a bare `died`.
+            killerDayzId,
+            weapon: finisher?.weapon ?? null,
+            distanceM: finisher?.distanceM == null ? null : String(finisher.distanceM),
+            // `DeathCauseWord` (@factions/domain): the parser's word, the verdict's for a bare `died`,
+            // or `finished` for a credited kill.
             cause,
             victimFactionId,
-            killerFactionId: null,
-            friendlyFire: false,
+            killerFactionId,
+            friendlyFire,
           })
           .onConflictDoNothing({ target: kills.eventId })
           .returning({ id: kills.id });

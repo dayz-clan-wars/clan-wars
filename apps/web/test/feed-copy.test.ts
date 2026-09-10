@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEATH_CAUSES } from "@factions/domain";
-import { FEED_KIND, DEATH_CAUSE, EMPTY_FEED, FEED_TITLE, FRIENDLY_FIRE_MARK, deathCause, steps, shot } from "../lib/feed-copy";
+import { FEED_KIND, DEATH_CAUSE, FINISHED, EMPTY_FEED, FEED_TITLE, FRIENDLY_FIRE_MARK, deathCause, steps, shot } from "../lib/feed-copy";
 
 describe("feed copy", () => {
   it("names every kind", () => {
@@ -18,6 +18,8 @@ describe("feed copy", () => {
     expect(deathCause("mauled")).toBe("mauled by the infected");
     expect(deathCause("starvation")).toBe("of starvation");
     expect(deathCause("wolf")).toBe("to a wolf");
+    expect(deathCause("explosion")).toBe("in an explosion");
+    expect(FINISHED).toEqual({ kill: "Finished", death: "Finished by" });
   });
   it("death causes read as a phrase, unknown ones as the log wrote them", () => {
     expect(deathCause("infected")).toBe("to the infected");

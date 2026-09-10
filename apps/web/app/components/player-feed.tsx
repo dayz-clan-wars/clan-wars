@@ -1,5 +1,5 @@
 import type { Encounter, FeedEntry, PlayerFeed } from "@factions/roster";
-import { EMPTY_FEED, FEED_KIND, FEED_TITLE, FRIENDLY_FIRE_MARK, deathCause, shot, steps } from "@/lib/feed-copy";
+import { EMPTY_FEED, FEED_KIND, FEED_TITLE, FINISHED, FRIENDLY_FIRE_MARK, deathCause, shot, steps } from "@/lib/feed-copy";
 import { PAGER } from "@/lib/stats-copy";
 import { seasonQuery } from "@/lib/board-page";
 import { Panel, Pager } from "./ui";
@@ -17,12 +17,12 @@ function FeedLine({ e }: { e: FeedEntry }) {
   switch (e.kind) {
     case "kill": {
       const s = shot(e.distanceM, e.weapon);
-      return <>Killed <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
+      return <>{e.cause === "finished" ? FINISHED.kill : "Killed"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
     }
     case "death": {
       const s = shot(e.distanceM, e.weapon);
       if (e.other === null) { const c = deathCause(e.cause); return <>Died{c && ` ${c}`}</>; }
-      return <>Killed by <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
+      return <>{e.cause === "finished" ? FINISHED.death : "Killed by"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
     }
     case "raid": return <>Lowered <strong className="font-bold text-ink">{e.victim.name}</strong>&rsquo;s flag</>;
     case "raised": return <>Raised the colours</>;

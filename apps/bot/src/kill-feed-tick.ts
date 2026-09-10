@@ -117,7 +117,7 @@ export class PgKillFeedStore implements KillFeedStore {
       killerName: killer.gamertag, victimName: victim.gamertag,
       killerTag: killerClan.tag, killerTexture: killerClan.texture,
       victimTag: victimClan.tag, victimTexture: victimClan.texture,
-      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire,
+      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire, cause: kills.cause,
     }).from(kills)
       .leftJoin(killer, eq(killer.dayzId, kills.killerDayzId))
       .leftJoin(victim, eq(victim.dayzId, kills.victimDayzId))
@@ -137,7 +137,7 @@ export class PgKillFeedStore implements KillFeedStore {
         killer: { gamertag: r.killerName ?? "Unknown", tag: r.killerTag ?? null, texture: r.killerTexture ?? null },
         victim: { gamertag: r.victimName ?? "Unknown", tag: r.victimTag ?? null, texture: r.victimTexture ?? null },
         weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM),
-        friendlyFire: r.friendlyFire, tally,
+        friendlyFire: r.friendlyFire, cause: r.cause, tally,
       });
     }
     return out;

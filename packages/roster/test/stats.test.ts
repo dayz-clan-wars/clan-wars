@@ -470,7 +470,7 @@ describe("roster player stats", () => {
       expect(feed.entries.filter((e) => e.kind === "built").map((e) => (e as { steps: number }).steps)).toEqual([1, 1, 1]);
       expect(feed.entries.filter((e) => e.kind === "kill")).toHaveLength(12);
       expect(feed.entries.find((e) => e.kind === "kill" && e.at.getTime() === h(t0, 5).getTime()))
-        .toEqual({ kind: "kill", at: h(t0, 5), other: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false });
+        .toEqual({ kind: "kill", at: h(t0, 5), other: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false, cause: "pvp" });
     });
 
     it("groups build steps by the hour they fell in", async () => {
@@ -497,7 +497,7 @@ describe("roster player stats", () => {
     it("the friendly kill and the self-kill read as the log had them", async () => {
       // All-time is longer than a page: read it wide.
       const feed = (await playerFeedDb(db, "Alpha", ALL, 1, now, 100))!;
-      expect(feed.entries.find((e) => e.kind === "kill" && e.friendlyFire)).toEqual({ kind: "kill", at: h(t0, -1), other: "Bravo", weapon: null, distanceM: null, friendlyFire: true });
+      expect(feed.entries.find((e) => e.kind === "kill" && e.friendlyFire)).toEqual({ kind: "kill", at: h(t0, -1), other: "Bravo", weapon: null, distanceM: null, friendlyFire: true, cause: "pvp" });
       const romeo = (await playerFeedDb(db, "Romeo", SEASON_2, 1, now))!;
       expect(romeo.entries.find((e) => e.kind === "death")).toEqual({ kind: "death", at: h(t50, 4), other: null, weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" });
     });

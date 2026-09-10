@@ -15,6 +15,8 @@ export type KillFeedItem = {
   weapon: string | null;
   distanceM: number | null;
   friendlyFire: boolean;
+  /** `finished` for a credited kill (kills-tick: shot to near-zero and left to die); anything else reads as a plain kill. */
+  cause: string;
   /** The running tally, counted up to and including this kill. */
   tally: { killerKills: number; victimDeaths: number; season: number | null };
 };
@@ -61,10 +63,11 @@ export function killFeedEmbed(k: KillFeedItem, siteBaseUrl: string, flagImage: F
   const killerTag = k.killer.tag ? ` [${escapeMarkdown(k.killer.tag)}]` : "";
   const how = howLine(k.weapon, k.distanceM);
   const scope = k.tally.season === null ? "all-time" : "this season";
+  const verb = k.cause === "finished" ? "finished" : "killed";
   const lines = [
     k.friendlyFire
-      ? `killed their own clanmate ${who(k.victim, siteBaseUrl)}`
-      : `killed ${who(k.victim, siteBaseUrl)}`,
+      ? `${verb} their own clanmate ${who(k.victim, siteBaseUrl)}`
+      : `${verb} ${who(k.victim, siteBaseUrl)}`,
     ...(how ? [how] : []),
     `${plural(k.tally.killerKills, "kill")} for ${escapeMarkdown(k.killer.gamertag)} · ` +
       `${plural(k.tally.victimDeaths, "death")} for ${escapeMarkdown(k.victim.gamertag)} ${scope}`,

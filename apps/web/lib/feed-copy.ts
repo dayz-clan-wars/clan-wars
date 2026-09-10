@@ -36,9 +36,14 @@ export const DEATH_CAUSE: Record<string, string> = {
   vehicle: "under a vehicle",
   starvation: "of starvation",
   dehydration: "of thirst",
+  explosion: "in an explosion",
   environment: "to the environment",
+  /** A credited kill (the row has a killer); the verb changes instead — see FINISHED. */
+  finished: "of their wounds",
   died: "",
 };
+/** The verb for a credited kill: shot to near-zero and left to die, the log never naming a killer. */
+export const FINISHED = { kill: "Finished", death: "Finished by" } as const;
 export const deathCause = (cause: string | null): string => (cause === null ? "" : DEATH_CAUSE[cause] ?? cause);
 
 /** "12 build steps", "1 build step". */

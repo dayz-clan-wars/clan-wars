@@ -1,18 +1,22 @@
 import { classifyEntityLabel } from "@factions/domain";
 
-export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "environment" | "died";
+export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "explosion" | "environment" | "died";
 export type DeathLine =
   | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null }
   /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads. */
   | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null };
 
 const ID = "[0-9A-F]{40}";
-// ⚠️ Both identities anchored on their 40-hex ids; the victim's `(DEAD)` marker sits between the name and the id.
-const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\) killed by Player "([^"]+)" \\(id=(${ID})[^)]*\\)(.*)$`, "u");
+// ⚠️ Both identities anchored on their 40-hex ids; the victim's `(DEAD)` marker sits between the name and the id —
+// and so does the KILLER's when they died in the same exchange (a mutual kill). Without that optional marker the
+// line falls through to DEATH_RE, whose entity regex reads the word "Player" and files a real kill as "environment".
+const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\) killed by Player "([^"]+)" (?:\\(DEAD\\) )?\\(id=(${ID})[^)]*\\)(.*)$`, "u");
 const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\)(.*)$`, "u");
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
 const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
 const VERB_RE = /\b(died|committed suicide|bled out|drowned|killed by)\b/u;
+// "killed by 6-M7 Frag Grenade", "killed by EGD-5 Frag Grenade", a landmine: the thrower is never on the line.
+const EXPLOSION_RE = /killed by .*(grenade|explosi|mine\b|claymore)/iu;
 const STATS_RE = /Stats>\s*Water:\s*([\d.]+)\s*Energy:\s*([\d.]+)\s*Bleed sources:\s*(\d+)/u;
 // Animals go through @factions/domain's classifyEntityLabel first (wolf, bear, animal) — the same
 // rules the verdict applies to hit labels — so the prefixes here are disjoint from `Animal_`.
@@ -36,6 +40,7 @@ export function parseDeath(raw: string): DeathLine | null {
   const entity = ENTITY_RE.exec(tail)?.[1] ?? null;
   const cause: DeathCause =
     lower.includes("bled out") ? "bled_out" : lower.includes("drowned") ? "drowned" : lower.includes("committed suicide") ? "suicide"
+    : EXPLOSION_RE.test(tail) ? "explosion"
     : lower.includes("killed by") ? (entity ? (classifyEntityLabel(entity) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
     : "died";
   const s = STATS_RE.exec(tail);

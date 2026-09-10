@@ -7,7 +7,7 @@ const kill = (over: Partial<KillFeedItem> = {}): KillFeedItem => ({
   eventId: 4000, occurredAt: at,
   killer: { gamertag: "IGC slide", tag: "BEAR", texture: "Flag_Bear" },
   victim: { gamertag: "RonaldRaygun552", tag: "WOLF", texture: "Flag_Wolf" },
-  weapon: "KA-74", distanceM: 40.714, friendlyFire: false,
+  weapon: "KA-74", distanceM: 40.714, friendlyFire: false, cause: "pvp",
   tally: { killerKills: 13, victimDeaths: 4, season: 1 },
   ...over,
 });
@@ -71,5 +71,10 @@ describe("killFeedEmbed", () => {
     expect(escapeMarkdown("x_x*[y]")).toBe("x\\_x\\*\\[y\\]");
     const d = killFeedEmbed(kill({ victim: { gamertag: "_sneaky_", tag: null, texture: null } }), site).description!;
     expect(d).toContain("\\_sneaky\\_");
+  });
+
+  it("a credited kill says finished, never killed — the log named no killer", () => {
+    expect(killFeedEmbed(kill({ cause: "finished" }), site).description).toContain("finished **[RonaldRaygun552]");
+    expect(killFeedEmbed(kill({ cause: "finished", friendlyFire: true }), site).description).toContain("finished their own clanmate");
   });
 });
