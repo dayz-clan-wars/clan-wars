@@ -69,7 +69,16 @@ export type SweepDeps = {
   onTravelError?: (serverId: number, err: unknown) => void;
   onTravelUploaded?: (serverId: number, result: TravelTickResult) => void;
   onTravelDrift?: (serverId: number, drift: ProjectionDrift) => void;
+  /**
+   * The in-game server name, read from Nitrado each sweep and stored on the
+   * server row for the site to show. Absent in tests that only exercise
+   * ingestion.
+   */
+  hostnames?: { clientFor: (nitradoServiceId: number) => HostnameClient };
+  onHostnameError?: (serverId: number, err: unknown) => void;
 };
+
+export type HostnameClient = { hostname(): Promise<string> };
 
 /** One sweep across every active server. The database decides which those are. */
 export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ servers: number }> {
@@ -148,6 +157,18 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         if (result.uploaded) deps.onTravelUploaded?.(s.id, result);
       } catch (err) {
         deps.onTravelError?.(s.id, err);
+      }
+    }
+
+    // The in-game name, last. Its own try/catch like the rest: a failed read
+    // leaves the stored name and its seen-at alone, so the site shows the
+    // last confirmed name rather than nothing.
+    if (deps.hostnames) {
+      try {
+        const hostname = await deps.hostnames.clientFor(s.nitradoServiceId!).hostname();
+        await db.update(servers).set({ hostname, hostnameSeenAt: new Date() }).where(eq(servers.id, s.id));
+      } catch (err) {
+        deps.onHostnameError?.(s.id, err);
       }
     }
   }

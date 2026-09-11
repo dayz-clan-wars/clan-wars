@@ -106,6 +106,23 @@ export class NitradoClient {
     return `/games/${username}/ftproot/${game}_missions/${mission}/custom`;
   }
 
+  /**
+   * The in-game server name — `settings.config.hostname`, the string players
+   * search for in the DayZ server browser. An operator setting that changes
+   * from time to time, so it is re-read every sweep and never configured.
+   *
+   * Throws on a missing or blank value rather than returning it: the caller
+   * stores the last good name, and an empty one must never replace it.
+   */
+  async hostname(): Promise<string> {
+    const gs = (await this.getJson(`/services/${this.serviceId}/gameservers`))?.data?.gameserver;
+    const hostname = gs?.settings?.config?.hostname;
+    if (typeof hostname !== "string" || hostname.trim() === "") {
+      throw new Error("Nitrado: gameserver has no settings.config.hostname");
+    }
+    return hostname.trim();
+  }
+
   async listAdmFiles(): Promise<AdmFileRef[]> {
     const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
     const base = gs?.data?.gameserver?.game_specific?.path;

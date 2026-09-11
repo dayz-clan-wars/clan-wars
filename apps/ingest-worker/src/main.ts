@@ -83,6 +83,10 @@ for (;;) {
         template: travelTemplate,
         fileName: "pra-teleport-hub.json",
       },
+      // The in-game name for the site's server strip. A failure keeps the
+      // last name stored and is only logged.
+      hostnames: { clientFor },
+      onHostnameError: (serverId, err) => console.error(`hostname read failed for server ${serverId}`, err),
       onTravelError: (serverId, err) => console.error(`travel tick failed for server ${serverId}`, err),
       onTravelUploaded: (serverId, r) =>
         console.log(`travel file uploaded for server ${serverId}: ${r.poles} active clan poles (takes effect at the next server restart)`),

@@ -49,6 +49,17 @@ export const servers = pgTable("servers", {
    * alone is not a safe filter for which servers to pull.
    */
   active: boolean("active").notNull().default(true),
+  /**
+   * The in-game server name (Nitrado `settings.config.hostname`), the string
+   * players search for in the DayZ server browser. NOT `name`, which is the
+   * operator's label at registration. Written by the ingest sweep from
+   * Nitrado, since the worker is the only thing holding a token; read by the
+   * site. Nullable: unset until the first sweep, and never set for the
+   * replay rows with no service behind them. The sweep keeps the last good
+   * value on a failed read, so `hostnameSeenAt` says how fresh it is.
+   */
+  hostname: text("hostname"),
+  hostnameSeenAt: timestamp("hostname_seen_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   uniqNameMap: uniqueIndex("servers_name_map_uniq").on(t.name, t.map),

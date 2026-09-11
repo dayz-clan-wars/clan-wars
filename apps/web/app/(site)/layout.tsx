@@ -1,8 +1,10 @@
 import { currentSession } from "@/lib/viewer";
-import { attention } from "@factions/roster";
+import { attention, liveServers } from "@factions/roster";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
+import { ServerStrip } from "@/app/components/server-strip";
+import { serverStripCopy } from "@/lib/server-strip";
 import { SkipLink } from "@/app/components/ui";
 
 /**
@@ -22,10 +24,14 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   // The bar's two counts (App Review §01): a handful of lookups, and never a
   // reason to fail the page — an unreachable count is a bar with no badge.
   const counts = session ? await attention(session.sub).catch(() => undefined) : undefined;
+  // The server-name strip: one cheap read, and like the counts never a
+  // reason to fail the page — unreachable means no strip.
+  const servers = serverStripCopy(await liveServers().catch(() => []));
   return (
     <>
       <SkipLink />
       <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
+      <ServerStrip servers={servers} />
       <InstallStrip />
       {children}
     </>

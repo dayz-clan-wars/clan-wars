@@ -1,11 +1,13 @@
 import "./guide.css";
 import { currentSession } from "@/lib/viewer";
-import { attention } from "@factions/roster";
+import { attention, liveServers } from "@factions/roster";
 import { SiteBar } from "@/app/(site)/site-bar";
 import { buildIndex } from "./index";
 import { GuideSearch } from "./search";
 import Contents from "./contents";
 import { SkipLink } from "@/app/components/ui";
+import { ServerStrip } from "@/app/components/server-strip";
+import { serverStripCopy } from "@/lib/server-strip";
 
 /**
  * The guide's chrome on the site's own pieces: the top bar (with a "/ Field
@@ -23,6 +25,7 @@ export const dynamic = "force-dynamic";
 export default async function GuideLayout({ children }: { children: React.ReactNode }) {
   const [session, index] = [await currentSession(), buildIndex(true)];
   const counts = session ? await attention(session.sub).catch(() => undefined) : undefined;
+  const servers = serverStripCopy(await liveServers().catch(() => []));
   return (
     <>
       <SkipLink />
@@ -36,6 +39,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
           </div>
         </details>
       } />
+      <ServerStrip servers={servers} />
       <div className="flex min-h-[calc(100dvh-var(--spacing-bar))]">
         <aside className="hidden w-[300px] flex-none border-r-2 border-rule-2 lg:block">
           <div className="sticky top-bar max-h-[calc(100dvh-var(--spacing-bar))] overflow-y-auto pb-10 pt-6">
