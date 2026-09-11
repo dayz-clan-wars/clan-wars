@@ -75,6 +75,7 @@ import {
   type GuestGrantOutcome, type GuestTargetRef,
 } from "./guest";
 import { attentionDb, type Attention } from "./attention";
+import { liveServersDb, type LiveServer } from "./servers";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -92,10 +93,16 @@ export type { VaultState, VaultLockView, VaultHistoryRow };
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
 export type { GuestGrantOutcome, GuestTargetRef };
 export type { Attention };
+export type { LiveServer };
 
 /** The site bar's two counts: what is waiting on you (/me) and on your clan (/clan). Read on every page, so it is cheap. */
 export function attention(discordId: string): Promise<Attention> {
   return attentionDb(db(), discordId, new Date());
+}
+
+/** The server strip under the top bar: each live server's in-game name as Nitrado last reported it. The same for every viewer. */
+export function liveServers(): Promise<LiveServer[]> {
+  return liveServersDb(db());
 }
 
 /** Who is looking: their link and their clan, or null for either. */

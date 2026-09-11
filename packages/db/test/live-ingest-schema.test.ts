@@ -31,6 +31,19 @@ describe("live ingest schema", () => {
     expect(s?.nitradoServiceId).toBeNull();
   });
 
+  it("stores the in-game hostname and when it was last confirmed, both absent until the worker reads them", async () => {
+    // The name players search for in the DayZ browser. The worker writes it
+    // from Nitrado every sweep; the site reads it. Nullable: a freshly
+    // registered server has not been swept yet, and the replay rows never
+    // will be.
+    const [s] = await server();
+    expect(s?.hostname).toBeNull();
+    expect(s?.hostnameSeenAt).toBeNull();
+    const [u] = await db.update(servers).set({ hostname: "Clan Wars Livonia", hostnameSeenAt: now }).where(eq(servers.id, s!.id)).returning();
+    expect(u?.hostname).toBe("Clan Wars Livonia");
+    expect(u?.hostnameSeenAt?.toISOString()).toBe(now.toISOString());
+  });
+
   it("defaults a server to active", async () => {
     // The sweep runs over active servers. A newly registered server should
     // start ingesting without a second call to turn it on.

@@ -64,6 +64,36 @@ describe("ingestSweep", () => {
     expect(onServerError).toHaveBeenCalledTimes(1);
   });
 
+  it("records each server's in-game hostname from Nitrado", async () => {
+    // The site shows this name; the worker is the only thing with a Nitrado
+    // token, so the sweep is where it gets read.
+    const [s] = await addServer();
+    const before = Date.now();
+    await ingestSweep(db, { ...baseDeps, hostnames: { clientFor: () => ({ hostname: async () => "Clan Wars Livonia | Xbox" }) } });
+    const [row] = await db.select().from(servers).where(sql`id = ${s!.id}`);
+    expect(row?.hostname).toBe("Clan Wars Livonia | Xbox");
+    expect(row?.hostnameSeenAt!.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it("keeps the last hostname when Nitrado fails to answer, and finishes the sweep", async () => {
+    // A blank strip on the site because Nitrado hiccuped once is worse than
+    // a name that is a few minutes old — and a hostname failure must cost
+    // no log events.
+    const [s] = await addServer({ hostname: "Old Name", hostnameSeenAt: new Date(0) });
+    await addServer();
+    const onHostnameError = vi.fn();
+    const r = await ingestSweep(db, {
+      ...baseDeps,
+      hostnames: { clientFor: () => ({ hostname: async () => { throw new Error("nitrado down"); } }) },
+      onHostnameError,
+    });
+    expect(r.servers).toBe(2);
+    expect(onHostnameError).toHaveBeenCalledTimes(2);
+    const [row] = await db.select().from(servers).where(sql`id = ${s!.id}`);
+    expect(row?.hostname).toBe("Old Name");
+    expect(row?.hostnameSeenAt?.getTime()).toBe(0);
+  });
+
   it("runs the supply tick for each server", async () => {
     await addServer();
     const seen: number[] = [];

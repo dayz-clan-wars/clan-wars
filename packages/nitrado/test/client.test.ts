@@ -322,3 +322,27 @@ describe("NitradoClient.statFile", () => {
     }
   });
 });
+
+describe("NitradoClient.hostname", () => {
+  const client = (gs: unknown) =>
+    new NitradoClient("t", 1, fakeFetch({ "/gameservers": gs }) as unknown as typeof fetch);
+
+  it("reads the in-game server name from settings.config.hostname", async () => {
+    // The name players search for in the DayZ server browser. It is an
+    // operator setting that changes from time to time, which is why the
+    // site never hard-codes it and the worker re-reads it every sweep.
+    const gs = structuredClone(GS_FULL) as any;
+    gs.data.gameserver.settings.config.hostname = "Clan Wars Livonia | Xbox | PvP";
+    expect(await client(gs).hostname()).toBe("Clan Wars Livonia | Xbox | PvP");
+  });
+
+  it("throws rather than reporting an empty name", async () => {
+    // A missing or blank hostname must not overwrite a good one downstream;
+    // the caller keeps the last name it saw.
+    const gs = structuredClone(GS_FULL) as any;
+    delete gs.data.gameserver.settings.config.hostname;
+    await expect(client(gs).hostname()).rejects.toThrow(/hostname/i);
+    gs.data.gameserver.settings.config.hostname = "   ";
+    await expect(client(gs).hostname()).rejects.toThrow(/hostname/i);
+  });
+});
