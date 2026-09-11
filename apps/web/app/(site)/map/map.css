@@ -1,0 +1,89 @@
+/*
+ * apps/web/app/(site)/map/map.css — Leaflet's chrome and the map's markers,
+ * in the site's palette. Imported by map-view.tsx immediately AFTER
+ * leaflet.css, and only there.
+ *
+ * ⚠️ Leaflet ships light defaults — white tooltips, white popups, a white
+ * attribution strip — at the same specificity as the overrides below, so
+ * WHICH SHEET COMES LAST decides. These rules used to live in globals.css
+ * while map-view.tsx imported leaflet.css on its own; Next emitted that as a
+ * second sheet after globals, Leaflet's white won, and every pin popup on a
+ * phone was a white card with light ink on it — the Delete button
+ * unreadable (2026-09-11). A desktop browser with forced dark mode hid it.
+ * One file, imported right after leaflet.css, makes the order a fact of the
+ * import list rather than of the bundler. test/map-css-order.test.ts pins
+ * both halves. No token is re-declared: these read globals.css's @theme.
+ */
+.leaflet-container { background: var(--color-terrain); font-family: var(--font-sans); }
+.leaflet-tooltip,
+.leaflet-popup-content-wrapper,
+.leaflet-popup-tip,
+.leaflet-control-attribution,
+.leaflet-bar a {
+  background: var(--color-frame);
+  color: var(--color-ink);
+  border-color: var(--color-rule-2);
+}
+.leaflet-tooltip { box-shadow: none; }
+.leaflet-tooltip::before { border-top-color: var(--color-frame); border-right-color: var(--color-frame); }
+.leaflet-control-attribution a, .leaflet-popup-content a { color: var(--color-gold); }
+/* The attribution strip in the mono voice, 11px, framed like a tag; Leaflet's default is 11px sans in a white rounded box. */
+.leaflet-control-attribution { font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border: 1px solid var(--color-rule-2); border-radius: 0; margin: 0; }
+.leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
+/*
+ * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
+ * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and
+ * these rules only keep it from being a white box and let a class flip its
+ * state — stale, open, far — without rebuilding the element.
+ */
+.cw-mk { background: none; border: 0; }
+.cw-mk svg { display: block; }
+/* Name tags: mono in the black chip, no arrow. Age lowers the tag's opacity with the marker's, never its text colour. */
+.cw-map-tag {
+  padding: 3px 7px; font-family: var(--font-mono); font-size: 11px; line-height: 1.3; white-space: nowrap;
+  background: var(--color-frame); color: var(--color-ink); border: 1px solid var(--color-rule-2); border-radius: 0; box-shadow: none;
+}
+.cw-map-tag::before { display: none; }
+.cw-map-tag-you { color: var(--color-gold); }
+.cw-map-tag-base { border-color: var(--color-gold); }
+.cw-map-tag-intruder { border-color: var(--color-rust); }
+/* A clanmate's core hollows past a day (`cw-stale` is toggled by the age tick). */
+.cw-mk-clanmate .cw-core-hollow { display: none; }
+.cw-mk-clanmate.cw-stale .cw-core-solid { display: none; }
+.cw-mk-clanmate.cw-stale .cw-core-hollow { display: block; }
+/* An intruder's slow single pulse while inside the zone. */
+.cw-mk-intruder { position: relative; }
+.cw-ring {
+  position: absolute; left: -4px; top: -4px; width: 36px; height: 36px; box-sizing: border-box;
+  border: 2px solid; transform: rotate(45deg); opacity: .45; pointer-events: none;
+  animation: cw-pulse 3s ease-out infinite;
+}
+@keyframes cw-pulse {
+  0% { transform: rotate(45deg) scale(.7); opacity: .6; }
+  100% { transform: rotate(45deg) scale(1.2); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) { .cw-ring { animation: none; } }
+/* Travel points: a dot below zoom 3 (`cw-far` on the container), a glyph chip from zoom 3 up. */
+.leaflet-container.cw-far .cw-tp-chip { display: none; }
+.leaflet-container:not(.cw-far) .cw-tp-dot { display: none; }
+/*
+ * Place names (lib/map-places.ts). ⚠️ The box goes on the CHIP, never on the
+ * root: the root carries Leaflet's inline `width: 0; height: 0` from
+ * `iconSize: [0, 0]`, and a background there paints a dash at the anchor.
+ * Dark chip, light text — the one combination that holds over pale terrain.
+ */
+.cw-place { pointer-events: none; }
+.cw-place-chip {
+  position: absolute; left: 0; top: 0; transform: translate(-50%, -50%); white-space: nowrap;
+  background: color-mix(in srgb, var(--color-frame) 92%, transparent); color: var(--color-ink);
+  font-family: var(--font-display); font-size: 11px; letter-spacing: .06em; text-transform: uppercase; padding: 1px 5px;
+}
+.cw-place-major > .cw-place-chip { font-size: 13px; }
+.cw-place-faint > .cw-place-chip { font-size: 10px; letter-spacing: .04em; color: var(--color-ink-2); }
+/* A pin's chip frame turns gold while its popup is open. */
+.cw-mk-pin.cw-open .cw-chip-edge { stroke: var(--color-gold); }
+/* Pin and clanmate popups: the site's squared 2px frame, no rounded white card. */
+.cw-map-popup .leaflet-popup-content-wrapper { border-radius: 0; border: 2px solid var(--color-rule-2); padding: 0; box-shadow: 0 12px 32px rgb(0 0 0 / .45); }
+.cw-map-popup .leaflet-popup-content { margin: 0; line-height: normal; }
+.cw-map-popup .leaflet-popup-close-button { color: var(--color-muted); }
+.cw-map-popup .leaflet-popup-close-button:hover { color: var(--color-ink); }

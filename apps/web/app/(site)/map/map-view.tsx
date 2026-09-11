@@ -18,7 +18,14 @@ import {
 // every page. Do not move this to app/layout.tsx (that loads Leaflet's CSS
 // site-wide) and do not delete it — without it Leaflet's panes, tiles and
 // controls have no positioning CSS in a real browser.
+//
+// ⚠️ map.css comes SECOND, and must: it restyles Leaflet's white chrome at
+// the same specificity, so the later sheet wins. When those rules sat in
+// globals.css, this import landed after them and every pin popup on a phone
+// was a white card with unreadable light text. test/map-css-order.test.ts
+// pins the pair and their order.
 import "leaflet/dist/leaflet.css";
+import "./map.css";
 
 /** Vendored from DZMap's own upstream config. Attribution is an obligation, not decoration. */
 const TILE_ATTRIBUTION = '<a href="https://dayz.xam.nu" target="_blank">Tiles © Xam.nu</a>';
