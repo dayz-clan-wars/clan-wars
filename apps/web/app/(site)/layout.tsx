@@ -4,7 +4,7 @@ import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
 import { ServerStrip } from "@/app/components/server-strip";
-import { serverStripCopy } from "@/lib/server-strip";
+import { serverStripLines } from "@/lib/server-strip";
 import { SkipLink } from "@/app/components/ui";
 
 /**
@@ -26,12 +26,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const counts = session ? await attention(session.sub).catch(() => undefined) : undefined;
   // The server-name strip: one cheap read, and like the counts never a
   // reason to fail the page — unreachable means no strip.
-  const servers = serverStripCopy(await liveServers().catch(() => []));
+  const serverLines = serverStripLines(await liveServers().catch(() => []));
   return (
     <>
       <SkipLink />
       <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
-      <ServerStrip servers={servers} />
+      <ServerStrip lines={serverLines} />
       <InstallStrip />
       {children}
     </>

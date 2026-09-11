@@ -245,7 +245,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 |---|---|
 | The player's guide (the authority over every rule) | `apps/web/content/guide/` (hand-written HTML fragments) and `apps/web/lib/guide.ts` (chapter manifest) — served at dayzclanwars.com/guide by `apps/web/app/guide/`. Moved in from the archived field-guide repo on 2026-09-07 |
 | The guide in Discord (📖 Field Guide category, one channel per chapter) | Written from the same fragments by `apps/web/scripts/publish-guide.ts` via `apps/web/lib/guide-discord.ts`; a reconciler, run by `deploy/deploy-web.sh` after every web deploy and hourly by `clan-wars-guide.timer`. Edit the site, never the channels. Runbook: `docs/deploy/2026-09-09-guide-in-discord.md` |
-| The server-name strip (in-game name under the top bar) | Nitrado `settings.config.hostname`, read every sweep by the worker into `servers.hostname`/`hostname_seen_at`, served by `liveServers()` in `packages/roster/src/servers.ts`, rendered by `apps/web/app/components/server-strip.tsx`. Never configured or hard-coded. Runbook: `docs/deploy/2026-09-11-server-name-strip.md` |
+| The server-name marquee (in-game name under the top bar) | Nitrado `settings.config.hostname`, read every sweep by the worker into `servers.hostname`/`hostname_seen_at`, served by `liveServers()` in `packages/roster/src/servers.ts`, rendered by `apps/web/app/components/server-strip.tsx`. Never configured or hard-coded. Runbook: `docs/deploy/2026-09-11-server-name-strip.md` |
 | The target state, guide → system | `docs/superpowers/specs/2026-09-04-clan-wars-target-state-design.md` — wins over every earlier spec where they differ |
 | Designs (per increment) | `docs/superpowers/specs/` |
 | Implementation plans | `docs/superpowers/plans/` |

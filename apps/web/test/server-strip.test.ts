@@ -1,38 +1,40 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { serverStripCopy, SERVER_STRIP } from "../lib/server-strip";
-
-const now = new Date("2026-09-11T12:00:00Z");
-const seen = new Date("2026-09-11T11:56:00Z");
+import { serverStripLines, SERVER_STRIP, marqueeSeconds } from "../lib/server-strip";
 
 /**
- * The strip under the top bar that names the server: the in-game name as
- * Nitrado last reported it, so a rename shows up on the site without a
- * deploy. Static text, not a marquee — a name is read at a glance and
- * copied into the DayZ browser's search, neither of which scrolling helps.
+ * The strip under the top bar that names the server: one line, "SERVER
+ * NAME: <name>", scrolling as a marquee. The name is the in-game one as
+ * Nitrado last reported it, so a rename shows up without a deploy. Under
+ * prefers-reduced-motion the same line sits still.
  */
-describe("serverStripCopy", () => {
-  it("names each server with its map, and says when the name was last confirmed", () => {
-    expect(serverStripCopy([{ hostname: "Clan Wars Livonia | Xbox", map: "livonia", seenAt: seen }], now)).toEqual([
-      { hostname: "Clan Wars Livonia | Xbox", map: "Livonia", seen: "confirmed 4 min ago" },
-    ]);
+describe("serverStripLines", () => {
+  it("makes one 'Server name: …' line per live server, the name verbatim", () => {
+    expect(serverStripLines([
+      { hostname: ".::CLAN WARS::. - custom bot", map: "livonia", seenAt: new Date() },
+      { hostname: "Second | Xbox", map: "chernarus", seenAt: new Date() },
+    ])).toEqual(["Server name: .::CLAN WARS::. - custom bot", "Server name: Second | Xbox"]);
+    expect(SERVER_STRIP.label).toBe("Server name:");
   });
 
-  it("capitalises the map without inventing a name for one it does not know", () => {
-    const [a, b] = serverStripCopy([
-      { hostname: "A", map: "chernarus", seenAt: seen },
-      { hostname: "B", map: "namalsk", seenAt: seen },
-    ], now);
-    expect(a?.map).toBe("Chernarus");
-    expect(b?.map).toBe("Namalsk");
+  it("scrolls slower for a longer line, never faster than a reader can follow", () => {
+    expect(marqueeSeconds("Server name: Short")).toBe(12);
+    expect(marqueeSeconds("Server name: " + "x".repeat(80))).toBeGreaterThan(marqueeSeconds("Server name: " + "x".repeat(40)));
   });
+});
 
-  it("has a label, a copy hint and a copied confirmation", () => {
-    expect(SERVER_STRIP.label).toBe("Server");
-    expect(SERVER_STRIP.copy).toBe("Copy name");
-    expect(SERVER_STRIP.copyShort).toBe("Copy");
-    expect(SERVER_STRIP.copied).toBe("Copied");
+describe("the strip component", () => {
+  const src = readFileSync(join(import.meta.dirname, "..", "app", "components", "server-strip.tsx"), "utf8");
+  it("is a server component with no button — nothing to click, nothing to hydrate", () => {
+    expect(src).not.toContain('"use client"');
+    expect(src).not.toMatch(/<button/u);
+  });
+  it("rests under prefers-reduced-motion", () => {
+    const css = readFileSync(join(import.meta.dirname, "..", "app", "globals.css"), "utf8");
+    expect(src).toContain("cw-marquee");
+    expect(css).toMatch(/@keyframes cw-marquee/u);
+    expect(css).toMatch(/prefers-reduced-motion: reduce\)[^}]*\.cw-marquee[^}]*animation: none/u);
   });
 });
 

@@ -121,6 +121,11 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
   100% { transform: rotate(45deg) scale(1.2); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .cw-ring { animation: none; } }
+/* The server-name marquee under the top bar (components/server-strip.tsx): the track holds the line twice and slides by one copy, so the loop is seamless. Pauses on hover so the name can be read or selected. */
+.cw-marquee { animation: cw-marquee 20s linear infinite; }
+.cw-marquee-clip:hover .cw-marquee { animation-play-state: paused; }
+@keyframes cw-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }
+@media (prefers-reduced-motion: reduce) { .cw-marquee { animation: none; } .cw-marquee > [aria-hidden] { display: none; } .cw-marquee > span { white-space: normal; } }
 /* Travel points: a dot below zoom 3 (`cw-far` on the container), a glyph chip from zoom 3 up. */
 .leaflet-container.cw-far .cw-tp-chip { display: none; }
 .leaflet-container:not(.cw-far) .cw-tp-dot { display: none; }

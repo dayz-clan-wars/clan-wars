@@ -1,7 +1,9 @@
 # Server-name strip — runbook
 
 The site now shows the in-game server name under the top bar on every page (the site
-shell and the guide): `SERVER  <name> · <map> · confirmed N min ago`, with a Copy button.
+shell and the guide) as a marquee: `SERVER NAME: <name>`, scrolling right to left, still
+under prefers-reduced-motion and while hovered. (First shipped the same day as a static
+line with a Copy button; replaced at the operator's request.)
 The name is Nitrado's `settings.config.hostname` — the string players search for in the
 DayZ browser — and it changes from time to time, so it is never configured: the ingest
 worker re-reads it every sweep (`NitradoClient.hostname`, `apps/ingest-worker/src/sweep.ts`)
@@ -13,7 +15,7 @@ Migration 0030 adds the two columns: additive, nullable, nothing backfilled. Nei
 bot nor the worker needs stopping.
 
 A failed Nitrado read keeps the last stored name and logs
-`hostname read failed for server N`; the strip's "confirmed … ago" is how stale it is.
+`hostname read failed for server N`; `servers.hostname_seen_at` says how stale it is.
 A server with no name yet (never swept, or a replay row) is simply not in the strip; with no
 server at all the strip does not render.
 
@@ -40,8 +42,8 @@ server at all the strip does not render.
 
        /opt/clan-wars/deploy/deploy-web.sh
 
-5. **Acceptance:** dayzclanwars.com and dayzclanwars.com/guide both show the strip with
-   the name the DayZ browser shows, and Copy puts it on the clipboard.
+5. **Acceptance:** dayzclanwars.com and dayzclanwars.com/guide both scroll the name the
+   DayZ browser shows.
 
 ## Rolling back
 
