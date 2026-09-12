@@ -123,6 +123,22 @@ export class NitradoClient {
     return hostname.trim();
   }
 
+  /** The gameserver's lifecycle status as Nitrado reports it: `started`, `stopped`, `restarting`, `stopping`, … */
+  async status(): Promise<string> {
+    const gs = (await this.getJson(`/services/${this.serviceId}/gameservers`))?.data?.gameserver;
+    return String(gs?.status ?? "unknown");
+  }
+
+  /**
+   * Restart the game server. `message` goes to Nitrado's log and, where the
+   * game supports it, to players; DayZ's own countdown comes from messages.xml
+   * and is not this call's concern. Routed through postJson so the
+   * HTTP-200-with-status:"error" guard applies.
+   */
+  async restart(message: string): Promise<void> {
+    await this.postJson(`/services/${this.serviceId}/gameservers/restart`, { message, restart_message: message });
+  }
+
   async listAdmFiles(): Promise<AdmFileRef[]> {
     const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
     const base = gs?.data?.gameserver?.game_specific?.path;
