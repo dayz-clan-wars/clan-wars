@@ -20,6 +20,11 @@ describe("achievement surfaces", () => {
     expect(src).toContain("achievementsFor({ clanTag");
     expect(src).toMatch(/<AchievementWall\b/u);
   });
+  it("a locked tile says so in words, not only in colour — WALL.locked is rendered, not just an aria-label", () => {
+    const src = read("components", "achievement-wall.tsx");
+    // `{WALL.locked}` as an element's children, i.e. outside any attribute.
+    expect(src).toMatch(/>\s*\{WALL\.locked\}\s*</u);
+  });
   it("no tile copy or component mentions a coordinate field", () => {
     for (const f of [read("components", "achievement-wall.tsx"), readFileSync(join(import.meta.dirname, "..", "lib", "achievements-copy.ts"), "utf8")]) {
       expect(f).not.toMatch(/\b(x|z|poleKey)\b\s*[:=]/u);

@@ -10,19 +10,27 @@ import { Panel, PanelBody, kickerSm } from "@/app/components/ui";
 function Tile({ t }: { t: AchievementTile }) {
   const earned = t.earnedAt !== null;
   const progress = progressLine(t);
-  const pct = earned ? 100 : Math.min(100, Math.round((t.count / t.target) * 100));
+  // ⚠️ Clamped both ends: a cached count can outrun its target, and nothing
+  // stops a future counter going negative — either would draw a bar off the tile.
+  const pct = earned ? 100 : Math.max(0, Math.min(100, Math.round((t.count / t.target) * 100)));
   return (
-    <li className={`flex flex-col gap-1 border-2 px-3 py-2.5 ${earned ? "border-gold bg-frame" : "border-rule-2 bg-surface opacity-70"}`} aria-label={`${t.name}: ${earned ? earnedLine(t) : WALL.locked}`}>
+    // ⚠️ The accessible name carries the state, not just the name: earned says
+    // when, in-progress says how far, and a one-shot says it is locked.
+    <li className={`flex flex-col gap-1 border-2 px-3 py-2.5 ${earned ? "border-gold bg-frame" : "border-rule-2 bg-surface opacity-70"}`} aria-label={`${t.name}: ${earned ? earnedLine(t) : progress ?? WALL.locked}`}>
       <span className={`font-display text-[13px] uppercase tracking-[0.06em] ${earned ? "text-gold" : "text-ink-2"}`}>{t.name}</span>
       <span className="text-[12px] leading-snug text-ink-2">{t.description}</span>
       {earned
         ? <span className={kickerSm}>{earnedLine(t)}</span>
-        : progress && (
-          <span className="mt-1 flex items-center gap-2">
-            <span className="h-1 flex-1 bg-rule-2"><span className="block h-1 bg-gold" style={{ width: `${pct}%` }} /></span>
-            <span className={kickerSm}>{progress}</span>
-          </span>
-        )}
+        : progress
+          ? (
+            <span className="mt-1 flex items-center gap-2">
+              <span className="h-1 flex-1 bg-rule-2"><span className="block h-1 bg-gold" style={{ width: `${pct}%` }} /></span>
+              <span className={kickerSm}>{progress}</span>
+            </span>
+          )
+          // ⚠️ Said in words, not only in colour and opacity: a one-shot has no
+          // bar, so without this line earned and locked differ by hue alone.
+          : <span className={kickerSm}>{WALL.locked}</span>}
     </li>
   );
 }
