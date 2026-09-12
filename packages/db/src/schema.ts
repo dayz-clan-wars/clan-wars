@@ -1337,3 +1337,26 @@ export const serverRestarts = pgTable("server_restarts", {
   pk: primaryKey({ columns: [t.serverId, t.scheduledFor] }),
   outcomeValid: check("server_restarts_outcome_valid", sql`${t.outcome} IN ('restarted','skipped','missed')`),
 }));
+
+/**
+ * One row per weekly vehicle wipe, written when its announcement is resolved.
+ *
+ * ⚠️ Keyed on `wipe_at` ALONE — no `server_id`, unlike `server_restarts` which this
+ * otherwise copies. The rotation is a property of the calendar, not of a server: every
+ * server wipes the same vehicle in the same week, and the announcement is one message to
+ * one channel. A per-server key would post one identical message per active server.
+ *
+ * ⚠️ `event_name` is stored even though it is derivable from `wipe_at`. The row records
+ * WHAT WAS ANNOUNCED; recomputing it later against an edited rotation list would make
+ * the record lie. Same reason the faction feed freezes its payload at write time.
+ */
+export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
+  /** The Monday wipe slot this announces — an even UTC hour. */
+  wipeAt: timestamp("wipe_at", { withTimezone: true }).primaryKey(),
+  announcedAt: timestamp("announced_at", { withTimezone: true }).notNull(),
+  eventName: text("event_name").notNull(),
+  /** posted = the message went out; missed = the cutoff passed with nothing sent. */
+  outcome: text("outcome").$type<"posted" | "missed">().notNull(),
+}, (t) => ({
+  outcomeValid: check("vehicle_wipe_announcements_outcome_valid", sql`${t.outcome} IN ('posted','missed')`),
+}));

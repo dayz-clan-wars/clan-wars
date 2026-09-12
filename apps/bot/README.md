@@ -30,6 +30,8 @@ in-game verification tick confirms it.
 | `TRUCK_WIPE_EVENTS` | no (default off: empty) | Comma-separated `events.xml` event names the daily truck wipe owns, e.g. `VehicleTruck01`. Empty means off — the bot never reads or writes `events.xml`. Requires `RESTART_SCHEDULE`; config load fails without it, because the wipe only ever fires on a restart slot. Runbook `docs/deploy/2026-09-12-truck-wipe.md`. |
 | `TRUCK_WIPE_OFF_HOUR` | no (default `8`) | UTC hour the events go `<active>0</active>`. Must be an even hour — odd hours are never restart slots. A present-but-blank value is refused rather than coerced to 0. |
 | `TRUCK_WIPE_ON_HOUR` | no (default `10`) | UTC hour they go back to `<active>1</active>`. Same rules. A window whose end is before its start wraps past midnight. |
+| `WEEKLY_VEHICLE_WIPE` | no (default off; `"1"`/`"true"` = on) | Wipe one of five vehicles each Monday, rotating weekly: Olga → Gunter → Hummer → Ada → Sarka. Uses the same window as `TRUCK_WIPE_OFF_HOUR`/`ON_HOUR`. Requires `RESTART_SCHEDULE`; independent of `TRUCK_WIPE_EVENTS`. Runbook `docs/deploy/2026-09-12-weekly-vehicle-rotation.md`. |
+| `ANNOUNCEMENTS_CHANNEL_ID` | no (default unset = silent) | Channel for the Sunday 24h-ahead notice naming the coming week's vehicle. Unset means the wipe still happens with no announcement; startup says so. |
 
 Example `.env` (placeholders only — never commit real values):
 

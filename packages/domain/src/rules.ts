@@ -111,3 +111,36 @@ export const WATCHTOWER_MAX_HEIGHT = { grounded: 2, onStructure: 1 } as const;
  */
 export const RESTART_PERIOD_MS = 2 * HOUR;
 export const RESTART_GRACE_MS = 10 * MIN;
+
+/**
+ * The weekly vehicle rotation (spec 2026-09-12). One of these is wiped each Monday
+ * alongside the daily trucks, in this order.
+ *
+ * ⚠️ The `event` strings must match `<event name="…">` in the mission's db/events.xml
+ * exactly. A name that is absent (or duplicated outside comments) throws at wipe time —
+ * `apps/bot/src/restart-tick.ts` accumulates the daily truck wipe and the rotation into
+ * one local `xml` and uploads only after both, so the exception discards the
+ * already-computed truck flips too. It is not "that week's wipe silently does not
+ * happen" — it is every slot, and it takes the daily truck wipe down with it.
+ */
+export const WEEKLY_WIPE_VEHICLES = [
+  { event: "VehicleCivilianSedan", name: "Olga" },
+  { event: "VehicleHatchback02", name: "Gunter" },
+  { event: "VehicleOffroad02", name: "Hummer" },
+  { event: "VehicleOffroadHatchback", name: "Ada" },
+  { event: "VehicleSedan02", name: "Sarka" },
+] as const;
+
+/**
+ * Monday 2026-09-14 UTC — rotation index 0, so the sequence runs in the order above.
+ *
+ * ⚠️ Moving this constant re-phases the whole rotation, including weeks already
+ * announced. It is the anchor, not a start date to keep current.
+ */
+export const ROTATION_ANCHOR_MS = Date.UTC(2026, 8, 14);
+
+/** The announcement lands this far before the wipe, and is never posted later than
+ *  ANNOUNCE_CUTOFF_MS before it — past that, a notice would describe a wipe that has
+ *  effectively already arrived, which is worse than silence. */
+export const ANNOUNCE_LEAD_MS = 24 * HOUR;
+export const ANNOUNCE_CUTOFF_MS = 1 * HOUR;

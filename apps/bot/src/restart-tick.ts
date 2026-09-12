@@ -1,5 +1,5 @@
 import { serverRestarts, servers, type Database } from "@factions/db";
-import { restartSlot, truckWipeActive } from "@factions/domain";
+import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 
@@ -13,8 +13,9 @@ export type RestartTarget = {
   uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
 };
 
-/** Which events.xml entries the wipe owns, and the UTC window they are off for. */
-export type TruckWipe = { events: string[]; offHour: number; onHour: number };
+/** Which events.xml entries the wipe owns, the UTC window they are off for, and
+ *  whether the weekly vehicle rotation rides along. */
+export type TruckWipe = { events: string[]; offHour: number; onHour: number; rotation: boolean };
 
 /** The events.xml file name, inside the mission's `db` directory. */
 const EVENTS_FILE = "events.xml";
@@ -31,12 +32,23 @@ export type RestartTickResult = { restarted: number; skipped: number; missed: nu
  * check), the upload does not.
  */
 async function applyTruckWipe(nitrado: RestartTarget, wipe: TruckWipe, slot: Date): Promise<boolean> {
-  const active = truckWipeActive(slot, wipe.offHour, wipe.onHour);
+  const daily = truckWipeActive(slot, wipe.offHour, wipe.onHour);
   const dir = await nitrado.missionDbDir();
   const original = await nitrado.downloadFile(`${dir}/${EVENTS_FILE}`);
 
   let xml = original;
-  for (const name of wipe.events) xml = setEventActive(xml, name, active).xml;
+  for (const name of wipe.events) xml = setEventActive(xml, name, daily).xml;
+
+  // ⚠️ ALL five every slot, not just this week's. A bot down across a Monday 10:00
+  // leaves that week's vehicle at 0, and by the time it returns the rotation has moved
+  // on — nothing else would ever put it back. Converging the whole set costs nothing:
+  // the download already happened, and an unchanged file is still never re-uploaded.
+  if (wipe.rotation) {
+    for (const v of WEEKLY_WIPE_VEHICLES) {
+      xml = setEventActive(xml, v.event, rotationActiveFor(slot, wipe.offHour, wipe.onHour, v.event)).xml;
+    }
+  }
+
   if (xml === original) return false;
 
   await nitrado.uploadFile(dir, EVENTS_FILE, xml);
@@ -128,7 +140,9 @@ export async function restartTick(
       // effect for another two hours. ⚠️ Its own try/catch — a wipe that fails must
       // never cost the restart; players rely on the two-hour cadence, and the next
       // slot recomputes the wanted state anyway.
-      if (opts.truckWipe && opts.truckWipe.events.length > 0) {
+      // ⚠️ Either half can run alone: the daily truck wipe and the weekly rotation are
+      // independently switchable, so this must not require `events` to be non-empty.
+      if (opts.truckWipe && (opts.truckWipe.events.length > 0 || opts.truckWipe.rotation)) {
         try {
           const wrote = await applyTruckWipe(nitrado, opts.truckWipe, slot.start);
           if (wrote) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);

@@ -214,6 +214,69 @@ describe("loadConfig", () => {
     it("refuses events without RESTART_SCHEDULE, which is what would fire them", () => {
       expect(() => loadConfig({ ...OK, TRUCK_WIPE_EVENTS: "VehicleTruck01" })).toThrow(/RESTART_SCHEDULE/u);
     });
+
+    it("leaves the rotation off by default", () => {
+      expect(loadConfig({ ...ON }).truckWipe.rotation).toBe(false);
+    });
+
+    it("turns the rotation on with WEEKLY_VEHICLE_WIPE", () => {
+      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" }).truckWipe.rotation).toBe(true);
+      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "true" }).truckWipe.rotation).toBe(true);
+    });
+
+    // ⚠️ The rotation rides on the restart slots. Configured without them nothing would
+    // ever fire it — no error, no log, just a wipe that never happens.
+    it("refuses the rotation without RESTART_SCHEDULE", () => {
+      expect(() => loadConfig({ ...OK, WEEKLY_VEHICLE_WIPE: "1" })).toThrow(/RESTART_SCHEDULE/u);
+    });
+
+    // ⚠️ Independently switchable: the daily truck wipe and the weekly rotation must
+    // each be able to run with the other off.
+    it("runs the rotation with no daily truck events", () => {
+      const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" });
+      expect(c.truckWipe.events).toEqual([]);
+      expect(c.truckWipe.rotation).toBe(true);
+    });
+
+    it("reads the announcements channel, and leaves it undefined when unset", () => {
+      expect(loadConfig({ ...ON }).announcementsChannelId).toBeUndefined();
+      expect(loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "123456789012345678" })
+        .announcementsChannelId).toBe("123456789012345678");
+    });
+
+    it("rejects a malformed announcements channel id", () => {
+      expect(() => loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "not-an-id" }))
+        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
+    });
+
+    // ⚠️ If an operator puts a rotation vehicle in TRUCK_WIPE_EVENTS too, the rotation
+    // loop overwrites the daily 0 with 1 on every non-Monday slot, silently defeating
+    // the daily wipe for that event. The rotation already owns these events.
+    describe("overlap between TRUCK_WIPE_EVENTS and the rotation", () => {
+      it("refuses an event that is in both lists when the rotation is on", () => {
+        expect(() => loadConfig({
+          ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleCivilianSedan",
+        })).toThrow(/VehicleCivilianSedan/u);
+      });
+
+      it("names every offending event", () => {
+        expect(() => loadConfig({
+          ...ON, WEEKLY_VEHICLE_WIPE: "1",
+          TRUCK_WIPE_EVENTS: "VehicleCivilianSedan,VehicleHatchback02,VehicleTruck01",
+        })).toThrow(/VehicleCivilianSedan.*VehicleHatchback02|VehicleHatchback02.*VehicleCivilianSedan/su);
+      });
+
+      it("allows the same event in TRUCK_WIPE_EVENTS when the rotation is off", () => {
+        expect(loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleCivilianSedan" }).truckWipe.events)
+          .toEqual(["VehicleCivilianSedan"]);
+      });
+
+      it("allows disjoint lists", () => {
+        const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleTruck01" });
+        expect(c.truckWipe.events).toEqual(["VehicleTruck01"]);
+        expect(c.truckWipe.rotation).toBe(true);
+      });
+    });
   });
 
   describe("FLAG_IMAGE_BASE_URL", () => {
