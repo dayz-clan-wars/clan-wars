@@ -150,6 +150,22 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("RESTART_SCHEDULE / NITRADO_TOKEN", () => {
+    it("defaults off, token optional while off", () => {
+      const cfg = loadConfig(OK);
+      expect(cfg.restartSchedule).toBe(false);
+      expect(cfg.nitradoToken).toBeUndefined();
+    });
+    it("on with a token loads", () => {
+      expect(loadConfig({ ...OK, RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" })).toMatchObject({ restartSchedule: true, nitradoToken: "nt" });
+      expect(loadConfig({ ...OK, RESTART_SCHEDULE: "true", NITRADO_TOKEN: "nt" }).restartSchedule).toBe(true);
+    });
+    it("⚠️ on without a token refuses to load — a schedule that cannot authenticate must not look like one that works", () => {
+      expect(() => loadConfig({ ...OK, RESTART_SCHEDULE: "1" })).toThrow(/NITRADO_TOKEN/u);
+      expect(() => loadConfig({ ...OK, RESTART_SCHEDULE: "1", NITRADO_TOKEN: "  " })).toThrow(/NITRADO_TOKEN/u);
+    });
+  });
+
   describe("FLAG_IMAGE_BASE_URL", () => {
     it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
       // The feed shipped before any artwork existed and must keep working

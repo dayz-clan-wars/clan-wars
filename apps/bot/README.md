@@ -25,6 +25,8 @@ in-game verification tick confirms it.
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
 | `ACHIEVEMENTS_CHANNEL_ID` | no (unset means the achievements wall is off) | The Discord channel id the public achievements wall posts to, alongside the normal clan-channel/DM notice for every unlock. Unset by default: unlocks still happen, nothing posts there. |
 | `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |
+| `RESTART_SCHEDULE` | no (default off; `"1"`/`"true"` = on) | Restart every active server with a `nitrado_service_id` at the top of every even UTC hour (00:00, 02:00 … 22:00), through Nitrado. Off by default. `messages.xml` is not touched — trim its own shutdown entry by hand or both fire. Runbook `docs/deploy/2026-09-12-scheduled-restarts.md`. |
+| `NITRADO_TOKEN` | only when `RESTART_SCHEDULE` is on | The Nitrado API token, the same value the ingest worker already reads. Config load fails if the schedule is on without it. |
 
 Example `.env` (placeholders only — never commit real values):
 

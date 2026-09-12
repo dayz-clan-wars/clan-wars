@@ -5,7 +5,7 @@ const GS = { status: "success", data: { gameserver: { game_specific: { path: "/g
 
 /** Serves canned JSON by URL substring, so a test states only what it cares about. */
 function fakeFetch(routes: Record<string, unknown>, text?: string) {
-  return vi.fn(async (url: string) => {
+  return vi.fn(async (url: string, init?: RequestInit) => {
     if (text !== undefined && url.startsWith("https://dl.nitrado")) {
       return { ok: true, text: async () => text } as unknown as Response;
     }
@@ -344,5 +344,24 @@ describe("NitradoClient.hostname", () => {
     await expect(client(gs).hostname()).rejects.toThrow(/hostname/i);
     gs.data.gameserver.settings.config.hostname = "   ";
     await expect(client(gs).hostname()).rejects.toThrow(/hostname/i);
+  });
+});
+
+describe("NitradoClient.status / restart", () => {
+  it("reads the gameserver status", async () => {
+    const fetchFn = fakeFetch({ "/gameservers": { status: "success", data: { gameserver: { status: "started" } } } });
+    expect(await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).status()).toBe("started");
+  });
+  it("posts the restart with the message in both fields", async () => {
+    const fetchFn = fakeFetch({ "/gameservers/restart": { status: "success", data: {} } });
+    await new NitradoClient("t", 42, fetchFn as unknown as typeof fetch).restart("Scheduled restart");
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe("https://api.nitrado.net/services/42/gameservers/restart");
+    expect(init!.method).toBe("POST");
+    expect(JSON.parse(init!.body as string)).toEqual({ message: "Scheduled restart", restart_message: "Scheduled restart" });
+  });
+  it("⚠️ throws on Nitrado's HTTP-200 status:error, like every other call", async () => {
+    const fetchFn = fakeFetch({ "/gameservers/restart": { status: "error", message: "Service is not running" } });
+    await expect(new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).restart("x")).rejects.toThrow(/status=error.*not running/u);
   });
 });

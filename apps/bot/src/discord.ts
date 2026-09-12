@@ -22,6 +22,8 @@ import { presenceTick, expirePendingMembers } from "./presence-tick.js";
 import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { reaperTick } from "./reaper-tick.js";
+import { restartTick, type RestartTarget } from "./restart-tick.js";
+import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
@@ -452,6 +454,25 @@ export async function start(cfg: BotConfig): Promise<void> {
   const onlineStore = new PgOnlineStore(db);
   const onlineState: OnlineState = { lastKey: null };
   const noticeSender = createNoticeSender(client);
+
+  // One client per Nitrado service, the shape the ingest worker's `clientFor` has.
+  // 10s, not the 30s default: a due pass can call status() then restart(), and this
+  // runs inside the same loop that drains the Discord posters — a slow Nitrado call
+  // must not hold that loop up for a full minute, every pass, for the whole ten-minute
+  // grace window.
+  const nitradoClients = new Map<number, NitradoClient>();
+  const nitradoFor = (serviceId: number): RestartTarget => {
+    let c = nitradoClients.get(serviceId);
+    if (!c) {
+      // ⚠️ loadConfig guarantees nitradoToken whenever restartSchedule is on; this
+      // throw states that invariant instead of silently defaulting to an empty
+      // bearer token, which would make every slot fail at error level forever.
+      if (!cfg.nitradoToken) throw new Error("nitradoToken is required when restartSchedule is on");
+      c = new NitradoClient(cfg.nitradoToken, serviceId, undefined, 10_000);
+      nitradoClients.set(serviceId, c);
+    }
+    return c;
+  };
 
   const renameOnLink = createNicknameApplier(client);
   const deps: CommandDeps = { store, now: () => new Date() };
@@ -1008,6 +1029,21 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       console.error("notice tick failed", err);
     }
+
+    // Scheduled restarts (spec 2026-09-12): housekeeping, not a consumer — it
+    // reads no cursor, so it sits with the reaper in spirit. But it runs LAST,
+    // after every Discord poster above, so a slow or stalled Nitrado call
+    // (status() then restart(), up to 10s each) cannot delay any of them.
+    // Every pass, so a slot's ten-minute grace window is checked at the tick
+    // interval. Its own try/catch, like every other step.
+    if (cfg.restartSchedule) {
+      try {
+        const r = await restartTick(db, nitradoFor, { now: new Date() });
+        if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
+      } catch (err) {
+        console.error("restart tick failed", err);
+      }
+    }
   });
 
   client.once("clientReady", async () => {
@@ -1024,6 +1060,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         ))
         .catch((err: unknown) => console.error("could not count the feed queue", err));
     }
+
+    if (!cfg.restartSchedule) console.warn("RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule.");
+    else console.log("scheduled restarts on: every even UTC hour");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)

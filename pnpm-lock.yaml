@@ -45,6 +45,9 @@ importers:
       '@factions/event-log':
         specifier: workspace:*
         version: link:../../packages/event-log
+      '@factions/nitrado':
+        specifier: workspace:*
+        version: link:../../packages/nitrado
       '@factions/roster':
         specifier: workspace:*
         version: link:../../packages/roster
