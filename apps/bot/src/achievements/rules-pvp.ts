@@ -36,6 +36,13 @@ const distance = (key: AchievementKey): Rule => async (db, owner) => {
  * not a magnitude to report as progress — "how close are you to point blank" has no
  * meaningful units, so (unlike marksman/sniper) this is a plain one-shot: 0 until the
  * first sub-threshold kill, 1 once earned. The distance still rides along in evidence.
+ * ⚠️ This deliberately reports `target: 1`, not the definition's real target of 5 (m):
+ * a "less than" rule has no monotone progress to climb (getting further away raises the
+ * distance without getting closer to earning it), so there is nothing sensible to hold
+ * `count` below except the binary 0/1 of "not earned yet" / "earned" — and the tick
+ * unlocks on `count >= target`, so `target` has to be 1 for that to ever fire. The site's
+ * copy suppresses a progress line for this key rather than rendering "0 / 5" against a
+ * count that can never mean "0 of 5 metres."
  */
 const pointBlank = (key: AchievementKey): Rule => async (db, owner) => {
   const threshold = T(key);
@@ -52,8 +59,12 @@ function streak(key: AchievementKey): Rule {
       .orderBy(asc(kills.occurredAt), asc(kills.id));
     const s = streakOf(rows, owner.id);
     const at = s.reachedAt(target);
-    if (!at) return { count: s.best, target };
-    const crossing = rows.find((r) => r.occurredAt.getTime() === at.getTime() && r.killer === owner.id)!;
+    const idx = s.reachedIndex(target);
+    if (at === null || idx === null) return { count: s.best, target };
+    // Index into `rows`, not a re-find by `occurredAt` — two of the owner's own kills can
+    // share one timestamp (same-second log resolution), and `find` would silently grab
+    // whichever one comes first rather than the one that actually crossed the target.
+    const crossing = rows[idx]!;
     return { count: s.best, target, earnedAt: at, evidenceId: crossing.id, evidence: { streak: target }, serverId: crossing.serverId };
   };
 }

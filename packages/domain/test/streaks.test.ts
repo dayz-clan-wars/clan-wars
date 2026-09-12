@@ -19,4 +19,16 @@ describe("streakOf", () => {
   it("a non-player death (no killer) does not reset", () => {
     expect(streakOf([K("A", "x", 1), K(null, "A", 2), K("A", "y", 3)], "A").best).toBe(2);
   });
+  it("reachedIndex picks the actual crossing row, even when two of the owner's kills share one timestamp", () => {
+    // Both kills land at t(1) — same-second log resolution. reachedAt(1) and reachedAt(2)
+    // are both t(1) and cannot tell the rows apart; reachedIndex must still point at the
+    // right one (0 for the kill that brought the run to 1, 1 for the kill that brought it to 2).
+    const rows = [K("A", "x", 1), K("A", "y", 1)];
+    const s = streakOf(rows, "A");
+    expect(s.reachedAt(1)).toEqual(t(1));
+    expect(s.reachedAt(2)).toEqual(t(1));
+    expect(s.reachedIndex(1)).toBe(0);
+    expect(s.reachedIndex(2)).toBe(1);
+    expect(rows[s.reachedIndex(2)!]).toBe(rows[1]);
+  });
 });
