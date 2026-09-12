@@ -218,6 +218,13 @@
       "when": 1789152113789,
       "tag": "0030_server_hostname",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1789182529907,
+      "tag": "0031_achievements",
+      "breakpoints": true
     }
   ]
 }

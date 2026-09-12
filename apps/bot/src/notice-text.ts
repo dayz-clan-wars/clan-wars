@@ -121,6 +121,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       ? `🔐 Codes rotated by ${person(p.gamertag)} — see the vault.`
       : `**${p.clan}** rotated its codes. See the vault: ${p.link}`,
   guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a ${hours(GUEST_PASS_MS)}h voice guest pass.`,
+  achievement: (p) => `🏆 ${p.ownerKind === "clan" ? `**${p.ownerName}**` : person(String(p.ownerName))}${p.clanTag && p.ownerKind === "player" && p.public ? ` [${p.clanTag}]` : ""} earned **${p.name}** — ${p.description}.`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */

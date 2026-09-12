@@ -1,6 +1,6 @@
 import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
-  uniqueIndex, index, numeric, boolean, check, char,
+  uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason } from "@factions/domain";
@@ -1040,6 +1040,58 @@ export const clanNotices = pgTable("clan_notices", {
   dmHasTarget: check("clan_notices_dm_has_target", sql`${t.target} <> 'dm' OR ${t.discordTargetId} IS NOT NULL`),
   noCoordinates: check("clan_notices_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
   queue: index("clan_notices_queue_idx").on(t.discordTargetId, t.id).where(sql`${t.postedAt} IS NULL AND ${t.failedAt} IS NULL`),
+}));
+
+/**
+ * Achievements (spec 2026-09-11 §5). One row per unlock, never deleted; the
+ * primary key is what makes a rule firing twice harmless. `earnedAt` is when
+ * the EVIDENCE happened — a backfilled Centurion is dated to the 100th kill,
+ * not to the backfill. `ownerId` is a dayz_id for a player or the faction id
+ * as text for a clan; clan rows survive renames and disbands unchanged.
+ */
+export const achievementUnlocks = pgTable("achievement_unlocks", {
+  ownerKind: text("owner_kind").$type<"player" | "clan">().notNull(),
+  ownerId: text("owner_id").notNull(),
+  key: text("key").notNull(),
+  earnedAt: timestamp("earned_at", { withTimezone: true }).notNull(),
+  /** The kill / raid / event / session / defense row that crossed the line, when there is one. */
+  evidenceId: bigint("evidence_id", { mode: "number" }),
+  evidence: jsonb("evidence").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+  noticedAt: timestamp("noticed_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.ownerKind, t.ownerId, t.key] }),
+  ownerKindValid: check("achievement_unlocks_owner_kind_valid", sql`${t.ownerKind} IN ('player','clan')`),
+  // ⚠️ Same predicate as clan_notices: evidence is rendered on the site and in Discord.
+  noCoordinates: check("achievement_unlocks_no_coordinates", sql`NOT (${t.evidence} ? 'poleKey' OR ${t.evidence} ? 'x' OR ${t.evidence} ? 'y' OR ${t.evidence} ? 'z')`),
+  byKey: index("achievement_unlocks_key_idx").on(t.key, t.earnedAt),
+}));
+
+/** A cache of the last computed count per owner and key — the profile reads one row per achievement. Safe to truncate; a full pass rebuilds it. */
+export const achievementProgress = pgTable("achievement_progress", {
+  ownerKind: text("owner_kind").$type<"player" | "clan">().notNull(),
+  ownerId: text("owner_id").notNull(),
+  key: text("key").notNull(),
+  count: integer("count").notNull(),
+  target: integer("target").notNull(),
+  computedAt: timestamp("computed_at", { withTimezone: true }).notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.ownerKind, t.ownerId, t.key] }) }));
+
+/**
+ * Lifetime counters for facts whose source rows vanish: pins are deleted by
+ * players (cartographer), positions are retained 30 days (explorer). `detail`
+ * holds what the counter needs to stay exact — for explorer the visited
+ * 1 km square INDICES (never x/z), plus `crossedAt` once the target was met.
+ */
+export const achievementCounters = pgTable("achievement_counters", {
+  ownerKind: text("owner_kind").$type<"player" | "clan">().notNull(),
+  ownerId: text("owner_id").notNull(),
+  key: text("key").notNull(),
+  value: integer("value").notNull().default(0),
+  detail: jsonb("detail").$type<Record<string, unknown>>().notNull().default({}),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.ownerKind, t.ownerId, t.key] }),
+  noCoordinates: check("achievement_counters_no_coordinates", sql`NOT (${t.detail} ? 'x' OR ${t.detail} ? 'z' OR ${t.detail} ? 'poleKey')`),
 }));
 
 /**
