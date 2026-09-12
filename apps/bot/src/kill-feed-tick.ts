@@ -1,9 +1,9 @@
-import type { APIEmbed } from "discord.js";
 import type { Database } from "@factions/db";
 import { consumerCursors, factions, kills, players, seasons } from "@factions/db";
 import { readCursor, writeCursor } from "@factions/event-log";
 import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { killFeedEmbed, type KillFeedItem } from "./kill-feed-embed.js";
 
@@ -11,68 +11,25 @@ import { killFeedEmbed, type KillFeedItem } from "./kill-feed-embed.js";
 export const KILL_FEED_CONSUMER = "kill-feed-poster";
 export const KILL_FEED_BATCH_SIZE = 20;
 
-export type KillFeedPoster = (embed: APIEmbed) => Promise<void>;
-
+export type KillFeedPoster = CursorFeedPoster;
 /** What the tick reads and writes; `PgKillFeedStore` is the real one. */
-export type KillFeedStore = {
-  /** Whether the cursor row exists at all. */
-  seeded(): Promise<boolean>;
-  /** The newest kill's event id, or 0 with no kills. */
-  head(): Promise<number>;
-  cursor(): Promise<number>;
-  /** PvP kills after `cursor`, oldest first, with names, tags and the tally as of each kill. */
-  readAfter(cursor: number, limit: number): Promise<KillFeedItem[]>;
-  markPosted(eventId: number): Promise<void>;
-};
-
-export type KillFeedTickResult = {
-  posted: number;
-  /** The event id that ended the run, or null if the queue drained. */
-  blockedAt: number | null;
-  /** True on the run that created the cursor at the head, posting nothing. */
-  seeded: boolean;
-};
+export type KillFeedStore = CursorFeedStore<KillFeedItem>;
+export type KillFeedTickResult = CursorFeedResult;
 
 /**
- * Post new PvP kills to #kill-feed, oldest first — the war-log poster's
- * shape over the `kills` table: post, then advance the cursor, and the first
- * failure ends the run so the channel stays chronological.
- *
- * ⚠️ The FIRST run seeds the cursor at the head and posts nothing. The kills
- * table holds history (58 backfilled kills on launch day alone), and a
- * Discord poster that replays history announces last week to a public
- * channel. This is the opposite default to the stats projectors, which are
- * deliberately unseeded so they DO replay — they write rows, not messages.
- *
- * ⚠️ At-least-once: a crash between the post and the cursor write re-posts
- * that kill on the next start. See notice-tick.ts.
+ * Post new PvP kills to #kill-feed, oldest first. The loop lives in
+ * `cursor-feed.ts` — every hazard it guards against is documented there.
+ * Every kill this store returns is postable, so the render never declines.
  */
-export async function killFeedTick(
+export function killFeedTick(
   store: KillFeedStore,
   post: KillFeedPoster,
   opts: { siteBaseUrl: string; flagImage?: FlagImageResolver; batchSize?: number; onError?: (eventId: number, err: unknown) => void },
 ): Promise<KillFeedTickResult> {
-  const out: KillFeedTickResult = { posted: 0, blockedAt: null, seeded: false };
-
-  if (!(await store.seeded())) {
-    await store.markPosted(await store.head());
-    out.seeded = true;
-    return out;
-  }
-
-  const cursor = await store.cursor();
-  for (const k of await store.readAfter(cursor, opts.batchSize ?? KILL_FEED_BATCH_SIZE)) {
-    try {
-      await post(killFeedEmbed(k, opts.siteBaseUrl, opts.flagImage));
-      await store.markPosted(k.eventId);
-    } catch (err) {
-      opts.onError?.(k.eventId, err);
-      out.blockedAt = k.eventId;
-      return out;
-    }
-    out.posted++;
-  }
-  return out;
+  return cursorFeedTick(store, post, (k) => killFeedEmbed(k, opts.siteBaseUrl, opts.flagImage), {
+    batchSize: opts.batchSize ?? KILL_FEED_BATCH_SIZE,
+    onError: opts.onError,
+  });
 }
 
 /** ⚠️ A kill BY another player — the same rule as every PvP read in the roster. */
