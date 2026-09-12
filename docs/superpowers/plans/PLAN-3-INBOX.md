@@ -959,3 +959,18 @@ in the game server's `cfggameplay.json` and the runbook.
 ⚠️ This is a recorded decision, not a missed flip: whoever runs the runbook must not "catch up"
 by opening a window on another day. The item closes itself once the 2026-09-18 flip is made.
 
+
+## 39. ~~Achievements: 50 lifetime achievements for players and clans~~ — DONE 2026-09-12
+
+Shipped, branch `achievements` (commits 20b6465..cd53c48). Spec
+`docs/superpowers/specs/2026-09-11-achievements-design.md`, runbook
+`docs/deploy/2026-09-12-achievements.md`.
+
+## 40. Achievements tick: capped pass re-collects head rows; root scripts untypechecked
+
+A capped pass re-collects the same head rows each pass and resumes after the last
+processed owner key (`achievements:after` marker in `achievement_counters`); fine at
+today's volume — a per-owner queue if a pass ever carries for more than a few minutes.
+
+Also: root scripts (incl. `scripts/backfill-achievements.ts`) are not typechecked
+anywhere.
