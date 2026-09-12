@@ -324,7 +324,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices`.**
   The achievements tick writes the three achievement tables in exactly that order inside each
   owner's transaction, before it appends that owner's notices.
-  `server_restarts` is outside the order: written by the restart tick alone, in its own transaction, touching nothing else.
+  `server_restarts` is outside the order: written by the restart tick alone, with a single statement, touching no other table.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

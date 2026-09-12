@@ -1322,8 +1322,8 @@ export const claimDrafts = pgTable("claim_drafts", {
  * bot's proof that the schedule ran, and its idempotency guard — a row for
  * (server, slot) means the slot is handled, whatever the outcome.
  *
- * ⚠️ Written by restart-tick.ts alone, in its own transaction, touching no
- * other table; it needs no place in the §4.12 lock order.
+ * ⚠️ Written by restart-tick.ts alone, with a single statement that touches
+ * no other table; it needs no place in the §4.12 lock order.
  */
 export const serverRestarts = pgTable("server_restarts", {
   serverId: integer("server_id").notNull().references(() => servers.id),

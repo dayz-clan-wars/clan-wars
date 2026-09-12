@@ -7,8 +7,13 @@ Migration 0032 adds that table, additively. `messages.xml` is NOT touched by any
 
 ⚠️ If `messages.xml` still carries its own shutdown entry, both schedules fire. The bot skips a
 slot when the server is not `started` (so a shutdown already in flight is not followed by a
-second restart), but two independent schedules is still two sets of restarts. Trim the
-shutdown from `messages.xml` by hand when you are happy the bot's are landing.
+second restart), but two independent schedules is still two sets of restarts. When you are
+happy the bot's restarts are landing, edit `messages.xml` by hand to delete only the entry
+that performs the shutdown — **keep its countdown messages**. The bot posts nothing to the
+game or to Discord before a restart; those in-game warnings are the only countdown a player
+ever sees, and a fixed two-hour cycle is what finally makes boot-relative warnings line up
+with the real restart time (it is the whole reason a late restart is recorded `missed` rather
+than fired late with no warning).
 
 ## Steps
 
@@ -20,7 +25,10 @@ shutdown from `messages.xml` by hand when you are happy the bot's are landing.
 3. Pick a moment more than ten minutes past an even hour (so the first slot the bot sees is a
    clean, future one), put `RESTART_SCHEDULE=1` in `.env` (`NITRADO_TOKEN` is already there for
    the worker), and `sudo systemctl restart clan-wars-bot`. The journal shows
-   `scheduled restarts on: every even UTC hour`.
+   `scheduled restarts on: every even UTC hour`. Because more than ten minutes have already
+   passed, the slot that was in flight when the flag went on is immediately past grace: expect
+   exactly one `missed` row for it, at error level in the journal — that is correct, not a
+   problem, and step 4's query will show it.
 4. At the next even hour: `select * from server_restarts order by scheduled_for desc limit 3;`
    shows a `restarted` row within seconds of the hour, the journal shows
    `restart: server 1 restarted for …`, and Nitrado's panel shows the restart. A fresh ADM

@@ -456,11 +456,21 @@ export async function start(cfg: BotConfig): Promise<void> {
   const noticeSender = createNoticeSender(client);
 
   // One client per Nitrado service, the shape the ingest worker's `clientFor` has.
-  // ⚠️ cfg.nitradoToken is guaranteed by loadConfig whenever restartSchedule is on.
+  // 10s, not the 30s default: a due pass can call status() then restart(), and this
+  // runs inside the same loop that drains the Discord posters — a slow Nitrado call
+  // must not hold that loop up for a full minute, every pass, for the whole ten-minute
+  // grace window.
   const nitradoClients = new Map<number, NitradoClient>();
   const nitradoFor = (serviceId: number): RestartTarget => {
     let c = nitradoClients.get(serviceId);
-    if (!c) { c = new NitradoClient(cfg.nitradoToken ?? "", serviceId); nitradoClients.set(serviceId, c); }
+    if (!c) {
+      // ⚠️ loadConfig guarantees nitradoToken whenever restartSchedule is on; this
+      // throw states that invariant instead of silently defaulting to an empty
+      // bearer token, which would make every slot fail at error level forever.
+      if (!cfg.nitradoToken) throw new Error("nitradoToken is required when restartSchedule is on");
+      c = new NitradoClient(cfg.nitradoToken, serviceId, undefined, 10_000);
+      nitradoClients.set(serviceId, c);
+    }
     return c;
   };
 
@@ -904,18 +914,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // Scheduled restarts (spec 2026-09-12): housekeeping, not a consumer — it
-    // reads no cursor, so it sits with the reaper. Every pass, so a slot's
-    // ten-minute grace window is checked at the tick interval.
-    if (cfg.restartSchedule) {
-      try {
-        const r = await restartTick(db, nitradoFor, { now: new Date() });
-        if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
-      } catch (err) {
-        console.error("restart tick failed", err);
-      }
-    }
-
     // ⚠️ Its own try/catch, like every other step. Runs after dormancy so a
     // transition and its announcement land in the same tick rather than the
     // next one.
@@ -1030,6 +1028,21 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       console.error("notice tick failed", err);
+    }
+
+    // Scheduled restarts (spec 2026-09-12): housekeeping, not a consumer — it
+    // reads no cursor, so it sits with the reaper in spirit. But it runs LAST,
+    // after every Discord poster above, so a slow or stalled Nitrado call
+    // (status() then restart(), up to 10s each) cannot delay any of them.
+    // Every pass, so a slot's ten-minute grace window is checked at the tick
+    // interval. Its own try/catch, like every other step.
+    if (cfg.restartSchedule) {
+      try {
+        const r = await restartTick(db, nitradoFor, { now: new Date() });
+        if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
+      } catch (err) {
+        console.error("restart tick failed", err);
+      }
     }
   });
 

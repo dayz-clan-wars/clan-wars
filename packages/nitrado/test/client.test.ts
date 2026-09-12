@@ -5,7 +5,7 @@ const GS = { status: "success", data: { gameserver: { game_specific: { path: "/g
 
 /** Serves canned JSON by URL substring, so a test states only what it cares about. */
 function fakeFetch(routes: Record<string, unknown>, text?: string) {
-  return vi.fn(async (url: string, init?: any) => {
+  return vi.fn(async (url: string, init?: RequestInit) => {
     if (text !== undefined && url.startsWith("https://dl.nitrado")) {
       return { ok: true, text: async () => text } as unknown as Response;
     }
@@ -357,8 +357,8 @@ describe("NitradoClient.status / restart", () => {
     await new NitradoClient("t", 42, fetchFn as unknown as typeof fetch).restart("Scheduled restart");
     const [url, init] = fetchFn.mock.calls[0]!;
     expect(url).toBe("https://api.nitrado.net/services/42/gameservers/restart");
-    expect(init.method).toBe("POST");
-    expect(JSON.parse(init.body)).toEqual({ message: "Scheduled restart", restart_message: "Scheduled restart" });
+    expect(init!.method).toBe("POST");
+    expect(JSON.parse(init!.body as string)).toEqual({ message: "Scheduled restart", restart_message: "Scheduled restart" });
   });
   it("⚠️ throws on Nitrado's HTTP-200 status:error, like every other call", async () => {
     const fetchFn = fakeFetch({ "/gameservers/restart": { status: "error", message: "Service is not running" } });

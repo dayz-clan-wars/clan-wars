@@ -9,8 +9,13 @@ export const RESTART_MESSAGE = "Scheduled restart";
 
 type Outcome = "restarted" | "skipped" | "missed";
 
-/** The last error per server, for the `missed` row's detail. Process-local by design: a restarted bot has no error to report, and says "not running". */
-const lastError = new Map<number, string>();
+/**
+ * The last error per server, for the `missed` row's detail. Process-local by
+ * design: a restarted bot has no error to report, and says "not running".
+ * Module-level default; `restartTick`'s `opts.lastError` lets a test supply
+ * its own map so it cannot leak state across test files (see restart-tick.test.ts).
+ */
+const moduleLastError = new Map<number, string>();
 
 /** Record a slot. `onConflictDoNothing`: a row already there means another pass handled it. */
 async function record(db: Database, serverId: number, slot: Date, now: Date, outcome: Outcome, detail: Record<string, string | number | boolean | null> = {}): Promise<boolean> {
@@ -38,8 +43,13 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
  * status in `detail`: a messages.xml shutdown or a manual restart already in
  * flight must not be followed by a second one.
  */
-export async function restartTick(db: Database, nitradoFor: (serviceId: number) => RestartTarget, opts: { now: Date }): Promise<RestartTickResult> {
+export async function restartTick(
+  db: Database,
+  nitradoFor: (serviceId: number) => RestartTarget,
+  opts: { now: Date; lastError?: Map<number, string> },
+): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
+  const lastError = opts.lastError ?? moduleLastError;
   const slot = restartSlot(opts.now);
   const targets = await db.select({ id: servers.id, serviceId: servers.nitradoServiceId }).from(servers)
     .where(and(eq(servers.active, true), isNotNull(servers.nitradoServiceId)));
@@ -71,12 +81,21 @@ export async function restartTick(db: Database, nitradoFor: (serviceId: number) 
           result.skipped += 1;
           console.warn(`restart: server ${s.id} skipped slot ${slot.start.toISOString()} — status ${status}`);
         }
+        // Same reasoning as the `restarted`/`missed` branches: a stale error
+        // here would otherwise surface on a LATER slot's `missed` row.
+        lastError.delete(s.id);
         continue;
       }
       await nitrado.restart(RESTART_MESSAGE);
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;
         console.log(`restart: server ${s.id} restarted for ${slot.start.toISOString()}`);
+      } else {
+        // ⚠️ The POST already went out — silence here is the one thing that
+        // would hide a possible double restart. A false return means some
+        // other pass already recorded this slot, so the server may just have
+        // been restarted twice.
+        console.warn(`restart: server ${s.id} POSTed a restart for slot ${slot.start.toISOString()} that was already recorded — a double restart may have happened`);
       }
       lastError.delete(s.id);
     } catch (err) {
