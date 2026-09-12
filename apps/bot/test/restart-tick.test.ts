@@ -139,7 +139,7 @@ describe("restartTick", () => {
   // trucks off for a day.
   const XML = (active: number) =>
     `<events><event name="VehicleTruck01"><active>${active}</active></event></events>`;
-  const WIPE = { events: ["VehicleTruck01"], offHour: 8, onHour: 10 };
+  const WIPE = { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false };
 
   function fakeWithFiles(current = 1, opts: { failUpload?: boolean; failDir?: boolean } = {}) {
     const order: string[] = [];
@@ -232,6 +232,90 @@ describe("restartTick", () => {
     expect(r.skipped).toBe(1);
     expect(f.t.downloadFile).not.toHaveBeenCalled();
     expect(f.uploads).toEqual([]);
+  });
+
+  // ── Weekly vehicle rotation ─────────────────────────────────────────────
+  const FULL_XML = (truck: number, olga: number, gunter: number) =>
+    `<events>` +
+    `<event name="VehicleTruck01"><active>${truck}</active></event>` +
+    `<event name="VehicleCivilianSedan"><active>${olga}</active></event>` +
+    `<event name="VehicleHatchback02"><active>${gunter}</active></event>` +
+    `<event name="VehicleOffroad02"><active>1</active></event>` +
+    `<event name="VehicleOffroadHatchback"><active>1</active></event>` +
+    `<event name="VehicleSedan02"><active>1</active></event>` +
+    `</events>`;
+
+  function fakeFullFiles(xml: string) {
+    const uploads: Array<{ dir: string; name: string; content: string }> = [];
+    const target = {
+      status: vi.fn(async () => "started"),
+      restart: vi.fn(async () => {}),
+      missionDbDir: vi.fn(async () => "/m/db"),
+      downloadFile: vi.fn(async () => xml),
+      uploadFile: vi.fn(async (dir: string, name: string, content: string) => {
+        uploads.push({ dir, name, content });
+      }),
+    } as unknown as RestartTarget;
+    return { target, uploads, t: target as any };
+  }
+
+  const ROT = { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: true };
+  const active = (xml: string, event: string) =>
+    Number(new RegExp(`<event name="${event}"><active>(\\d)`).exec(xml)![1]);
+
+  // 2026-09-14 is the anchor Monday: Olga's week.
+  it("wipes the trucks AND this week's vehicle in one upload on the wipe Monday", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1));
+    await restartTick(db, () => f.target, { now: at("2026-09-14T08:00:03Z"), lastError, truckWipe: ROT });
+    expect(f.uploads).toHaveLength(1);
+    const x = f.uploads[0]!.content;
+    expect(active(x, "VehicleTruck01")).toBe(0);
+    expect(active(x, "VehicleCivilianSedan")).toBe(0); // Olga
+    expect(active(x, "VehicleHatchback02")).toBe(1);   // Gunter untouched
+    expect(active(x, "VehicleSedan02")).toBe(1);
+  });
+
+  it("restores both at the on hour", async () => {
+    const f = fakeFullFiles(FULL_XML(0, 0, 1));
+    await restartTick(db, () => f.target, { now: at("2026-09-14T10:00:03Z"), lastError, truckWipe: ROT });
+    const x = f.uploads[0]!.content;
+    expect(active(x, "VehicleTruck01")).toBe(1);
+    expect(active(x, "VehicleCivilianSedan")).toBe(1);
+  });
+
+  // ⚠️ The convergence guarantee, end to end: the bot was down across Olga's Monday
+  // 10:00, so the file still says 0. Gunter's week must put Olga back.
+  it("heals a previous week's vehicle left disabled", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 0, 1)); // Olga still off
+    await restartTick(db, () => f.target, { now: at("2026-09-21T12:00:03Z"), lastError, truckWipe: ROT });
+    expect(f.uploads).toHaveLength(1);
+    expect(active(f.uploads[0]!.content, "VehicleCivilianSedan")).toBe(1);
+  });
+
+  it("writes nothing on an ordinary slot with everything already correct", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1));
+    await restartTick(db, () => f.target, { now: at("2026-09-16T12:00:03Z"), lastError, truckWipe: ROT });
+    expect(f.uploads).toEqual([]);
+  });
+
+  it("leaves the rotation alone entirely when rotation is off", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1));
+    await restartTick(db, () => f.target, {
+      now: at("2026-09-14T08:00:03Z"), lastError, truckWipe: { ...ROT, rotation: false },
+    });
+    const x = f.uploads[0]!.content;
+    expect(active(x, "VehicleTruck01")).toBe(0);
+    expect(active(x, "VehicleCivilianSedan")).toBe(1); // untouched
+  });
+
+  it("runs the rotation even with no daily truck events configured", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1));
+    await restartTick(db, () => f.target, {
+      now: at("2026-09-14T08:00:03Z"), lastError, truckWipe: { ...ROT, events: [] },
+    });
+    expect(f.uploads).toHaveLength(1);
+    expect(active(f.uploads[0]!.content, "VehicleCivilianSedan")).toBe(0);
+    expect(active(f.uploads[0]!.content, "VehicleTruck01")).toBe(1);
   });
 });
 

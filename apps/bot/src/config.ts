@@ -77,7 +77,7 @@ export type BotConfig = {
   /** Restart every active server on even UTC hours through Nitrado (spec 2026-09-12). Off by default. */
   restartSchedule: boolean;
   /** Truck wipe. `events` empty means off; the window is only meaningful when it is not. */
-  truckWipe: { events: string[]; offHour: number; onHour: number };
+  truckWipe: { events: string[]; offHour: number; onHour: number; rotation: boolean };
   /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
   nitradoToken: string | undefined;
 };
@@ -251,6 +251,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       events: (env.TRUCK_WIPE_EVENTS ?? "").split(",").map((e) => e.trim()).filter((e) => e !== ""),
       offHour: wipeHour(env, "TRUCK_WIPE_OFF_HOUR", 8),
       onHour: wipeHour(env, "TRUCK_WIPE_ON_HOUR", 10),
+      // Not wired to config yet — that is a later task. Hard-coded off preserves
+      // today's behaviour exactly: the daily truck wipe, nothing else.
+      rotation: false,
     },
   };
 
