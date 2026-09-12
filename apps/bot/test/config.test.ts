@@ -214,6 +214,40 @@ describe("loadConfig", () => {
     it("refuses events without RESTART_SCHEDULE, which is what would fire them", () => {
       expect(() => loadConfig({ ...OK, TRUCK_WIPE_EVENTS: "VehicleTruck01" })).toThrow(/RESTART_SCHEDULE/u);
     });
+
+    it("leaves the rotation off by default", () => {
+      expect(loadConfig({ ...ON }).truckWipe.rotation).toBe(false);
+    });
+
+    it("turns the rotation on with WEEKLY_VEHICLE_WIPE", () => {
+      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" }).truckWipe.rotation).toBe(true);
+      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "true" }).truckWipe.rotation).toBe(true);
+    });
+
+    // ⚠️ The rotation rides on the restart slots. Configured without them nothing would
+    // ever fire it — no error, no log, just a wipe that never happens.
+    it("refuses the rotation without RESTART_SCHEDULE", () => {
+      expect(() => loadConfig({ ...OK, WEEKLY_VEHICLE_WIPE: "1" })).toThrow(/RESTART_SCHEDULE/u);
+    });
+
+    // ⚠️ Independently switchable: the daily truck wipe and the weekly rotation must
+    // each be able to run with the other off.
+    it("runs the rotation with no daily truck events", () => {
+      const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" });
+      expect(c.truckWipe.events).toEqual([]);
+      expect(c.truckWipe.rotation).toBe(true);
+    });
+
+    it("reads the announcements channel, and leaves it undefined when unset", () => {
+      expect(loadConfig({ ...ON }).announcementsChannelId).toBeUndefined();
+      expect(loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "123456789012345678" })
+        .announcementsChannelId).toBe("123456789012345678");
+    });
+
+    it("rejects a malformed announcements channel id", () => {
+      expect(() => loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "not-an-id" }))
+        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
+    });
   });
 
   describe("FLAG_IMAGE_BASE_URL", () => {

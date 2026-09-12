@@ -80,6 +80,8 @@ export type BotConfig = {
   truckWipe: { events: string[]; offHour: number; onHour: number; rotation: boolean };
   /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
   nitradoToken: string | undefined;
+  /** Where the weekly wipe notice posts. Unset = the wipe still happens, silently. */
+  announcementsChannelId?: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -251,10 +253,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       events: (env.TRUCK_WIPE_EVENTS ?? "").split(",").map((e) => e.trim()).filter((e) => e !== ""),
       offHour: wipeHour(env, "TRUCK_WIPE_OFF_HOUR", 8),
       onHour: wipeHour(env, "TRUCK_WIPE_ON_HOUR", 10),
-      // Not wired to config yet — that is a later task. Hard-coded off preserves
-      // today's behaviour exactly: the daily truck wipe, nothing else.
-      rotation: false,
+      rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
+    announcementsChannelId: optionalSnowflake(env, "ANNOUNCEMENTS_CHANNEL_ID"),
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
@@ -263,10 +264,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     throw new Error("RESTART_SCHEDULE is on but NITRADO_TOKEN is unset — the bot cannot restart a server it cannot authenticate to.");
   }
 
-  // ⚠️ The wipe rides on the restart tick's slots. Configured without the schedule
-  // it would never fire at all — no error, no log, just trucks that never wipe.
-  if (config.truckWipe.events.length > 0 && !config.restartSchedule) {
-    throw new Error("TRUCK_WIPE_EVENTS is set but RESTART_SCHEDULE is off — the truck wipe runs on the restart slots, so nothing would ever fire it.");
+  // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule
+  // neither would ever fire at all — no error, no log, just a wipe that never happens.
+  if ((config.truckWipe.events.length > 0 || config.truckWipe.rotation) && !config.restartSchedule) {
+    throw new Error("TRUCK_WIPE_EVENTS or WEEKLY_VEHICLE_WIPE is set but RESTART_SCHEDULE is off — both run on the restart slots, so nothing would ever fire them.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

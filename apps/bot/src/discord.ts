@@ -5,7 +5,7 @@ import {
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { eq } from "drizzle-orm";
-import { emoteLabel } from "@factions/domain";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
 import { verificationTick } from "./tick.js";
@@ -23,6 +23,7 @@ import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
+import { announceTick } from "./announce-tick.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -447,6 +448,7 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
   const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
+  const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   // The same embed poster the feed uses, aimed at #kill-feed.
   const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
   const killFeedStore = new PgKillFeedStore(db);
@@ -1044,6 +1046,20 @@ export async function start(cfg: BotConfig): Promise<void> {
         console.error("restart tick failed", err);
       }
     }
+
+    // ⚠️ After the restart tick, for the same reason the restart tick runs last: a slow
+    // Discord call must not delay a due restart. Its own try/catch, like every step.
+    if (cfg.truckWipe.rotation && announcePoster) {
+      try {
+        const a = await announceTick(db, announcePoster, {
+          now: new Date(), offHour: cfg.truckWipe.offHour,
+          onError: (err) => console.error("weekly wipe announcement failed; will retry until the cutoff", err),
+        });
+        if (a.posted + a.missed > 0) console.log(`announce: ${a.posted} posted, ${a.missed} missed`);
+      } catch (err) {
+        console.error("announce tick failed", err);
+      }
+    }
   });
 
   client.once("clientReady", async () => {
@@ -1069,6 +1085,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     // rather than at 08:00 tomorrow.
     if (cfg.truckWipe.events.length === 0) console.warn("TRUCK_WIPE_EVENTS is unset: the bot is not wiping trucks.");
     else console.log(`truck wipe on: ${cfg.truckWipe.events.join(", ")} off at ${String(cfg.truckWipe.offHour).padStart(2, "0")}:00Z, back on at ${String(cfg.truckWipe.onHour).padStart(2, "0")}:00Z`);
+
+    if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
+    else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}`);
+    if (!cfg.announcementsChannelId) console.warn("ANNOUNCEMENTS_CHANNEL_ID is unset: wipes happen without notice.");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)
