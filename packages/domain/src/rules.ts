@@ -117,8 +117,11 @@ export const RESTART_GRACE_MS = 10 * MIN;
  * alongside the daily trucks, in this order.
  *
  * ⚠️ The `event` strings must match `<event name="…">` in the mission's db/events.xml
- * exactly. A name that is absent throws at wipe time — logged, restart unaffected, but
- * that week's wipe silently does not happen.
+ * exactly. A name that is absent (or duplicated outside comments) throws at wipe time —
+ * `apps/bot/src/restart-tick.ts` accumulates the daily truck wipe and the rotation into
+ * one local `xml` and uploads only after both, so the exception discards the
+ * already-computed truck flips too. It is not "that week's wipe silently does not
+ * happen" — it is every slot, and it takes the daily truck wipe down with it.
  */
 export const WEEKLY_WIPE_VEHICLES = [
   { event: "VehicleCivilianSedan", name: "Olga" },

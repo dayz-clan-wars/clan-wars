@@ -610,6 +610,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   let lastReportedWarLogBlockedAt: number | null = null;
   const killFeedFailures = new Set<number>();
   let lastReportedKillFeedBlockedAt: number | null = null;
+  // Same purpose as feedFailures: from Sunday 08:00 to the Monday cutoff this tick
+  // retries every interval, and an identical error every 10 seconds forever is how a
+  // real problem becomes invisible. Keyed on wipeAt.getTime() so next week's
+  // announcement — a different wipeAt — is reported again.
+  const announceFailures = new Set<number>();
 
   // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
   // tick — see the throttle beside expirePendingMembers below.
@@ -1053,7 +1058,12 @@ export async function start(cfg: BotConfig): Promise<void> {
       try {
         const a = await announceTick(db, announcePoster, {
           now: new Date(), offHour: cfg.truckWipe.offHour,
-          onError: (err) => console.error("weekly wipe announcement failed; will retry until the cutoff", err),
+          onError: (err, wipeAt) => {
+            const key = wipeAt.getTime();
+            if (announceFailures.has(key)) return;
+            announceFailures.add(key);
+            console.error("weekly wipe announcement failed; will retry until the cutoff", err);
+          },
         });
         if (a.posted + a.missed > 0) console.log(`announce: ${a.posted} posted, ${a.missed} missed`);
       } catch (err) {

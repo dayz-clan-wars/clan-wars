@@ -71,8 +71,8 @@ date.
   confirm exactly TWO `<active>` digits changed — `VehicleTruck01` and that week's
   vehicle. Everything else, comments included, is byte-identical.
 - **The Monday 10:00 restore** puts both back to `1`.
-- **Convergence**: on any ordinary slot the bot writes nothing (`no upload` in the
-  journal), because the file already holds the wanted state.
+- **Convergence**: on any ordinary slot the bot writes nothing, because the file already
+  holds the wanted state, and then goes quiet.
 
 ## Rolling back
 

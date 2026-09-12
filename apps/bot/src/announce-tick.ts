@@ -17,7 +17,7 @@ export type AnnounceTickResult = { posted: number; missed: number; failed: numbe
 export async function announceTick(
   db: Database,
   post: AnnouncePoster,
-  opts: { now: Date; offHour: number; onError?: (err: unknown) => void },
+  opts: { now: Date; offHour: number; onError?: (err: unknown, wipeAt: Date) => void },
 ): Promise<AnnounceTickResult> {
   const out: AnnounceTickResult = { posted: 0, missed: 0, failed: 0 };
 
@@ -41,10 +41,10 @@ export async function announceTick(
   }
 
   try {
-    await post(weeklyWipeAnnouncement(vehicle, wipeAt));
+    await post(weeklyWipeAnnouncement(vehicle, wipeAt, opts.now));
   } catch (err) {
     // No row: the next tick retries until the cutoff closes the window.
-    opts.onError?.(err);
+    opts.onError?.(err, wipeAt);
     out.failed++;
     return out;
   }

@@ -166,4 +166,28 @@ describe("rotationActiveFor", () => {
     // 2026-09-16 is a Wednesday; 08:00 is inside the window hours but not a Monday.
     expect(rotationActiveFor(new Date("2026-09-16T08:00:00Z"), 8, 10, GUNTER)).toBe(1);
   });
+
+  // A window whose onHour is before its offHour wraps past midnight — same as
+  // truckWipeActive. Without the shared predicate this silently never wipes anything.
+  describe("with a window that wraps past midnight (22 -> 2)", () => {
+    it("disables this week's vehicle at the off hour", () => {
+      expect(rotationActiveFor(new Date("2026-09-14T22:00:00Z"), 22, 2, OLGA)).toBe(0);
+    });
+
+    it("keeps this week's vehicle disabled after midnight, before the on hour", () => {
+      expect(rotationActiveFor(new Date("2026-09-14T23:00:00Z"), 22, 2, OLGA)).toBe(0);
+    });
+
+    // ⚠️ Monday-only interaction: the Monday guard runs before the wrap check, so
+    // once the calendar rolls to Tuesday the vehicle is back on immediately —
+    // Mon 22:00 wipes, Tue 00:00 restores. Semantically odd, but consistent with
+    // "Monday alone owns the rotation window".
+    it("re-enables at Tuesday 00:00, even though the wrap window is still open", () => {
+      expect(rotationActiveFor(new Date("2026-09-15T00:00:00Z"), 22, 2, OLGA)).toBe(1);
+    });
+
+    it("never disables anything outside the wrap window on Monday", () => {
+      expect(rotationActiveFor(new Date("2026-09-14T12:00:00Z"), 22, 2, OLGA)).toBe(1);
+    });
+  });
 });

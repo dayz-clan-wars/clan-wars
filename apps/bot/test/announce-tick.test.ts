@@ -84,6 +84,15 @@ describe("announceTick", () => {
     expect(await rows()).toHaveLength(1);
   });
 
+  // ⚠️ The caller dedupes its logging per wipeAt (the same shape as feedFailures /
+  // warLogFailures in discord.ts), so onError must be handed the wipeAt it failed for.
+  it("hands onError the wipeAt of the announcement that failed to post", async () => {
+    const bad = vi.fn(async (_content: string) => { throw new Error("discord down"); });
+    const onError = vi.fn();
+    await announceTick(db, bad, { now: at("2026-09-13T08:00:01Z"), offHour: 8, onError });
+    expect(onError).toHaveBeenCalledWith(expect.any(Error), at("2026-09-14T08:00:00Z"));
+  });
+
   // ⚠️ The spec asks for "two servers produce one message". `announceTick` takes no
   // server input at all and never queries `servers`, so a two-server test would assert
   // nothing. The guarantee lives in the schema instead — `wipe_at` is the whole primary

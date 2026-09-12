@@ -27,6 +27,20 @@ export function restartSlot(now: Date): RestartSlot {
 export type ActiveFlag = 0 | 1;
 
 /**
+ * Whether hour `h` falls inside the wipe window `[offHour, onHour)` — a window whose
+ * `onHour` is less than its `offHour` wraps past midnight.
+ *
+ * ⚠️ The one statement of this fact. `truckWipeActive` and `rotationActiveFor` both
+ * need it, and having each spell out its own copy is exactly how one gets the wrap
+ * branch and the other doesn't — which is how `rotationActiveFor` shipped without it.
+ */
+function inWipeWindow(h: number, offHour: number, onHour: number): boolean {
+  return offHour <= onHour
+    ? h >= offHour && h < onHour
+    : h >= offHour || h < onHour; // wraps past midnight
+}
+
+/**
  * Truck wipe (level-triggered): the `<active>` value the events.xml entries
  * should carry for the server about to boot into `slotStart`. `0` inside
  * [offHour, onHour), `1` everywhere else; a window whose `onHour` is less than
@@ -41,11 +55,7 @@ export type ActiveFlag = 0 | 1;
  * self-healing.
  */
 export function truckWipeActive(slotStart: Date, offHour: number, onHour: number): ActiveFlag {
-  const h = slotStart.getUTCHours();
-  const inWindow = offHour <= onHour
-    ? h >= offHour && h < onHour
-    : h >= offHour || h < onHour; // wraps past midnight
-  return inWindow ? 0 : 1;
+  return inWipeWindow(slotStart.getUTCHours(), offHour, onHour) ? 0 : 1;
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
@@ -100,12 +110,19 @@ export function announceAtFor(wipeMonday: Date): Date {
  * ⚠️ Returns 1 for the other four on purpose — the caller converges ALL five every
  * slot. See the test: a bot down across Monday 10:00 otherwise strands that week's
  * vehicle at 0 permanently, because the rotation has moved on by the time it returns.
+ *
+ * ⚠️ Same wrap logic as `truckWipeActive` (via `inWipeWindow`) — a window whose
+ * `onHour` is before its `offHour` wraps past midnight here too. Before this shared
+ * helper, a wrapping window (e.g. 22 -> 2) made this function silently never wipe
+ * anything while the trucks kept wiping on the same window, with no error or log.
+ * Note the Monday guard runs first: with a wrapping window that means Mon 22:00
+ * wipes and Tue 00:00 restores — semantically odd, but consistent with "Monday
+ * alone owns the rotation window".
  */
 export function rotationActiveFor(
   slotStart: Date, offHour: number, onHour: number, event: string,
 ): ActiveFlag {
   if (slotStart.getUTCDay() !== 1) return 1; // not a Monday
   if (weeklyWipeVehicle(slotStart).event !== event) return 1;
-  const h = slotStart.getUTCHours();
-  return h >= offHour && h < onHour ? 0 : 1;
+  return inWipeWindow(slotStart.getUTCHours(), offHour, onHour) ? 0 : 1;
 }

@@ -248,6 +248,35 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "not-an-id" }))
         .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
     });
+
+    // ⚠️ If an operator puts a rotation vehicle in TRUCK_WIPE_EVENTS too, the rotation
+    // loop overwrites the daily 0 with 1 on every non-Monday slot, silently defeating
+    // the daily wipe for that event. The rotation already owns these events.
+    describe("overlap between TRUCK_WIPE_EVENTS and the rotation", () => {
+      it("refuses an event that is in both lists when the rotation is on", () => {
+        expect(() => loadConfig({
+          ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleCivilianSedan",
+        })).toThrow(/VehicleCivilianSedan/u);
+      });
+
+      it("names every offending event", () => {
+        expect(() => loadConfig({
+          ...ON, WEEKLY_VEHICLE_WIPE: "1",
+          TRUCK_WIPE_EVENTS: "VehicleCivilianSedan,VehicleHatchback02,VehicleTruck01",
+        })).toThrow(/VehicleCivilianSedan.*VehicleHatchback02|VehicleHatchback02.*VehicleCivilianSedan/su);
+      });
+
+      it("allows the same event in TRUCK_WIPE_EVENTS when the rotation is off", () => {
+        expect(loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleCivilianSedan" }).truckWipe.events)
+          .toEqual(["VehicleCivilianSedan"]);
+      });
+
+      it("allows disjoint lists", () => {
+        const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleTruck01" });
+        expect(c.truckWipe.events).toEqual(["VehicleTruck01"]);
+        expect(c.truckWipe.rotation).toBe(true);
+      });
+    });
   });
 
   describe("FLAG_IMAGE_BASE_URL", () => {

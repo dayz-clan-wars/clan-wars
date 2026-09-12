@@ -1,3 +1,4 @@
+import { WEEKLY_WIPE_VEHICLES } from "@factions/domain";
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
 
 export type BotConfig = {
@@ -273,6 +274,20 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // the morning someone finally sets TRUCK_WIPE_EVENTS.
   if (config.truckWipe.offHour === config.truckWipe.onHour) {
     throw new Error(`TRUCK_WIPE_OFF_HOUR and TRUCK_WIPE_ON_HOUR are both ${config.truckWipe.offHour} — that is an empty window, not a wipe.`);
+  }
+  // ⚠️ An event in both lists means the rotation loop overwrites the daily wipe's `0`
+  // with `1` on every non-Monday slot — the rotation converges ALL five every slot
+  // (see rotationActiveFor), so it always runs last and always wins. That silently
+  // defeats the daily wipe for that event, with no error and no log.
+  if (config.truckWipe.rotation) {
+    const rotationEvents = new Set<string>(WEEKLY_WIPE_VEHICLES.map((v) => v.event));
+    const overlap = config.truckWipe.events.filter((e) => rotationEvents.has(e));
+    if (overlap.length > 0) {
+      throw new Error(
+        `TRUCK_WIPE_EVENTS names ${overlap.join(", ")}, which the weekly rotation already owns — ` +
+        "remove them from TRUCK_WIPE_EVENTS; the rotation wipes them on its own schedule.",
+      );
+    }
   }
 
   return config;
