@@ -96,6 +96,25 @@ export class NitradoClient {
    * uploadFile reports success for a write the game never reads.
    */
   async missionCustomDir(): Promise<string> {
+    return `${await this.missionDir()}/custom`;
+  }
+
+  /**
+   * The mission's `db` directory — where `events.xml` lives.
+   *
+   * ⚠️ NOT the mission root and NOT `custom`. Verified against the live file
+   * server on 2026-09-12: the mission root holds only cfgeconomycore.xml,
+   * cfgeventspawns.xml, cfgeventgroups.xml and the `db`/`env`/`custom` dirs,
+   * and a download of `<mission>/events.xml` answers "File doesn't exist
+   * (anymore?)". Composing the wrong one of these three would upload into a
+   * directory the game never reads, and report success.
+   */
+  async missionDbDir(): Promise<string> {
+    return `${await this.missionDir()}/db`;
+  }
+
+  /** Shared base for the per-directory helpers above. Throws on any missing field. */
+  private async missionDir(): Promise<string> {
     const gs = (await this.getJson(`/services/${this.serviceId}/gameservers`))?.data?.gameserver;
     const username = gs?.username;
     const game = gs?.game;
@@ -103,7 +122,7 @@ export class NitradoClient {
     if (!username) throw new Error("Nitrado: gameserver has no username, cannot locate the mission directory");
     if (!game) throw new Error("Nitrado: gameserver has no game, cannot locate the mission directory");
     if (!mission) throw new Error("Nitrado: gameserver has no settings.config.mission, cannot locate the mission directory");
-    return `/games/${username}/ftproot/${game}_missions/${mission}/custom`;
+    return `/games/${username}/ftproot/${game}_missions/${mission}`;
   }
 
   /**

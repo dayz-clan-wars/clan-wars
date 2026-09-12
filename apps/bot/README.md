@@ -27,6 +27,9 @@ in-game verification tick confirms it.
 | `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |
 | `RESTART_SCHEDULE` | no (default off; `"1"`/`"true"` = on) | Restart every active server with a `nitrado_service_id` at the top of every even UTC hour (00:00, 02:00 … 22:00), through Nitrado. Off by default. `messages.xml` is not touched — trim its own shutdown entry by hand or both fire. Runbook `docs/deploy/2026-09-12-scheduled-restarts.md`. |
 | `NITRADO_TOKEN` | only when `RESTART_SCHEDULE` is on | The Nitrado API token, the same value the ingest worker already reads. Config load fails if the schedule is on without it. |
+| `TRUCK_WIPE_EVENTS` | no (default off: empty) | Comma-separated `events.xml` event names the daily truck wipe owns, e.g. `VehicleTruck01`. Empty means off — the bot never reads or writes `events.xml`. Requires `RESTART_SCHEDULE`; config load fails without it, because the wipe only ever fires on a restart slot. Runbook `docs/deploy/2026-09-12-truck-wipe.md`. |
+| `TRUCK_WIPE_OFF_HOUR` | no (default `8`) | UTC hour the events go `<active>0</active>`. Must be an even hour — odd hours are never restart slots. A present-but-blank value is refused rather than coerced to 0. |
+| `TRUCK_WIPE_ON_HOUR` | no (default `10`) | UTC hour they go back to `<active>1</active>`. Same rules. A window whose end is before its start wraps past midnight. |
 
 Example `.env` (placeholders only — never commit real values):
 

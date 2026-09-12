@@ -166,6 +166,56 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("TRUCK_WIPE", () => {
+    const ON = { ...OK, RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" };
+
+    it("is off when TRUCK_WIPE_EVENTS is unset", () => {
+      expect(loadConfig({ ...ON }).truckWipe.events).toEqual([]);
+    });
+
+    it("parses a comma-separated list, trimming and dropping blanks", () => {
+      expect(loadConfig({ ...ON, TRUCK_WIPE_EVENTS: " VehicleTruck01 ,, VehicleSedan02 " }).truckWipe.events)
+        .toEqual(["VehicleTruck01", "VehicleSedan02"]);
+    });
+
+    it("defaults the window to 08:00-10:00 UTC", () => {
+      const c = loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01" });
+      expect(c.truckWipe).toMatchObject({ offHour: 8, onHour: 10 });
+    });
+
+    it("accepts an overridden window", () => {
+      const c = loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_OFF_HOUR: "6", TRUCK_WIPE_ON_HOUR: "14" });
+      expect(c.truckWipe).toMatchObject({ offHour: 6, onHour: 14 });
+    });
+
+    // ⚠️ The repo rule is "never a silent default". An operator who blanks the line
+    // to turn it off must not silently get a midnight wipe.
+    it("refuses a blank hour rather than coercing it to 0", () => {
+      expect(() => loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_OFF_HOUR: "" })).toThrow(/TRUCK_WIPE_OFF_HOUR/u);
+    });
+
+    it("refuses an hour outside 0-23 and a non-numeric one", () => {
+      expect(() => loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_ON_HOUR: "24" })).toThrow(/TRUCK_WIPE_ON_HOUR/u);
+      expect(() => loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_ON_HOUR: "noon" })).toThrow(/TRUCK_WIPE_ON_HOUR/u);
+    });
+
+    // ⚠️ Restarts land on even UTC hours only. An odd hour would never be a slot, so
+    // the window boundary would never be the state any server actually boots into.
+    it("refuses an odd hour, which is never a restart slot", () => {
+      expect(() => loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_OFF_HOUR: "7" })).toThrow(/slot|even/iu);
+    });
+
+    it("refuses an empty window", () => {
+      expect(() => loadConfig({ ...ON, TRUCK_WIPE_EVENTS: "VehicleTruck01", TRUCK_WIPE_OFF_HOUR: "8", TRUCK_WIPE_ON_HOUR: "8" })).toThrow(/window/iu);
+    });
+
+    // ⚠️ The wipe rides on the restart tick. Configured without it, nothing would
+    // ever fire and the trucks would simply never wipe, with no error anywhere.
+    it("refuses events without RESTART_SCHEDULE, which is what would fire them", () => {
+      expect(() => loadConfig({ ...OK, TRUCK_WIPE_EVENTS: "VehicleTruck01" })).toThrow(/RESTART_SCHEDULE/u);
+    });
+  });
+
   describe("FLAG_IMAGE_BASE_URL", () => {
     it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
       // The feed shipped before any artwork existed and must keep working

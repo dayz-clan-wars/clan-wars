@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESTART_PERIOD_MS, RESTART_GRACE_MS, restartSlot } from "../src/restarts";
+import { RESTART_PERIOD_MS, RESTART_GRACE_MS, restartSlot, truckWipeActive } from "../src/restarts";
 
 const at = (iso: string) => new Date(iso);
 
@@ -21,5 +21,45 @@ describe("restartSlot", () => {
     expect(restartSlot(at("2026-09-12T14:09:59Z"))).toMatchObject({ due: true, missedIfUnhandled: false });
     expect(restartSlot(at("2026-09-12T14:10:00Z"))).toMatchObject({ due: false, missedIfUnhandled: true });
     expect(restartSlot(at("2026-09-12T15:30:00Z"))).toMatchObject({ start: at("2026-09-12T14:00:00Z"), due: false, missedIfUnhandled: true });
+  });
+});
+
+describe("truckWipeActive", () => {
+  const at = (h: number) => new Date(Date.UTC(2026, 8, 12, h));
+
+  // Level-triggered, NOT edge-triggered: every slot computes the state the
+  // server should boot into, so a failed write self-heals at the next restart.
+  it("is off for the slots inside the wipe window", () => {
+    expect(truckWipeActive(at(8), 8, 10)).toBe(0);
+  });
+
+  it("is on for every slot outside the window", () => {
+    for (const h of [0, 2, 4, 6, 10, 12, 14, 16, 18, 20, 22]) {
+      expect(truckWipeActive(at(h), 8, 10)).toBe(1);
+    }
+  });
+
+  it("re-enables at the on hour itself", () => {
+    expect(truckWipeActive(at(10), 8, 10)).toBe(1);
+  });
+
+  // ⚠️ The self-healing property: a slot after a FAILED 10:00 write still
+  // computes 1, so the next restart puts the trucks back without anyone paging.
+  it("still computes on at 12:00, so a failed 10:00 write recovers", () => {
+    expect(truckWipeActive(at(12), 8, 10)).toBe(1);
+  });
+
+  it("covers a window that wraps past midnight", () => {
+    expect(truckWipeActive(at(22), 22, 2)).toBe(0);
+    expect(truckWipeActive(at(0), 22, 2)).toBe(0);
+    expect(truckWipeActive(at(2), 22, 2)).toBe(1);
+    expect(truckWipeActive(at(20), 22, 2)).toBe(1);
+  });
+
+  it("spans multiple slots when the window is wider than one period", () => {
+    expect(truckWipeActive(at(8), 8, 14)).toBe(0);
+    expect(truckWipeActive(at(10), 8, 14)).toBe(0);
+    expect(truckWipeActive(at(12), 8, 14)).toBe(0);
+    expect(truckWipeActive(at(14), 8, 14)).toBe(1);
   });
 });

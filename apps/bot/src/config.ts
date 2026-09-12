@@ -76,6 +76,8 @@ export type BotConfig = {
   achievementsTick: boolean;
   /** Restart every active server on even UTC hours through Nitrado (spec 2026-09-12). Off by default. */
   restartSchedule: boolean;
+  /** Truck wipe. `events` empty means off; the window is only meaningful when it is not. */
+  truckWipe: { events: string[]; offHour: number; onHour: number };
   /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
   nitradoToken: string | undefined;
 };
@@ -245,6 +247,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
     restartSchedule: ["1", "true"].includes((env.RESTART_SCHEDULE ?? "").toLowerCase()),
     nitradoToken: env.NITRADO_TOKEN?.trim() || undefined,
+    truckWipe: {
+      events: (env.TRUCK_WIPE_EVENTS ?? "").split(",").map((e) => e.trim()).filter((e) => e !== ""),
+      offHour: wipeHour(env, "TRUCK_WIPE_OFF_HOUR", 8),
+      onHour: wipeHour(env, "TRUCK_WIPE_ON_HOUR", 10),
+    },
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
@@ -253,5 +260,38 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     throw new Error("RESTART_SCHEDULE is on but NITRADO_TOKEN is unset — the bot cannot restart a server it cannot authenticate to.");
   }
 
+  // ⚠️ The wipe rides on the restart tick's slots. Configured without the schedule
+  // it would never fire at all — no error, no log, just trucks that never wipe.
+  if (config.truckWipe.events.length > 0 && !config.restartSchedule) {
+    throw new Error("TRUCK_WIPE_EVENTS is set but RESTART_SCHEDULE is off — the truck wipe runs on the restart slots, so nothing would ever fire it.");
+  }
+  // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
+  // the morning someone finally sets TRUCK_WIPE_EVENTS.
+  if (config.truckWipe.offHour === config.truckWipe.onHour) {
+    throw new Error(`TRUCK_WIPE_OFF_HOUR and TRUCK_WIPE_ON_HOUR are both ${config.truckWipe.offHour} — that is an empty window, not a wipe.`);
+  }
+
   return config;
+}
+
+/**
+ * A UTC hour for the wipe window: even, 0-23, never silently defaulted.
+ *
+ * ⚠️ Only an ABSENT variable takes the default. A present-but-blank one throws:
+ * blanking the line is a natural way to try to turn the feature off, and coercing
+ * `""` to 0 would quietly move the wipe to midnight instead.
+ *
+ * ⚠️ Odd hours are refused because restarts land on even UTC hours only
+ * (RESTART_PERIOD_MS = 2h, epoch-aligned), so an odd boundary is never a slot and
+ * would never be the state a server actually boots into.
+ */
+function wipeHour(env: NodeJS.ProcessEnv, name: string, fallback: number): number {
+  const raw = env[name];
+  if (raw === undefined) return fallback;
+  const trimmed = raw.trim();
+  if (trimmed === "") throw new Error(`${name} is set but blank — remove the line to accept the default (${fallback}), or give it an even UTC hour.`);
+  const n = Number(trimmed);
+  if (!Number.isInteger(n) || n < 0 || n > 23) throw new Error(`${name} must be a whole UTC hour 0-23, got "${raw}".`);
+  if (n % 2 !== 0) throw new Error(`${name}=${n} is an odd hour, but restarts only land on even UTC hours — that boundary is never a restart slot.`);
+  return n;
 }

@@ -254,6 +254,30 @@ const GS_FULL = {
   },
 };
 
+describe("NitradoClient.missionDbDir", () => {
+  const client = (gs: unknown) =>
+    new NitradoClient("t", 1, fakeFetch({ "/gameservers": gs }) as unknown as typeof fetch);
+
+  it("composes the mission db directory, where events.xml lives", async () => {
+    // ⚠️ Verified against the live CLAN WARS file server on 2026-09-12: events.xml
+    // is in the mission's `db` directory — NOT the mission root (which holds only
+    // cfgeconomycore.xml, cfgeventspawns.xml, cfgeventgroups.xml and the dirs) and
+    // NOT `custom` (teleports, loadouts, faction supplies). Downloading the mission
+    // root's events.xml returns "File doesn't exist (anymore?)".
+    expect(await client(GS_FULL).missionDbDir()).toBe(
+      "/games/ni11558038_4/ftproot/dayzxb_missions/dayzOffline.enoch/db",
+    );
+  });
+
+  it("throws rather than composing a path with a hole in it", async () => {
+    for (const drop of ["username", "game"]) {
+      const gs = structuredClone(GS_FULL) as any;
+      delete gs.data.gameserver[drop];
+      await expect(client(gs).missionDbDir()).rejects.toThrow(new RegExp(drop, "i"));
+    }
+  });
+});
+
 describe("NitradoClient.missionCustomDir", () => {
   const client = (gs: unknown) =>
     new NitradoClient("t", 1, fakeFetch({ "/gameservers": gs }) as unknown as typeof fetch);

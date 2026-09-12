@@ -1,10 +1,47 @@
 import { serverRestarts, servers, type Database } from "@factions/db";
-import { restartSlot } from "@factions/domain";
+import { restartSlot, truckWipeActive } from "@factions/domain";
 import { and, eq, isNotNull } from "drizzle-orm";
+import { setEventActive } from "./events-xml.js";
 
-/** What the tick needs from a Nitrado client — the two methods, so a test can hand it a fake. */
-export type RestartTarget = { status(): Promise<string>; restart(message: string): Promise<void> };
+/** What the tick needs from a Nitrado client, so a test can hand it a fake. */
+export type RestartTarget = {
+  status(): Promise<string>;
+  restart(message: string): Promise<void>;
+  /** Only reached when a truck wipe is configured. */
+  missionDbDir(): Promise<string>;
+  downloadFile(path: string): Promise<string>;
+  uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
+};
+
+/** Which events.xml entries the wipe owns, and the UTC window they are off for. */
+export type TruckWipe = { events: string[]; offHour: number; onHour: number };
+
+/** The events.xml file name, inside the mission's `db` directory. */
+const EVENTS_FILE = "events.xml";
 export type RestartTickResult = { restarted: number; skipped: number; missed: number; failed: number };
+
+/**
+ * Bring one server's events.xml to the state `slot` wants, immediately before its
+ * restart. Returns true when a write actually went out.
+ *
+ * ⚠️ Level-triggered — see `truckWipeActive`. Every slot recomputes the wanted
+ * state, so the 10 daily slots outside the window each verify the trucks are back
+ * on and rewrite the file if some earlier write was lost. A file already in the
+ * wanted state is NEVER re-uploaded: the download still happens (that is the
+ * check), the upload does not.
+ */
+async function applyTruckWipe(nitrado: RestartTarget, wipe: TruckWipe, slot: Date): Promise<boolean> {
+  const active = truckWipeActive(slot, wipe.offHour, wipe.onHour);
+  const dir = await nitrado.missionDbDir();
+  const original = await nitrado.downloadFile(`${dir}/${EVENTS_FILE}`);
+
+  let xml = original;
+  for (const name of wipe.events) xml = setEventActive(xml, name, active).xml;
+  if (xml === original) return false;
+
+  await nitrado.uploadFile(dir, EVENTS_FILE, xml);
+  return true;
+}
 export const RESTART_MESSAGE = "Scheduled restart";
 
 type Outcome = "restarted" | "skipped" | "missed";
@@ -46,7 +83,7 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
 export async function restartTick(
   db: Database,
   nitradoFor: (serviceId: number) => RestartTarget,
-  opts: { now: Date; lastError?: Map<number, string> },
+  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
   const lastError = opts.lastError ?? moduleLastError;
@@ -86,6 +123,20 @@ export async function restartTick(
         lastError.delete(s.id);
         continue;
       }
+      // ⚠️ BEFORE the restart POST, and only for a server actually being restarted:
+      // DayZ reads events.xml at boot, so a write after the POST would not take
+      // effect for another two hours. ⚠️ Its own try/catch — a wipe that fails must
+      // never cost the restart; players rely on the two-hour cadence, and the next
+      // slot recomputes the wanted state anyway.
+      if (opts.truckWipe && opts.truckWipe.events.length > 0) {
+        try {
+          const wrote = await applyTruckWipe(nitrado, opts.truckWipe, slot.start);
+          if (wrote) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);
+        } catch (err) {
+          console.error(`restart: server ${s.id} truck wipe failed for slot ${slot.start.toISOString()} — restarting anyway`, err);
+        }
+      }
+
       await nitrado.restart(RESTART_MESSAGE);
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;
