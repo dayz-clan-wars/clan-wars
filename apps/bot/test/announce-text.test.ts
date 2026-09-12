@@ -1,3 +1,8 @@
+// ⚠️ Forced off UTC: with TZ=UTC (this machine, and CI) a getHours() implementation
+// prints the same string as getUTCHours(), so the assertion below cannot catch the one
+// bug it exists for. The production host's timezone is not guaranteed to be UTC.
+process.env.TZ = "America/New_York";
+
 import { describe, it, expect } from "vitest";
 import { weeklyWipeAnnouncement } from "../src/announce-text.js";
 
@@ -13,6 +18,11 @@ describe("weeklyWipeAnnouncement", () => {
 
   it("gives the time in UTC, which is what the restarts are in", () => {
     expect(weeklyWipeAnnouncement(OLGA, WIPE_AT)).toContain("08:00 UTC");
+  });
+
+  it("zero-pads minutes, even single-digit non-zero", () => {
+    const t = weeklyWipeAnnouncement(OLGA, new Date("2026-09-14T07:05:00Z"));
+    expect(t).toContain("07:05 UTC");
   });
 
   // ⚠️ The one instruction a player can act on. Losing it makes the notice decorative.
