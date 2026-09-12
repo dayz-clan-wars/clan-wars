@@ -4,6 +4,7 @@ import { sql, eq } from "drizzle-orm";
 import { achievementsTick } from "../../src/achievements/tick.js";
 import { RULES } from "../../src/achievements/rules.js";
 import { seedServer, seedLink, seedKill, seedFaction, seedMembership, seedEvent, TRUNCATE } from "./seed.js";
+import { readResume } from "../../src/achievements/touched.js";
 
 const URL = requireTestDatabaseUrl();
 const A = "A".repeat(36), B = "B".repeat(36);
@@ -105,6 +106,53 @@ describe("achievementsTick", () => {
     const r = await achievementsTick(db, { now: m(11), everyone: true, announce: false });
     expect(r.unlocked).toBe(0);
     expect((await db.select().from(achievementUnlocks)).length).toBe(n1);
+  });
+
+  it("backfill: every owner is evaluated, not just the first batch", async () => {
+    // ⚠️ The backfill ends by heading the watermarks, so an owner it skipped is unreachable
+    // afterwards — the live tick only looks past those heads. One call must drain them all.
+    const ids = Array.from({ length: 7 }, (_, i) => `${i}`.repeat(36));
+    for (const [i, id] of ids.entries()) await seedLink(db, { dayzId: id, discordId: `3333333333333333${i}${i}`, gamertag: `P${i}`, verifiedAt: m(1) });
+    const r = await achievementsTick(db, { now: m(10), everyone: true, announce: false, batch: 3 });
+    expect(r.evaluated).toBeGreaterThanOrEqual(8);   // 7 players + the clan + A
+    for (const id of ids) {
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(38);
+      const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, id));
+      expect(unlocks.map((u) => u.key)).toContain("enlisted");
+    }
+  });
+
+  it("backfill: feeds every position and pin into the counters before evaluating", async () => {
+    const ev = await seedEvent(db, { serverId, type: "player.position", at: m(1), payload: { dayzId: A } });
+    for (let i = 0; i < 50; i++) {
+      await db.insert(playerPositions).values({ serverId, dayzId: A, x: String(i * 1000 + 1), z: "500", alt: "100", occurredAt: m(i), eventId: i === 0 ? ev.id : (await seedEvent(db, { serverId, type: "player.position", at: m(i), payload: { dayzId: A } })).id });
+    }
+    for (let i = 0; i < 10; i++) {
+      await db.insert(clanPins).values({ factionId: bear, dayzId: A, x: "1", z: "2", icon: "loot", note: null, createdAt: m(100 + i), expiresAt: m(1000) });
+    }
+    // No prior live pass: the backfill is the only thing that has ever seen these rows.
+    await achievementsTick(db, { now: m(200), everyone: true, announce: false, batch: 3 });
+    const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, A));
+    expect(unlocks.find((u) => u.key === "explorer")).toMatchObject({ earnedAt: m(49) });
+    expect(unlocks.find((u) => u.key === "cartographer")).toMatchObject({ earnedAt: m(109) });
+  });
+
+  it("a drain skips nobody when new owners arrive mid-drain and sort before the marker", async () => {
+    for (let i = 0; i < 3; i++) await seedKill(db, { serverId, killer: `${i}`.padStart(36, "K"), victim: `${i}`.padStart(36, "V"), at: m(i) });
+    const first = await achievementsTick(db, { now: m(10), batch: 2 });
+    expect(first.carried).toBeGreaterThan(0);
+    expect(await readResume(db)).not.toBeNull();
+    // Two owners whose keys sort BEFORE everything already processed.
+    const early = ["0".repeat(36), "1".repeat(36)];
+    await seedKill(db, { serverId, killer: early[0]!, victim: early[1]!, at: m(5) });
+    for (let pass = 0; pass < 12; pass++) {
+      const r = await achievementsTick(db, { now: m(20 + pass), batch: 2 });
+      if (r.evaluated === 0) break;
+    }
+    for (const id of early) {
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(38);
+    }
+    expect(await readResume(db)).toBeNull();   // the drain finished and cleaned up after itself
   });
 
   it("feeds new positions and pins into the counters", async () => {

@@ -1,6 +1,6 @@
 import {
-  alphaWeeks, clanPins, consumerCursors, ceremonyParticipants, defenses, events, factions, identityLinks, kills, membershipHistory, playerPositions,
-  playerSessions, raids, seasonResults, type Database,
+  achievementCounters, alphaWeeks, clanPins, consumerCursors, ceremonyParticipants, defenses, events, factions, identityLinks, kills,
+  membershipHistory, playerPositions, playerSessions, raids, seasonResults, type Database,
 } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Owner } from "./types.js";
@@ -15,8 +15,8 @@ export const CURSOR_PREFIX = "achievements:";
 /** The event types any rule reads; other types never touch an owner. */
 const RULE_EVENT_TYPES = ["base.built", "player.teleported", "emote.performed", "player.unconscious"] as const;
 
-export type PositionRow = { dayzId: string; x: number; z: number; at: Date };
-export type PinRow = { dayzId: string; at: Date };
+export type PositionRow = { id: number; dayzId: string; x: number; z: number; at: Date };
+export type PinRow = { id: number; dayzId: string; at: Date };
 
 /** Watermarks ride the event-log cursor table under `achievements:<source>`; ids for id-keyed tables, epoch ms for time-keyed ones. */
 export async function readWatermarks(db: Database): Promise<Watermarks> {
@@ -39,29 +39,62 @@ export async function writeWatermarks(tx: Tx, wm: Watermarks): Promise<void> {
 }
 
 /**
- * How many of the (stable, sorted) touched owners the previous capped pass already
- * evaluated. It rides the same cursor table under a name that is NOT a source, so
- * `readWatermarks` ignores it.
+ * Where a capped drain got to: the LAST OWNER KEY it processed, plus the watermarks the
+ * drain started from.
  *
- * ⚠️ Without it a capped pass is a livelock: the watermarks are held back, the next
- * pass re-collects the identical owner list and re-evaluates the same first `batch`
- * owners forever, and everyone behind them is never evaluated again.
+ * ⚠️ Two things are wrong without it, both silent. (1) A positional offset skips an owner
+ * for good as soon as a new owner sorts ahead of it — the list shifts under the index.
+ * (2) Advancing to the LAST pass's watermarks at the end of a drain consumes the rows that
+ * arrived DURING the drain, whose owners were never evaluated; freezing the drain-start
+ * watermarks here leaves those rows unread, so the next pass collects them normally.
+ *
+ * ⚠️ It lives in `achievement_counters` (owner_kind 'clan', owner_id '0') because that
+ * table already IS "the durable state this consumer keeps", and `consumer_cursors` has
+ * only a bigint column — a key and a watermark set do not fit in it. Owner id '0' is not a
+ * faction id (`factions.id` is a bigserial starting at 1), so it can never collide.
  */
-export const OFFSET_CURSOR = CURSOR_PREFIX + "offset";
+export const RESUME_KEY = "achievements:after";
+const RESUME_WHERE = and(eq(achievementCounters.ownerKind, "clan"), eq(achievementCounters.ownerId, "0"), eq(achievementCounters.key, RESUME_KEY));
+export type Resume = { afterKey: string; wm: Watermarks };
 
-export async function readOffset(db: Database): Promise<number> {
-  const [r] = await db.select().from(consumerCursors).where(eq(consumerCursors.consumerName, OFFSET_CURSOR));
-  return r?.lastEventId ?? 0;
+export async function readResume(db: Database): Promise<Resume | null> {
+  const [r] = await db.select().from(achievementCounters).where(RESUME_WHERE);
+  const afterKey = r?.detail.afterKey;
+  const wm = r?.detail.wm;
+  return typeof afterKey === "string" && wm ? { afterKey, wm: wm as Watermarks } : null;
 }
 
-export async function writeOffset(tx: Tx, offset: number): Promise<void> {
-  await tx.insert(consumerCursors).values({ consumerName: OFFSET_CURSOR, lastEventId: offset, updatedAt: new Date() })
-    .onConflictDoUpdate({ target: consumerCursors.consumerName, set: { lastEventId: offset, updatedAt: new Date() } });
+export async function writeResume(tx: Tx, resume: Resume): Promise<void> {
+  await tx.insert(achievementCounters)
+    .values({ ownerKind: "clan", ownerId: "0", key: RESUME_KEY, value: 0, detail: { ...resume }, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: [achievementCounters.ownerKind, achievementCounters.ownerId, achievementCounters.key],
+      set: { detail: { ...resume }, updatedAt: new Date() },
+    });
+}
+
+/** Called in the same transaction as the watermark advance: a drain is over, start clean. */
+export async function clearResume(tx: Tx): Promise<void> {
+  await tx.delete(achievementCounters).where(RESUME_WHERE);
 }
 
 const player = (id: string): Owner => ({ kind: "player", id });
 const clan = (id: number): Owner => ({ kind: "clan", id: String(id) });
-const key = (o: Owner) => `${o.kind}:${o.id}`;
+export const ownerKey = (o: Owner) => `${o.kind}:${o.id}`;
+const key = ownerKey;
+
+/** Position fixes past `afterId`, in id order. Shared with the backfill, which walks the whole table in chunks. */
+export async function positionsAfter(db: Database, afterId: number, limit: number): Promise<PositionRow[]> {
+  const rows = await db.select({ id: playerPositions.id, dayzId: playerPositions.dayzId, x: playerPositions.x, z: playerPositions.z, at: playerPositions.occurredAt })
+    .from(playerPositions).where(gt(playerPositions.id, afterId)).orderBy(asc(playerPositions.id)).limit(limit);
+  return rows.map((p) => ({ id: p.id, dayzId: p.dayzId, x: Number(p.x), z: Number(p.z), at: p.at }));
+}
+
+/** Pins past `afterId`, in id order. Same use as positionsAfter. */
+export async function pinsAfter(db: Database, afterId: number, limit: number): Promise<PinRow[]> {
+  return db.select({ id: clanPins.id, dayzId: clanPins.dayzId, at: clanPins.createdAt })
+    .from(clanPins).where(gt(clanPins.id, afterId)).orderBy(asc(clanPins.id)).limit(limit);
+}
 
 /**
  * Owners with rows past each watermark, and the new watermarks. `limit` caps rows read
@@ -107,16 +140,23 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
   // when someone last disconnected — two unrelated facts, one number, silently wrong either way.
   const spans = await db.select({ id: membershipHistory.id, dayzId: membershipHistory.dayzId, clan: membershipHistory.factionId, leftAt: membershipHistory.leftAt }).from(membershipHistory)
     .where(sql`${membershipHistory.id} > ${wm.membership} or ${membershipHistory.leftAt} > to_timestamp(${wm.membershipClosed / 1000})`).orderBy(asc(membershipHistory.id)).limit(limit);
-  for (const s of advance("membership", spans)) { add(player(s.dayzId)); add(clan(s.clan)); }
-  // The closed watermark advances to the LATEST leftAt seen, not the last row's: the rows come
-  // back in id order, so the last row's leftAt is not the greatest one.
-  for (const s of spans) if (s.leftAt && s.leftAt.getTime() > next.membershipClosed) next.membershipClosed = s.leftAt.getTime();
+  // ⚠️ NOT `advance()`: the OR clause returns old, low-id spans whose left_at was just set,
+  // so taking the last row's id would move the membership watermark BACKWARDS and make the
+  // next pass re-collect most of the server. Both halves only ever move forward.
+  for (const s of spans) {
+    add(player(s.dayzId)); add(clan(s.clan));
+    if (s.id > next.membership) next.membership = s.id;
+    // The closed watermark takes the LATEST left_at seen, not the last row's: the rows come
+    // back in id order, so the last row's left_at is not the greatest one.
+    if (s.leftAt && s.leftAt.getTime() > next.membershipClosed) next.membershipClosed = s.leftAt.getTime();
+  }
+  if (spans.length === limit) carried = true;
 
   for (const c of advance("ceremonies", await db.select({ id: ceremonyParticipants.id, dayzId: ceremonyParticipants.dayzId }).from(ceremonyParticipants).where(gt(ceremonyParticipants.id, wm.ceremonies)).orderBy(asc(ceremonyParticipants.id)).limit(limit))) add(player(c.dayzId));
   for (const l of advance("links", await db.select({ id: identityLinks.id, dayzId: identityLinks.dayzId }).from(identityLinks).where(gt(identityLinks.id, wm.links)).orderBy(asc(identityLinks.id)).limit(limit))) add(player(l.dayzId));
-  const pins = advance("pins", await db.select({ id: clanPins.id, dayzId: clanPins.dayzId, at: clanPins.createdAt }).from(clanPins).where(gt(clanPins.id, wm.pins)).orderBy(asc(clanPins.id)).limit(limit));
+  const pins = advance("pins", await pinsAfter(db, wm.pins, limit));
   for (const p of pins) add(player(p.dayzId));
-  const positions = advance("positions", await db.select({ id: playerPositions.id, dayzId: playerPositions.dayzId, x: playerPositions.x, z: playerPositions.z, at: playerPositions.occurredAt }).from(playerPositions).where(gt(playerPositions.id, wm.positions)).orderBy(asc(playerPositions.id)).limit(limit));
+  const positions = advance("positions", await positionsAfter(db, wm.positions, limit));
   for (const p of positions) add(player(p.dayzId));
   // Activation happens after the row is inserted: watermark on activated_at.
   const activated = await db.select({ id: factions.id, at: factions.activatedAt }).from(factions)
@@ -128,9 +168,9 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
   return {
     // Sorted, not insertion-ordered: the carried-owner offset above is only meaningful
     // against an order that does not depend on which source happened to touch whom.
-    owners: [...owners.values()].sort((a, b) => key(a).localeCompare(key(b))), next, carried,
-    positions: positions.map((p) => ({ dayzId: p.dayzId, x: Number(p.x), z: Number(p.z), at: p.at })),
-    pins: pins.map((p) => ({ dayzId: p.dayzId, at: p.at })),
+    // Sorted, not insertion-ordered: the resume key above is only meaningful against an
+    // order that does not depend on which source happened to touch whom.
+    owners: [...owners.values()].sort((a, b) => key(a).localeCompare(key(b))), next, carried, positions, pins,
   };
 }
 
@@ -143,4 +183,26 @@ export async function collectEveryone(db: Database): Promise<Owner[]> {
   for (const r of await db.select({ id: playerSessions.dayzId }).from(playerSessions)) ids.add(r.id);
   const clans = await db.select({ id: factions.id }).from(factions);
   return [...[...ids].map(player), ...clans.map((c) => clan(c.id))];
+}
+
+/**
+ * The current head of every source, as aggregates — one round trip, no rows loaded.
+ *
+ * ⚠️ Never `collectTouched(db, …, MAX_SAFE_INTEGER)`: that reads every kill, position and
+ * event ever logged into memory just to learn their last ids. A backfill is exactly when
+ * those tables are largest, which is exactly when that OOMs the bot.
+ */
+export async function headWatermarks(db: Database): Promise<Watermarks> {
+  const id = (table: string, where = "") => sql.raw(`coalesce((select max(id) from ${table} ${where}), 0)`);
+  const ms = (table: string, col: string) => sql.raw(`coalesce((select extract(epoch from max(${col})) * 1000 from ${table}), 0)`);
+  const types = RULE_EVENT_TYPES.map((t) => `'${t}'`).join(",");
+  const rows = await db.execute(sql`select
+    ${id("kills")} as kills, ${ms("player_sessions", "disconnected_at")} as sessions,
+    ${id("events", `where type in (${types})`)} as events, ${id("raids")} as raids, ${id("defenses")} as defenses,
+    ${id("alpha_weeks")} as "alphaWeeks", ${id("season_results")} as "seasonResults",
+    ${id("membership_history")} as membership, ${ms("membership_history", "left_at")} as "membershipClosed",
+    ${id("ceremony_participants")} as ceremonies, ${id("identity_links")} as links, ${id("clan_pins")} as pins,
+    ${id("player_positions")} as positions, ${ms("factions", "activated_at")} as activations`);
+  const row = (rows as unknown as Record<string, unknown>[])[0] ?? {};
+  return Object.fromEntries(SOURCES.map((src) => [src, Number(row[src] ?? 0)])) as Watermarks;
 }

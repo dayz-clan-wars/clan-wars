@@ -63,20 +63,29 @@ export async function applyPositionCounters(tx: Tx, rows: readonly { dayzId: str
 }
 
 /**
- * New pins, in time order. Deleting a pin later does not un-drop it — which is
- * the whole reason this counter exists rather than a `count(*)` over `clan_pins`
- * (they are deleted by players and expire on their own).
+ * New pins, in id order. Deleting a pin later does not un-drop it — which is the whole
+ * reason this counter exists rather than a `count(*)` over `clan_pins` (they are deleted
+ * by players and expire on their own).
+ *
+ * ⚠️ Idempotent BY CONSTRUCTION, via `lastPinId`: the tick re-reads the same head of
+ * `clan_pins` on every pass of a capped drain (the watermarks are held back), so a
+ * counter that simply added `rows.length` would inflate cartographer by a batch per
+ * pass and stamp `crossedAt` on the wrong pin. Explorer needs no such guard — a set of
+ * squares absorbs a replay on its own.
  */
-export async function applyPinCounters(tx: Tx, rows: readonly { dayzId: string; at: Date }[]): Promise<void> {
+export async function applyPinCounters(tx: Tx, rows: readonly { id: number; dayzId: string; at: Date }[]): Promise<void> {
   const target = ACHIEVEMENT_BY_KEY.cartographer.target;
   for (const [dayzId, pins] of byPlayer(rows)) {
     const c = await readCounter(tx, dayzId, "cartographer");
     let value = c?.value ?? 0;
+    let lastPinId = Number(c?.detail.lastPinId ?? 0);
     let crossedAt = c?.detail.crossedAt as string | undefined;
-    for (const p of pins) {
+    for (const p of [...pins].sort((a, b) => a.id - b.id)) {
+      if (p.id <= lastPinId) continue;
       value += 1;
+      lastPinId = p.id;
       if (!crossedAt && value >= target) crossedAt = p.at.toISOString();
     }
-    await writeCounter(tx, dayzId, "cartographer", value, crossedAt ? { crossedAt } : {});
+    await writeCounter(tx, dayzId, "cartographer", value, { lastPinId, ...(crossedAt ? { crossedAt } : {}) });
   }
 }
