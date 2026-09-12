@@ -5,6 +5,8 @@ import { when, ago } from "@/lib/format";
 import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm } from "./ui";
 import { NextStepStrip } from "./next-step";
 import { ClosestPanel } from "./achievement-wall";
+import { AchievementToast } from "./achievement-toast";
+import { freshUnlocks } from "@/lib/achievements-copy";
 
 /**
  * What a signed-in member sees about themselves, wherever their page is:
@@ -52,15 +54,22 @@ export function OwnerStrip({ owner, notices }: { owner: Owner; notices: (string 
 }
 
 /**
- * The panels that only the owner sees: what they are closest to unlocking, a
- * ceremony waiting, open invites, open requests. The wall itself is public and
- * lives further down the page; this is the nudge, and it links to it.
+ * The panels that only the owner sees: what they just unlocked, what they are
+ * closest to unlocking, a ceremony waiting, open invites, open requests. The
+ * wall itself is public and lives further down the page; this is the nudge,
+ * and it links to it.
+ *
+ * ⚠️ The toasts are for the viewer's OWN player-scoped unlocks only. `wall`
+ * here is always the viewer's (isOwnPage gates the whole component), and
+ * `freshUnlocks` drops the team tiles, which are the clan's.
  */
-export function OwnerPanels({ owner, wall }: { owner: Owner; wall?: AchievementWall | null }) {
+export function OwnerPanels({ owner, wall, now = new Date() }: { owner: Owner; wall?: AchievementWall | null; now?: Date }) {
   const { claim, invites, requests, showInvites, next } = owner;
   const gamertag = owner.viewer.link?.gamertag;
+  const fresh = wall && gamertag ? freshUnlocks(wall.tiles, now) : [];
   return (
     <>
+      {fresh.length > 0 && <div className="flex flex-col gap-3">{fresh.map((t) => <AchievementToast key={t.key} t={t} />)}</div>}
       {wall && gamertag && <ClosestPanel wall={wall} href={`/players/${encodeURIComponent(gamertag)}#achievements`} />}
       {claim && (
         <Panel title="A ceremony is waiting" tone={next ? "plain" : "gold"}>

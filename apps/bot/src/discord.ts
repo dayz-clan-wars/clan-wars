@@ -397,17 +397,20 @@ export function createChannelPoster(client: Client, channelId: string): WarLogPo
  * `PgNoticeStore.markAttempt` exists for.
  */
 export function createNoticeSender(client: Client): NoticeSender {
-  return async (target, discordTargetId, content) => {
+  return async (target, discordTargetId, content, embeds) => {
+    // ⚠️ `content: ""` with embeds is a valid message; `content: ""` alone is
+    // rejected by Discord — so the key is dropped when empty, never sent blank.
+    const message = { ...(content ? { content } : {}), ...(embeds?.length ? { embeds } : {}) };
     if (target === "dm") {
       const user = await client.users.fetch(discordTargetId);
-      await user.send(content);
+      await user.send(message);
       return;
     }
     const channel = await client.channels.fetch(discordTargetId);
     if (!channel?.isSendable()) {
       throw new Error(`notice channel ${discordTargetId} is missing or not sendable by this bot`);
     }
-    await channel.send({ content });
+    await channel.send(message);
   };
 }
 
@@ -991,6 +994,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     try {
       const n = await noticeTick(noticeStore, noticeSender, {
         now: new Date(),
+        siteBaseUrl: cfg.siteBaseUrl,
         onError: (id, attempts, err) => {
           // Logged once per attempt, capped at NOTICE_MAX_ATTEMPTS: a row
           // failing for the third time is worth a distinct line from the

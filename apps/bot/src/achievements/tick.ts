@@ -40,12 +40,12 @@ export async function evaluateOwner(db: Database, owner: Owner, now: Date, onErr
   return out;
 }
 
-type Names = { ownerName: string; clanTag: string | null; factionId: number | null; serverId: number; memberDiscordId: string | null };
+type Names = { ownerName: string; gamertag: string | null; clanTag: string | null; factionId: number | null; serverId: number; memberDiscordId: string | null };
 
 async function namesFor(db: Database, owner: Owner, serverIdHint?: number): Promise<Names> {
   if (owner.kind === "clan") {
     const [f] = await db.select({ tag: factions.tag, name: factions.name, serverId: factions.serverId }).from(factions).where(eq(factions.id, Number(owner.id)));
-    return { ownerName: f?.name ?? owner.id, clanTag: f?.tag ?? null, factionId: Number(owner.id), serverId: f?.serverId ?? serverIdHint ?? 0, memberDiscordId: null };
+    return { ownerName: f?.name ?? owner.id, gamertag: null, clanTag: f?.tag ?? null, factionId: Number(owner.id), serverId: f?.serverId ?? serverIdHint ?? 0, memberDiscordId: null };
   }
   const [link] = await db.select({ discordId: identityLinks.discordId, gamertag: identityLinks.gamertag }).from(identityLinks).where(eq(identityLinks.dayzId, owner.id));
   const [seen] = link ? [] : await db.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, owner.id));
@@ -71,6 +71,8 @@ async function namesFor(db: Database, owner: Owner, serverIdHint?: number): Prom
     // `person()` renders an all-digit value as a mention, which is how the player is
     // actually told. The gamertag is the fallback for someone who never linked.
     ownerName: link?.discordId ?? seen?.gamertag ?? "a player",
+    // The embed (achievement-embed.ts) names the player by gamertag, where the text line mentions them.
+    gamertag: link?.gamertag ?? seen?.gamertag ?? null,
     clanTag: clanRow?.tag ?? null,
     factionId: clanRow?.factionId ?? null,
     serverId,
@@ -105,7 +107,7 @@ async function processOwner(
       if (!announce) continue;
       names ??= await namesFor(db, owner, r.serverId);
       const a = ACHIEVEMENT_BY_KEY[key];
-      const payload = { key, name: a.name, description: a.description, ownerKind: owner.kind, ownerName: names.ownerName, clanTag: names.clanTag };
+      const payload = { key, name: a.name, description: a.description, ownerKind: owner.kind, ownerName: names.ownerName, gamertag: names.gamertag, clanTag: names.clanTag };
       const base = { serverId: names.serverId, kind: "achievement" as const, occurredAt: r.earnedAt, payload };
       if (owner.kind === "clan") {
         await noticeClanTx(tx, { ...base, factionId: names.factionId! });

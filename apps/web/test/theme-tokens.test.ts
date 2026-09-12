@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { ACHIEVEMENT_GROUP_COLORS } from "@factions/domain";
 
 /**
  * Frontend rebuild §4 and §6. The palette used to be stated twice, in two
@@ -26,6 +27,12 @@ const TOKENS: Record<string, string> = {
   "--color-olive": "#8fa36a",
   "--color-terrain": "#111110",
   "--color-ground": "#050505",
+  // ⚠️ The badge colours are stated in @factions/domain (the bot's embeds read them there)
+  // and restated here as tokens so a tile can say `border-achievement-pvp`. Held together.
+  "--color-achievement-solo": ACHIEVEMENT_GROUP_COLORS.solo,
+  "--color-achievement-pve": ACHIEVEMENT_GROUP_COLORS.pve,
+  "--color-achievement-pvp": ACHIEVEMENT_GROUP_COLORS.pvp,
+  "--color-achievement-team": ACHIEVEMENT_GROUP_COLORS.team,
 };
 
 const FACES = ["--font-display", "--font-sans", "--font-mono"];

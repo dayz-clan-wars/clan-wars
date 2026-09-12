@@ -35,9 +35,15 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * is the landing page's terrain still (public/hero/, one webp): the page is
  * public, so its picture must be too. `/api/players/` is the gamertag
  * autocomplete behind the public player search; its `linked` scope checks
- * the session itself (app/api/players/suggest/route.ts).
+ * the session itself (app/api/players/suggest/route.ts). `/achievements/`
+ * is the badge art (public/achievements/): the bot's unlock embeds point
+ * Discord's crawler at `unlocked/<key>.png`, and a crawler has no session —
+ * gated, every card posts without its badge, silently. `/api/og/` is the
+ * share card (app/api/og/achievement/[key]), fetched by the same crawlers
+ * for the same reason; it carries a name, a tag and a date, all public
+ * already on the wall, never a coordinate.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should

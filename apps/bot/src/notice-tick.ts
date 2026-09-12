@@ -1,9 +1,26 @@
 import type { NoticeStore } from "@factions/roster/internal";
 import { NOTICE_MAX_ATTEMPTS } from "@factions/roster/internal";
 import type { NoticeTarget } from "@factions/domain";
+import type { APIEmbed } from "discord.js";
 import { noticeText } from "./notice-text.js";
+import { achievementEmbed, achievementMention } from "./achievement-embed.js";
 
-export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string) => Promise<void>;
+/** What one queued row posts: a line, an embed, or both (an achievement in a clan channel is a mention plus the card). */
+export type NoticeMessage = { content: string; embeds?: APIEmbed[] };
+export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[]) => Promise<void>;
+
+/**
+ * An achievement posts as an embed (the badge, the group colour) rather than
+ * the text line; every other kind is the line `noticeText` renders. In the
+ * clan channel the embed rides behind a bare mention, so the player is still
+ * pinged the way the text line pinged them — a DM needs no ping, and the
+ * public wall never pinged anyone.
+ */
+export function noticeMessage(row: Parameters<typeof noticeText>[0], now: Date, siteBaseUrl: string): NoticeMessage {
+  if (row.kind !== "achievement") return { content: noticeText(row, now) };
+  const mention = row.target === "channel" && !row.payload.public ? achievementMention(row.payload) : "";
+  return { content: mention, embeds: [achievementEmbed(row.payload, siteBaseUrl)] };
+}
 
 export type NoticeTickResult = { posted: number; failed: number; blockedTargets: string[] };
 
@@ -32,7 +49,7 @@ export type NoticeTickResult = { posted: number; failed: number; blockedTargets:
 export async function noticeTick(
   store: NoticeStore,
   send: NoticeSender,
-  opts: { now: Date; batchSize?: number; onError?: (id: number, attempts: number, err: unknown) => void },
+  opts: { now: Date; batchSize?: number; siteBaseUrl: string; onError?: (id: number, attempts: number, err: unknown) => void },
 ): Promise<NoticeTickResult> {
   const rows = await store.readUnposted(opts.batchSize ?? 50);
   const blocked = new Set<string>();
@@ -42,7 +59,8 @@ export async function noticeTick(
     const target = row.discordTargetId!;
     if (blocked.has(target)) continue;
     try {
-      await send(row.target, target, noticeText(row, opts.now));
+      const msg = noticeMessage(row, opts.now, opts.siteBaseUrl);
+      await send(row.target, target, msg.content, msg.embeds);
       await store.markPosted(row.id, opts.now);
       out.posted++;
     } catch (err) {

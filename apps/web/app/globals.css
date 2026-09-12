@@ -26,6 +26,11 @@
   /* The edge of a CONTROL (field, secondary button, checkbox): 3.2:1, the floor for a boundary that is the only affordance. Panels keep --color-rule-2. */
   --color-rule-3: #66625b;
   --color-gold: #d9a03c;
+  /* The four achievement groups' badge colours: solo = ink, pve = olive, pvp = rust-2, team = gold. Restated from ACHIEVEMENT_GROUP_COLORS in @factions/domain (theme-tokens.test.ts holds them together) so a tile can say `border-achievement-pvp` and Tailwind can see it. */
+  --color-achievement-solo: #e8e2d4;
+  --color-achievement-pve: #8fa36a;
+  --color-achievement-pvp: #d4623a;
+  --color-achievement-team: #d9a03c;
   --color-rust: #8c3a22;
   /* Rust as TEXT. --color-rust is 2.6:1 on the frame and is for edges only; this is the same hue at 5:1. */
   --color-rust-2: #d4623a;
