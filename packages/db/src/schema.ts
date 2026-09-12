@@ -1316,3 +1316,24 @@ export const claimDrafts = pgTable("claim_drafts", {
 }, (t) => ({
   uniqDraft: uniqueIndex("claim_drafts_ceremony_discord_uniq").on(t.ceremonyId, t.discordId),
 }));
+
+/**
+ * One row per server per two-hour restart slot (spec 2026-09-12 §5): the
+ * bot's proof that the schedule ran, and its idempotency guard — a row for
+ * (server, slot) means the slot is handled, whatever the outcome.
+ *
+ * ⚠️ Written by restart-tick.ts alone, in its own transaction, touching no
+ * other table; it needs no place in the §4.12 lock order.
+ */
+export const serverRestarts = pgTable("server_restarts", {
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  /** The slot start — an even UTC hour. */
+  scheduledFor: timestamp("scheduled_for", { withTimezone: true }).notNull(),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  /** restarted = Nitrado accepted the POST; skipped = server was not `started`; missed = the grace window closed with nothing fired. */
+  outcome: text("outcome").$type<"restarted" | "skipped" | "missed">().notNull(),
+  detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.serverId, t.scheduledFor] }),
+  outcomeValid: check("server_restarts_outcome_valid", sql`${t.outcome} IN ('restarted','skipped','missed')`),
+}));

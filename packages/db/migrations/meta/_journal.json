@@ -225,6 +225,13 @@
       "when": 1789182529907,
       "tag": "0031_achievements",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1789238723169,
+      "tag": "0032_server_restarts",
+      "breakpoints": true
     }
   ]
 }
