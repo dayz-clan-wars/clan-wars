@@ -8,7 +8,7 @@ const s = (n: number) => new Date(t0.getTime() + n * 1000);
 let nextId = 0;
 function hit(p: Partial<HitInput> & { at: number }): HitInput {
   return {
-    eventId: ++nextId, occurredAt: s(p.at),
+    eventId: ++nextId, serverId: p.serverId ?? 1, occurredAt: s(p.at),
     attackerType: p.attackerType ?? "player",
     attackerDayzId: p.attackerDayzId === undefined ? A : p.attackerDayzId,
     victimDayzId: p.victimDayzId ?? B,
@@ -110,5 +110,12 @@ describe("groupHitBursts", () => {
     const out = groupHitBursts([hit({ at: 0, victimDayzId: C }), hit({ at: 1, victimDayzId: B })], settled);
     expect(out[0]!.victimDayzId).toBe(C);
     expect(out[1]!.victimDayzId).toBe(B);
+  });
+
+  it("⚠️ the same pair fighting on two servers does not merge into one engagement", () => {
+    const out = groupHitBursts([hit({ at: 0, serverId: 1 }), hit({ at: 1, serverId: 2 }), hit({ at: 2, serverId: 1 })], settled);
+    expect(out).toHaveLength(2);
+    expect(out.find((e) => e.serverId === 1)!.hits).toHaveLength(2);
+    expect(out.find((e) => e.serverId === 2)!.hits).toHaveLength(1);
   });
 });

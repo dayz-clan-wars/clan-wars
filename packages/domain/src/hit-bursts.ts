@@ -6,6 +6,8 @@ export const DEFAULT_HIT_BURST_WINDOW_S = 60;
 /** One `player.hit` event, flattened. Exactly what the feed needs; no coordinates, ever. */
 export type HitInput = {
   eventId: number;
+  /** ⚠️ Part of the engagement's identity — see `keyOf`. Multi-server is live, and a dayzId is not scoped to one. */
+  serverId: number;
   occurredAt: Date;
   attackerType: "player" | "infected" | "environment";
   attackerDayzId: string | null;
@@ -18,12 +20,13 @@ export type HitInput = {
   victimHp: number | null;
 };
 
-/** A run of hits sharing (attacker, victim, weapon). `closed` means no further hit can join it. */
+/** A run of hits sharing (server, attacker, victim, weapon). `closed` means no further hit can join it. */
 export type HitEngagement = {
   firstEventId: number;
   lastEventId: number;
   startedAt: Date;
   endedAt: Date;
+  serverId: number;
   attackerDayzId: string;
   victimDayzId: string;
   weapon: string | null;
@@ -40,10 +43,14 @@ function isPvp(h: HitInput): boolean {
 /**
  * `weapon` is part of the key and may be null, which must NOT collide with a
  * weapon literally named "null" — hence the length prefix rather than a join.
+ *
+ * ⚠️ `serverId` is part of the key too. A dayzId is a game-account identity,
+ * not scoped to one server; without the server term, the same pair fighting
+ * on two servers at once would merge into a single cross-server engagement.
  */
 function keyOf(h: HitInput): string {
   const w = h.weapon === null ? "-" : `${h.weapon.length}:${h.weapon}`;
-  return `${h.attackerDayzId}|${h.victimDayzId}|${w}`;
+  return `${h.serverId}|${h.attackerDayzId}|${h.victimDayzId}|${w}`;
 }
 
 /**
@@ -90,7 +97,7 @@ export function groupHitBursts(hits: HitInput[], opts: { frontier: Date; windowS
     const started: HitEngagement = {
       firstEventId: h.eventId, lastEventId: h.eventId,
       startedAt: h.occurredAt, endedAt: h.occurredAt,
-      attackerDayzId: h.attackerDayzId!, victimDayzId: h.victimDayzId, weapon: h.weapon,
+      serverId: h.serverId, attackerDayzId: h.attackerDayzId!, victimDayzId: h.victimDayzId, weapon: h.weapon,
       hits: [h], closed: false,
     };
     open.set(key, started);

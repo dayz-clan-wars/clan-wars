@@ -132,6 +132,15 @@ export const events = pgTable("events", {
   byRaisePlayer: index("events_raise_by_player_idx")
     .on(sql`(${t.payload}->>'dayzId')`)
     .where(sql`${t.type} = 'flag.raised'`),
+  // ⚠️ `PgHitFeedStore.readAfter` (apps/bot/src/hit-feed-tick.ts) asks for
+  // `id > cursor AND type = 'player.hit' AND occurred_at <= frontier` every
+  // tick. `events_type_idx` narrows to player.hit but the id range then still
+  // has to be walked from wherever the planner enters it; when the frontier
+  // lags, that walk runs to the end of the table for zero rows. Partial and
+  // on `id` alone: the id range is what actually needs an ordered scan, and
+  // `occurred_at` is applied as a cheap filter afterward. This has caused a
+  // tick loop to silently stop keeping up before — see CLAUDE.md.
+  byHitId: index("events_hit_id_idx").on(t.id).where(sql`${t.type} = 'player.hit'`),
 }));
 
 export const consumerCursors = pgTable("consumer_cursors", {

@@ -36,7 +36,7 @@ export function profileUrl(siteBaseUrl: string, gamertag: string): string {
 }
 
 /** `**[Name](profile)** [TAG]` — the name links to the profile; the tag is plain. */
-function who(side: KillFeedSide, siteBaseUrl: string): string {
+export function who(side: KillFeedSide, siteBaseUrl: string): string {
   const name = `**[${escapeMarkdown(side.gamertag)}](${profileUrl(siteBaseUrl, side.gamertag)})**`;
   return side.tag ? `${name} [${escapeMarkdown(side.tag)}]` : name;
 }

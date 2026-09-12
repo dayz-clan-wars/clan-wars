@@ -6,7 +6,7 @@ const base: HitFeedItem = {
   eventId: 7, occurredAt: new Date("2026-09-12T01:00:41Z"), startedAt: new Date("2026-09-12T01:00:00Z"),
   attacker: { gamertag: "Steve", tag: "WOLF", texture: null },
   victim: { gamertag: "Dave", tag: "BEAR", texture: null },
-  weapon: "KA-74", distanceM: 41, friendlyFire: false, suppressed: false,
+  weapon: "KA-74", friendlyFire: false, suppressed: false,
   hits: [
     { damage: 38, bodyPart: "Torso", weapon: "KA-74", distanceM: 41 },
     { damage: 38, bodyPart: "Head", weapon: "KA-74", distanceM: 39 },
@@ -60,6 +60,10 @@ describe("hitFeedEmbed", () => {
     const e = hitFeedEmbed({ ...base, friendlyFire: true }, site);
     expect(e.title).toContain("Friendly fire");
     expect(e.color).toBe(0xe67e22);
+  });
+
+  it("⚠️ colours an ordinary engagement duller than the kill feed's rust, so the two channels read apart at a glance", () => {
+    expect(hitFeedEmbed(base, site).color).toBe(0x8c5a3c);
   });
 
   it("⚠️ timestamps the last hit, not the post — a delayed post still reads as when it happened", () => {

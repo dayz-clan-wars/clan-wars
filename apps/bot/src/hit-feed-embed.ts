@@ -1,7 +1,7 @@
 import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
-import { cappedLines, detailLine, escapeMarkdown, profileUrl, type HitDetail, type KillFeedSide } from "./kill-feed-embed.js";
+import { cappedLines, detailLine, escapeMarkdown, profileUrl, who, type HitDetail, type KillFeedSide } from "./kill-feed-embed.js";
 
 /**
  * One engagement, ready to render. Built by `PgHitFeedStore`; never carries a
@@ -18,8 +18,6 @@ export type HitFeedItem = {
   attacker: KillFeedSide;
   victim: KillFeedSide;
   weapon: string | null;
-  /** The last hit's distance — the engagement's representative range. */
-  distanceM: number | null;
   friendlyFire: boolean;
   suppressed: boolean;
   /** Oldest first. */
@@ -32,12 +30,6 @@ export type HitFeedItem = {
 /** Duller than the kill feed's rust, so the two channels are distinguishable at a glance. */
 const EMBER = 0x8c5a3c;
 const AMBER = 0xe67e22;
-
-/** `**[Name](profile)** [TAG]` — the name links to the profile; the tag is plain. */
-function who(side: KillFeedSide, siteBaseUrl: string): string {
-  const name = `**[${escapeMarkdown(side.gamertag)}](${profileUrl(siteBaseUrl, side.gamertag)})**`;
-  return side.tag ? `${name} [${escapeMarkdown(side.tag)}]` : name;
-}
 
 /** `once`, `2 times`, `9 times`. "1 times" is not a sentence. */
 function times(n: number): string {
