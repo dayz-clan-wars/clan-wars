@@ -101,3 +101,13 @@ export const HUB_DESTINATIONS = 31;
 // Fair play
 export const COMBAT_LOG_MS = 10 * MIN;
 export const WATCHTOWER_MAX_HEIGHT = { grounded: 2, onStructure: 1 } as const;
+
+/**
+ * Scheduled restarts (spec 2026-09-12): the bot restarts the server every
+ * RESTART_PERIOD_MS, in slots aligned to the Unix epoch — which is itself an
+ * even UTC hour, so there is no phase constant to get wrong. A slot the bot
+ * did not fire within RESTART_GRACE_MS of its start is missed, not late: a
+ * restart twenty minutes late kicks players who had no countdown.
+ */
+export const RESTART_PERIOD_MS = 2 * HOUR;
+export const RESTART_GRACE_MS = 10 * MIN;
