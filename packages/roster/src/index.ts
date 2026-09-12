@@ -56,6 +56,8 @@ import {
   type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry, type WarLogFilter,
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
+import { achievementsForDb, type AchievementWall, type AchievementTile, type AchievementSubject } from "./achievements";
+export type { AchievementWall, AchievementTile, AchievementSubject };
 import {
   playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, playerFeedDb, BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE,
   type StatScope, type ResolvedScope, type BoardRow, type KdRow, type LongestKillRow, type Boards, type PlayerProfile,
@@ -270,6 +272,10 @@ export function playerBoards(scope: StatScope, limit?: number): Promise<Boards> 
 /** One player's public page, by gamertag. Null when the log has never seen that name. */
 export function playerProfile(gamertag: string, scope: StatScope): Promise<PlayerProfile | null> {
   return playerProfileDb(db(), gamertag, scope, new Date());
+}
+/** The badge wall for a player (by gamertag) or a clan (by tag). Null when the name is unknown. */
+export function achievementsFor(subject: AchievementSubject): Promise<AchievementWall | null> {
+  return achievementsForDb(db(), subject, new Date());
 }
 /** The same boards, narrowed to the viewer's own clan's current full roster. Full members only. */
 export function clanBoard(discordId: string, scope: StatScope, limit?: number): Promise<Boards | "not-linked" | "not-in-clan" | "pending"> {
