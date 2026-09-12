@@ -74,6 +74,10 @@ export type BotConfig = {
    * skip or duplicate unlocks.
    */
   achievementsTick: boolean;
+  /** Restart every active server on even UTC hours through Nitrado (spec 2026-09-12). Off by default. */
+  restartSchedule: boolean;
+  /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
+  nitradoToken: string | undefined;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -239,7 +243,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
     achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),
     achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
+    restartSchedule: ["1", "true"].includes((env.RESTART_SCHEDULE ?? "").toLowerCase()),
+    nitradoToken: env.NITRADO_TOKEN?.trim() || undefined,
   };
+
+  // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
+  // error level and look, from systemctl, exactly like one that is working.
+  if (config.restartSchedule && !config.nitradoToken) {
+    throw new Error("RESTART_SCHEDULE is on but NITRADO_TOKEN is unset — the bot cannot restart a server it cannot authenticate to.");
+  }
 
   return config;
 }
