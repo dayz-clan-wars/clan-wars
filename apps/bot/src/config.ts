@@ -61,6 +61,19 @@ export type BotConfig = {
    * `@Alpha`, only clan roles and channels inside them.
    */
   alphaRoleId: string;
+  /**
+   * The achievements wall: a channel notice with no clan behind it, posted
+   * alongside the normal clan-channel/DM notice for every unlock. Optional,
+   * for the same reason `feedChannelId` is — unset by default, nothing posts.
+   */
+  achievementsChannelId: string | undefined;
+  /**
+   * Gates the achievements tick itself, default **off**. A fresh deploy must
+   * run the backfill (spec §10) before the live tick starts evaluating
+   * owners — turning it on first would race the backfill's watermarks and
+   * skip or duplicate unlocks.
+   */
+  achievementsTick: boolean;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -224,6 +237,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
     alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
+    achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),
+    achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
   };
 
   return config;

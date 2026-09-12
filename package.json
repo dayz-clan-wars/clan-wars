@@ -13,6 +13,7 @@
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
     "rebuild:kills": "tsx scripts/rebuild-kills.ts",
+    "backfill:achievements": "tsx scripts/backfill-achievements.ts",
     "wipe": "tsx scripts/wipe.ts",
     "launch": "tsx scripts/launch.ts"
   },

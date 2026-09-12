@@ -159,3 +159,17 @@ describe("duration", () => {
     expect(duration(60)).toBe("0h 1m");
   });
 });
+
+describe("achievement", () => {
+  const at = new Date("2026-09-11T12:00:00Z");
+  const base = { kind: "achievement" as const, occurredAt: at, target: "channel" as const };
+  it("names the player as a mention in their clan channel, and with their tag in the public channel", () => {
+    const payload = { key: "sniper", name: "Sniper", description: "A kill from 300 m or more", ownerKind: "player", ownerName: "111111111111111111", clanTag: "BEAR" };
+    expect(noticeText({ ...base, payload }, at)).toBe("🏆 <@111111111111111111> earned **Sniper** — A kill from 300 m or more.");
+    expect(noticeText({ ...base, payload: { ...payload, public: true } }, at)).toBe("🏆 <@111111111111111111> [BEAR] earned **Sniper** — A kill from 300 m or more.");
+  });
+  it("names a clan in bold, no tag suffix", () => {
+    const payload = { key: "fortress", name: "Fortress", description: "10 defenses", ownerKind: "clan", ownerName: "Bear Company", clanTag: "BEAR", public: true };
+    expect(noticeText({ ...base, payload }, at)).toBe("🏆 **Bear Company** earned **Fortress** — 10 defenses.");
+  });
+});

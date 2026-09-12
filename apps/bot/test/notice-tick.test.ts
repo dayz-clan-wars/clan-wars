@@ -39,6 +39,15 @@ function fakeStore(rows: QueuedNotice[]): NoticeStore & { posted: number[]; atte
 }
 
 describe("noticeTick", () => {
+  it("posts a channel row that has no clan behind it to its own target", async () => {
+    // The achievements wall: factionId null, the channel id frozen at write time.
+    const store = fakeStore([row(1, "wall-1", { factionId: null, kind: "achievement", payload: { key: "sniper", name: "Sniper", description: "d", ownerKind: "clan", ownerName: "Bears", clanTag: "BEAR", public: true } })]);
+    const send = vi.fn<NoticeSender>(async () => {});
+    const r = await noticeTick(store, send, { now });
+    expect(r).toMatchObject({ posted: 1, failed: 0 });
+    expect(send.mock.calls[0]![1]).toBe("wall-1");
+  });
+
   it("posts in id order per target and marks each posted", async () => {
     const store = fakeStore([row(1, "chan-a"), row(2, "chan-a"), row(3, "chan-b")]);
     const send = vi.fn<NoticeSender>().mockResolvedValue(undefined);

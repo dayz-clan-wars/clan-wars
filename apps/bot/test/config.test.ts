@@ -139,6 +139,17 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("ACHIEVEMENTS_CHANNEL_ID / ACHIEVEMENTS_TICK", () => {
+    it("ACHIEVEMENTS_CHANNEL_ID is optional and ACHIEVEMENTS_TICK defaults off", () => {
+      const cfg = loadConfig(OK);
+      expect(cfg.achievementsChannelId).toBeUndefined();
+      expect(cfg.achievementsTick).toBe(false);
+      expect(loadConfig({ ...OK, ACHIEVEMENTS_CHANNEL_ID: "123456789012345678", ACHIEVEMENTS_TICK: "1" }))
+        .toMatchObject({ achievementsChannelId: "123456789012345678", achievementsTick: true });
+      expect(() => loadConfig({ ...OK, ACHIEVEMENTS_CHANNEL_ID: "nope" })).toThrow(/ACHIEVEMENTS_CHANNEL_ID/u);
+    });
+  });
+
   describe("FLAG_IMAGE_BASE_URL", () => {
     it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
       // The feed shipped before any artwork existed and must keep working

@@ -23,6 +23,8 @@ in-game verification tick confirms it.
 | `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
+| `ACHIEVEMENTS_CHANNEL_ID` | no (unset means the achievements wall is off) | The Discord channel id the public achievements wall posts to, alongside the normal clan-channel/DM notice for every unlock. Unset by default: unlocks still happen, nothing posts there. |
+| `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |
 
 Example `.env` (placeholders only — never commit real values):
 

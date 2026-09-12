@@ -93,6 +93,19 @@ describe("roster package notices", () => {
     expect(rows.map((r) => r.t).sort()).toEqual(["d1", "d2"]);
   });
 
+  it("a channel row with no clan behind it posts to its own target", async () => {
+    // ⚠️ The achievements wall queues `factionId: null, target: "channel"` with the
+    // public channel written in. The coalesce in readUnposted is what makes that row
+    // deliverable: resolving a channel from the faction row alone would leave it
+    // waiting forever, unposted and unfailed, with nothing saying so.
+    await db.transaction((tx) => appendClanNoticeTx(tx, {
+      serverId, factionId: null, target: "channel", discordTargetId: "wall-1", kind: "achievement", occurredAt: now,
+      payload: { key: "sniper", name: "Sniper", ownerKind: "player", ownerName: "111111111111111111", clanTag: "BEAR", public: true },
+    }));
+    const [q] = await new PgNoticeStore(db).readUnposted(10);
+    expect(q).toMatchObject({ factionId: null, target: "channel", discordTargetId: "wall-1", kind: "achievement" });
+  });
+
   it("markAttempt fails a row on the third attempt and readUnposted stops returning it", async () => {
     await db.transaction((tx) => noticeUserTx(tx, { serverId, factionId: null, discordId: "d9", kind: "solo_lapsed", occurredAt: now, payload: {} }));
     const store = new PgNoticeStore(db);

@@ -43,6 +43,7 @@ import { membershipTick } from "./membership-tick.js";
 import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
 import { leadershipTick } from "./leadership-tick.js";
+import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { handleGuestCommand } from "./guest-command.js";
 
@@ -752,6 +753,21 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (wk.closed > 0) console.log(`weeks closed ${wk.closed}`);
     } catch (err) {
       console.error("week tick failed", err);
+    }
+
+    // Achievements (spec 2026-09-11 §6.2): after kills, sessions, raids, raises and weeks have
+    // settled their rows, before the posters drain what this queues. Gated so a deploy can land
+    // the code, run the backfill, and only then start announcing.
+    if (cfg.achievementsTick) {
+      try {
+        const r = await achievementsTick(db, {
+          achievementsChannelId: cfg.achievementsChannelId,
+          onError: (owner, key, err) => console.error(`achievement rule ${key} failed for ${owner.kind} ${owner.id}`, err),
+        });
+        if (r.unlocked || r.failed) console.log(`achievements: ${r.evaluated} evaluated, ${r.unlocked} unlocked, ${r.failed} rule failures, ${r.carried} carried`);
+      } catch (err) {
+        console.error("achievements tick failed", err);
+      }
     }
 
     try {

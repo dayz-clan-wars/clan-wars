@@ -47,6 +47,8 @@ export const CHAPTERS: readonly Chapter[] = [
     lede: "Everything else in this guide is enforced by the server log. This chapter is enforced by people." },
   { slug: "rules-on-one-page", number: "13", title: "The rules on one page", file: "13-rules-on-one-page.html",
     lede: "Every promise in this guide, one line each. If it is not here, it is not a rule." },
+  { slug: "achievements", number: "14", title: "Achievements", file: "14-achievements.html",
+    lede: "Fifty marks on your record, earned once and kept, each one proved from the log." },
   { slug: "numbers", number: "A", title: "Every number", file: null,
     lede: "Every timer, cap, radius and cooldown, in one table." },
 ];

@@ -1,9 +1,10 @@
-import { viewerFor, myInvites, myRequests, claimContext, linkStatus, type Viewer, type MyInvite, type MyRequest, type ClaimContext } from "@factions/roster";
+import { viewerFor, myInvites, myRequests, claimContext, linkStatus, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
 import type { Session } from "@/lib/auth/session";
 import { nextStepFor, type NextStep } from "@/lib/next-step";
 import { when, ago } from "@/lib/format";
 import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm } from "./ui";
 import { NextStepStrip } from "./next-step";
+import { ClosestPanel } from "./achievement-wall";
 
 /**
  * What a signed-in member sees about themselves, wherever their page is:
@@ -50,11 +51,17 @@ export function OwnerStrip({ owner, notices }: { owner: Owner; notices: (string 
   );
 }
 
-/** The panels that only the owner sees: a ceremony waiting, open invites, open requests. */
-export function OwnerPanels({ owner }: { owner: Owner }) {
+/**
+ * The panels that only the owner sees: what they are closest to unlocking, a
+ * ceremony waiting, open invites, open requests. The wall itself is public and
+ * lives further down the page; this is the nudge, and it links to it.
+ */
+export function OwnerPanels({ owner, wall }: { owner: Owner; wall?: AchievementWall | null }) {
   const { claim, invites, requests, showInvites, next } = owner;
+  const gamertag = owner.viewer.link?.gamertag;
   return (
     <>
+      {wall && gamertag && <ClosestPanel wall={wall} href={`/players/${encodeURIComponent(gamertag)}#achievements`} />}
       {claim && (
         <Panel title="A ceremony is waiting" tone={next ? "plain" : "gold"}>
           <PanelBody>

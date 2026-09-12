@@ -128,13 +128,15 @@ export function Body({ children, className = "" }: { children: React.ReactNode; 
  * on a page (a ceremony waiting, recruiting); `tone="rust"` marks an open
  * obligation (a link challenge) — never a generic error.
  */
-export function Panel({ num, title, aside, tone = "plain", children, className = "" }: {
+export function Panel({ num, title, aside, tone = "plain", children, className = "", id }: {
   num?: string; title?: React.ReactNode; aside?: React.ReactNode; tone?: "plain" | "gold" | "rust"; children: React.ReactNode; className?: string;
+  /** An anchor target, for a panel something links down to (`#achievements`). */
+  id?: string;
 }) {
   const edge = tone === "gold" ? "border-gold" : tone === "rust" ? "border-rust" : "border-rule-2";
   const head = tone === "gold" ? "text-gold" : "text-ink";
   return (
-    <section className={`border-2 ${edge} bg-frame ${className}`}>
+    <section id={id} className={`border-2 ${edge} bg-frame ${className}`}>
       {title && (
         <div className={`flex items-center justify-between gap-4 border-b-2 ${edge} px-4 py-3 lg:px-5`}>
           <h2 className={`m-0 font-display text-[13px] uppercase tracking-[0.06em] lg:text-sm ${head}`}>

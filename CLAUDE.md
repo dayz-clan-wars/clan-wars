@@ -87,6 +87,8 @@ turbo gate stays the gate, because it runs `typecheck` too.
   after the commit. `wipeTx` calls the same `closeWeeksTx` with `now = wipeAt` before it
   closes the season, so the last elapsed week still crowns its Alphas: once `ended_at` is
   set, the tick (which walks open seasons only) can never reach it.
+  Since achievements, `achievements/tick.ts` runs after `week-tick.ts` and before the
+  posters, gated on `ACHIEVEMENTS_TICK`.
   `structure-tick.ts`'s reconciler gained an `@Alpha` step alongside its existing
   role/channel/`@Linked` diffs: it gives the role to the full members of the latest
   closed week's Alphas and takes it from everyone else. The bot now also requires
@@ -256,6 +258,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | The guide's numbers | `packages/domain/src/guide-numbers.ts` — the appendix table and the chapters' `{{KEY\|format}}` tokens both render from it; `apps/web/test/guide.test.ts` fails on a hand-typed number |
+| Achievements (50, lifetime) | Definitions `packages/domain/src/achievements.ts`; rules and tick `apps/bot/src/achievements/`; unlocks in `achievement_unlocks`; site via `achievementsFor()`. Backfill `pnpm backfill:achievements`. Runbook `docs/deploy/2026-09-12-achievements.md` |
 | The wipe, the launch grace stamp, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm launch --server <id> --at <ISO>` (`scripts/launch.ts`; stamps every pole on the server to `--at` + 7 days, spec §4.2; same `--at`-is-required rule, idempotent for the same instant), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — all three refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
@@ -316,7 +319,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
-  `clan_pins` → `guest_passes` → `faction_events` → `war_log_events` → `clan_notices`.**
+  `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
+  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices`.**
+  The achievements tick writes the three achievement tables in exactly that order inside each
+  owner's transaction, before it appends that owner's notices.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

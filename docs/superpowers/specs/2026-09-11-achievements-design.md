@@ -231,13 +231,18 @@ The renderer reads the name and description from `ACHIEVEMENTS`; text is one lin
 - `BEAR earned Fortress — 10 defenses.`
 
 The public channel is `ACHIEVEMENTS_CHANNEL_ID`, optional like `WAR_LOG_CHANNEL_ID`: unset
-means no public post and the bot still starts. Public posts ride `war_log_events` with a new
-kind `achievement`, since that queue already targets one configured channel and stops at the
-first failure; the notice queue handles clan channels and DMs.
+means no public post and the bot still starts. **Public posts ride `clan_notices`** as a
+channel-target row with no clan behind it — `faction_id` null, `target = 'channel'`,
+`discord_target_id` = the achievements channel, written in rather than resolved from a faction
+row. *(Amended 2026-09-12 per implementation. This paragraph originally routed public posts
+through `war_log_events`; that queue targets ONE fixed channel — `WAR_LOG_CHANNEL_ID`, resolved
+by the war-log poster itself — so it cannot address a second configured channel at all. The
+notice queue already carries an explicit per-row target, retries three times per target, and
+never lets one stuck target block another, so all three destinations ride one queue.)*
 
-Adding the kinds follows the documented path: the domain kind lists, a migration for the two
-CHECK constraints, renderer branches in `notice-text.ts` and `war-log-text.ts`, and the
-existing kind-to-renderer tests.
+Adding the kind follows the documented path: the domain kind list, a migration for the
+`clan_notices` CHECK constraint, a renderer branch in `notice-text.ts`, and the existing
+kind-to-renderer tests. No `war_log_events` kind is added.
 
 Several unlocks in one pass produce one message each, in order. Backfill posts nothing.
 
