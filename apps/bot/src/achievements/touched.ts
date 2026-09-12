@@ -177,10 +177,16 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
 /** Every owner there is — the backfill's set. */
 export async function collectEveryone(db: Database): Promise<Owner[]> {
   const ids = new Set<string>();
-  for (const r of await db.select({ id: identityLinks.dayzId }).from(identityLinks)) ids.add(r.id);
-  for (const r of await db.select({ id: kills.victimDayzId }).from(kills)) ids.add(r.id);
-  for (const r of await db.select({ id: kills.killerDayzId }).from(kills).where(isNotNull(kills.killerDayzId))) ids.add(r.id!);
-  for (const r of await db.select({ id: playerSessions.dayzId }).from(playerSessions)) ids.add(r.id);
+  // ⚠️ `select distinct`, and the kills table read ONCE as a union of its two id columns.
+  // The obvious form — four plain selects, killer and victim separately — materialises every
+  // kill row twice just to build a set of a few hundred ids. A backfill is exactly when that
+  // table is largest, which is exactly when it OOMs the bot (same hazard as `headWatermarks`).
+  const rows = await db.execute(sql`
+    select dayz_id from identity_links
+    union select victim_dayz_id from kills
+    union select killer_dayz_id from kills where killer_dayz_id is not null
+    union select dayz_id from player_sessions`);
+  for (const r of rows as unknown as { dayz_id: string }[]) if (r.dayz_id) ids.add(r.dayz_id);
   const clans = await db.select({ id: factions.id }).from(factions);
   return [...[...ids].map(player), ...clans.map((c) => clan(c.id))];
 }
@@ -204,5 +210,10 @@ export async function headWatermarks(db: Database): Promise<Watermarks> {
     ${id("ceremony_participants")} as ceremonies, ${id("identity_links")} as links, ${id("clan_pins")} as pins,
     ${id("player_positions")} as positions, ${ms("factions", "activated_at")} as activations`);
   const row = (rows as unknown as Record<string, unknown>[])[0] ?? {};
-  return Object.fromEntries(SOURCES.map((src) => [src, Number(row[src] ?? 0)])) as Watermarks;
+  // ⚠️ `Math.floor`, not a bare `Number`: `extract(epoch from …) * 1000` carries microsecond
+  // precision, so a time-keyed head can come back fractional (…957.123). These go straight into
+  // `consumer_cursors.last_event_id`, a BIGINT, in the same transaction that clears the backfill's
+  // resume marker — postgres rejects a fractional bigint, the transaction aborts, and the backfill
+  // ends with its watermarks never headed and its resume marker still set.
+  return Object.fromEntries(SOURCES.map((src) => [src, Math.floor(Number(row[src] ?? 0))])) as Watermarks;
 }

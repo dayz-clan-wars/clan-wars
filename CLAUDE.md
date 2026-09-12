@@ -319,7 +319,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
 - **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
-  `clan_pins` → `guest_passes` → `faction_events` → `war_log_events` → `clan_notices`.**
+  `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
+  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices`.**
+  The achievements tick writes the three achievement tables in exactly that order inside each
+  owner's transaction, before it appends that owner's notices.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

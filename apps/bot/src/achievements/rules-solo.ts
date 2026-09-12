@@ -57,7 +57,12 @@ export const SOLO_RULES: Partial<Record<AchievementKey, Rule>> = {
   },
 
   founder: async (db, owner) => {
-    // A participant of the ceremony a clan points at. Dated to the clan's activation (creation if never activated).
+    // A participant of the ceremony a clan points at. Dated to the clan's activation (creation if
+    // never activated) rather than to the `ceremony_participants` row on purpose: participants are
+    // recorded WHILE the ceremony runs, before anyone knows whether it resolves, so a participant
+    // row is not yet evidence of anything. The fact this achievement witnesses is the clan
+    // existing, and the instant that became true is the activation. A ceremony that never produced
+    // a clan has no row here at all (the join is through `factions.ceremony_id`).
     const [r] = await db.select({ id: factions.id, at: sql<Date>`coalesce(${factions.activatedAt}, ${factions.createdAt})`, serverId: factions.serverId, tag: factions.tag })
       .from(ceremonyParticipants).innerJoin(factions, eq(factions.ceremonyId, ceremonyParticipants.ceremonyId))
       .where(eq(ceremonyParticipants.dayzId, owner.id)).orderBy(asc(factions.createdAt)).limit(1);

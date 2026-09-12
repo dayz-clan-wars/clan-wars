@@ -14,7 +14,14 @@ async function ownEvents(db: Parameters<Rule>[0], type: string, dayzId: string, 
 }
 const built = (key: AchievementKey): Rule => async (db, owner) => nth(await ownEvents(db, "base.built", owner.id), T(key), (rows) => ({ buildPoints: rows.length }));
 
-/** A death to the environment with the named cause; killer is null for every non-player death. */
+/**
+ * A death to the environment with the named cause; killer is null for every non-player death.
+ *
+ * `killer_dayz_id IS NULL` is the definition of the family, not an oversight — including
+ * `sunday_driver`, where a player who runs someone over is a credited PvP kill and counts as
+ * one everywhere else (spec §11, `killer_dayz_id` is the whole test). Dropping the predicate
+ * for "vehicle" would award an environment achievement for being murdered by a person.
+ */
 const deathBy = (cause: string): Rule => async (db, owner) => {
   const [k] = await db.select({ id: kills.id, at: kills.occurredAt, serverId: kills.serverId }).from(kills)
     .where(and(eq(kills.victimDayzId, owner.id), isNull(kills.killerDayzId), eq(kills.cause, cause)))
@@ -55,7 +62,12 @@ export const PVE_RULES: Partial<Record<AchievementKey, Rule>> = {
     for (const s of sessions) {
       let from = s.from.getTime();
       const to = s.to!.getTime();
-      while (di < deaths.length && deaths[di]! < from) di++;
+      // ⚠️ `run = 0` here too: a death in the GAP between two sessions (logged out, died on
+      // reconnect-and-crash, killed by a log-out timer) still breaks the streak. Skipping it
+      // without zeroing silently welds the two sessions together and grants ironman to a
+      // player who died between them — the one case no test would notice, since both
+      // sessions look clean on their own.
+      while (di < deaths.length && deaths[di]! < from) { run = 0; di++; }
       while (di < deaths.length && deaths[di]! <= to) { run = 0; from = deaths[di]!; di++; }
       if (run + (to - from) >= target * HOUR) {
         const at = new Date(from + target * HOUR - run);

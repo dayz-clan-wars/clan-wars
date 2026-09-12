@@ -159,6 +159,17 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
   const announce = opts.announce ?? true;
   const result: AchievementsTickResult = { evaluated: 0, unlocked: 0, carried: 0, failed: 0 };
   const onError: AchievementsTickOpts["onError"] = (o, k, e) => { result.failed += 1; opts.onError?.(o, k, e); };
+  // ⚠️ Spec §6.2: one owner's failure never blocks another's. `evaluateOwner` already isolates
+  // a throwing RULE, but the COMMIT can throw too — an FK on a notice's server_id, a jsonb the
+  // driver cannot serialise, a deadlock. Unguarded, that throw leaves `achievementsTick` before
+  // the watermarks and the resume marker are written, so the next pass collects the same owner
+  // and dies on it again: one poisoned owner stalls the whole engine, silently and for good
+  // (and on the backfill path it abandons the drain half-done, then heads nothing). Key "*"
+  // means "the owner, not a rule" to the caller's error sink.
+  const runOwner = async (owner: Owner) => {
+    try { await processOwner(db, owner, now, announce, opts, result, onError); }
+    catch (err) { onError(owner, "*" as AchievementKey, err); }
+  };
   const wm = await readWatermarks(db);
 
   if (opts.everyone) {
@@ -175,7 +186,7 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
     const heads = await headWatermarks(db);
     await backfillCounters(db, wm, batch * 5);
     const all = [...(await collectEveryone(db))].sort((a, b) => ownerKey(a).localeCompare(ownerKey(b)));
-    for (const owner of all) await processOwner(db, owner, now, announce, opts, result, onError);
+    for (const owner of all) await runOwner(owner);
     await db.transaction(async (tx) => { await writeWatermarks(tx, heads); await clearResume(tx); });
     return result;
   }
@@ -196,7 +207,7 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
   // the next pass will find. Only `ownersLeft` decides whether the drain continues.
   result.carried = ownersLeft + (touched.carried ? 1 : 0);
 
-  for (const owner of owners) await processOwner(db, owner, now, announce, opts, result, onError);
+  for (const owner of owners) await runOwner(owner);
 
   // ⚠️ Computed BEFORE the transaction: an `await` cannot live in the non-async arrow the
   // watermark write would otherwise be. A finished drain advances to the watermarks it

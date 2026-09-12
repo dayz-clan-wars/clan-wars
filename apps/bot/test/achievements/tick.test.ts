@@ -70,6 +70,43 @@ describe("achievementsTick", () => {
     } finally { (RULES as Record<string, unknown>).enlisted = original; }
   });
 
+  it("an owner whose TRANSACTION throws costs only that owner; the pass finishes and moves past it", async () => {
+    // ⚠️ Spec §6.2. `evaluateOwner` isolates a throwing rule, but the commit can throw too. The
+    // failure is forced the way a real one arrives: a bogus `serverId` on the rule result, which
+    // `namesFor` takes as its hint and hands to `noticeClanTx` — an FK violation on
+    // `clan_notices.server_id` that aborts A's whole transaction from inside.
+    await seedLink(db, { dayzId: B, discordId: "222222222222222222", gamertag: "Ben", verifiedAt: t0 });
+    const originals = { ...RULES } as Record<string, (typeof RULES)[keyof typeof RULES]>;
+    for (const k of Object.keys(RULES)) {
+      (RULES as Record<string, unknown>)[k] = async (...args: Parameters<(typeof RULES)[keyof typeof RULES]>) => {
+        const r = await originals[k]!(...args);
+        return args[1].id === A ? { ...r, serverId: 2_000_000_000 } : r;
+      };
+    }
+    const seen: [string, string][] = [];
+    let r: Awaited<ReturnType<typeof achievementsTick>>;
+    try {
+      r = await achievementsTick(db, { now: m(10), achievementsChannelId: CH, onError: (o, k) => seen.push([o.id, k]) });
+    } finally { for (const k of Object.keys(originals)) (RULES as Record<string, unknown>)[k] = originals[k]; }
+
+    // The pass completed and reported the owner-level failure, keyed "*" rather than a rule.
+    expect(r.failed).toBeGreaterThanOrEqual(1);
+    expect(seen).toContainEqual([A, "*"]);
+    // A's transaction rolled back whole: no unlocks, no progress cache, no notices.
+    expect((await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, A))).length).toBe(0);
+    // B — collected in the same pass, after A in key order — was evaluated and committed anyway.
+    const bUnlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, B));
+    expect(bUnlocks.map((u) => u.key)).toContain("enlisted");
+    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, B))).length).toBe(38);
+
+    // And the engine is not stuck on A: the drain finished, so the watermarks advanced and the
+    // resume marker was cleared. The next pass — rules restored — finds nothing left to do.
+    expect(await readResume(db)).toBeNull();
+    expect((await readWatermarks(db)).links).toBeGreaterThan(0);
+    const again = await achievementsTick(db, { now: m(11), achievementsChannelId: CH });
+    expect(again).toMatchObject({ evaluated: 0, failed: 0 });
+  });
+
   it("batches: at most `batch` owners per pass, the rest carried to the next", async () => {
     for (let i = 0; i < 5; i++) await seedKill(db, { serverId, killer: `${i}`.padStart(36, "K"), victim: `${i}`.padStart(36, "V"), at: m(i) });
     const first = await achievementsTick(db, { now: m(10), batch: 4 });

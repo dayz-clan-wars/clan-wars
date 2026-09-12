@@ -77,4 +77,18 @@ describe("pve rules", () => {
     // session's raw total of 6h — the achievement is one-shot at the target.)
     expect(await rule("ironman")(db, player, ctx)).toMatchObject({ count: 5, earnedAt: h(11) });
   });
+
+  it("ironman: a death in the GAP between two sessions breaks the streak, it does not extend it", async () => {
+    // ⚠️ 4 h + 4 h with a death BETWEEN them is not an 8 h run. The death is outside every
+    // session's window, so the rule has to notice it while skipping past it — otherwise the two
+    // clean sessions weld together and hand out ironman to a player who demonstrably died.
+    await seedSession(db, { serverId, dayzId: A, from: h(0), to: h(4) });
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(4.5), cause: "fall" });
+    await seedSession(db, { serverId, dayzId: A, from: h(5), to: h(9) });
+    expect(await rule("ironman")(db, player, ctx)).toMatchObject({ count: 4, target: 5 });
+    expect((await rule("ironman")(db, player, ctx)).earnedAt).toBeUndefined();
+    // The run restarted at h(5), so the target is only crossed 5 h of play after it.
+    await seedSession(db, { serverId, dayzId: A, from: h(10), to: h(12) });
+    expect(await rule("ironman")(db, player, ctx)).toMatchObject({ count: 5, earnedAt: h(11) });
+  });
 });

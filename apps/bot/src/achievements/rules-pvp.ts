@@ -112,6 +112,12 @@ export const PVP_RULES: Partial<Record<AchievementKey, Rule>> = {
   killing_spree: streak("killing_spree"),
   unstoppable: streak("unstoppable"),
 
+  // ⚠️ `evidence.victim` is a raw dayz id, and it must NEVER be rendered. `evidence` is stored
+  // for forensics only — `notice-text.ts` and the web tiles read `key`/`name`/`description` and
+  // nothing else — so naming the victim here is private. Posting "Ann earned Nemesis (5 kills on
+  // Ben)" hands out a grudge list the game never surfaces; the same applies to `blue_on_blue`
+  // below, where the victim is a clanmate. If a renderer ever wants evidence, these two keys
+  // must be excluded or the id resolved away first.
   nemesis: async (db, owner) => {
     const target = T("nemesis");
     const per = new Map<string, number>();
@@ -155,6 +161,8 @@ export const PVP_RULES: Partial<Record<AchievementKey, Rule>> = {
     return oneShot(d ? { at: d.at, id: d.id, evidence: { siegeSeconds: d.siege, factionId: d.factionId } } : undefined);
   },
 
+  // ⚠️ `evidence.victim` is an unrendered dayz id — see the note on `nemesis` above. Naming the
+  // clanmate someone team-killed in a public post is the worst version of that leak.
   blue_on_blue: async (db, owner) => {
     const [k] = await db.select(killCols).from(kills).where(and(eq(kills.killerDayzId, owner.id), eq(kills.friendlyFire, true)))
       .orderBy(asc(kills.occurredAt), asc(kills.id)).limit(1);
