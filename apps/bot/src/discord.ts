@@ -22,6 +22,8 @@ import { presenceTick, expirePendingMembers } from "./presence-tick.js";
 import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { reaperTick } from "./reaper-tick.js";
+import { restartTick, type RestartTarget } from "./restart-tick.js";
+import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
@@ -452,6 +454,15 @@ export async function start(cfg: BotConfig): Promise<void> {
   const onlineStore = new PgOnlineStore(db);
   const onlineState: OnlineState = { lastKey: null };
   const noticeSender = createNoticeSender(client);
+
+  // One client per Nitrado service, the shape the ingest worker's `clientFor` has.
+  // ⚠️ cfg.nitradoToken is guaranteed by loadConfig whenever restartSchedule is on.
+  const nitradoClients = new Map<number, NitradoClient>();
+  const nitradoFor = (serviceId: number): RestartTarget => {
+    let c = nitradoClients.get(serviceId);
+    if (!c) { c = new NitradoClient(cfg.nitradoToken ?? "", serviceId); nitradoClients.set(serviceId, c); }
+    return c;
+  };
 
   const renameOnLink = createNicknameApplier(client);
   const deps: CommandDeps = { store, now: () => new Date() };
@@ -893,6 +904,18 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // Scheduled restarts (spec 2026-09-12): housekeeping, not a consumer — it
+    // reads no cursor, so it sits with the reaper. Every pass, so a slot's
+    // ten-minute grace window is checked at the tick interval.
+    if (cfg.restartSchedule) {
+      try {
+        const r = await restartTick(db, nitradoFor, { now: new Date() });
+        if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
+      } catch (err) {
+        console.error("restart tick failed", err);
+      }
+    }
+
     // ⚠️ Its own try/catch, like every other step. Runs after dormancy so a
     // transition and its announcement land in the same tick rather than the
     // next one.
@@ -1024,6 +1047,9 @@ export async function start(cfg: BotConfig): Promise<void> {
         ))
         .catch((err: unknown) => console.error("could not count the feed queue", err));
     }
+
+    if (!cfg.restartSchedule) console.warn("RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule.");
+    else console.log("scheduled restarts on: every even UTC hour");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)
