@@ -40,9 +40,9 @@ export async function evaluateOwner(db: Database, owner: Owner, now: Date, onErr
   return out;
 }
 
-type Names = { ownerName: string; gamertag: string | null; clanTag: string | null; factionId: number | null; serverId: number; memberDiscordId: string | null };
+export type Names = { ownerName: string; gamertag: string | null; clanTag: string | null; factionId: number | null; serverId: number; memberDiscordId: string | null };
 
-async function namesFor(db: Database, owner: Owner, serverIdHint?: number): Promise<Names> {
+export async function namesFor(db: Database, owner: Owner, serverIdHint?: number): Promise<Names> {
   if (owner.kind === "clan") {
     const [f] = await db.select({ tag: factions.tag, name: factions.name, serverId: factions.serverId }).from(factions).where(eq(factions.id, Number(owner.id)));
     return { ownerName: f?.name ?? owner.id, gamertag: null, clanTag: f?.tag ?? null, factionId: Number(owner.id), serverId: f?.serverId ?? serverIdHint ?? 0, memberDiscordId: null };
@@ -106,23 +106,43 @@ async function processOwner(
       result.unlocked += 1;
       if (!announce) continue;
       names ??= await namesFor(db, owner, r.serverId);
-      const a = ACHIEVEMENT_BY_KEY[key];
-      const payload = { key, name: a.name, description: a.description, ownerKind: owner.kind, ownerName: names.ownerName, gamertag: names.gamertag, clanTag: names.clanTag };
-      const base = { serverId: names.serverId, kind: "achievement" as const, occurredAt: r.earnedAt, payload };
-      if (owner.kind === "clan") {
-        await noticeClanTx(tx, { ...base, factionId: names.factionId! });
-        await noticeFullMembersTx(tx, { ...base, factionId: names.factionId! });
-      } else {
-        if (names.factionId) await noticeClanTx(tx, { ...base, factionId: names.factionId });
-        if (names.memberDiscordId) await noticeUserTx(tx, { ...base, factionId: names.factionId, discordId: names.memberDiscordId });
-      }
-      if (opts.achievementsChannelId) {
-        // The public wall: a channel notice with no clan behind it, so the target is
-        // written in rather than resolved from a faction row by the poster.
-        await appendClanNoticeTx(tx, { ...base, factionId: null, target: "channel", discordTargetId: opts.achievementsChannelId, payload: { ...payload, public: true } });
-      }
+      await queueUnlockNoticesTx(tx, { owner, key, earnedAt: r.earnedAt, names, achievementsChannelId: opts.achievementsChannelId });
     }
   });
+}
+
+/** Where an unlock is announced. The tick says all three; the notice backfill (backfill-notices.ts) chooses. */
+export type NoticeTargets = { clan: boolean; dm: boolean; public: boolean };
+export const ALL_TARGETS: NoticeTargets = { clan: true, dm: true, public: true };
+
+/**
+ * Queue one unlock's notices: the clan channel, the owner's DM (every full
+ * member's, for a team unlock), and the public wall when a channel is set.
+ * Shared by the live tick and the notice backfill so the two can never
+ * describe one unlock differently. `ownerId` rides in the payload so the
+ * backfill can tell which unlocks were already announced; nothing renders it.
+ */
+export async function queueUnlockNoticesTx(
+  tx: Parameters<typeof noticeClanTx>[0],
+  a: { owner: Owner; key: AchievementKey; earnedAt: Date; names: Names; achievementsChannelId?: string; targets?: NoticeTargets },
+): Promise<void> {
+  const { owner, key, names } = a;
+  const targets = a.targets ?? ALL_TARGETS;
+  const def = ACHIEVEMENT_BY_KEY[key];
+  const payload = { key, name: def.name, description: def.description, ownerKind: owner.kind, ownerId: owner.id, ownerName: names.ownerName, gamertag: names.gamertag, clanTag: names.clanTag };
+  const base = { serverId: names.serverId, kind: "achievement" as const, occurredAt: a.earnedAt, payload };
+  if (owner.kind === "clan") {
+    if (targets.clan) await noticeClanTx(tx, { ...base, factionId: names.factionId! });
+    if (targets.dm) await noticeFullMembersTx(tx, { ...base, factionId: names.factionId! });
+  } else {
+    if (targets.clan && names.factionId) await noticeClanTx(tx, { ...base, factionId: names.factionId });
+    if (targets.dm && names.memberDiscordId) await noticeUserTx(tx, { ...base, factionId: names.factionId, discordId: names.memberDiscordId });
+  }
+  if (targets.public && a.achievementsChannelId) {
+    // The public wall: a channel notice with no clan behind it, so the target is
+    // written in rather than resolved from a faction row by the poster.
+    await appendClanNoticeTx(tx, { ...base, factionId: null, target: "channel", discordTargetId: a.achievementsChannelId, payload: { ...payload, public: true } });
+  }
 }
 
 /**

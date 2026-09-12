@@ -74,6 +74,25 @@ module, or the glyph test fails.
   into Discord — it must unfurl as the card (not a login page); the next real unlock posts
   a coloured card with a badge thumbnail.
 
+## Announcing the history (2026-09-12)
+
+The first backfill inserted 104 unlocks silently (`announce:false`). To post them to
+Discord in the order they were earned:
+
+    cd /opt/clan-wars && set -a && . ./.env && set +a
+    pnpm backfill:achievement-notices --targets public --dry-run   # counts, writes nothing
+    pnpm backfill:achievement-notices --targets public
+
+`--targets public` (the default) is the `#achievements` wall only — one card per unlock, no
+pings. `clan` adds each clan's channel (mentions the player), `dm` the player's DMs; the
+2026-09-12 run used `public` alone. The script only QUEUES `clan_notices` rows; the running
+bot's notice poster sends them, 50 per tick per target, oldest first — 104 rows take three
+ticks. Idempotent by (owner, key): rerunning queues nothing, and unlocks the live tick has
+already announced are skipped, so it is safe to run with `ACHIEVEMENTS_TICK=1` on.
+
+Check: `select count(*) filter (where posted_at is null) from clan_notices where kind =
+'achievement';` reaches 0 within a minute of the run.
+
 ## Rolling back
 
 Unset `ACHIEVEMENTS_TICK`, restart the bot. The tables can stay; nothing else reads them.
