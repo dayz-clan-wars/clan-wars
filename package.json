@@ -14,6 +14,7 @@
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
     "rebuild:kills": "tsx scripts/rebuild-kills.ts",
     "backfill:achievements": "tsx scripts/backfill-achievements.ts",
+    "backfill:achievement-notices": "tsx scripts/backfill-achievement-notices.ts",
     "wipe": "tsx scripts/wipe.ts",
     "launch": "tsx scripts/launch.ts"
   },
