@@ -12,3 +12,4 @@ export * from "./scoring";
 export * from "./travel";
 export * from "./guide-numbers";
 export * from "./death-verdict";
+export * from "./achievements";
