@@ -106,4 +106,55 @@ describe("PgKillFeedStore", () => {
     // ⚠️ Season 2 only: the season-1 kill and the pre-season kill are not in this window.
     expect(k2!.tally).toEqual({ killerKills: 1, victimDeaths: 1, season: 2 });
   });
+
+  /** A player.hit event by `attacker` on `victim`. */
+  async function mkHit(a: { at: Date; attacker: string | null; victim: string; damage?: number; bodyPart?: string; weapon?: string | null; distanceM?: number | null }) {
+    const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
+    await db.insert(events).values({
+      serverId, admFileId: file!.id, lineIndex: 5000 + ids.length, type: "player.hit" as never, occurredAt: a.at,
+      payload: {
+        victimDayzId: a.victim, victimGamertag: "v", victimHp: 40,
+        attackerType: a.attacker ? "player" : "infected",
+        attackerDayzId: a.attacker, attackerGamertag: a.attacker ? "k" : null, attackerLabel: a.attacker ? null : "Infected",
+        damage: a.damage ?? 38, bodyPart: a.bodyPart ?? "Torso",
+        weapon: a.weapon === undefined ? "KA-74" : a.weapon, distanceM: a.distanceM === undefined ? 41 : a.distanceM,
+      },
+    });
+    ids.push(0);
+  }
+
+  it("carries the killer's own hits on the victim, oldest first", async () => {
+    const at = h(1);
+    await mkHit({ at: new Date(at.getTime() - 30_000), attacker: A, victim: B, damage: 38 });
+    await mkHit({ at: new Date(at.getTime() - 10_000), attacker: A, victim: B, damage: 22, weapon: "Mosin", distanceM: 112 });
+    await mkKill({ at, victim: B, killer: A });
+    const [item] = await store.readAfter(0, 10);
+    expect(item!.hits.map((x) => x.damage)).toEqual([38, 22]);
+    expect(item!.hits.map((x) => x.weapon)).toEqual(["KA-74", "Mosin"]);
+  });
+
+  it("ignores hits by anyone else, and PvE hits, on the same victim", async () => {
+    const at = h(2);
+    await mkHit({ at: new Date(at.getTime() - 20_000), attacker: R, victim: B });
+    await mkHit({ at: new Date(at.getTime() - 15_000), attacker: null, victim: B });
+    await mkHit({ at: new Date(at.getTime() - 10_000), attacker: A, victim: B, damage: 50 });
+    await mkKill({ at, victim: B, killer: A });
+    const [item] = await store.readAfter(0, 10);
+    expect(item!.hits.map((x) => x.damage)).toEqual([50]);
+  });
+
+  it("⚠️ ignores hits older than the attribution window — an unrelated earlier fight is not this kill's run", async () => {
+    const at = h(3);
+    await mkHit({ at: new Date(at.getTime() - 121_000), attacker: A, victim: B, damage: 11 });
+    await mkHit({ at: new Date(at.getTime() - 5_000), attacker: A, victim: B, damage: 99 });
+    await mkKill({ at, victim: B, killer: A });
+    const [item] = await store.readAfter(0, 10);
+    expect(item!.hits.map((x) => x.damage)).toEqual([99]);
+  });
+
+  it("a kill with nothing before it carries an empty list, never null", async () => {
+    await mkKill({ at: h(4), victim: B, killer: A });
+    const [item] = await store.readAfter(0, 10);
+    expect(item!.hits).toEqual([]);
+  });
 });

@@ -19,6 +19,8 @@ export type KillFeedItem = {
   cause: string;
   /** The running tally, counted up to and including this kill. */
   tally: { killerKills: number; victimDeaths: number; season: number | null };
+  /** The killer's own hits on this victim in the RECENT_HIT_WINDOW_S before the kill, oldest first. May be empty. */
+  hits: HitDetail[];
 };
 
 const RUST = 0xb0482a;
@@ -51,6 +53,43 @@ export function howLine(weapon: string | null, distanceM: number | null): string
   return parts.join(" · ");
 }
 
+/** One hit, as both feeds render it. No coordinates — damage, where, what with, how far. */
+export type HitDetail = {
+  damage: number | null;
+  bodyPart: string | null;
+  weapon: string | null;
+  distanceM: number | null;
+};
+
+/**
+ * ⚠️ Ten, not Discord's 4096-character description limit. A sustained
+ * firefight stops being readable long before it stops being legal.
+ */
+export const DETAIL_LINE_CAP = 10;
+
+/**
+ * `38 dmg · Torso · KA-74 · 41 m`, dropping whatever the log did not give.
+ *
+ * The weapon is omitted by default because #hit-feed's engagements are keyed
+ * on one weapon and already name it in the header; a kill run can switch
+ * weapons, so the kill feed passes `{ weapon: true }`.
+ */
+export function detailLine(d: HitDetail, opts: { weapon?: boolean } = {}): string {
+  const parts: string[] = [];
+  if (d.damage !== null && Number.isFinite(d.damage)) parts.push(`${Math.round(d.damage)} dmg`);
+  if (d.bodyPart) parts.push(escapeMarkdown(d.bodyPart));
+  if (opts.weapon && d.weapon) parts.push(escapeMarkdown(d.weapon));
+  if (d.distanceM !== null && Number.isFinite(d.distanceM)) parts.push(`${Math.round(d.distanceM)} m`);
+  return parts.join(" · ");
+}
+
+/** The first `DETAIL_LINE_CAP` lines, plus `… and N more` when there were more. */
+export function cappedLines(lines: string[], noun: string): string[] {
+  if (lines.length <= DETAIL_LINE_CAP) return lines;
+  const extra = lines.length - DETAIL_LINE_CAP;
+  return [...lines.slice(0, DETAIL_LINE_CAP), `… and ${extra} more ${noun}`];
+}
+
 /**
  * One kill, one embed. Pure — no client, no I/O, no clock.
  *
@@ -72,6 +111,9 @@ export function killFeedEmbed(k: KillFeedItem, siteBaseUrl: string, flagImage: F
     `${plural(k.tally.killerKills, "kill")} for ${escapeMarkdown(k.killer.gamertag)} · ` +
       `${plural(k.tally.victimDeaths, "death")} for ${escapeMarkdown(k.victim.gamertag)} ${scope}`,
   ];
+
+  const detail = cappedLines(k.hits.map((h) => detailLine(h, { weapon: true })).filter((l) => l !== ""), "hits");
+  if (detail.length > 0) lines.push("", ...detail);
 
   return {
     title: `${k.friendlyFire ? "Friendly fire — " : ""}${k.killer.gamertag}${killerTag}`,

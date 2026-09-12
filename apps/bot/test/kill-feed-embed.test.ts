@@ -9,6 +9,7 @@ const kill = (over: Partial<KillFeedItem> = {}): KillFeedItem => ({
   victim: { gamertag: "RonaldRaygun552", tag: "WOLF", texture: "Flag_Wolf" },
   weapon: "KA-74", distanceM: 40.714, friendlyFire: false, cause: "pvp",
   tally: { killerKills: 13, victimDeaths: 4, season: 1 },
+  hits: [],
   ...over,
 });
 
@@ -76,5 +77,46 @@ describe("killFeedEmbed", () => {
   it("a credited kill says finished, never killed — the log named no killer", () => {
     expect(killFeedEmbed(kill({ cause: "finished" }), site).description).toContain("finished **[RonaldRaygun552]");
     expect(killFeedEmbed(kill({ cause: "finished", friendlyFire: true }), site).description).toContain("finished their own clanmate");
+  });
+});
+
+describe("hit detail lines", () => {
+  const base = {
+    eventId: 1, occurredAt: new Date("2026-09-12T01:00:00Z"),
+    killer: { gamertag: "Steve", tag: "WOLF", texture: null },
+    victim: { gamertag: "Dave", tag: "BEAR", texture: null },
+    weapon: "KA-74", distanceM: 41, friendlyFire: false, cause: "pvp",
+    tally: { killerKills: 12, victimDeaths: 3, season: 2 },
+  };
+  const site = "https://dayzclanwars.com";
+
+  it("renders one line per hit, with the weapon, because a kill run can switch weapons", () => {
+    const e = killFeedEmbed({ ...base, hits: [
+      { damage: 38, bodyPart: "Torso", weapon: "KA-74", distanceM: 41 },
+      { damage: 22, bodyPart: "Head", weapon: "Mosin", distanceM: 112 },
+    ] }, site);
+    expect(e.description).toContain("38 dmg · Torso · KA-74 · 41 m");
+    expect(e.description).toContain("22 dmg · Head · Mosin · 112 m");
+  });
+
+  it("drops the parts the log did not give, without leaving stray separators", () => {
+    const e = killFeedEmbed({ ...base, hits: [{ damage: null, bodyPart: "Torso", weapon: null, distanceM: null }] }, site);
+    expect(e.description).toContain("Torso");
+    expect(e.description).not.toMatch(/·\s*·/u);
+    expect(e.description).not.toContain("null");
+  });
+
+  it("caps the list at ten and says how many it dropped", () => {
+    const hits = Array.from({ length: 16 }, () => ({ damage: 10, bodyPart: "Torso", weapon: "KA-74", distanceM: 40 }));
+    const e = killFeedEmbed({ ...base, hits }, site);
+    expect(e.description).toContain("… and 6 more");
+    expect(e.description!.split("\n").filter((l) => l.includes("dmg"))).toHaveLength(10);
+  });
+
+  it("⚠️ a kill with no hits behind it renders exactly as it did before — no empty block", () => {
+    const withNone = killFeedEmbed({ ...base, hits: [] }, site);
+    expect(withNone.description).not.toContain("dmg");
+    expect(withNone.description!.endsWith(" ")).toBe(false);
+    expect(withNone.description).not.toMatch(/\n\n$/u);
   });
 });

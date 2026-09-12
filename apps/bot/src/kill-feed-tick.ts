@@ -1,11 +1,12 @@
 import type { Database } from "@factions/db";
-import { consumerCursors, factions, kills, players, seasons } from "@factions/db";
+import { consumerCursors, events, factions, kills, players, seasons } from "@factions/db";
 import { readCursor, writeCursor } from "@factions/event-log";
+import { RECENT_HIT_WINDOW_S } from "@factions/domain";
 import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
-import { killFeedEmbed, type KillFeedItem } from "./kill-feed-embed.js";
+import { killFeedEmbed, type HitDetail, type KillFeedItem } from "./kill-feed-embed.js";
 
 /** ⚠️ Distinct from every other consumer name. Its value is the `events.id` of the last kill posted. */
 export const KILL_FEED_CONSUMER = "kill-feed-poster";
@@ -86,7 +87,10 @@ export class PgKillFeedStore implements KillFeedStore {
 
     const out: KillFeedItem[] = [];
     for (const r of rows) {
-      const tally = await this.tally(r.serverId, r.killerDayzId!, r.victimDayzId, r.occurredAt);
+      const [tally, hits] = await Promise.all([
+        this.tally(r.serverId, r.killerDayzId!, r.victimDayzId, r.occurredAt),
+        this.runOf(r.serverId, r.killerDayzId!, r.victimDayzId, r.occurredAt),
+      ]);
       out.push({
         eventId: Number(r.eventId), occurredAt: r.occurredAt,
         // The log always names a player, but `players` is a projection and
@@ -94,10 +98,40 @@ export class PgKillFeedStore implements KillFeedStore {
         killer: { gamertag: r.killerName ?? "Unknown", tag: r.killerTag ?? null, texture: r.killerTexture ?? null },
         victim: { gamertag: r.victimName ?? "Unknown", tag: r.victimTag ?? null, texture: r.victimTexture ?? null },
         weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM),
-        friendlyFire: r.friendlyFire, cause: r.cause, tally,
+        friendlyFire: r.friendlyFire, cause: r.cause, tally, hits,
       });
     }
     return out;
+  }
+
+  /**
+   * The killer's OWN hits on this victim in the RECENT_HIT_WINDOW_S before the
+   * kill — the run that produced it. Read from `events` rather than a
+   * projection because nothing projects hits; `kills-tick`'s `verdictOf` reads
+   * the same rows the same way.
+   *
+   * ⚠️ Matched on occurred_at and the two ids, never on event id order: a
+   * reparse backfills hit events at the head of the log with their true
+   * occurred_at, and this must still find them.
+   */
+  private async runOf(serverId: number, killerDayzId: string, victimDayzId: string, at: Date): Promise<HitDetail[]> {
+    const from = new Date(at.getTime() - RECENT_HIT_WINDOW_S * 1000);
+    const rows = await this.db.select({ payload: events.payload, occurredAt: events.occurredAt }).from(events).where(and(
+      eq(events.serverId, serverId),
+      eq(events.type, "player.hit"),
+      gte(events.occurredAt, from), lte(events.occurredAt, at),
+      sql`${events.payload}->>'victimDayzId' = ${victimDayzId}`,
+      sql`${events.payload}->>'attackerDayzId' = ${killerDayzId}`,
+    )).orderBy(asc(events.occurredAt));
+
+    const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
+    return rows.map((r) => {
+      const p = r.payload as Record<string, unknown>;
+      return {
+        damage: num(p.damage), bodyPart: typeof p.bodyPart === "string" ? p.bodyPart : null,
+        weapon: typeof p.weapon === "string" ? p.weapon : null, distanceM: num(p.distanceM),
+      };
+    });
   }
 
   /**

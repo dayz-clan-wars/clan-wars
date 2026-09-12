@@ -8,6 +8,7 @@ const item = (eventId: number): KillFeedItem => ({
   eventId, occurredAt: new Date("2026-09-08T01:00:00Z"),
   killer: { gamertag: `K${eventId}`, tag: null, texture: null }, victim: { gamertag: `V${eventId}`, tag: null, texture: null },
   weapon: null, distanceM: null, friendlyFire: false, cause: "pvp", tally: { killerKills: 1, victimDeaths: 1, season: null },
+  hits: [],
 });
 
 /** An in-memory store: `cursor` null means never seeded. */
