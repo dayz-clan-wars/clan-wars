@@ -14,7 +14,7 @@ describe("the public allowlist is exactly this", () => {
   });
 
   it("pins the public prefixes", () => {
-    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/"]);
+    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/"]);
   });
 
   it("pins the auth pages", () => {
@@ -31,6 +31,9 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/api/auth/discord")).toBe(true);
     expect(pathIsPublic("/api/auth/callback")).toBe(true);
     expect(pathIsPublic("/flags/Flag_Wolf.png")).toBe(true);
+    // The bot's embeds and the share card are fetched by Discord's crawler, which has no session.
+    expect(pathIsPublic("/achievements/unlocked/sniper.png")).toBe(true);
+    expect(pathIsPublic("/api/og/achievement/sniper")).toBe(true);
   });
 
   it("gates the prototypes", () => {

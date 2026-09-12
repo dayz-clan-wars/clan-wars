@@ -50,6 +50,30 @@ exit 0. A database that happens to carry leftover rows from an earlier test run 
 nonzero summary instead — that is fine; the check is exit 0 and a printed summary line, not any
 particular count.
 
+## Badge art (2026-09-12, after the first deploy)
+
+The badges (design hand-off `achievements.zip`) live in `apps/web/public/achievements/` —
+`unlocked/<key>.png`, `locked/<key>.png`, `svg/<key>.svg`, one per key in
+`packages/domain/src/achievements.ts` (`apps/web/test/achievement-share.test.ts` and
+`achievement-glyphs.test.ts` hold the three sets and the keys together). The site draws
+badges inline from `apps/web/lib/achievement-glyphs.ts`, which `pnpm build` regenerates
+from the SVGs first (`prebuild`); after replacing an SVG, rerun
+`pnpm --filter @factions/web exec tsx scripts/build-achievement-glyphs.ts` and commit the
+module, or the glyph test fails.
+
+- **Web deploy** as usual (`/opt/clan-wars/deploy/deploy-web.sh`). The wall, the owner's
+  "Achievement unlocked" toasts (player-scoped unlocks from the last 7 days), and the share
+  card `/api/og/achievement/<key>?gamertag=&tag=&earned=` ship with it. `/achievements/` and
+  `/api/og/` are public paths (`lib/auth/gate.ts`) — Discord's crawler fetches them with no
+  session, and gated they would 303 to `/login` and every embed would post without its badge.
+- **Bot** (git pull, `sudo systemctl restart clan-wars-bot`): unlock notices now post as an
+  embed (group colour, `unlocked/<key>.png` thumbnail from `SITE_BASE_URL`, `Clan Wars ·
+  Livonia` footer). The clan channel still gets the player's mention, in the message content
+  ahead of the card; the DM and `#achievements` get the card alone. Nothing to migrate.
+- Acceptance: paste `https://dayzclanwars.com/api/og/achievement/champions?gamertag=X&tag=Y`
+  into Discord — it must unfurl as the card (not a login page); the next real unlock posts
+  a coloured card with a badge thumbnail.
+
 ## Rolling back
 
 Unset `ACHIEVEMENTS_TICK`, restart the bot. The tables can stay; nothing else reads them.

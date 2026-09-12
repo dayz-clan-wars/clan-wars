@@ -10,6 +10,15 @@
  */
 export const ACHIEVEMENT_GROUPS = ["solo", "pve", "pvp", "team"] as const;
 export type AchievementGroup = (typeof ACHIEVEMENT_GROUPS)[number];
+/**
+ * The colour each group's badge is drawn in (design hand-off 2026-09-12):
+ * solo is the ink, pve the olive, pvp the rust-as-text, team the gold. Stated
+ * ONCE here because both the site (the badge, the tile, the toast, the share
+ * card) and the bot (the Discord embed's colour) draw from it; the site's
+ * Tailwind tokens restate the hex values and `apps/web/test/theme-tokens.test.ts`
+ * holds them to these.
+ */
+export const ACHIEVEMENT_GROUP_COLORS: Record<AchievementGroup, `#${string}`> = { solo: "#e8e2d4", pve: "#8fa36a", pvp: "#d4623a", team: "#d9a03c" };
 export type AchievementOwner = "player" | "clan";
 export type AchievementUnit = "count" | "hours" | "days" | "m";
 
