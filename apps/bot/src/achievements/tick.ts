@@ -166,10 +166,16 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
     // watermarks, so an owner it skipped is unreachable afterwards: the live tick only
     // ever looks at rows past those heads. `batch` only bounds how many owners are held
     // in flight, never how many are done.
+    // ⚠️ The heads are read FIRST, before a single row is counted or an owner evaluated,
+    // and it is these — not the heads at the end — that are written when the backfill is
+    // done. A backfill takes minutes, and players keep dropping pins and moving through the
+    // web app while it runs; heading the watermarks over rows the backfill never saw would
+    // lose those pins and fixes for good, because the live tick only ever looks past the
+    // heads. Taken first, they stay unread and the next live pass picks them up.
+    const heads = await headWatermarks(db);
     await backfillCounters(db, wm, batch * 5);
     const all = [...(await collectEveryone(db))].sort((a, b) => ownerKey(a).localeCompare(ownerKey(b)));
     for (const owner of all) await processOwner(db, owner, now, announce, opts, result, onError);
-    const heads = await headWatermarks(db);
     await db.transaction(async (tx) => { await writeWatermarks(tx, heads); await clearResume(tx); });
     return result;
   }
@@ -184,7 +190,11 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
   // newly touched owner sorting earlier cannot push a different one out of the list.
   const pending = resume ? touched.owners.filter((o) => ownerKey(o) > resume.afterKey) : touched.owners;
   const owners = pending.slice(0, batch);
-  result.carried = pending.length - owners.length;
+  const ownersLeft = pending.length - owners.length;
+  // Backlog, for the operator: owners this pass did not reach, plus one for "and at least
+  // one source had more rows than it was allowed to read" — those unread rows are owners
+  // the next pass will find. Only `ownersLeft` decides whether the drain continues.
+  result.carried = ownersLeft + (touched.carried ? 1 : 0);
 
   for (const owner of owners) await processOwner(db, owner, now, announce, opts, result, onError);
 
@@ -194,7 +204,7 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
   // next pass, and consuming them here would drop their owners on the floor.
   const finalWm: Watermarks = resume?.wm ?? touched.next;
   await db.transaction(async (tx) => {
-    if (result.carried === 0) { await writeWatermarks(tx, finalWm); await clearResume(tx); }
+    if (ownersLeft === 0) { await writeWatermarks(tx, finalWm); await clearResume(tx); }
     else await writeResume(tx, { afterKey: ownerKey(owners[owners.length - 1]!), wm: finalWm });
   });
   return result;

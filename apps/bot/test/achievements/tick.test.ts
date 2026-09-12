@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, achievementProgress, clanNotices, consumerCursors, factions, playerPositions, clanPins, type Database } from "@factions/db";
-import { sql, eq } from "drizzle-orm";
+import { sql, eq, and } from "drizzle-orm";
 import { achievementsTick } from "../../src/achievements/tick.js";
 import { RULES } from "../../src/achievements/rules.js";
 import { seedServer, seedLink, seedKill, seedFaction, seedMembership, seedEvent, TRUNCATE } from "./seed.js";
-import { readResume } from "../../src/achievements/touched.js";
+import { readResume, readWatermarks } from "../../src/achievements/touched.js";
 
 const URL = requireTestDatabaseUrl();
 const A = "A".repeat(36), B = "B".repeat(36);
@@ -135,6 +135,41 @@ describe("achievementsTick", () => {
     const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, A));
     expect(unlocks.find((u) => u.key === "explorer")).toMatchObject({ earnedAt: m(49) });
     expect(unlocks.find((u) => u.key === "cartographer")).toMatchObject({ earnedAt: m(109) });
+  });
+
+  it("backfill: a pin dropped WHILE it runs is not headed over", async () => {
+    // ⚠️ A backfill takes minutes and the web app keeps writing through it. The heads must
+    // be taken before the first row is counted, or a pin dropped mid-backfill is skipped by
+    // the counter pass AND headed over — the live tick never looks at it again.
+    const before = await db.insert(clanPins).values(
+      Array.from({ length: 3 }, (_, i) => ({ factionId: bear, dayzId: A, x: "1", z: "2", icon: "loot" as const, note: null, createdAt: m(i), expiresAt: m(1000) })),
+    ).returning({ id: clanPins.id });
+    const maxBefore = Math.max(...before.map((p) => p.id));
+
+    // A rule that drops one more pin the first time it runs — i.e. DURING the owner drain.
+    const original = RULES.enlisted;
+    let dropped = false;
+    (RULES as Record<string, unknown>).enlisted = async (...args: Parameters<typeof original>) => {
+      if (!dropped) {
+        dropped = true;
+        await db.insert(clanPins).values({ factionId: bear, dayzId: A, x: "1", z: "2", icon: "loot", note: null, createdAt: m(50), expiresAt: m(1000) });
+      }
+      return original(...args);
+    };
+    try {
+      await achievementsTick(db, { now: m(100), everyone: true, announce: false, batch: 2 });
+    } finally { (RULES as Record<string, unknown>).enlisted = original; }
+    expect(dropped).toBe(true);
+
+    // The stored watermark is the head as it was BEFORE the backfill, not "now".
+    expect((await readWatermarks(db)).pins).toBe(maxBefore);
+    const afterBackfill = await db.select().from(achievementProgress).where(and(eq(achievementProgress.ownerId, A), eq(achievementProgress.key, "cartographer")));
+    expect(afterBackfill[0]).toMatchObject({ count: 3 });
+
+    // So the next live pass still sees the mid-backfill pin and counts it.
+    await achievementsTick(db, { now: m(110) });
+    const live = await db.select().from(achievementProgress).where(and(eq(achievementProgress.ownerId, A), eq(achievementProgress.key, "cartographer")));
+    expect(live[0]).toMatchObject({ count: 4 });
   });
 
   it("a drain skips nobody when new owners arrive mid-drain and sort before the marker", async () => {
