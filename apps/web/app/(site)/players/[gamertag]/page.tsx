@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile, playerFeed, viewerFor, type PlayerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, viewerFor, achievementsFor, type PlayerProfile } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
 import { UNLINK_COPY } from "@/lib/link-copy";
@@ -10,6 +10,7 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
+import { AchievementWall } from "@/app/components/achievement-wall";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { EMPTY_BOARD, playTime, scopeLabel } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
@@ -62,7 +63,9 @@ export default async function PlayerProfilePage({
 
   // ⚠️ Same as /players: `{ kind: "current" }` is resolved inside the roster.
   // The profile and its feed page are the two reads, side by side.
-  const [profile, feed, session] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession()]);
+  // ⚠️ The wall is lifetime, never scoped, and `.catch(() => null)` on purpose:
+  // an achievement read that fails must cost the page its wall, never the profile.
+  const [profile, feed, session, wall] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession(), achievementsFor({ gamertag }).catch(() => null)]);
 
   if (!profile || !feed) notFound();
   // The viewer's link decides ownership; the rest of the owner's state is only read once it does.
@@ -117,7 +120,7 @@ export default async function PlayerProfilePage({
             </PanelBody></Panel>
           </div>
           <div className="flex flex-col gap-4 lg:gap-6">
-            {owner && <OwnerPanels owner={owner} />}
+            {owner && <OwnerPanels owner={owner} wall={wall} />}
             <Panel title="Killed by"><PanelBody><OpponentList items={profile.killedBy} encounters={profile.encounters} me={profile.gamertag} side="killedBy" /></PanelBody></Panel>
             <Panel title="Killed"><PanelBody><OpponentList items={profile.killed} encounters={profile.encounters} me={profile.gamertag} side="killed" /></PanelBody></Panel>
             <Panel title="Clan history"><PanelBody>
@@ -134,6 +137,7 @@ export default async function PlayerProfilePage({
               )}
             </PanelBody></Panel>
           </div>
+          {wall && <AchievementWall wall={wall} className="lg:col-span-2" />}
         </div>
         <div className="mt-4 lg:mt-6">
           <PlayerFeedPanel feed={feed} basePath={basePath} />

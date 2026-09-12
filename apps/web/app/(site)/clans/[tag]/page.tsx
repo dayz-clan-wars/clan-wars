@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { clanByTag, scoreboard, warLog, type ClanPage } from "@factions/roster";
+import { clanByTag, scoreboard, warLog, achievementsFor, type ClanPage } from "@factions/roster";
 import { WarLogLine, WarLogKicker } from "@/app/(site)/war-log/entry";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
@@ -11,6 +11,7 @@ import { flagImagePath } from "@/src/flag-images";
 import { ALPHA_BADGE, duration } from "@/lib/scoring-copy";
 import { Page, Panel, PanelBody, Notice, Facts, Stat, btnCta, link, linkMono, kickerSm } from "@/app/components/ui";
 import { ClanHero, Lit } from "@/app/components/clan-hero";
+import { AchievementWall } from "@/app/components/achievement-wall";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — clan" };
@@ -36,7 +37,8 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
   const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
   const back = `/clans/${encodeURIComponent(clan.tag)}`;
   // The clan's own action (App Review R2 §7): the five most recent entries it was in, and the way to the rest.
-  const log = await warLog(5, { clanTag: clan.tag });
+  // ⚠️ `.catch(() => null)` on purpose: a failed achievement read costs the page its wall, never the page.
+  const [log, wall] = await Promise.all([warLog(5, { clanTag: clan.tag }), achievementsFor({ clanTag: clan.tag }).catch(() => null)]);
   // This season's standing, for the hero's "#1 · 48 pts". Unranked clans have no rank; a clan yet to score shows its points as 0.
   const standing = (await scoreboard()).rows.find((r) => r.tag === clan.tag) ?? null;
   const logHref = `/war-log?clan=${encodeURIComponent(clan.tag)}`;
@@ -105,6 +107,8 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
             </ul>
           )}
         </Panel>
+
+        {wall && <AchievementWall wall={wall} title="Clan achievements" className="lg:col-span-3" />}
 
         <Panel title="War log" aside={<a className={linkMono} href={logHref}>All →</a>} className="lg:col-span-3">
           {log.length === 0 ? (

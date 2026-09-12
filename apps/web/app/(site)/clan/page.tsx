@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { clanFor } from "@factions/roster";
+import { clanFor, achievementsFor } from "@factions/roster";
 import { ACTIVATION_WINDOW_MS, JOIN_PRESENCE_RADIUS_M, LEADER_SILENT_MS, PENDING_EXPIRY_MS, SUCCESSION_WINDOW_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/clan-copy";
@@ -12,6 +12,7 @@ import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, S
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
+import { AchievementWall } from "@/app/components/achievement-wall";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -62,6 +63,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
   const full = roster.filter((r) => r.status === "full");
   const pending = roster.filter((r) => r.status === "pending");
   const voteBlocked = leadership.nextVoteAllowedAt !== null && leadership.nextVoteAllowedAt.getTime() > Date.now();
+  // ⚠️ `.catch(() => null)` on purpose: a failed achievement read costs the clan its wall, never the page its roster.
+  const wall = await achievementsFor({ clanTag: clan.tag }).catch(() => null);
 
   return (
     <Page wide>
@@ -224,6 +227,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             </PanelBody>
           </Panel>
         </div>
+
+        {wall && <AchievementWall wall={wall} title="Clan achievements" className="lg:col-span-2" />}
       </div>
     </Page>
   );
