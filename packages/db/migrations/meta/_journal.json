@@ -232,6 +232,13 @@
       "when": 1789238723169,
       "tag": "0032_server_restarts",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1789247953486,
+      "tag": "0033_lumpy_stick",
+      "breakpoints": true
     }
   ]
 }
