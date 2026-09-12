@@ -35,7 +35,11 @@ export function nth(rows: readonly Hit[], target: number, evidence?: (rows: read
   const count = rows.length;
   if (count < target) return { count, target };
   const crossing = rows[target - 1]!;
-  return { count, target, earnedAt: crossing.at, evidenceId: crossing.id ?? null, evidence: evidence?.(rows) ?? { count }, serverId: crossing.serverId };
+  // Once earned, count reports the target, not the total rows seen — the same convention as
+  // oneShot. A rule whose backing rows can keep accumulating past the target (e.g. `foundation`,
+  // target 1, fed by every base.built event) would otherwise report `count: 100` for a one-shot
+  // achievement, which reads as a broken unlock rather than an earned one.
+  return { count: target, target, earnedAt: crossing.at, evidenceId: crossing.id ?? null, evidence: evidence?.(rows) ?? { count }, serverId: crossing.serverId };
 }
 
 export function clanId(owner: Owner): number {
