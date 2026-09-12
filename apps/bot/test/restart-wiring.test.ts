@@ -27,4 +27,11 @@ describe("restart tick wiring", () => {
   it("says at startup when the schedule is off — an off feature must not look broken", () => {
     expect(src).toMatch(/RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule\./u);
   });
+  // ⚠️ Same reason as the line above, and it matters more here: the wipe writes to a
+  // file nobody looks at. Off and broken are indistinguishable from the journal unless
+  // startup says which, and says WHICH events and window are live.
+  it("says at startup whether the truck wipe is on, and with what window", () => {
+    expect(src).toMatch(/TRUCK_WIPE_EVENTS is unset: the bot is not wiping trucks\./u);
+    expect(src).toMatch(/truck wipe on:/u);
+  });
 });

@@ -1064,6 +1064,12 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!cfg.restartSchedule) console.warn("RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule.");
     else console.log("scheduled restarts on: every even UTC hour");
 
+    // ⚠️ The wipe writes to a file nobody watches, so "off" and "broken" look identical
+    // from the journal. Name the events and the window, so a wrong one is visible here
+    // rather than at 08:00 tomorrow.
+    if (cfg.truckWipe.events.length === 0) console.warn("TRUCK_WIPE_EVENTS is unset: the bot is not wiping trucks.");
+    else console.log(`truck wipe on: ${cfg.truckWipe.events.join(", ")} off at ${String(cfg.truckWipe.offHour).padStart(2, "0")}:00Z, back on at ${String(cfg.truckWipe.onHour).padStart(2, "0")}:00Z`);
+
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)
         .then((n) => console.warn(
