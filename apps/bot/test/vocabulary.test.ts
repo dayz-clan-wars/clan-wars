@@ -21,6 +21,16 @@ function listTsFiles(dir: string, prefix = ""): string[] {
 }
 const COPY_FILES = listTsFiles(COPY_SRC_ROOT);
 
+// The design doc requires this check to cover apps/bot/src/commands/** — a
+// hand-maintained list of file names there drifts the moment a new command
+// or embed file is added and nobody remembers to add it here (which is
+// exactly what happened: twelve player-facing files landed in one branch and
+// none were added). Walked the same way COPY_FILES is walked above, so a new
+// file under commands/ (embeds/ included, since the walk recurses) is
+// covered automatically instead of depending on an implementer remembering.
+const COMMANDS_SRC_ROOT = resolve(here, "..", "src", "commands");
+const COMMAND_FILES = listTsFiles(COMMANDS_SRC_ROOT).map((f) => `commands/${f}`);
+
 /**
  * The guide says "clan"; code says "faction". These modules are the ones
  * whose strings reach players (public embeds and DMs), so every string
@@ -33,11 +43,8 @@ const PLAYER_FACING = [
   "retired-commands.ts",
   // Increment 3c: the clan_notices and war_log_events renderers.
   "notice-text.ts", "war-log-text.ts",
-  // 2026-09-13: every slash command reply and embed.
-  "commands/link.ts", "commands/base.ts", "commands/route.ts",
-  "commands/embeds/link.ts", "commands/embeds/base.ts",
-  // /guest's Discord-visible description text lives in the registry.
-  "commands/index.ts",
+  // 2026-09-13: every slash command reply and embed — see COMMAND_FILES above.
+  ...COMMAND_FILES,
 ];
 
 const STRING_LITERALS = /(["'`])(?:\\.|(?!\1)[^\\])*\1/gsu;
@@ -88,6 +95,17 @@ describe("offendersIn", () => {
 });
 
 describe("player-facing strings say clan, not faction", () => {
+  // ⚠️ Same failure mode as the COPY_FILES guard below: if COMMANDS_SRC_ROOT
+  // moves or empties, `COMMAND_FILES` silently becomes `[]`, the loop below
+  // iterates over fewer files, and this whole describe block reports green
+  // having checked less than it claims. Assert a specific known file, not
+  // just a nonzero count, so a partial walk (finds some files, wrong ones)
+  // is caught too.
+  it("finds apps/bot/src/commands's files, including route.ts and embeds/clan.ts", () => {
+    expect(COMMAND_FILES).toContain("commands/route.ts");
+    expect(COMMAND_FILES).toContain("commands/embeds/clan.ts");
+  });
+
   for (const file of PLAYER_FACING) {
     it(file, () => {
       expect(offendersIn(src(file))).toEqual([]);

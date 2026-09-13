@@ -1,5 +1,16 @@
-import type { EmbedBuilder, SlashCommandBuilder, SlashCommandSubcommandsOnlyBuilder } from "discord.js";
+import type {
+  ActionRowBuilder,
+  ButtonBuilder,
+  EmbedBuilder,
+  ModalBuilder,
+  SlashCommandBuilder,
+  SlashCommandSubcommandsOnlyBuilder,
+  StringSelectMenuBuilder,
+} from "discord.js";
 import type { Roster } from "@factions/roster";
+
+/** A row a `Reply` can carry: buttons or a single select menu, never mixed in one row. */
+export type ReplyRow = ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>;
 
 /**
  * ⚠️ Every reply is ephemeral — see the note on `Reply` in
@@ -7,7 +18,14 @@ import type { Roster } from "@factions/roster";
  * never be one: a challenge sequence posted publicly is a challenge any
  * bystander can perform, and a clan's roster, base or vault is a raid target.
  */
-export type Reply = { content?: string; embeds?: EmbedBuilder[]; ephemeral: true };
+export type Reply = {
+  content?: string;
+  embeds?: EmbedBuilder[];
+  components?: ReplyRow[];
+  /** Set instead of the fields above: the router opens this modal rather than editing a reply. */
+  modal?: ModalBuilder;
+  ephemeral: true;
+};
 
 /**
  * What a handler is given instead of a discord.js interaction. `route.ts` is
@@ -44,6 +62,22 @@ export type AutocompleteSource = (
   a: { actorDiscordId: string; value: string },
 ) => Promise<{ name: string; value: string }[]>;
 
+/**
+ * A pressed button or a chosen select-menu option. `route.ts` has already
+ * checked the presser against the actor named in the custom id before this
+ * runs — see the note on `CommandGroup.components`.
+ */
+export type ComponentHandler = (
+  ctx: Ctx,
+  a: { actorDiscordId: string; arg: string | null; values: string[] },
+) => Promise<Reply>;
+
+/** A submitted modal. `field` reads one text input by the name it was given when the modal was built. */
+export type ModalHandler = (
+  ctx: Ctx,
+  a: { actorDiscordId: string; arg: string | null; field: (name: string) => string },
+) => Promise<Reply>;
+
 export type CommandSpec = {
   /** "base" for a bare command, "base declare" for a subcommand. Matches `command-registration.test.ts`. */
   path: string;
@@ -55,4 +89,21 @@ export type CommandSpec = {
 export type CommandGroup = {
   command: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder;
   specs: CommandSpec[];
+  /**
+   * Keyed by the action segment of a `cw:c:<action>:…` id. `route.ts` is the
+   * only file that unpacks a custom id — a group just names the actions it
+   * answers, the same way `specs` names the subcommand paths it answers.
+   */
+  components?: Record<string, ComponentHandler>;
+  /** Keyed by the action segment of a `cw:m:<action>:…` id. */
+  modals?: Record<string, ModalHandler>;
+  /**
+   * Component actions whose handler returns a modal instead of a reply.
+   *
+   * ⚠️ Discord refuses `showModal` on an interaction that has already been
+   * acknowledged, so the router must NOT defer these — it calls the handler
+   * first and shows the modal it returns. `/found`'s "found-name" button is
+   * its only user: see `foundGroup` in `found.ts`.
+   */
+  modalOpeners?: string[];
 };

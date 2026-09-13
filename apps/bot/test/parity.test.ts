@@ -16,21 +16,21 @@ import { SPECS } from "../src/commands/index.js";
  * would have to carve out exceptions and would stop meaning anything.
  */
 const COMMANDS: Record<string, string> = {
-  startLink: "link start",
-  cancelLink: "link cancel",
-  unlink: "link unlink",
-  declareSolo: "base declare",
-  releaseSolo: "base release",
+  startLink: "link start", cancelLink: "link cancel", unlink: "link unlink",
+  declareSolo: "base declare", releaseSolo: "base release",
+  acceptInvite: "me accept", declineInvite: "me decline", withdrawRequest: "me withdraw",
+  invite: "roster invite", revokeInvite: "roster revoke", decideRequest: "roster decide",
+  kick: "roster kick", promote: "roster promote", demote: "roster demote", transfer: "roster transfer",
+  leave: "clan leave", rename: "clan rename", setRecruitingPost: "clan recruiting",
+  confirmRebind: "clan rebind", disband: "clan disband",
+  requestJoin: "clans join",
+  claimSuccession: "lead claim", openVote: "lead vote", castVote: "lead ballot",
+  claimCeremony: "found",
+  grantGuestPass: "guest grant", revokeGuestPass: "guest revoke",
 };
 
-/** Shipping in plans 2 and 3. Each entry names the plan that removes it. */
+/** Shipping in plan 3. Each entry names the plan that removes it. */
 const PENDING: Record<string, string> = {
-  invite: "plan 2", revokeInvite: "plan 2", acceptInvite: "plan 2", declineInvite: "plan 2",
-  requestJoin: "plan 2", withdrawRequest: "plan 2", decideRequest: "plan 2", leave: "plan 2",
-  kick: "plan 2", promote: "plan 2", demote: "plan 2", transfer: "plan 2", disband: "plan 2",
-  rename: "plan 2", setRecruitingPost: "plan 2", claimCeremony: "plan 2", confirmRebind: "plan 2",
-  claimSuccession: "plan 2", openVote: "plan 2", castVote: "plan 2",
-  grantGuestPass: "plan 2", revokeGuestPass: "plan 2",
   addLock: "plan 3", editLock: "plan 3", deleteLock: "plan 3", revealLock: "plan 3",
   confirmLock: "plan 3", rotateLocks: "plan 3", dropPin: "plan 3", deletePin: "plan 3",
 };

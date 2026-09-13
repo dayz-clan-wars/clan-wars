@@ -49,7 +49,6 @@ import { killsTick } from "./kills-tick.js";
 import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
-import { handleGuestCommand } from "./guest-command.js";
 import { makeRoster } from "@factions/roster";
 import { routeInteraction } from "./commands/route.js";
 import type { Ctx } from "./commands/types.js";
@@ -545,16 +544,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     try {
       if (await routeInteraction(ctxNow(), interaction)) return;
 
-      if (interaction.isChatInputCommand() && interaction.commandName === "guest") {
-        const reply = await handleGuestCommand(db, {
-          channelId: interaction.channelId,
-          actorDiscordId: interaction.user.id,
-          targetUserId: interaction.options.getUser("user", true).id,
-          now: new Date(),
-        });
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
-        return;
-      }
       if (interaction.isChatInputCommand()) {
         const sub = interaction.options.getSubcommand(false);
         const reply = retiredReply(cfg.siteBaseUrl, interaction.commandName, sub);
