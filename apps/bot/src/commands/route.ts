@@ -5,6 +5,13 @@ import type { CommandInput, Ctx, Reply } from "./types.js";
 /** What an unknown command or a stale client gets: a sentence, never discord.js's default failure. */
 const UNKNOWN = "That command is no longer available — check the site.";
 
+/**
+ * What a player sees when their handler throws after the interaction was
+ * deferred. Generic on purpose — the real cause belongs in the operator's
+ * log, not in a player-facing message.
+ */
+const HANDLER_FAILED = "Something went wrong running that command. Try again in a moment.";
+
 /** The one place a discord.js interaction is unpacked into a handler's input. */
 function inputFor(i: ChatInputCommandInteraction): CommandInput {
   return {
@@ -27,7 +34,18 @@ export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction):
   // Discord kills an un-acknowledged interaction after 3 seconds; the reply
   // below then edits the deferred message instead of racing that deadline.
   await i.deferReply({ flags: MessageFlags.Ephemeral });
-  const reply: Reply = await spec.handler(ctx, inputFor(i));
+  // ⚠️ Ruling 10: a handler that throws after this point must still produce
+  // a reply. Without this, the interaction is left showing "thinking…"
+  // forever — the outer try/catch in discord.ts stops the bot crashing, but
+  // it does nothing for the player already staring at a stuck interaction.
+  let reply: Reply;
+  try {
+    reply = await spec.handler(ctx, inputFor(i));
+  } catch (err) {
+    console.error(`handler failed for /${pathOf(i.commandName, i.options.getSubcommand(false))}`, err);
+    await i.editReply({ content: HANDLER_FAILED, embeds: [] });
+    return;
+  }
   await i.editReply({ content: reply.content, embeds: reply.embeds ?? [] });
 }
 

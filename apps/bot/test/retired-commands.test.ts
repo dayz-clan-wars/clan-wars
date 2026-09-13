@@ -3,16 +3,15 @@ import { retiredPath, retiredReply, RETIRED_COMMANDS } from "../src/retired-comm
 import { buildCommands } from "../src/discord.js";
 
 describe("retired commands", () => {
-  it("registers the four old names, bare, plus the live 'guest' command, so a stale client gets a pointer and not 'unknown command'", () => {
+  it("registers the three old names, bare, plus the live 'guest' and 'link' commands, so a stale client gets a pointer and not 'unknown command'", () => {
     const cmds = buildCommands();
-    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, "guest"].sort());
+    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, "guest", "link"].sort());
     for (const c of cmds) {
-      if (c.name === "guest") continue;
+      if (c.name === "guest" || c.name === "link") continue;
       expect((c as { options?: unknown[] }).options ?? []).toEqual([]);
     }
   });
   it("points each command at the page that replaced it", () => {
-    expect(retiredPath("link", null)).toBe("/link");
     expect(retiredPath("unlink", null)).toBe("/me");
     expect(retiredPath("whoami", null)).toBe("/me");
     expect(retiredPath("faction", "claim")).toBe("/me");
