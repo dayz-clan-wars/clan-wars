@@ -1,5 +1,5 @@
-import { VAULT_CODE_DIGITS } from "@factions/domain";
-import { VAULT_NAME_MAX, VAULT_NOTE_MAX, type ActorRefusal } from "@factions/roster";
+import { VAULT_CODE_DIGITS, VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/domain";
+import type { ActorRefusal } from "@factions/roster";
 import { REFUSAL, INPUT } from "./clan";
 
 /**

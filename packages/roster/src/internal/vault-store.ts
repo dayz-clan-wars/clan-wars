@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { vaultLocks, vaultHistory, players, factions } from "@factions/db";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
-import { ROLE_RANK, canSeeLock, randomVaultCode, type ClanRole, type VaultAction } from "@factions/domain";
+import { ROLE_RANK, VAULT_NAME_MAX, VAULT_NOTE_MAX, canSeeLock, randomVaultCode, type ClanRole, type VaultAction } from "@factions/domain";
 import { lockFactionTx, fullMemberTx } from "./leadership-store";
 import { noticeClanTx, noticeFullMembersTx } from "./notices";
 import { gamertagOrId } from "./feed-actor";
@@ -13,8 +13,10 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 /** Mirrors `packages/roster`'s `Role` union (see `roster-store.ts`) — same string literals as domain's `ClanRole`. */
 type Role = ClanRole;
 
-export const VAULT_NAME_MAX = 40;
-export const VAULT_NOTE_MAX = 140;
+// Re-exported so this store stays the one place the vault's callers import
+// from; the values themselves live in @factions/domain so @factions/copy can
+// read them without pulling a postgres client into a browser bundle.
+export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
 
 const CODE_RE = /^[0-9]{4}$/u;
 const validName = (name: string) => name.length >= 1 && name.length <= VAULT_NAME_MAX;

@@ -94,6 +94,20 @@ export type PinIcon = (typeof PIN_ICONS)[number];
 /** Pin note length cap, characters. UI + package share it. */
 export const PIN_NOTE_MAX = 140;
 
+/**
+ * Vault lock label and note caps, characters.
+ *
+ * ⚠️ These live here, not in the vault store that enforces them, because
+ * `@factions/copy` interpolates them into the player-facing refusal text and
+ * `@factions/copy` must stay a leaf over this package. Importing them from
+ * `@factions/roster` instead pulls that package's pooled postgres client into
+ * whatever imports the copy barrel — and a client component that does so fails
+ * `next build` with "Can't resolve 'fs'", which no typecheck or vitest run
+ * catches. That is not hypothetical: it broke a deploy on 2026-09-13.
+ */
+export const VAULT_NAME_MAX = 40;
+export const VAULT_NOTE_MAX = 140;
+
 // Getting around
 export const TRAVEL_POINTS = 209;
 export const HUB_DESTINATIONS = 31;

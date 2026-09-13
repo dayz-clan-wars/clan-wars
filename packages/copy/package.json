@@ -3,11 +3,19 @@
   "version": "0.0.0",
   "type": "module",
   "main": "src/index.ts",
-  "exports": { ".": "./src/index.ts" },
-  "scripts": { "typecheck": "tsc --noEmit", "test": "vitest run" },
-  "dependencies": {
-    "@factions/domain": "workspace:*",
-    "@factions/roster": "workspace:*"
+  "exports": {
+    ".": "./src/index.ts"
   },
-  "devDependencies": { "typescript": "^5.6.0", "vitest": "^2.1.0" }
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@factions/domain": "workspace:*"
+  },
+  "devDependencies": {
+    "@factions/roster": "workspace:*",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  }
 }
