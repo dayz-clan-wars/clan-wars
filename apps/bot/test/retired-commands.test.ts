@@ -3,11 +3,11 @@ import { retiredPath, retiredReply, RETIRED_COMMANDS } from "../src/retired-comm
 import { buildCommands } from "../src/discord.js";
 
 describe("retired commands", () => {
-  it("registers the three old names, bare, plus the live 'guest', 'link', 'base', 'me' and 'roster' commands, so a stale client gets a pointer and not 'unknown command'", () => {
+  it("registers the three old names, bare, plus the live 'guest', 'link', 'base', 'me', 'roster' and 'clan' commands, so a stale client gets a pointer and not 'unknown command'", () => {
     const cmds = buildCommands();
-    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, "guest", "link", "base", "me", "roster"].sort());
+    expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, "guest", "link", "base", "me", "roster", "clan"].sort());
     for (const c of cmds) {
-      if (c.name === "guest" || c.name === "link" || c.name === "base" || c.name === "me" || c.name === "roster") continue;
+      if (c.name === "guest" || c.name === "link" || c.name === "base" || c.name === "me" || c.name === "roster" || c.name === "clan") continue;
       expect((c as { options?: unknown[] }).options ?? []).toEqual([]);
     }
   });

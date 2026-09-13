@@ -6,6 +6,7 @@
  * file re-registers its `describe`s and runs them twice — see
  * `packages/roster/test/roster-exports.ts` for the same guard.
  */
+import type { ClanView } from "@factions/roster";
 import type { AutocompleteSource, CommandGroup, CommandInput, ComponentHandler, Ctx } from "../src/commands/types.js";
 
 /** Finds one spec by its `path` (e.g. "me accept") off a given group. */
@@ -56,4 +57,27 @@ export function input(opts: Record<string, string | number | boolean | null | un
 /** Builds a `Ctx` from a partial roster stub of plain async functions. */
 export function ctxWith(roster: Record<string, unknown>): Ctx {
   return { roster, now: new Date("2026-09-13T00:00:00Z"), siteBaseUrl: "https://x" } as unknown as Ctx;
+}
+
+/**
+ * A complete `ClanView`, for `/clan` and (per a later task) `/guest`.
+ * Shallow-merged with `over` — pass a partial `clan`/`me`/`leadership` object
+ * built off `viewFixture().clan` etc. when only one field needs changing.
+ */
+export function viewFixture(over: Partial<ClanView> = {}): ClanView {
+  return {
+    clan: {
+      id: 1, name: "Wolves", tag: "WLF", texture: "wolf", status: "active",
+      createdAt: new Date("2026-01-01T00:00:00Z"), activatedAt: new Date("2026-01-01T00:00:00Z"), recruiting: false,
+      playWindow: null, language: null, pitch: null, base: null,
+    },
+    me: { role: "leader", status: "full" },
+    roster: [],
+    invitesOut: [],
+    requestsIn: [],
+    rebindCandidates: [],
+    leadership: { openClaim: null, openVote: null, canClaim: "not-eligible", nextVoteAllowedAt: null, leaderLastSeenAt: null },
+    guestPasses: [],
+    ...over,
+  };
 }
