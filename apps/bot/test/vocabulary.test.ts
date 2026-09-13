@@ -18,6 +18,9 @@ const PLAYER_FACING = [
   "retired-commands.ts",
   // Increment 3c: the clan_notices and war_log_events renderers.
   "notice-text.ts", "war-log-text.ts",
+  // 2026-09-13: every slash command reply and embed.
+  "commands/link.ts", "commands/base.ts", "commands/route.ts",
+  "commands/embeds/link.ts", "commands/embeds/base.ts",
 ];
 
 const STRING_LITERALS = /(["'`])(?:\\.|(?!\1)[^\\])*\1/gsu;
