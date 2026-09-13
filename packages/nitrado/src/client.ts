@@ -113,14 +113,8 @@ export class NitradoClient {
     return `${await this.missionDir()}/db`;
   }
 
-  /**
-   * The mission root — where `init.c` lives.
-   *
-   * ⚠️ Public because the bot's restart tick writes init.c here. NOT `db` and
-   * NOT `custom`: the mission script sits in the root, and an upload into
-   * either sibling reports success for a file the game never compiles.
-   */
-  async missionDir(): Promise<string> {
+  /** Shared base for the per-directory helpers above. Throws on any missing field. */
+  private async missionDir(): Promise<string> {
     const gs = (await this.getJson(`/services/${this.serviceId}/gameservers`))?.data?.gameserver;
     const username = gs?.username;
     const game = gs?.game;
