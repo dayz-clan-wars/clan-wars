@@ -144,6 +144,17 @@ describe("directoryEmbed", () => {
     const last = fields.at(-1)!;
     expect(last.value).toMatch(/^\+\d+ more — see the site\.$/);
   });
+
+  it("keeps /clans list inside Discord's embed cap at four thousand clans", () => {
+    const entries = Array.from({ length: 4000 }, (_, i) => ({
+      tag: `T${i}`, name: `Clan ${i}`, texture: "wolf", memberCount: 8, recruiting: i % 2 === 0, alpha: false,
+    })) as Parameters<typeof directoryEmbed>[0];
+    const j = directoryEmbed(entries, "https://x").toJSON();
+    const total = (j.title?.length ?? 0) + (j.description?.length ?? 0) + (j.footer?.text.length ?? 0)
+      + (j.fields ?? []).reduce((s, f) => s + f.name.length + f.value.length, 0);
+    expect(total).toBeLessThanOrEqual(6000);
+    expect((j.fields ?? []).at(-1)!.value).toMatch(/^\+\d+ more/u);
+  });
 });
 
 describe("/clans autocomplete", () => {
