@@ -18,6 +18,12 @@ export type ArmbandAssignment = { dayzId: string; armband: string };
  */
 const TEMPLATE = `void main()
 {
+	// PLATFORM PROBE: main() calls CreateHive() below, so it unquestionably runs
+	// if init.c executes at all. If this line is absent from the script log,
+	// either init.c is not executed or Print is stripped on this build - and in
+	// either case the silence of the spawn hooks says nothing about the hooks.
+	Print("[CLANWARS] main() running");
+
 	//INIT ECONOMY--------------------------------------
 	Hive ce = CreateHive();
 	if ( ce )
@@ -195,6 +201,11 @@ class CustomMission: MissionServer
 
 Mission CreateCustomMission(string path)
 {
+	// PLATFORM PROBE: the factory the engine asks for when it wants the mission.
+	// main() printing while THIS does not means init.c runs but the console
+	// server never takes our mission class - which would make every override in
+	// CustomMission dead code and this whole approach impossible here.
+	Print("[CLANWARS] CreateCustomMission() called");
 	return new CustomMission();
 }
 `;

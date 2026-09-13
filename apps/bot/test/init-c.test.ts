@@ -157,6 +157,23 @@ describe("renderInitC", () => {
     expect(prints.length).toBeGreaterThanOrEqual(3);
   });
 
+  /**
+   * ⚠️ PLATFORM PROBES. On 2026-09-13 all three spawn hooks ran silent on a
+   * clean compile, which cannot distinguish "the override was not invoked" from
+   * "init.c never executed" from "Print is stripped on console RELEASE builds".
+   * These two probes sit on code paths whose execution is not in question —
+   * main() calls CreateHive(), and CreateCustomMission() is the mission factory
+   * the engine asks for — so their presence or absence in the script log
+   * partitions the failure exactly.
+   */
+  it.each([
+    ["main", "[CLANWARS] main() running"],
+    ["CreateCustomMission", "[CLANWARS] CreateCustomMission() called"],
+  ])("prints a platform probe from %s", (_where, line) => {
+    const c = renderInitC([]);
+    expect(c).toContain(`Print("${line}");`);
+  });
+
   it("keeps the mission scaffolding the server boots from", () => {
     const c = renderInitC([]);
     expect(c).toContain("void main()");
