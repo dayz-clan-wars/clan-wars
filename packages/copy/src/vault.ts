@@ -1,6 +1,6 @@
 import { VAULT_CODE_DIGITS } from "@factions/domain";
 import { VAULT_NAME_MAX, VAULT_NOTE_MAX, type ActorRefusal } from "@factions/roster";
-import { REFUSAL } from "./clan";
+import { REFUSAL, INPUT } from "./clan";
 
 /**
  * Vault copy (spec §4.9/§10.2), built the same way `leadership.ts` builds
@@ -66,7 +66,5 @@ const REVEAL: Record<"ok" | "not-visible" | "gone" | ActorRefusal, string> = {
   "not-visible": NOT_VISIBLE,
   gone: GONE,
 };
-const INPUT: Record<"bad-input", string> = { "bad-input": "Something in that form was missing or too long. Try again." };
-
 export const VAULT_TABLES = { add: ADD, edit: EDIT, delete: DELETE, rotate: ROTATE, confirm: CONFIRM, reveal: REVEAL, input: INPUT } as const;
 export type VaultAction = keyof typeof VAULT_TABLES;

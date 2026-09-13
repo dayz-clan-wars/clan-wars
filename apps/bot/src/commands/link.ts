@@ -35,8 +35,8 @@ const cancel: Handler = async (ctx, input) => {
 /** `unlink` releases a solo base and is refused inside a clan; both rules are the store's. */
 const unlink: Handler = async (ctx, input) => {
   const outcome = await ctx.roster.unlink(input.actorDiscordId);
-  if (outcome.ok) return { content: UNLINK_COPY.ok!, ephemeral: true };
-  return { content: UNLINK_COPY[outcome.reason]!, ephemeral: true };
+  if (outcome.ok) return { content: UNLINK_COPY.ok, ephemeral: true };
+  return { content: UNLINK_COPY[outcome.reason], ephemeral: true };
 };
 
 /** The log's own list of characters. Autocomplete is scoped by prefix, not by viewer: the site's /link box is the same. */

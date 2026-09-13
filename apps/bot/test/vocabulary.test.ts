@@ -1,10 +1,25 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const src = (f: string) => readFileSync(resolve(here, "..", "src", f), "utf8");
+
+// packages/copy/src holds the outcome-copy tables both the site and the bot
+// render (moved out of apps/web/lib/*-copy.ts on 2026-09-13) — every string
+// literal there is player-facing exactly the same way, so it gets the same
+// walk rather than a second, drifting copy of this check.
+const COPY_SRC_ROOT = resolve(here, "..", "..", "..", "packages", "copy", "src");
+const copySrc = (f: string) => readFileSync(join(COPY_SRC_ROOT, f), "utf8");
+function listTsFiles(dir: string, prefix = ""): string[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const rel = prefix ? `${prefix}/${entry.name}` : entry.name;
+    if (entry.isDirectory()) return listTsFiles(join(dir, entry.name), rel);
+    return entry.name.endsWith(".ts") ? [rel] : [];
+  });
+}
+const COPY_FILES = listTsFiles(COPY_SRC_ROOT);
 
 /**
  * The guide says "clan"; code says "faction". These modules are the ones
@@ -21,6 +36,8 @@ const PLAYER_FACING = [
   // 2026-09-13: every slash command reply and embed.
   "commands/link.ts", "commands/base.ts", "commands/route.ts",
   "commands/embeds/link.ts", "commands/embeds/base.ts",
+  // /guest's Discord-visible description text lives in the registry.
+  "commands/index.ts",
 ];
 
 const STRING_LITERALS = /(["'`])(?:\\.|(?!\1)[^\\])*\1/gsu;
@@ -74,6 +91,14 @@ describe("player-facing strings say clan, not faction", () => {
   for (const file of PLAYER_FACING) {
     it(file, () => {
       expect(offendersIn(src(file))).toEqual([]);
+    });
+  }
+});
+
+describe("packages/copy/src says clan, not faction", () => {
+  for (const file of COPY_FILES) {
+    it(file, () => {
+      expect(offendersIn(copySrc(file))).toEqual([]);
     });
   }
 });

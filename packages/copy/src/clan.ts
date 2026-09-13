@@ -136,7 +136,12 @@ const CLAIM: Record<ReserveOutcome | "not-linked" | "no-such-ceremony" | "bad-na
   "bad-flag": "Pick one of the free flags.",
   "bad-roster": "The roster must be people who were at the ceremony, and must include you.",
 };
-const INPUT: Record<"bad-input", string> = { "bad-input": "Something in that form was missing or too long. Try again." };
+/**
+ * Shared with `vault.ts` (identical wording, same generic form-validation
+ * failure) — exported here rather than duplicated so the two can't drift the
+ * way this branch's review caught them doing.
+ */
+export const INPUT: Record<"bad-input", string> = { "bad-input": "Something in that form was missing or too long. Try again." };
 
 /** §4.10: a guest pass, granted by Discord id or by a linked gamertag (the site has no user picker). */
 const GUEST: Record<GuestGrantOutcome, string> = {

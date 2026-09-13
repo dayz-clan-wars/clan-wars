@@ -35,8 +35,8 @@ export function linkStatusEmbed(status: LinkStatus, now: Date, siteBaseUrl: stri
     embed.setFooter({ text: "Perform them in order, in game. `/link cancel` drops the challenge." });
   }
 
-  if (status.ended && Object.hasOwn(ENDED_COPY, status.ended)) {
-    embed.addFields({ name: "Last attempt", value: ENDED_COPY[status.ended as keyof typeof ENDED_COPY], inline: false });
+  if (status.ended) {
+    embed.addFields({ name: "Last attempt", value: ENDED_COPY[status.ended], inline: false });
   }
 
   embed.setURL(`${siteBaseUrl}/link`);

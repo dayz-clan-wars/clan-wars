@@ -47,7 +47,7 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **26/26 tasks** (`packages/roster` and `packages/declarations` each add `typecheck` and `test`). A cached pass
+Expect **28/28 tasks** (`packages/roster`, `packages/declarations` and `packages/copy` each add `typecheck` and `test`). A cached pass
 proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.
@@ -308,7 +308,7 @@ rule number in any chapter; the old vendored `docs/guide-numbers.json` and its d
 must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →
 `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless form
 legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
-`domain`, `declarations` and `verification` — including `packages/roster/src/internal/`, the bot's entry point; adding a package to `transpilePackages` means converting it first, and
+`domain`, `declarations`, `verification` and `copy` — including `packages/roster/src/internal/`, the bot's entry point; adding a package to `transpilePackages` means converting it first, and
 `apps/web/test/transpiled-imports.test.ts` fails until you do.
 
 ---

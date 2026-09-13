@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, identityLinks, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, identityLinks, verificationChallenges, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { makeRoster } from "../src/api";
 import { ROSTER_EXPORTS } from "./roster-exports";
@@ -46,9 +46,23 @@ describe("makeRoster", () => {
   });
 
   it("takes its clock from getNow, so a caller can freeze time", async () => {
-    const roster = makeRoster(() => db, () => NOW);
+    // A default (real-clock) getNow would see this challenge's expiresAt as
+    // years in the future and report `ended: null`. Only an implementation
+    // that actually calls the injected getNow — and gets FROZEN back — reads
+    // it as already expired. This is the one branch of linkStatusDb whose
+    // result depends on which clock it used, so it is the one worth pinning.
+    const FROZEN = new Date("2030-06-01T00:00:00Z");
+    await db.insert(verificationChallenges).values({
+      discordId: D,
+      targetDayzId: UID,
+      sequence: ["a", "b", "c"],
+      issuedAt: new Date("2029-12-01T00:00:00Z"),
+      expiresAt: new Date("2029-12-02T00:00:00Z"),
+    });
+    const roster = makeRoster(() => db, () => FROZEN);
     const status = await roster.linkStatus(D);
     expect(status.link).toBeNull();
     expect(status.challenge).toBeNull();
+    expect(status.ended).toBe("expired");
   });
 });
