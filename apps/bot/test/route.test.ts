@@ -1,9 +1,9 @@
 import { describe, it, expect, afterEach } from "vitest";
-import type { ChatInputCommandInteraction, Interaction, MessageComponentInteraction } from "discord.js";
-import { handleChatInput, handleComponent, routeInteraction, UNKNOWN } from "../src/commands/route.js";
-import { GROUPS, SPECS, COMPONENTS, MODAL_OPENERS } from "../src/commands/index.js";
-import { confirmId } from "../src/commands/confirm.js";
-import type { ComponentHandler, Ctx } from "../src/commands/types.js";
+import type { ChatInputCommandInteraction, Interaction, MessageComponentInteraction, ModalSubmitInteraction } from "discord.js";
+import { handleChatInput, handleComponent, handleModalSubmit, routeInteraction, UNKNOWN } from "../src/commands/route.js";
+import { GROUPS, SPECS, COMPONENTS, MODALS, MODAL_OPENERS } from "../src/commands/index.js";
+import { confirmId, modalId } from "../src/commands/confirm.js";
+import type { ComponentHandler, Ctx, ModalHandler } from "../src/commands/types.js";
 
 /**
  * Ruling 10: a handler that throws after the interaction is deferred must
@@ -111,6 +111,50 @@ async function runComponent(
   }
 }
 
+/**
+ * A fake ModalSubmitInteraction — a submitted modal. Mirrors `fakeButton`
+ * above. `fields` is a flat name→value map, read back through
+ * `i.fields.getTextInputValue(n)` exactly as `handleModalSubmit` calls it.
+ */
+function fakeModal(customId: string, userId: string, fields: Record<string, string> = {}): Interaction {
+  const edits: { content?: string; embeds?: unknown[]; components?: unknown[] }[] = [];
+  const interaction = {
+    customId,
+    user: { id: userId },
+    isButton: () => false,
+    isMessageComponent: () => false,
+    isStringSelectMenu: () => false,
+    isChatInputCommand: () => false,
+    isAutocomplete: () => false,
+    isModalSubmit: () => true,
+    fields: { getTextInputValue: (n: string) => fields[n] ?? "" },
+    deferReply: async () => {},
+    editReply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { edits.push(payload); },
+    _edits: edits,
+  };
+  return interaction as unknown as Interaction;
+}
+
+/**
+ * Runs `handleModalSubmit` against a fake modal submit, with the given
+ * handlers registered under `MODALS` only for the duration of the call —
+ * mirrors `runComponent`.
+ */
+async function runModal(
+  opts: { customId: string; userId: string; fields?: Record<string, string> },
+  handlers: Record<string, ModalHandler>,
+): Promise<string | undefined> {
+  const keys = Object.keys(handlers);
+  for (const [action, handler] of Object.entries(handlers)) MODALS.set(action, handler);
+  try {
+    const interaction = fakeModal(opts.customId, opts.userId, opts.fields) as unknown as ModalSubmitInteraction;
+    await handleModalSubmit({} as Ctx, interaction);
+    return (interaction as unknown as { _edits: { content?: string }[] })._edits[0]?.content;
+  } finally {
+    for (const action of keys) MODALS.delete(action);
+  }
+}
+
 describe("component and modal routing", () => {
   it("refuses a button whose custom id names a different actor", async () => {
     const seen: string[] = [];
@@ -135,6 +179,38 @@ describe("component and modal routing", () => {
 
   it("leaves a component it does not own to discord.ts", async () => {
     expect(await routeInteraction({} as Ctx, fakeButton("invite-42", "111"))).toBe(false);
+  });
+
+  /**
+   * The global constraint names modals explicitly: "a button, select menu or
+   * modal is never a permission". `handleModalSubmit` re-checks the actor
+   * the same way `handleComponent` does — this asserts that check, not just
+   * the component one.
+   */
+  it("refuses a modal submit whose custom id names a different actor", async () => {
+    const seen: string[] = [];
+    const reply = await runModal({ customId: modalId("found", "111"), userId: "999" }, {
+      found: async () => { seen.push("ran"); return { content: "done", ephemeral: true as const }; },
+    });
+    expect(seen).toEqual([]);
+    expect(reply).toContain("not yours");
+  });
+
+  it("runs the modal handler when the submitter is the actor, reading fields by name", async () => {
+    const reply = await runModal(
+      { customId: modalId("found", "111"), userId: "111", fields: { name: "Falcons" } },
+      { found: async (_ctx, a) => ({ content: `Founded ${a.field("name")}.`, ephemeral: true as const }) },
+    );
+    expect(reply).toBe("Founded Falcons.");
+  });
+
+  it("answers an unknown cw: modal action with the UNKNOWN sentence, never a throw", async () => {
+    const reply = await runModal({ customId: modalId("nosuch", "111"), userId: "111" }, {});
+    expect(reply).toBe(UNKNOWN);
+  });
+
+  it("leaves a modal submit it does not own to discord.ts", async () => {
+    expect(await routeInteraction({} as Ctx, fakeModal("invite-42", "111"))).toBe(false);
   });
 });
 
