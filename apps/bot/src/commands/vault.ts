@@ -139,15 +139,26 @@ const PICK_A_LOCK = "Pick a lock from the list.";
  * already rank-filtered) purely so the sentence can name what was revealed;
  * `revealLock` is still the permission check and can refuse after that read.
  */
+/**
+ * ⚠️ `VAULT_TABLES.reveal.ok` ("Revealed.") is a placeholder — its own
+ * comment in `packages/copy/src/vault.ts` says it must never reach a
+ * player, because `revealLock`'s real success path always carries a code.
+ * `outcome === "ok" && code === null` should be unreachable; treat it as a
+ * failure rather than fall through to that placeholder sentence.
+ */
+const REVEAL_FAILED = "Something went wrong revealing that code. Try again.";
+
 const reveal: Handler = async (ctx, input) => {
   const lockId = idOf(input.string("lock"));
   if (lockId === null) return { content: PICK_A_LOCK, ephemeral: true };
   const state = await ctx.roster.vaultFor(input.actorDiscordId);
   if (typeof state === "string") return { content: REFUSAL[state], ephemeral: true };
   const { outcome, code } = await ctx.roster.revealLock(input.actorDiscordId, lockId);
-  if (outcome !== "ok" || code === null) return { content: discordVaultCopy("reveal", outcome), ephemeral: true };
-  const name = state.locks.find((l) => l.id === lockId)?.name ?? "That lock";
-  return { content: revealedCopy(name, code), ephemeral: true };
+  if (outcome === "ok" && code !== null) {
+    const name = state.locks.find((l) => l.id === lockId)?.name ?? "That lock";
+    return { content: revealedCopy(name, code), ephemeral: true };
+  }
+  return { content: outcome === "ok" ? REVEAL_FAILED : discordVaultCopy("reveal", outcome), ephemeral: true };
 };
 
 const confirm: Handler = async (ctx, input) => {

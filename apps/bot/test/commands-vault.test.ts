@@ -189,6 +189,21 @@ describe("/vault reveal", () => {
     const reply = await specOf(vaultGroup, "vault reveal").handler(ctx, input({ lock: "4" }));
     expect(reply.content).toBe("You are not in a clan.");
   });
+
+  /**
+   * ⚠️ `VAULT_TABLES.reveal.ok` ("Revealed.") is a placeholder that must
+   * never reach a player — this contradiction (`ok` with no code) should be
+   * unreachable in practice, but if it ever happens the handler must not
+   * fall through to that placeholder sentence.
+   */
+  it("never answers with the placeholder 'Revealed.' sentence, even on a contradictory outcome", async () => {
+    const ctx = ctxWith({
+      vaultFor: async () => state({ locks: [lock({ id: 4 })] }),
+      revealLock: async () => ({ outcome: "ok", code: null }),
+    });
+    const reply = await specOf(vaultGroup, "vault reveal").handler(ctx, input({ lock: "4" }));
+    expect(reply.content).not.toBe("Revealed.");
+  });
 });
 
 describe("/vault confirm", () => {
@@ -246,8 +261,12 @@ describe("/vault rotate", () => {
     const sub = vaultGroup.command.toJSON().options!.find((o) => o.name === "rotate")!;
     const opts = (sub as { options?: { name: string }[] }).options ?? [];
     expect(opts.map((o) => o.name)).toEqual(["lock"]);
-    const ctx = ctxWith({ rotateLocks: async () => ({ outcome: "ok", rotated: 1 }) });
+    // ⚠️ Arity, not just the reply text: a chosen code smuggled in as a third
+    // argument would still pass a `not.toMatch(/\d{4}/u)` check on the reply.
+    let args: unknown[] = [];
+    const ctx = ctxWith({ rotateLocks: async (...a: unknown[]) => { args = a; return { outcome: "ok", rotated: 1 }; } });
     const reply = await componentOf(vaultGroup, "vault-rot")(ctx, { actorDiscordId: "111", arg: "4", values: [] });
+    expect(args).toEqual(["111", 4]);
     expect(reply.content).not.toMatch(/\d{4}/u);
   });
 });

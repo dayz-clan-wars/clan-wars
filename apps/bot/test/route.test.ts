@@ -1,4 +1,4 @@
-import { describe, it, expect, afterEach } from "vitest";
+import { describe, it, expect, afterEach, vi } from "vitest";
 import { ModalBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Interaction, MessageComponentInteraction, ModalSubmitInteraction } from "discord.js";
 import { handleChatInput, handleComponent, handleModalSubmit, routeInteraction, UNKNOWN } from "../src/commands/route.js";
@@ -371,6 +371,54 @@ describe("a select menu that updates in place", () => {
       expect(calls).toEqual(["deferReply", "editReply"]);
     } finally {
       COMPONENTS.delete("t-press");
+    }
+  });
+});
+
+/**
+ * ⚠️ The exact hazard `safeErrorInfo` exists for: a handler's reply body can
+ * be a secret (`/vault reveal`'s code), and `@discordjs/rest`'s
+ * `DiscordAPIError`/`HTTPError` carry the whole failed request — including
+ * that body — as `err.requestBody.json`. If `finish`'s final `editReply`
+ * ever fails and something logs the caught error object directly, the
+ * secret lands in the operator's log. This proves it does not: the fake
+ * `editReply` below rejects with an object shaped exactly like that real
+ * error, carrying a distinctive digit string nobody else in this suite
+ * uses, and the test asserts that string appears nowhere in what
+ * `console.error` was called with.
+ */
+describe("logging a failed editReply never leaks the reply body", () => {
+  const LEAKY_PATH = "t leaky";
+
+  afterEach(() => {
+    SPECS.delete(LEAKY_PATH);
+  });
+
+  it("does not pass a DiscordAPIError-shaped rejection's request body to console.error", async () => {
+    const CODE = "70155"; // distinctive: not a UI string this suite otherwise produces
+    SPECS.set(LEAKY_PATH, {
+      path: LEAKY_PATH,
+      handler: async () => ({ content: `**Front gate** — \`${CODE}\`. Only you can see this.`, ephemeral: true as const }),
+    });
+    const fakeDiscordApiError = Object.assign(new Error("Unknown Message"), {
+      name: "DiscordAPIError",
+      code: 10008,
+      status: 404,
+      requestBody: { files: [], json: { content: `**Front gate** — \`${CODE}\`. Only you can see this.` } },
+    });
+    const [interaction] = (() => {
+      const { interaction: base } = fakeInteraction(LEAKY_PATH, { userId: "111" });
+      const i = base as { editReply: (payload: unknown) => Promise<void> };
+      i.editReply = async () => { throw fakeDiscordApiError; };
+      return [base];
+    })();
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await handleChatInput({} as Ctx, interaction as unknown as ChatInputCommandInteraction);
+      const logged = JSON.stringify(errSpy.mock.calls);
+      expect(logged).not.toContain(CODE);
+    } finally {
+      errSpy.mockRestore();
     }
   });
 });

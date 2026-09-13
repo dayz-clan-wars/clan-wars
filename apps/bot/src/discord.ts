@@ -50,7 +50,7 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { makeRoster } from "@factions/roster";
-import { routeInteraction } from "./commands/route.js";
+import { routeInteraction, safeErrorInfo } from "./commands/route.js";
 import type { Ctx } from "./commands/types.js";
 import { buildCommands } from "./commands/index.js";
 
@@ -557,7 +557,11 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       // ⚠️ discord.js does not await this listener; an uncaught throw is an unhandled rejection that takes the bot down. Log and drop the one interaction.
-      console.error(`interaction failed`, err);
+      // ⚠️ Never log `err` itself: a discord.js REST failure carries the
+      // whole failed request body (`err.requestBody.json`), which for
+      // `/vault reveal` is a lock code — see `safeErrorInfo`'s comment in
+      // `commands/route.ts`.
+      console.error(`interaction failed`, safeErrorInfo(err));
     }
   });
 

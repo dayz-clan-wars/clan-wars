@@ -23,6 +23,23 @@ const HANDLER_FAILED = "Something went wrong running that command. Try again in 
 /** A pressed button or a submitted modal whose custom id names someone else. */
 const NOT_YOURS = "That button is not yours — run the command yourself.";
 
+/**
+ * ⚠️ Never `console.error(err)` a discord.js REST failure directly. Its
+ * `DiscordAPIError`/`HTTPError` (`@discordjs/rest`) carry the whole failed
+ * request as `err.requestBody = { files, json: body }` — and the request
+ * that fails here is the `editReply` call below, whose `json.content` is
+ * whatever the handler answered with. For `/vault reveal` that content IS a
+ * lock code. Log only the diagnosis — name, message, and `code`/`status`
+ * when present — and nothing shaped like a request or response body.
+ */
+export function safeErrorInfo(err: unknown): Record<string, unknown> {
+  if (err && typeof err === "object") {
+    const e = err as { name?: unknown; message?: unknown; code?: unknown; status?: unknown };
+    return { name: e.name, message: e.message, code: e.code, status: e.status };
+  }
+  return { value: String(err) };
+}
+
 /** The one place a discord.js interaction is unpacked into a handler's input. */
 function inputFor(i: ChatInputCommandInteraction): CommandInput {
   return {
@@ -58,11 +75,21 @@ async function finish(
   try {
     reply = await run();
   } catch (err) {
-    console.error(`handler failed for ${label}`, err);
-    await i.editReply({ content: HANDLER_FAILED, embeds: [], components: [] });
+    console.error(`handler failed for ${label}`, safeErrorInfo(err));
+    // ⚠️ This editReply's own body is generic (`HANDLER_FAILED`), never a
+    // secret — but it can still throw (rate limit, unknown message, 5xx),
+    // and that throw must not go unlogged or escape uncaught either.
+    await i.editReply({ content: HANDLER_FAILED, embeds: [], components: [] })
+      .catch((editErr: unknown) => console.error(`edit reply failed for ${label}`, safeErrorInfo(editErr)));
     return;
   }
-  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [], components: reply.components ?? [] });
+  // ⚠️ The one place a leaked lock code could reach a log line: this
+  // editReply's request body is `reply.content`, and for `/vault reveal`
+  // that IS a lock code. If the Discord API call itself fails, the thrown
+  // error carries that body — see `safeErrorInfo`'s comment. Never log the
+  // caught error directly here.
+  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [], components: reply.components ?? [] })
+    .catch((err: unknown) => console.error(`edit reply failed for ${label}`, safeErrorInfo(err)));
 }
 
 export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction): Promise<void> {
