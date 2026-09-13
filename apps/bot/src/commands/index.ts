@@ -42,6 +42,7 @@ export const MODALS: Map<string, ModalHandler> = new Map(
   GROUPS.flatMap((g) => Object.entries(g.modals ?? {})),
 );
 export const MODAL_OPENERS: Set<string> = new Set(GROUPS.flatMap((g) => g.modalOpeners ?? []));
+export const UPDATERS: Set<string> = new Set(GROUPS.flatMap((g) => g.updatesInPlace ?? []));
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [

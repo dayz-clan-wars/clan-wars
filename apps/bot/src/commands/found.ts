@@ -111,4 +111,8 @@ export const foundGroup: CommandGroup = {
   components: { "found-flag": pickFlag, "found-crew": pickCrew, "found-name": openNameModal },
   modals: { found: submit },
   modalOpeners: ["found-name"],
+  // The flag and crew selects refine the card the player is looking at. The
+  // "Name it" button is not here: it opens a modal, and a modal opener must
+  // not be acknowledged at all.
+  updatesInPlace: ["found-flag", "found-crew"],
 };

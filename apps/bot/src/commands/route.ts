@@ -6,7 +6,7 @@ import {
   type MessageComponentInteraction,
   type ModalSubmitInteraction,
 } from "discord.js";
-import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS } from "./index.js";
+import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS, UPDATERS } from "./index.js";
 import { parseCustomId } from "./confirm.js";
 import type { CommandInput, Ctx, Reply } from "./types.js";
 
@@ -66,13 +66,25 @@ async function finish(
 }
 
 export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction): Promise<void> {
-  const spec = SPECS.get(pathOf(i.commandName, i.options.getSubcommand(false)));
+  const path = pathOf(i.commandName, i.options.getSubcommand(false));
+  const spec = SPECS.get(path);
   if (!spec) return;
+  // ⚠️ Before the defer, for the same reason `handleComponent` has this
+  // branch: a modal cannot be shown on an acknowledged interaction.
+  if (spec.opensModal) {
+    const reply = await spec.handler(ctx, inputFor(i));
+    if (reply.modal) { await i.showModal(reply.modal); return; }
+    // ⚠️ Same invariant as the component opener: a non-modal reply from an
+    // opener carries `content` only. Embeds and components are dropped here
+    // silently — do not return them from an `opensModal` handler.
+    await i.reply({ content: reply.content ?? UNKNOWN, flags: MessageFlags.Ephemeral });
+    return;
+  }
   // ⚠️ Defer first. A handler runs one or more database round trips and
   // Discord kills an un-acknowledged interaction after 3 seconds; the reply
   // below then edits the deferred message instead of racing that deadline.
   await i.deferReply({ flags: MessageFlags.Ephemeral });
-  await finish(i, () => spec.handler(ctx, inputFor(i)), `/${pathOf(i.commandName, i.options.getSubcommand(false))}`);
+  await finish(i, () => spec.handler(ctx, inputFor(i)), `/${path}`);
 }
 
 export async function handleAutocomplete(ctx: Ctx, i: AutocompleteInteraction): Promise<void> {
@@ -107,7 +119,8 @@ export async function handleComponent(ctx: Ctx, i: MessageComponentInteraction):
       return;
     }
   }
-  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const inPlace = UPDATERS.has(parsed.action);
+  if (inPlace) await i.deferUpdate(); else await i.deferReply({ flags: MessageFlags.Ephemeral });
   // ⚠️ A button is never a permission (R2): re-check the presser against the
   // actor named in the custom id even though the message is ephemeral and in
   // practice only that actor can see the button at all.

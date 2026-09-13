@@ -1,7 +1,8 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { ModalBuilder } from "discord.js";
 import type { ChatInputCommandInteraction, Interaction, MessageComponentInteraction, ModalSubmitInteraction } from "discord.js";
 import { handleChatInput, handleComponent, handleModalSubmit, routeInteraction, UNKNOWN } from "../src/commands/route.js";
-import { GROUPS, SPECS, COMPONENTS, MODALS, MODAL_OPENERS } from "../src/commands/index.js";
+import { GROUPS, SPECS, COMPONENTS, MODALS, MODAL_OPENERS, UPDATERS } from "../src/commands/index.js";
 import { confirmId, modalId } from "../src/commands/confirm.js";
 import { putDraft, clearDraft } from "../src/commands/founding-draft.js";
 import type { ComponentHandler, Ctx, ModalHandler } from "../src/commands/types.js";
@@ -16,17 +17,23 @@ import type { ComponentHandler, Ctx, ModalHandler } from "../src/commands/types.
  * `route.ts`'s own unit, and the whole point of `CommandInput` is that
  * nothing downstream needs a client.
  */
-function fakeInteraction(path: string): {
+function fakeInteraction(
+  path: string,
+  opts: { userId?: string; calls?: string[] } = {},
+): {
   interaction: unknown;
   deferred: boolean[];
   edits: { content?: string; embeds?: unknown[] }[];
+  modals: unknown[];
 } {
   const [commandName, subcommand] = path.split(" ");
   const deferred: boolean[] = [];
   const edits: { content?: string; embeds?: unknown[] }[] = [];
+  const modals: unknown[] = [];
+  const calls = opts.calls;
   const interaction = {
     commandName,
-    user: { id: "discord-thrower" },
+    user: { id: opts.userId ?? "discord-thrower" },
     options: {
       getSubcommand: () => subcommand ?? null,
       getString: () => null,
@@ -34,10 +41,12 @@ function fakeInteraction(path: string): {
       getBoolean: () => null,
       getUser: () => null,
     },
-    deferReply: async () => { deferred.push(true); },
-    editReply: async (payload: { content?: string; embeds?: unknown[] }) => { edits.push(payload); },
+    deferReply: async () => { calls?.push("deferReply"); deferred.push(true); },
+    editReply: async (payload: { content?: string; embeds?: unknown[] }) => { calls?.push("editReply"); edits.push(payload); },
+    reply: async (payload: { content?: string; embeds?: unknown[] }) => { calls?.push("reply"); edits.push(payload); },
+    showModal: async (modal: unknown) => { calls?.push("showModal"); modals.push(modal); },
   };
-  return { interaction, deferred, edits };
+  return { interaction, deferred, edits, modals };
 }
 
 describe("handleChatInput — Ruling 10", () => {
@@ -72,7 +81,7 @@ describe("handleChatInput — Ruling 10", () => {
  * needed. Edits (and replies, for the un-deferred modal-opener path) land in
  * `_edits`, read back by `runComponent`.
  */
-function fakeButton(customId: string, userId: string): Interaction {
+function fakeButton(customId: string, userId: string, calls?: string[]): Interaction {
   const edits: { content?: string; embeds?: unknown[]; components?: unknown[] }[] = [];
   const modals: unknown[] = [];
   const deferred: boolean[] = [];
@@ -86,10 +95,11 @@ function fakeButton(customId: string, userId: string): Interaction {
     isAutocomplete: () => false,
     isModalSubmit: () => false,
     values: [] as string[],
-    deferReply: async () => { deferred.push(true); },
-    reply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { edits.push(payload); },
-    editReply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { edits.push(payload); },
-    showModal: async (modal: unknown) => { modals.push(modal); },
+    deferReply: async () => { calls?.push("deferReply"); deferred.push(true); },
+    deferUpdate: async () => { calls?.push("deferUpdate"); deferred.push(true); },
+    reply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { calls?.push("reply"); edits.push(payload); },
+    editReply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { calls?.push("editReply"); edits.push(payload); },
+    showModal: async (modal: unknown) => { calls?.push("showModal"); modals.push(modal); },
     _edits: edits,
     _modals: modals,
     _deferred: deferred,
@@ -294,6 +304,73 @@ describe("MODAL_OPENERS", () => {
     } finally {
       if (previous === undefined) COMPONENTS.delete("found-name");
       else COMPONENTS.set("found-name", previous);
+    }
+  });
+});
+
+describe("a slash command that opens a modal", () => {
+  const OPENER_PATH = "t opener";
+
+  afterEach(() => {
+    SPECS.delete(OPENER_PATH);
+  });
+
+  it("shows the modal without deferring first", async () => {
+    // ⚠️ The whole point. Discord refuses showModal on an acknowledged
+    // interaction, so a deferReply here makes /vault add answer with
+    // nothing at all, forever, with no error a player can see.
+    const modal = new ModalBuilder().setCustomId("cw:m:x:111:").setTitle("t");
+    SPECS.set(OPENER_PATH, {
+      path: OPENER_PATH,
+      handler: async () => ({ modal, ephemeral: true as const }),
+      opensModal: true,
+    });
+    const calls: string[] = [];
+    const { interaction, deferred, modals } = fakeInteraction(OPENER_PATH, { userId: "111", calls });
+    await handleChatInput({} as Ctx, interaction as unknown as ChatInputCommandInteraction);
+    expect(calls).toEqual(["showModal"]);
+    expect(deferred).toEqual([]);
+    expect(modals).toEqual([modal]);
+  });
+
+  it("falls back to an ephemeral reply when the handler returns no modal", async () => {
+    SPECS.set(OPENER_PATH, {
+      path: OPENER_PATH,
+      handler: async () => ({ content: "nope", ephemeral: true as const }),
+      opensModal: true,
+    });
+    const calls: string[] = [];
+    const { interaction, edits } = fakeInteraction(OPENER_PATH, { userId: "111", calls });
+    await handleChatInput({} as Ctx, interaction as unknown as ChatInputCommandInteraction);
+    expect(calls).toEqual(["reply"]);
+    expect(edits[0]!.content).toBe("nope");
+  });
+});
+
+describe("a select menu that updates in place", () => {
+  it("acknowledges with deferUpdate so the card is edited, not duplicated", async () => {
+    const calls: string[] = [];
+    COMPONENTS.set("t-pick", async () => ({ content: "picked", ephemeral: true as const }));
+    UPDATERS.add("t-pick");
+    try {
+      const button = fakeButton(confirmId("t-pick", "111"), "111", calls);
+      await handleComponent({} as Ctx, button as unknown as MessageComponentInteraction);
+      expect(calls).toEqual(["deferUpdate", "editReply"]);
+    } finally {
+      COMPONENTS.delete("t-pick");
+      UPDATERS.delete("t-pick");
+    }
+  });
+
+  it("still defers a plain confirm button as a new ephemeral reply", async () => {
+    const calls: string[] = [];
+    COMPONENTS.set("t-press", async () => ({ content: "done", ephemeral: true as const }));
+    try {
+      const button = fakeButton(confirmId("t-press", "111"), "111", calls);
+      await handleComponent({} as Ctx, button as unknown as MessageComponentInteraction);
+      expect(calls).toEqual(["deferReply", "editReply"]);
+    } finally {
+      COMPONENTS.delete("t-press");
     }
   });
 });
