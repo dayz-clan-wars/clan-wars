@@ -15,6 +15,18 @@ import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
  */
 const copy = (key: string) => PIN_RESULT_COPY[key] ?? discordCopy("input", "bad-input");
 
+/**
+ * A missing or unparseable option is a BAD INPUT, not a pin outcome. Both
+ * paths below are unreachable through a real client — Discord enforces
+ * required options — but answering "That point is off the map" or "That pin
+ * is not yours to delete" for an option that never arrived would name a
+ * refusal that never happened, which is the same mistake P3 fixed in
+ * `copy`'s fallback. `/vault` says "Pick a lock from the list." for exactly
+ * this; these are its siblings.
+ */
+const PICK_A_PIN = "Pick a pin from the list.";
+const NEED_A_POINT = "Give an x, a z and an icon.";
+
 const pins: Handler = async (ctx, input) => {
   const state = await ctx.roster.mapState(input.actorDiscordId);
   if (state === "not-linked") return { content: copy("not-linked"), ephemeral: true };
@@ -25,7 +37,7 @@ const drop: Handler = async (ctx, input) => {
   const x = input.integer("x");
   const z = input.integer("z");
   const icon = input.string("icon");
-  if (x === null || z === null || !icon) return { content: copy("off-map"), ephemeral: true };
+  if (x === null || z === null || !icon) return { content: NEED_A_POINT, ephemeral: true };
   const note = input.string("note");
   const outcome = await ctx.roster.dropPin(input.actorDiscordId, { x, z, icon, note: note ?? null });
   return { content: outcome.ok ? copy("dropped") : copy(outcome.reason), ephemeral: true };
@@ -33,7 +45,7 @@ const drop: Handler = async (ctx, input) => {
 
 const unpin: Handler = async (ctx, input) => {
   const pinId = idOf(input.string("pin"));
-  if (pinId === null) return { content: copy("not-deleted"), ephemeral: true };
+  if (pinId === null) return { content: PICK_A_PIN, ephemeral: true };
   const { deleted } = await ctx.roster.deletePin(input.actorDiscordId, pinId);
   return { content: deleted ? copy("deleted") : copy("not-deleted"), ephemeral: true };
 };
@@ -41,6 +53,10 @@ const unpin: Handler = async (ctx, input) => {
 /**
  * R1: a command with subcommands has no bare form, so the pointer to the
  * picture lives here. Spec §2.2 — the map itself is site-only by design.
+ *
+ * The sentence is written here rather than in `@factions/copy` because it is
+ * not an outcome: nothing was attempted and nothing can refuse it. It is a
+ * signpost, the same category as `route.ts`'s `UNKNOWN`.
  */
 const view: Handler = async (ctx) =>
   ({ content: `The map is a picture — open it here: ${ctx.siteBaseUrl}/map`, ephemeral: true });
