@@ -30,7 +30,7 @@ const revoke: Handler = async (ctx, input) => {
   return { content: discordCopy("revoke-guest", await ctx.roster.revokeGuestPass(input.actorDiscordId, id)), ephemeral: true };
 };
 
-/** Officer+ only clans have any passes to show — `clanFor` answers a string for anyone else, so this offers nothing. */
+/** Guest passes are officer+ only info; `clanFor` answers a string for anyone else, so this offers nothing. */
 const passes: AutocompleteSource = async (ctx, a) => {
   const view = await ctx.roster.clanFor(a.actorDiscordId);
   if (typeof view === "string") return [];
