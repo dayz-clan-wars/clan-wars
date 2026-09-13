@@ -3,6 +3,7 @@ import type { ChatInputCommandInteraction, Interaction, MessageComponentInteract
 import { handleChatInput, handleComponent, handleModalSubmit, routeInteraction, UNKNOWN } from "../src/commands/route.js";
 import { GROUPS, SPECS, COMPONENTS, MODALS, MODAL_OPENERS } from "../src/commands/index.js";
 import { confirmId, modalId } from "../src/commands/confirm.js";
+import { putDraft, clearDraft } from "../src/commands/founding-draft.js";
 import type { ComponentHandler, Ctx, ModalHandler } from "../src/commands/types.js";
 
 /**
@@ -73,6 +74,8 @@ describe("handleChatInput — Ruling 10", () => {
  */
 function fakeButton(customId: string, userId: string): Interaction {
   const edits: { content?: string; embeds?: unknown[]; components?: unknown[] }[] = [];
+  const modals: unknown[] = [];
+  const deferred: boolean[] = [];
   const interaction = {
     customId,
     user: { id: userId },
@@ -83,10 +86,13 @@ function fakeButton(customId: string, userId: string): Interaction {
     isAutocomplete: () => false,
     isModalSubmit: () => false,
     values: [] as string[],
-    deferReply: async () => {},
+    deferReply: async () => { deferred.push(true); },
     reply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { edits.push(payload); },
     editReply: async (payload: { content?: string; embeds?: unknown[]; components?: unknown[] }) => { edits.push(payload); },
+    showModal: async (modal: unknown) => { modals.push(modal); },
     _edits: edits,
+    _modals: modals,
+    _deferred: deferred,
   };
   return interaction as unknown as Interaction;
 }
@@ -225,5 +231,28 @@ describe("MODAL_OPENERS", () => {
     expect(MODAL_OPENERS).toBeInstanceOf(Set);
     const expected = new Set(GROUPS.flatMap((g) => g.modalOpeners ?? []));
     expect(MODAL_OPENERS).toEqual(expected);
+  });
+
+  /**
+   * P4: `/found`'s "found-name" button is the first real modal opener, so it
+   * is the first thing that can prove the no-defer branch actually works.
+   * Discord refuses `showModal` on an interaction that has already been
+   * acknowledged — if `handleComponent` deferred before calling this
+   * handler, the button would be silently dead in production and no other
+   * test would catch it, since every fake here just resolves.
+   */
+  it("shows the modal a listed opener returns, without deferring first", async () => {
+    expect(MODAL_OPENERS.has("found-name")).toBe(true);
+    const now = new Date("2026-09-13T00:00:00Z");
+    putDraft("111", { ceremonyId: 9, texture: "Flag_Zenit", memberDayzIds: ["a"] }, now);
+    try {
+      const button = fakeButton(confirmId("found-name", "111"), "111");
+      await handleComponent({ now } as Ctx, button as unknown as MessageComponentInteraction);
+      const b = button as unknown as { _modals: unknown[]; _deferred: boolean[] };
+      expect(b._modals).toHaveLength(1);
+      expect(b._deferred).toEqual([]);
+    } finally {
+      clearDraft("111");
+    }
   });
 });
