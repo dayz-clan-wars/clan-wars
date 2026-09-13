@@ -3,6 +3,7 @@ import { RETIRED_COMMANDS, RETIRED_DESCRIPTION } from "../retired-commands.js";
 import { baseGroup } from "./base.js";
 import { linkGroup } from "./link.js";
 import { meGroup } from "./me.js";
+import { rosterGroup } from "./roster.js";
 import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "./types.js";
 
 /**
@@ -16,7 +17,7 @@ import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "
  * of plan 3, not before: a player who loses the stub before the real command
  * lands gets Discord's "unknown command" and no pointer at all.
  */
-export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup];
+export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup, rosterGroup];
 
 export const SPECS: Map<string, CommandSpec> = new Map(
   GROUPS.flatMap((g) => g.specs).map((s) => [s.path, s]),
