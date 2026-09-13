@@ -33,6 +33,9 @@ importers:
       '@factions/ceremony':
         specifier: workspace:*
         version: link:../../packages/ceremony
+      '@factions/copy':
+        specifier: workspace:*
+        version: link:../../packages/copy
       '@factions/db':
         specifier: workspace:*
         version: link:../../packages/db

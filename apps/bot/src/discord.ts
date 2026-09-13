@@ -1,7 +1,5 @@
 import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags, PermissionFlagsBits,
-  SlashCommandBuilder,
-  type RESTPostAPIApplicationCommandsJSONBody,
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { eq } from "drizzle-orm";
@@ -28,7 +26,7 @@ import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
-import { RETIRED_COMMANDS, RETIRED_DESCRIPTION, retiredReply } from "./retired-commands.js";
+import { retiredReply } from "./retired-commands.js";
 import { PgFeedStore, PgNoticeStore, PgWarLogStore, countUnposted, countUnpostedWarLog, noticeUserTx } from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
@@ -52,18 +50,12 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { handleGuestCommand } from "./guest-command.js";
+import { makeRoster } from "@factions/roster";
+import { routeInteraction } from "./commands/route.js";
+import type { Ctx } from "./commands/types.js";
+import { buildCommands } from "./commands/index.js";
 
-export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
-  return [
-    ...RETIRED_COMMANDS.map((name) =>
-      new SlashCommandBuilder().setName(name).setDescription(RETIRED_DESCRIPTION).toJSON()),
-    new SlashCommandBuilder()
-      .setName("guest")
-      .setDescription("Give someone a 24h voice guest pass")
-      .addUserOption((o) => o.setName("user").setDescription("Who").setRequired(true))
-      .toJSON(),
-  ];
-}
+export { buildCommands } from "./commands/index.js";
 
 export * from "./notify.js";
 
@@ -428,6 +420,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   const feedStore = new PgFeedStore(db);
   const noticeStore = new PgNoticeStore(db);
   const warLogStore = new PgWarLogStore(db);
+  // ⚠️ `now` on a long-lived Ctx would freeze at boot — build the context
+  // fresh per interaction instead.
+  const roster = makeRoster(() => db);
+  const ctxNow = (): Ctx => ({ roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -547,7 +543,8 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   client.on("interactionCreate", async (interaction) => {
     try {
-      if (interaction.isAutocomplete()) { await interaction.respond([]); return; }
+      if (await routeInteraction(ctxNow(), interaction)) return;
+
       if (interaction.isChatInputCommand() && interaction.commandName === "guest") {
         const reply = await handleGuestCommand(db, {
           channelId: interaction.channelId,

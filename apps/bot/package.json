@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@factions/ceremony": "workspace:*",
+    "@factions/copy": "workspace:*",
     "@factions/declarations": "workspace:*",
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
