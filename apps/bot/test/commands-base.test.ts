@@ -89,6 +89,19 @@ describe("/base", () => {
     expect(choices).toEqual([{ name: "5000, 5000", value: P1 }]);
   });
 
+  it("caps autocomplete choices at 25, Discord's limit", async () => {
+    await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
+    await db.insert(identityLinks).values({ discordId: D, dayzId: UID, gamertag: "Ada", verifiedAt: NOW });
+    for (let i = 0; i < 30; i++) {
+      const poleKey = `${(1000 + i).toFixed(2)}:100.00:1000.00`;
+      await pole(poleKey, 1000 + i, 1000);
+      await raise(UID, poleKey, 1000 + i, 1000, NOW);
+    }
+
+    const choices = await SPECS.get("base declare")!.autocomplete!.pole!(ctx, { actorDiscordId: D, value: "" });
+    expect(choices.length).toBe(25);
+  });
+
   it("never says faction", async () => {
     await db.insert(identityLinks).values({ discordId: D, dayzId: UID, gamertag: "Ada", verifiedAt: NOW });
     const reply = await SPECS.get("base show")!.handler(ctx, input(D));

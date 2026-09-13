@@ -30,6 +30,7 @@ const poles: AutocompleteSource = async (ctx, a) => {
   if (!view.linked) return [];
   return view.candidates
     .filter((c) => a.value.trim() === "" || c.poleKey.includes(a.value.trim()))
+    .slice(0, 25)
     .map((c) => ({ name: `${Math.round(c.x)}, ${Math.round(c.z)}`, value: c.poleKey }));
 };
 

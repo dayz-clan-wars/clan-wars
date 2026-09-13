@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { BaseView } from "@factions/roster";
-import { lapsedCopy } from "@factions/copy";
+import { DECLARE_COPY, lapsedCopy } from "@factions/copy";
 
 const GOLD = 0xc8a34a;
 
@@ -18,7 +18,7 @@ export function baseEmbed(view: BaseView, siteBaseUrl: string): EmbedBuilder {
     return embed.setDescription("Link your character first — run `/link start`.");
   }
   if (view.inClan) {
-    return embed.setDescription("You are in a clan, so your base is the clan's. Solo declarations are for players outside one.");
+    return embed.setDescription(DECLARE_COPY["in-clan"]);
   }
 
   if (view.declaration) {
