@@ -4,6 +4,7 @@ export { LEADERSHIP_TABLES, type LeadershipAction, CLAIM_REFUSAL } from "./leade
 export { DECLARE_COPY, RELEASE_COPY, DECLARED_OK, lapsedCopy } from "./base";
 export { ISSUE_COPY, ENDED_COPY, UNLINK_COPY, unlinkCopy, formatRemaining } from "./link";
 export { PIN_RESULT_COPY, PIN_ICON_LABELS } from "./map";
+export { EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "./scoring";
 export { days, hours, when } from "./format";
 export {
   discordCopy, discordVaultCopy, discordLeadershipCopy,

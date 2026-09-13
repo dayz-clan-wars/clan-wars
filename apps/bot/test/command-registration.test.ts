@@ -50,13 +50,27 @@ describe("command registration", () => {
   });
 
   it("names an autocomplete source for every option marked autocomplete", () => {
+    type Opt = { name: string; autocomplete?: boolean };
     for (const group of GROUPS) {
       const json = group.command.toJSON();
-      for (const sub of (json.options ?? []).filter((o) => o.type === 1)) {
-        for (const opt of ((sub as { options?: { name: string; autocomplete?: boolean }[] }).options ?? [])) {
+      const subs = (json.options ?? []).filter((o) => o.type === 1);
+      if (subs.length > 0) {
+        for (const sub of subs) {
+          for (const opt of ((sub as { options?: Opt[] }).options ?? [])) {
+            if (!opt.autocomplete) continue;
+            const spec = SPECS.get(`${json.name} ${sub.name}`);
+            expect(spec?.autocomplete?.[opt.name], `/${json.name} ${sub.name} ${opt.name} has no source`).toBeTypeOf("function");
+          }
+        }
+      } else {
+        // ⚠️ A bare command's own options sit directly on `json.options`,
+        // not nested under a subcommand (type 1) — `/warlog`'s `clan:` was
+        // the first of these to carry autocomplete, and the subcommand-only
+        // walk above never looked at it.
+        for (const opt of ((json.options ?? []) as Opt[])) {
           if (!opt.autocomplete) continue;
-          const spec = SPECS.get(`${json.name} ${sub.name}`);
-          expect(spec?.autocomplete?.[opt.name], `/${json.name} ${sub.name} ${opt.name} has no source`).toBeTypeOf("function");
+          const spec = SPECS.get(json.name);
+          expect(spec?.autocomplete?.[opt.name], `/${json.name} ${opt.name} has no source`).toBeTypeOf("function");
         }
       }
     }

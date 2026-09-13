@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { NO_ALPHAS_WEEK } from "@factions/copy";
 import { alphasGroup, scoreboardGroup, seasonsGroup, warlogGroup } from "../src/commands/scoring.js";
 import { ctxWith, input, sourceOf, specOf } from "./command-fakes.js";
 
@@ -42,6 +43,27 @@ describe("/alphas", () => {
     const reply = await specOf(alphasGroup, "alphas").handler(ctx, input());
     expect(reply.embeds![0]!.toJSON().description).toMatch(/No week has closed/u);
   });
+
+  // Regression: `alphasDb` emits one week object for every week from season
+  // start through `weekClosedThrough`, with `entries: []` where nobody
+  // scored — `closeWeeksTx` only inserts `alpha_weeks` rows for factions
+  // that placed. An empty-string field value used to reach Discord's API,
+  // which refuses the WHOLE embed on an empty `fields[n].value`
+  // (`HANDLER_FAILED`). A second, scoring week fixture proves the fix
+  // didn't just drop the empty week or otherwise disturb week order.
+  it("says nobody scored for a closed week with no entries, rather than an empty field", async () => {
+    const ctx = ctxWith({ alphas: async () => ({ season: { number: 3 }, weeks: [
+      { weekStart: new Date("2026-09-14T00:00:00Z"), entries: [] },
+      { weekStart: new Date("2026-09-07T00:00:00Z"), entries: [
+        { rank: 1, tag: "WLF", name: "Wolves", texture: "wolf", points: 30 },
+      ] },
+    ] }) });
+    const reply = await specOf(alphasGroup, "alphas").handler(ctx, input());
+    const fields = reply.embeds![0]!.toJSON().fields ?? [];
+    expect(fields.length).toBe(2);
+    for (const f of fields) expect(f.value.length).toBeGreaterThan(0);
+    expect(fields.map((f) => f.value)).toContain(NO_ALPHAS_WEEK);
+  });
 });
 
 describe("/seasons", () => {
@@ -75,12 +97,23 @@ describe("/warlog", () => {
     let got: unknown;
     const ctx = ctxWith({ warLog: async (_limit: number, filter: unknown) => { got = filter; return []; } });
     await specOf(warlogGroup, "warlog").handler(ctx, input({ clan: "WLF", kind: "raid" }));
-    expect(got).toEqual({ clanTag: "WLF", kind: "raid" });
+    // ⚠️ toStrictEqual, not toEqual — toEqual ignores keys whose value is
+    // `undefined`, so a filter object carrying a stray `kind: undefined`
+    // (an unnarrowed option that leaked through) would pass this
+    // assertion silently.
+    expect(got).toStrictEqual({ clanTag: "WLF", kind: "raid" });
+  });
+
+  it("passes an empty filter when no options are given, not undefined keys", async () => {
+    let got: unknown;
+    const ctx = ctxWith({ warLog: async (_limit: number, filter: unknown) => { got = filter; return []; } });
+    await specOf(warlogGroup, "warlog").handler(ctx, input());
+    expect(got).toStrictEqual({});
   });
 
   it("says the log is empty rather than rendering nothing", async () => {
     const reply = await specOf(warlogGroup, "warlog").handler(ctxWith({ warLog: async () => [] }), input());
-    expect(reply.embeds![0]!.toJSON().description).toMatch(/Nothing yet/u);
+    expect(reply.embeds![0]!.toJSON().description).toMatch(/No raids yet/u);
   });
 
   it("offers clans from the directory", async () => {
