@@ -171,10 +171,9 @@ turbo gate stays the gate, because it runs `typecheck` too.
   (`guild-removal.ts`) — not on a schedule — dropping a departed user's roster row,
   identity link, solo declaration and guest passes in one transaction, handing off
   leadership if they held it (ruling 10: no catch-up sweep for removals during
-  downtime). `/guest` is registered the same way every retired command is
-  (`Routes.applicationGuildCommands`), letting an officer or the leader give a 24h
-  voice guest pass from the clan's own text channel — since 2026-09-13 it is no
-  longer the only live slash command; see below.
+  downtime). `/guest grant`/`/guest revoke` are real commands now (`commands/guest.ts`)
+  — see below; the hand-written `handleGuestCommand` and its channel-bound `/guest user:`
+  form are gone as of plan 2.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -236,10 +235,16 @@ turbo gate stays the gate, because it runs `typecheck` too.
   form POSTs to `apps/web/app/api/**` (`lib/form.ts`; codes looked up in
   `lib/clan-copy.ts`). Since 2026-09-13 the slash commands are coming BACK, as a second
   front door onto the same `@factions/roster` calls the site makes — spec
-  `docs/superpowers/specs/2026-09-13-discord-command-parity-design.md`. Plan 1
-  ships `/link` and `/base`; `apps/bot/test/parity.test.ts` lists every write and
-  which plan carries it. The remaining stubs in `retired-commands.ts` still answer
-  with one line and a link and are deleted only when parity is complete.
+  `docs/superpowers/specs/2026-09-13-discord-command-parity-design.md`. Plan 1 shipped
+  `/link` and `/base`; plan 2 (`docs/deploy/2026-09-13-discord-commands-2.md`) lands the
+  other seven groups — `/me`, `/roster`, `/clan`, `/clans`, `/lead`, `/found`, `/guest` —
+  so the live command list is `/link /base /me /roster /clan /clans /lead /found /guest`.
+  `apps/bot/test/parity.test.ts` lists every write and which plan carries it: 27 are
+  shipped, 8 (the vault's locks and the map's pins) are pending in plan 3. `whoami` and
+  `faction` are the two retired stubs still standing with no real replacement — they
+  answer with one line and a link and are deleted only when parity is complete; the
+  bare `unlink` name also stays registered for a stale client's sake even though
+  `/link unlink` is already its real replacement (`retired-commands.ts`).
   ⚠️ Every command reply is ephemeral, always: `apps/bot/src/commands.ts` says why,
   and `command-registration.test.ts` enforces it. A page may never
   reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`
