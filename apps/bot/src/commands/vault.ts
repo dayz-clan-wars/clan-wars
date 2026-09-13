@@ -2,12 +2,12 @@ import {
   ActionRowBuilder, ModalBuilder, SlashCommandBuilder, TextInputBuilder, TextInputStyle,
 } from "discord.js";
 import { VAULT_CODE_DIGITS } from "@factions/domain";
-import { discordCopy, discordVaultCopy, REFUSAL } from "@factions/copy";
+import { discordCopy, discordVaultCopy, REFUSAL, revealedCopy, rotatedCopy } from "@factions/copy";
 import { VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/roster";
 import { vaultEmbed } from "./embeds/vault.js";
 import { idOf, roleOf } from "./parse.js";
-import { modalId } from "./confirm.js";
-import type { AutocompleteSource, CommandGroup, Handler, ModalHandler } from "./types.js";
+import { confirmReply, modalId } from "./confirm.js";
+import type { AutocompleteSource, CommandGroup, ComponentHandler, Handler, ModalHandler } from "./types.js";
 
 /**
  * ⚠️ `vaultFor` IS the permission check, on every subcommand that needs one:
@@ -128,6 +128,71 @@ const submitEdit: ModalHandler = async (ctx, a) => {
   return { content: discordVaultCopy("edit", outcome), ephemeral: true };
 };
 
+const PICK_A_LOCK = "Pick a lock from the list.";
+
+/**
+ * `/vault reveal`.
+ *
+ * ⚠️ The only place in `apps/bot` that holds a code. It goes into
+ * `Reply.content` and nowhere else — no embed, no log line, no custom id, no
+ * autocomplete label. The lock's name is read from `vaultFor` (which has
+ * already rank-filtered) purely so the sentence can name what was revealed;
+ * `revealLock` is still the permission check and can refuse after that read.
+ */
+const reveal: Handler = async (ctx, input) => {
+  const lockId = idOf(input.string("lock"));
+  if (lockId === null) return { content: PICK_A_LOCK, ephemeral: true };
+  const state = await ctx.roster.vaultFor(input.actorDiscordId);
+  if (typeof state === "string") return { content: REFUSAL[state], ephemeral: true };
+  const { outcome, code } = await ctx.roster.revealLock(input.actorDiscordId, lockId);
+  if (outcome !== "ok" || code === null) return { content: discordVaultCopy("reveal", outcome), ephemeral: true };
+  const name = state.locks.find((l) => l.id === lockId)?.name ?? "That lock";
+  return { content: revealedCopy(name, code), ephemeral: true };
+};
+
+const confirm: Handler = async (ctx, input) => {
+  const lockId = idOf(input.string("lock"));
+  if (lockId === null) return { content: PICK_A_LOCK, ephemeral: true };
+  return { content: discordVaultCopy("confirm", await ctx.roster.confirmLock(input.actorDiscordId, lockId)), ephemeral: true };
+};
+
+/** R2: the slash command writes nothing. The press is the write. */
+const del: Handler = async (_ctx, input) => {
+  const lockId = idOf(input.string("lock"));
+  if (lockId === null) return { content: PICK_A_LOCK, ephemeral: true };
+  return confirmReply("vault-del", input.actorDiscordId, discordVaultCopy("delete", "unconfirmed"), String(lockId));
+};
+
+const pressDelete: ComponentHandler = async (ctx, a) => {
+  const lockId = idOf(a.arg);
+  if (lockId === null) return { content: PICK_A_LOCK, ephemeral: true };
+  return { content: discordVaultCopy("delete", await ctx.roster.deleteLock(a.actorDiscordId, lockId)), ephemeral: true };
+};
+
+/** R2 and R3: a Confirm button, one lock or every lock, and never a chosen code. */
+const rotate: Handler = async (_ctx, input) => {
+  const raw = input.string("lock");
+  const target = raw === "all" ? "all" : idOf(raw);
+  if (target === null) return { content: PICK_A_LOCK, ephemeral: true };
+  return confirmReply("vault-rot", input.actorDiscordId, discordVaultCopy("rotate", "unconfirmed"), String(target));
+};
+
+const pressRotate: ComponentHandler = async (ctx, a) => {
+  const target = a.arg === "all" ? "all" : idOf(a.arg);
+  if (target === null) return { content: PICK_A_LOCK, ephemeral: true };
+  const { outcome, rotated } = await ctx.roster.rotateLocks(a.actorDiscordId, target);
+  if (outcome !== "ok") return { content: discordVaultCopy("rotate", outcome), ephemeral: true };
+  // ⚠️ P2: the count needs a sentence around it, and a sentence a player
+  // reads is copy — so it lives in `packages/copy`, not here.
+  return { content: rotatedCopy(rotated), ephemeral: true };
+};
+
+/** `/vault rotate`'s option: every lock the rank may see, plus "all". */
+export const locksOrAll: AutocompleteSource = async (ctx, a) => [
+  { name: "Every lock", value: "all" },
+  ...(await locks(ctx, a)),
+];
+
 export const vaultGroup: CommandGroup = {
   command: new SlashCommandBuilder()
     .setName("vault")
@@ -137,11 +202,24 @@ export const vaultGroup: CommandGroup = {
       .addStringOption((o) => o.setName("minrole").setDescription("Who may see the code").setRequired(true).addChoices(...MIN_ROLE_CHOICES)))
     .addSubcommand((s) => s.setName("edit").setDescription("Rename a lock or change who may see it")
       .addStringOption((o) => o.setName("lock").setDescription("Which lock").setRequired(true).setAutocomplete(true))
-      .addStringOption((o) => o.setName("minrole").setDescription("Who may see the code").setRequired(true).addChoices(...MIN_ROLE_CHOICES))),
+      .addStringOption((o) => o.setName("minrole").setDescription("Who may see the code").setRequired(true).addChoices(...MIN_ROLE_CHOICES)))
+    .addSubcommand((s) => s.setName("reveal").setDescription("Show a code — only to you")
+      .addStringOption((o) => o.setName("lock").setDescription("Which lock").setRequired(true).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName("confirm").setDescription("Say the new code is set on the lock in game")
+      .addStringOption((o) => o.setName("lock").setDescription("Which lock").setRequired(true).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName("delete").setDescription("Delete a lock")
+      .addStringOption((o) => o.setName("lock").setDescription("Which lock").setRequired(true).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName("rotate").setDescription("Give a lock a new code")
+      .addStringOption((o) => o.setName("lock").setDescription("Which lock, or every lock").setRequired(true).setAutocomplete(true))),
   specs: [
     { path: "vault list", handler: list },
     { path: "vault add", handler: add, opensModal: true },
     { path: "vault edit", handler: edit, opensModal: true, autocomplete: { lock: locks } },
+    { path: "vault reveal", handler: reveal, autocomplete: { lock: locks } },
+    { path: "vault confirm", handler: confirm, autocomplete: { lock: locks } },
+    { path: "vault delete", handler: del, autocomplete: { lock: locks } },
+    { path: "vault rotate", handler: rotate, autocomplete: { lock: locksOrAll } },
   ],
   modals: { "vault-add": submitAdd, "vault-edit": submitEdit },
+  components: { "vault-del": pressDelete, "vault-rot": pressRotate },
 };

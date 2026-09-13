@@ -1,5 +1,5 @@
 export { TABLES, type Action, REFUSAL, DISBAND_WARNING } from "./clan";
-export { VAULT_TABLES, type VaultAction, VAULT_INTRO } from "./vault";
+export { VAULT_TABLES, type VaultAction, VAULT_INTRO, revealedCopy, rotatedCopy } from "./vault";
 export { LEADERSHIP_TABLES, type LeadershipAction, CLAIM_REFUSAL } from "./leadership";
 export { DECLARE_COPY, RELEASE_COPY, DECLARED_OK, lapsedCopy } from "./base";
 export { ISSUE_COPY, ENDED_COPY, UNLINK_COPY, unlinkCopy, formatRemaining } from "./link";

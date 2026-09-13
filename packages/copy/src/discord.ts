@@ -30,7 +30,10 @@ export function discordCopy<A extends Action>(action: A, outcome: keyof (typeof 
 
 export const DISCORD_VAULT_OVERRIDES: {
   [A in VaultAction]?: Partial<Record<keyof (typeof VAULT_TABLES)[A] & string, string>>
-} = {};
+} = {
+  delete: { unconfirmed: "Press Confirm to delete this lock. Its code goes with it." },
+  rotate: { unconfirmed: "Press Confirm to rotate. Nothing changes in game until someone sets the new code on the lock." },
+};
 
 export function discordVaultCopy<A extends VaultAction>(action: A, outcome: keyof (typeof VAULT_TABLES)[A] & string): string {
   const over = (DISCORD_VAULT_OVERRIDES[action] as Record<string, string> | undefined)?.[outcome];

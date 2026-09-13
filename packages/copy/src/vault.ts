@@ -68,3 +68,23 @@ const REVEAL: Record<"ok" | "not-visible" | "gone" | ActorRefusal, string> = {
 };
 export const VAULT_TABLES = { add: ADD, edit: EDIT, delete: DELETE, rotate: ROTATE, confirm: CONFIRM, reveal: REVEAL, input: INPUT } as const;
 export type VaultAction = keyof typeof VAULT_TABLES;
+
+/**
+ * What `/vault reveal` answers with on `ok`. The site's reveal button gets
+ * the raw code as JSON and paints it behind a tap; Discord has no tap, so
+ * the sentence carries the warning instead.
+ *
+ * ⚠️ A code appears in exactly two places in this codebase: the
+ * `vault_locks` row, and the string this function returns. Do not log it, do
+ * not put it in a custom id, do not interpolate it into an embed.
+ */
+export const revealedCopy = (lockName: string, code: string) =>
+  `**${lockName}** — \`${code}\`. Only you can see this message; do not paste it anywhere else.`;
+
+/**
+ * What a rotate answers with once it has landed. The count is the part the
+ * `ROTATE.ok` table string cannot carry, and it is the part that tells a
+ * leader whether "all" did what they meant.
+ */
+export const rotatedCopy = (n: number) =>
+  `${n} lock${n === 1 ? "" : "s"} rotated. ${ROTATE.ok}`;

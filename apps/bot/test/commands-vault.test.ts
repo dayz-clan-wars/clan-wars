@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { VAULT_INTRO } from "@factions/copy";
 import { locks, vaultGroup } from "../src/commands/vault.js";
-import { modalId } from "../src/commands/confirm.js";
-import { ctxWith, input, specOf } from "./command-fakes.js";
+import { confirmId, modalId } from "../src/commands/confirm.js";
+import { ctxWith, input, specOf, componentOf } from "./command-fakes.js";
 import type { VaultLockView, VaultState } from "@factions/roster";
 
 const lock = (over: Partial<VaultLockView> = {}): VaultLockView => ({
@@ -159,5 +159,95 @@ describe("/vault edit", () => {
       actorDiscordId: "111", arg: "4.emperor", field: () => "x",
     });
     expect(reply.content).toMatch(/missing or too long/u);
+  });
+});
+
+describe("/vault reveal", () => {
+  it("hands back the code, and nothing else does", async () => {
+    const ctx = ctxWith({
+      vaultFor: async () => state({ locks: [lock({ id: 4, name: "Front gate" })] }),
+      revealLock: async () => ({ outcome: "ok", code: "9182" }),
+    });
+    const reply = await specOf(vaultGroup, "vault reveal").handler(ctx, input({ lock: "4" }));
+    expect(reply.content).toContain("9182");
+    expect(reply.embeds).toBeUndefined();
+    expect(reply.components).toBeUndefined();
+    expect(reply.ephemeral).toBe(true);
+  });
+
+  it("says why, without a code, when the rank is too low", async () => {
+    const ctx = ctxWith({
+      vaultFor: async () => state({ locks: [lock({ id: 4 })] }),
+      revealLock: async () => ({ outcome: "not-visible", code: null }),
+    });
+    const reply = await specOf(vaultGroup, "vault reveal").handler(ctx, input({ lock: "4" }));
+    expect(reply.content).toBe("That lock is above your rank.");
+  });
+
+  it("passes a refusal through", async () => {
+    const ctx = ctxWith({ vaultFor: async () => state(), revealLock: async () => ({ outcome: "not-in-clan", code: null }) });
+    const reply = await specOf(vaultGroup, "vault reveal").handler(ctx, input({ lock: "4" }));
+    expect(reply.content).toBe("You are not in a clan.");
+  });
+});
+
+describe("/vault confirm", () => {
+  it("confirms the lock the option named", async () => {
+    let got: number | undefined;
+    const ctx = ctxWith({ confirmLock: async (_id: string, lockId: number) => { got = lockId; return "ok"; } });
+    const reply = await specOf(vaultGroup, "vault confirm").handler(ctx, input({ lock: "4" }));
+    expect(got).toBe(4);
+    expect(reply.content).toMatch(/no longer flags this lock/u);
+  });
+
+  it("asks for a lock rather than guessing", async () => {
+    const ctx = ctxWith({ confirmLock: async () => { throw new Error("must not be called"); } });
+    const reply = await specOf(vaultGroup, "vault confirm").handler(ctx, input());
+    expect(reply.content).toMatch(/Pick a lock/u);
+  });
+});
+
+describe("/vault delete", () => {
+  it("writes nothing and offers a Confirm button", async () => {
+    const ctx = ctxWith({ deleteLock: async () => { throw new Error("must not be called before the press"); } });
+    const reply = await specOf(vaultGroup, "vault delete").handler(ctx, input({ lock: "4" }));
+    expect(reply.content).toMatch(/Press Confirm/u);
+    expect((reply.components![0]!.toJSON().components[0]! as { custom_id: string }).custom_id).toBe(confirmId("vault-del", "111", "4"));
+  });
+
+  it("deletes on the press, and the press is the write", async () => {
+    let got: number | undefined;
+    const ctx = ctxWith({ deleteLock: async (_id: string, lockId: number) => { got = lockId; return "ok"; } });
+    const reply = await componentOf(vaultGroup, "vault-del")(ctx, { actorDiscordId: "111", arg: "4", values: [] });
+    expect(got).toBe(4);
+    expect(reply.content).toBe("Deleted.");
+  });
+});
+
+describe("/vault rotate", () => {
+  it("offers Confirm for one lock and for every lock", async () => {
+    const ctx = ctxWith({});
+    const one = await specOf(vaultGroup, "vault rotate").handler(ctx, input({ lock: "4" }));
+    expect((one.components![0]!.toJSON().components[0]! as { custom_id: string }).custom_id).toBe(confirmId("vault-rot", "111", "4"));
+    const all = await specOf(vaultGroup, "vault rotate").handler(ctx, input({ lock: "all" }));
+    expect((all.components![0]!.toJSON().components[0]! as { custom_id: string }).custom_id).toBe(confirmId("vault-rot", "111", "all"));
+  });
+
+  it("rotates every lock when the arg says all, and says how many", async () => {
+    let got: unknown;
+    const ctx = ctxWith({ rotateLocks: async (_id: string, l: unknown) => { got = l; return { outcome: "ok", rotated: 3 }; } });
+    const reply = await componentOf(vaultGroup, "vault-rot")(ctx, { actorDiscordId: "111", arg: "all", values: [] });
+    expect(got).toBe("all");
+    expect(reply.content).toContain("3");
+  });
+
+  /** ⚠️ R3: there is no chosen-code path on either surface. A rotate never carries a code in or out. */
+  it("never accepts or returns a code", async () => {
+    const sub = vaultGroup.command.toJSON().options!.find((o) => o.name === "rotate")!;
+    const opts = (sub as { options?: { name: string }[] }).options ?? [];
+    expect(opts.map((o) => o.name)).toEqual(["lock"]);
+    const ctx = ctxWith({ rotateLocks: async () => ({ outcome: "ok", rotated: 1 }) });
+    const reply = await componentOf(vaultGroup, "vault-rot")(ctx, { actorDiscordId: "111", arg: "4", values: [] });
+    expect(reply.content).not.toMatch(/\d{4}/u);
   });
 });

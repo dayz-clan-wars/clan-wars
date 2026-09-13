@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   TABLES, VAULT_TABLES, LEADERSHIP_TABLES,
   DISCORD_OVERRIDES, DISCORD_VAULT_OVERRIDES, DISCORD_LEADERSHIP_OVERRIDES,
-  discordCopy,
+  discordCopy, discordVaultCopy, revealedCopy,
 } from "../src/index";
 
 /**
@@ -76,5 +76,27 @@ describe("copy tables", () => {
   it("prefers the override when there is one", () => {
     expect(discordCopy("disband", "unconfirmed")).toBe("Press Confirm to disband — this cannot be undone.");
     expect(discordCopy("disband", "unconfirmed")).not.toBe(TABLES.disband.unconfirmed);
+  });
+});
+
+describe("the vault's Discord wording", () => {
+  it("asks for a button press, not a checkbox", () => {
+    for (const action of ["delete", "rotate"] as const) {
+      expect(discordVaultCopy(action, "unconfirmed")).toMatch(/Press Confirm/u);
+      expect(discordVaultCopy(action, "unconfirmed")).not.toMatch(/tick|box/iu);
+    }
+  });
+
+  /**
+   * ⚠️ The revealed code is the one string in this package that carries a
+   * secret. It exists here, rather than in apps/bot, for the same reason
+   * every other sentence does — but it must stay a pure function of its two
+   * arguments, with nothing logged and nothing cached.
+   */
+  it("names the lock beside the code, and says the code is not to be shared", () => {
+    const line = revealedCopy("Front gate", "1234");
+    expect(line).toContain("Front gate");
+    expect(line).toContain("1234");
+    expect(line).toMatch(/only you/iu);
   });
 });
