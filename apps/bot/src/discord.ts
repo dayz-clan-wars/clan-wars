@@ -1138,7 +1138,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, armbands: cfg.armbands });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1182,12 +1182,6 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.restartSchedule) console.warn("RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule.");
     else console.log("scheduled restarts on: every even UTC hour");
-
-    // ⚠️ Same reason as the wipe below: init.c is a file nobody watches, so say on
-    // every boot which way this is set rather than leaving "off" and "broken"
-    // indistinguishable in the journal.
-    if (!cfg.armbands) console.warn("CLAN_ARMBANDS is off: clan spawn armbands are not being written to init.c.");
-    else console.log("clan armbands on: init.c is rewritten from the roster before each restart.");
 
     // ⚠️ The wipe writes to a file nobody watches, so "off" and "broken" look identical
     // from the journal. Name the events and the window, so a wrong one is visible here
