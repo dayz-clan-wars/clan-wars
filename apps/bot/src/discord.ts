@@ -37,7 +37,10 @@ import { raiseTick } from "./raise-tick.js";
 import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
+import { PgHitFeedStore, hitFeedTick } from "./hit-feed-tick.js";
 import { PgKillFeedStore, killFeedTick } from "./kill-feed-tick.js";
+import { PgKillstreakFeedStore, killstreakFeedTick } from "./killstreak-feed-tick.js";
+import { PgLongRangeFeedStore, longRangeFeedTick } from "./long-range-feed-tick.js";
 import { PgOnlineStore, onlineTick, type OnlineBoard, type OnlineState } from "./online-tick.js";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
@@ -452,6 +455,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   // The same embed poster the feed uses, aimed at #kill-feed.
   const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
   const killFeedStore = new PgKillFeedStore(db);
+  const hitFeedPoster = cfg.hitFeedChannelId ? createFeedPoster(client, cfg.hitFeedChannelId) : null;
+  const hitFeedStore = new PgHitFeedStore(db, { windowS: cfg.hitBurstWindowS });
+  const killstreakFeedPoster = cfg.killstreakFeedChannelId ? createFeedPoster(client, cfg.killstreakFeedChannelId) : null;
+  const killstreakFeedStore = new PgKillstreakFeedStore(db);
+  const longRangeFeedPoster = cfg.longRangeFeedChannelId ? createFeedPoster(client, cfg.longRangeFeedChannelId) : null;
+  const longRangeFeedStore = new PgLongRangeFeedStore(db, { minM: cfg.longRangeMinM });
   const onlineBoard = cfg.playersOnlineChannelId ? createOnlineBoard(client, cfg.playersOnlineChannelId) : null;
   const onlineStore = new PgOnlineStore(db);
   const onlineState: OnlineState = { lastKey: null };
@@ -610,6 +619,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   let lastReportedWarLogBlockedAt: number | null = null;
   const killFeedFailures = new Set<number>();
   let lastReportedKillFeedBlockedAt: number | null = null;
+  const hitFeedFailures = new Set<number>();
+  const killstreakFeedFailures = new Set<number>();
+  const longRangeFeedFailures = new Set<number>();
+  let lastReportedHitFeedBlockedAt: number | null = null;
+  let lastReportedKillstreakFeedBlockedAt: number | null = null;
+  let lastReportedLongRangeFeedBlockedAt: number | null = null;
   // Same purpose as feedFailures: from Sunday 08:00 to the Monday cutoff this tick
   // retries every interval, and an identical error every 10 seconds forever is how a
   // real problem becomes invisible. Keyed on wipeAt.getTime() so next week's
@@ -1013,6 +1028,85 @@ export async function start(cfg: BotConfig): Promise<void> {
         }
       } catch (err) {
         console.error("kill feed tick failed", err);
+      }
+    }
+
+    // ⚠️ After killFeedTick: #hit-feed suppresses engagements a kill claimed,
+    // and reads the kills-projector cursor to decide what is safe to close.
+    if (hitFeedPoster) {
+      try {
+        const r = await hitFeedTick(hitFeedStore, hitFeedPoster, {
+          siteBaseUrl: cfg.siteBaseUrl,
+          flagImage: flagImageResolver(cfg.flagImageBaseUrl),
+          onError: (id, err) => {
+            if (hitFeedFailures.has(id)) return;
+            hitFeedFailures.add(id);
+            console.error(`hit feed post failed for engagement ending at event ${id}`, err);
+          },
+        });
+        if (r.seeded) console.log("hit feed: cursor seeded at the head; history is not posted");
+        if (r.posted > 0) console.log(`hit feed posted ${r.posted}`);
+        if (r.blockedAt !== null && r.blockedAt !== lastReportedHitFeedBlockedAt) {
+          console.error(
+            `hit feed blocked at event ${r.blockedAt}; nothing behind it will post ` +
+            `until this one succeeds. Check the bot's View Channel / Send Messages / Embed Links permission on ${cfg.hitFeedChannelId}.`,
+          );
+          lastReportedHitFeedBlockedAt = r.blockedAt;
+        }
+      } catch (err) {
+        console.error("hit feed tick failed", err);
+      }
+    }
+
+    if (killstreakFeedPoster) {
+      try {
+        const r = await killstreakFeedTick(killstreakFeedStore, killstreakFeedPoster, {
+          siteBaseUrl: cfg.siteBaseUrl,
+          every: cfg.killstreakEvery,
+          flagImage: flagImageResolver(cfg.flagImageBaseUrl),
+          onError: (id, err) => {
+            if (killstreakFeedFailures.has(id)) return;
+            killstreakFeedFailures.add(id);
+            console.error(`killstreak feed post failed for kill event ${id}`, err);
+          },
+        });
+        if (r.seeded) console.log("killstreak feed: cursor seeded at the head; history is not posted");
+        if (r.posted > 0) console.log(`killstreak feed posted ${r.posted}`);
+        if (r.blockedAt !== null && r.blockedAt !== lastReportedKillstreakFeedBlockedAt) {
+          console.error(
+            `killstreak feed blocked at kill event ${r.blockedAt}; nothing behind it will post ` +
+            `until this one succeeds. Check the bot's View Channel / Send Messages / Embed Links permission on ${cfg.killstreakFeedChannelId}.`,
+          );
+          lastReportedKillstreakFeedBlockedAt = r.blockedAt;
+        }
+      } catch (err) {
+        console.error("killstreak feed tick failed", err);
+      }
+    }
+
+    if (longRangeFeedPoster) {
+      try {
+        const r = await longRangeFeedTick(longRangeFeedStore, longRangeFeedPoster, {
+          siteBaseUrl: cfg.siteBaseUrl,
+          minM: cfg.longRangeMinM,
+          flagImage: flagImageResolver(cfg.flagImageBaseUrl),
+          onError: (id, err) => {
+            if (longRangeFeedFailures.has(id)) return;
+            longRangeFeedFailures.add(id);
+            console.error(`long range feed post failed for kill event ${id}`, err);
+          },
+        });
+        if (r.seeded) console.log("long range feed: cursor seeded at the head; history is not posted");
+        if (r.posted > 0) console.log(`long range feed posted ${r.posted}`);
+        if (r.blockedAt !== null && r.blockedAt !== lastReportedLongRangeFeedBlockedAt) {
+          console.error(
+            `long range feed blocked at kill event ${r.blockedAt}; nothing behind it will post ` +
+            `until this one succeeds. Check the bot's View Channel / Send Messages / Embed Links permission on ${cfg.longRangeFeedChannelId}.`,
+          );
+          lastReportedLongRangeFeedBlockedAt = r.blockedAt;
+        }
+      } catch (err) {
+        console.error("long range feed tick failed", err);
       }
     }
 

@@ -358,9 +358,11 @@ poster that replays it announces last month to a public channel.
 
 ## Files
 
-No migration, for any of the three. `events` already carries every hit payload, `kills`
-already carries distance and friendly fire, and the cursors live in the existing
-`consumer_cursors` table.
+One migration, `0034`, and it is index-only: `events` already carries every hit payload,
+`kills` already carries distance and friendly fire, and the cursors live in the existing
+`consumer_cursors` table. `0034` adds `events_hit_id_idx` (partial, `id` where
+`type = 'player.hit'`) and `events_occurred_idx` (plain, on `occurred_at`), both needed by
+the hit feed's `readAfter`/`frontier` queries — see `hit-feed-tick.ts`.
 
 | File | Change |
 |---|---|

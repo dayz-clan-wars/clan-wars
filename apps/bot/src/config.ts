@@ -1,5 +1,7 @@
-import { WEEKLY_WIPE_VEHICLES } from "@factions/domain";
+import { DEFAULT_HIT_BURST_WINDOW_S, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
+import { DEFAULT_KILLSTREAK_EVERY } from "./killstreak-feed-tick.js";
+import { DEFAULT_LONG_RANGE_MIN_M } from "./long-range-feed-tick.js";
 
 export type BotConfig = {
   token: string;
@@ -29,6 +31,18 @@ export type BotConfig = {
   warLogChannelId: string | undefined;
   /** #kill-feed. Optional: the kill feed is off unless deliberately turned on. */
   killFeedChannelId?: string;
+  /** #hit-feed. Optional: the hit feed is off unless deliberately turned on. */
+  hitFeedChannelId?: string;
+  /** #killstreaks. Optional, off unless set. */
+  killstreakFeedChannelId?: string;
+  /** #long-range. Optional, off unless set. */
+  longRangeFeedChannelId?: string;
+  /** The quiet gap that closes a hit engagement. ⚠️ The 120s settle floor still binds below this. */
+  hitBurstWindowS: number;
+  /** Post on every Nth kill of a streak. */
+  killstreakEvery: number;
+  /** Minimum distance, in metres, for #long-range. */
+  longRangeMinM: number;
   /** #players-online: one message the bot keeps edited. Optional. */
   playersOnlineChannelId?: string;
   /**
@@ -231,6 +245,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
     warLogChannelId: optionalSnowflake(env, "WAR_LOG_CHANNEL_ID"),
     killFeedChannelId: optionalSnowflake(env, "KILL_FEED_CHANNEL_ID"),
+    hitFeedChannelId: optionalSnowflake(env, "HIT_FEED_CHANNEL_ID"),
+    killstreakFeedChannelId: optionalSnowflake(env, "KILLSTREAK_FEED_CHANNEL_ID"),
+    longRangeFeedChannelId: optionalSnowflake(env, "LONG_RANGE_FEED_CHANNEL_ID"),
+    hitBurstWindowS: positiveInt(env, "HIT_BURST_WINDOW_S", DEFAULT_HIT_BURST_WINDOW_S),
+    killstreakEvery: positiveInt(env, "KILLSTREAK_EVERY", DEFAULT_KILLSTREAK_EVERY),
+    longRangeMinM: positiveInt(env, "LONG_RANGE_MIN_M", DEFAULT_LONG_RANGE_MIN_M),
     playersOnlineChannelId: optionalSnowflake(env, "PLAYERS_ONLINE_CHANNEL_ID"),
     flagImageBaseUrl: optionalHttpUrl(env, "FLAG_IMAGE_BASE_URL"),
     // ⚠️ Stripped of any trailing slash here, unlike FLAG_IMAGE_BASE_URL just
