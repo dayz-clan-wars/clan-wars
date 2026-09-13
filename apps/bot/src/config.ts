@@ -91,6 +91,8 @@ export type BotConfig = {
   achievementsTick: boolean;
   /** Restart every active server on even UTC hours through Nitrado (spec 2026-09-12). Off by default. */
   restartSchedule: boolean;
+  /** Per-clan spawn armbands, written into init.c on each restart slot. */
+  armbands: boolean;
   /** Truck wipe. `events` empty means off; the window is only meaningful when it is not. */
   truckWipe: { events: string[]; offHour: number; onHour: number; rotation: boolean };
   /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
@@ -269,6 +271,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),
     achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
     restartSchedule: ["1", "true"].includes((env.RESTART_SCHEDULE ?? "").toLowerCase()),
+    armbands: ["1", "true"].includes((env.CLAN_ARMBANDS ?? "").toLowerCase()),
     nitradoToken: env.NITRADO_TOKEN?.trim() || undefined,
     truckWipe: {
       events: (env.TRUCK_WIPE_EVENTS ?? "").split(",").map((e) => e.trim()).filter((e) => e !== ""),
@@ -290,6 +293,14 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if ((config.truckWipe.events.length > 0 || config.truckWipe.rotation) && !config.restartSchedule) {
     throw new Error("TRUCK_WIPE_EVENTS or WEEKLY_VEHICLE_WIPE is set but RESTART_SCHEDULE is off — both run on the restart slots, so nothing would ever fire them.");
   }
+
+  // ⚠️ Same reason as the truck wipe above: armbands ride the restart slots too,
+  // so without the schedule nothing would ever write init.c and the feature
+  // would be silently off.
+  if (config.armbands && !config.restartSchedule) {
+    throw new Error("CLAN_ARMBANDS is on but RESTART_SCHEDULE is off — armbands are written on the restart slots, so nothing would ever fire them.");
+  }
+
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.
   if (config.truckWipe.offHour === config.truckWipe.onHour) {

@@ -31,6 +31,7 @@ in-game verification tick confirms it.
 | `TRUCK_WIPE_OFF_HOUR` | no (default `8`) | UTC hour the events go `<active>0</active>`. Must be an even hour — odd hours are never restart slots. A present-but-blank value is refused rather than coerced to 0. |
 | `TRUCK_WIPE_ON_HOUR` | no (default `10`) | UTC hour they go back to `<active>1</active>`. Same rules. A window whose end is before its start wraps past midnight. |
 | `WEEKLY_VEHICLE_WIPE` | no (default off; `"1"`/`"true"` = on) | Wipe one of five vehicles each Monday, rotating weekly: Olga → Gunter → Hummer → Ada → Sarka. Uses the same window as `TRUCK_WIPE_OFF_HOUR`/`ON_HOUR`. Requires `RESTART_SCHEDULE`; independent of `TRUCK_WIPE_EVENTS`. Runbook `docs/deploy/2026-09-12-weekly-vehicle-rotation.md`. |
+| `CLAN_ARMBANDS` | no (default off; `"1"`/`"true"` = on) | Give every full clan member their clan's armband on a fresh spawn. The bot renders the whole of `init.c` from the roster and uploads it to the mission ROOT before each restart slot. Requires `RESTART_SCHEDULE`; config load fails without it, since the write only ever happens on a slot. ⚠️ The bot becomes the sole writer of `init.c` — the `livonia` repo excludes it from its FTP deploy. Runbook `docs/deploy/2026-09-12-clan-armbands.md`. |
 | `ANNOUNCEMENTS_CHANNEL_ID` | no (default unset = silent) | Channel for the Sunday 24h-ahead notice naming the coming week's vehicle. Unset means the wipe still happens with no announcement; startup says so. |
 
 Example `.env` (placeholders only — never commit real values):

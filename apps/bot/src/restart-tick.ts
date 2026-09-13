@@ -2,6 +2,8 @@ import { serverRestarts, servers, type Database } from "@factions/db";
 import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
 import { and, eq, isNotNull } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
+import { renderInitC } from "./init-c.js";
+import { armbandAssignments } from "./armband-roster.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -9,6 +11,8 @@ export type RestartTarget = {
   restart(message: string): Promise<void>;
   /** Only reached when a truck wipe is configured. */
   missionDbDir(): Promise<string>;
+  /** Only reached when armbands are enabled. init.c sits in the mission ROOT. */
+  missionDir(): Promise<string>;
   downloadFile(path: string): Promise<string>;
   uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
 };
@@ -54,6 +58,31 @@ async function applyTruckWipe(nitrado: RestartTarget, wipe: TruckWipe, slot: Dat
   await nitrado.uploadFile(dir, EVENTS_FILE, xml);
   return true;
 }
+/** The mission script, in the mission ROOT — not `db`, not `custom`. */
+const INIT_FILE = "init.c";
+
+/**
+ * Bring one server's init.c to the clan roster's current state, immediately
+ * before its restart. Returns true when a write actually went out.
+ *
+ * ⚠️ BEFORE the restart, for the same reason as the truck wipe: DayZ compiles
+ * init.c at boot, so a write afterwards is invisible for another two hours.
+ *
+ * ⚠️ Level-triggered, like the wipe. Every slot re-renders the whole file from
+ * the roster, so a lost write, a hand-edit, or a Release that shipped an old
+ * init.c all self-heal at the next restart. The download is the check and always
+ * happens; the upload only on an actual difference.
+ */
+async function applyArmbands(nitrado: RestartTarget, db: Database, serverId: number): Promise<boolean> {
+  const wanted = renderInitC(await armbandAssignments(db, serverId));
+  const dir = await nitrado.missionDir();
+  const current = await nitrado.downloadFile(`${dir}/${INIT_FILE}`);
+  if (current === wanted) return false;
+
+  await nitrado.uploadFile(dir, INIT_FILE, wanted);
+  return true;
+}
+
 export const RESTART_MESSAGE = "Scheduled restart";
 
 type Outcome = "restarted" | "skipped" | "missed";
@@ -95,7 +124,7 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
 export async function restartTick(
   db: Database,
   nitradoFor: (serviceId: number) => RestartTarget,
-  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe },
+  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; armbands?: boolean },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
   const lastError = opts.lastError ?? moduleLastError;
@@ -148,6 +177,18 @@ export async function restartTick(
           if (wrote) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);
         } catch (err) {
           console.error(`restart: server ${s.id} truck wipe failed for slot ${slot.start.toISOString()} — restarting anyway`, err);
+        }
+      }
+
+      // ⚠️ Its own try/catch, same rule as the wipe above: players rely on the
+      // two-hour cadence and the next slot re-renders the file anyway, so a
+      // roster read or a Nitrado hiccup must never cost the restart.
+      if (opts.armbands) {
+        try {
+          const wrote = await applyArmbands(nitrado, db, s.id);
+          if (wrote) console.log(`restart: server ${s.id} wrote init.c for ${slot.start.toISOString()}`);
+        } catch (err) {
+          console.error(`restart: server ${s.id} armbands failed for slot ${slot.start.toISOString()} — restarting anyway`, err);
         }
       }
 
