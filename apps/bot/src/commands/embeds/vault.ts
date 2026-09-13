@@ -36,7 +36,7 @@ export function vaultEmbed(state: VaultState, siteBaseUrl: string): EmbedBuilder
     // ⚠️ `list()` returns early on zero lines, so without this an empty
     // vault would render a blank card — no "0 locks", no sentence at all.
     // A player should be told plainly that there is nothing here yet.
-    b.field(embed, "Locks", "No locks yet — add one on the site.");
+    b.field(embed, "Locks", "No locks yet. Add one with `/vault add`.");
   } else {
     b.list(embed, `${state.locks.length} lock${state.locks.length === 1 ? "" : "s"}`,
       state.locks.map(lockLine), (n) => `+${n} more — see the site.`);
