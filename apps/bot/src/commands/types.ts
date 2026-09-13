@@ -4,6 +4,7 @@ import type {
   EmbedBuilder,
   ModalBuilder,
   SlashCommandBuilder,
+  SlashCommandOptionsOnlyBuilder,
   SlashCommandSubcommandsOnlyBuilder,
   StringSelectMenuBuilder,
 } from "discord.js";
@@ -96,7 +97,7 @@ export type CommandSpec = {
 };
 
 export type CommandGroup = {
-  command: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder;
+  command: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder | SlashCommandOptionsOnlyBuilder;
   specs: CommandSpec[];
   /**
    * Keyed by the action segment of a `cw:c:<action>:…` id. `route.ts` is the
