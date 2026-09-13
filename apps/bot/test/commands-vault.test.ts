@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { VAULT_INTRO } from "@factions/copy";
 import { locks, vaultGroup } from "../src/commands/vault.js";
+import { modalId } from "../src/commands/confirm.js";
 import { ctxWith, input, specOf } from "./command-fakes.js";
 import type { VaultLockView, VaultState } from "@factions/roster";
 
@@ -69,5 +70,94 @@ describe("/vault lock autocomplete", () => {
   it("offers nothing rather than throwing when the actor cannot see a vault", async () => {
     const ctx = ctxWith({ vaultFor: async () => "not-in-clan" });
     expect(await locks(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
+  });
+});
+
+describe("/vault add", () => {
+  it("opens a modal and never puts the code on the command line", async () => {
+    const reply = await specOf(vaultGroup, "vault add").handler(ctxWith({}), input({ minrole: "officer" }));
+    const j = reply.modal!.toJSON();
+    expect(j.custom_id).toBe(modalId("vault-add", "111", "officer"));
+    const rows = j.components as unknown as { components: { custom_id?: string }[] }[];
+    const ids = rows.flatMap((r) => r.components.map((c) => c.custom_id));
+    expect(ids).toEqual(["name", "note", "code"]);
+    // ⚠️ The option list must not carry a `code` — a slash option is visible
+    // while typed and persists in Discord's client-side command history.
+    const sub = vaultGroup.command.toJSON().options!.find((o) => o.name === "add")!;
+    const opts = (sub as { options?: { name: string }[] }).options ?? [];
+    expect(opts.map((o) => o.name)).toEqual(["minrole"]);
+  });
+
+  it("refuses a minrole that is not a role, in the shared words", async () => {
+    const reply = await specOf(vaultGroup, "vault add").handler(ctxWith({}), input({ minrole: "emperor" }));
+    expect(reply.modal).toBeUndefined();
+    expect(reply.content).toMatch(/missing or too long/u);
+  });
+
+  it("adds the lock the modal described, and answers with the table's words", async () => {
+    let got: unknown;
+    const ctx = ctxWith({ addLock: async (_id: string, a: unknown) => { got = a; return { outcome: "ok", lockId: 7 }; } });
+    const reply = await vaultGroup.modals!["vault-add"]!(ctx, {
+      actorDiscordId: "111", arg: "officer",
+      field: (n) => ({ name: "Front gate", note: "the big one", code: "1234" })[n] ?? "",
+    });
+    expect(got).toEqual({ name: "Front gate", note: "the big one", minRole: "officer", code: "1234" });
+    expect(reply.content).toBe("Lock added.");
+  });
+
+  it("leaves the code undefined when the field was left blank, so one is generated", async () => {
+    let got: { code?: string } | undefined;
+    const ctx = ctxWith({ addLock: async (_id: string, a: { code?: string }) => { got = a; return { outcome: "ok", lockId: 7 }; } });
+    await vaultGroup.modals!["vault-add"]!(ctx, {
+      actorDiscordId: "111", arg: "member",
+      field: (n) => ({ name: "Shed", note: "", code: "  " })[n] ?? "",
+    });
+    expect(got!.code).toBeUndefined();
+  });
+
+  it("passes a refusal straight through from the roster", async () => {
+    const ctx = ctxWith({ addLock: async () => ({ outcome: "not-permitted", lockId: null }) });
+    const reply = await vaultGroup.modals!["vault-add"]!(ctx, {
+      actorDiscordId: "111", arg: "member", field: (n) => (n === "name" ? "Shed" : ""),
+    });
+    expect(reply.content).toMatch(/Only an officer or the leader/u);
+  });
+});
+
+describe("/vault edit", () => {
+  it("prefills the modal with the lock as it stands", async () => {
+    const ctx = ctxWith({ vaultFor: async () => state({ locks: [lock({ id: 4, name: "Back shed", note: "spare fuel" })] }) });
+    const reply = await specOf(vaultGroup, "vault edit").handler(ctx, input({ lock: "4", minrole: "leader" }));
+    const j = reply.modal!.toJSON();
+    expect(j.custom_id).toBe(modalId("vault-edit", "111", "4.leader"));
+    const rows = j.components as unknown as { components: { value?: string }[] }[];
+    const values = rows.flatMap((r) => r.components.map((c) => c.value));
+    expect(values).toEqual(["Back shed", "spare fuel"]);
+  });
+
+  it("says the lock is gone rather than opening a modal for nothing", async () => {
+    const ctx = ctxWith({ vaultFor: async () => state({ locks: [] }) });
+    const reply = await specOf(vaultGroup, "vault edit").handler(ctx, input({ lock: "4", minrole: "leader" }));
+    expect(reply.modal).toBeUndefined();
+    expect(reply.content).toBe("That lock no longer exists.");
+  });
+
+  it("edits the lock the arg named, with the role the arg carried", async () => {
+    let got: unknown;
+    const ctx = ctxWith({ editLock: async (_id: string, a: unknown) => { got = a; return "ok"; } });
+    const reply = await vaultGroup.modals!["vault-edit"]!(ctx, {
+      actorDiscordId: "111", arg: "4.leader",
+      field: (n) => ({ name: "Back shed", note: "" })[n] ?? "",
+    });
+    expect(got).toEqual({ lockId: 4, name: "Back shed", note: null, minRole: "leader" });
+    expect(reply.content).toBe("Saved.");
+  });
+
+  it("refuses a malformed arg instead of writing with a guess", async () => {
+    const ctx = ctxWith({ editLock: async () => { throw new Error("must not be called"); } });
+    const reply = await vaultGroup.modals!["vault-edit"]!(ctx, {
+      actorDiscordId: "111", arg: "4.emperor", field: () => "x",
+    });
+    expect(reply.content).toMatch(/missing or too long/u);
   });
 });
