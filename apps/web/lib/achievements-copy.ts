@@ -1,5 +1,6 @@
 import type { AchievementTile } from "@factions/roster";
 import { ACHIEVEMENT_GROUP_COLORS, type AchievementGroup } from "@factions/domain";
+import { ACHIEVEMENT_CLOSEST, ACHIEVEMENT_NONE } from "@factions/copy";
 
 /**
  * Every word the wall says. Thresholds come from the tile (i.e. from the
@@ -11,7 +12,8 @@ export const GROUP_LABELS = { solo: "Solo", pve: "Survival", pvp: "Combat", team
 export const GROUP_COLORS: Record<AchievementGroup, string> = ACHIEVEMENT_GROUP_COLORS;
 /** The unlock toast on the owner's own page (design hand-off §03). */
 export const TOAST = { kicker: (group: AchievementGroup) => `Achievement unlocked · ${GROUP_LABELS[group]}`, windowDays: 7 } as const;
-export const WALL = { title: "Achievements", locked: "Locked", closest: "Closest to unlocking", none: "Nothing in reach yet — play, and this fills in.", earnedOf: (n: number, of: number) => `${n} of ${of}` } as const;
+/** `closest`/`none` moved to `@factions/copy` (2026-09-13) so the bot's `/achievements` reads the same words. */
+export const WALL = { title: "Achievements", locked: "Locked", closest: ACHIEVEMENT_CLOSEST, none: ACHIEVEMENT_NONE, earnedOf: (n: number, of: number) => `${n} of ${of}` } as const;
 
 /** ⚠️ UTC, like every other date the site prints: the server's timezone must not change what a player reads. */
 const day = (d: Date) => d.toLocaleDateString("en-GB", { day: "numeric", month: "short", timeZone: "UTC" });

@@ -11,6 +11,7 @@ import { mapGroup } from "./map.js";
 import { meGroup } from "./me.js";
 import { rosterGroup } from "./roster.js";
 import { alphasGroup, scoreboardGroup, seasonsGroup, warlogGroup } from "./scoring.js";
+import { achievementsGroup, boardGroup, playerGroup } from "./stats.js";
 import { vaultGroup } from "./vault.js";
 import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "./types.js";
 
@@ -25,7 +26,7 @@ import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "
  * of plan 3, not before: a player who loses the stub before the real command
  * lands gets Discord's "unknown command" and no pointer at all.
  */
-export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup, rosterGroup, clanGroup, clansGroup, leadGroup, foundGroup, guestGroup, vaultGroup, mapGroup, scoreboardGroup, alphasGroup, seasonsGroup, warlogGroup];
+export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup, rosterGroup, clanGroup, clansGroup, leadGroup, foundGroup, guestGroup, vaultGroup, mapGroup, scoreboardGroup, alphasGroup, seasonsGroup, warlogGroup, playerGroup, boardGroup, achievementsGroup];
 
 export const SPECS: Map<string, CommandSpec> = new Map(
   GROUPS.flatMap((g) => g.specs).map((s) => [s.path, s]),

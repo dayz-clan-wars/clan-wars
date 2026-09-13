@@ -1,4 +1,4 @@
-import type { Role } from "@factions/roster";
+import type { Role, StatScope } from "@factions/roster";
 
 /**
  * Slash command options only carry strings (autocomplete choices are
@@ -23,4 +23,17 @@ const ROLES: readonly Role[] = ["leader", "officer", "member"];
  */
 export function roleOf(raw: string | null): Role | null {
   return ROLES.find((r) => r === raw) ?? null;
+}
+
+/**
+ * R7: one `scope:` option, autocompleted to `current`, `all` and each closed
+ * season's number. Unrecognised input resolves to the current season rather
+ * than throwing — the string comes from a client and every read echoes back
+ * the scope it actually resolved, so a wrong guess is visible, not silent.
+ */
+export function parseScope(raw: string | null): StatScope {
+  const v = (raw ?? "").trim().toLowerCase();
+  if (v === "all") return { kind: "all" };
+  if (/^[1-9]\d*$/u.test(v)) return { kind: "season", number: Number(v) };
+  return { kind: "current" };
 }

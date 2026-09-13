@@ -1,18 +1,14 @@
 import { KD_MIN_KILLS } from "@factions/domain";
-import type { BoardKind, ResolvedScope } from "@factions/roster";
+import { BOARD_LABELS, EMPTY_BOARD as SHARED_EMPTY_BOARD } from "@factions/copy";
+import type { ResolvedScope } from "@factions/roster";
 
-/** Section headings for the nine boards, in `BOARD_KINDS` order: raiding, offensive PvP, building, play time, then the shameful two. */
-export const BOARD_LABELS: Record<BoardKind, string> = {
-  raiders: "Top raiders",
-  killers: "Top killers",
-  kd: "Best K/D",
-  streaks: "Best killstreak",
-  longestKills: "Longest kill",
-  builders: "Top builders",
-  playTime: "Most play time",
-  deaths: "Most PvP deaths",
-  friendlyFire: "Most friendly fire",
-};
+/**
+ * Section headings for the nine boards, in `BOARD_KINDS` order: raiding,
+ * offensive PvP, building, play time, then the shameful two. Moved to
+ * `@factions/copy` (2026-09-13) once the bot's `/board` needed the same
+ * names; re-exported here so nothing on the site changes its import.
+ */
+export { BOARD_LABELS };
 
 /** Under the streaks board: what ends one. */
 export const STREAK_NOTE = "Ends on a PvP death";
@@ -28,7 +24,7 @@ export const SEE_ALL = "See all";
 /** Page links on a full board. */
 export const PAGER = { prev: "Previous", next: "Next", page: (n: number) => `Page ${n}` } as const;
 
-export const EMPTY_BOARD = "Nothing yet.";
+export const EMPTY_BOARD = SHARED_EMPTY_BOARD;
 export const NO_PROFILE = "No player by that name.";
 
 /** `"12h 05m"` — hours and zero-padded minutes, unlike the bot's `duration()`. */
