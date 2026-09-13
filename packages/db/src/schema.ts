@@ -141,6 +141,12 @@ export const events = pgTable("events", {
   // `occurred_at` is applied as a cheap filter afterward. This has caused a
   // tick loop to silently stop keeping up before — see CLAUDE.md.
   byHitId: index("events_hit_id_idx").on(t.id).where(sql`${t.type} = 'player.hit'`),
+  // ⚠️ `PgHitFeedStore.frontier()`'s steady-state branch (`select
+  // max(occurred_at) from events`, no predicate) runs on every tick where the
+  // kills projector is caught up — most of them. `events_server_occurred_idx`
+  // is `(server_id, occurred_at)` and cannot answer an unqualified global max;
+  // without this, that's a full sequential scan of `events` every such tick.
+  byOccurred: index("events_occurred_idx").on(t.occurredAt),
 }));
 
 export const consumerCursors = pgTable("consumer_cursors", {

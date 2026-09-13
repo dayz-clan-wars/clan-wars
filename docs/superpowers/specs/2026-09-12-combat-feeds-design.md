@@ -123,12 +123,30 @@ The shared `cursorFeedTick` of Part 4, for the reasons `kill-feed-tick.ts` docum
 - At-least-once: a crash between the post and the cursor write re-posts that engagement on
   the next start. Same trade as the kill feed and `notice-tick`.
 
-**Cursor advance.** Within a batch, let `barrier` be the smallest event id belonging to a
-still-open engagement. Engagements whose last event id is below `barrier` are posted, in
-order of their first event id; the cursor then advances to `barrier - 1`. With no open
-engagement it advances to the batch's highest event id. A fight in progress holds the line
-rather than being stepped over — which is what makes an engagement straddling a batch
-boundary arrive whole.
+**Cursor advance.** Within a batch, an engagement is safe to post only if doing so cannot
+bury another, not-yet-posted engagement's earlier hits below the new cursor.
+
+An open-only rule — "safe if its last event id is below the smallest first event id among
+still-OPEN engagements" — is not sufficient. A CLOSED engagement that is itself withheld by
+that same rule (because something else blocks it) is just as much an obstacle as an open
+one: its early hits are equally unposted, and stepping the cursor past them buries them the
+same way. The obstacle set is therefore every engagement that ends up NOT posted this batch,
+open or withheld-closed alike — which is exactly what makes computing it a fixed point
+rather than one sorted pass: a withheld closed engagement's own first event id can
+retroactively disqualify a different, earlier-last-event-id candidate that looked safe
+against a barrier computed before that withholding was known (two fully closed engagements
+whose event-id spans nest, with neither open, is enough to trigger this).
+
+Compute it as: start with the open engagements as the obstacle set. Repeatedly move any
+not-yet-decided closed engagement whose last event id is not below the current minimum
+obstacle first-event-id into the obstacle set too, recomputing the minimum each pass, until
+a pass changes nothing. What remains is the safe set; post it in ascending last-event-id
+order, and the cursor advances to each posted engagement's own last event id in turn (never
+past the batch in one jump — a post can fail partway through the batch, and every prefix of
+the posted order must itself be a safe stopping point). With nothing open and nothing
+withheld, the whole batch is safe and posts in one pass. A fight in progress — open, or
+closed-but-blocked — holds the line rather than being stepped over, which is what makes an
+engagement straddling a batch boundary arrive whole once it finally clears.
 
 Suppressed engagements advance the cursor exactly as posted ones do. They are decided, not
 pending.

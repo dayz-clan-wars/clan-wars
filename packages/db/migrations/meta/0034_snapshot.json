@@ -1,5 +1,5 @@
 {
-  "id": "e10c5a60-5706-414b-aadf-e07ded2d7f3e",
+  "id": "41d33369-ed44-49c1-8134-f6668bc8cdc2",
   "prevId": "5c9f53aa-d44c-48b8-a1ac-a2ebbe566f59",
   "version": "7",
   "dialect": "postgresql",
@@ -1635,6 +1635,21 @@
           ],
           "isUnique": false,
           "where": "\"events\".\"type\" = 'player.hit'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "events_occurred_idx": {
+          "name": "events_occurred_idx",
+          "columns": [
+            {
+              "expression": "occurred_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

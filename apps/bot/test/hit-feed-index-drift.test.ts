@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createClient, runMigrations, type Database } from "@factions/db";
-import { hitEventsQuery } from "../src/hit-feed-tick.js";
+import { hitEventsQuery, maxOccurredAtQuery } from "../src/hit-feed-tick.js";
 
 const URL = process.env.TEST_DATABASE_URL;
 if (!URL) throw new Error("TEST_DATABASE_URL is required");
@@ -13,6 +13,11 @@ if (!URL) throw new Error("TEST_DATABASE_URL is required");
  * walk runs to the end of `events` for zero rows, once per tick, forever. This
  * has silently stopped a tick loop keeping up before (see CLAUDE.md, on the
  * dormancy clock's own index).
+ *
+ * ⚠️ `events_occurred_idx` guards `frontier()`'s STEADY-STATE branch — the
+ * unqualified `max(occurred_at)` that runs on every tick where the kills
+ * projector is caught up, which is most of them. `events_server_occurred_idx`
+ * is keyed on `server_id` first and cannot answer a global max.
  */
 describe("the hit feed's candidate read is index-backed", () => {
   let db: Database;
@@ -21,9 +26,7 @@ describe("the hit feed's candidate read is index-backed", () => {
     await runMigrations(db);
   });
 
-  it("resolves the id range through the partial index, not a filter", async () => {
-    const { sql: text, params } = hitEventsQuery(db, 0, new Date()).toSQL();
-
+  async function explain(text: string, params: unknown[]) {
     const client = (db as unknown as {
       $client: { unsafe: (q: string, p: unknown[]) => Promise<Record<string, string>[]> };
     }).$client;
@@ -32,8 +35,13 @@ describe("the hit feed's candidate read is index-backed", () => {
     // actually answer the predicate.
     await client.unsafe("set enable_seqscan = off", []);
     await client.unsafe("set enable_bitmapscan = off", []);
-    const plan = await client.unsafe(`explain ${text}`, params as unknown[]);
-    const lines = plan.map((r) => r["QUERY PLAN"] as string);
+    const plan = await client.unsafe(`explain ${text}`, params);
+    return plan.map((r) => r["QUERY PLAN"] as string);
+  }
+
+  it("resolves the id range through the partial index, not a filter", async () => {
+    const { sql: text, params } = hitEventsQuery(db, 0, new Date()).toSQL();
+    const lines = await explain(text, params as unknown[]);
     const planText = lines.join("\n");
 
     expect(planText).toContain("events_hit_id_idx");
@@ -47,5 +55,14 @@ describe("the hit feed's candidate read is index-backed", () => {
     // signature ever shows occurred_at driving the scan instead, that means a
     // DIFFERENT, uncovering index took over silently.
     expect(indexConds).not.toContain("occurred_at");
+  });
+
+  it("resolves the steady-state global max through events_occurred_idx, not a sequential scan", async () => {
+    const { sql: text, params } = maxOccurredAtQuery(db).toSQL();
+    const lines = await explain(text, params as unknown[]);
+    const planText = lines.join("\n");
+
+    expect(planText).toContain("events_occurred_idx");
+    expect(planText).not.toContain("Seq Scan on events");
   });
 });

@@ -213,6 +213,34 @@ describe("PgHitFeedStore", () => {
     expect(long.startedAt).toEqual(s(0));
   });
 
+  it("⚠️ a withheld CLOSED engagement is just as much an obstacle as an open one — an open-only barrier lets the cursor step over its earlier hits", async () => {
+    // A/B: opens at the LOWEST id in the batch and closes once quiet — but it
+    // is itself withheld this tick (its lastEventId sits at or past R/C's
+    // still-open firstEventId), exactly like the round-2 scenario. An
+    // open-only barrier stops there and considers C/D clear, because C/D's
+    // lastEventId (3) is below R/C's firstEventId (4) — but A/B's un-emitted
+    // opening hit (id 1) sits BELOW C/D's last hit too. Advancing the cursor
+    // to 3 to post C/D would bury it.
+    await mkHit({ at: s(0), attacker: A, victim: B }); // id 1 — A/B's opening hit, lowest id
+    await mkHit({ at: s(1), attacker: C, victim: D }); // id 2
+    await mkHit({ at: s(2), attacker: C, victim: D }); // id 3 — closes C/D
+    await mkHit({ at: s(3), attacker: R, victim: C }); // id 4 — R/C's opening hit
+    await mkHit({ at: s(50), attacker: A, victim: B }); // id 5 — closes A/B once quiet
+    await mkHit({ at: s(60), attacker: R, victim: C }); // id 6 — keeps R/C open
+
+    // R/C quiet 115s (open); A/B quiet 125s (closed, but withheld); C/D quiet
+    // 173s (closed, and would wrongly clear an open-only barrier).
+    await mkFrontier(s(175));
+
+    const before = await store.cursor();
+    const tick1 = await store.readAfter(before, 20);
+    // Nothing is safe to post: emitting C/D would step over A/B's still-
+    // un-emitted opening hit. Against an open-only barrier this tick would
+    // have posted C/D alone and advanced the cursor to id 3.
+    expect(tick1).toEqual([]);
+    expect(await store.cursor()).toBe(before);
+  });
+
   it("⚠️ a fight that finishes early posts while an unrelated fight that started later is still ongoing — and the ongoing one survives complete once it finally closes", async () => {
     // The short fight (C/D) is fully quiet BEFORE the long fight (A/B) even
     // begins, so posting it never requires the cursor to step over any of the

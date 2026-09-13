@@ -1,1 +1,0 @@
-CREATE INDEX IF NOT EXISTS "events_hit_id_idx" ON "events" USING btree ("id") WHERE "events"."type" = 'player.hit';

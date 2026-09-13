@@ -46,6 +46,18 @@ export function hitEventsQuery(db: Database, cursor: number, frontier: Date) {
     .orderBy(asc(events.id));
 }
 
+/**
+ * `frontier()`'s steady-state fallback — the query it runs on every tick
+ * where the kills projector is caught up (most of them). Exported for the
+ * same reason as `hitEventsQuery`: `hit-feed-index-drift.test.ts` pins the
+ * actual query, not a lookalike. `events_occurred_idx` (plain, unqualified)
+ * is what answers it; `events_server_occurred_idx` cannot, since it is keyed
+ * on `server_id` first.
+ */
+export function maxOccurredAtQuery(db: Database) {
+  return db.select({ at: max(events.occurredAt) }).from(events);
+}
+
 export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
   private readonly windowS: number;
   constructor(private readonly db: Database, opts: { windowS?: number } = {}) {
@@ -96,7 +108,7 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
     const killsCursor = await readCursor(this.db, KILLS_CONSUMER);
     const [unseen] = await this.db.select({ at: min(events.occurredAt) }).from(events).where(gt(events.id, killsCursor));
     if (unseen?.at != null) return new Date(unseen.at.getTime() - 1);
-    const [seen] = await this.db.select({ at: max(events.occurredAt) }).from(events);
+    const [seen] = await maxOccurredAtQuery(this.db);
     return seen?.at ?? null;
   }
 
@@ -147,19 +159,45 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
     // `writeCursor` is an unconditional set: the cursor would move backward
     // and the earlier fight would be posted again as a mangled fragment.
     //
-    // `barrier` is the smallest first-event id belonging to a STILL-OPEN
-    // engagement (Infinity when none are open). A closed engagement is only
-    // safe to post — and to let the cursor advance past — when its last event
-    // id is below that barrier: otherwise advancing the cursor there would
-    // step over an open engagement's earlier hits, burying them below the
-    // cursor forever once that engagement finally closes and gets re-grouped
-    // from a fresh, cursor-filtered read.
-    let barrier = Infinity;
-    for (const e of engagements) if (!e.closed && e.firstEventId < barrier) barrier = e.firstEventId;
-    const closed = engagements
-      .filter((e) => e.closed && e.lastEventId < barrier)
-      .sort((a, b) => a.lastEventId - b.lastEventId)
-      .slice(0, limit);
+    // ⚠️ It is NOT enough to guard against OPEN engagements alone. A closed
+    // engagement that is itself withheld (because emitting it would already
+    // violate this same rule) is just as much an obstacle as an open one: its
+    // early hits are just as unposted, and stepping the cursor past them
+    // buries them exactly the same way. So the barrier for candidate X is not
+    // "the smallest firstEventId among open engagements" — it is the smallest
+    // firstEventId among every engagement that ends up NOT emitted this tick,
+    // open or withheld-closed alike, excluding X itself.
+    //
+    // ⚠️ Computing that safe set is a FIXED POINT, not a single sorted pass.
+    // A withheld engagement's own firstEventId can retroactively disqualify
+    // an EARLIER-lastEventId candidate that looked safe against a barrier
+    // computed before that withholding was known — e.g. two engagements whose
+    // spans nest (one's hits entirely surrounding the other's), both fully
+    // closed, neither open: checked in isolation each looks fine, but the
+    // outer one's lastEventId sits inside the inner one's span. Treat opens
+    // as the initial obstacle set; repeatedly move any not-yet-decided closed
+    // engagement whose lastEventId is not below the current barrier into the
+    // obstacle set (recomputing the barrier each pass) until a pass makes no
+    // change. What survives is the safe set; emit it sorted by lastEventId
+    // ascending. Batches here are small, so this straightforward, repeated-
+    // pass approach is preferred over a cleverer single-scan one.
+    let obstacles = engagements.filter((e) => !e.closed);
+    let candidates = engagements.filter((e) => e.closed);
+    for (let changed = true; changed; ) {
+      changed = false;
+      const barrier = obstacles.length > 0 ? Math.min(...obstacles.map((e) => e.firstEventId)) : Infinity;
+      const stillCandidates: typeof candidates = [];
+      for (const c of candidates) {
+        if (c.lastEventId >= barrier) {
+          obstacles.push(c);
+          changed = true;
+        } else {
+          stillCandidates.push(c);
+        }
+      }
+      candidates = stillCandidates;
+    }
+    const closed = candidates.sort((a, b) => a.lastEventId - b.lastEventId).slice(0, limit);
 
     const out: HitFeedItem[] = [];
     for (const e of closed) {
