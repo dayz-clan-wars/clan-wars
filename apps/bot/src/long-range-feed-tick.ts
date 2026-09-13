@@ -76,7 +76,9 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
       };
 
       if (!qualifies) {
-        // Nothing is rendered, so nothing needs resolving — skip four queries.
+        // Nothing is rendered, so nothing needs resolving — skip up to seven
+        // queries: two side() calls (up to two queries each) plus records()'s
+        // season lookup and its two counts.
         out.push({ ...base, killer: blank(), victim: blank(), personalBest: false, seasonRank: null, season: null });
         continue;
       }

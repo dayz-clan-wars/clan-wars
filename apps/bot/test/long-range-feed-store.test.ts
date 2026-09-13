@@ -87,6 +87,23 @@ describe("PgLongRangeFeedStore", () => {
     expect(items[1]!.seasonRank).toBe(2);
   });
 
+  it("⚠️ ranks numerically, not lexicographically — a 3-digit and a 4-digit distance would invert under string comparison", async () => {
+    // "190" > "1400" lexicographically (first differing char '9' > '4'), but
+    // 190 < 1400 numerically. Chosen specifically so a regression to string
+    // comparison in the `further` clause flips BOTH assertions below: the
+    // smaller kill would wrongly count as "further" than the larger one.
+    await mkKill({ at: s(0), killer: A, victim: B, distanceM: 190 });
+    await mkKill({ at: s(10), killer: A, victim: R, distanceM: 1400 });
+    const items = await store.readAfter(0, 20);
+    expect(items[0]!.personalBest).toBe(true);
+    expect(items[0]!.seasonRank).toBe(1);
+    // Under numeric comparison nothing outranks the 1400m kill. Under a
+    // lexicographic comparison the earlier 190m kill would wrongly count as
+    // "further", making this personalBest false and seasonRank 2.
+    expect(items[1]!.personalBest).toBe(true);
+    expect(items[1]!.seasonRank).toBe(1);
+  });
+
   it("a kill before any season ranks all-time", async () => {
     await mkKill({ at: s(0), killer: A, victim: B, distanceM: 400 });
     expect((await store.readAfter(0, 20))[0]!.season).toBeNull();

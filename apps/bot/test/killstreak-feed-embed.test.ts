@@ -40,4 +40,34 @@ describe("killstreakFeedEmbed", () => {
     expect(e.title).toBe("S\\*t\\*eve");
     expect(e.description).toContain("D\\_ave");
   });
+
+  // "started ... ago" boundaries — pins the unit escalating BEFORE rounding
+  // can push it into the next unit (e.g. 3599s must not read "60 minutes").
+  describe("elapsed-time boundaries", () => {
+    const withDelta = (seconds: number): KillstreakFeedItem => ({
+      ...base,
+      startedAt: new Date(0),
+      occurredAt: new Date(seconds * 1000),
+    });
+
+    it("59s stays in seconds — one below the minute boundary", () => {
+      const e = killstreakFeedEmbed(withDelta(59), site);
+      expect(e.description).toContain("started 59 seconds ago");
+    });
+
+    it("60s crosses into minutes exactly at the boundary", () => {
+      const e = killstreakFeedEmbed(withDelta(60), site);
+      expect(e.description).toContain("started 1 minute ago");
+    });
+
+    it("3599s escalates to hours instead of rounding to 60 minutes", () => {
+      const e = killstreakFeedEmbed(withDelta(3599), site);
+      expect(e.description).toContain("started 1 hour ago");
+    });
+
+    it("3600s crosses into hours exactly at the boundary", () => {
+      const e = killstreakFeedEmbed(withDelta(3600), site);
+      expect(e.description).toContain("started 1 hour ago");
+    });
+  });
 });

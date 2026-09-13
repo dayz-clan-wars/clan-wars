@@ -21,13 +21,21 @@ export type KillstreakFeedItem = {
 
 const FLAME = 0xd35400;
 
-/** "41 minutes", "2 hours", "35 seconds" — from the kill times, never from a clock. */
+/**
+ * "41 minutes", "2 hours", "35 seconds" — from the kill times, never from a clock.
+ *
+ * ⚠️ Escalates to the next unit BEFORE rounding can reach it — rounding a raw
+ * second count straight into minutes (or minutes into hours) lets a value
+ * like 3599s round to "60 minutes" instead of "1 hour". Each unit is checked
+ * only after computing its own rounded value, so a rollover re-escalates.
+ */
 function elapsed(from: Date, to: Date): string {
-  const s = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
+  const totalSeconds = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
   const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
-  if (s < 60) return plural(s, "second");
-  if (s < 3600) return plural(Math.round(s / 60), "minute");
-  return plural(Math.round(s / 3600), "hour");
+  if (totalSeconds < 60) return plural(totalSeconds, "second");
+  const minutes = Math.round(totalSeconds / 60);
+  if (minutes < 60) return plural(minutes, "minute");
+  return plural(Math.round(totalSeconds / 3600), "hour");
 }
 
 /** One streak milestone, one embed. Pure — no client, no I/O, no clock. */
