@@ -96,6 +96,16 @@ describe("player-facing strings say clan, not faction", () => {
 });
 
 describe("packages/copy/src says clan, not faction", () => {
+  // ⚠️ If COPY_SRC_ROOT moves, empties, or the .ts filter changes, this
+  // loop's `for` iterates zero times and registers zero `it`s — the whole
+  // describe block then reports green with nothing checked, and the guard
+  // this file exists for goes silently dark. Asserting a specific known
+  // file (not just a nonzero count) also catches a filter that admits
+  // some-but-wrong files, e.g. a partial walk that still finds something.
+  it("finds packages/copy/src's files, including clan.ts", () => {
+    expect(COPY_FILES).toContain("clan.ts");
+  });
+
   for (const file of COPY_FILES) {
     it(file, () => {
       expect(offendersIn(copySrc(file))).toEqual([]);
