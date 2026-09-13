@@ -13,6 +13,7 @@
     "guide:publish": "tsx scripts/publish-guide.ts"
   },
   "dependencies": {
+    "@factions/copy": "workspace:*",
     "@factions/domain": "workspace:*",
     "@factions/roster": "workspace:*",
     "arctic": "3.7.0",
