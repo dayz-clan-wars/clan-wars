@@ -2,14 +2,18 @@ import type { Database } from "@factions/db";
 import { clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, players } from "@factions/db";
 import { publicPoles } from "@factions/declarations";
 import {
-  FAST_TRAVEL_POINTS, HOLDING_STATUSES, HUB_POSITION, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, type PinIcon,
+  FAST_TRAVEL_POINTS, HOLDING_STATUSES, HUB_POSITION, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
 } from "@factions/domain";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { activeServerId } from "./server";
 import { actorFor, isRefusal } from "./actor";
 
-/** Livonia. The one map this deployment runs; `servers.map` says "livonia". */
-export const WORLD_SIZE_M = 12800;
+// P5: `WORLD_SIZE_M` lives in `@factions/domain` (beside `PIN_ICONS`/`PIN_NOTE_MAX`),
+// not this package's export surface — the bot needs it at slash-command
+// registration time, before any `mapState()` call exists to read it off. Kept
+// re-exported here so nothing inside this package that already imports it
+// from `./map` breaks.
+export { WORLD_SIZE_M };
 
 export type MapFix = { x: number; z: number; at: Date };
 export type MapState = {
