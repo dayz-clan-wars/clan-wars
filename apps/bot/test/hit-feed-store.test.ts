@@ -180,6 +180,39 @@ describe("PgHitFeedStore", () => {
     expect(ids[0]!).toBeLessThan(ids[1]!);
   });
 
+  it("⚠️ a fight in progress holds the line — a closed fight entirely after its first hit is not posted, or the cursor would step over its still-open earlier hits", async () => {
+    // Long fight A/B: continuous hits, and its FIRST hit has the lowest event
+    // id in the whole batch. It is still receiving hits close to the
+    // frontier, so it stays open.
+    await mkHit({ at: s(0), attacker: A, victim: B }); // id 1 — lowest id in the batch
+    // Short fight C/D: entirely AFTER the long fight's first hit in event-id
+    // order, and fully quiet by the frontier — closed on its own terms.
+    await mkHit({ at: s(5), attacker: C, victim: D }); // id 2
+    const shortLastHit = await mkHit({ at: s(6), attacker: C, victim: D }); // id 3 — closes C/D's run
+    await mkHit({ at: s(50), attacker: A, victim: B }); // id 4 — keeps A/B's run alive
+    const longLastHit = await mkHit({ at: s(90), attacker: A, victim: B }); // id 5
+
+    // C/D has been quiet 144s (closed); A/B has been quiet only 60s (open).
+    await mkFrontier(s(150));
+
+    const before = await store.cursor();
+    const tick1 = await store.readAfter(before, 20);
+    // The whole point of the barrier: a fight in progress holds the line
+    // rather than being stepped over. Against the pre-fix code this tick
+    // would have posted C/D and advanced the cursor to id 3 — burying A/B's
+    // hits at ids 1 and 4 below it forever.
+    expect(tick1).toEqual([]);
+    expect(await store.cursor()).toBe(before);
+
+    // Now A/B is far enough past its last hit too.
+    await mkFrontier(s(400));
+    const tick2 = await store.readAfter(before, 20);
+    expect(tick2.map((i) => i.eventId)).toEqual([shortLastHit, longLastHit]);
+    const long = tick2.find((i) => i.eventId === longLastHit)!;
+    expect(long.hits).toHaveLength(3);
+    expect(long.startedAt).toEqual(s(0));
+  });
+
   it("⚠️ a fight that finishes early posts while an unrelated fight that started later is still ongoing — and the ongoing one survives complete once it finally closes", async () => {
     // The short fight (C/D) is fully quiet BEFORE the long fight (A/B) even
     // begins, so posting it never requires the cursor to step over any of the
