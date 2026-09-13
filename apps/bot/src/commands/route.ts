@@ -1,5 +1,13 @@
-import { MessageFlags, type AutocompleteInteraction, type ChatInputCommandInteraction, type Interaction } from "discord.js";
-import { SPECS } from "./index.js";
+import {
+  MessageFlags,
+  type AutocompleteInteraction,
+  type ChatInputCommandInteraction,
+  type Interaction,
+  type MessageComponentInteraction,
+  type ModalSubmitInteraction,
+} from "discord.js";
+import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS } from "./index.js";
+import { parseCustomId } from "./confirm.js";
 import type { CommandInput, Ctx, Reply } from "./types.js";
 
 /** What an unknown command or a stale client gets: a sentence, never discord.js's default failure. */
@@ -11,6 +19,9 @@ const UNKNOWN = "That command is no longer available — check the site.";
  * log, not in a player-facing message.
  */
 const HANDLER_FAILED = "Something went wrong running that command. Try again in a moment.";
+
+/** A pressed button or a submitted modal whose custom id names someone else. */
+const NOT_YOURS = "That button is not yours — run the command yourself.";
 
 /** The one place a discord.js interaction is unpacked into a handler's input. */
 function inputFor(i: ChatInputCommandInteraction): CommandInput {
@@ -27,6 +38,33 @@ export function pathOf(commandName: string, subcommand: string | null): string {
   return subcommand ? `${commandName} ${subcommand}` : commandName;
 }
 
+/**
+ * Runs `run` and edits the (already-deferred) interaction with what it
+ * returns; a throw is caught and turned into `HANDLER_FAILED` instead of
+ * leaving the player staring at "thinking…" forever (Ruling 10). Shared by
+ * all three acknowledged paths — chat input, component and modal — so that
+ * invariant cannot be forgotten by a new one.
+ *
+ * ⚠️ Clears `components: []` on every edit. Without this, a failed confirm
+ * (or any handler that throws) leaves the pressed button's row on the
+ * message, live for another press.
+ */
+async function finish(
+  i: ChatInputCommandInteraction | MessageComponentInteraction | ModalSubmitInteraction,
+  run: () => Promise<Reply>,
+  label: string,
+): Promise<void> {
+  let reply: Reply;
+  try {
+    reply = await run();
+  } catch (err) {
+    console.error(`handler failed for ${label}`, err);
+    await i.editReply({ content: HANDLER_FAILED, embeds: [], components: [] });
+    return;
+  }
+  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [], components: reply.components ?? [] });
+}
+
 export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction): Promise<void> {
   const spec = SPECS.get(pathOf(i.commandName, i.options.getSubcommand(false)));
   if (!spec) return;
@@ -34,19 +72,7 @@ export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction):
   // Discord kills an un-acknowledged interaction after 3 seconds; the reply
   // below then edits the deferred message instead of racing that deadline.
   await i.deferReply({ flags: MessageFlags.Ephemeral });
-  // ⚠️ Ruling 10: a handler that throws after this point must still produce
-  // a reply. Without this, the interaction is left showing "thinking…"
-  // forever — the outer try/catch in discord.ts stops the bot crashing, but
-  // it does nothing for the player already staring at a stuck interaction.
-  let reply: Reply;
-  try {
-    reply = await spec.handler(ctx, inputFor(i));
-  } catch (err) {
-    console.error(`handler failed for /${pathOf(i.commandName, i.options.getSubcommand(false))}`, err);
-    await i.editReply({ content: HANDLER_FAILED, embeds: [] });
-    return;
-  }
-  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [] });
+  await finish(i, () => spec.handler(ctx, inputFor(i)), `/${pathOf(i.commandName, i.options.getSubcommand(false))}`);
 }
 
 export async function handleAutocomplete(ctx: Ctx, i: AutocompleteInteraction): Promise<void> {
@@ -57,6 +83,61 @@ export async function handleAutocomplete(ctx: Ctx, i: AutocompleteInteraction): 
   const choices = await source(ctx, { actorDiscordId: i.user.id, value: String(focused.value ?? "") });
   // Discord rejects more than 25, and a name over 100 characters.
   await i.respond(choices.slice(0, 25).map((c) => ({ name: c.name.slice(0, 100), value: c.value })));
+}
+
+export async function handleComponent(ctx: Ctx, i: MessageComponentInteraction): Promise<void> {
+  const parsed = parseCustomId(i.customId);
+  if (!parsed || parsed.kind !== "c") return;
+  // ⚠️ Before the defer: a handler that opens a modal cannot have
+  // acknowledged the interaction first (see `modalOpeners` on `CommandGroup`).
+  if (MODAL_OPENERS.has(parsed.action) && parsed.actorDiscordId === i.user.id) {
+    const opener = COMPONENTS.get(parsed.action);
+    if (opener) {
+      const reply = await opener(ctx, { actorDiscordId: i.user.id, arg: parsed.arg, values: [] });
+      if (reply.modal) { await i.showModal(reply.modal); return; }
+      await i.reply({ content: reply.content ?? UNKNOWN, flags: MessageFlags.Ephemeral });
+      return;
+    }
+  }
+  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  // ⚠️ A button is never a permission (R2): re-check the presser against the
+  // actor named in the custom id even though the message is ephemeral and in
+  // practice only that actor can see the button at all.
+  if (parsed.actorDiscordId !== i.user.id) {
+    await i.editReply({ content: NOT_YOURS, embeds: [], components: [] });
+    return;
+  }
+  const handler = COMPONENTS.get(parsed.action);
+  if (!handler) {
+    await i.editReply({ content: UNKNOWN, embeds: [], components: [] });
+    return;
+  }
+  await finish(i, () => handler(ctx, {
+    actorDiscordId: i.user.id,
+    arg: parsed.arg,
+    values: i.isStringSelectMenu() ? i.values : [],
+  }), `component ${parsed.action}`);
+}
+
+export async function handleModalSubmit(ctx: Ctx, i: ModalSubmitInteraction): Promise<void> {
+  const parsed = parseCustomId(i.customId);
+  if (!parsed || parsed.kind !== "m") return;
+  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  // ⚠️ A button is never a permission (R2): same re-check as `handleComponent`.
+  if (parsed.actorDiscordId !== i.user.id) {
+    await i.editReply({ content: NOT_YOURS, embeds: [], components: [] });
+    return;
+  }
+  const handler = MODALS.get(parsed.action);
+  if (!handler) {
+    await i.editReply({ content: UNKNOWN, embeds: [], components: [] });
+    return;
+  }
+  await finish(i, () => handler(ctx, {
+    actorDiscordId: i.user.id,
+    arg: parsed.arg,
+    field: (n) => i.fields.getTextInputValue(n),
+  }), `modal ${parsed.action}`);
 }
 
 /**
@@ -76,6 +157,18 @@ export async function routeInteraction(ctx: Ctx, interaction: Interaction): Prom
     const path = pathOf(interaction.commandName, interaction.options.getSubcommand(false));
     if (!SPECS.has(path)) return false;
     await handleChatInput(ctx, interaction);
+    return true;
+  }
+  if (interaction.isMessageComponent()) {
+    const parsed = parseCustomId(interaction.customId);
+    if (!parsed || parsed.kind !== "c") return false; // R5: not ours, leave it to discord.ts
+    await handleComponent(ctx, interaction);
+    return true;
+  }
+  if (interaction.isModalSubmit()) {
+    const parsed = parseCustomId(interaction.customId);
+    if (!parsed || parsed.kind !== "m") return false;
+    await handleModalSubmit(ctx, interaction);
     return true;
   }
   return false;

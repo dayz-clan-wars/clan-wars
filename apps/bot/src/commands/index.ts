@@ -2,7 +2,7 @@ import { SlashCommandBuilder, type RESTPostAPIApplicationCommandsJSONBody } from
 import { RETIRED_COMMANDS, RETIRED_DESCRIPTION } from "../retired-commands.js";
 import { baseGroup } from "./base.js";
 import { linkGroup } from "./link.js";
-import type { CommandGroup, CommandSpec } from "./types.js";
+import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "./types.js";
 
 /**
  * The registry. A group states its Discord JSON and its handlers in one
@@ -20,6 +20,20 @@ export const GROUPS: CommandGroup[] = [linkGroup, baseGroup];
 export const SPECS: Map<string, CommandSpec> = new Map(
   GROUPS.flatMap((g) => g.specs).map((s) => [s.path, s]),
 );
+
+/**
+ * The router's own registries, one per interaction kind it handles beyond
+ * chat input — see `route.ts`. Kept mutable (`Map`/`Set`, not a frozen
+ * object) so a test can register a throwaway action for the duration of one
+ * case, the same way `SPECS` already allows for chat-input handlers.
+ */
+export const COMPONENTS: Map<string, ComponentHandler> = new Map(
+  GROUPS.flatMap((g) => Object.entries(g.components ?? {})),
+);
+export const MODALS: Map<string, ModalHandler> = new Map(
+  GROUPS.flatMap((g) => Object.entries(g.modals ?? {})),
+);
+export const MODAL_OPENERS: Set<string> = new Set(GROUPS.flatMap((g) => g.modalOpeners ?? []));
 
 export function buildCommands(): RESTPostAPIApplicationCommandsJSONBody[] {
   return [
