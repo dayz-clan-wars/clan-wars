@@ -3,9 +3,9 @@ import { retiredPath, retiredReply, RETIRED_COMMANDS } from "../src/retired-comm
 import { buildCommands } from "../src/discord.js";
 
 describe("retired commands", () => {
-  it("registers the three old names, bare, plus the live 'guest', 'link', 'base', 'me', 'roster', 'clan', 'clans', 'lead' and 'found' commands, so a stale client gets a pointer and not 'unknown command'", () => {
+  it("registers the three old names, bare, plus the live 'guest', 'link', 'base', 'me', 'roster', 'clan', 'clans', 'lead', 'found' and 'vault' commands, so a stale client gets a pointer and not 'unknown command'", () => {
     const cmds = buildCommands();
-    const live = ["guest", "link", "base", "me", "roster", "clan", "clans", "lead", "found"];
+    const live = ["guest", "link", "base", "me", "roster", "clan", "clans", "lead", "found", "vault"];
     expect(cmds.map((c) => c.name).sort()).toEqual([...RETIRED_COMMANDS, ...live].sort());
     for (const c of cmds) {
       if (live.includes(c.name)) continue;
