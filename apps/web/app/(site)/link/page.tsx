@@ -2,8 +2,7 @@ import type { Metadata } from "next";
 import { linkStatus } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { Page, GuideLine, SessionLost, Notice } from "@/app/components/ui";
-import { UNLINK_COPY } from "@/lib/link-copy";
-import { lookupCopy } from "@/lib/copy-lookup";
+import { unlinkCopy } from "@/lib/link-copy";
 import { guideLinkFor } from "@/lib/guide-links";
 import { LinkFlow } from "./link-flow";
 
@@ -19,7 +18,7 @@ export default async function LinkPage({ searchParams }: { searchParams: Promise
   // ⚠️ Looked up, never echoed: ?unlink= is attacker-supplied (see lib/copy-lookup.ts).
   // An unlinked member's /me forwards here, so a successful unlink's notice lands on this page.
   const { unlink: unlinkCode } = await searchParams;
-  const unlinkNotice = unlinkCode ? lookupCopy(UNLINK_COPY, unlinkCode) : undefined;
+  const unlinkNotice = unlinkCode ? unlinkCopy(unlinkCode) : undefined;
   const session = await currentSession();
   if (!session) {
     return <SessionLost next="/link" />;

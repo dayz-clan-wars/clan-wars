@@ -33,6 +33,9 @@ importers:
       '@factions/ceremony':
         specifier: workspace:*
         version: link:../../packages/ceremony
+      '@factions/copy':
+        specifier: workspace:*
+        version: link:../../packages/copy
       '@factions/db':
         specifier: workspace:*
         version: link:../../packages/db
@@ -132,6 +135,9 @@ importers:
 
   apps/web:
     dependencies:
+      '@factions/copy':
+        specifier: workspace:*
+        version: link:../../packages/copy
       '@factions/domain':
         specifier: workspace:*
         version: link:../../packages/domain
@@ -206,6 +212,22 @@ importers:
       '@factions/domain':
         specifier: workspace:*
         version: link:../domain
+    devDependencies:
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
+
+  packages/copy:
+    dependencies:
+      '@factions/domain':
+        specifier: workspace:*
+        version: link:../domain
+      '@factions/roster':
+        specifier: workspace:*
+        version: link:../roster
     devDependencies:
       typescript:
         specifier: ^5.6.0

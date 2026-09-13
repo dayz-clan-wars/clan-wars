@@ -5,7 +5,7 @@ import type { VerificationStore } from "@factions/verification";
  * challenge anyone reading the channel can perform, which would let a bystander
  * bind their own UID to someone else's Discord account.
  */
-export type Reply = { content: string; ephemeral: true };
+export type { Reply } from "./commands/types.js";
 
 export type CommandDeps = {
   store: VerificationStore;

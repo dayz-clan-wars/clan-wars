@@ -47,7 +47,7 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **26/26 tasks** (`packages/roster` and `packages/declarations` each add `typecheck` and `test`). A cached pass
+Expect **28/28 tasks** (`packages/roster`, `packages/declarations` and `packages/copy` each add `typecheck` and `test`). A cached pass
 proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.
@@ -171,9 +171,10 @@ turbo gate stays the gate, because it runs `typecheck` too.
   (`guild-removal.ts`) — not on a schedule — dropping a departed user's roster row,
   identity link, solo declaration and guest passes in one transaction, handing off
   leadership if they held it (ruling 10: no catch-up sweep for removals during
-  downtime). `/guest` is the one live slash command, registered the same way every
-  retired command is (`Routes.applicationGuildCommands`), letting an officer or the
-  leader give a 24h voice guest pass from the clan's own text channel.
+  downtime). `/guest` is registered the same way every retired command is
+  (`Routes.applicationGuildCommands`), letting an officer or the leader give a 24h
+  voice guest pass from the clan's own text channel — since 2026-09-13 it is no
+  longer the only live slash command; see below.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -233,8 +234,14 @@ turbo gate stays the gate, because it runs `typecheck` too.
   copy of a rule. Since 2c-b the site is the tool: `/clans`, `/clans/{tag}`, `/clan`,
   `/clan/settings`, `/claim/{ceremony}` and `/me` call the package's 34 exports through
   form POSTs to `apps/web/app/api/**` (`lib/form.ts`; codes looked up in
-  `lib/clan-copy.ts`). Every Discord slash command is retired and answers with one line
-  and a link (`apps/bot/src/retired-commands.ts`, `SITE_BASE_URL`). A page may never
+  `lib/clan-copy.ts`). Since 2026-09-13 the slash commands are coming BACK, as a second
+  front door onto the same `@factions/roster` calls the site makes — spec
+  `docs/superpowers/specs/2026-09-13-discord-command-parity-design.md`. Plan 1
+  ships `/link` and `/base`; `apps/bot/test/parity.test.ts` lists every write and
+  which plan carries it. The remaining stubs in `retired-commands.ts` still answer
+  with one line and a link and are deleted only when parity is complete.
+  ⚠️ Every command reply is ephemeral, always: `apps/bot/src/commands.ts` says why,
+  and `command-registration.test.ts` enforces it. A page may never
   reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`
   bans the substring in web source, identifiers included) — the package maps the
   page-facing fields at that boundary, e.g. `reads.ts`'s `clanId`/`clanName`.
@@ -301,7 +308,7 @@ rule number in any chapter; the old vendored `docs/guide-numbers.json` and its d
 must use extensionless relative imports in its `src/`.** Turbopack cannot map `.js` →
 `.ts`; `tsconfig.base.json`'s `moduleResolution: "Bundler"` makes the extensionless form
 legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
-`domain`, `declarations` and `verification` — including `packages/roster/src/internal/`, the bot's entry point; adding a package to `transpilePackages` means converting it first, and
+`domain`, `declarations`, `verification` and `copy` — including `packages/roster/src/internal/`, the bot's entry point; adding a package to `transpilePackages` means converting it first, and
 `apps/web/test/transpiled-imports.test.ts` fails until you do.
 
 ---

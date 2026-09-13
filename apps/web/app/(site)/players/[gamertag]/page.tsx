@@ -4,7 +4,7 @@ import { notFound } from "next/navigation";
 import { playerProfile, playerFeed, viewerFor, achievementsFor, type PlayerProfile } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
-import { UNLINK_COPY } from "@/lib/link-copy";
+import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, SignOut } from "@/app/components/owner";
@@ -72,7 +72,7 @@ export default async function PlayerProfilePage({
   const viewer = session ? await viewerFor(session.sub) : null;
   const owner = session && viewer && isOwnPage(viewer.link?.gamertag, profile.gamertag) ? await loadOwner(session, viewer) : null;
   // ⚠️ Looked up, never echoed: ?unlink= and ?result= are attacker-supplied (see lib/copy-lookup.ts). Only the owner's notices, on the owner's page.
-  const notices = owner ? [unlinkCode ? lookupCopy(UNLINK_COPY, unlinkCode) : undefined, result ? lookupCopy(RESULT_COPY, result) : undefined] : [];
+  const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, result ? lookupCopy(RESULT_COPY, result) : undefined] : [];
   const basePath = `/players/${encodeURIComponent(profile.gamertag)}`;
 
   const guide = guideLinkFor("/players/[gamertag]");
