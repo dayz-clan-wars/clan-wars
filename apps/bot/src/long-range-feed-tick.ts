@@ -4,6 +4,7 @@ import { readCursor, writeCursor } from "@factions/event-log";
 import { and, asc, desc, eq, gt, gte, isNotNull, isNull, lt, lte, or, sql } from "drizzle-orm";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
+import { UNKNOWN_SIDE } from "./kill-feed-embed.js";
 import { longRangeFeedEmbed, type LongRangeFeedItem } from "./long-range-feed-embed.js";
 import { membershipAt } from "./membership-tick.js";
 
@@ -17,7 +18,10 @@ export const LONG_RANGE_RANK_CAP = 10;
 export function longRangeFeedTick(
   store: CursorFeedStore<LongRangeFeedItem>,
   post: CursorFeedPoster,
-  opts: { siteBaseUrl: string; minM: number; flagImage?: FlagImageResolver; batchSize?: number; onError?: (eventId: number, err: unknown) => void },
+  // ⚠️ No `minM` here. The threshold lives in `PgLongRangeFeedStore`, which is
+  // what decides `qualifies`; a second copy on the tick would be read by
+  // nobody and would silently disagree with the store's.
+  opts: { siteBaseUrl: string; flagImage?: FlagImageResolver; batchSize?: number; onError?: (eventId: number, err: unknown) => void },
 ): Promise<CursorFeedResult> {
   return cursorFeedTick(store, post, (i) => (i.qualifies ? longRangeFeedEmbed(i, opts.siteBaseUrl, opts.flagImage) : null), {
     batchSize: opts.batchSize,
@@ -76,10 +80,11 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
       };
 
       if (!qualifies) {
-        // Nothing is rendered, so nothing needs resolving — skip up to seven
-        // queries: two side() calls (up to two queries each) plus records()'s
-        // season lookup and its two counts.
-        out.push({ ...base, killer: blank(), victim: blank(), personalBest: false, seasonRank: null, season: null });
+        // Nothing is rendered, so nothing needs resolving — skip up to nine
+        // queries: three per side() (membershipAt, players, and the factions
+        // select it makes when there is a membership) for two sides, plus
+        // records()'s season lookup and its two counts.
+        out.push({ ...base, killer: UNKNOWN_SIDE, victim: UNKNOWN_SIDE, personalBest: false, seasonRank: null, season: null });
         continue;
       }
 
@@ -127,9 +132,4 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
     const [f] = factionId === null ? [] : await this.db.select({ tag: factions.tag, texture: factions.texture }).from(factions).where(eq(factions.id, factionId));
     return { gamertag: p?.gamertag ?? "Unknown", tag: f?.tag ?? null, texture: f?.texture ?? null };
   }
-}
-
-/** A side nothing will render. Only ever reached for a kill the feed declines. */
-function blank() {
-  return { gamertag: "Unknown", tag: null, texture: null };
 }

@@ -61,7 +61,11 @@ export function hitFeedEmbed(i: HitFeedItem, siteBaseUrl: string, flagImage: Fla
   const lines = [head.join(" · "), ...(summary.length > 0 ? [summary.join(" · ")] : []), ...(detail.length > 0 ? ["", ...detail] : [])];
 
   return {
-    title: `${i.friendlyFire ? "Friendly fire — " : ""}${escapeMarkdown(i.attacker.gamertag)}${attackerTag}`,
+    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
+    // Discord renders no markdown in an embed title, so an escape is not
+    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
+    // Same rule as `kill-feed-embed.ts`.
+    title: `${i.friendlyFire ? "Friendly fire — " : ""}${i.attacker.gamertag}${attackerTag}`,
     url: profileUrl(siteBaseUrl, i.attacker.gamertag),
     description: lines.join("\n"),
     color: i.friendlyFire ? AMBER : EMBER,

@@ -1088,7 +1088,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       try {
         const r = await longRangeFeedTick(longRangeFeedStore, longRangeFeedPoster, {
           siteBaseUrl: cfg.siteBaseUrl,
-          minM: cfg.longRangeMinM,
           flagImage: flagImageResolver(cfg.flagImageBaseUrl),
           onError: (id, err) => {
             if (longRangeFeedFailures.has(id)) return;

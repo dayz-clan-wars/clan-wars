@@ -6,6 +6,7 @@ import { and, asc, eq, gt, gte, lte, max, min, sql } from "drizzle-orm";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { hitFeedEmbed, type HitFeedItem } from "./hit-feed-embed.js";
+import { UNKNOWN_SIDE } from "./kill-feed-embed.js";
 import { KILLS_CONSUMER } from "./kills-tick.js";
 import { membershipAt } from "./membership-tick.js";
 
@@ -100,6 +101,19 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
    * `kills` row (if any) already exists. When nothing is unprocessed — the
    * projector is caught up — `F` falls back to the newest known `occurred_at`
    * across all events, which is "now" as far as this feed can tell.
+   *
+   * ⚠️ Both branches are GLOBAL, across every server, not per server — and
+   * the fallback is the steady-state path, taken on most ticks. With a second
+   * server registered, a server whose ADM poller is ahead pulls the frontier
+   * forward for ALL of them, so a still-running fight on a lagging server can
+   * be judged quiet and posted early — the double-post into #hit-feed and
+   * #kill-feed that this frontier exists to prevent. Nothing logs when it
+   * happens. It is global deliberately: `readAfter` reads all servers' hits in
+   * one id-ordered pass against one scalar frontier, and the truncation guard
+   * and the cursor fixed point below are both built on that single pass;
+   * scoping the frontier means a per-server read, and that is a rewrite of
+   * this class, not a patch. One server is registered today. Before a second
+   * goes live, make the read per server — do not simply narrow this query.
    *
    * On an empty events table this returns null, which means nothing closes —
    * correct, there is nothing to be caught up on.
@@ -274,9 +288,7 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
       // Suppression is checked FIRST and cheaply: a suppressed engagement
       // never renders, so the ~6 name/tag/flag lookups below would be wasted.
       const suppressed = await this.claimedByAKill(e.serverId, e.attackerDayzId, e.victimDayzId, e.startedAt, e.endedAt);
-      // A suppressed engagement is never rendered (the render declines it),
-      // so the name/tag/flag lookups below would be pure waste.
-      const blank = { factionId: null, side: { gamertag: "", tag: null, texture: null } };
+      const blank = { factionId: null, side: UNKNOWN_SIDE };
       const [attacker, victim] = suppressed
         ? [blank, blank]
         : await Promise.all([

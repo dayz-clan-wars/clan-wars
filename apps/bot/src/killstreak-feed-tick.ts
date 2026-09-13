@@ -4,7 +4,7 @@ import { readCursor, writeCursor } from "@factions/event-log";
 import { and, asc, desc, eq, gt, isNotNull, lte, sql } from "drizzle-orm";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
-import type { KillFeedSide } from "./kill-feed-embed.js";
+import { UNKNOWN_SIDE } from "./kill-feed-embed.js";
 import { killstreakFeedEmbed, type KillstreakFeedItem } from "./killstreak-feed-embed.js";
 import { membershipAt } from "./membership-tick.js";
 
@@ -75,7 +75,7 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
         // it. Without that rule the cheapest 9-streak on the server is three
         // clanmates standing still. This item is always declined, so the
         // killer's name, tag and flag are never rendered — skip the lookup.
-        out.push({ eventId: Number(r.eventId), occurredAt: r.occurredAt, startedAt: r.occurredAt, killer: blank(), streak: null, victims: [] });
+        out.push({ eventId: Number(r.eventId), occurredAt: r.occurredAt, startedAt: r.occurredAt, killer: UNKNOWN_SIDE, streak: null, victims: [] });
         continue;
       }
       const side = await this.side(r.serverId, killer, r.occurredAt);
@@ -124,9 +124,4 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
     const [f] = factionId === null ? [] : await this.db.select({ tag: factions.tag, texture: factions.texture }).from(factions).where(eq(factions.id, factionId));
     return { gamertag: p?.gamertag ?? "Unknown", tag: f?.tag ?? null, texture: f?.texture ?? null };
   }
-}
-
-/** A side nothing will render. Only ever reached for a kill the feed declines. */
-function blank(): KillFeedSide {
-  return { gamertag: "Unknown", tag: null, texture: null };
 }

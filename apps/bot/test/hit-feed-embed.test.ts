@@ -71,9 +71,14 @@ describe("hitFeedEmbed", () => {
     expect(e.timestamp).toBe("2026-09-12T01:00:41.000Z");
   });
 
-  it("escapes markdown in gamertags — a name is text, never markup", () => {
-    const e = hitFeedEmbed({ ...base, attacker: { gamertag: "St*e*ve", tag: null, texture: null } }, site);
-    expect(e.title).toBe("St\\*e\\*ve");
+  it("escapes markdown in gamertags in the DESCRIPTION, where markdown renders", () => {
+    const e = hitFeedEmbed({ ...base, victim: { gamertag: "D_ave", tag: null, texture: null } }, site);
+    expect(e.description).toContain("D\\_ave");
+  });
+
+  it("⚠️ leaves the gamertag RAW in the title — Discord renders no markdown there, so an escape would be displayed", () => {
+    const e = hitFeedEmbed({ ...base, attacker: { gamertag: "x_Dave_x", tag: null, texture: null } }, site);
+    expect(e.title).toBe("x_Dave_x");
   });
 
   it("uses the attacker's flag as the thumbnail when there is one", () => {

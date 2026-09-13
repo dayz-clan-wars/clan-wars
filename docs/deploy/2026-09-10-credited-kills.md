@@ -33,16 +33,40 @@ feed will post the four historical ones once the rebuild lands — see step 4.
        delete from kills where event_id in (select id from events where type = 'player.died' and payload->>'cause' = 'environment');
        delete from events where type = 'player.died' and payload->>'cause' = 'environment'; -- 4 rows
 
-   Nothing consumes those rows by id — the kills consumer matches evidence by `occurred_at` —
-   and no consumer cursor needs moving: the reparse appends fresh rows at the head of the log.
+   Nothing consumes those rows by id — the kills consumer matches evidence by `occurred_at`.
+
+   ⚠️ **But the feed cursors DO need parking, and `hit-feed-poster`'s before this step, not
+   after it.** The reparse appends the deleted `player.hit` rows back at the **head** of the log
+   with brand-new ids and their true, old `occurred_at`. #hit-feed reads `events` by id, so every
+   one of those 505 rows is "new" to it and it will replay weeks of old firefights into a public
+   channel. Note the four cursors now (the table in step 4), and restore them after step 4.
 
        set -a; . ./.env; set +a
        (cd apps/ingest-worker && npx tsx src/reparse-main.ts)
 
-4. **Rebuild kills.** ⚠️ Before this step, park the kill feed's cursor so the rebuild's four new
+4. **Rebuild kills.** ⚠️ Before this step, park the feed cursors so the rebuild's four new
    PvP rows and two recovered mutual kills do not post to Discord as if they happened today:
 
-       select consumer_name, last_event_id from consumer_cursors where consumer_name like '%kill%';
+       select consumer_name, last_event_id from consumer_cursors where consumer_name like '%feed-poster%';
+
+   ⚠️ **There are FOUR feed consumers, not one**, and an earlier version of this runbook matched
+   on `'%kill%'`, which silently caught only two of them:
+
+   | Consumer | Channel | Cursor is |
+   |---|---|---|
+   | `kill-feed-poster` | #kill-feed | a `kills.event_id` |
+   | `hit-feed-poster` | #hit-feed | an `events.id` of a `player.hit` |
+   | `killstreak-feed-poster` | #killstreaks | a `kills.event_id` |
+   | `long-range-feed-poster` | #long-range | a `kills.event_id` |
+
+   All four need parking, for the same reason: a reparse appends events at the **head** of the
+   log carrying their true, **old** `occurred_at`, so the new ids land above every cursor and
+   every feed reads them as new. Skip two of them and weeks-old combat posts into two public
+   channels in front of live players. Note each cursor's value before the rebuild, and after it
+   restore any feed you do not want posting history — `update consumer_cursors set last_event_id
+   = <max> where consumer_name = '<name>'` (`<max>` is `select max(event_id) from kills` for the
+   three kill-derived feeds, and `select max(id) from events where type = 'player.hit'` for
+   `hit-feed-poster`).
 
    The kill feed's cursor is a `kills.event_id`; the recovered rows all carry event ids BELOW the
    current cursor except the two re-parsed mutual kills, which land at the head of the log with

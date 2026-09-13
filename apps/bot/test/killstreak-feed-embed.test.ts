@@ -35,9 +35,9 @@ describe("killstreakFeedEmbed", () => {
     expect(killstreakFeedEmbed(base, site).timestamp).toBe("2026-09-12T01:41:00.000Z");
   });
 
-  it("escapes markdown in every name", () => {
-    const e = killstreakFeedEmbed({ ...base, killer: { gamertag: "S*t*eve", tag: null, texture: null }, victims: ["D_ave"] }, site);
-    expect(e.title).toBe("S\\*t\\*eve");
+  it("⚠️ escapes names in the description, but leaves the title's gamertag RAW — Discord renders no markdown in a title, so an escape there would be displayed", () => {
+    const e = killstreakFeedEmbed({ ...base, killer: { gamertag: "x_Dave_x", tag: null, texture: null }, victims: ["D_ave"] }, site);
+    expect(e.title).toBe("x_Dave_x");
     expect(e.description).toContain("D\\_ave");
   });
 

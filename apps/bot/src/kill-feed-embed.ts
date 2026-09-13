@@ -5,6 +5,19 @@ import { flagLabel } from "./feed-embed.js";
 /** One side of a kill: the name the log used, and the clan they were in at that instant, if any. */
 export type KillFeedSide = { gamertag: string; tag: string | null; texture: string | null };
 
+/**
+ * The side a store hands back for an item it already knows the render will
+ * decline — the name/tag/flag lookups are skipped, so something has to stand
+ * in. One constant for every feed, because three copies of one fact drift
+ * (see CLAUDE.md), and these already had.
+ *
+ * ⚠️ A word, never `""`. If a feed ever stops declining the items it fills in
+ * with this, an empty gamertag makes an empty embed title, Discord answers
+ * 400, `cursorFeedTick` reads that as a post failure, and the feed wedges
+ * with a "blocked at" line pointing at the wrong cause.
+ */
+export const UNKNOWN_SIDE: KillFeedSide = { gamertag: "Unknown", tag: null, texture: null };
+
 /** One kill, ready to render. Built by `PgKillFeedStore`; never carries a position. */
 export type KillFeedItem = {
   /** The kill's `events.id`: the feed's cursor. */

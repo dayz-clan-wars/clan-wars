@@ -53,7 +53,11 @@ export function killstreakFeedEmbed(i: KillstreakFeedItem, siteBaseUrl: string, 
   ];
 
   return {
-    title: `${escapeMarkdown(i.killer.gamertag)}${tag}`,
+    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
+    // Discord renders no markdown in an embed title, so an escape is not
+    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
+    // Same rule as `kill-feed-embed.ts`.
+    title: `${i.killer.gamertag}${tag}`,
     url: profileUrl(siteBaseUrl, i.killer.gamertag),
     description: lines.join("\n"),
     color: FLAME,

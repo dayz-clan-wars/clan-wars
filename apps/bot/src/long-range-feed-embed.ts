@@ -1,7 +1,7 @@
 import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
-import { escapeMarkdown, profileUrl, type KillFeedSide } from "./kill-feed-embed.js";
+import { escapeMarkdown, profileUrl, who, type KillFeedSide } from "./kill-feed-embed.js";
 
 /** One long-range kill, ready to render. `distanceM` null means the log did not say — the render declines it. */
 export type LongRangeFeedItem = {
@@ -31,11 +31,6 @@ function ordinal(n: number): string {
   return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
 }
 
-function who(side: KillFeedSide, siteBaseUrl: string): string {
-  const name = `**[${escapeMarkdown(side.gamertag)}](${profileUrl(siteBaseUrl, side.gamertag)})**`;
-  return side.tag ? `${name} [${escapeMarkdown(side.tag)}]` : name;
-}
-
 /** One long-range kill, one embed. Pure — no client, no I/O, no clock. */
 export function longRangeFeedEmbed(i: LongRangeFeedItem, siteBaseUrl: string, flagImage: FlagImageResolver = () => null): APIEmbed {
   const image = i.killer.texture ? flagImage(i.killer.texture) : null;
@@ -58,7 +53,11 @@ export function longRangeFeedEmbed(i: LongRangeFeedItem, siteBaseUrl: string, fl
   ];
 
   return {
-    title: `${i.friendlyFire ? "Friendly fire — " : ""}${escapeMarkdown(i.killer.gamertag)}${tag}`,
+    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
+    // Discord renders no markdown in an embed title, so an escape is not
+    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
+    // Same rule as `kill-feed-embed.ts`.
+    title: `${i.friendlyFire ? "Friendly fire — " : ""}${i.killer.gamertag}${tag}`,
     url: profileUrl(siteBaseUrl, i.killer.gamertag),
     description: lines.join("\n"),
     color: i.friendlyFire ? AMBER : STEEL,

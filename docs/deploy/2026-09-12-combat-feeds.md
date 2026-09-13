@@ -8,9 +8,20 @@ cursor at the head on its first run, posting nothing historical — the same rul
 
 **`0034` is a real migration and must be applied by hand before the new code starts** —
 nothing in this repo applies migrations at startup. `runMigrations` (`packages/db/src/migrate.ts`)
-is called only from tests, there is no `db:migrate` script, and a deploy that assumes the
-bot migrates itself starts a bot whose queries reference an index the live database does
-not have. Use the one-off runner from `docs/deploy/2026-09-02-dormancy.md`.
+is called only from tests, and there is no `db:migrate` script. Use the one-off runner from
+`docs/deploy/2026-09-02-dormancy.md`.
+
+⚠️ **Skipping `0034` does not break anything loudly — that is the problem.** No query
+"references" an index; a missing index only makes a query slow. The failure mode is the
+silent one `packages/db/src/schema.ts` describes at the `byHitId` index: `hitEventsQuery`'s
+`id` range scan has to be walked from wherever the planner enters it, and once the frontier
+lags that walk runs to the **end of `events`** — a sequential scan of the largest table on
+the box — every tick, for zero rows. `maxOccurredAtQuery` does the same without
+`events_occurred_idx`. The tick then overruns its interval, `guardedRunner` quietly skips
+the overlapping runs, and **nothing is logged**: no error, no warning, no "blocked at" line.
+#hit-feed simply falls further and further behind while the bot looks healthy. So do not
+look for a crash to tell you the migration was missed — look at the indexes, below, and at
+whether #hit-feed's posts keep up with the fights.
 
 `0034` adds two indexes on `events`, both needed by the hit feed's queries
 (`hit-feed-tick.ts`: `hitEventsQuery` and `maxOccurredAtQuery`):
@@ -25,9 +36,12 @@ CONCURRENTLY` cannot run in one. This briefly locks writes on `events`, which is
 table (the same table `0034`'s own review found had no usable index for this feed's read).
 Pick a quiet moment; do not run it during a busy raid window.
 
-Confirm the count afterward:
+Confirm afterward that both indexes exist — a bare migration count cannot show that `0034`
+specifically landed:
 
-    select count(*) from __drizzle_migrations;   -- should include 0034
+    select indexname from pg_indexes where tablename = 'events';
+
+`events_hit_id_idx` and `events_occurred_idx` must both be in the result.
 
 ## Channels
 
@@ -86,3 +100,39 @@ consumer's row from `consumer_cursors` before restarting to have it re-seed at t
 instead.
 
 Consumer names: `hit-feed-poster`, `killstreak-feed-poster`, `long-range-feed-poster`.
+
+## ⚠️ Before any future rebuild or reparse: park all four feed cursors
+
+A reparse appends events at the **head** of the log carrying their true, **old**
+`occurred_at`. The new ids therefore land *above* every feed cursor, and every feed reads
+them as new work — so the next reparse by anyone who has not read this posts weeks-old
+combat into public channels, in front of live players. #hit-feed is the worst of it: it
+consumes `player.hit` events directly, and `docs/deploy/2026-09-10-credited-kills.md`'s
+reparse deletes and re-creates *every* hit event on the server.
+
+There are **four** feed consumers. An earlier version of that runbook told you to find them
+with `like '%kill%'`, which matches `kill-feed-poster` and — only by coincidence —
+`killstreak-feed-poster`, and silently misses the other two. It now reads:
+
+    select consumer_name, last_event_id from consumer_cursors where consumer_name like '%feed-poster%';
+
+| Consumer | Channel | Cursor is | Head query |
+|---|---|---|---|
+| `kill-feed-poster` | #kill-feed | a `kills.event_id` | `select max(event_id) from kills` |
+| `hit-feed-poster` | #hit-feed | an `events.id` of a `player.hit` | `select max(id) from events where type = 'player.hit'` |
+| `killstreak-feed-poster` | #killstreaks | a `kills.event_id` | `select max(event_id) from kills` |
+| `long-range-feed-poster` | #long-range | a `kills.event_id` | `select max(event_id) from kills` |
+
+**Park, then restore:**
+
+1. Before the reparse, record all four rows from the query above.
+2. Run the reparse and the `kills` rebuild.
+3. For each feed you do not want replaying history, set its cursor to the head:
+
+       update consumer_cursors set last_event_id = (<head query>) where consumer_name = '<name>';
+
+   Do this **before** the bot's next tick — if it is running, stop it for the rebuild or
+   accept that the feeds start posting the moment the rows land.
+4. Restoring the *recorded* value instead of the head is the other valid choice, and the
+   right one when you deliberately want the recovered rows posted. It is not the default:
+   the ids moved, so the old value no longer means what it meant.

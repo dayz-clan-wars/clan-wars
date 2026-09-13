@@ -94,9 +94,24 @@ engagement looks quiet against `Date.now()` and the feed closes fights that are 
 being fought — then posts a second embed when the rest of the burst arrives.
 
 **Guard:** the closing test's notion of "now" is the **ingest frontier** —
-`max(events.occurred_at)` for the server — not the wall clock. An engagement is quiet when
-`frontier - lastHit.occurredAt >= HIT_BURST_WINDOW_S`. With ingest caught up, the frontier
-tracks real time and behaviour is unchanged; with ingest behind, nothing closes early.
+`max(events.occurred_at)` across the whole log — not the wall clock. An engagement is quiet
+when `frontier - lastHit.occurredAt >= HIT_BURST_WINDOW_S`. With ingest caught up, the
+frontier tracks real time and behaviour is unchanged; with ingest behind, nothing closes
+early.
+
+⚠️ **The frontier is global, not per server, and that is a live trap the day a second
+server is registered.** `PgHitFeedStore.frontier()` has two branches and both span every
+server: `min(occurred_at)` over events the kills projector has not reached (conservative,
+and therefore safe), and — on most ticks, once the projector is caught up — an unqualified
+`max(events.occurred_at)`, with no `server_id` term. With two servers, the one whose ADM poller
+is *ahead* sets the frontier for both, so a fight still being fought on the lagging server
+looks quiet, closes, and is posted to #hit-feed — and then again to #kill-feed when the
+death finally lands. That is exactly the double-post this guard exists to prevent, and
+nothing logs when it happens. It is global on purpose: `readAfter` reads all servers' hits
+in one id-ordered pass against a single scalar frontier, and both the truncation guard and the
+cursor-ordering fixed point are built on that single pass. Narrowing only the `max` query
+would not be enough — the read itself has to become per server. One server is registered
+today; do this work **before** a second goes live, not after.
 
 ### And a third: the kills projector could be wedged
 
@@ -231,7 +246,17 @@ characters, but a sustained firefight stops being readable long before it stops 
 legal. The cap is one constant in `kill-feed-embed.ts`, shared by every feed that lists
 repeated items — the hit lines here, and the killstreak victim list in Part 2.
 
-Gamertags pass through `escapeMarkdown` on every path. A name is text, never markup.
+Gamertags pass through `escapeMarkdown` everywhere markdown actually renders: the embed
+**description** (every detail line, every `who()` link, the killstreak victim list) and
+every clan tag. A name is text, never markup.
+
+⚠️ **Embed titles are the exception, in every feed, deliberately.** Discord renders no
+markdown in an embed title, so an escape there is not neutralised — it is *displayed*. A
+gamertag of the ordinary Xbox shape `x_Dave_x` would read `x\_Dave\_x` to every player in
+the channel. The title therefore carries the **raw** gamertag, which is what the deployed
+#kill-feed has always done (`kill-feed-embed.ts`). This is not an oversight to be "fixed"
+by adding the escape back: the two contexts have opposite rules, and only the description
+is markup.
 
 # Part 2 — Killstreaks
 
@@ -246,11 +271,19 @@ Only a death **at another player's hand** resets a streak to zero: a `kills` row
 Zombies, fall damage, starvation, fences and self-inflicted deaths leave the streak
 running.
 
-⚠️ **Friendly fire neither advances nor breaks a streak.** A kill where
-`kills.friendly_fire` is true is invisible to this feed in both directions. Without that
-rule the cheapest 9-streak on the server is three clanmates standing still, and the feed
-stops meaning anything. It does not break the streak either — a misclick should not cost
-someone a legitimate run.
+⚠️ **Friendly fire does not advance a streak — but being killed by a clanmate still ends
+one.** The two directions differ on purpose, and the asymmetry is the whole rule:
+
+- As the **killer**: a kill where `kills.friendly_fire` is true does not count toward the
+  streak. Without that, the cheapest 9-streak on the server is three clanmates standing
+  still, and the feed stops meaning anything.
+- As the **victim**: it counts, exactly as the normative rule above says. A streak ends
+  when *another player* kills you, and a clanmate is a player. No exception is carved out
+  for the killer's clan — the death lookup in `killstreak-feed-tick.ts` is keyed on `pvp`,
+  not on `streakable`, and that is intended, not an oversight.
+
+So the rule protects the *feed* from being farmed by a friendly firing squad; it does not
+protect the person who gets shot. Dying is dying.
 
 ⚠️ **Streaks are not season-scoped**, unlike the kill feed's tally. Only death ends one, so
 a streak running across a season boundary keeps counting. The two are different questions:
