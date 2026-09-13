@@ -102,9 +102,8 @@ export type CommandGroup = {
    *
    * ⚠️ Discord refuses `showModal` on an interaction that has already been
    * acknowledged, so the router must NOT defer these — it calls the handler
-   * first and shows the modal it returns. Nothing in this task uses it; it is
-   * built here because it is the router's business, and a later task is the
-   * only user.
+   * first and shows the modal it returns. `/found`'s "found-name" button is
+   * its only user: see `foundGroup` in `found.ts`.
    */
   modalOpeners?: string[];
 };

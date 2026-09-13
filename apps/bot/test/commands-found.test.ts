@@ -2,6 +2,7 @@ import { describe, it, expect, afterEach } from "vitest";
 import { discordCopy } from "@factions/copy";
 import type { ClaimContext } from "@factions/roster";
 import { foundGroup } from "../src/commands/found.js";
+import { foundEmbed } from "../src/commands/embeds/found.js";
 import { getDraft, clearDraft, DRAFT_TTL_MS } from "../src/commands/founding-draft.js";
 import { specOf, ctxWith, input } from "./command-fakes.js";
 
@@ -133,5 +134,22 @@ describe("/found modal submit", () => {
     const later = { ...ctx, now: new Date(ctx.now.getTime() + DRAFT_TTL_MS + 1) };
     const reply = await foundGroup.modals!.found!(later, { actorDiscordId: "111", arg: "9", field: () => "x" });
     expect(reply.content).toContain("/found");
+  });
+});
+
+describe("foundEmbed", () => {
+  it("shows the chosen flag when one has been picked", () => {
+    const c = context();
+    const draft = { ceremonyId: 9, texture: "Flag_Zenit", memberDayzIds: ["a", "b"] };
+    const json = JSON.stringify(foundEmbed(c, draft, "https://x"));
+    expect(json).toContain("Flag_Zenit");
+    expect(json).not.toContain("not chosen yet");
+  });
+
+  it("says the flag is not chosen yet when the draft has none", () => {
+    const c = context();
+    const draft = { ceremonyId: 9, texture: null, memberDayzIds: ["a", "b", "c"] };
+    const json = JSON.stringify(foundEmbed(c, draft, "https://x"));
+    expect(json).toContain("not chosen yet");
   });
 });

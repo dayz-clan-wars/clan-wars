@@ -9,8 +9,9 @@ const GOLD = 0xc8a34a;
  *
  * ⚠️ `clan.base` is the viewer's own clan's pole and is the ONLY coordinate
  * this card may carry. `rebindCandidates` is deliberately rendered by raiser
- * and time: a pole key is a coordinate in disguise, and this card is read by
- * every rank including a pending member.
+ * and time: a pole key is a coordinate in disguise. This card IS read by
+ * every rank including a pending member, but the base field itself is gated
+ * to full members only — see the check below.
  */
 export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
   const embed = new EmbedBuilder()
@@ -19,7 +20,14 @@ export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
     .setURL(`${siteBaseUrl}/clan`)
     .setDescription(`You are **${view.me.role}**${view.me.status === "full" ? "" : ` (${view.me.status})`}.`);
 
-  if (view.clan.base) {
+  // ⚠️ Gated here, not in `clanForDb`: that read is shared with the website,
+  // which never renders the coordinate at all (see `mapState` in
+  // packages/roster/src/map.ts, which excludes pending members from the map
+  // entirely). `clanForDb` computes `base` for every rank, so this card is
+  // the only place that decides who actually sees it — a pending member has
+  // done nothing but have a join request accepted, and handing them the
+  // clan's exact base is the cheapest path a raider has to a base fix.
+  if (view.clan.base && view.me.status === "full") {
     embed.addFields({ name: "Base", value: `${Math.round(view.clan.base.x)}, ${Math.round(view.clan.base.z)}`, inline: true });
   }
   embed.addFields({ name: "Status", value: view.clan.status, inline: true });

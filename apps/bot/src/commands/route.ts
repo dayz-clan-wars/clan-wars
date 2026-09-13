@@ -95,6 +95,14 @@ export async function handleComponent(ctx: Ctx, i: MessageComponentInteraction):
     if (opener) {
       const reply = await opener(ctx, { actorDiscordId: i.user.id, arg: parsed.arg, values: [] });
       if (reply.modal) { await i.showModal(reply.modal); return; }
+      // ⚠️ INVARIANT: a modal-opener's non-modal reply carries `content`
+      // only — `embeds`/`components` are dropped here, silently, with no
+      // error. This is harmless today because every listed opener (see
+      // `modalOpeners` on `CommandGroup`) can only return a modal or a bare
+      // content string. `Reply` itself still permits embeds on this path, so
+      // if a future opener ever returns one, it will vanish with nothing to
+      // say why — do not add embeds/components to an opener's reply without
+      // widening this branch to forward them.
       await i.reply({ content: reply.content ?? UNKNOWN, flags: MessageFlags.Ephemeral });
       return;
     }

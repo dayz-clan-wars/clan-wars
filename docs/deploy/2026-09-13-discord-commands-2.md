@@ -46,6 +46,11 @@ either way, so nothing trusts anything stale by the time the write lands.
 **Web is unaffected.** This deploy touches `apps/bot` only. Do not run
 `deploy-web.sh` for it.
 
+**Deviation from the design doc:** the command surface there writes `/me`
+with a default subcommand, but Discord has no way to express a bare command
+that also declares subcommands — a command is either a leaf or a router, never
+both. This ships as `/me show` instead. Intentional; do not "fix" it back.
+
 ## Acceptance (needs a human in Discord)
 
 - `/me show` on a linked account.

@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 import { discordCopy } from "@factions/copy";
 import { idOf } from "./parse.js";
-import { linkedPlayers } from "./roster.js";
+import { clanView, linkedPlayers } from "./roster.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 /**
@@ -32,9 +32,8 @@ const revoke: Handler = async (ctx, input) => {
 
 /** Guest passes are officer+ only info; `clanFor` answers a string for anyone else, so this offers nothing. */
 const passes: AutocompleteSource = async (ctx, a) => {
-  const view = await ctx.roster.clanFor(a.actorDiscordId);
-  if (typeof view === "string") return [];
-  return view.guestPasses.map((p) => ({ name: `guest ${p.userDiscordId}`, value: String(p.id) }));
+  const view = await clanView(ctx, a.actorDiscordId);
+  return (view?.guestPasses ?? []).map((p) => ({ name: `guest ${p.userDiscordId}`, value: String(p.id) }));
 };
 
 export const guestGroup: CommandGroup = {

@@ -4,8 +4,15 @@ import { confirmReply } from "./confirm.js";
 import { idOf } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, ComponentHandler, Handler } from "./types.js";
 
-/** `clanFor` answers a string when the actor has no clan to read; autocomplete then offers nothing. */
-async function clanView(ctx: Parameters<Handler>[0], discordId: string) {
+/**
+ * `clanFor` answers a string when the actor has no clan to read; autocomplete
+ * (and `/clan`'s and `/guest`'s own autocomplete sources) then offer nothing.
+ *
+ * Exported so `clan.ts` and `guest.ts` share this one spelling of "is this a
+ * `ClanView` or a refusal string" instead of each inlining their own
+ * `typeof view === "string"` check.
+ */
+export async function clanView(ctx: Parameters<Handler>[0], discordId: string) {
   const view = await ctx.roster.clanFor(discordId);
   return typeof view === "string" ? null : view;
 }

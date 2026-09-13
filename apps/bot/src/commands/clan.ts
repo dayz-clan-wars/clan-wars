@@ -2,12 +2,13 @@ import { SlashCommandBuilder } from "discord.js";
 import { DISBAND_WARNING, REFUSAL, discordCopy } from "@factions/copy";
 import { clanEmbed } from "./embeds/clan.js";
 import { confirmReply } from "./confirm.js";
+import { clanView } from "./roster.js";
 import type { AutocompleteSource, CommandGroup, ComponentHandler, Handler } from "./types.js";
 
 const info: Handler = async (ctx, input) => {
   const view = await ctx.roster.clanFor(input.actorDiscordId);
   if (view === "not-linked") return { content: REFUSAL["not-linked"], ephemeral: true };
-  if (view === "not-in-clan") return { content: "You are not in a clan. Browse with `/clans list`.", ephemeral: true };
+  if (view === "not-in-clan") return { content: `${REFUSAL["not-in-clan"]} Browse with \`/clans list\`.`, ephemeral: true };
   return { embeds: [clanEmbed(view, ctx.siteBaseUrl)], ephemeral: true };
 };
 
@@ -48,9 +49,8 @@ const confirmDisband: ComponentHandler = async (ctx, a) =>
 
 /** ⚠️ Label by raiser and time. The pole key is the VALUE, which Discord never shows. */
 const poles: AutocompleteSource = async (ctx, a) => {
-  const view = await ctx.roster.clanFor(a.actorDiscordId);
-  if (typeof view === "string") return [];
-  return view.rebindCandidates.map((c) => ({ name: `raised by ${c.by}`, value: c.poleKey }));
+  const view = await clanView(ctx, a.actorDiscordId);
+  return (view?.rebindCandidates ?? []).map((c) => ({ name: `raised by ${c.by}`, value: c.poleKey }));
 };
 
 export const clanGroup: CommandGroup = {

@@ -101,19 +101,28 @@ function fakeButton(customId: string, userId: string): Interaction {
  * Runs `handleComponent` against a fake button, with the given handlers
  * registered under `COMPONENTS` only for the duration of the call — so one
  * test's stub action never leaks into the next.
+ *
+ * ⚠️ Restores whatever was there before, rather than deleting the key. One
+ * of the actions tests stub here is "disband", which `clanGroup` really
+ * registers — deleting it would unregister the real handler for the rest of
+ * the process, and any later test exercising real `disband` would silently
+ * get `UNKNOWN` instead of a failure pointing at this file.
  */
 async function runComponent(
   opts: { customId: string; userId: string },
   handlers: Record<string, ComponentHandler>,
 ): Promise<string | undefined> {
-  const keys = Object.keys(handlers);
+  const previous = new Map(Object.keys(handlers).map((action) => [action, COMPONENTS.get(action)]));
   for (const [action, handler] of Object.entries(handlers)) COMPONENTS.set(action, handler);
   try {
     const interaction = fakeButton(opts.customId, opts.userId) as unknown as MessageComponentInteraction;
     await handleComponent({} as Ctx, interaction);
     return (interaction as unknown as { _edits: { content?: string }[] })._edits[0]?.content;
   } finally {
-    for (const action of keys) COMPONENTS.delete(action);
+    for (const [action, handler] of previous) {
+      if (handler === undefined) COMPONENTS.delete(action);
+      else COMPONENTS.set(action, handler);
+    }
   }
 }
 
@@ -144,20 +153,23 @@ function fakeModal(customId: string, userId: string, fields: Record<string, stri
 /**
  * Runs `handleModalSubmit` against a fake modal submit, with the given
  * handlers registered under `MODALS` only for the duration of the call —
- * mirrors `runComponent`.
+ * mirrors `runComponent`, restore-not-delete included.
  */
 async function runModal(
   opts: { customId: string; userId: string; fields?: Record<string, string> },
   handlers: Record<string, ModalHandler>,
 ): Promise<string | undefined> {
-  const keys = Object.keys(handlers);
+  const previous = new Map(Object.keys(handlers).map((action) => [action, MODALS.get(action)]));
   for (const [action, handler] of Object.entries(handlers)) MODALS.set(action, handler);
   try {
     const interaction = fakeModal(opts.customId, opts.userId, opts.fields) as unknown as ModalSubmitInteraction;
     await handleModalSubmit({} as Ctx, interaction);
     return (interaction as unknown as { _edits: { content?: string }[] })._edits[0]?.content;
   } finally {
-    for (const action of keys) MODALS.delete(action);
+    for (const [action, handler] of previous) {
+      if (handler === undefined) MODALS.delete(action);
+      else MODALS.set(action, handler);
+    }
   }
 }
 
@@ -222,9 +234,10 @@ describe("component and modal routing", () => {
 
 /**
  * `MODAL_OPENERS` is a derived index, not hand-maintained state: it must
- * always equal the union of every group's own `modalOpeners` list. With the
- * registry as it stands today that union is empty — no group opens a modal
- * yet — so this asserts the derivation itself, not any particular member.
+ * always equal the union of every group's own `modalOpeners` list. `/found`'s
+ * "found-name" button is a member of that union today (see `foundGroup`'s
+ * `modalOpeners` in `found.ts`), so this asserts the derivation itself, not
+ * any particular member — the test below pins that specific member.
  */
 describe("MODAL_OPENERS", () => {
   it("is the union of every group's modalOpeners", () => {
@@ -253,6 +266,34 @@ describe("MODAL_OPENERS", () => {
       expect(b._deferred).toEqual([]);
     } finally {
       clearDraft("111");
+    }
+  });
+
+  /**
+   * M5: pins the invariant named in `route.ts`'s modal-opener branch — a
+   * non-modal reply from an opener forwards `content` only. `embeds` (and
+   * `components`) are silently dropped. Harmless today because every real
+   * opener only ever returns a modal or a bare content string, but `Reply`
+   * itself permits embeds here, so this test is what would fail the day a
+   * future opener starts returning one instead of route.ts quietly widening.
+   */
+  it("drops embeds from a modal-opener's non-modal reply, without erroring", async () => {
+    const previous = COMPONENTS.get("found-name");
+    COMPONENTS.set("found-name", async () => ({
+      content: "no modal this time",
+      embeds: [{ fake: "embed" } as never],
+      ephemeral: true as const,
+    }));
+    try {
+      const button = fakeButton(confirmId("found-name", "111"), "111");
+      await handleComponent({} as Ctx, button as unknown as MessageComponentInteraction);
+      const b = button as unknown as { _edits: { content?: string; embeds?: unknown[] }[] };
+      expect(b._edits).toHaveLength(1);
+      expect(b._edits[0]!.content).toBe("no modal this time");
+      expect(b._edits[0]!.embeds).toBeUndefined();
+    } finally {
+      if (previous === undefined) COMPONENTS.delete("found-name");
+      else COMPONENTS.set("found-name", previous);
     }
   });
 });

@@ -27,9 +27,31 @@ describe("clanEmbed", () => {
     expect(json).not.toContain("3021_9944");
   });
 
-  it("renders the clan's own base, which is the one coordinate a member may see", () => {
-    const view = viewFixture({ clan: { ...viewFixture().clan, base: { x: 3021.4, z: 9944.6 } } });
+  it("renders the clan's own base, which is the one coordinate a full member may see", () => {
+    const view = viewFixture({
+      me: { role: "leader", status: "full" },
+      clan: { ...viewFixture().clan, base: { x: 3021.4, z: 9944.6 } },
+    });
     expect(JSON.stringify(clanEmbed(view, "https://x"))).toContain("3021");
+  });
+
+  /**
+   * `clanForDb` computes `base` for every rank (it only gates
+   * `invitesOut`/`requestsIn`/`rebindCandidates`/`leadership`/`guestPasses`),
+   * so the gate belongs here. A pending member has done nothing but have a
+   * join request accepted — showing them the base is the cheapest path a
+   * raider has to a base fix. Asserted against the whole stringified card,
+   * the way the pole-key test above does, so it catches a coordinate leaking
+   * through ANY field, not just the one named "Base".
+   */
+  it("shows no coordinate at all to a pending member, even though clan.base is set", () => {
+    const view = viewFixture({
+      me: { role: "member", status: "pending" },
+      clan: { ...viewFixture().clan, base: { x: 3021.4, z: 9944.6 } },
+    });
+    const json = JSON.stringify(clanEmbed(view, "https://x"));
+    expect(json).not.toContain("3021");
+    expect(json).not.toContain("9944");
   });
 });
 
