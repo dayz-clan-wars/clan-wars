@@ -153,3 +153,21 @@ describe("foundEmbed", () => {
     expect(json).toContain("not chosen yet");
   });
 });
+
+/**
+ * ⚠️ The router's in-place behaviour is tested in `route.test.ts` against a
+ * throwaway action, so nothing there notices if `/found` stops opting in.
+ * Deleting the `updatesInPlace` line would silently bring back the defect it
+ * was added to fix: every flag or crew pick stacking a NEW ephemeral card
+ * under the old one, leaving the player looking at three copies of the
+ * founding screen with only the last one current.
+ */
+describe("foundGroup's registration", () => {
+  it("takes the flag and crew selects in place, and the modal opener not at all", () => {
+    expect(foundGroup.updatesInPlace).toEqual(["found-flag", "found-crew"]);
+    // A modal cannot be shown on an acknowledged interaction, so the button
+    // that opens one must never be deferred — in place or otherwise.
+    expect(foundGroup.modalOpeners).toEqual(["found-name"]);
+    expect(foundGroup.updatesInPlace).not.toContain("found-name");
+  });
+});
