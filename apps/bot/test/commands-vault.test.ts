@@ -29,11 +29,20 @@ describe("/vault list", () => {
     expect(JSON.stringify(j.fields)).toContain("Front gate");
   });
 
-  /** ⚠️ The one thing this card may never contain. `VaultLockView` carries no code — keep it that way. */
+  /**
+   * ⚠️ The one thing this card may never contain. `VaultLockView` carries no
+   * code field at all — this guards against a future edit that joins in
+   * some OTHER lock field the embed does not read today (here, `createdBy`)
+   * and happens to leak a code-shaped string onto the card. A weaker check
+   * (e.g. matching the literal word "code") would pass even if the digits
+   * themselves reached the card under a different label, so this asserts
+   * the distinctive string itself is entirely absent from the serialised
+   * embed.
+   */
   it("never prints a code", async () => {
-    const ctx = ctxWith({ vaultFor: async () => state({ locks: [lock({ name: "1234" })] }) });
+    const ctx = ctxWith({ vaultFor: async () => state({ locks: [lock({ createdBy: "9137" })] }) });
     const reply = await specOf(vaultGroup, "vault list").handler(ctx, input());
-    expect(JSON.stringify(reply.embeds![0]!.toJSON())).not.toMatch(/\bcode\b\s*[:=]/iu);
+    expect(JSON.stringify(reply.embeds![0]!.toJSON())).not.toContain("9137");
   });
 
   it("shows history to a leader and nothing to anyone else", async () => {
@@ -47,7 +56,7 @@ describe("/vault list", () => {
   it("says so plainly when the vault is empty", async () => {
     const ctx = ctxWith({ vaultFor: async () => state({ locks: [] }) });
     const reply = await specOf(vaultGroup, "vault list").handler(ctx, input());
-    expect(reply.embeds![0]!.toJSON().fields ?? []).toEqual([]);
+    expect(JSON.stringify(reply.embeds![0]!.toJSON().fields ?? [])).toMatch(/no locks/iu);
   });
 });
 

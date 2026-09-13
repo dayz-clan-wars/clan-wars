@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { EmbedBuilder } from "discord.js";
-import { budget, EMBED_TOTAL_MAX, MAX_FIELDS } from "../src/commands/embeds/budget.js";
+import { budget, EMBED_TOTAL_MAX, FIELD_VALUE_MAX, MAX_FIELDS } from "../src/commands/embeds/budget.js";
 
 /** What Discord counts: title + description + every field name and value + footer. */
 function totalLength(embed: EmbedBuilder): number {
@@ -47,6 +47,21 @@ describe("embed budget", () => {
     const b = budget(EMBED_TOTAL_MAX - 4);
     expect(b.field(embed, "Name", "value that is far too long to fit")).toBe(false);
     expect(embed.toJSON().fields ?? []).toEqual([]);
+  });
+
+  /**
+   * ⚠️ Fix round 1, finding 1: a single line over FIELD_VALUE_MAX used to
+   * become a chunk of one whose value already exceeded the cap, and
+   * `embed.addFields` throws on that — reaching the player as
+   * `HANDLER_FAILED` rather than the truncated-but-present card this
+   * asserts.
+   */
+  it("truncates a single line longer than the field cap instead of throwing", () => {
+    const embed = new EmbedBuilder();
+    expect(() => budget(0).list(embed, "Rows", ["x".repeat(3000)], (n) => `+${n} more`)).not.toThrow();
+    const fields = embed.toJSON().fields ?? [];
+    expect(fields.length).toBeGreaterThan(0);
+    for (const f of fields) expect(f.value.length).toBeLessThanOrEqual(FIELD_VALUE_MAX);
   });
 
   it("adds every line and no notice when everything fits", () => {

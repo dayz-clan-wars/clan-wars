@@ -49,9 +49,19 @@ export function budget(spentAlready: number): Budget {
     list: (embed, name, lines, more) => {
       if (lines.length === 0) return;
       // Chunk first: each chunk is a field value at or under FIELD_VALUE_MAX.
+      //
+      // ⚠️ A single line longer than FIELD_VALUE_MAX is truncated to fit
+      // BEFORE it is ever placed in a chunk. Without this, a lone over-long
+      // line becomes a chunk of one whose value already exceeds the cap —
+      // `embed.addFields` throws on that, past this function's own reach —
+      // and the thrown error reaches the player as `HANDLER_FAILED`, exactly
+      // the failure this file exists to prevent. Unreachable for today's
+      // vault/lock fields (all well under 1024 chars), but map pins, boards
+      // and player cards feed this free text in later tasks.
       const chunks: string[][] = [];
       let chunk: string[] = [];
-      for (const line of lines) {
+      for (const raw of lines) {
+        const line = raw.length > FIELD_VALUE_MAX ? raw.slice(0, FIELD_VALUE_MAX) : raw;
         if (chunk.length > 0 && [...chunk, line].join("\n").length > FIELD_VALUE_MAX) { chunks.push(chunk); chunk = []; }
         chunk.push(line);
       }
@@ -77,6 +87,14 @@ export function budget(spentAlready: number): Budget {
         fields += 1;
         shown += c.length;
       }
+      // ⚠️ `add` can itself return false here — if even the notice does not
+      // fit the budget that remains (only reachable when this `Budget` is
+      // shared across more than one `list()`/`field()` call and an earlier
+      // one already spent most of it, e.g. `vaultEmbed`'s history section
+      // running right after a nearly-full locks section), the whole
+      // section — header and "+N more" both — is silently dropped. Known
+      // and bounded: it can only under-fill the card, never push it over
+      // Discord's cap, so it is left as is rather than restructured.
       if (shown < lines.length) add(embed, "…", more(lines.length - shown), false);
     },
   };

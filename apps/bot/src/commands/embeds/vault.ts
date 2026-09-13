@@ -32,8 +32,15 @@ export function vaultEmbed(state: VaultState, siteBaseUrl: string): EmbedBuilder
     .setDescription(VAULT_INTRO).setFooter({ text: FOOTER_TEXT });
   const b = budget(TITLE.length + VAULT_INTRO.length + FOOTER_TEXT.length);
 
-  b.list(embed, `${state.locks.length} lock${state.locks.length === 1 ? "" : "s"}`,
-    state.locks.map(lockLine), (n) => `+${n} more — see the site.`);
+  if (state.locks.length === 0) {
+    // ⚠️ `list()` returns early on zero lines, so without this an empty
+    // vault would render a blank card — no "0 locks", no sentence at all.
+    // A player should be told plainly that there is nothing here yet.
+    b.field(embed, "Locks", "No locks yet — add one on the site.");
+  } else {
+    b.list(embed, `${state.locks.length} lock${state.locks.length === 1 ? "" : "s"}`,
+      state.locks.map(lockLine), (n) => `+${n} more — see the site.`);
+  }
 
   if (state.history && state.history.length > 0) {
     b.list(embed, "Recent changes",
