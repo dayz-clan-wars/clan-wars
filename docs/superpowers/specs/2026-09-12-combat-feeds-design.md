@@ -141,12 +141,38 @@ Compute it as: start with the open engagements as the obstacle set. Repeatedly m
 not-yet-decided closed engagement whose last event id is not below the current minimum
 obstacle first-event-id into the obstacle set too, recomputing the minimum each pass, until
 a pass changes nothing. What remains is the safe set; post it in ascending last-event-id
-order, and the cursor advances to each posted engagement's own last event id in turn (never
-past the batch in one jump — a post can fail partway through the batch, and every prefix of
-the posted order must itself be a safe stopping point). With nothing open and nothing
-withheld, the whole batch is safe and posts in one pass. A fight in progress — open, or
-closed-but-blocked — holds the line rather than being stepped over, which is what makes an
-engagement straddling a batch boundary arrive whole once it finally clears.
+order, and the cursor advances to each posted engagement's own last event id in turn. With
+nothing open and nothing withheld, the whole batch is safe and posts in one pass. A fight in
+progress — open, or closed-but-blocked — holds the line rather than being stepped over,
+which is what makes an engagement straddling a batch boundary arrive whole once it finally
+clears.
+
+**The batch limit is part of that fixed point, not a slice after it.** An engagement dropped
+by a trailing slice is neither posted nor an obstacle, so nothing was ever checked against
+it — which reopens the same hole. The dropped tail joins the obstacle set and the passes run
+again, until neither the disqualification pass nor the limit changes the set.
+
+**Liveness beats the limit.** Every safe set is a prefix of the closed engagements in
+last-event-id order (if an un-posted engagement's last event id were below the largest
+posted one, its first event id would be below it too, and the post was never safe), so when
+the safe set's spans nest, a prefix shorter than the whole thing can be unsafe. If that whole
+thing is longer than the batch limit, no admissible set of at most `limit` engagements
+exists, and posting nothing would stall the feed permanently — the same rows, the same
+answer, every tick, with no open engagement that will ever close to break it. In that case
+the batch overshoots the limit and posts the smallest non-empty safe prefix instead. The
+limit is a batch-size hint, bounded by the rows already read; the cursor invariant is not.
+
+**What this guarantees, and what it deliberately does not.** The guarantee is about the batch
+as a whole: for every posted engagement `e`, `e`'s last event id is below the first event id
+of every engagement NOT posted this batch. It is *not* prefix-safe. Posted spans may nest —
+A (first 1, last 10) and B (first 2, last 3) both post, ordered [B, A] — and the loop advances
+the cursor per item and stops at the first post failure, so if B posts and A's post then
+fails, A's hits at ids 1-2 are below the cursor and A re-posts later as a fragment. That is
+accepted, not overlooked. The only rule that is prefix-safe is a single sorted pass with
+stop-at-first-failure, and it deadlocks forever on two fully closed engagements whose spans
+nest with neither open — an ordinary shape, not an edge case. These feeds are at-least-once
+by design; one duplicated fragment after a Discord outage is the price of a feed that cannot
+wedge.
 
 Suppressed engagements advance the cursor exactly as posted ones do. They are decided, not
 pending.

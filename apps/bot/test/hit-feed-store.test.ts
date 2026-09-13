@@ -241,6 +241,48 @@ describe("PgHitFeedStore", () => {
     expect(await store.cursor()).toBe(before);
   });
 
+  it("⚠️ the batch limit is applied INSIDE the barrier fixed point — a closed engagement dropped by the limit is still an obstacle, not a hole", async () => {
+    // Three fully closed engagements, none open:
+    //   Y  (A/B)  first id 1, last id 6 — it spans the whole batch
+    //   X1 (C/D)  first id 2, last id 3
+    //   X2 (R/C)  first id 4, last id 5
+    // By lastEventId that is [X1, X2, Y]. With limit 2, slicing AFTER the
+    // fixed point converged would emit X1 and X2, land the cursor on id 5,
+    // and bury Y's opening hit at id 1 — Y would re-group next tick as a
+    // one-hit fragment with the wrong start time. The limit has to take part
+    // in the fixed point: dropping Y makes Y an obstacle, which disqualifies
+    // both X1 and X2, and the only safe non-empty prefix is all three.
+    await mkHit({ at: s(0), attacker: A, victim: B }); // id 1 — Y opens, lowest id in the batch
+    await mkHit({ at: s(1), attacker: C, victim: D }); // id 2 — X1
+    await mkHit({ at: s(2), attacker: C, victim: D }); // id 3 — X1 closes
+    await mkHit({ at: s(3), attacker: R, victim: C }); // id 4 — X2
+    await mkHit({ at: s(4), attacker: R, victim: C }); // id 5 — X2 closes
+    await mkHit({ at: s(30), attacker: A, victim: B }); // id 6 — Y closes (30s gap, inside the burst window)
+    await mkFrontier(s(400));
+
+    const items = await store.readAfter(0, 2);
+    // All three, ascending — deliberately over the limit of 2, because no
+    // smaller prefix is safe and emitting nothing at all would stall this
+    // feed permanently on a shape that never changes.
+    expect(items.map((i) => i.eventId)).toEqual([3, 5, 6]);
+    // Y arrives whole: both hits, its own opening time.
+    const y = items.find((i) => i.eventId === 6)!;
+    expect(y.hits).toHaveLength(2);
+    expect(y.startedAt).toEqual(s(0));
+  });
+
+  it("the batch limit still binds when the shorter prefix is safe — four separate fights, limit 2, the two oldest post", async () => {
+    // No spans overlap, so every prefix is safe and the limit is free to cut.
+    const first = await mkHit({ at: s(0), attacker: A, victim: B });
+    const second = await mkHit({ at: s(1), attacker: C, victim: D });
+    await mkHit({ at: s(2), attacker: R, victim: C });
+    await mkHit({ at: s(3), attacker: D, victim: A });
+    await mkFrontier(s(400));
+
+    const items = await store.readAfter(0, 2);
+    expect(items.map((i) => i.eventId)).toEqual([first, second]);
+  });
+
   it("⚠️ a fight that finishes early posts while an unrelated fight that started later is still ongoing — and the ongoing one survives complete once it finally closes", async () => {
     // The short fight (C/D) is fully quiet BEFORE the long fight (A/B) even
     // begins, so posting it never requires the cursor to step over any of the

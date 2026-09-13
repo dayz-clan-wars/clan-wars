@@ -1,4 +1,4 @@
-import { RECENT_HIT_WINDOW_S } from "./death-verdict.js";
+import { RECENT_HIT_WINDOW_S } from "./death-verdict";
 
 /** The default quiet gap that closes an engagement. Overridden by `HIT_BURST_WINDOW_S`. */
 export const DEFAULT_HIT_BURST_WINDOW_S = 60;

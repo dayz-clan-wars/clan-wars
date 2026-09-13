@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { consumerCursors, events, factions, kills, players } from "@factions/db";
 import { readCursor, writeCursor } from "@factions/event-log";
-import { DEFAULT_HIT_BURST_WINDOW_S, RECENT_HIT_WINDOW_S, groupHitBursts, type HitInput } from "@factions/domain";
+import { DEFAULT_HIT_BURST_WINDOW_S, RECENT_HIT_WINDOW_S, groupHitBursts, type HitEngagement, type HitInput } from "@factions/domain";
 import { and, asc, eq, gt, gte, lte, max, min, sql } from "drizzle-orm";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
@@ -178,26 +178,94 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
     // as the initial obstacle set; repeatedly move any not-yet-decided closed
     // engagement whose lastEventId is not below the current barrier into the
     // obstacle set (recomputing the barrier each pass) until a pass makes no
-    // change. What survives is the safe set; emit it sorted by lastEventId
-    // ascending. Batches here are small, so this straightforward, repeated-
-    // pass approach is preferred over a cleverer single-scan one.
-    let obstacles = engagements.filter((e) => !e.closed);
-    let candidates = engagements.filter((e) => e.closed);
-    for (let changed = true; changed; ) {
-      changed = false;
-      const barrier = obstacles.length > 0 ? Math.min(...obstacles.map((e) => e.firstEventId)) : Infinity;
-      const stillCandidates: typeof candidates = [];
-      for (const c of candidates) {
-        if (c.lastEventId >= barrier) {
-          obstacles.push(c);
+    // change. Batches here are small, so this straightforward, repeated-pass
+    // approach is preferred over a cleverer single-scan one.
+    //
+    // ⚠️ `limit` takes part in that fixed point — it is NOT a slice applied
+    // after it converges. An engagement dropped by a trailing slice is
+    // neither emitted nor an obstacle, so it was never tested against, which
+    // reopens the exact hole the fixed point closes: closed X1(1st 10, last
+    // 11), X2(1st 12, last 13), Y(1st 1, last 100) with limit 2 would emit X1
+    // and X2, land the cursor on 13, and bury Y's hits at ids 1-9 — Y then
+    // re-groups as a fragment, posting "4 hits, 152 damage" as "1 hit, 38
+    // damage" with a wrong start time. Silent and permanent. So the dropped
+    // tail joins the obstacles and the passes run again.
+    //
+    // Termination: `obstacles` only ever grows and `candidates` only ever
+    // shrinks — nothing is returned to `candidates` once withheld — so every
+    // pass that sets `changed` strictly decreases a non-negative integer.
+    // At most one pass per engagement, then it stops. It cannot cycle.
+    const byLast = (a: HitEngagement, b: HitEngagement) => a.lastEventId - b.lastEventId;
+    const open = engagements.filter((e) => !e.closed);
+    const allClosed = engagements.filter((e) => e.closed).sort(byLast);
+
+    const settle = (cap: number): HitEngagement[] => {
+      const obstacles = [...open];
+      let candidates = [...allClosed];
+      for (let changed = true; changed; ) {
+        changed = false;
+        const barrier = obstacles.length > 0 ? Math.min(...obstacles.map((e) => e.firstEventId)) : Infinity;
+        const stillCandidates: HitEngagement[] = [];
+        for (const c of candidates) {
+          if (c.lastEventId >= barrier) {
+            obstacles.push(c);
+            changed = true;
+          } else {
+            stillCandidates.push(c);
+          }
+        }
+        candidates = stillCandidates;
+        if (candidates.length > cap) {
+          obstacles.push(...candidates.slice(cap));
+          candidates = candidates.slice(0, cap);
           changed = true;
-        } else {
-          stillCandidates.push(c);
         }
       }
-      candidates = stillCandidates;
+      return candidates;
+    };
+
+    // ⚠️ `settle(limit)` is the LARGEST safe set of at most `limit`
+    // engagements, but "largest" can be zero even with nothing open at all:
+    // when the safe set's spans nest, a prefix shorter than the whole thing
+    // is unsafe, and if the whole thing is longer than `limit` then no
+    // admissible set exists. Emitting nothing there is not caution, it is a
+    // permanent stall — the same rows re-read every tick, the same answer,
+    // forever, with no open engagement that will ever close to break it. So
+    // when the limited fixed point comes back empty, fall back to the
+    // SMALLEST non-empty safe prefix and overshoot `limit` deliberately.
+    // `limit` is a batch-size hint bounded by the rows already read; the
+    // cursor invariant is not negotiable, and liveness beats the hint.
+    //
+    // (Every safe set is a prefix in lastEventId order: if some un-emitted g
+    // had g.lastEventId below the largest emitted lastEventId, then g's own
+    // firstEventId is below it too and the emission was never safe. So a
+    // prefix search is exhaustive — there is no cleverer non-prefix subset
+    // that fits under `limit`.)
+    let closed = settle(limit);
+    if (closed.length === 0) {
+      const safe = settle(Infinity);
+      let k = safe.length;
+      for (let i = 1; i < safe.length; i++) {
+        let minFirst = Infinity;
+        for (let j = i; j < safe.length; j++) minFirst = Math.min(minFirst, safe[j]!.firstEventId);
+        if (safe[i - 1]!.lastEventId < minFirst) {
+          k = i;
+          break;
+        }
+      }
+      closed = safe.slice(0, k);
     }
-    const closed = candidates.sort((a, b) => a.lastEventId - b.lastEventId).slice(0, limit);
+
+    // ⚠️ The emitted set is safe as a WHOLE, and is not safe prefix by
+    // prefix: emitted spans may nest (A first 1 last 10, B first 2 last 3
+    // both emit, ordered [B, A]), and `cursorFeedTick` advances the cursor
+    // per item and stops at the first post failure. If B posts and A's post
+    // then fails, A's hits at ids 1-2 sit below the cursor and A re-posts
+    // later as a fragment. That is accepted: this feed is at-least-once, and
+    // the only rule that IS prefix-safe is the single pass that deadlocks
+    // forever on nested closed spans (tried twice, wrong twice). A duplicated
+    // fragment after a Discord outage is recoverable; a deadlocked feed is
+    // not.
 
     const out: HitFeedItem[] = [];
     for (const e of closed) {
