@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { discordCopy } from "@factions/copy";
 import { meGroup } from "../src/commands/me.js";
-import { specOf, input, ctxWith } from "./command-fakes.js";
+import { specOf, sourceOf, input, ctxWith } from "./command-fakes.js";
 
 const spec = (path: string) => specOf(meGroup, path);
 
@@ -52,7 +52,7 @@ describe("/me autocomplete", () => {
         ? [{ id: 7, clanId: 1, clanName: "Wolves", tag: "WLF", serverId: 1, serverName: "s", expiresAt: new Date() }]
         : []),
     });
-    const choices = await spec("me accept").autocomplete!.invite(ctx, { actorDiscordId: "111", value: "" });
+    const choices = await sourceOf(meGroup, "me accept", "invite")(ctx, { actorDiscordId: "111", value: "" });
     expect(choices).toEqual([{ name: "Wolves [WLF]", value: "7" }]);
   });
 });

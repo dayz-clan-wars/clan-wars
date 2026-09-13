@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { discordCopy } from "@factions/copy";
 import { rosterGroup } from "../src/commands/roster.js";
-import { specOf, input, ctxWith } from "./command-fakes.js";
+import { specOf, sourceOf, componentOf, input, ctxWith } from "./command-fakes.js";
 
 const spec = (path: string) => specOf(rosterGroup, path);
 
@@ -165,21 +165,21 @@ describe("/roster transfer", () => {
   it("writes when the button is pressed, carrying the target in the custom id", async () => {
     const seen: unknown[] = [];
     const ctx = ctxWith({ transfer: async (a: string, t: string) => { seen.push([a, t]); return "ok"; } });
-    const reply = await rosterGroup.components!.transfer(ctx, { actorDiscordId: "111", arg: "222", values: [] });
+    const reply = await componentOf(rosterGroup, "transfer")(ctx, { actorDiscordId: "111", arg: "222", values: [] });
     expect(seen).toEqual([["111", "222"]]);
     expect(reply.content).toBe(discordCopy("transfer", "ok"));
   });
 
   it("refuses a press whose custom id lost its target", async () => {
     const ctx = ctxWith({ transfer: async () => "ok" });
-    const reply = await rosterGroup.components!.transfer(ctx, { actorDiscordId: "111", arg: null, values: [] });
+    const reply = await componentOf(rosterGroup, "transfer")(ctx, { actorDiscordId: "111", arg: null, values: [] });
     expect(reply.content).toContain("Run `/roster transfer`");
   });
 
   it("renders every TransferOutcome from the shared table on the button press", async () => {
     for (const o of ["ok", "not-leader", "target-not-member", "vote-open", "not-linked", "not-in-clan", "pending"] as const) {
       const ctx = ctxWith({ transfer: async () => o });
-      const reply = await rosterGroup.components!.transfer(ctx, { actorDiscordId: "111", arg: "222", values: [] });
+      const reply = await componentOf(rosterGroup, "transfer")(ctx, { actorDiscordId: "111", arg: "222", values: [] });
       expect(reply.content, o).toBe(discordCopy("transfer", o));
     }
   });
@@ -188,7 +188,7 @@ describe("/roster transfer", () => {
 describe("/roster autocomplete", () => {
   it("offers outstanding invites, and nothing when the actor has no clan", async () => {
     const ctx = ctxWith({ clanFor: async () => "not-in-clan" });
-    expect(await spec("roster revoke").autocomplete!.invite(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
+    expect(await sourceOf(rosterGroup, "roster revoke", "invite")(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
   });
 
   it("offers outstanding invites by invitee gamertag, falling back to their Discord id", async () => {
@@ -201,7 +201,7 @@ describe("/roster autocomplete", () => {
         requestsIn: [],
       }),
     });
-    expect(await spec("roster revoke").autocomplete!.invite(ctx, { actorDiscordId: "111", value: "" })).toEqual([
+    expect(await sourceOf(rosterGroup, "roster revoke", "invite")(ctx, { actorDiscordId: "111", value: "" })).toEqual([
       { name: "Survivor", value: "5" },
       { name: "888", value: "6" },
     ]);
@@ -209,7 +209,7 @@ describe("/roster autocomplete", () => {
 
   it("offers incoming requests by gamertag, falling back to their Discord id, and nothing when not linked", async () => {
     const noClan = ctxWith({ clanFor: async () => "not-linked" });
-    expect(await spec("roster decide").autocomplete!.request(noClan, { actorDiscordId: "111", value: "" })).toEqual([]);
+    expect(await sourceOf(rosterGroup, "roster decide", "request")(noClan, { actorDiscordId: "111", value: "" })).toEqual([]);
 
     const ctx = ctxWith({
       clanFor: async () => ({
@@ -220,7 +220,7 @@ describe("/roster autocomplete", () => {
         ],
       }),
     });
-    expect(await spec("roster decide").autocomplete!.request(ctx, { actorDiscordId: "111", value: "" })).toEqual([
+    expect(await sourceOf(rosterGroup, "roster decide", "request")(ctx, { actorDiscordId: "111", value: "" })).toEqual([
       { name: "Looter", value: "9" },
       { name: "666", value: "10" },
     ]);
@@ -229,10 +229,10 @@ describe("/roster autocomplete", () => {
   it("offers linked gamertag suggestions for invite, scoped to 'linked', and nothing for a blank query", async () => {
     const seen: unknown[] = [];
     const ctx = ctxWith({ suggestGamertags: async (q: string, scope: string) => { seen.push([q, scope]); return ["Survivor", "Survivor2"]; } });
-    expect(await spec("roster invite").autocomplete!.gamertag(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
+    expect(await sourceOf(rosterGroup, "roster invite", "gamertag")(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
     expect(seen).toEqual([]);
 
-    expect(await spec("roster invite").autocomplete!.gamertag(ctx, { actorDiscordId: "111", value: "Sur" })).toEqual([
+    expect(await sourceOf(rosterGroup, "roster invite", "gamertag")(ctx, { actorDiscordId: "111", value: "Sur" })).toEqual([
       { name: "Survivor", value: "Survivor" },
       { name: "Survivor2", value: "Survivor2" },
     ]);
@@ -255,7 +255,7 @@ describe("roster reply ephemerality", () => {
       const reply = await spec(path).handler(ctx, input(opts));
       expect(reply.ephemeral, path).toBe(true);
     }
-    const pressed = await rosterGroup.components!.transfer(ctx, { actorDiscordId: "111", arg: "222", values: [] });
+    const pressed = await componentOf(rosterGroup, "transfer")(ctx, { actorDiscordId: "111", arg: "222", values: [] });
     expect(pressed.ephemeral).toBe(true);
   });
 });

@@ -6,7 +6,7 @@
  * file re-registers its `describe`s and runs them twice — see
  * `packages/roster/test/roster-exports.ts` for the same guard.
  */
-import type { CommandGroup, CommandInput, Ctx } from "../src/commands/types.js";
+import type { AutocompleteSource, CommandGroup, CommandInput, ComponentHandler, Ctx } from "../src/commands/types.js";
 
 /** Finds one spec by its `path` (e.g. "me accept") off a given group. */
 export function specOf(group: CommandGroup, path: string) {
@@ -15,8 +15,35 @@ export function specOf(group: CommandGroup, path: string) {
   return found;
 }
 
-/** Builds a `CommandInput` from option overrides; unset options resolve to null. */
-export function input(opts: Record<string, string | number | boolean | null> = {}): CommandInput {
+/**
+ * Finds one autocomplete source by option name off the spec at `path`. Tests
+ * call this instead of `specOf(...).autocomplete!.<option>(...)` — under
+ * strict mode that reaches through an optional `Record`, which TypeScript
+ * (correctly) treats as possibly `undefined`, forcing every call site to
+ * scatter `!`. A missing source here throws a clear, named error instead of
+ * either a silenced compiler or a bare "cannot invoke undefined" at runtime.
+ */
+export function sourceOf(group: CommandGroup, path: string, option: string): AutocompleteSource {
+  const source = specOf(group, path).autocomplete?.[option];
+  if (!source) throw new Error(`no autocomplete source "${option}" on spec "${path}" in group "${group.command.name}"`);
+  return source;
+}
+
+/** Finds one component handler by its action name off a group. Same reasoning as `sourceOf`. */
+export function componentOf(group: CommandGroup, action: string): ComponentHandler {
+  const handler = group.components?.[action];
+  if (!handler) throw new Error(`no component handler "${action}" in group "${group.command.name}"`);
+  return handler;
+}
+
+/**
+ * Builds a `CommandInput` from option overrides; unset options resolve to
+ * null. The value type includes `undefined` so a test can write a union of
+ * object literals with different keys present (e.g. one branch has
+ * `gamertag`, another has `member`) without every literal needing every key
+ * explicitly set to `null` — an absent key still reads back as `null` below.
+ */
+export function input(opts: Record<string, string | number | boolean | null | undefined> = {}): CommandInput {
   return {
     actorDiscordId: "111",
     string: (n: string) => (opts[n] as string) ?? null,
