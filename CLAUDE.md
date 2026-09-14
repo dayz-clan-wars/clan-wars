@@ -179,10 +179,20 @@ turbo gate stays the gate, because it runs `typecheck` too.
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
   running count **checkable** and stopping it **safe**: `systemctl status clan-wars-bot`
   shows the real count in the unit's cgroup, and `sudo systemctl stop clan-wars-bot`
-  cannot reach anything outside it. It does not make a second instance impossible —
-  someone can still hand-start a second bot outside the unit, and that second instance
-  ships duplicate DMs exactly as before. Not doing that remains a human discipline, not
-  something systemd enforces.
+  cannot reach anything outside it.
+
+  **Since 2026-09-14 it is also enforced, not just checkable.** The bot takes a Postgres
+  session-scoped advisory lock (`apps/bot/src/instance-lock.ts`, over
+  `packages/db`'s `acquireAdvisoryLock`) before it opens a pool, logs in, or registers
+  commands, and a second process refuses to start: one line saying so, then **exit 0**,
+  because the unit is `Restart=on-failure` and a deliberate refusal should stay exited
+  rather than restart-loop. Session-scoped means a SIGKILLed or power-lost bot releases
+  it on connection death — no TTL, no stale holder to clear. `systemctl restart` is
+  unaffected: systemd waits for the stop, and the release runs after `client.destroy()`.
+  A second dependant arrived with plan 2 and is worse than duplicate DMs: `/found` keeps
+  its draft in memory (ten participant ids do not fit in a 100-character `custom_id`),
+  so across two processes a player's select-menu pick and their modal submit can land on
+  different ones and their founding choices vanish with no explanation.
 
   ⚠️ **`systemctl status clan-wars-bot` reporting `active (running)` answers exactly one
   question: how many bot processes are running. It does not mean the bot is working.**
