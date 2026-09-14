@@ -6,9 +6,23 @@ import type { DirectoryEntry, Role, StatScope } from "@factions/roster";
  * that takes a row id wants a number. `idOf` is the one place that bridges
  * the two: null for missing/blank input, null for anything that is not a
  * positive integer, otherwise the parsed number.
+ *
+ * ⚠️ Matched against a decimal regex, NOT `Number()`. `Number("9e2")` is
+ * 900 and `Number("0x10")` is 16, and both pass `Number.isInteger`, so a
+ * bare coercion silently accepts input this function's own doc comment says
+ * it rejects. It matters because these strings are player-typed: an option
+ * marked `setAutocomplete(true)` still sends whatever the player typed
+ * instead of picking, so every `lock:`, `pin:`, `invite:` and `pass:` on
+ * the branch reaches here as arbitrary text. No privilege escalation — the
+ * roster re-derives permission from the actor and answers "gone" for a row
+ * that is not theirs — but `DECIMAL_RE` in `config.ts` is the house rule and
+ * PLAN-3-INBOX item 16 exists because two older parsers broke it the same
+ * way.
  */
+const DECIMAL_RE = /^\d+$/u;
+
 export function idOf(raw: string | null): number | null {
-  if (!raw) return null;
+  if (!raw || !DECIMAL_RE.test(raw)) return null;
   const n = Number(raw);
   return Number.isInteger(n) && n > 0 ? n : null;
 }

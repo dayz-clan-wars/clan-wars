@@ -58,7 +58,15 @@ gamertag tests mirroring the five added to `packages/adm-parser/test/emote.test.
 **Not affected:** `flagpole.ts` — `BUILT_RE` and `DISMANTLED_RE` already anchor
 with `\)\s*`.
 
-## 2. Gate `/unlink` on faction membership
+## 2. ~~Gate `/unlink` on faction membership~~ — DONE 2026-09-13 (v1.9.0)
+
+Closed by the Discord parity work. `handleUnlink` no longer exists; `/link
+unlink` routes to `@factions/roster`'s `unlink`, whose `UnlinkOutcome` carries
+`{ ok: false, reason: "in-clan", clanName }` — the site and the bot are refused
+by the same call, so the gate cannot be present on one surface and missing on
+the other. Original writeup below.
+
+### Original writeup
 
 `apps/bot/src/commands.ts` `handleUnlink` deletes an identity link with no
 checks, because no factions exist yet. Unlinking a faction leader's identity
@@ -166,7 +174,17 @@ arrive and no `/link` can ever succeed — silently, showing only
 Plan 3 should state the required cadence in the bot README and set the TTL
 default above it.
 
-## 10. Defer the `/link` reply
+## 10. ~~Defer the `/link` reply~~ — DONE 2026-09-13 (v1.9.0)
+
+Closed by the Discord parity work, and generalised: `route.ts`'s
+`handleChatInput` defers EVERY chat input with
+`deferReply({ flags: MessageFlags.Ephemeral })` and edits after, so no handler
+can race the 3-second window. The two paths that deliberately do not defer
+(`opensModal`, and a component that opens a modal) cannot — Discord refuses
+`showModal` on an acknowledged interaction — and both are held to one indexed
+read. Original writeup below.
+
+### Original writeup
 
 `apps/bot/src/discord.ts` calls `interaction.reply` without a prior
 `deferReply`, but `handleLink` does four or more round trips (link lookup,
@@ -249,7 +267,24 @@ separately.
   where this becomes real.
 
 
-## 16. Two custom-id parsers still coerce with `Number()`
+## 16. ~~Two custom-id parsers still coerce with `Number()`~~ — DONE 2026-09-14
+
+Both named parsers were deleted by the Discord parity work along with the rest
+of the pre-plan-1 command layer.
+
+⚠️ **But the class came back, and is now fixed properly.** `idOf` in
+`apps/bot/src/commands/parse.ts` — the single bridge from a slash option's
+string to a roster row id, on sixteen call sites — was written with the same
+bare `Number()` coercion, so `idOf("9e2")` returned 900 while its own doc
+comment promised it rejected anything that is not a positive integer. It now
+matches `DECIMAL_RE`, with a test that mutation-fails against the old body.
+
+Worth recording WHY it recurred: the original item named two functions rather
+than the rule, so deleting those functions read as closing it. The rule is
+`DECIMAL_RE` in `config.ts`, and it applies to every string that becomes a
+row id. Original writeup below.
+
+### Original writeup
 
 `parseTransferCustomId` and `parseClaimCustomId` in `apps/bot/src/discord.ts` carry
 the coercion bug that `parseIdSuffix` was fixed for in Plan 4a: `Number("9e2")` is
@@ -341,6 +376,22 @@ The fix is isolation, not more truncation: a database or schema per package, nam
 from the package, so no two suites share a namespace.
 
 ## 22. The bot is single-instance-only, and nothing enforces it
+
+⚠️ **Raised 2026-09-13 (v1.8.0): this now has a second dependant, and a worse
+failure mode than duplicate DMs.** `/found` keeps a player's in-progress
+founding choices — chosen flag, chosen crew — in an in-memory draft store
+(`apps/bot/src/commands/founding-draft.ts`, plan 2 ruling R4), keyed by Discord
+id with a 15-minute TTL. A `custom_id` caps at 100 characters and ten
+17-character participant ids do not fit, so the draft cannot live in the
+interaction. With two instances, a player's select-menu pick and their modal
+submit can land on different processes: the second has no draft and answers
+"That took too long — run `/found` again", losing choices that were made
+seconds ago. Nothing is written, so nothing is corrupted — but it is
+unexplainable to the player, and it fails intermittently rather than always,
+which is the hardest kind to report.
+
+The startup guard below would close both this and the notifier. It is now the
+cheapest way to make an invariant the code already leans on actually true.
 
 `notifyCompleted` sends the DM BEFORE calling `markNotified` (`apps/bot/src/discord.ts`).
 That order is deliberate and right for one process — marking first would drop the DM
