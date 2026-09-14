@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from "discord.js";
 import { BOARD_KINDS, type BoardKind } from "@factions/roster";
-import { BOARD_LABELS, discordCopy, NO_PROFILE, REFUSAL } from "@factions/copy";
+import { BOARD_LABELS, discordCopy, NO_PROFILE, REFUSAL, scopeLabel } from "@factions/copy";
 import { achievementsEmbed, boardEmbed, playerEmbed } from "./embeds/stats.js";
 import { matchClans, parseScope } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
@@ -10,11 +10,18 @@ const NEED_A_GAMERTAG = "Give a gamertag.";
 /** Likewise: a `kind:` outside `BOARD_KINDS` never reaches a real client, which only offers the choices below. */
 const PICK_A_BOARD = "Pick a board from the list.";
 
-/** R7: one `scope:` option, autocompleted from the seasons that exist. */
+/**
+ * R7: one `scope:` option, autocompleted from the seasons that exist.
+ *
+ * ⚠️ The labels come from `scopeLabel`, the same function the cards use, so
+ * the option a player picks reads the same as the card they get back. They
+ * had drifted apart once already — the picker offered "All time" and the
+ * card came back headed "All-time", in one interaction.
+ */
 const scopes: AutocompleteSource = async (ctx) => [
   { name: "This season", value: "current" },
-  { name: "All time", value: "all" },
-  ...(await ctx.roster.seasons()).map((s) => ({ name: `Season ${s.number}`, value: String(s.number) })),
+  { name: scopeLabel({ kind: "all" }), value: "all" },
+  ...(await ctx.roster.seasons()).map((s) => ({ name: scopeLabel({ kind: "season", number: s.number }), value: String(s.number) })),
 ];
 
 /** Every gamertag the server has SEEN, not only linked ones — `/player` and `/achievements` both look up strangers. */
