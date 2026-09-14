@@ -543,10 +543,14 @@ export async function start(cfg: BotConfig): Promise<void> {
     try {
       if (await routeInteraction(ctxNow(), interaction)) return;
 
-      // Nothing routed it: an unknown command name from a stale client, or a
-      // button on a message the pre-plan-1 bot posted. One sentence and a
-      // link, never discord.js's "unknown command" and never silence.
-      if (interaction.isChatInputCommand() || interaction.isMessageComponent()) {
+      // Nothing routed it: an unknown command name from a stale client, a
+      // button on a message the pre-plan-1 bot posted, or (unreachable
+      // today — no pre-plan-1 modals exist) a modal submit with a foreign
+      // custom id. `routeInteraction` returns `false` for all three kinds,
+      // so all three belong here — leaving one out means that kind's player
+      // sees Discord's own "This interaction failed." instead of a sentence
+      // and a link.
+      if (interaction.isChatInputCommand() || interaction.isMessageComponent() || interaction.isModalSubmit()) {
         await interaction.reply({ content: `${UNKNOWN} ${cfg.siteBaseUrl}`, flags: MessageFlags.Ephemeral });
       }
     } catch (err) {
