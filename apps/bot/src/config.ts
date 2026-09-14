@@ -110,7 +110,25 @@ function required(env: NodeJS.ProcessEnv, key: string): string {
 /** Plain base-10 digits only. See the comment in positiveInt for why. */
 const DECIMAL_RE = /^\d+$/u;
 
-function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): number {
+/**
+ * The largest delay `setInterval` actually honours.
+ *
+ * ⚠️ Node stores a timer delay in a signed 32-bit int. Past this it warns
+ * (`TimeoutOverflowWarning`) and uses **1 ms** — so an extra-digits typo in
+ * `BOT_TICK_INTERVAL_MS` does not slow the loop down, it turns it into a
+ * database hammer firing a thousand times a second, while the value in `.env`
+ * reads like a longer interval than intended. Exactly the "looks correctly
+ * configured and is not" failure the comment in `positiveInt` is about.
+ */
+export const MAX_TIMER_MS = 2_147_483_647;
+
+/**
+ * `max` REFUSES rather than clamps, deliberately. Clamping would run an
+ * interval the config does not say, which is the same silent-reinterpretation
+ * this function already rejects `0x10` and `1e3` for. A bot that will not start
+ * with a message naming the limit is the honest outcome.
+ */
+function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number, max?: number): number {
   const raw = env[key];
   if (raw === undefined || raw === "") return fallback;
 
@@ -125,6 +143,13 @@ function positiveInt(env: NodeJS.ProcessEnv, key: string, fallback: number): num
   if (!Number.isSafeInteger(n) || n <= 0) {
     throw new Error(
       `${key} must be a positive integer in plain decimal digits, got ${JSON.stringify(raw)}.`,
+    );
+  }
+  if (max !== undefined && n > max) {
+    throw new Error(
+      `${key} must be at most ${max}, got ${JSON.stringify(raw)}. ` +
+      "A larger value is not a longer interval: setInterval truncates past " +
+      `${MAX_TIMER_MS} and fires every 1 ms instead.`,
     );
   }
   return n;
@@ -230,7 +255,9 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     applicationId: required(env, "DISCORD_APPLICATION_ID"),
     guildId: required(env, "DISCORD_GUILD_ID"),
     databaseUrl: required(env, "DATABASE_URL"),
-    tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000),
+    // ⚠️ Capped: this one is a `setInterval` delay (discord.ts), not a duration
+    // compared arithmetically like the four below it. See MAX_TIMER_MS.
+    tickIntervalMs: positiveInt(env, "BOT_TICK_INTERVAL_MS", 10_000, MAX_TIMER_MS),
     // 7 days, matching the server's FlagRefreshMaxDuration. ⚠️ Copied by hand:
     // change one and not the other and they diverge silently, either cutting
     // supplies at a base that is fine or feeding one that has already decayed.

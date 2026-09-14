@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { loadConfig } from "../src/config.js";
+import { loadConfig, MAX_TIMER_MS } from "../src/config.js";
 
 const OK = {
   DISCORD_TOKEN: "t", DISCORD_APPLICATION_ID: "a", DISCORD_GUILD_ID: "g",
@@ -34,6 +34,35 @@ describe("loadConfig", () => {
 
   it("rejects a zero or negative tick interval", () => {
     expect(() => loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: "0" })).toThrow(/BOT_TICK_INTERVAL_MS/);
+  });
+
+  /**
+   * ⚠️ A larger number is not a longer interval. Node stores a timer delay in a
+   * signed 32-bit int: past MAX_TIMER_MS `setInterval` warns and uses 1 ms, so
+   * an extra-digits typo turns the tick loop into a database hammer while the
+   * value in `.env` reads like a longer interval than intended. Refused rather
+   * than clamped — clamping would run an interval the config does not say.
+   */
+  it("rejects a tick interval past what setInterval honours", () => {
+    expect(() => loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: String(MAX_TIMER_MS + 1) }))
+      .toThrow(/BOT_TICK_INTERVAL_MS must be at most 2147483647/);
+    // The message has to say why, or the next person raises the cap.
+    expect(() => loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: "100000000000" }))
+      .toThrow(/fires every 1 ms/);
+  });
+
+  it("accepts the largest interval setInterval does honour", () => {
+    expect(loadConfig({ ...OK, BOT_TICK_INTERVAL_MS: String(MAX_TIMER_MS) }).tickIntervalMs).toBe(MAX_TIMER_MS);
+  });
+
+  /**
+   * The cap belongs to this one key. The dormancy windows are durations
+   * compared arithmetically, never `setInterval` delays — 14 days is 1.2e9 ms
+   * and fits, but a longer window is a legitimate setting, not a typo.
+   */
+  it("does not cap the dormancy windows", () => {
+    const cfg = loadConfig({ ...OK, BOT_DORMANT_AFTER_MS: String(MAX_TIMER_MS + 1) });
+    expect(cfg.dormantAfterMs).toBe(MAX_TIMER_MS + 1);
   });
 
   it("throws when a required value is set to the empty string", () => {

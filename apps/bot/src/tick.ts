@@ -90,6 +90,31 @@ export async function verificationTick(
     const batch = await readEventBatch(db, cursor, batchSize);
     if (batch.length === 0) break;
 
+    // Live challenges, read once per batch instead of once per event.
+    //
+    // ⚠️ The invariant the old per-event read protected is kept exactly: a
+    // completion or cancellation inside the loop must not leave a stale
+    // challenge in a cached list, so every write below drops the cache and the
+    // next event re-reads. When nothing is written, nothing THIS process does
+    // can change the list — `now` is fixed for the whole pass, so expiry
+    // cannot move either.
+    //
+    // ⚠️ What does change: a challenge created or canceled by an interaction
+    // handler mid-batch is now seen at the next write or the next batch rather
+    // than at the next event. A newly created one is harmless — its `issuedAt`
+    // is later than every event being scanned here, so the guard below skips
+    // it regardless. A concurrently canceled one is the narrow case, and it is
+    // already racy: nothing stops a cancel landing between the read and the
+    // write, which is why `completeChallenge` guards on `stillOpen` in SQL.
+    // This widens that window from one event to one write, it does not open a
+    // new one.
+    //
+    // It matters because the old shape cost one query per emote event — 2,093
+    // on the historical backfill — plus a `getAttempt` per (event × challenge).
+    let live: Awaited<ReturnType<typeof store.liveChallenges>> | null = null;
+    const liveNow = async () => (live ??= await store.liveChallenges(now));
+    const invalidate = () => { live = null; };
+
     for (const ev of batch) {
       cursor = ev.id;
       if (ev.type !== "emote.performed") continue;
@@ -98,9 +123,7 @@ export async function verificationTick(
       if (!payload) continue;
       out.scanned++;
 
-      // Re-read live challenges per event: a completion inside this loop must
-      // not leave a stale challenge in a cached list.
-      for (const challenge of await store.liveChallenges(now)) {
+      for (const challenge of await liveNow()) {
         // ⚠️ A challenge may only be satisfied by emotes performed AFTER it was
         // issued. Without this, ingesting a historical log — or simply starting
         // with a cursor of 0 — replays weeks of past emotes at every live
@@ -153,6 +176,9 @@ export async function verificationTick(
           // marker only after the completion succeeds means a throw here
           // replays the event intact.
           const bound = await store.completeChallenge(challenge.id, challenge.targetDayzId, payload.gamertag, now);
+          // This challenge is no longer live either way — bound, or canceled
+          // by completeChallenge because the UID went elsewhere.
+          invalidate();
           if (bound) out.verified++;
           else out.alreadyLinked++;
         }
@@ -185,6 +211,7 @@ export async function verificationTick(
           // sequence simply stops working, and the next /link hands them three
           // different emotes with no explanation.
           await store.cancelChallenge(challenge.id, now, "budget-exhausted");
+          invalidate();
         }
       }
     }

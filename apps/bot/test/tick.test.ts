@@ -84,6 +84,31 @@ describe("verificationTick", () => {
     expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: UID_A });
   });
 
+  /**
+   * ⚠️ The invariant the per-event `liveChallenges` re-read protected, now that
+   * the list is cached per batch: a challenge completed inside the loop must
+   * not still be in the list for the events after it, in the SAME batch.
+   *
+   * If the cache is not dropped on completion, the trailing safe-pool emotes
+   * below find the finished challenge, try to complete it again, and the
+   * second attempt fails `stillOpen` in SQL — surfacing as `alreadyLinked`,
+   * which is supposed to mean "this UID belongs to someone else".
+   */
+  it("does not revisit a challenge it completed earlier in the same batch", async () => {
+    await issue();
+    for (const t of SEQ) await emote(UID_A, t);
+    // Same batch, same UID, after the completion. Safe-pool tokens, so they
+    // are not skipped as unusable.
+    await emote(UID_A, "EmoteSalute");
+    await emote(UID_A, "EmoteClap");
+
+    const r = await tick();
+    expect(r.verified).toBe(1);
+    expect(r.alreadyLinked).toBe(0);
+    expect(r.lockedOut).toBe(0);
+    expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: UID_A });
+  });
+
   it("does not verify a partial sequence", async () => {
     await issue();
     await emote(UID_A, SEQ[0]!);

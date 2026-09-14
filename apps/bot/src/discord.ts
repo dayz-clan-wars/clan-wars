@@ -316,6 +316,32 @@ export function guardedRunner(job: () => Promise<void>): {
 }
 
 /**
+ * One piece of a tick pass, failing alone.
+ *
+ * ⚠️ The point is the BOUNDARY, not the logging. `verificationTick` and
+ * `notifyCompleted` shared one `try`, so a tick that threw persistently meant
+ * players who had already performed their sequence were never told — the
+ * notifier never ran at all, indefinitely, with only "tick failed" in the
+ * journal to show for it. Every other pair in this pass already had its own
+ * catch; that one was the outlier.
+ *
+ * Exported because the pass itself is a closure inside `start()` and cannot be
+ * reached from a test. This is the part that carries the guarantee, so this is
+ * the part that gets tested.
+ *
+ * `run` may resolve to anything — `notifyCompleted` returns a count — and the
+ * value is dropped. A step's result is its side effects; the caller that wants
+ * a number should not be going through here.
+ */
+export async function step(label: string, run: () => Promise<unknown>): Promise<void> {
+  try {
+    await run();
+  } catch (err) {
+    console.error(`${label} failed`, err);
+  }
+}
+
+/**
  * ⚠️ Throws on every unreachable path rather than returning quietly. The feed
  * tick marks a row posted only when this resolves, so a swallowed failure
  * would mark it posted and lose the announcement permanently.
@@ -827,16 +853,16 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    try {
+    // ⚠️ Two steps, not one try. A thrown tick must not kill the interval, and
+    // it must not take the notifier down with it either: the two are
+    // independent, and players already verified still need telling.
+    await step("tick", async () => {
       const r = await verificationTick(db, store);
       if (r.verified > 0 || r.alreadyLinked > 0) {
         console.log(`verified ${r.verified}, refused ${r.alreadyLinked} (already linked)`);
       }
-      await notifyCompleted(deps, send, notifyFailures, renameOnLink, cfg.guildId);
-    } catch (err) {
-      // A thrown tick must not kill the interval and silently stop all verification.
-      console.error("tick failed", err);
-    }
+    });
+    await step("notify", () => notifyCompleted(deps, send, notifyFailures, renameOnLink, cfg.guildId));
 
     // Each of the two ceremony steps gets its own try/catch: a failing
     // detector must not stop ceremony DMs, and vice versa.

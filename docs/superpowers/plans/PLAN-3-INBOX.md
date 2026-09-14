@@ -195,20 +195,39 @@ application did not respond" — after the challenge row was already created.
 Recovery works, but the first attempt reads as a hard failure.
 `deferReply({ flags: Ephemeral })` then `editReply` removes the class.
 
-## 11. Two smaller items in the bot loop
+## 11. ~~Two smaller items in the bot loop~~ — CLOSED 2026-09-14 (v1.14.0)
 
-- `verificationTick` and `notifyCompleted` share one `try` in `start()`. A tick
-  that throws persistently means players already bound are never told,
-  indefinitely. Give `notifyCompleted` its own catch.
-- `positiveInt` accepts up to `MAX_SAFE_INTEGER`, but `setInterval` truncates
-  past 2^31-1 to a **1 ms** delay. An extra-digits typo in
-  `BOT_TICK_INTERVAL_MS` produces exactly the "hammers the database while
-  looking correctly configured" failure the comment above it warns about. Cap
-  `tickIntervalMs` at 2_147_483_647.
-- `verificationTick` re-queries `store.liveChallenges(now)` for every emote
-  event — one query per event (2,093 on the historical backfill) plus a
-  `getAttempt` per (event x live challenge). Hoist per batch, invalidate on
-  completion. Performance only; the invariant is currently correct.
+All three (the heading undercounted).
+
+- ~~`verificationTick` and `notifyCompleted` share one `try`.~~ They now run as
+  two `step()` calls. The failure this closes: a tick that throws persistently
+  meant players who had already performed their sequence were never told,
+  indefinitely, with one "tick failed" line per pass and nothing saying the
+  notifier had stopped too. Every other pair in that pass already had its own
+  catch; this one was the outlier. `step` is exported and unit-tested because
+  the pass itself is a closure inside `start()` and cannot be reached otherwise
+  — the same wall item 18 describes, taken down for this one case.
+- ~~`positiveInt` accepts up to `MAX_SAFE_INTEGER`.~~ `BOT_TICK_INTERVAL_MS` is
+  now capped at `MAX_TIMER_MS` (2_147_483_647) and **refuses** rather than
+  clamps: clamping would run an interval the config does not say, which is the
+  same silent reinterpretation the function already rejects `0x10` and `1e3`
+  for. The cap is on this key alone — the other four callers are durations
+  compared arithmetically, never timer delays.
+- ~~`verificationTick` re-queries `liveChallenges` per event.~~ Read once per
+  batch, cache dropped on every write. ⚠️ Not only performance, as the item
+  assumed: the per-event re-read was also load-bearing, and reproducing it
+  exactly is what the new test pins. Without the invalidation, safe-pool emotes
+  arriving after a completion in the same batch re-enter the finished challenge
+  and its second completion fails `stillOpen` in SQL — surfacing as
+  `alreadyLinked`, which is supposed to mean "this UID belongs to someone
+  else". Mutation-checked: removing the invalidation makes that count read 2.
+
+  The one real behavioural change: a challenge created or canceled by an
+  interaction handler mid-batch is seen at the next write or the next batch
+  rather than the next event. A newly created one is harmless (its `issuedAt`
+  is later than every event being scanned). A concurrently canceled one is
+  already racy — nothing stops a cancel landing between the read and the write,
+  which is why `completeChallenge` guards on `stillOpen`.
 
 ---
 
