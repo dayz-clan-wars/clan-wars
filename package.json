@@ -8,8 +8,10 @@
   "packageManager": "pnpm@9.12.0",
   "scripts": {
     "test": "turbo run test --concurrency=1",
-    "typecheck": "turbo run typecheck",
-    "ci": "turbo run typecheck test --concurrency=1",
+    "typecheck:scripts": "tsc -p scripts/tsconfig.json",
+    "typecheck": "pnpm typecheck:scripts && turbo run typecheck",
+    "ci": "pnpm typecheck:scripts && turbo run typecheck test --concurrency=1",
+    "db:migrate": "tsx scripts/migrate.ts",
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
     "rebuild:kills": "tsx scripts/rebuild-kills.ts",
@@ -26,6 +28,7 @@
     "vitest": "^2.1.0"
   },
   "dependencies": {
-    "@factions/db": "workspace:*"
+    "@factions/db": "workspace:*",
+    "drizzle-orm": "^0.36.0"
   }
 }

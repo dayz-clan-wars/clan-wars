@@ -1,10 +1,7 @@
 import { migrate } from "drizzle-orm/postgres-js/migrator";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { MIGRATIONS_FOLDER } from "./migrations-folder";
 import type { Database } from "./client";
 
-const here = dirname(fileURLToPath(import.meta.url));
-
 export async function runMigrations(db: Database): Promise<void> {
-  await migrate(db, { migrationsFolder: join(here, "..", "migrations") });
+  await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
 }

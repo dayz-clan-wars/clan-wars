@@ -214,16 +214,20 @@ turbo gate stays the gate, because it runs `typecheck` too.
   dependable manual fallback is process **cwd**, not a command-line pattern: clan-wars
   processes have `/proc/<pid>/cwd` under `/opt/clan-wars`; dayzonelife.com's are under
   `/var/www/dayzonelife.com`.
-- **⚠️ Nothing applies migrations in production.** `runMigrations` is exported from
-  `packages/db/src/migrate.ts` but is called *only from tests* — `apps/bot/src` never
-  calls it, and there is no `db:migrate` script. A deploy that assumes "the bot migrates
-  at startup" starts a bot whose queries reference columns the live database does not
+- **⚠️ Nothing applies migrations automatically.** Not the bot, not the site, not a
+  container entrypoint: `runMigrations` is called only from test setup and from
+  `pnpm db:migrate`, which a human runs. A deploy that assumes "the bot migrates at
+  startup" starts a bot whose queries reference columns the live database does not
   have; on 2026-09-02 that produced a `dormancy tick failed … column "dormant_since"
-  does not exist` loop until `0015` was applied by hand. Apply migrations deliberately,
-  as a step of their own, before starting the new code — see
-  `docs/deploy/2026-09-02-dormancy.md` for the one-off runner that does it safely.
-  Generate with `cd packages/db && npx drizzle-kit generate`, and **read the generated
-  SQL** before letting it near `factions_live`.
+  does not exist` loop until `0015` was applied by hand. **`pnpm db:migrate`**
+  (`scripts/migrate.ts`) is the migration path — a dry run by default, printing the
+  exact journal tags it would apply; `--apply --production` writes, and the
+  `factions_live` guard runs *both* ways. It refuses outright when
+  `drizzle.__drizzle_migrations` disagrees with the journal, which is the case that
+  silently replays old migrations against live data. Runbook:
+  `docs/deploy/2026-09-14-db-migrate.md`. Generate with
+  `cd packages/db && npx drizzle-kit generate`, and **read the generated SQL** before
+  letting it near `factions_live`.
 - **⚠️ Stop the bot before migrating** when a migration adds NOT NULL columns or
   constraints. Old code + new schema and new code + old schema both break; see
   `docs/deploy/2026-09-01-targeted-linking.md` for the incident.

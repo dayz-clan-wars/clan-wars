@@ -702,7 +702,14 @@ which are also in the pool. So the fix is not simply demoting it. Correct the do
 to say what the set actually is, and let the lockout messages — which now name the emote
 a player never reached — accumulate evidence about which tokens really are unperformable.
 
-## 28. Nothing applies migrations in production
+## 28. Nothing applies migrations in production — CLOSED 2026-09-14
+
+**Closed by `pnpm db:migrate` (`scripts/migrate.ts` + `packages/db/src/migration-plan.ts`),
+v1.11.0.** Both checks named below are built in, and the planner is a pure function of
+the journal and the `__drizzle_migrations` rows, so the replay case has a unit test
+instead of a runbook paragraph. Runbook: `docs/deploy/2026-09-14-db-migrate.md`. The
+ruling below — that calling `runMigrations` at startup is the *wrong* fix — still holds
+and is why the script is a human-run deploy step.
 
 `runMigrations` (`packages/db/src/migrate.ts`) is called only from test setup. No app
 calls it, and no package defines a `db:migrate` script, so every migration has reached
@@ -1040,5 +1047,12 @@ A capped pass re-collects the same head rows each pass and resumes after the las
 processed owner key (`achievements:after` marker in `achievement_counters`); fine at
 today's volume — a per-owner queue if a pass ever carries for more than a few minutes.
 
-Also: root scripts (incl. `scripts/backfill-achievements.ts`) are not typechecked
-anywhere.
+~~Also: root scripts (incl. `scripts/backfill-achievements.ts`) are not typechecked
+anywhere.~~ **Second half closed 2026-09-14** by `scripts/tsconfig.json` and
+`pnpm typecheck:scripts`, which the root `typecheck` and `ci` scripts now run before
+turbo. It found a live bug on its first run: `scripts/rebuild-kills.ts` and
+`scripts/rebuild-sessions.ts` import `drizzle-orm`, which was not a root dependency and
+does not resolve from the repo root under pnpm's strict layout — `pnpm rebuild:kills`
+and `pnpm rebuild:sessions` would have failed at startup with `ERR_MODULE_NOT_FOUND`.
+Fixed by adding `drizzle-orm` to the root `dependencies`. The capped-pass half above is
+still open.
