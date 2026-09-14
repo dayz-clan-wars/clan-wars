@@ -11,9 +11,13 @@ import { SPECS } from "../src/commands/index.js";
  * explicitly deferred fails this suite, so parity cannot rot quietly on the
  * next increment.
  *
- * ⚠️ Reads are deliberately NOT here. `/map` and deep board pagination are
- * site-only by design (spec §2.2); a test that demanded a command per read
- * would have to carve out exceptions and would stop meaning anything.
+ * ⚠️ Reads are deliberately NOT here. Most of them DO have commands now —
+ * `/me show`, `/clan info`, `/clans list`, `/vault list`, `/map pins`,
+ * `/scoreboard`, `/player`, `/board` and the rest — but a test that demanded
+ * one command per read export would have to carve out the two things that
+ * stay site-only by design (spec §2.2): the drawn map behind `/map view`,
+ * and board pagination past the first pages. Carving those out is how a
+ * list stops meaning anything, so reads are listed by name below instead.
  */
 const COMMANDS: Record<string, string> = {
   startLink: "link start", cancelLink: "link cancel", unlink: "link unlink",

@@ -256,7 +256,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // ⚠️ Stripped of any trailing slash here, unlike FLAG_IMAGE_BASE_URL just
     // above — that resolver strips its own trailing slash at the point it
     // appends `/flags/<texture>.png`, but every consumer of siteBaseUrl
-    // (raise-tick's rebind_proposed link, retired-commands' replies) builds
+    // (raise-tick's rebind_proposed link, every slash-command reply that
+    // points at a page) builds
     // its own path by simple concatenation with no such strip, so a bare
     // origin with a trailing slash (`optionalHttpUrl` accepts one — its
     // pathname is `"/"`, which passes) would otherwise produce a doubled
