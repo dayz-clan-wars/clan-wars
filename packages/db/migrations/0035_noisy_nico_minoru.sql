@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX IF NOT EXISTS "faction_members_server_discord_uniq" ON "faction_members" USING btree ("server_id","discord_id");

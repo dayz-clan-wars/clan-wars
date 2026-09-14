@@ -351,17 +351,23 @@ describe("PgRosterStore invites", () => {
     it("lists only open, unexpired invites, soonest-expiring first", async () => {
       // A second clan on the SAME server, so its pole key must differ:
       // declarations_pole_uniq is (server_id, pole_key).
+      //
+      // ⚠️ And its own leader. One Discord account leading two clans on one
+      // server was never legal — `faction_members_server_discord_uniq` is now
+      // what says so, where before only the dayz-keyed index did and this
+      // fixture slipped past it with a second UID.
+      const LEADER2 = "d2";
       const f2 = await seedFaction(db, {
         serverId, name: "Wolves", tag: "WOLF", texture: "Flag_Wolf",
         poleKey: "4:5:6", x: 4, y: 5, z: 6,
-        status: "active", leaderDiscordId: LEADER, createdAt: t0,
+        status: "active", leaderDiscordId: LEADER2, createdAt: t0,
       });
       await db.insert(factionMembers).values({
-        factionId: f2.id, serverId, dayzId: "M".repeat(40), discordId: LEADER, role: "leader", joinedAt: t0,
+        factionId: f2.id, serverId, dayzId: "M".repeat(40), discordId: LEADER2, role: "leader", joinedAt: t0,
       });
 
       await store.createInvite({ ...base, expiresAt: new Date(t0.getTime() + 20_000) });
-      await store.createInvite({ ...base, factionId: f2.id, expiresAt: new Date(t0.getTime() + 10_000) });
+      await store.createInvite({ ...base, factionId: f2.id, invitedByDiscordId: LEADER2, expiresAt: new Date(t0.getTime() + 10_000) });
 
       const rows = await store.pendingInvitesFor(INVITEE_DAYZ, t0);
       expect(rows.map((r) => r.factionName)).toEqual(["Wolves", "Bears"]);
