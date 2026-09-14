@@ -4,7 +4,7 @@ import { sql } from "drizzle-orm";
 import { PermissionFlagsBits } from "discord.js";
 import { PgVerificationStore } from "@factions/verification";
 import {
-  buildCommands, notifyCompleted, guardedRunner,
+  buildCommands, notifyCompleted, guardedRunner, step,
   createNicknameApplier, type NicknameClientLike, type RealGuildLike,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
@@ -458,5 +458,42 @@ describe("discord wiring", () => {
       expect(await createNicknameApplier(client)("g", "u1", "Ronald")).toBe("failed");
       warned.mockRestore();
     });
+  });
+});
+
+/**
+ * ⚠️ `verificationTick` and `notifyCompleted` shared one `try`, so a tick that
+ * threw persistently meant players who had already performed their sequence
+ * were never told — indefinitely, with one "tick failed" line per pass and no
+ * sign that the notifier had also stopped. The pass is a closure inside
+ * `start()` and cannot be reached from a test, so the boundary lives here.
+ */
+describe("step", () => {
+  it("logs a failing step and does not rethrow", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await expect(step("tick", () => Promise.reject(new Error("boom")))).resolves.toBeUndefined();
+      expect(err).toHaveBeenCalledWith("tick failed", expect.any(Error));
+    } finally {
+      err.mockRestore();
+    }
+  });
+
+  it("runs the next step after one fails — the whole point", async () => {
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+    const ran: string[] = [];
+    try {
+      await step("tick", () => Promise.reject(new Error("boom")));
+      await step("notify", async () => { ran.push("notify"); });
+    } finally {
+      err.mockRestore();
+    }
+    expect(ran).toEqual(["notify"]);
+  });
+
+  it("stays out of the way when nothing throws", async () => {
+    const ran: string[] = [];
+    await step("tick", async () => { ran.push("tick"); });
+    expect(ran).toEqual(["tick"]);
   });
 });
