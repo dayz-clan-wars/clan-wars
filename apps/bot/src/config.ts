@@ -52,8 +52,10 @@ export type BotConfig = {
    */
   flagImageBaseUrl: string | undefined;
   /**
-   * Bare origin of the site — `https://dayzclanwars.com`. Every retired
-   * slash command's reply and the ceremony DM point players here.
+   * Bare origin of the site — `https://dayzclanwars.com`. Every command
+   * embed's title links here, the unrouted-interaction fallback in
+   * `discord.ts` points a stale client or dead button at it, and the
+   * ceremony DM does too.
    */
   siteBaseUrl: string;
   /**

@@ -3,7 +3,7 @@ import type { Reply } from "./types.js";
 
 /**
  * Namespaced so the router claims only its own components (R5): `discord.ts`
- * still answers un-routed ones with a retired pointer, for buttons on
+ * still answers un-routed ones with `UNKNOWN` and a site link, for buttons on
  * messages the pre-plan-1 bot posted.
  *
  * `cw:c:<action>:<actorDiscordId>:<arg>` — 100 characters is Discord's cap,
