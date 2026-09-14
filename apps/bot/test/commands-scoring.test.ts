@@ -44,6 +44,17 @@ describe("/alphas", () => {
     expect(reply.embeds![0]!.toJSON().description).toMatch(/No week has closed/u);
   });
 
+  // Regression: between seasons (no season open at all) is a DIFFERENT
+  // domain state from a season that is open but has not closed a week yet
+  // — the site branches these two ways, and collapsing them into one
+  // sentence was exactly the class of bug this branch spent two tasks
+  // fixing.
+  it("says no season is open rather than no week has closed, between seasons", async () => {
+    const ctx = ctxWith({ alphas: async () => ({ season: null, weeks: [] }) });
+    const reply = await specOf(alphasGroup, "alphas").handler(ctx, input());
+    expect(reply.embeds![0]!.toJSON().description).toMatch(/No season is open/u);
+  });
+
   // Regression: `alphasDb` emits one week object for every week from season
   // start through `weekClosedThrough`, with `entries: []` where nobody
   // scored — `closeWeeksTx` only inserts `alpha_weeks` rows for factions
@@ -63,6 +74,21 @@ describe("/alphas", () => {
     expect(fields.length).toBe(2);
     for (const f of fields) expect(f.value.length).toBeGreaterThan(0);
     expect(fields.map((f) => f.value)).toContain(NO_ALPHAS_WEEK);
+  });
+
+  // Regression: a season running past Discord's 25-field cap used to
+  // under-fill the card with no indication anything was dropped. Every
+  // other list on this branch says "+N more"; this one now does too.
+  it("says how many weeks were dropped past the field cap", async () => {
+    const weeks = Array.from({ length: 30 }, (_, i) => ({
+      weekStart: new Date(2026, 0, i + 1),
+      entries: [{ rank: 1, tag: "WLF", name: "Wolves", texture: "wolf", points: 10 }],
+    }));
+    const ctx = ctxWith({ alphas: async () => ({ season: { number: 3 }, weeks }) });
+    const reply = await specOf(alphasGroup, "alphas").handler(ctx, input());
+    const fields = reply.embeds![0]!.toJSON().fields ?? [];
+    expect(fields.length).toBeLessThanOrEqual(25);
+    expect(fields.some((f) => /\+\d+ more/u.test(f.value))).toBe(true);
   });
 });
 

@@ -1,16 +1,9 @@
 import { EmbedBuilder } from "discord.js";
-import type { AchievementWall, BoardPage, PlayerProfile, ResolvedScope } from "@factions/roster";
-import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, playTime } from "@factions/copy";
+import type { AchievementWall, BoardPage, PlayerProfile } from "@factions/roster";
+import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, playTime, scopeLabel } from "@factions/copy";
 import { budget } from "./budget.js";
 
 const GOLD = 0xc8a34a;
-
-/**
- * "All time" or "Season N" — the RESOLVED scope a read actually used, never
- * `"current"`. R7's whole safety story is that this is printed on every
- * scoped card: a scope the player fumbled is visible, not silent.
- */
-const scopeLabel = (scope: ResolvedScope): string => (scope.kind === "all" ? "All time" : `Season ${scope.number}`);
 
 /**
  * `/player` — one player's card: headline numbers only.

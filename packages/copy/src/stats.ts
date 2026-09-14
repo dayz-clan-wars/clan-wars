@@ -1,4 +1,4 @@
-import type { BoardKind } from "@factions/roster";
+import type { BoardKind, ResolvedScope } from "@factions/roster";
 
 /**
  * Player/board/achievement copy shared between the site and the bot.
@@ -46,4 +46,18 @@ export function playTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/**
+ * "All-time" or "Season N", for the scope picker and page headings, and for
+ * the bot's `/player` and `/board` cards. ⚠️ A RESOLVED scope: `Boards.scope`
+ * and `PlayerProfile.scope` never carry `"current"`.
+ *
+ * Moved from `apps/web/lib/stats-copy.ts` (2026-09-13) once the bot's own
+ * card needed the identical label — it had drifted to "All time" (missing
+ * the hyphen) before this move, which is exactly the two-surfaces-one-fact
+ * drift this package exists to stop.
+ */
+export function scopeLabel(scope: ResolvedScope): string {
+  return scope.kind === "all" ? "All-time" : `Season ${scope.number}`;
 }
