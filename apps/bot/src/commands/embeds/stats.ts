@@ -1,12 +1,16 @@
 import { EmbedBuilder } from "discord.js";
-import type { AchievementWall, BoardPage, PlayerProfile } from "@factions/roster";
-import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, hours } from "@factions/copy";
+import type { AchievementWall, BoardPage, PlayerProfile, ResolvedScope } from "@factions/roster";
+import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, playTime } from "@factions/copy";
 import { budget } from "./budget.js";
 
 const GOLD = 0xc8a34a;
 
-/** "All time" or "Season N" — the RESOLVED scope a read actually used, never `"current"`. */
-const scopeLabel = (scope: PlayerProfile["scope"]): string => (scope.kind === "all" ? "All time" : `Season ${scope.number}`);
+/**
+ * "All time" or "Season N" — the RESOLVED scope a read actually used, never
+ * `"current"`. R7's whole safety story is that this is printed on every
+ * scoped card: a scope the player fumbled is visible, not silent.
+ */
+const scopeLabel = (scope: ResolvedScope): string => (scope.kind === "all" ? "All time" : `Season ${scope.number}`);
 
 /**
  * `/player` — one player's card: headline numbers only.
@@ -28,7 +32,7 @@ export function playerEmbed(p: PlayerProfile, siteBaseUrl: string): EmbedBuilder
   b.field(embed, "Kills", String(p.pvpKills), true);
   b.field(embed, "Deaths", String(p.pvpDeaths), true);
   b.field(embed, "K/D", p.kd === null ? "—" : String(p.kd), true);
-  b.field(embed, "Play time", hours(p.playTimeSeconds * 1000), true);
+  b.field(embed, "Play time", playTime(p.playTimeSeconds), true);
   b.field(embed, "Sessions", String(p.sessions), true);
   b.field(embed, "Raid credits", String(p.raidCredits), true);
   b.field(embed, "Build points", String(p.buildPoints), true);
@@ -43,23 +47,31 @@ export function playerEmbed(p: PlayerProfile, siteBaseUrl: string): EmbedBuilder
   return embed;
 }
 
-/** `/board` — one page of one board, numbered from where this page starts. */
+/**
+ * `/board` — one page of one board, numbered from where this page starts.
+ *
+ * ⚠️ R7: prints `page.scope` — the RESOLVED scope, not whatever the player
+ * typed — so a mistyped or unrecognised `scope:` shows up as the wrong
+ * season on the card instead of silently returning different numbers.
+ */
 export function boardEmbed(page: BoardPage, siteBaseUrl: string): EmbedBuilder {
   const title = `${BOARD_LABELS[page.kind]} — page ${page.page}`;
+  const description = scopeLabel(page.scope);
   const footerText = page.hasNext ? "More on the site." : "That is the whole board.";
   const embed = new EmbedBuilder()
     .setColor(GOLD)
     .setTitle(title)
     .setURL(`${siteBaseUrl}/players/boards/${page.kind}`)
+    .setDescription(description)
     .setFooter({ text: footerText });
-  if (page.rows.length === 0) return embed.setDescription(EMPTY_BOARD);
+  if (page.rows.length === 0) return embed.setDescription(`${description} — ${EMPTY_BOARD}`);
 
   const start = (page.page - 1) * page.perPage + 1;
   const lines = page.rows.map((r, i) => {
     const clan = page.clans[r.dayzId];
     return `• ${start + i}. ${r.gamertag}${clan ? ` [${clan.tag}]` : ""} — ${r.value}`;
   });
-  const b = budget(title.length + footerText.length);
+  const b = budget(title.length + description.length + footerText.length);
   b.list(embed, BOARD_LABELS[page.kind], lines, (n) => `+${n} more — see the site.`);
   return embed;
 }
@@ -78,10 +90,15 @@ export function boardEmbed(page: BoardPage, siteBaseUrl: string): EmbedBuilder {
  */
 const NOTHING_EARNED = "Nothing earned yet — see the site for the full wall.";
 
-/** `siteBaseUrl` is unused: a wall's subject can be a player OR a clan tag, and the two live at different site paths, so no single link is right for both — the caller's title carries a link only when it can (see `player`/`board`). */
-export function achievementsEmbed(wall: AchievementWall, subject: string, siteBaseUrl: string): EmbedBuilder {
+/**
+ * `url` is a finished link, not a base — a wall's subject is a player OR a
+ * clan tag, and the two live at different site paths (`/players/…`,
+ * `/clans/…`), so only the caller (which already branched on subject) can
+ * build the right one.
+ */
+export function achievementsEmbed(wall: AchievementWall, subject: string, url: string): EmbedBuilder {
   const title = `${subject} — ${wall.earned} earned`;
-  const embed = new EmbedBuilder().setColor(GOLD).setTitle(title);
+  const embed = new EmbedBuilder().setColor(GOLD).setTitle(title).setURL(url);
   const b = budget(title.length);
 
   const earned = wall.tiles.filter((t) => t.earnedAt !== null).map((t) => `• ${t.name}`);

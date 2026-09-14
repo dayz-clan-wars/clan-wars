@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 import type { WarLogFilter } from "@factions/roster";
 import { alphasEmbed, scoreboardEmbed, seasonsEmbed, warLogEmbed } from "./embeds/scoring.js";
+import { matchClans } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 /** How many war-log rows fit one card comfortably. The site paginates; Discord shows the newest. */
@@ -26,13 +27,10 @@ const warlog: Handler = async (ctx, input) => {
   return { embeds: [warLogEmbed(await ctx.roster.warLog(WAR_LOG_LIMIT, filter), ctx.siteBaseUrl)], ephemeral: true };
 };
 
-/** Shared with nothing else: `/clans` has its own, which also offers "recruiting". */
+/** Its labels are plain (unlike `/clans`'s, which also offers "recruiting"); the filtering is shared via `matchClans`. */
 const clanTags: AutocompleteSource = async (ctx, a) => {
   const { clans } = await ctx.roster.directory();
-  const q = a.value.trim().toLowerCase();
-  return clans
-    .filter((c) => q === "" || c.tag.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-    .map((c) => ({ name: `${c.name} [${c.tag}]`, value: c.tag }));
+  return matchClans(clans, a.value).map((c) => ({ name: `${c.name} [${c.tag}]`, value: c.tag }));
 };
 
 const flat = (name: string, description: string, handler: Handler): CommandGroup => ({

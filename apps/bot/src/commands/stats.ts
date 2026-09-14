@@ -1,8 +1,8 @@
 import { SlashCommandBuilder } from "discord.js";
 import { BOARD_KINDS, type BoardKind } from "@factions/roster";
-import { BOARD_LABELS, discordCopy, NO_SUCH_PLAYER, REFUSAL } from "@factions/copy";
+import { BOARD_LABELS, discordCopy, NO_PROFILE, REFUSAL } from "@factions/copy";
 import { achievementsEmbed, boardEmbed, playerEmbed } from "./embeds/stats.js";
-import { parseScope } from "./parse.js";
+import { matchClans, parseScope } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 /** A missing gamertag is BAD INPUT, not a domain outcome; unreachable through a real client since the option is required. */
@@ -21,13 +21,10 @@ const scopes: AutocompleteSource = async (ctx) => [
 const gamertags: AutocompleteSource = async (ctx, a) =>
   (await ctx.roster.suggestGamertags(a.value, "seen")).map((g) => ({ name: g, value: g }));
 
-/** Clan tags off the public directory, for `/achievements clan:`. */
+/** Clan tags off the public directory, for `/achievements clan:`. Plain labels — filtering is shared with `/clans`/`/warlog` via `matchClans`, but their "· recruiting" suffix is `/clans`'s own. */
 const clanChoices: AutocompleteSource = async (ctx, a) => {
   const { clans } = await ctx.roster.directory();
-  const q = a.value.trim().toLowerCase();
-  return clans
-    .filter((c) => q === "" || c.tag.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-    .map((c) => ({ name: `${c.name} [${c.tag}]`, value: c.tag }));
+  return matchClans(clans, a.value).map((c) => ({ name: `${c.name} [${c.tag}]`, value: c.tag }));
 };
 
 const player: Handler = async (ctx, input) => {
@@ -37,7 +34,7 @@ const player: Handler = async (ctx, input) => {
   const profile = await ctx.roster.playerProfile(gamertag, scope);
   return profile
     ? { embeds: [playerEmbed(profile, ctx.siteBaseUrl)], ephemeral: true }
-    : { content: NO_SUCH_PLAYER, ephemeral: true };
+    : { content: NO_PROFILE, ephemeral: true };
 };
 
 /** ⚠️ `mine` routes to a DIFFERENT roster export, not to a local filter: `clanBoardPage` is the one that checks membership, and its refusals are the shared `REFUSAL` strings. */
@@ -62,7 +59,7 @@ const achievements: Handler = async (ctx, input) => {
   if (clan) {
     const wall = await ctx.roster.achievementsFor({ clanTag: clan });
     return wall
-      ? { embeds: [achievementsEmbed(wall, `[${clan.toUpperCase()}]`, ctx.siteBaseUrl)], ephemeral: true }
+      ? { embeds: [achievementsEmbed(wall, `[${clan.toUpperCase()}]`, `${ctx.siteBaseUrl}/clans/${clan.toUpperCase()}`)], ephemeral: true }
       : { content: discordCopy("request", "no-such-clan"), ephemeral: true };
   }
   let gamertag = input.string("gamertag");
@@ -73,8 +70,8 @@ const achievements: Handler = async (ctx, input) => {
   }
   const wall = await ctx.roster.achievementsFor({ gamertag });
   return wall
-    ? { embeds: [achievementsEmbed(wall, gamertag, ctx.siteBaseUrl)], ephemeral: true }
-    : { content: NO_SUCH_PLAYER, ephemeral: true };
+    ? { embeds: [achievementsEmbed(wall, gamertag, `${ctx.siteBaseUrl}/players/${encodeURIComponent(gamertag)}`)], ephemeral: true }
+    : { content: NO_PROFILE, ephemeral: true };
 };
 
 export const playerGroup: CommandGroup = {

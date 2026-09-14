@@ -1,4 +1,4 @@
-import type { Role, StatScope } from "@factions/roster";
+import type { DirectoryEntry, Role, StatScope } from "@factions/roster";
 
 /**
  * Slash command options only carry strings (autocomplete choices are
@@ -36,4 +36,15 @@ export function parseScope(raw: string | null): StatScope {
   if (v === "all") return { kind: "all" };
   if (/^[1-9]\d*$/u.test(v)) return { kind: "season", number: Number(v) };
   return { kind: "current" };
+}
+
+/**
+ * The directory, filtered case-insensitively by name or tag — the FILTERING
+ * three autocomplete sources share (`/clans`'s, `/warlog`'s, and `/achievements
+ * clan:`'s). Their LABELS differ (`/clans` alone appends "· recruiting"), so
+ * only this is shared; each call site still builds its own `{ name, value }`.
+ */
+export function matchClans(clans: readonly DirectoryEntry[], query: string): DirectoryEntry[] {
+  const q = query.trim().toLowerCase();
+  return clans.filter((c) => q === "" || c.tag.toLowerCase().includes(q) || c.name.toLowerCase().includes(q));
 }
