@@ -195,6 +195,30 @@ export function ptFor(L: typeof import("leaflet"), size: number) {
   };
 }
 
+/**
+ * Every popup on this map, without exception.
+ *
+ * ⚠️ `cw-map-popup` is not only styling: `lib/map-popup-fit.ts` writes its fit
+ * as custom properties that ONLY this class's rules read. A popup bound without
+ * it is still clipped away by `.leaflet-container`'s `overflow: hidden` near the
+ * world's edge — the 2026-09-12 bug, silently, for that one popup. Pinned by
+ * test/map-popup-fit.test.ts.
+ */
+const POPUP = { className: "cw-map-popup", closeButton: true } as const;
+
+/**
+ * The chip's frame turns gold while its popup is open.
+ *
+ * ⚠️ Load-bearing for a popup near the world's edge, not decoration. A card
+ * shifted further than its tip can follow has the tip hidden outright
+ * (`cw-no-tip`), and then this is the only thing left saying which marker the
+ * card belongs to. Every marker that binds a popup calls it.
+ */
+function markOpen(marker: L.Marker): void {
+  marker.on("popupopen", () => marker.getElement()?.classList.add("cw-open"));
+  marker.on("popupclose", () => marker.getElement()?.classList.remove("cw-open"));
+}
+
 /** The name tags: mono in the black chip, no arrow. `cw-map-tag-*` variants recolour text or edge. */
 const TAG = "cw-map-tag";
 /** Leaflet's tooltips default to 90%; a fresh tag is fully there, and age lowers it (never the text colour). */
@@ -246,7 +270,8 @@ export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
     marker.bindTooltip(name, tag(""));
     const text = (age: string) => `${name} · ${escapeHtml(age)}`;
     const age = fixAge(m.fix.at, new Date(now));
-    marker.bindPopup(text(age), { className: "cw-map-popup" });
+    marker.bindPopup(text(age), POPUP);
+    markOpen(marker);
     marker.addTo(group);
     // Past a day the marker is dimmed rather than dropped: "here a day ago" is
     // still worth knowing, and a vanished clanmate reads as a bug. The
@@ -295,10 +320,8 @@ export function drawPins({ L, group, pt, data, now, ages, p }: Ctx): void {
       `</div>`;
     const age = fixAge(pin.at, new Date(now));
     const marker = L.marker(pt(pin.x, pin.z), { icon: chipIcon(L, pinIcon(p, pin.icon), ICON.pin, "cw-mk-pin"), keyboard: false })
-      .bindPopup(text(age), { className: "cw-map-popup", closeButton: true });
-    // The chip's frame turns gold while its popup is open.
-    marker.on("popupopen", () => marker.getElement()?.classList.add("cw-open"));
-    marker.on("popupclose", () => marker.getElement()?.classList.remove("cw-open"));
+      .bindPopup(text(age), POPUP);
+    markOpen(marker);
     marker.addTo(group);
     ages.push({ at: pin.at, layer: marker, popup: text, last: age });
   }

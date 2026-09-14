@@ -8,6 +8,7 @@ import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { LAYER_REASONS, MAP_HINT, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
+import { applyPopupFit } from "@/lib/map-popup-fit";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
   drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
@@ -185,6 +186,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const map = useRef<L.Map | null>(null);
   const groups = useRef<Partial<Record<LayerKey, L.LayerGroup>>>({});
   const gridDrawn = useRef(false);
+  // The open popup, and the call that keeps its card inside the container.
+  const openPopup = useRef<L.Popup | null>(null);
+  const fitPopupNow = useRef<() => void>(() => {});
   const dataRef = useRef<MapData | null>(null);
   const hintRef = useRef(false);
   hintRef.current = hint;
@@ -376,6 +380,19 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         // unrendered — one stray right-click and the map had no controls left.
         // The guard here and the `!pinSheet` on the bar are the two halves of
         // that; `pinSheet` below keeps them from drifting apart again.
+        // ⚠️ A pin near the world's edge. Leaflet keeps a popup in view by
+        // PANNING THE MAP, and this map cannot pan: the world is the max bounds
+        // with viscosity 1 and the zoom floor fits all of it, so a card that
+        // overruns the container was simply clipped away by
+        // `.leaflet-container`'s `overflow: hidden` — note and Delete button off
+        // the page. lib/map-popup-fit.ts moves the card instead. Recomputed on
+        // every view change, because what fits depends on where the pin now is.
+        const fitOpen = () => { const p = openPopup.current; if (p) applyPopupFit(m, p); };
+        fitPopupNow.current = fitOpen;
+        m.on("popupopen", (e: L.PopupEvent) => { openPopup.current = e.popup; fitOpen(); });
+        m.on("popupclose", (e: L.PopupEvent) => { if (openPopup.current === e.popup) openPopup.current = null; });
+        m.on("moveend zoomend resize", fitOpen);
+
         if (layersRef.current.pins) {
           m.on("contextmenu", (e: L.LeafletMouseEvent) => {
             const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
@@ -400,6 +417,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       observer.current = null;
       map.current?.remove();
       map.current = null;
+      openPopup.current = null;
+      fitPopupNow.current = () => {};
       groups.current = {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
@@ -418,7 +437,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // ⚠️ The age tick rewrites text and NOTHING else. It must never clear a
   // layer group: a player reading a pin note would lose the note and its
   // Delete button mid-read, twice a minute, with no input of their own.
-  useEffect(() => { refreshAges(ages.current, now); }, [now]);
+  // A rewritten age can change the card's height (an expiry wrapping to a
+  // second line), so the fit is taken again — never the layers.
+  useEffect(() => { refreshAges(ages.current, now); fitPopupNow.current(); }, [now]);
 
   // One group per layer, added and removed on its switch.
   useEffect(() => {
