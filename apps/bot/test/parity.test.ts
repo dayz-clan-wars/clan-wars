@@ -11,9 +11,13 @@ import { SPECS } from "../src/commands/index.js";
  * explicitly deferred fails this suite, so parity cannot rot quietly on the
  * next increment.
  *
- * ⚠️ Reads are deliberately NOT here. `/map` and deep board pagination are
- * site-only by design (spec §2.2); a test that demanded a command per read
- * would have to carve out exceptions and would stop meaning anything.
+ * ⚠️ Reads are deliberately NOT here. Most of them DO have commands now —
+ * `/me show`, `/clan info`, `/clans list`, `/vault list`, `/map pins`,
+ * `/scoreboard`, `/player`, `/board` and the rest — but a test that demanded
+ * one command per read export would have to carve out the two things that
+ * stay site-only by design (spec §2.2): the drawn map behind `/map view`,
+ * and board pagination past the first pages. Carving those out is how a
+ * list stops meaning anything, so reads are listed by name below instead.
  */
 const COMMANDS: Record<string, string> = {
   startLink: "link start", cancelLink: "link cancel", unlink: "link unlink",
@@ -27,13 +31,17 @@ const COMMANDS: Record<string, string> = {
   claimSuccession: "lead claim", openVote: "lead vote", castVote: "lead ballot",
   claimCeremony: "found",
   grantGuestPass: "guest grant", revokeGuestPass: "guest revoke",
+  addLock: "vault add", editLock: "vault edit", deleteLock: "vault delete",
+  revealLock: "vault reveal", confirmLock: "vault confirm", rotateLocks: "vault rotate",
+  dropPin: "map pin", deletePin: "map unpin",
 };
 
-/** Shipping in plan 3. Each entry names the plan that removes it. */
-const PENDING: Record<string, string> = {
-  addLock: "plan 3", editLock: "plan 3", deleteLock: "plan 3", revealLock: "plan 3",
-  confirmLock: "plan 3", rotateLocks: "plan 3", dropPin: "plan 3", deletePin: "plan 3",
-};
+/**
+ * Empty, and that is the point: every write `@factions/roster` exports has a
+ * command. A new write lands here only if a future increment ships one
+ * without a Discord command — and then this file says which plan owes it.
+ */
+const PENDING: Record<string, string> = {};
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
 const WRITES = [...Object.keys(COMMANDS), ...Object.keys(PENDING)];

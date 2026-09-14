@@ -1,8 +1,7 @@
-export const EMPTY_SCOREBOARD = "No season is open. The scoreboard starts with the first raid after the season opens.";
-export const NO_ALPHAS_WEEK = "Nobody scored.";
-export const NO_SEASONS = "No season has closed yet.";
-export const EMPTY_WAR_LOG = "No raids yet this season.";
-export const ALPHA_BADGE = "Alpha";
+// Moved to `packages/copy/src/scoring.ts` on 2026-09-13 so the bot's embeds
+// use the identical sentences instead of a second, drifting copy of them.
+// Re-exported here so no page's import needs to change.
+export { EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "@factions/copy";
 
 /**
  * `"3h 15m"`, hours and minutes, no seconds — the bot's rules

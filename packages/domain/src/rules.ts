@@ -93,6 +93,8 @@ export const PIN_ICONS = ["loot", "vehicle", "enemy", "meet", "danger", "note"] 
 export type PinIcon = (typeof PIN_ICONS)[number];
 /** Pin note length cap, characters. UI + package share it. */
 export const PIN_NOTE_MAX = 140;
+/** Livonia. The one map this deployment runs; `servers.map` says "livonia". */
+export const WORLD_SIZE_M = 12800;
 
 /**
  * Vault lock label and note caps, characters.

@@ -39,8 +39,6 @@ const COMMAND_FILES = listTsFiles(COMMANDS_SRC_ROOT).map((f) => `commands/${f}`)
  */
 const PLAYER_FACING = [
   "feed-embed.ts", "ceremony-notify.ts", "dormancy-notify.ts", "notify.ts",
-  // Increment 2c-b: the one reply every retired command gives.
-  "retired-commands.ts",
   // Increment 3c: the clan_notices and war_log_events renderers.
   "notice-text.ts", "war-log-text.ts",
   // 2026-09-13: every slash command reply and embed — see COMMAND_FILES above.

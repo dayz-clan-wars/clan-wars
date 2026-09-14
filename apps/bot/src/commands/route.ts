@@ -6,7 +6,7 @@ import {
   type MessageComponentInteraction,
   type ModalSubmitInteraction,
 } from "discord.js";
-import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS } from "./index.js";
+import { COMPONENTS, MODALS, MODAL_OPENERS, SPECS, UPDATERS } from "./index.js";
 import { parseCustomId } from "./confirm.js";
 import type { CommandInput, Ctx, Reply } from "./types.js";
 
@@ -22,6 +22,23 @@ const HANDLER_FAILED = "Something went wrong running that command. Try again in 
 
 /** A pressed button or a submitted modal whose custom id names someone else. */
 const NOT_YOURS = "That button is not yours — run the command yourself.";
+
+/**
+ * ⚠️ Never `console.error(err)` a discord.js REST failure directly. Its
+ * `DiscordAPIError`/`HTTPError` (`@discordjs/rest`) carry the whole failed
+ * request as `err.requestBody = { files, json: body }` — and the request
+ * that fails here is the `editReply` call below, whose `json.content` is
+ * whatever the handler answered with. For `/vault reveal` that content IS a
+ * lock code. Log only the diagnosis — name, message, and `code`/`status`
+ * when present — and nothing shaped like a request or response body.
+ */
+export function safeErrorInfo(err: unknown): Record<string, unknown> {
+  if (err && typeof err === "object") {
+    const e = err as { name?: unknown; message?: unknown; code?: unknown; status?: unknown };
+    return { name: e.name, message: e.message, code: e.code, status: e.status };
+  }
+  return { value: String(err) };
+}
 
 /** The one place a discord.js interaction is unpacked into a handler's input. */
 function inputFor(i: ChatInputCommandInteraction): CommandInput {
@@ -58,21 +75,43 @@ async function finish(
   try {
     reply = await run();
   } catch (err) {
-    console.error(`handler failed for ${label}`, err);
-    await i.editReply({ content: HANDLER_FAILED, embeds: [], components: [] });
+    console.error(`handler failed for ${label}`, safeErrorInfo(err));
+    // ⚠️ This editReply's own body is generic (`HANDLER_FAILED`), never a
+    // secret — but it can still throw (rate limit, unknown message, 5xx),
+    // and that throw must not go unlogged or escape uncaught either.
+    await i.editReply({ content: HANDLER_FAILED, embeds: [], components: [] })
+      .catch((editErr: unknown) => console.error(`edit reply failed for ${label}`, safeErrorInfo(editErr)));
     return;
   }
-  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [], components: reply.components ?? [] });
+  // ⚠️ The one place a leaked lock code could reach a log line: this
+  // editReply's request body is `reply.content`, and for `/vault reveal`
+  // that IS a lock code. If the Discord API call itself fails, the thrown
+  // error carries that body — see `safeErrorInfo`'s comment. Never log the
+  // caught error directly here.
+  await i.editReply({ content: reply.content, embeds: reply.embeds ?? [], components: reply.components ?? [] })
+    .catch((err: unknown) => console.error(`edit reply failed for ${label}`, safeErrorInfo(err)));
 }
 
 export async function handleChatInput(ctx: Ctx, i: ChatInputCommandInteraction): Promise<void> {
-  const spec = SPECS.get(pathOf(i.commandName, i.options.getSubcommand(false)));
+  const path = pathOf(i.commandName, i.options.getSubcommand(false));
+  const spec = SPECS.get(path);
   if (!spec) return;
+  // ⚠️ Before the defer, for the same reason `handleComponent` has this
+  // branch: a modal cannot be shown on an acknowledged interaction.
+  if (spec.opensModal) {
+    const reply = await spec.handler(ctx, inputFor(i));
+    if (reply.modal) { await i.showModal(reply.modal); return; }
+    // ⚠️ Same invariant as the component opener: a non-modal reply from an
+    // opener carries `content` only. Embeds and components are dropped here
+    // silently — do not return them from an `opensModal` handler.
+    await i.reply({ content: reply.content ?? UNKNOWN, flags: MessageFlags.Ephemeral });
+    return;
+  }
   // ⚠️ Defer first. A handler runs one or more database round trips and
   // Discord kills an un-acknowledged interaction after 3 seconds; the reply
   // below then edits the deferred message instead of racing that deadline.
   await i.deferReply({ flags: MessageFlags.Ephemeral });
-  await finish(i, () => spec.handler(ctx, inputFor(i)), `/${pathOf(i.commandName, i.options.getSubcommand(false))}`);
+  await finish(i, () => spec.handler(ctx, inputFor(i)), `/${path}`);
 }
 
 export async function handleAutocomplete(ctx: Ctx, i: AutocompleteInteraction): Promise<void> {
@@ -107,7 +146,8 @@ export async function handleComponent(ctx: Ctx, i: MessageComponentInteraction):
       return;
     }
   }
-  await i.deferReply({ flags: MessageFlags.Ephemeral });
+  const inPlace = UPDATERS.has(parsed.action);
+  if (inPlace) await i.deferUpdate(); else await i.deferReply({ flags: MessageFlags.Ephemeral });
   // ⚠️ A button is never a permission (R2): re-check the presser against the
   // actor named in the custom id even though the message is ephemeral and in
   // practice only that actor can see the button at all.

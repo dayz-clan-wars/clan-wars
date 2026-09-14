@@ -238,13 +238,20 @@ turbo gate stays the gate, because it runs `typecheck` too.
   `docs/superpowers/specs/2026-09-13-discord-command-parity-design.md`. Plan 1 shipped
   `/link` and `/base`; plan 2 (`docs/deploy/2026-09-13-discord-commands-2.md`) lands the
   other seven groups — `/me`, `/roster`, `/clan`, `/clans`, `/lead`, `/found`, `/guest` —
-  so the live command list is `/link /base /me /roster /clan /clans /lead /found /guest`.
-  `apps/bot/test/parity.test.ts` lists every write and which plan carries it: 27 are
-  shipped, 8 (the vault's locks and the map's pins) are pending in plan 3. `whoami` and
-  `faction` are the two retired stubs still standing with no real replacement — they
-  answer with one line and a link and are deleted only when parity is complete; the
-  bare `unlink` name also stays registered for a stale client's sake even though
-  `/link unlink` is already its real replacement (`retired-commands.ts`).
+  and plan 3 (`docs/deploy/2026-09-13-discord-commands-3.md`) lands the vault and the
+  map plus the read-only groups, so the live command list is `/link /base /me /roster
+  /clan /clans /lead /found /guest /vault /map /scoreboard /alphas /seasons /warlog
+  /player /board /achievements`. `apps/bot/test/parity.test.ts` lists every write and
+  its command; its `PENDING` map is empty — every write `@factions/roster` exports has
+  a command, and the test fails the moment a future increment ships one without a
+  Discord command, naming which plan owes it. **`retired-commands.ts` and its stubs
+  (`whoami`, `faction`, the bare `unlink`) are gone** (plan 3, task 7): the condition
+  their own comment set for removal — "deleted only when parity is complete" — is now
+  met, and this repeats an invariant this file stated the opposite way before that: the
+  stubs are no longer kept around "until parity is complete." An unrouted interaction
+  (a stale command name, or a button on a message the pre-plan-1 bot posted) now gets
+  one branch in `discord.ts` that answers with `commands/route.ts`'s `UNKNOWN` sentence
+  plus the site link, rather than a per-command pointer.
   ⚠️ Every command reply is ephemeral, always: `apps/bot/src/commands.ts` says why,
   and `command-registration.test.ts` enforces it. A page may never
   reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`

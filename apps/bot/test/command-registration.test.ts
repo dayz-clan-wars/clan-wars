@@ -50,13 +50,27 @@ describe("command registration", () => {
   });
 
   it("names an autocomplete source for every option marked autocomplete", () => {
+    type Opt = { name: string; autocomplete?: boolean };
     for (const group of GROUPS) {
       const json = group.command.toJSON();
-      for (const sub of (json.options ?? []).filter((o) => o.type === 1)) {
-        for (const opt of ((sub as { options?: { name: string; autocomplete?: boolean }[] }).options ?? [])) {
+      const subs = (json.options ?? []).filter((o) => o.type === 1);
+      if (subs.length > 0) {
+        for (const sub of subs) {
+          for (const opt of ((sub as { options?: Opt[] }).options ?? [])) {
+            if (!opt.autocomplete) continue;
+            const spec = SPECS.get(`${json.name} ${sub.name}`);
+            expect(spec?.autocomplete?.[opt.name], `/${json.name} ${sub.name} ${opt.name} has no source`).toBeTypeOf("function");
+          }
+        }
+      } else {
+        // ⚠️ A bare command's own options sit directly on `json.options`,
+        // not nested under a subcommand (type 1) — `/warlog`'s `clan:` was
+        // the first of these to carry autocomplete, and the subcommand-only
+        // walk above never looked at it.
+        for (const opt of ((json.options ?? []) as Opt[])) {
           if (!opt.autocomplete) continue;
-          const spec = SPECS.get(`${json.name} ${sub.name}`);
-          expect(spec?.autocomplete?.[opt.name], `/${json.name} ${sub.name} ${opt.name} has no source`).toBeTypeOf("function");
+          const spec = SPECS.get(json.name);
+          expect(spec?.autocomplete?.[opt.name], `/${json.name} ${opt.name} has no source`).toBeTypeOf("function");
         }
       }
     }
@@ -97,5 +111,35 @@ describe("commands are ephemeral", () => {
     expect(route).toMatch(/deferReply\(\{\s*flags:\s*MessageFlags\.Ephemeral\s*\}\)/u);
     // An un-flagged acknowledgement would be a public reply.
     expect(route).not.toMatch(/\.reply\(\{(?![^}]*MessageFlags\.Ephemeral)/u);
+  });
+
+  /**
+   * `discord.ts` is ~1200 lines of tick loops with no reply of its own,
+   * except the `interactionCreate` handler's fallback for whatever
+   * `routeInteraction` did not claim (a stale command name, or a button on a
+   * message the pre-plan-1 bot posted). That fallback is a player-facing
+   * reply just like everything in `route.ts` above, so it must be scoped
+   * out and checked the same way — a bare regex over the whole file would
+   * either match nothing (vacuously passing forever) or, worse, trip on
+   * unrelated code that happens to contain the word "reply".
+   */
+  it("discord.ts's interaction fallback is ephemeral too", () => {
+    const discord = readFileSync(resolve(here, "..", "src", "discord.ts"), "utf8");
+    const start = discord.indexOf('client.on("interactionCreate"');
+    expect(start, `discord.ts must define an interactionCreate handler`).toBeGreaterThan(-1);
+    const end = discord.indexOf("\n  });", start);
+    expect(end, `could not find the end of the interactionCreate handler`).toBeGreaterThan(start);
+    const handler = discord.slice(start, end);
+    const acks = handler.match(/\.(deferReply|reply)\(/gu) ?? [];
+    expect(acks.length, "the interactionCreate handler must acknowledge unrouted interactions").toBeGreaterThan(0);
+    // Each whole `.reply(...)` call, up to its closing `);`, must carry the
+    // ephemeral flag. Unlike `route.ts`'s replies, this one's content is a
+    // template literal with `${...}` interpolations — which themselves
+    // contain `}` — so route.ts's own negative-lookahead-up-to-`}` regex
+    // would stop short of `MessageFlags.Ephemeral` here and false-fail; this
+    // walks to the call's actual end instead.
+    const replyCalls = handler.match(/\.reply\([\s\S]*?\);/gu) ?? [];
+    expect(replyCalls.length, "must have at least one .reply( call").toBeGreaterThan(0);
+    for (const call of replyCalls) expect(call).toMatch(/flags:\s*MessageFlags\.Ephemeral/u);
   });
 });

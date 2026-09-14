@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 import { discordCopy } from "@factions/copy";
 import { directoryEmbed, clanPageEmbed } from "./embeds/clans.js";
+import { matchClans } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 /** `/clans list` — every clan, public fields only. */
@@ -33,10 +34,7 @@ const join: Handler = async (ctx, input) => {
 /** Offers tags from the directory, filtered case-insensitively by name or tag. */
 const tags: AutocompleteSource = async (ctx, a) => {
   const { clans } = await ctx.roster.directory();
-  const q = a.value.trim().toLowerCase();
-  return clans
-    .filter((c) => q === "" || c.tag.toLowerCase().includes(q) || c.name.toLowerCase().includes(q))
-    .map((c) => ({ name: `${c.name} [${c.tag}]${c.recruiting ? " · recruiting" : ""}`, value: c.tag }));
+  return matchClans(clans, a.value).map((c) => ({ name: `${c.name} [${c.tag}]${c.recruiting ? " · recruiting" : ""}`, value: c.tag }));
 };
 
 export const clansGroup: CommandGroup = {

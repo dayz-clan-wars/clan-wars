@@ -26,7 +26,6 @@ import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
-import { retiredReply } from "./retired-commands.js";
 import { PgFeedStore, PgNoticeStore, PgWarLogStore, countUnposted, countUnpostedWarLog, noticeUserTx } from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
@@ -50,7 +49,7 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { makeRoster } from "@factions/roster";
-import { routeInteraction } from "./commands/route.js";
+import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
 import type { Ctx } from "./commands/types.js";
 import { buildCommands } from "./commands/index.js";
 
@@ -544,20 +543,23 @@ export async function start(cfg: BotConfig): Promise<void> {
     try {
       if (await routeInteraction(ctxNow(), interaction)) return;
 
-      if (interaction.isChatInputCommand()) {
-        const sub = interaction.options.getSubcommand(false);
-        const reply = retiredReply(cfg.siteBaseUrl, interaction.commandName, sub);
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      // Buttons and selects on old DMs (invite accept, claim confirm, rebind confirm): the same pointer.
-      if (interaction.isMessageComponent()) {
-        const reply = retiredReply(cfg.siteBaseUrl, "faction", interaction.customId.startsWith("invite-") ? "invites" : null);
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+      // Nothing routed it: an unknown command name from a stale client, a
+      // button on a message the pre-plan-1 bot posted, or (unreachable
+      // today — no pre-plan-1 modals exist) a modal submit with a foreign
+      // custom id. `routeInteraction` returns `false` for all three kinds,
+      // so all three belong here — leaving one out means that kind's player
+      // sees Discord's own "This interaction failed." instead of a sentence
+      // and a link.
+      if (interaction.isChatInputCommand() || interaction.isMessageComponent() || interaction.isModalSubmit()) {
+        await interaction.reply({ content: `${UNKNOWN} ${cfg.siteBaseUrl}`, flags: MessageFlags.Ephemeral });
       }
     } catch (err) {
       // ⚠️ discord.js does not await this listener; an uncaught throw is an unhandled rejection that takes the bot down. Log and drop the one interaction.
-      console.error(`interaction failed`, err);
+      // ⚠️ Never log `err` itself: a discord.js REST failure carries the
+      // whole failed request body (`err.requestBody.json`), which for
+      // `/vault reveal` is a lock code — see `safeErrorInfo`'s comment in
+      // `commands/route.ts`.
+      console.error(`interaction failed`, safeErrorInfo(err));
     }
   });
 

@@ -90,7 +90,7 @@ Six list embeds land in this plan. Before any of them is written, fix the accoun
 - Produces:
   - `budget(spentAlready: number): Budget` in `embeds/budget.ts`, with `EMBED_TOTAL_MAX`, `FIELD_VALUE_MAX`, `MAX_FIELDS`.
   - `vaultEmbed(state: VaultState, siteBaseUrl: string): EmbedBuilder` in `embeds/vault.ts`.
-  - `vaultGroup: CommandGroup` in `vault.ts`, registering `/vault list` only. Later tasks add subcommands to the same builder and the same `specs` array.
+  - `vaultGroup: CommandGroup` in `vault.ts`, registering `/vault list` only. Handlers call `ctx.roster.vaultFor` directly — no local wrapper (P1). Later tasks add subcommands to the same builder and the same `specs` array.
   - `locks: AutocompleteSource` exported from `vault.ts`, reused by Tasks 2 and 3.
 
 - [ ] **Step 1: Write the failing budget test**
@@ -447,19 +447,17 @@ export function vaultEmbed(state: VaultState, siteBaseUrl: string): EmbedBuilder
 import { SlashCommandBuilder } from "discord.js";
 import { REFUSAL } from "@factions/copy";
 import { vaultEmbed } from "./embeds/vault.js";
-import type { AutocompleteSource, CommandGroup, Ctx, Handler } from "./types.js";
+import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 /**
- * Every vault subcommand starts here: `vaultFor` is the permission check,
- * and a refusal is a sentence, not an empty card. Returned as a union so a
- * handler can `if (typeof v === "string")` once and move on.
+ * ⚠️ `vaultFor` IS the permission check, on every subcommand that needs one:
+ * it rank-filters the locks and returns a refusal string for a player who is
+ * unlinked, clanless or pending. A refusal is a sentence, never an empty
+ * card, so each handler narrows with `typeof state === "string"` and answers
+ * from `REFUSAL`.
  */
-export async function vaultState(ctx: Ctx, actorDiscordId: string) {
-  return ctx.roster.vaultFor(actorDiscordId);
-}
-
 const list: Handler = async (ctx, input) => {
-  const state = await vaultState(ctx, input.actorDiscordId);
+  const state = await ctx.roster.vaultFor(input.actorDiscordId);
   if (typeof state === "string") return { content: REFUSAL[state], ephemeral: true };
   return { embeds: [vaultEmbed(state, ctx.siteBaseUrl)], ephemeral: true };
 };
@@ -530,7 +528,7 @@ The second router change is the defect plan 2 shipped knowingly: `/found`'s sele
 - Test: `apps/bot/test/route.test.ts` (extend), `apps/bot/test/commands-vault.test.ts` (extend)
 
 **Interfaces:**
-- Consumes: `Reply.modal`, `modalId`, `confirmId`, `parseCustomId`, `MODAL_OPENERS`, `COMPONENTS`, `MODALS` from plan 2. `locks` and `vaultState` from Task 1. `VAULT_NAME_MAX`, `VAULT_NOTE_MAX` from `@factions/roster`; `VAULT_CODE_DIGITS` from `@factions/domain`.
+- Consumes: `Reply.modal`, `modalId`, `confirmId`, `parseCustomId`, `MODAL_OPENERS`, `COMPONENTS`, `MODALS` from plan 2. `locks` from Task 1. `VAULT_NAME_MAX`, `VAULT_NOTE_MAX` from `@factions/roster`; `VAULT_CODE_DIGITS` from `@factions/domain`.
 - Produces:
   - `CommandSpec.opensModal?: true` — the router does not defer this spec; its handler returns `{ modal }`.
   - `CommandGroup.updatesInPlace?: string[]` and `index.ts`'s `UPDATERS: Set<string>` — component actions the router acknowledges with `deferUpdate()` so the reply edits the card the component sits on.
@@ -956,9 +954,9 @@ The rest of the vault. Two are plain writes, two are destructive and get Confirm
 - Test: `packages/copy/test/overrides.test.ts` (extend), `apps/bot/test/commands-vault.test.ts` (extend)
 
 **Interfaces:**
-- Consumes: `confirmReply`, `confirmId` from `commands/confirm.js`; `locks` from Task 1; `roleOf`/`idOf` from `commands/parse.js`.
+- Consumes: `confirmReply`, `confirmId` from `commands/confirm.js`; `locks` from Task 1; `idOf` from `commands/parse.js`.
 - Produces:
-  - `revealedCopy(lockName: string, code: string): string` exported from `@factions/copy`.
+  - `revealedCopy(lockName: string, code: string): string` and `rotatedCopy(n: number): string` exported from `@factions/copy`.
   - `DISCORD_VAULT_OVERRIDES.delete.unconfirmed` and `.rotate.unconfirmed` — button wording, replacing the site's "tick the box".
   - `locksOrAll: AutocompleteSource` in `vault.ts`.
   - `/vault reveal`, `/vault confirm`, `/vault delete`, `/vault rotate` on `vaultGroup`; component actions `vault-del` and `vault-rot`.
@@ -1012,7 +1010,17 @@ In `packages/copy/src/vault.ts`:
  */
 export const revealedCopy = (lockName: string, code: string) =>
   `**${lockName}** — \`${code}\`. Only you can see this message; do not paste it anywhere else.`;
+
+/**
+ * What a rotate answers with once it has landed. The count is the part the
+ * `ROTATE.ok` table string cannot carry, and it is the part that tells a
+ * leader whether "all" did what they meant.
+ */
+export const rotatedCopy = (n: number) =>
+  `${n} lock${n === 1 ? "" : "s"} rotated. ${ROTATE.ok}`;
 ```
+
+⚠️ `ROTATE` is module-private in `vault.ts` today. Either move `rotatedCopy` below `ROTATE`'s declaration in that file (simplest), or read it as `VAULT_TABLES.rotate.ok` — do not paste the sentence a second time.
 
 In `packages/copy/src/discord.ts`, fill in the empty override table:
 
@@ -1025,7 +1033,7 @@ export const DISCORD_VAULT_OVERRIDES: {
 };
 ```
 
-In `packages/copy/src/index.ts`, add `revealedCopy` to the `./vault` export line.
+In `packages/copy/src/index.ts`, add `revealedCopy` and `rotatedCopy` to the `./vault` export line.
 
 - [ ] **Step 4: Run the copy tests**
 
@@ -1194,7 +1202,9 @@ const pressRotate: ComponentHandler = async (ctx, a) => {
   if (target === null) return { content: PICK_A_LOCK, ephemeral: true };
   const { outcome, rotated } = await ctx.roster.rotateLocks(a.actorDiscordId, target);
   if (outcome !== "ok") return { content: discordVaultCopy("rotate", outcome), ephemeral: true };
-  return { content: `${rotated} lock${rotated === 1 ? "" : "s"} rotated. ${discordVaultCopy("rotate", "ok")}`, ephemeral: true };
+  // ⚠️ P2: the count needs a sentence around it, and a sentence a player
+  // reads is copy — so it lives in `packages/copy`, not here.
+  return { content: rotatedCopy(rotated), ephemeral: true };
 };
 
 /** `/vault rotate`'s option: every lock the rank may see, plus "all". */
@@ -1250,14 +1260,14 @@ git commit -m "feat(bot): /vault reveal, confirm, delete and rotate"
 The last two writes in `parity.test.ts`, plus the read that makes them usable and the pointer to the picture Discord cannot draw (R1).
 
 **Files:**
-- Modify: `packages/roster/src/index.ts`, `packages/roster/src/api.ts` (export `WORLD_SIZE_M`)
+- Modify: `packages/domain/src/rules.ts`, `packages/roster/src/map.ts` (move `WORLD_SIZE_M` to the domain — P5)
 - Create: `apps/bot/src/commands/map.ts`, `apps/bot/src/commands/embeds/map.ts`
 - Modify: `apps/bot/src/commands/index.ts`
 - Test: `apps/bot/test/commands-map.test.ts` (create)
 
 **Interfaces:**
-- Consumes: `budget` from Task 1; `PIN_RESULT_COPY`, `PIN_ICON_LABELS` from `@factions/copy`; `PIN_ICONS`, `PIN_NOTE_MAX`, `type PinIcon` from `@factions/domain`; `mapState`, `dropPin`, `deletePin`, `type MapState` from `@factions/roster`.
-- Produces: `pinsEmbed(state: MapState, siteBaseUrl: string): EmbedBuilder`; `mapGroup: CommandGroup`; `WORLD_SIZE_M` on `@factions/roster`'s public surface.
+- Consumes: `budget` from Task 1; `PIN_RESULT_COPY`, `PIN_ICON_LABELS`, `discordCopy` from `@factions/copy`; `PIN_ICONS`, `PIN_NOTE_MAX`, `WORLD_SIZE_M`, `type PinIcon` from `@factions/domain`; `mapState`, `dropPin`, `deletePin`, `type MapState` from `@factions/roster`.
+- Produces: `pinsEmbed(state: MapState, siteBaseUrl: string): EmbedBuilder`; `mapGroup: CommandGroup`; `WORLD_SIZE_M` on `@factions/domain` (P5).
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -1397,11 +1407,19 @@ describe("/map view", () => {
 Run: `pnpm --filter @factions/bot test commands-map` with Bash `timeout: 600000`.
 Expected: FAIL — `Cannot find module '../src/commands/map.js'`.
 
-- [ ] **Step 3: Export `WORLD_SIZE_M` from `@factions/roster`**
+- [ ] **Step 3: Move `WORLD_SIZE_M` into `@factions/domain`**
 
-`packages/roster/src/map.ts` already declares it. Add it to the package's public surface the same way `VAULT_NAME_MAX` is added — a named re-export in `packages/roster/src/api.ts`'s export block — so the slash option's bounds come from the domain rather than a literal 12800 in the bot.
+The bot needs the world size at *registration* time, for `setMinValue`/`setMaxValue`, so it cannot read it off `mapState().world.size` at call time.
 
-⚠️ `packages/roster/test/exports.test.ts` and `apps/bot/test/parity.test.ts` both enumerate the package's exports. `WORLD_SIZE_M` is a constant, not a write, so add it to `parity.test.ts`'s `reads` set beside `VAULT_NAME_MAX`, or the parity suite fails with "new roster export with no command and no decision".
+**P5 — it does not become a roster export.** `packages/roster/test/roster-exports.ts` is an allowlist whose own comment says "the export list IS the permission list", pinned again by `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts`; growing a permission list to publish a constant is the wrong trade, and it would also need a fourth edit in `parity.test.ts`'s `reads` set.
+
+Instead:
+
+1. Move the declaration to `packages/domain/src/rules.ts`, beside `PIN_ICONS` and `PIN_NOTE_MAX` — the map's other rules already live there, and `rules.ts` is re-exported by `packages/domain/src/index.ts`.
+2. In `packages/roster/src/map.ts`, replace the local `export const WORLD_SIZE_M = 12800;` with an import from `@factions/domain`, and keep re-exporting it from that module so nothing inside the package breaks.
+3. Keep the comment that says what it is ("Livonia. The one map this deployment runs; `servers.map` says \"livonia\".") with the declaration as it moves.
+
+⚠️ No allowlist file changes, and `parity.test.ts` is untouched by this step. If `exports.test.ts` goes red, the constant leaked onto the roster's public surface — undo that rather than widening the allowlist.
 
 - [ ] **Step 4: Write `embeds/map.ts`**
 
@@ -1449,15 +1467,21 @@ export function pinsEmbed(state: MapState, siteBaseUrl: string): EmbedBuilder {
 
 ```ts
 import { SlashCommandBuilder } from "discord.js";
-import { PIN_ICONS, PIN_NOTE_MAX, type PinIcon } from "@factions/domain";
-import { PIN_ICON_LABELS, PIN_RESULT_COPY } from "@factions/copy";
-import { WORLD_SIZE_M } from "@factions/roster";
+import { PIN_ICONS, PIN_NOTE_MAX, WORLD_SIZE_M, type PinIcon } from "@factions/domain";
+import { PIN_ICON_LABELS, PIN_RESULT_COPY, discordCopy } from "@factions/copy";
 import { pinsEmbed } from "./embeds/map.js";
 import { idOf } from "./parse.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
-/** ⚠️ Every player-facing sentence here is `PIN_RESULT_COPY`'s. Do not write one inline. */
-const copy = (key: string) => PIN_RESULT_COPY[key] ?? PIN_RESULT_COPY["not-deleted"]!;
+/**
+ * ⚠️ Every player-facing sentence here is `PIN_RESULT_COPY`'s. Do not write
+ * one inline. `PIN_RESULT_COPY` is a `Record<string, string>`, so a key the
+ * table does not hold reads back as `undefined` — the fallback is the shared
+ * bad-input sentence, NOT another pin outcome. Falling back to a real
+ * outcome's words would tell a player their pin was refused for a reason
+ * that never happened (P3).
+ */
+const copy = (key: string) => PIN_RESULT_COPY[key] ?? discordCopy("input", "bad-input");
 
 const pins: Handler = async (ctx, input) => {
   const state = await ctx.roster.mapState(input.actorDiscordId);
@@ -1537,13 +1561,13 @@ Expected: PASS.
 
 - [ ] **Step 7: Typecheck the workspace packages this touched, and run their suites**
 
-Run: `pnpm --filter @factions/roster typecheck && pnpm --filter @factions/roster test && pnpm --filter @factions/bot typecheck && pnpm --filter @factions/bot test` with Bash `timeout: 600000`.
+Run: `pnpm --filter @factions/domain test && pnpm --filter @factions/roster typecheck && pnpm --filter @factions/roster test && pnpm --filter @factions/bot typecheck && pnpm --filter @factions/bot test` with Bash `timeout: 600000`.
 Expected: all clean.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add packages/roster/src apps/bot/src/commands/map.ts apps/bot/src/commands/embeds/map.ts apps/bot/src/commands/index.ts apps/bot/test/commands-map.test.ts apps/bot/test/parity.test.ts
+git add packages/domain/src packages/roster/src apps/bot/src/commands/map.ts apps/bot/src/commands/embeds/map.ts apps/bot/src/commands/index.ts apps/bot/test/commands-map.test.ts
 git commit -m "feat(bot): /map pins, pin, unpin and view"
 ```
 

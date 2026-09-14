@@ -4,6 +4,7 @@ import type {
   EmbedBuilder,
   ModalBuilder,
   SlashCommandBuilder,
+  SlashCommandOptionsOnlyBuilder,
   SlashCommandSubcommandsOnlyBuilder,
   StringSelectMenuBuilder,
 } from "discord.js";
@@ -84,10 +85,19 @@ export type CommandSpec = {
   handler: Handler;
   /** Keyed by option name. */
   autocomplete?: Record<string, AutocompleteSource>;
+  /**
+   * The handler returns `{ modal }` and the router must NOT defer.
+   *
+   * ⚠️ Discord refuses `showModal` on an interaction that has already been
+   * acknowledged, and a deferred interaction is acknowledged. A spec marked
+   * this way therefore has ~3 seconds total: one indexed read before
+   * building the modal is fine, a chain of them is not.
+   */
+  opensModal?: true;
 };
 
 export type CommandGroup = {
-  command: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder;
+  command: SlashCommandBuilder | SlashCommandSubcommandsOnlyBuilder | SlashCommandOptionsOnlyBuilder;
   specs: CommandSpec[];
   /**
    * Keyed by the action segment of a `cw:c:<action>:…` id. `route.ts` is the
@@ -106,4 +116,14 @@ export type CommandGroup = {
    * its only user: see `foundGroup` in `found.ts`.
    */
   modalOpeners?: string[];
+  /**
+   * Component actions whose reply should EDIT the message the component sits
+   * on rather than post a new ephemeral one — select menus that refine a
+   * card in place.
+   *
+   * ⚠️ Without this the router defers a fresh reply per interaction, so a
+   * player who picks a flag and then a crew ends up looking at three copies
+   * of the same card, only the last of which is current.
+   */
+  updatesInPlace?: string[];
 };
