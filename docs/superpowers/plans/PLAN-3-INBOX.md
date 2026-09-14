@@ -375,7 +375,24 @@ count can surface or hide a failure — which is exactly how a latent isolation 
 The fix is isolation, not more truncation: a database or schema per package, named
 from the package, so no two suites share a namespace.
 
-## 22. The bot is single-instance-only, and nothing enforces it
+## 22. ~~The bot is single-instance-only, and nothing enforces it~~ — DONE 2026-09-14 (v1.10.0)
+
+Enforced. `apps/bot/src/instance-lock.ts` takes a Postgres session-scoped
+advisory lock (over `packages/db`'s `acquireAdvisoryLock`) before the bot opens
+a pool, logs in, or registers commands; a second process prints one line and
+exits 0 — deliberate, so `Restart=on-failure` leaves it exited rather than
+restart-looping. Session scope means a SIGKILLed or power-lost bot releases on
+connection death: no TTL, no stale holder. Verified on the production host by
+hand-starting a second bot, which refused in about a second and left the
+running one untouched (`NRestarts 0`).
+
+Both dependants below are covered by the one lock. The startup guard was the
+cheaper half of the original suggestion; the notify-step lease it also proposed
+is unnecessary now that no second process can reach the notifier at all.
+
+Runbook: `docs/deploy/2026-09-14-single-instance-lock.md`. Original writeup below.
+
+### Original writeup
 
 ⚠️ **Raised 2026-09-13 (v1.8.0): this now has a second dependant, and a worse
 failure mode than duplicate DMs.** `/found` keeps a player's in-progress
