@@ -26,7 +26,6 @@ import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
 import { notifyDormancy } from "./dormancy-notify.js";
-import { retiredReply } from "./retired-commands.js";
 import { PgFeedStore, PgNoticeStore, PgWarLogStore, countUnposted, countUnpostedWarLog, noticeUserTx } from "@factions/roster/internal";
 import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
@@ -50,7 +49,7 @@ import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { makeRoster } from "@factions/roster";
-import { routeInteraction, safeErrorInfo } from "./commands/route.js";
+import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
 import type { Ctx } from "./commands/types.js";
 import { buildCommands } from "./commands/index.js";
 
@@ -544,16 +543,11 @@ export async function start(cfg: BotConfig): Promise<void> {
     try {
       if (await routeInteraction(ctxNow(), interaction)) return;
 
-      if (interaction.isChatInputCommand()) {
-        const sub = interaction.options.getSubcommand(false);
-        const reply = retiredReply(cfg.siteBaseUrl, interaction.commandName, sub);
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
-        return;
-      }
-      // Buttons and selects on old DMs (invite accept, claim confirm, rebind confirm): the same pointer.
-      if (interaction.isMessageComponent()) {
-        const reply = retiredReply(cfg.siteBaseUrl, "faction", interaction.customId.startsWith("invite-") ? "invites" : null);
-        await interaction.reply({ content: reply.content, flags: MessageFlags.Ephemeral });
+      // Nothing routed it: an unknown command name from a stale client, or a
+      // button on a message the pre-plan-1 bot posted. One sentence and a
+      // link, never discord.js's "unknown command" and never silence.
+      if (interaction.isChatInputCommand() || interaction.isMessageComponent()) {
+        await interaction.reply({ content: `${UNKNOWN} ${cfg.siteBaseUrl}`, flags: MessageFlags.Ephemeral });
       }
     } catch (err) {
       // ⚠️ discord.js does not await this listener; an uncaught throw is an unhandled rejection that takes the bot down. Log and drop the one interaction.

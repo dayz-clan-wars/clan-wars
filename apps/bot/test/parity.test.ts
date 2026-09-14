@@ -27,13 +27,17 @@ const COMMANDS: Record<string, string> = {
   claimSuccession: "lead claim", openVote: "lead vote", castVote: "lead ballot",
   claimCeremony: "found",
   grantGuestPass: "guest grant", revokeGuestPass: "guest revoke",
+  addLock: "vault add", editLock: "vault edit", deleteLock: "vault delete",
+  revealLock: "vault reveal", confirmLock: "vault confirm", rotateLocks: "vault rotate",
+  dropPin: "map pin", deletePin: "map unpin",
 };
 
-/** Shipping in plan 3. Each entry names the plan that removes it. */
-const PENDING: Record<string, string> = {
-  addLock: "plan 3", editLock: "plan 3", deleteLock: "plan 3", revealLock: "plan 3",
-  confirmLock: "plan 3", rotateLocks: "plan 3", dropPin: "plan 3", deletePin: "plan 3",
-};
+/**
+ * Empty, and that is the point: every write `@factions/roster` exports has a
+ * command. A new write lands here only if a future increment ships one
+ * without a Discord command — and then this file says which plan owes it.
+ */
+const PENDING: Record<string, string> = {};
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
 const WRITES = [...Object.keys(COMMANDS), ...Object.keys(PENDING)];
