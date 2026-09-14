@@ -60,6 +60,12 @@ describe("PgDormancyStore", () => {
     // one faction per test. Multi-faction tests on the same server pass a
     // distinct id to avoid faction_members_server_player_uniq.
     const dayzId = o.dayzId ?? "A";
+    // ⚠️ Derived, not a constant: `faction_members_server_discord_uniq` is the
+    // same one-membership-per-server rule keyed on the Discord id, so a shared
+    // "d1" across two factions on one server is now as illegal as a shared
+    // dayzId. The faction's own `leaderDiscordId` stays "d1" — that is what
+    // the clock assertions read.
+    const memberDiscordId = `d-${dayzId}`;
 
     // Task 9's shared seed helper doesn't exist yet, so this is a minimal
     // local declaration: the faction's hold on its pole now lives in
@@ -81,7 +87,7 @@ describe("PgDormancyStore", () => {
     // A roster member so the member-raise predicate has someone to match.
     // Direct inserts bypass the 200 m check, so a fixed pole key is fine here.
     await db.insert(factionMembers).values({
-      factionId: f!.id, serverId, dayzId, discordId: "d1", role: "leader", joinedAt: declaredAt,
+      factionId: f!.id, serverId, dayzId, discordId: memberDiscordId, role: "leader", joinedAt: declaredAt,
     });
 
     return f!;

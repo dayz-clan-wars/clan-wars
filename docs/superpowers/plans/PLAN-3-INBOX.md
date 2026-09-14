@@ -295,20 +295,51 @@ against the acting user, so the worst outcome of a coerced id is a no-op reply. 
 was fixed for the same class in Plan 3, so this now reads as an inconsistency. Four
 lines.
 
-## 17. A relink lets one Discord account hold two roster rows on one server
+## 17. ~~A relink lets one Discord account hold two roster rows on one server~~ — CLOSED 2026-09-14 (v1.13.0)
 
-Plan 4a closed the stale-UID variant: `acceptInvite` re-derives the accepter's UID
-from `identity_links` at accept time. The re-invite variant is still open. A member
-of faction F who unlinks and relinks a NEW uid can be invited again and accept —
-`createInvite`'s already-member check keys on `dayz_id`, and
-`faction_members_server_player_uniq` is on `(server_id, dayz_id)`, so neither guard
-fires and F ends up with two membership rows for one Discord id.
+**The item as written described a live bug. It was not one.** Re-checking every
+write path before fixing it found the behavioural hole already closed in four
+places:
 
-`resolveServerContext` would then silently take the first. Worse, `leaderIs()` and
-`kick()` use scalar subqueries over `(faction_id, discord_id)`, which would raise
-"more than one row returned by a subquery" — a raw Postgres error reaching a player.
-There is no unique index on `(faction_id, discord_id)`; adding one is probably the
-fix, but it needs a check against what `/unlink` and re-linking are meant to permit.
+- `unlinkDb` (`packages/roster/src/link.ts`) refuses while the account holds a
+  membership row in a faction with a HOLDING status — so "unlinks and relinks a
+  new UID" cannot start while they are in a clan.
+- `acceptInvite` inserts `INSERT ... SELECT` from `identity_links` requiring
+  `il.dayz_id = inv.inviteeDayzId`, and aborts `link-changed` on zero rows. Its
+  own comment names this exact failure as what the shape prevents.
+- `decideRequestDb` (`packages/roster/src/internal/requests.ts`) has the same
+  shape for join requests.
+- The founding insert (`faction-store.ts`) draws its members from ceremony
+  participants resolved through `identity_links`, which is unique on BOTH
+  columns, so one Discord id cannot appear twice in the batch.
+
+Every exit from HOLDING deletes the roster rows in the same transaction —
+`disbandFactionTx` and `lapseReservations` both do, the latter with a comment
+explaining why a surviving row is worse than none. `deleteLinkByDiscord` in the
+verification store would bypass the unlink guard, but it has no production
+caller. `factions_live` held 8 membership rows with 8 distinct Discord ids and
+8 distinct UIDs — nothing to clean up.
+
+What was genuinely open is that **none of those four guards is a constraint**,
+while `leaderIs()` and `kick()` read `(faction_id, discord_id)` through SCALAR
+subqueries — so a fifth write path getting it wrong would not degrade, it would
+raise Postgres 21000 in a player's face.
+
+Closed by migration `0035`: `faction_members_server_discord_uniq` on
+`(server_id, discord_id)` — deliberately server-scoped, not faction-scoped, so
+it mirrors the `faction_members_server_player_uniq` that already exists on
+`(server_id, dayz_id)`. A faction belongs to one server, so the server-scoped
+index implies the faction-scoped one, and it is the version that protects
+`resolveServerContext`'s server-level lookup. One person, one membership per
+server, whichever id you identify them by.
+
+`isDuplicateMembership()` (roster-store.ts) now matches BOTH constraint names at
+the two catch sites, so the new index surfaces as `already-member` / `gone`
+rather than as an unhandled error.
+
+⚠️ It immediately caught three test fixtures seeding one Discord account as
+leader of two clans on one server. All three were always illegal and only the
+dayz-keyed index was watching; they slipped past it with a second UID.
 
 ## 18. Three `apologiseForFailure` call sites are untested
 

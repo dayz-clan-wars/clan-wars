@@ -159,6 +159,22 @@ class RosterAbort extends Error {
 export const leaderIs = (factionId: number, discordId: string) =>
   sql`(select role from faction_members where faction_id = ${factionId} and discord_id = ${discordId} and status = 'full') = 'leader'`;
 
+/**
+ * A write that would have given one player two membership rows on one server.
+ *
+ * ⚠️ BOTH names, deliberately. `faction_members_server_player_uniq` keys on
+ * `(server_id, dayz_id)` and `faction_members_server_discord_uniq` on
+ * `(server_id, discord_id)` — the same invariant, keyed by each of the two ids
+ * a player has. A caller that knows only the first still lets the second raise
+ * as an unhandled error, which is the failure the discord-keyed index exists to
+ * prevent (inbox 17): `leaderIs` below reads `(faction_id, discord_id)` through
+ * a SCALAR subquery, so a duplicate does not degrade — it raises Postgres 21000
+ * at whichever player runs the next command.
+ */
+export const isDuplicateMembership = (err: unknown): boolean =>
+  String(err).includes("faction_members_server_player_uniq") ||
+  String(err).includes("faction_members_server_discord_uniq");
+
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -624,7 +640,7 @@ export class PgRosterStore implements RosterStore {
       });
     } catch (err) {
       if (err instanceof RosterAbort) return err.outcome as AcceptInviteOutcome;
-      if (String(err).includes("faction_members_server_player_uniq")) return "already-member";
+      if (isDuplicateMembership(err)) return "already-member";
       throw err;
     }
   }

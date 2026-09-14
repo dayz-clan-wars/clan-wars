@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { factions, factionJoinRequests, factionMembers, identityLinks, players, rosterCooldowns } from "@factions/db";
 import { CLAN_SIZE_CAP, HOLDING_STATUSES } from "@factions/domain";
 import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
-import { countMembersTx } from "./roster-store";
+import { countMembersTx, isDuplicateMembership } from "./roster-store";
 import { gamertagOrId } from "./feed-actor";
 import { noticeClanTx, noticeUserTx } from "./notices";
 
@@ -169,7 +169,7 @@ export async function decideRequestDb(db: Database, a: { requestId: number; acto
     });
   } catch (err) {
     if (err instanceof RequestAbort) return err.outcome;
-    if (String(err).includes("faction_members_server_player_uniq")) return "gone";
+    if (isDuplicateMembership(err)) return "gone";
     throw err;
   }
 }

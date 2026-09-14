@@ -1202,6 +1202,23 @@ export const factionMembers = pgTable("faction_members", {
   statusValid: check("faction_members_status_valid", sql`${t.status} IN ('pending','full')`),
   uniqMember: uniqueIndex("faction_members_uniq").on(t.factionId, t.dayzId),
   uniqServerPlayer: uniqueIndex("faction_members_server_player_uniq").on(t.serverId, t.dayzId),
+  /**
+   * The same invariant as `uniqServerPlayer`, keyed the other way: one person,
+   * one membership per server, whichever id you identify them by.
+   *
+   * ⚠️ Defence in depth, not a fix for a live bug (inbox 17). Three separate
+   * write sites already refuse to create a second row for one Discord account
+   * — `unlinkDb` will not unlink a member of a holding faction, `acceptInvite`
+   * inserts `SELECT`ing from `identity_links` and aborts `link-changed` if the
+   * accepter's UID has moved, and the founding insert draws its members from
+   * links unique on both columns. What was missing is anything enforcing it.
+   *
+   * It matters because `leaderIs()` (roster-store.ts) and `kick()` read
+   * `(faction_id, discord_id)` through SCALAR subqueries: a second row does
+   * not degrade gracefully, it raises Postgres 21000 "more than one row
+   * returned by a subquery" in a player's face. Better the insert fails.
+   */
+  uniqServerDiscord: uniqueIndex("faction_members_server_discord_uniq").on(t.serverId, t.discordId),
   // Exactly one leader. Transfer is one transaction demoting and promoting;
   // this is what makes two simultaneous transfers impossible rather than
   // merely unlikely.
