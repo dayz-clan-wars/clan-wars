@@ -35,9 +35,18 @@ export function budget(spentAlready: number): Budget {
   let fields = 0;
 
   const add = (embed: EmbedBuilder, name: string, value: string, inline: boolean): boolean => {
-    const cost = name.length + value.length;
+    // ⚠️ Truncate to FIELD_VALUE_MAX BEFORE costing it, the same way
+    // `list()`'s chunker does for an over-long line. Without this, a value
+    // over 1024 chars reaches `embed.addFields` untouched, which throws past
+    // this function's own reach — reaching the player as `HANDLER_FAILED`,
+    // the exact failure this file exists to prevent. Unreachable today
+    // (every `field()` caller is bounded to 3 entries or a short scalar),
+    // but this is the one place that promise is actually kept rather than
+    // just claimed.
+    const truncated = value.length > FIELD_VALUE_MAX ? value.slice(0, FIELD_VALUE_MAX) : value;
+    const cost = name.length + truncated.length;
     if (fields >= MAX_FIELDS || spent + cost > EMBED_TOTAL_MAX) return false;
-    embed.addFields({ name, value, inline });
+    embed.addFields({ name, value: truncated, inline });
     spent += cost;
     fields += 1;
     return true;

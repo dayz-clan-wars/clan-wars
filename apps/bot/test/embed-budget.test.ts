@@ -64,6 +64,23 @@ describe("embed budget", () => {
     for (const f of fields) expect(f.value.length).toBeLessThanOrEqual(FIELD_VALUE_MAX);
   });
 
+  /**
+   * ⚠️ Fix round 2, finding 3: `field()` checked the 25-field and
+   * 6000-character caps but not the 1024-character field-value cap, so a
+   * value over 1024 chars reached `embed.addFields` untouched — which
+   * throws — reaching the player as `HANDLER_FAILED`, exactly the failure
+   * this file's own docblock claims to prevent for "all three at once."
+   * Unreachable today (every `field()` caller is bounded to 3 entries or a
+   * short scalar), but this is the one place that promise is actually kept.
+   */
+  it("truncates a field value longer than the field cap instead of throwing", () => {
+    const embed = new EmbedBuilder();
+    expect(() => budget(0).field(embed, "Name", "x".repeat(3000))).not.toThrow();
+    const fields = embed.toJSON().fields ?? [];
+    expect(fields.length).toBe(1);
+    expect(fields[0]!.value.length).toBe(FIELD_VALUE_MAX);
+  });
+
   it("adds every line and no notice when everything fits", () => {
     const embed = new EmbedBuilder();
     budget(0).list(embed, "Rows", ["• a", "• b"], (n) => `+${n} more`);
