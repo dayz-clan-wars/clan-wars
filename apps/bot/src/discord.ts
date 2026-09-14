@@ -50,6 +50,7 @@ import { achievementsTick } from "./achievements/tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { makeRoster } from "@factions/roster";
 import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
+import { acquireInstanceLock } from "./instance-lock.js";
 import type { Ctx } from "./commands/types.js";
 import { buildCommands } from "./commands/index.js";
 
@@ -411,6 +412,28 @@ export function createNoticeSender(client: Client): NoticeSender {
 }
 
 export async function start(cfg: BotConfig): Promise<void> {
+  // ⚠️ FIRST, before a pool, a Discord login or a command registration PUT.
+  // Registration replaces the whole command list in one call, so a second
+  // instance that got as far as booting would fight the first over it.
+  const instanceLock = await acquireInstanceLock(cfg.databaseUrl);
+  if (!instanceLock) {
+    // ⚠️ Exit 0, not 1. The unit is `Restart=on-failure` — "a bot that exits
+    // deliberately should stay exited", as its own comment puts it — and
+    // refusing because another instance is alive IS deliberate. Exiting
+    // non-zero would restart-loop every RestartSec forever and bury the
+    // journal under a message that is, in fact, the system working.
+    console.error(
+      "another clan-wars bot already holds the single-instance lock on this database; " +
+      "refusing to start a second one. Exactly one may run: the notifier is at-least-once " +
+      "across processes (a verified player was DM'd twice on 2026-09-01) and /found keeps " +
+      "its draft in memory, so a second instance loses a player's founding choices between " +
+      "their select menu and their modal. Find the other process with " +
+      "`systemctl status clan-wars-bot`, and never `pkill -f \"src/main.ts\"` on this host — " +
+      "~15 dayzonelife.com services match that pattern.",
+    );
+    process.exit(0);
+  }
+
   const db = createClient(cfg.databaseUrl);
   const store = new PgVerificationStore(db);
   const ceremonyStore = new PgCeremonyStore(db);
@@ -1230,6 +1253,10 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
 
     await client.destroy();
+    // ⚠️ After `client.destroy()`, so the lock outlives every in-flight
+    // handler: releasing earlier would let a replacement instance start and
+    // run its own notify pass while this one is still finishing a send.
+    await instanceLock.release();
     process.exit(0);
   };
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
