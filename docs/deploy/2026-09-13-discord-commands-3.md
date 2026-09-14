@@ -44,8 +44,14 @@ Unchanged from plan 2, and for the same reasons.
    healthy while every command fails. Look for the ready line in the journal;
    `systemctl status` alone proves nothing.
 
-**Web is unaffected.** This deploy touches `apps/bot` only. Do not run
-`deploy-web.sh` for it.
+**The web build is unaffected, even though the diff is not `apps/bot`-only.**
+`apps/web/lib/{scoring,stats,achievements}-copy.ts` and `packages/copy` both
+changed on this branch — the copy those files held moved into the shared
+`@factions/copy` package so the bot's new cards could reuse the site's exact
+wording. The moved values are byte-identical, and the web files that used to
+define them now just re-export from `@factions/copy`, so the site renders
+exactly what it rendered before. There is no reason to redeploy or rebuild
+`web` for this change — do not run `deploy-web.sh` for it.
 
 ## Acceptance
 
