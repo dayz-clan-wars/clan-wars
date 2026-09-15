@@ -34,8 +34,8 @@ function readItemClass(payload: unknown): string {
   return typeof c === "string" && c !== "" ? c : "unknown";
 }
 
-const toBoostPlacement = (r: { dayzId: string; x: string; y: string; z: string; occurredAt: Date }): BoostPlacement =>
-  ({ dayzId: r.dayzId, x: Number(r.x), y: Number(r.y), z: Number(r.z), occurredAt: r.occurredAt });
+const toBoostPlacement = (r: { dayzId: string; eventId: number; x: string; y: string; z: string; occurredAt: Date }): BoostPlacement =>
+  ({ dayzId: r.dayzId, eventId: r.eventId, x: Number(r.x), y: Number(r.y), z: Number(r.z), occurredAt: r.occurredAt });
 
 /**
  * The open incident for this zone, extended to `occurredAt`, or a new one.
@@ -67,15 +67,9 @@ async function openIncident(tx: Tx, zone: Zone, serverId: number, occurredAt: Da
  * conflict. ⚠️ The totals are updated ONLY on a fresh insert, which is what
  * makes a replayed event unable to double-count damage.
  */
-// ⚠️ DECISION: the brief's sketch bumps `stackItems` by a flat 1 per call, but
-// a stack is only ever recorded once — on the placement that completes it —
-// so a flat 1 would undercount the cluster (the test pins `stackItems: 2` for
-// a two-item stack). `stackCount` lets the placement arm pass the whole
-// cluster's size; every other kind defaults to 1, matching the brief exactly.
 async function recordViolation(
   tx: Tx, incidentId: number, eventId: number, kind: ViolationKind,
   dayzId: string, gamertag: string, what: string, pos: Vec3, occurredAt: Date,
-  stackCount = 1,
 ): Promise<boolean> {
   const [row] = await tx.insert(zoneViolations).values({
     incidentId, eventId, kind, dayzId, what,
@@ -84,7 +78,7 @@ async function recordViolation(
   if (!row) return false;
 
   const bump = kind === "dismantle" ? { partsDismantled: sql`${zoneIncidents.partsDismantled} + 1` }
-    : kind === "stack" ? { stackItems: sql`${zoneIncidents.stackItems} + ${stackCount}`, hasBreach: true }
+    : kind === "stack" ? { stackItems: sql`${zoneIncidents.stackItems} + 1`, hasBreach: true }
     : { partsBuilt: sql`${zoneIncidents.partsBuilt} + 1`, hasBreach: true };
   await tx.update(zoneIncidents)
     .set({ ...bump, ...(kind === "gate" ? { hasGate: true, hasBreach: true } : {}) })
@@ -187,26 +181,33 @@ export async function zoneTick(db: Database, opts: { batchSize?: number; now?: D
           if (!row) return done();   // replay
 
           const recent = await tx.select({
-            dayzId: zonePlacements.dayzId, x: zonePlacements.x, y: zonePlacements.y,
+            dayzId: zonePlacements.dayzId, eventId: zonePlacements.eventId, gamertag: zonePlacements.gamertag,
+            itemClass: zonePlacements.itemClass, x: zonePlacements.x, y: zonePlacements.y,
             z: zonePlacements.z, occurredAt: zonePlacements.occurredAt, id: zonePlacements.id,
           }).from(zonePlacements).where(and(
             eq(zonePlacements.declarationId, hit.zone.declarationId),
             gte(zonePlacements.occurredAt, new Date(ev.occurredAt.getTime() - BOOST_STACK_WINDOW_MS)),
             ne(zonePlacements.id, row.id),
           ));
-          const latest: BoostPlacement = { dayzId: fix.dayzId, x: fix.x, y: fix.alt, z: fix.z, occurredAt: ev.occurredAt };
+          const byEventId = new Map(recent.map((r) => [r.eventId, r]));
+          const latest: BoostPlacement = { dayzId: fix.dayzId, eventId: ev.id, x: fix.x, y: fix.alt, z: fix.z, occurredAt: ev.occurredAt };
           const stack = boostStackFor(recent.map(toBoostPlacement), latest);
           if (!stack) return done();
 
           const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
-          const pos: Vec3 = { x: fix.x, y: fix.alt, z: fix.z };
-          if (await recordViolation(tx, incidentId, ev.id, "stack", fix.dayzId, gamertag, readItemClass(ev.payload), pos, ev.occurredAt, stack.length)) out.violations++;
-          // Everyone who contributed to the cluster is a participant, even
-          // where their own placement predates the stack becoming one.
+          // ⚠️ One violation row PER CLUSTER MEMBER, keyed on that member's own
+          // event id — `zone_violations_event_uq` then dedups for free: a
+          // member already recorded by an earlier completing placement is a
+          // no-op here, so `stackItems` lands on exactly the cluster size at
+          // every stack height, and a replay of the whole cluster re-inserts
+          // nothing. Recording a flat "+1 per completing event" instead would
+          // re-count every earlier member each time the cluster grows.
           for (const member of stack) {
-            await tx.insert(zoneIncidentParticipants)
-              .values({ incidentId, dayzId: member.dayzId, gamertag })
-              .onConflictDoNothing();
+            const isLatest = member.eventId === ev.id;
+            const memberGamertag = isLatest ? gamertag : byEventId.get(member.eventId)!.gamertag;
+            const memberItem = isLatest ? readItemClass(ev.payload) : byEventId.get(member.eventId)!.itemClass;
+            const pos: Vec3 = { x: member.x, y: member.y, z: member.z };
+            if (await recordViolation(tx, incidentId, member.eventId, "stack", member.dayzId, memberGamertag, memberItem, pos, member.occurredAt)) out.violations++;
           }
           return done();
         }

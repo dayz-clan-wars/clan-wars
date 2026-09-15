@@ -33,9 +33,16 @@ export function sentenceMsFor(damage: IncidentDamage, priorOffences: number): nu
   return priorOffences === 0 ? ms : ms * BAN_REPEAT_MULTIPLIER;
 }
 
-/** One boost-item placement inside a zone, as recorded by the log. */
+/**
+ * One boost-item placement inside a zone, as recorded by the log.
+ *
+ * `eventId` is inert data for `boostStackFor` — it never reads it — carried
+ * only so a caller can record one `zone_violations` row per cluster member,
+ * keyed on that member's own event, once a stack forms.
+ */
 export type BoostPlacement = {
   dayzId: string;
+  eventId: number;
   x: number;
   y: number;
   z: number;

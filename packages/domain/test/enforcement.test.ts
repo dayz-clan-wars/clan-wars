@@ -51,8 +51,9 @@ describe("sentenceMsFor", () => {
 describe("boostStackFor", () => {
   const t0 = new Date("2026-09-15T12:00:00Z");
   const at = (ms: number) => new Date(t0.getTime() + ms);
+  let nextEventId = 1;
   const p = (x: number, y: number, z: number, ms: number, dayzId = "A".repeat(40)): BoostPlacement =>
-    ({ dayzId, x, y, z, occurredAt: at(ms) });
+    ({ dayzId, eventId: nextEventId++, x, y, z, occurredAt: at(ms) });
 
   it("two co-located placements with the player rising is a stack", () => {
     const first = p(100, 10.0, 100, 0);

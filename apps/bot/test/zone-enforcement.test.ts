@@ -96,6 +96,29 @@ describe("zoneTick enforcement", () => {
     expect(await incidents()).toHaveLength(0);
   });
 
+  it("a genuine three-high stack counts exactly 3 stackItems and 3 violation rows, not the triangular sum", async () => {
+    await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
+    await placed(STRANGER, 5010.2, 100.5, 5010.1, "GardenPlot", at(20_000));
+    await placed(STRANGER, 5010.1, 101.0, 5010.2, "GardenPlot", at(40_000));
+    await zoneTick(db, { now: at(120_000) });
+    const [i] = await incidents();
+    expect(i).toMatchObject({ stackItems: 3, hasBreach: true });
+    const stackViolations = (await violations()).filter((v) => v.kind === "stack");
+    expect(stackViolations).toHaveLength(3);
+  });
+
+  it("re-running the tick over the same stack leaves stackItems at 3 — per-member dedup, not a re-count", async () => {
+    await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
+    await placed(STRANGER, 5010.2, 100.5, 5010.1, "GardenPlot", at(20_000));
+    const [last] = await placed(STRANGER, 5010.1, 101.0, 5010.2, "GardenPlot", at(40_000));
+    await zoneTick(db, { now: at(120_000) });
+    await db.execute(sql`update consumer_cursors set last_event_id = ${last!.id - 1} where consumer_name = 'zone-watch'`);
+    await zoneTick(db, { now: at(120_000) });
+    const [i] = await incidents();
+    expect(i!.stackItems).toBe(3);
+    expect((await violations()).filter((v) => v.kind === "stack")).toHaveLength(3);
+  });
+
   it("every contributor to one incident becomes a participant, gamertag frozen", async () => {
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
     await structure(FRIEND, 5011, 5010, "Fence Kit", "base.dismantled");
