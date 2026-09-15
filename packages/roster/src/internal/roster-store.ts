@@ -618,8 +618,11 @@ export class PgRosterStore implements RosterStore {
         // under a UID they no longer own — misattributed raid credit (§7),
         // and, because this table's uniqueness and the cooldown key on
         // `dayz_id` while `membershipsFor` keys on `discord_id`, a second
-        // membership row for one Discord user on one server, after which
-        // `resolveServerContext` silently picks whichever came first.
+        // membership row for one Discord user on one server, after which every
+        // `(faction_id, discord_id)` scalar subquery in this file — `leaderIs`,
+        // `kick`, the role checks — raises Postgres 21000 rather than
+        // degrading. `faction_members_server_discord_uniq` (migration 0035) is
+        // the backstop; this clause is what stops it ever being reached.
         // Zero rows means the link moved (or is gone); roll the claim back.
         const inserted = await tx.execute(sql`
           insert into faction_members (faction_id, server_id, dayz_id, discord_id, role, joined_at, status, pending_since)
