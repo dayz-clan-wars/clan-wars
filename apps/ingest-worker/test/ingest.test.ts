@@ -103,6 +103,23 @@ describe("ingestFile", () => {
     expect(r.unparsedFlagLines).toBe(2);
   });
 
+  it("ingests a deployable placement to item.placed with itemClass and pos in the payload", async () => {
+    // Real line, verbatim: DayZServer_X1_x64_2026-09-14_19-01-58.ADM.
+    const lines = [
+      "AdminLog started on 2026-07-22 at 07:01:37",
+      `19:58:00 | Player "Destruction7915" (id=${ID} pos=<2523.7, 12605.6, 304.8>) placed Fireplace<Fireplace>`,
+    ];
+    await ingestFile(db, { ...opts(), lines });
+    const rows = await db.select().from(events).orderBy(events.lineIndex);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.type).toBe("item.placed");
+    expect(rows[0]!.payload).toEqual({
+      gamertag: "Destruction7915", dayzId: ID,
+      item: "Fireplace", itemClass: "Fireplace",
+      pos: { x: 2523.7, y: 304.8, z: 12605.6 },
+    });
+  });
+
   it("shifts occurredAt by the server's clock offset", async () => {
     // A server running 4 hours ahead of UTC (e.g. Chernarus UTC+4) records
     // 10:21:40 local time for what is actually 14:21:40Z.
