@@ -1789,7 +1789,9 @@ The bullet currently reads *"Legal boosting: a two-player boost, vehicles, and u
 
 Stacked garden plots and fireplaces are now sentenced on the proportional ladder, not as permanent-ban exploits. Move that clause into the Bases section and state the ladder.
 
-**Backpacks and car parts stay where they are**, keeping the exploit rule and the ticket path — but do **not** justify that in the copy by saying the log cannot see them. ⚠️ An earlier draft of this plan and of the spec's §10 both claimed the bot "cannot see them in the log". That is **false**, verified against 12 live ADM files on 2026-09-15: barrels, wooden crates, large tents, sea chests and fire barrels all log `placed X<Class>` with a position, and a real four-barrel cluster was observed within ~1.5m horizontally with the player's `y` moving 224.8 → 228.0 — the exact signature `boostStackFor` detects. They are excluded because the approved spec scopes the rule to fireplaces and garden plots, not because they are invisible. Write the copy so it does not claim otherwise, and leave widening the list to a later decision.
+**Backpacks and car parts stay where they are**, keeping the exploit rule and the ticket path — but do **not** justify that in the copy by saying the log cannot see them. ⚠️ An earlier draft of this plan and of the spec's §10 both claimed the bot "cannot see them in the log". That is **false**, verified against 12 live ADM files on 2026-09-15: barrels, wooden crates, large tents, sea chests and fire barrels all log `placed X<Class>` with a position. They are excluded because the approved spec scopes the rule to fireplaces and garden plots, not because they are invisible. Write the copy so it does not claim otherwise.
+
+⚠️ **Do not add barrels to `BOOST_ITEM_CLASSES` on the strength of the log alone.** A barrel cannot be stood on in DayZ, so a barrel cluster is not a boost however tightly packed it is. Which deployables actually bear a player's weight is a game fact the log cannot tell you — it must be confirmed in game before any item family joins the list.
 
 - [ ] **Step 3: State the enforcement**
 
