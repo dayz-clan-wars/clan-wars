@@ -122,6 +122,17 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       : `**${p.clan}** rotated its codes. See the vault: ${p.link}`,
   guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a ${hours(GUEST_PASS_MS)}h voice guest pass.`,
   achievement: (p) => `🏆 ${p.ownerKind === "clan" ? `**${p.ownerName}**` : person(String(p.ownerName))}${p.clanTag && p.ownerKind === "player" && p.public ? ` [${p.clanTag}]` : ""} earned **${p.name}** — ${p.description}.`,
+  zone_warning: (p) => {
+    const acts = [
+      Number(p.dismantled) > 0 ? `dismantling ${p.dismantled} part(s)` : null,
+      Number(p.built) > 0 ? `building ${p.built} part(s)` : null,
+      Number(p.stacked) > 0 ? `stacking ${p.stacked} item(s)` : null,
+    ].filter(Boolean).join(" and ");
+    return `⚠️ The log recorded you ${acts} inside ${p.tag}'s declared base zone. **If they asked you to help, ignore this.** If not, an officer of that clan can report it, and the penalty scales with the damage.`;
+  },
+  ban_applied: (p) => p.until
+    ? `⛔ You are banned from the server until ${p.until} — ${p.reason}.`
+    : `⛔ You are permanently banned from the server — ${p.reason}.`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */
