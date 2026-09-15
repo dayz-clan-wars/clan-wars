@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -1391,4 +1391,118 @@ export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
   outcome: text("outcome").$type<"posted" | "missed">().notNull(),
 }, (t) => ({
   outcomeValid: check("vehicle_wipe_announcements_outcome_valid", sql`${t.outcome} IN ('posted','missed')`),
+}));
+
+/**
+ * Every boost-item placement inside a declared zone by a non-member.
+ *
+ * ⚠️ A LONE placement is recorded here and is NOT a violation: a player may
+ * legitimately place a fireplace to cook or a garden plot to farm near a base
+ * without knowing the base is there. The row exists so a LATER placement can
+ * form a stack with it (spec §2.3). Only `boostStackFor` promotes these to a
+ * violation.
+ */
+export const zonePlacements = pgTable("zone_placements", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  declarationId: bigint("declaration_id", { mode: "number" }).notNull().references(() => declarations.id, { onDelete: "cascade" }),
+  eventId: bigint("event_id", { mode: "number" }).notNull(),
+  dayzId: text("dayz_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  itemClass: text("item_class").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  /** One row per event: a replayed event must not double-count. */
+  oneRowPerEvent: uniqueIndex("zone_placements_event_uq").on(t.eventId),
+  lookup: index("zone_placements_zone_idx").on(t.declarationId, t.occurredAt),
+}));
+
+/**
+ * One incident per (declaration, rolling window). Opens on the first
+ * violating act, extends on each later one, closes after
+ * VIOLATION_INCIDENT_GAP_MS of quiet.
+ */
+export const zoneIncidents = pgTable("zone_incidents", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  declarationId: bigint("declaration_id", { mode: "number" }).notNull().references(() => declarations.id, { onDelete: "cascade" }),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  lastActAt: timestamp("last_act_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  partsDismantled: integer("parts_dismantled").notNull().default(0),
+  partsBuilt: integer("parts_built").notNull().default(0),
+  stackItems: integer("stack_items").notNull().default(0),
+  hasBreach: boolean("has_breach").notNull().default(false),
+  hasGate: boolean("has_gate").notNull().default(false),
+  reportedAt: timestamp("reported_at", { withTimezone: true }),
+  reportedByDiscordId: text("reported_by_discord_id"),
+}, (t) => ({
+  /** At most one OPEN incident per declaration — the partial index is the guard. */
+  oneOpen: uniqueIndex("zone_incidents_one_open").on(t.declarationId).where(sql`closed_at IS NULL`),
+  closedUnreported: index("zone_incidents_closed_idx").on(t.closedAt).where(sql`reported_at IS NULL`),
+}));
+
+/** One row per violating act. */
+export const zoneViolations = pgTable("zone_violations", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  incidentId: bigint("incident_id", { mode: "number" }).notNull().references(() => zoneIncidents.id, { onDelete: "cascade" }),
+  eventId: bigint("event_id", { mode: "number" }).notNull(),
+  kind: text("kind").$type<ViolationKind>().notNull(),
+  dayzId: text("dayz_id").notNull(),
+  /** The part or item name as the log spelled it — "Fence", "Garden Plot". */
+  what: text("what").notNull(),
+  x: numeric("x", { precision: 12, scale: 2 }).notNull(),
+  y: numeric("y", { precision: 12, scale: 2 }).notNull(),
+  z: numeric("z", { precision: 12, scale: 2 }).notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  /** ⚠️ This is what makes a replayed event unable to double-count damage. */
+  oneRowPerEvent: uniqueIndex("zone_violations_event_uq").on(t.eventId),
+  byIncident: index("zone_violations_incident_idx").on(t.incidentId),
+}));
+
+/** Who took part. Liability is JOINT: each is sentenced on the incident total. */
+export const zoneIncidentParticipants = pgTable("zone_incident_participants", {
+  incidentId: bigint("incident_id", { mode: "number" }).notNull().references(() => zoneIncidents.id, { onDelete: "cascade" }),
+  dayzId: text("dayz_id").notNull(),
+  /** ⚠️ Frozen at event time — never re-resolved through identity_links later. */
+  gamertag: text("gamertag").notNull(),
+  warnedAt: timestamp("warned_at", { withTimezone: true }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.incidentId, t.dayzId] }),
+}));
+
+/**
+ * Durable ban audit. Never rebuilt, never deleted.
+ *
+ * ⚠️ `dayzId` AND `gamertag` are both frozen here at creation. The ID is what
+ * survives a rename; resolving the gamertag through a join at apply time is
+ * how One Life's enforcer produced phantom re-bans (their
+ * CODE-REVIEW-2026-08-04.md, finding 1).
+ *
+ * ⚠️ `expiresAt` NULL means PERMANENT, not "unknown".
+ */
+export const bans = pgTable("bans", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  incidentId: bigint("incident_id", { mode: "number" }).references(() => zoneIncidents.id),
+  dayzId: text("dayz_id").notNull(),
+  gamertag: text("gamertag").notNull(),
+  bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  status: text("status").$type<BanStatus>().notNull().default("pending"),
+  /** Written from BAN_DRY_RUN at creation; a dry-run row never reaches Nitrado. */
+  dryRun: boolean("dry_run").notNull().default(true),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  liftedAt: timestamp("lifted_at", { withTimezone: true }),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+}, (t) => ({
+  /** One ban per incident per person. */
+  oneperIncident: uniqueIndex("bans_incident_person_uq").on(t.incidentId, t.dayzId),
+  work: index("bans_work_idx").on(t.status, t.expiresAt),
+  byPerson: index("bans_person_idx").on(t.dayzId, t.bannedAt),
 }));
