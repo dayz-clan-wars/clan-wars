@@ -99,6 +99,20 @@ export type BotConfig = {
   nitradoToken: string | undefined;
   /** Where the weekly wipe notice posts. Unset = the wipe still happens, silently. */
   announcementsChannelId?: string;
+  /**
+   * ⚠️ Defaults TRUE. Real bans require explicitly setting `BAN_DRY_RUN`
+   * to `"false"`. A ban row is always written and always transitions status;
+   * only the Nitrado call is skipped, so a dry-run deployment still shows
+   * exactly what would have happened. Anything that defaults to enforcing
+   * (rather than to dry-run) is wrong — see `ban-tick.ts`.
+   *
+   * ⚠️ NEVER set this back to true while a ban is `applied`. The expire arm
+   * then closes the row WITHOUT calling Nitrado, orphaning the list entry
+   * permanently — and an orphaned account hash cannot be shed by renaming.
+   */
+  banDryRun: boolean;
+  /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
+  enforcementTick: boolean;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -307,6 +321,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
     announcementsChannelId: optionalSnowflake(env, "ANNOUNCEMENTS_CHANNEL_ID"),
+    banDryRun: (env.BAN_DRY_RUN ?? "true") !== "false",
+    enforcementTick: env.ENFORCEMENT_TICK === "1",
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
