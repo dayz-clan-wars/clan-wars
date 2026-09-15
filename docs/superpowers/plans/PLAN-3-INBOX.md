@@ -1,5 +1,57 @@
 # Plan 3 inbox — items carried forward, to fold into the plan when it is written
 
+---
+
+## Audit 2026-09-14 — read this before picking work from below
+
+Every open item was re-checked against the code. **Six had drifted.** This list
+is the corrected state; the items themselves carry the evidence.
+
+⚠️ **An item's text is a claim about code as it was the day someone wrote it.**
+Four of the six drifted because the thing they described was fixed or deleted by
+later work that never came back to the inbox — and #17 nearly cost a day
+building a fix for a bug four write paths already prevented. Verify before
+building, and update the item when you do.
+
+**Closed by the audit (no code written):**
+
+| # | Why |
+|---|-----|
+| 9 | TTL is 24h, not 10 min; the ingest worker is a 60s loop, not a one-shot batch |
+| 18 | `apologiseForFailure` does not exist; `finish()` replaced it and is testable |
+| 36 | The `lapsed` feed event shipped — constraint, kind, embed and append all present |
+| 15 (2 of 4) | `flagSuggestions`/`/faction claim` retired in v1.9.0; the read-then-write is closed by v1.10.0's advisory lock |
+
+**Corrected, still open:**
+
+- **#12 is worse than it read** — its claimed copy mitigation is not in the
+  codebase, and the case is the common one, not a corner.
+- **#14 is half fixed** — phase 3 clamps the high-water mark, `settlePole` does not.
+- **#13's evidence was stale** — `white_raises` is no longer empty (9 rows), but
+  all 5 distinct keys parse, so the conclusion survives.
+- **#17's own rationale was wrong** — it cited `resolveServerContext`, which does
+  not exist. The index it shipped is still right; one of its two reasons was not.
+
+**Genuinely open, ranked by what it costs to leave alone:**
+
+1. **#12** — a founding group can lose its claim to a condition it cannot see,
+   and the one-sentence warning that would prevent it is missing. Cheapest fix
+   with the most player-visible consequence.
+2. **#14** — settlement's unclamped high-water mark. Small, verified, bounded.
+3. **#26** (third bullet) — a genuinely dead game server never releases its flags.
+   Needs a source of truth this system does not have; deliberately not guessed at.
+4. **#19 / #20** — the lock order is a comment, and two race tests would pass
+   while proving nothing if reordered.
+5. **#4** — retention reaper. Nothing is broken; the tables are small.
+6. **#3, #5, #6, #35, #40** — unchanged and accurate; none is urgent.
+7. **#29-33** — unbuilt features from the server survey. Brainstorm, not a fix.
+
+⚠️ **#38 is an action, not an item.** The first raid window opens **Friday
+2026-09-18 00:00 UTC** and lives only in the game server's `cfggameplay.json`.
+Nobody is reminded by anything in this repo.
+
+---
+
 ## 1. ~~Harden `FLAG_CHANGE_RE` against gamertag injection~~ — DONE 2026-08-31 (`c58601e`)
 
 Fixed on `feat/bot-and-identity-linking`, and widened: `PLAYER_POS_RE` had the
@@ -162,17 +214,19 @@ The draw cap also closed a pre-existing hole: `/link A → /link B → /link A`
 re-issued A with a fresh sequence and a fresh budget without limit, which made
 the documented 0.46% a per-challenge figure rather than a per-day one.
 
-## 9. Document the ingest cadence the challenge TTL assumes
+## 9. ~~Document the ingest cadence the challenge TTL assumes~~ — CLOSED 2026-09-14 (audit)
 
-`challengeTtlMs` defaults to 600_000, which assumes emotes reach `events`
-within ten minutes. But `apps/ingest-worker` is a one-shot batch over a
-directory of `.ADM` files and nothing in the repo schedules or tails it. If the
-real cadence exceeds the TTL, every challenge is canceled before its emotes
-arrive and no `/link` can ever succeed — silently, showing only
-`verified: 0, alreadyLinked: 0`.
+Both halves of the premise are gone.
 
-Plan 3 should state the required cadence in the bot README and set the TTL
-default above it.
+- The TTL is no longer ten minutes. `LINK_TTL_MS` (`packages/domain/src/rules.ts`)
+  is **24 hours**, and `link.ts` says so at the call site.
+- The ingest worker is no longer "a one-shot batch nothing schedules". It is a
+  loop (`apps/ingest-worker/src/main.ts` sleeps `intervalSeconds` and repeats)
+  running under `docker compose` with `restart: unless-stopped` and
+  `INGEST_INTERVAL_SECONDS: "60"`.
+
+A 60-second cadence against a 24-hour TTL is three orders of magnitude of
+headroom. Nothing to document and nothing to raise.
 
 ## 10. ~~Defer the `/link` reply~~ — DONE 2026-09-13 (v1.9.0)
 
@@ -236,55 +290,92 @@ All three (the heading undercounted).
 Plan 3 (ceremony detection and faction claim) is implemented. These were found
 during its review and consciously deferred rather than fixed.
 
-## 12. Activation cannot see a flag that is already flying
+## 12. Activation cannot see a flag that is already flying — ⚠️ MORE OPEN THAN WRITTEN (audit 2026-09-14)
 
-`ceremonyTick` evaluates activation inline on the forward scan, and DayZ emits
-`flag.raised` only on the raise TRANSITION. A founder whose faction flag was
-already up at the pole — or who raises it in the gap between the detector
-consuming that event and the claim committing — can never activate, and nothing
-tells them why. The reservation lapses at 24h and the flag returns to the pool,
-so the 33-slot pool is safe; the cost is that the founding group loses its claim
-to a condition it cannot observe.
+`ceremonyTick` evaluates activation inline on the forward scan
+(`ceremony-tick.ts`: a `flag.raised` event whose texture matches a reserved
+faction at that pole, raised by a roster member), and DayZ emits `flag.raised`
+only on the raise TRANSITION. A founder whose faction flag was already up at the
+pole — or who raises it in the gap between the detector consuming that event and
+the claim committing — can never activate, and nothing tells them why. The
+reservation lapses at 24h and the flag returns to the pool, so the 33-slot pool
+is safe; the cost is that the founding group loses its claim to a condition it
+cannot observe.
 
-Mitigated for now by copy only: the reservation reply tells founders to lower the
-flag first if it is already flying. A real fix needs either a bounded cursor
-rewind on activation or a reconciliation pass, and neither is worth building
-before a staged ceremony shows whether players actually hit this.
+⚠️ **The mitigation this item claims is not in the codebase.** It said
+"mitigated for now by copy only: the reservation reply tells founders to lower
+the flag first if it is already flying." `CLAIM.ok` (`packages/copy/src/clan.ts`)
+reads: *"Reserved. Raise your flag at the pole within N days to activate the
+clan; until then the name, tag, flag and pole are yours alone."* No mention of
+lowering. Grep finds no such sentence anywhere in `packages/copy` or `apps/web`.
+Either it never shipped or it was lost when `/faction claim` was retired in
+v1.9.0 for `/found`.
 
-## 13. A poisoned pole key logs forever
+⚠️ **And it is more likely than the item implies.** A group that already flies a
+flag at its base is exactly the group that will pick that same flag from the free
+pool at founding — the flag is chosen at claim, and nothing about "free" means
+"not currently raised somewhere". That is the common case, not the corner case.
+
+So: still no code fix (a bounded cursor rewind on activation, or a reconciliation
+pass), but the cheap half — a sentence in `CLAIM.ok` telling founders to lower the
+flag and raise it again — is not done and is worth doing on its own.
+
+## 13. A poisoned pole key logs forever — STILL UNREACHABLE, evidence refreshed 2026-09-14
 
 If a `white_raises` row ever holds a pole key `parsePoleKey` rejects, phase 2
 logs and skips it on every tick — every 10 seconds, indefinitely. The wedge is
 gone (phase 3 still runs, so expiry and lapsing are unaffected), and the altitude
-bounds added to `parsePoleAt` mean no new such row can be created, so this is
-currently unreachable: `white_raises` holds zero rows in both the live and
-backfill databases. If it ever becomes reachable, apply the same once-per-key log
-discipline the ceremony notifier uses.
+bounds added to `parsePoleAt` mean no new such row can be created.
 
-## 14. `highWaterMark` is an event time, not an ingest time
+⚠️ **The item's supporting fact is out of date.** It said `white_raises` holds
+zero rows. As of 2026-09-14 `factions_live` holds **9 rows across 5 distinct
+pole keys, all settled**, and every one of the five is a plain decimal triple
+that `parsePoleKey`'s `^-?\d+(\.\d+)?$` accepts. So the table is no longer
+empty, but it still contains nothing poisoned — the conclusion stands on fresh
+evidence rather than on an empty table.
+
+If it ever becomes reachable, apply the same once-per-key log discipline the
+ceremony notifier uses.
+
+## 14. `highWaterMark` is an event time, not an ingest time — HALF FIXED (audit 2026-09-14)
 
 It is `max(occurred_at)`, so a single future-dated event pins the high-water mark
-ahead of the wall clock permanently — which silently collapses the two-clock rule
-to wall-clock-only, with no signal. Every settling and retirement decision rests
-on this value. Worth either clamping it to now, or tracking ingest time
-separately.
+ahead of the wall clock. Reachable through `servers.clock_offset_ms` or a game
+server whose own clock runs ahead.
 
-## 15. Smaller items
+**Phase 3 already clamps it.** `ceremonyTick` computes
+`const cutoff = highWater.getTime() < now.getTime() ? highWater : now` before
+expiring ceremonies and lapsing reservations, so the two-clock rule holds there.
+The item was written as if nothing clamped.
 
-- `flagSuggestions` has no server context, so `/faction claim` autocomplete
-  offers all 33 flags including ones already held. Caught correctly downstream,
-  but it makes "already taken" the common path late in a server's life.
+**Phase 2 does not.** `settlePole` passes `highWater` straight into
+`settleWindows(pending, highWater)` with no clamp, so a future-dated event makes
+settlement treat claim windows as observed when they have not been. That is the
+half still open, and the fix is making phase 2 agree with phase 3 rather than
+anything new.
+
+## 15. Smaller items — two of four closed by the audit 2026-09-14
+
+- ~~`flagSuggestions` has no server context, so `/faction claim` autocomplete
+  offers all 33 flags including ones already held.~~ **Moot.** Neither
+  `flagSuggestions` nor `/faction` exists: the command was retired in v1.9.0 and
+  founding runs through `/found`. If the new flow has the same problem it is a
+  fresh observation about fresh code, not this bullet.
 - `white_raises.settled_at` is written from the wall clock or the window end
-  depending on whether the window qualified. Nothing reads it today; it is a
-  trap for the first query that does.
+  depending on whether the window qualified. **Still accurate:** every read of
+  the column is an `IS NULL` guard (`ceremony-store.ts`); nothing reads the
+  value. It is a trap for the first query that does.
 - The roster-confirm select has no separate confirm button, so choosing in the
   menu founds the faction. The spec (§6) called for a confirm step. Accepted
   because the menu is ephemeral and only the claimant sees it.
-- `hasOpenCeremony`/`isPoleBound` before `settle`'s insert is a read-then-write,
+- ~~`hasOpenCeremony`/`isPoleBound` before `settle`'s insert is a read-then-write,
   safe only because `guardedRunner` serializes within one process. The README
   already defers multi-instance operation to a Postgres advisory lock; that is
-  where this becomes real.
-
+  where this becomes real.~~ **Closed by construction 2026-09-14 (v1.10.0).**
+  The advisory lock the bullet was waiting on exists and is taken at startup
+  (`apps/bot/src/instance-lock.ts`), so a second process cannot run at all. The
+  read-then-write is now safe for a reason the database enforces rather than one
+  a deployment convention promises. It reopens only if that lock is removed.
 
 ## 16. ~~Two custom-id parsers still coerce with `Number()`~~ — DONE 2026-09-14
 
@@ -348,9 +439,16 @@ Closed by migration `0035`: `faction_members_server_discord_uniq` on
 `(server_id, discord_id)` — deliberately server-scoped, not faction-scoped, so
 it mirrors the `faction_members_server_player_uniq` that already exists on
 `(server_id, dayz_id)`. A faction belongs to one server, so the server-scoped
-index implies the faction-scoped one, and it is the version that protects
-`resolveServerContext`'s server-level lookup. One person, one membership per
-server, whichever id you identify them by.
+index implies the faction-scoped one. One person, one membership per server,
+whichever id you identify them by.
+
+⚠️ Correction (audit 2026-09-14): this entry and the v1.13.0 tag both justified
+the server scope partly by "it protects `resolveServerContext`'s server-level
+lookup". **`resolveServerContext` does not exist.** It was `roster-context.ts`
+in the Plan-1 bot and survives only in old plan documents and one stale comment
+in `roster-store.ts`, which the audit also fixed. The decision stands on the
+first reason alone — mirroring the dayz-keyed index, and being strictly stronger
+than a faction-scoped one.
 
 `isDuplicateMembership()` (roster-store.ts) now matches BOTH constraint names at
 the two catch sites, so the new index surfaces as `already-member` / `gone`
@@ -360,13 +458,19 @@ rather than as an unhandled error.
 leader of two clans on one server. All three were always illegal and only the
 dayz-keyed index was watching; they slipped past it with a second UID.
 
-## 18. Three `apologiseForFailure` call sites are untested
+## 18. ~~Three `apologiseForFailure` call sites are untested~~ — CLOSED 2026-09-14 (audit)
 
-`interactionCreate` is a closure inside `startBot`, so deleting any of the three
-`await apologiseForFailure(interaction)` lines in `discord.ts` leaves the suite
-green. The routers are proven to throw post-defer and the helper is proven to
-answer, but nothing pins them together. Testing it needs the catch body extracted
-into an exported wrapper. Failure mode is a hung "thinking" indicator, not data loss.
+`apologiseForFailure` does not exist. Grep finds it nowhere in `apps/bot/src`;
+the interaction error path it described was replaced by `finish()` in
+`apps/bot/src/commands/route.ts` during plans 1-3.
+
+That replacement is not a closure inside `startBot` — `route.ts` is a module,
+`finish()` is reachable from a test, and its error handling already carries
+coverage from v1.9.0 (`safeErrorInfo` at both logging sites, mutation-tested
+when a lock code could otherwise reach the operator log).
+
+The general point the item made survives in item 19 and in `step()`
+(v1.14.0), which exists precisely because the tick pass still is a closure.
 
 ## 19. The lock-order convention has no enforcement
 
@@ -1020,42 +1124,22 @@ blocked at …` is an error-level log line and nothing else: a human has to be r
 `bot.log`, or grepping for it, to notice the feed has stalled. Until something pages on
 it, a blocked queue is silent to everyone except whoever next thinks to check.
 
-## 36. A lapsed reservation releases a flag with no event
+## 36. ~~A lapsed reservation releases a flag with no event~~ — CLOSED 2026-09-14 (audit; shipped earlier)
 
-`apps/bot/src/ceremony-store.ts`'s `lapseReservations` sets `status: "lapsed"` when a
-claim's 24-hour TTL expires without activation. That releases the flag, tag, and pole
-back to the 33-slot pool, which is correct. But a `founded` event has already been posted
-to the feed, publicly announcing that the flag is reserved. Nothing is ever posted to say
-the reservation expired.
+Shipped, and the item was never updated. All four pieces are in place:
 
-So the feed permanently implies the faction holds a flag that is in fact available again —
-directly contradicting the feed's stated purpose (spec §1): making the pool's scarcity
-observable. This is the one path where a flag becomes claimable and nobody is told.
+- `faction_events_kind_valid` includes `'lapsed'` (`packages/db/src/schema.ts`).
+- `FEED_KINDS` lists it (`packages/domain/src/feed.ts`).
+- `feed-embed.ts` renders a `lapsed` case.
+- `lapseReservations` appends the event inside the same transaction that sets
+  the status and deletes the roster (`apps/bot/src/ceremony-store.ts`), with the
+  name/tag/texture frozen off the update's own `.returning()` so a concurrent
+  rename cannot leak into a late-posted row.
 
-It is a **spec gap, not an implementation deviation.** `docs/superpowers/specs/2026-09-03-faction-feed-design.md`
-§2 lists seven kinds — `founded`, `activated`, `renamed`, `rebound`, `dormant`, `revived`,
-`disbanded` — and omits `lapsed`. The code is faithful to the design and the design is
-what is incomplete.
-
-**Deliberately deferred from the feed branch.** Adding a `lapsed` kind means changing the
-SQL check constraint in migration `0019`, which means either editing the already-generated
-migration or adding a new one (`0020`) — scope growth at the merge gate. For a path that
-cannot fire on `factions_live` today: the one faction, `COK`, is active with no
-outstanding reservation, so lapsing factions do not exist yet.
-
-⚠️ It becomes live the first time a `/faction claim` is left unactivated past its 24-hour
-TTL, without warning. The reservation vanishes silently and the pool reclaims its flag,
-while the feed reads as if the faction still holds it. See inbox item 35 for the feed's
-other known gap.
-
-### Original reasoning, rejected
-
-The most literal fix — emit a `lapsed` event on every timeout — is wrong. A malicious
-claimant could reserve many flags with fake ceremonies and spam the feed as they expire,
-one every 24 hours. The event belongs to the attempt history, not the feed: log it to
-`events`, tag it with the attempt's own provenance, and keep it out of the public channel.
-That means a schema change outside `faction_events` and a different reconciliation, which
-is also scope at merge gate.
+⚠️ The item's "Original reasoning, rejected" section argued a `lapsed` feed row
+is spammable by a malicious claimant reserving many flags with fake ceremonies.
+What shipped posts to the feed anyway. If that abuse ever shows up, it is a new
+item about rate-limiting the feed, not a reason to unpick this.
 
 ## 37. ~~`apps/web` player copy still says "faction"~~ — DONE 2026-09-05
 
