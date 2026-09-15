@@ -30,7 +30,7 @@ describe("makeRoster", () => {
     const singleton = await import("../src/index");
     // The eight names that are constants, not wrappers: they stay plain re-exports on index,
     // plus makeRoster itself, which is a factory export, not a method on the instance it returns.
-    const notWrappers = ["BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE", "ISSUE_OUTCOME_KINDS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX", "makeRoster"];
+    const notWrappers = ["BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE", "ISSUE_OUTCOME_KINDS", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX", "makeRoster"];
     const wrappers = ROSTER_EXPORTS.filter((n) => !notWrappers.includes(n));
     expect(Object.keys(roster).sort()).toEqual([...wrappers].sort());
     for (const name of wrappers) {

@@ -41,7 +41,17 @@ const COMMANDS: Record<string, string> = {
  * command. A new write lands here only if a future increment ships one
  * without a Discord command — and then this file says which plan owes it.
  */
-const PENDING: Record<string, string> = {};
+const PENDING: Record<string, string> = {
+  // 2026-09-15 zone enforcement. Pressing charges triggers an automatic ban, and
+  // the evidence an officer needs to decide — part names, distances, timestamps,
+  // coordinates — cannot be shown in Discord: `clan_notices_no_coordinates`
+  // forbids coordinates in any notice payload, and the guide's rule that a base's
+  // location never appears in Discord is the reason that CHECK exists. So the
+  // decision surface is the owner-gated /base page. A `/base report` command that
+  // listed incidents by id WITHOUT the evidence would be a ban trigger with the
+  // reasoning stripped out, which is worse than no command.
+  reportIncident: "base report",
+};
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
 const WRITES = [...Object.keys(COMMANDS), ...Object.keys(PENDING)];
@@ -74,7 +84,7 @@ describe("Discord parity with the site", () => {
       "achievementsFor", "clanBoard", "clanBoardPage", "boardPage", "playerFeed", "vaultFor",
       "makeRoster",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
-      "ISSUE_OUTCOME_KINDS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
+      "ISSUE_OUTCOME_KINDS", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

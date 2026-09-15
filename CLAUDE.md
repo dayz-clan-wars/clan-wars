@@ -356,7 +356,12 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
-  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices`.**
+  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices` →
+  `zone_incidents` → `zone_incident_participants` → `bans`.**
+  The zone-enforcement report write (`reportIncidentDb`, `packages/roster/src/internal/incidents.ts`)
+  reads `declarations` and `faction_members` (both earlier in the order, for the officer gate) before
+  it locks `zone_incidents`, then writes `zone_incident_participants` and `bans` in that sequence,
+  all inside the incident's own transaction.
   The achievements tick writes the three achievement tables in exactly that order inside each
   owner's transaction, before it appends that owner's notices.
   `server_restarts` and `vehicle_wipe_announcements` are outside the order: each written by

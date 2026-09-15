@@ -47,6 +47,7 @@ import {
 } from "./guest";
 import { attentionDb, type Attention } from "./attention";
 import { liveServersDb, type LiveServer } from "./servers";
+import { reportIncidentDb, REPORT_REASONS, type ReportOutcome, type ReportableIncident } from "./internal/incidents";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -65,11 +66,13 @@ export type { GuestGrantOutcome, GuestTargetRef };
 export type { Attention };
 export type { LiveServer };
 export type { AchievementWall, AchievementTile, AchievementSubject };
+export type { ReportOutcome, ReportableIncident };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
 export { DECLARE_SOLO_REASONS } from "./base";
 export { ISSUE_OUTCOME_KINDS } from "@factions/verification";
 export { BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE } from "./stats";
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX } from "./vault";
+export { REPORT_REASONS } from "./internal/incidents";
 
 /**
  * The site's capability layer, parameterized (spec §3.1).
@@ -227,6 +230,16 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     grantGuestPass: (discordId: string, target: GuestTargetRef) => grantGuestPassDbFor(getDb(), getNow(), discordId, target),
     /** Revoke an open guest pass early. Officer+ only. */
     revokeGuestPass: (discordId: string, passId: number) => revokeGuestPassDbFor(getDb(), getNow(), discordId, passId),
+
+    /**
+     * Press charges on a bot-witnessed incident at your own base. A SOLO
+     * base is reportable only by its declarant; a clan base, officer+ only.
+     * Every participant is sentenced on the incident's full damage total —
+     * liability is joint. This writes ban rows with no staff review; see
+     * `reportIncidentDb`'s own comment for why that is safe here.
+     */
+    reportIncident: (discordId: string, incidentId: number): Promise<ReportOutcome> =>
+      reportIncidentDb(getDb(), getNow(), discordId, incidentId),
   };
 }
 

@@ -22,3 +22,4 @@ export * from "./leadership-store";
 export * from "./vault-store";
 export * from "./guest-store";
 export * from "./removal-store";
+export * from "./incidents";
