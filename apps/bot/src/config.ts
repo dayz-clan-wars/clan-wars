@@ -321,14 +321,35 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
     announcementsChannelId: optionalSnowflake(env, "ANNOUNCEMENTS_CHANNEL_ID"),
-    banDryRun: (env.BAN_DRY_RUN ?? "true") !== "false",
-    enforcementTick: env.ENFORCEMENT_TICK === "1",
+    // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
+    // typing `FALSE` or ` false ` (either a reasonable thing to type) leaves the
+    // raw string unequal to `"false"`, so `banDryRun` stays true — the SAFE
+    // direction, but silently: the operator believes bans are now real, nothing
+    // errors, and every ban stays a no-op against Nitrado. Only the exact,
+    // normalized string `"false"` turns real bans on.
+    banDryRun: (env.BAN_DRY_RUN ?? "true").trim().toLowerCase() !== "false",
+    // Matches the `["1", "true"]` shape every other boolean flag in this file
+    // uses (achievementsTick, restartSchedule, the truck-wipe flags below) —
+    // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
+    // the literal `"1"` was accepted.
+    enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
   // error level and look, from systemctl, exactly like one that is working.
   if (config.restartSchedule && !config.nitradoToken) {
     throw new Error("RESTART_SCHEDULE is on but NITRADO_TOKEN is unset — the bot cannot restart a server it cannot authenticate to.");
+  }
+
+  // ⚠️ Same failure shape as restartSchedule above, but worse: with BAN_DRY_RUN
+  // already false and no token, every addBans/removeBans call throws, attempts
+  // climbs on every retry, and three ticks later every pending row is
+  // permanently `failed` — the apply query excludes `attempts >=
+  // BAN_MAX_ATTEMPTS`, so nothing ever revisits them. A misconfigured restart
+  // schedule costs one slot; a misconfigured enforcement tick destroys the
+  // bans it was supposed to place, silently.
+  if (config.enforcementTick && !config.nitradoToken) {
+    throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule

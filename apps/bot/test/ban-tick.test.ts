@@ -55,7 +55,7 @@ describe("banTick", () => {
   it("applies a pending ban: one addBans carrying BOTH the dayzId and the gamertag", async () => {
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.applied).toBe(1);
     expect(fake.added).toEqual([[DAYZ_ID, "Sasha"]]);
     expect((await allRows())[0]).toMatchObject({ status: "applied", dryRun: false });
@@ -64,7 +64,7 @@ describe("banTick", () => {
   it("a dry-run row is never sent to Nitrado but is still marked applied", async () => {
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: true, since: at("2026-09-15T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: true, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.applied).toBe(1);
     expect(fake.added).toEqual([]);
     expect((await allRows())[0]).toMatchObject({ status: "applied", dryRun: true });
@@ -74,7 +74,7 @@ describe("banTick", () => {
     // Banned well before `since`: represents historical backlog written while dry-run was on.
     await insertBan({ bannedAt: at("2026-08-01T00:00:00Z") });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.applied).toBe(0);
     expect(fake.added).toEqual([]);
     expect((await allRows())[0]).toMatchObject({ status: "pending" });
@@ -88,7 +88,7 @@ describe("banTick", () => {
       expiresAt: at("2026-09-10T00:00:00Z"),
     });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
     expect(r.expired).toBe(1);
     expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
     expect((await allRows())[0]).toMatchObject({ status: "expired" });
@@ -102,7 +102,7 @@ describe("banTick", () => {
       expiresAt: null,
     });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
     expect(r.expired).toBe(0);
     expect(fake.removed).toEqual([]);
     expect((await allRows())[0]).toMatchObject({ status: "applied" });
@@ -124,7 +124,7 @@ describe("banTick", () => {
       expiresAt: at("2026-09-20T00:00:00Z"),
     });
     const fake = fakeClient();
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
     expect(r.expired).toBe(1);
     expect(fake.removed).toEqual([]);
     expect(await activeStatuses()).toContain("applied");
@@ -133,14 +133,14 @@ describe("banTick", () => {
   it("a Nitrado error increments attempts and leaves the row retryable", async () => {
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
     const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
-    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z") });
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect((await allRows())[0]).toMatchObject({ status: "pending", attempts: 1 });
   });
 
   it("BAN_MAX_ATTEMPTS errors move the row to failed, not pending", async () => {
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), attempts: 2 });
     const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
-    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z") });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.failed).toBe(1);
     expect((await allRows())[0]).toMatchObject({ status: "failed", attempts: 3 });
   });
@@ -153,10 +153,59 @@ describe("banTick", () => {
       expiresAt: null,
     });
     const fake = fakeClient();
-    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z") });
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
     expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
     const row = (await allRows())[0]!;
     expect(row.status).toBe("lifted");
     expect(row.liftedAt).not.toBeNull();
+  });
+
+  describe("multi-server isolation", () => {
+    let server2Id = 0;
+
+    beforeEach(async () => {
+      const [s2] = await db.insert(servers).values({ name: "S2", map: "chernarusplus", clockOffsetMs: 0, nitradoServiceId: 2, active: true }).returning();
+      server2Id = s2!.id;
+    });
+
+    it("⚠️ a tick for server 1 never applies, expires, or lifts server 2's rows", async () => {
+      // Pending on server 2 only — server 1's tick must not touch it.
+      await insertBan({ serverId: server2Id, bannedAt: at("2026-09-15T01:00:00Z") });
+      const fake = fakeClient();
+      const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+      expect(r.applied).toBe(0);
+      expect(fake.added).toEqual([]);
+      expect((await allRows())[0]).toMatchObject({ serverId: server2Id, status: "pending" });
+    });
+
+    it("⚠️ stillBanned does not let another server's active ban block THIS server's removal — the unliftable-ban regression", async () => {
+      // Server 1: a ban on DAYZ_ID due to expire right now.
+      await insertBan({
+        serverId,
+        status: "applied",
+        dryRun: false,
+        appliedAt: at("2026-09-01T00:00:00Z"),
+        expiresAt: at("2026-09-15T00:00:00Z"),
+      });
+      // Server 2: a DIFFERENT, still-active ban on the SAME dayzId. Before the
+      // serverId filter, stillBanned would see this row and refuse to ever
+      // remove server 1's list entry — an unliftable ban on server 1 caused
+      // by a ban that has nothing to do with server 1.
+      await insertBan({
+        serverId: server2Id,
+        status: "applied",
+        dryRun: false,
+        appliedAt: at("2026-09-01T00:00:00Z"),
+        expiresAt: null,
+      });
+      const fake = fakeClient();
+      const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+      expect(r.expired).toBe(1);
+      expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+      const server1Row = (await allRows()).find((row) => row.serverId === serverId)!;
+      const server2Row = (await allRows()).find((row) => row.serverId === server2Id)!;
+      expect(server1Row.status).toBe("expired");
+      expect(server2Row.status).toBe("applied"); // untouched
+    });
   });
 });
