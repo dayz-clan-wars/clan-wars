@@ -204,6 +204,26 @@ export const BAN_REPEAT_MULTIPLIER = 2;
 export const BAN_PERMANENT_AT_OFFENCE = 3;
 
 /**
+ * ⚠️ How far back `banTick`'s apply arm looks for `pending` rows to send to
+ * Nitrado. This guards against a historical dry-run backlog firing at
+ * Nitrado in a single tick the moment `BAN_DRY_RUN` flips to `false` — every
+ * pending row ever written, going back to the feature's first day, would
+ * otherwise become a live ban attempt at once. One Life's unbounded detect
+ * query did exactly this.
+ *
+ * ⚠️ This is NOT, and must never become, the bot's process start time. An
+ * earlier draft used that and it is wrong in a way that is invisible: a ban
+ * written five minutes before a routine restart has `bannedAt < since`, so
+ * it is never applied — yet `reportIncidentDb`'s prior-offence query still
+ * counts it as a standing prior (it excludes only `lifted`), so the player
+ * serves no ban but still climbs the sentencing ladder, and their next
+ * report is harsher for a punishment that never happened. `RESTART_PERIOD_MS`
+ * is 2 hours, so a process-start-time bound would trigger this on almost
+ * every tick. A fixed lookback from `now` is immune to restarts entirely.
+ */
+export const BAN_APPLY_LOOKBACK_MS = 24 * HOUR;
+
+/**
  * DayZ classnames that can be stacked into a boost.
  *
  * ⚠️ VERIFY AGAINST A REAL ADM LINE before trusting this list. It is inferred

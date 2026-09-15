@@ -83,15 +83,39 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
   const { serverId } = opts;
   const out: BanTickResult = { applied: 0, expired: 0, failed: 0 };
 
+  // ── Age-out arm ──────────────────────────────────────────────────────
+  //
+  // ⚠️ Runs BEFORE the apply arm, and unconditionally (not gated on
+  // `dryRun`, not limited by `BAN_MAX_ATTEMPTS`). A `pending` row with
+  // `bannedAt` older than `since` (`now - BAN_APPLY_LOOKBACK_MS`, callers
+  // pass a fixed lookback rather than process start time — see rules.ts) is
+  // EXCLUDED from the apply query below by the `gte(bans.bannedAt, since)`
+  // predicate, and without this arm such a row would sit `pending` forever:
+  // never sent to Nitrado, never revisited, while `reportIncidentDb`'s prior
+  // query still counts it as a standing prior offence — a ban that silently
+  // never happens while still making the player's next report harsher. Aging
+  // it out to `failed` makes that honest: the row stops looking like an
+  // active, soon-to-apply ban and starts looking like what it is.
+  const agedOut = await db.update(bans).set({
+    status: "failed",
+    lastError: `aged out: bannedAt was older than the ${Math.round((now.getTime() - opts.since.getTime()) / 3_600_000)}h apply lookback`,
+  }).where(and(
+    eq(bans.serverId, serverId),
+    eq(bans.status, "pending"),
+    lt(bans.bannedAt, opts.since),
+  )).returning({ id: bans.id });
+  out.failed += agedOut.length;
+
   // ── Apply arm ────────────────────────────────────────────────────────
   //
   // ⚠️ `since` BOUNDS this query. Without it, the moment BAN_DRY_RUN flips to
   // "false" the entire historical backlog of intended bans — every pending
   // row ever written, going back to the feature's first day — fires at
   // Nitrado in a single tick. One Life's unbounded detect query did exactly
-  // this. Task 10 passes the bot's process start time as `since`, so only
-  // bans that became pending after the bot itself came up this run are ever
-  // candidates for a live Nitrado call.
+  // this. Callers pass `now - BAN_APPLY_LOOKBACK_MS` (24h), NOT the bot's
+  // process start time — see the comment on `BAN_APPLY_LOOKBACK_MS` in
+  // `rules.ts` for why process start time is wrong. Rows older than `since`
+  // are handled by the age-out arm above, not silently skipped.
   const pending = await db.select().from(bans).where(and(
     eq(bans.serverId, serverId),
     eq(bans.status, "pending"),

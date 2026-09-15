@@ -32,6 +32,8 @@ in-game verification tick confirms it.
 | `TRUCK_WIPE_ON_HOUR` | no (default `10`) | UTC hour they go back to `<active>1</active>`. Same rules. A window whose end is before its start wraps past midnight. |
 | `WEEKLY_VEHICLE_WIPE` | no (default off; `"1"`/`"true"` = on) | Wipe one of five vehicles each Monday, rotating weekly: Olga → Gunter → Hummer → Ada → Sarka. Uses the same window as `TRUCK_WIPE_OFF_HOUR`/`ON_HOUR`. Requires `RESTART_SCHEDULE`; independent of `TRUCK_WIPE_EVENTS`. Runbook `docs/deploy/2026-09-12-weekly-vehicle-rotation.md`. |
 | `ANNOUNCEMENTS_CHANNEL_ID` | no (default unset = silent) | Channel for the Sunday 24h-ahead notice naming the coming week's vehicle. Unset means the wipe still happens with no announcement; startup says so. |
+| `ENFORCEMENT_TICK` | no (default off; `"1"`/`"true"` = on) | Gates zone enforcement: `violationTick` (every tick, closes quiet incidents and queues warning DMs) and `banTick` (every 5 minutes, beside the reaper — reconciles `bans` rows against each server's Nitrado ban list). Off by default. Requires `NITRADO_TOKEN`; config load fails if this is on without it. |
+| `BAN_DRY_RUN` | no (default `true`) | ⚠️ Defaults TRUE. A ban row is always written and always transitions status — the audit trail always shows exactly what would have happened — but only the Nitrado call is skipped while this is true. Real bans require explicitly setting `BAN_DRY_RUN=false`; anything other than the exact string `false` (after trim/lowercase) leaves it dry-run. Never flip this back to `true` while a ban is `applied` — the expire arm would then close the row without calling Nitrado, orphaning the ban-list entry. |
 
 Example `.env` (placeholders only — never commit real values):
 

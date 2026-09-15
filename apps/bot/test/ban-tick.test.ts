@@ -77,7 +77,34 @@ describe("banTick", () => {
     const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
     expect(r.applied).toBe(0);
     expect(fake.added).toEqual([]);
-    expect((await allRows())[0]).toMatchObject({ status: "pending" });
+    // Never sent to Nitrado — but it does NOT sit `pending` forever either: the
+    // age-out arm below moves it to `failed`, so it stops silently counting as
+    // an active, soon-to-apply ban.
+    expect((await allRows())[0]).toMatchObject({ status: "failed" });
+  });
+
+  it("ages a pending row out to failed when bannedAt predates `since`, without touching Nitrado", async () => {
+    const old = await insertBan({ bannedAt: at("2026-08-01T00:00:00Z") });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    expect(r.failed).toBe(1);
+    expect(fake.added).toEqual([]);
+    const row = (await allRows()).find((x) => x.id === old.id)!;
+    expect(row.status).toBe("failed");
+    expect(row.lastError).toMatch(/aged out/u);
+  });
+
+  it("an aged-out row does not block a newer pending row from applying in the same tick", async () => {
+    const old = await insertBan({ bannedAt: at("2026-08-01T00:00:00Z"), gamertag: "Old", dayzId: "76561198000000002" });
+    const fresh = await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    expect(r.failed).toBe(1);
+    expect(r.applied).toBe(1);
+    expect(fake.added).toEqual([[DAYZ_ID, "Sasha"]]);
+    const rows = await allRows();
+    expect(rows.find((x) => x.id === old.id)!.status).toBe("failed");
+    expect(rows.find((x) => x.id === fresh.id)!.status).toBe("applied");
   });
 
   it("an expired ban is removed and marked expired", async () => {
