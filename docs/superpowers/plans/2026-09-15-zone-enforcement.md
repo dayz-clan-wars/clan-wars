@@ -1385,6 +1385,26 @@ In `packages/roster/src/base.ts`, add `incidents: ReportableIncident[]` to the l
 
 ⚠️ `packages/roster/test/roster-exports.ts` and `apps/web/test/smoke.test.ts` both pin the exact export list of `@factions/roster`. Add `reportIncident` and `REPORT_REASONS` to both arrays, in alphabetical position, or those two suites fail.
 
+⚠️ **`apps/bot/test/parity.test.ts` will also fail.** It asserts that every *write* `@factions/roster` exports maps either to a shipped Discord command (`COMMANDS`) or to an explicitly deferred one (`PENDING`) — and `PENDING` is currently empty on purpose, so that "parity cannot rot quietly on the next increment". `reportIncident` is a write.
+
+Add it to `PENDING`, not to `COMMANDS`, with a comment naming this plan and the reason:
+
+```ts
+const PENDING: Record<string, string> = {
+  // 2026-09-15 zone enforcement. Pressing charges triggers an automatic ban, and
+  // the evidence an officer needs to decide — part names, distances, timestamps,
+  // coordinates — cannot be shown in Discord: `clan_notices_no_coordinates`
+  // forbids coordinates in any notice payload, and the guide's rule that a base's
+  // location never appears in Discord is the reason that CHECK exists. So the
+  // decision surface is the owner-gated /base page. A `/base report` command that
+  // listed incidents by id WITHOUT the evidence would be a ban trigger with the
+  // reasoning stripped out, which is worse than no command.
+  reportIncident: "base report",
+};
+```
+
+This is bookkeeping, not a decision to skip parity — it records the debt where the next increment will see it. Whether a `/base report` command should ship anyway is a product call for the repo's owner, and is out of scope here.
+
 - [ ] **Step 5: Run the tests to verify they pass**
 
 Run: `cd packages/roster && npx vitest run`
