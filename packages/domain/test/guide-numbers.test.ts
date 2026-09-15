@@ -21,7 +21,7 @@ const LABELS = [
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
   "Fast travel points (outhouses, wells, bus stops)", "Hub destinations",
-  "Combat log rule", "Watchtower height",
+  "Combat log rule", "Watchtower height", "Window to press charges on a closed zone incident",
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {

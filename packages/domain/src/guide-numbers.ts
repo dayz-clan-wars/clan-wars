@@ -36,6 +36,7 @@ const SCALARS: Record<string, number> = {
   POSITION_FIX_MS: R.POSITION_FIX_MS, INTRUDER_ALERT_COOLDOWN_MS: R.INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS: R.INTRUDER_PIN_TTL_MS, PIN_TTL_MS: R.PIN_TTL_MS,
   TRAVEL_POINTS: R.TRAVEL_POINTS, HUB_DESTINATIONS: R.HUB_DESTINATIONS,
   COMBAT_LOG_MS: R.COMBAT_LOG_MS,
+  VIOLATION_REPORT_WINDOW_MS: R.VIOLATION_REPORT_WINDOW_MS,
 };
 
 type Unit = "ms" | "m" | "count";
@@ -185,6 +186,7 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Getting around", "Hub destinations", "HUB_DESTINATIONS_TOWNS"),
   row("Fair play", "Combat log rule", "COMBAT_LOG"),
   row("Fair play", "Watchtower height", "WATCHTOWER"),
+  row("Fair play", "Window to press charges on a closed zone incident", "VIOLATION_REPORT_WINDOW_MS"),
 ];
 
 /** Every key a prose token may name. */

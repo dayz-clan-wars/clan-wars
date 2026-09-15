@@ -13,7 +13,7 @@
 <ul>
 <li>No duping.</li>
 <li>No glitching: through walls, under the map, into bases, into locked rooms.</li>
-<li>No sky-walking, floating structures, or boosting that only works because the game is broken. <strong>Legal boosting:</strong> a two-player boost, vehicles, and up to two stacked watchtowers, both grounded. <strong>Not legal:</strong> garden plots, fireplaces, backpacks, car parts, or anything of that kind.</li>
+<li>No sky-walking, floating structures, or boosting that only works because the game is broken. <strong>Legal boosting:</strong> a two-player boost, vehicles, and up to two stacked watchtowers, both grounded. <strong>Not legal, permanent ban:</strong> stacked backpacks, car parts, or anything else used to climb. Stacked fireplaces and garden plots are not on this list any more — see Bases, below, for how those are sentenced now.</li>
 <li>No whitewalling or restart abuse — using a loading screen or a server restart to see through walls or find players.</li>
 <li>No code-lock brute-forcing or macroing. Standing at a gate guessing numbers is not a raid.</li>
 <li>No cheating of any kind — aim assistance, ESP, mods. Clear proof means a permanent ban with no appeal.</li>
@@ -26,12 +26,14 @@
 <li>No building inside buildings that spawn military, police, medical or hunting loot. No building on roads.</li>
 <li>Never log out inside someone else's base. If you disconnect during a raid, rejoin immediately.</li>
 <li><strong>No takeovers of a declared base.</strong> You raid it; you do not move in. Undeclared poles that have already gone public are fair game — see <a href="/guide/bases">Bases</a>.</li>
+<li><strong>No boosting with stacked fireplaces or garden plots</strong> inside a watch zone that isn't yours. The bot spots the stack from how tight together and how high up the placements go, and warns whoever placed them. If the base's owner presses charges, it's sentenced the same way as a dismantle — a base term, more for breaching the wall, doubled on a repeat offence, permanent on the third. It is not on the exploits permanent-ban list any more: it scales with what actually happened.</li>
 </ul>
 
 <h2>Boost raids outside the window</h2>
-<div class="human"><p>Base damage is on only from <strong>Friday 00:00 UTC to Monday 00:00 UTC</strong>. Outside that, you may boost in and lower the flag — that is legal and it scores. You may <strong>not</strong> dismantle any part of a base that is not yours, and you may <strong>not</strong> turn a fence into a gate.</p>
-<p>The log records every dismantle and every gate built, with a name attached, and your watch zone tells the bot which base it happened at. A member of the victim clan reports it; staff read the log. <strong>If you can boost in, make damn sure you can boost out.</strong></p>
-<p>Inside the window, dismantling from within a base you are raiding is part of raiding. Outside it, it never is.</p></div>
+<div class="human"><p>Base damage is on only from <strong>Friday 00:00 UTC to Monday 00:00 UTC</strong>. Outside that, you may boost in and lower the flag — that is legal and it scores. You may <strong>not</strong> dismantle any part of a base that is not yours, and you may <strong>not</strong> turn a fence into a gate. That is true in the window and out of it. There is no carve-out any more: dismantling someone else's base is never part of raiding, window or no window.</p>
+<p>The log records every dismantle and every gate built, with a name attached, and your watch zone tells the bot which base it happened at. The bot records the incident and warns whoever it caught. From there it is on the base's owner: an officer of the owning clan, or a solo declarant, can press charges from <code>/base</code> within {{VIOLATION_REPORT_WINDOW_MS|days}} of the incident going quiet. Press charges and the ban is automatic, scaled to the damage the log shows. This is the one fair-play rule that skips the ticket queue — every other rule in this chapter still needs a ticket; see Enforcement, below.</p>
+<p>A warning DM is not an accusation. There is no helper-permit system, so someone your clan invited to help build gets the exact same warning a raider would — the bot cannot tell the two apart from the log. Nothing happens to them unless an officer presses charges, and an owner who invited the helper simply will not.</p>
+<p><strong>If you can boost in, make damn sure you can boost out.</strong></p></div>
 
 <h2>Griefing</h2>
 <p>Griefing is destruction with no purpose: dismantling walls you are not raiding through, destroying storage instead of looting it, dumping loot to despawn it, blocking doorways with junk, trapping players.</p>
@@ -42,7 +44,7 @@
 
 <h2>Enforcement</h2>
 <ul>
-<li>Report through a ticket, with video. Staff cannot act on "trust me". Dismantle and gate reports are the exception: the log is the video.</li>
+<li>Report through a ticket, with video. Staff cannot act on "trust me". Dismantling, gate-building and boost-stacking inside a watch zone are the exception: the bot catches them from the log, and the base's owner presses charges from <code>/base</code> — no ticket, no staff.</li>
 <li>Warning, then temporary ban, then permanent, at staff discretion. Exploits and cheating skip straight to permanent.</li>
 <li>Staff never create, edit or delete a clan, a flag, a base or a raid. If it looks like they did, they didn't — a person was removed and the system followed.</li>
 </ul>
