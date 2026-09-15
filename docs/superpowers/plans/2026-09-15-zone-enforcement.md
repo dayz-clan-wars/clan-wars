@@ -557,11 +557,7 @@ git commit -m "feat(adm-parser): item.placed for deployable placements"
 
 - [ ] **Step 1: Add the domain types**
 
-In `packages/domain/src/feed.ts`, add the two kinds to `CLAN_NOTICE_KINDS`, at the end of the array so existing order is untouched:
-
-```ts
-  "zone_warning", "ban_applied",
-```
+⚠️ **The two new `CLAN_NOTICE_KINDS` do NOT belong in this task — they moved to Task 5.** `apps/bot/test/notice-text.test.ts` asserts a two-way diff between `CLAN_NOTICE_KINDS` and the renderer map, so adding a kind here leaves the whole `apps/bot` suite red until Task 5 ships the renderers. The kind and its renderer are two statements of one fact and must land in one commit. (Found the hard way: Task 3's first attempt did exactly this and broke the suite.)
 
 Create the status unions in `packages/domain/src/enforcement.ts`:
 
@@ -1186,9 +1182,17 @@ async function ownerTagFor(tx: Tx, declarationId: number): Promise<string> {
 }
 ```
 
-- [ ] **Step 4: Add the renderers**
+- [ ] **Step 4: Add the notice kinds AND their renderers, in ONE commit**
 
-In `apps/bot/src/notice-text.ts`, add to the renderer map:
+First, in `packages/domain/src/feed.ts`, append the two kinds to the END of `CLAN_NOTICE_KINDS` so existing order is untouched:
+
+```ts
+  "zone_warning", "ban_applied",
+```
+
+⚠️ These moved here from Task 3. `apps/bot/test/notice-text.test.ts` asserts a two-way diff between `CLAN_NOTICE_KINDS` and the renderer map below — a kind without a renderer turns the entire `apps/bot` suite red, and a renderer without a kind does the same. They are two statements of one fact; commit them together.
+
+Then in `apps/bot/src/notice-text.ts`, add to the renderer map:
 
 ```ts
   zone_warning: (p) => {
