@@ -2,7 +2,7 @@ import {
   BAN_BASE_MS, BAN_BREACH_MS, BAN_GATE_MS, BAN_PER_DISMANTLE_MS,
   BAN_FIRST_OFFENCE_CAP_MS, BAN_REPEAT_MULTIPLIER, BAN_PERMANENT_AT_OFFENCE,
   BOOST_STACK_MIN_ITEMS, BOOST_STACK_RADIUS_M, BOOST_STACK_MIN_RISE_M, BOOST_STACK_WINDOW_MS,
-} from "./rules.js";
+} from "./rules";
 
 /** What one closed incident cost the base, as counted from the log. */
 export type IncidentDamage = {
