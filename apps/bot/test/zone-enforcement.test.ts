@@ -1,0 +1,133 @@
+import { describe, it, expect, beforeEach } from "vitest";
+import {
+  createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events,
+  factionMembers, declarations, zoneIncidents, zoneViolations, zonePlacements,
+  zoneIncidentParticipants, type Database,
+} from "@factions/db";
+import { sql, eq } from "drizzle-orm";
+import { zoneTick } from "../src/zone-tick.js";
+import { seedFaction } from "./seed.js";
+
+const URL = requireTestDatabaseUrl();
+const now = new Date("2026-09-15T12:00:00Z");
+const at = (ms: number) => new Date(now.getTime() + ms);
+const MEMBER = "M".repeat(40); const STRANGER = "X".repeat(40); const FRIEND = "F".repeat(40);
+
+describe("zoneTick enforcement", () => {
+  let db: Database; let serverId = 0; let admFileId = 0; let factionId = 0; let line = 0;
+  beforeEach(async () => {
+    db = createClient(URL);
+    await runMigrations(db);
+    await db.execute(sql`truncate table bans, zone_incident_participants, zone_violations, zone_placements, zone_incidents, intruder_sightings, clan_notices, declarations, poles, faction_members, factions, identity_links, events, raw_lines, adm_files, consumer_cursors, servers restart identity cascade`);
+    const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
+    serverId = s!.id;
+    const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+    admFileId = a!.id; line = 0;
+    factionId = (await seedFaction(db, { serverId, tag: "BEAR", texture: "Flag_Bear", createdAt: at(-100_000), x: 5000, z: 5000 })).id;
+    await db.insert(factionMembers).values([
+      { factionId, serverId, dayzId: MEMBER, discordId: "1", role: "leader", joinedAt: now, status: "full" },
+    ]);
+  });
+
+  const structure = (dayzId: string, x: number, z: number, part: string, kind: "base.built" | "base.dismantled", str = "Fence", when = now) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, type: kind, occurredAt: when,
+      payload: { dayzId, gamertag: "Sasha", action: kind === "base.built" ? "built" : "dismantled", part, structure: str, tool: null, pos: { x, y: 100, z } },
+    }).returning({ id: events.id });
+
+  const placed = (dayzId: string, x: number, y: number, z: number, itemClass: string, when = now) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, type: "item.placed", occurredAt: when,
+      payload: { dayzId, gamertag: "Sasha", item: itemClass, itemClass, pos: { x, y, z } },
+    }).returning({ id: events.id });
+
+  const incidents = () => db.select().from(zoneIncidents).orderBy(zoneIncidents.id);
+  const violations = () => db.select().from(zoneViolations).orderBy(zoneViolations.id);
+
+  it("a non-member dismantling inside the zone opens an incident and counts the loss", async () => {
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await structure(STRANGER, 5011, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    const [i] = await incidents();
+    expect(i).toMatchObject({ partsDismantled: 2, partsBuilt: 0, hasBreach: false, hasGate: false, closedAt: null });
+    expect(await violations()).toHaveLength(2);
+  });
+
+  it("a full member is never a violation", async () => {
+    await structure(MEMBER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("an act outside the zone is never a violation", async () => {
+    await structure(STRANGER, 5300, 5300, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("building is a breach, and a gate sets hasGate too", async () => {
+    await structure(STRANGER, 5010, 5010, "Watchtower Kit", "base.built");
+    await structure(STRANGER, 5012, 5010, "Gate", "base.built");
+    await zoneTick(db, { now });
+    const [i] = await incidents();
+    expect(i).toMatchObject({ partsBuilt: 2, hasBreach: true, hasGate: true });
+  });
+
+  it("a lone fireplace is recorded but is not a violation", async () => {
+    await placed(STRANGER, 5010, 100, 5010, "Fireplace");
+    await zoneTick(db, { now });
+    expect(await db.select().from(zonePlacements)).toHaveLength(1);
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("a co-located pair with a rise is a stack: one breach, both items counted", async () => {
+    await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
+    await placed(STRANGER, 5010.3, 100.9, 5010.2, "GardenPlot", at(60_000));
+    await zoneTick(db, { now: at(120_000) });
+    const [i] = await incidents();
+    expect(i).toMatchObject({ stackItems: 2, hasBreach: true, hasGate: false });
+  });
+
+  it("three garden plots side by side are a farm, not a stack", async () => {
+    await placed(STRANGER, 5010, 100, 5010, "GardenPlot");
+    await placed(STRANGER, 5013, 100, 5010, "GardenPlot", at(60_000));
+    await placed(STRANGER, 5016, 100, 5010, "GardenPlot", at(120_000));
+    await zoneTick(db, { now: at(180_000) });
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("every contributor to one incident becomes a participant, gamertag frozen", async () => {
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await structure(FRIEND, 5011, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    const [i] = await incidents();
+    const parts = await db.select().from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, i!.id));
+    expect(parts.map((p) => p.dayzId).sort()).toEqual([FRIEND, STRANGER].sort());
+    expect(parts.every((p) => p.gamertag === "Sasha")).toBe(true);
+  });
+
+  it("acts separated by more than the gap belong to different incidents", async () => {
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    await db.update(zoneIncidents).set({ closedAt: at(60_000) });
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled", "Fence", at(120_000));
+    await zoneTick(db, { now: at(180_000) });
+    expect(await incidents()).toHaveLength(2);
+  });
+
+  it("a replayed event does not double-count damage", async () => {
+    const [e] = await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now });
+    await db.execute(sql`update consumer_cursors set last_event_id = ${e!.id - 1} where consumer_name = 'zone-watch'`);
+    await zoneTick(db, { now });
+    const [i] = await incidents();
+    expect(i!.partsDismantled).toBe(1);
+    expect(await violations()).toHaveLength(1);
+  });
+
+  it("a stale act is skipped entirely — a rewound cursor cannot manufacture incidents", async () => {
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled", "Fence", at(-10 * 86_400_000));
+    await zoneTick(db, { now });
+    expect(await incidents()).toHaveLength(0);
+  });
+});

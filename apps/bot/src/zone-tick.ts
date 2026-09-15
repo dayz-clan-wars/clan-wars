@@ -1,16 +1,19 @@
 import type { Database } from "@factions/db";
-import { identityLinks, intruderSightings } from "@factions/db";
+import { identityLinks, intruderSightings, zoneIncidents, zoneIncidentParticipants, zonePlacements, zoneViolations } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, type ClanNoticeKind } from "@factions/domain";
+import {
+  INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, BOOST_ITEM_CLASSES, BOOST_STACK_WINDOW_MS,
+  boostStackFor, type BoostPlacement, type ClanNoticeKind, type ViolationKind, type Vec3,
+} from "@factions/domain";
 import { noticeClanTx, noticeUserTx, type NoticePayload } from "@factions/roster/internal";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, gte, isNull, ne, sql } from "drizzle-orm";
 import { readFix } from "./positions-tick.js";
 import { isMemberOf, zoneContaining, zonesFor, type Tx, type Zone } from "./zones.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const ZONE_CONSUMER = "zone-watch";
 
-export type ZoneTickResult = { scanned: number; sightings: number; alerts: number };
+export type ZoneTickResult = { scanned: number; sightings: number; alerts: number; violations: number };
 
 const GATE_RE = /gate/iu;
 
@@ -25,6 +28,72 @@ function readPart(payload: unknown): string {
 function isGate(payload: unknown): boolean {
   const p = payload as Record<string, unknown>;
   return GATE_RE.test(String(p.part ?? "")) || GATE_RE.test(String(p.structure ?? ""));
+}
+function readItemClass(payload: unknown): string {
+  const c = (payload as Record<string, unknown>).itemClass;
+  return typeof c === "string" && c !== "" ? c : "unknown";
+}
+
+const toBoostPlacement = (r: { dayzId: string; x: string; y: string; z: string; occurredAt: Date }): BoostPlacement =>
+  ({ dayzId: r.dayzId, x: Number(r.x), y: Number(r.y), z: Number(r.z), occurredAt: r.occurredAt });
+
+/**
+ * The open incident for this zone, extended to `occurredAt`, or a new one.
+ *
+ * ⚠️ `zone_incidents_one_open` (partial unique on declaration_id WHERE
+ * closed_at IS NULL) is what makes two acts in the same batch share one row
+ * rather than race into two.
+ */
+async function openIncident(tx: Tx, zone: Zone, serverId: number, occurredAt: Date): Promise<number> {
+  const [open] = await tx.select({ id: zoneIncidents.id, lastActAt: zoneIncidents.lastActAt })
+    .from(zoneIncidents)
+    .where(and(eq(zoneIncidents.declarationId, zone.declarationId), isNull(zoneIncidents.closedAt)));
+  if (open) {
+    if (occurredAt > open.lastActAt) {
+      await tx.update(zoneIncidents).set({ lastActAt: occurredAt }).where(eq(zoneIncidents.id, open.id));
+    }
+    return open.id;
+  }
+  const [fresh] = await tx.insert(zoneIncidents)
+    .values({ serverId, declarationId: zone.declarationId, openedAt: occurredAt, lastActAt: occurredAt })
+    .returning({ id: zoneIncidents.id });
+  return fresh!.id;
+}
+
+/**
+ * Record one violating act and fold it into the incident's totals.
+ *
+ * Returns false when the event was already recorded — the `zone_violations_event_uq`
+ * conflict. ⚠️ The totals are updated ONLY on a fresh insert, which is what
+ * makes a replayed event unable to double-count damage.
+ */
+// ⚠️ DECISION: the brief's sketch bumps `stackItems` by a flat 1 per call, but
+// a stack is only ever recorded once — on the placement that completes it —
+// so a flat 1 would undercount the cluster (the test pins `stackItems: 2` for
+// a two-item stack). `stackCount` lets the placement arm pass the whole
+// cluster's size; every other kind defaults to 1, matching the brief exactly.
+async function recordViolation(
+  tx: Tx, incidentId: number, eventId: number, kind: ViolationKind,
+  dayzId: string, gamertag: string, what: string, pos: Vec3, occurredAt: Date,
+  stackCount = 1,
+): Promise<boolean> {
+  const [row] = await tx.insert(zoneViolations).values({
+    incidentId, eventId, kind, dayzId, what,
+    x: pos.x.toFixed(2), y: pos.y.toFixed(2), z: pos.z.toFixed(2), occurredAt,
+  }).onConflictDoNothing({ target: zoneViolations.eventId }).returning({ id: zoneViolations.id });
+  if (!row) return false;
+
+  const bump = kind === "dismantle" ? { partsDismantled: sql`${zoneIncidents.partsDismantled} + 1` }
+    : kind === "stack" ? { stackItems: sql`${zoneIncidents.stackItems} + ${stackCount}`, hasBreach: true }
+    : { partsBuilt: sql`${zoneIncidents.partsBuilt} + 1`, hasBreach: true };
+  await tx.update(zoneIncidents)
+    .set({ ...bump, ...(kind === "gate" ? { hasGate: true, hasBreach: true } : {}) })
+    .where(eq(zoneIncidents.id, incidentId));
+
+  await tx.insert(zoneIncidentParticipants)
+    .values({ incidentId, dayzId, gamertag })
+    .onConflictDoNothing();
+  return true;
 }
 
 /**
@@ -67,7 +136,7 @@ export async function zoneTick(db: Database, opts: { batchSize?: number; now?: D
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   const oldest = now.getTime() - INTRUDER_PIN_TTL_MS;
-  const out: ZoneTickResult = { scanned: 0, sightings: 0, alerts: 0 };
+  const out: ZoneTickResult = { scanned: 0, sightings: 0, alerts: 0, violations: 0 };
   let cursor = await readCursor(db, ZONE_CONSUMER);
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -79,7 +148,9 @@ export async function zoneTick(db: Database, opts: { batchSize?: number; now?: D
       if (!fix) continue;
       const isPosition = ev.type === "player.position";
       const isBuild = ev.type === "base.built" || ev.type === "base.dismantled";
-      if (!isPosition && !isBuild) continue;
+      const isPlacement = ev.type === "item.placed"
+        && (BOOST_ITEM_CLASSES as readonly string[]).includes(readItemClass(ev.payload));
+      if (!isPosition && !isBuild && !isPlacement) continue;
       if (ev.occurredAt.getTime() < oldest) continue;   // stale fix: the pin would have expired anyway
       out.scanned++;
       let zones = zonesByServer.get(ev.serverId);
@@ -90,10 +161,52 @@ export async function zoneTick(db: Database, opts: { batchSize?: number; now?: D
       await db.transaction(async (tx) => {
         const done = async () => { await writeCursor(tx, ZONE_CONSUMER, ev.id); };
         if (isBuild) {
+          const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
+          const part = readPart(ev.payload);
+          const pos: Vec3 = { x: fix.x, y: fix.alt, z: fix.z };
           if (ev.type === "base.dismantled") {
-            if (await alertOwner(tx, hit.zone, ev.serverId, "dismantle", ev.occurredAt, { gamertag, part: readPart(ev.payload) })) out.alerts++;
-          } else if (isGate(ev.payload)) {
-            if (await alertOwner(tx, hit.zone, ev.serverId, "gate_built", ev.occurredAt, { gamertag })) out.alerts++;
+            if (await recordViolation(tx, incidentId, ev.id, "dismantle", fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            if (await alertOwner(tx, hit.zone, ev.serverId, "dismantle", ev.occurredAt, { gamertag, part })) out.alerts++;
+          } else {
+            const kind: ViolationKind = isGate(ev.payload) ? "gate" : "build";
+            if (await recordViolation(tx, incidentId, ev.id, kind, fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            if (kind === "gate" && await alertOwner(tx, hit.zone, ev.serverId, "gate_built", ev.occurredAt, { gamertag })) out.alerts++;
+          }
+          return done();
+        }
+        if (isPlacement) {
+          // ⚠️ A LONE placement is recorded and is NOT a violation (spec §2.3):
+          // a player may legitimately cook or farm near a base they cannot see.
+          // It becomes one only when a LATER placement stacks on it.
+          const [row] = await tx.insert(zonePlacements).values({
+            serverId: ev.serverId, declarationId: hit.zone.declarationId, eventId: ev.id,
+            dayzId: fix.dayzId, gamertag, itemClass: readItemClass(ev.payload),
+            x: fix.x.toFixed(2), y: fix.alt.toFixed(2), z: fix.z.toFixed(2), occurredAt: ev.occurredAt,
+          }).onConflictDoNothing({ target: zonePlacements.eventId })
+            .returning({ id: zonePlacements.id });
+          if (!row) return done();   // replay
+
+          const recent = await tx.select({
+            dayzId: zonePlacements.dayzId, x: zonePlacements.x, y: zonePlacements.y,
+            z: zonePlacements.z, occurredAt: zonePlacements.occurredAt, id: zonePlacements.id,
+          }).from(zonePlacements).where(and(
+            eq(zonePlacements.declarationId, hit.zone.declarationId),
+            gte(zonePlacements.occurredAt, new Date(ev.occurredAt.getTime() - BOOST_STACK_WINDOW_MS)),
+            ne(zonePlacements.id, row.id),
+          ));
+          const latest: BoostPlacement = { dayzId: fix.dayzId, x: fix.x, y: fix.alt, z: fix.z, occurredAt: ev.occurredAt };
+          const stack = boostStackFor(recent.map(toBoostPlacement), latest);
+          if (!stack) return done();
+
+          const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
+          const pos: Vec3 = { x: fix.x, y: fix.alt, z: fix.z };
+          if (await recordViolation(tx, incidentId, ev.id, "stack", fix.dayzId, gamertag, readItemClass(ev.payload), pos, ev.occurredAt, stack.length)) out.violations++;
+          // Everyone who contributed to the cluster is a participant, even
+          // where their own placement predates the stack becoming one.
+          for (const member of stack) {
+            await tx.insert(zoneIncidentParticipants)
+              .values({ incidentId, dayzId: member.dayzId, gamertag })
+              .onConflictDoNothing();
           }
           return done();
         }
