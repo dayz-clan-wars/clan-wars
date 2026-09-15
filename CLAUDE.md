@@ -359,9 +359,12 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices` →
   `zone_incidents` → `zone_incident_participants` → `bans`.**
   The zone-enforcement report write (`reportIncidentDb`, `packages/roster/src/internal/incidents.ts`)
-  reads `declarations` and `faction_members` (both earlier in the order, for the officer gate) before
-  it locks `zone_incidents`, then writes `zone_incident_participants` and `bans` in that sequence,
-  all inside the incident's own transaction.
+  locks `zone_incidents` FIRST (`FOR UPDATE`, by incident id — that row is already known from the
+  caller's `reportableIncidentsDb` read), then reads `declarations` and `faction_members` for the
+  officer gate as PLAIN selects, no `FOR UPDATE` — so despite reading tables earlier in the order
+  second, no conflicting lock is taken out of sequence, because those two reads never lock a row.
+  It then writes `zone_incident_participants` and `bans` in that order, all inside the incident's
+  own transaction.
   The achievements tick writes the three achievement tables in exactly that order inside each
   owner's transaction, before it appends that owner's notices.
   `server_restarts` and `vehicle_wipe_announcements` are outside the order: each written by

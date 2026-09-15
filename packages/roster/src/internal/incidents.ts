@@ -4,7 +4,7 @@ import {
 } from "@factions/db";
 import type { Tx } from "@factions/declarations";
 import { sentenceMsFor, VIOLATION_REPORT_WINDOW_MS, type IncidentDamage, type ViolationKind } from "@factions/domain";
-import { and, asc, eq, gte, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
 import { activeServerId } from "../server";
 
 export type ReportableIncident = {
@@ -25,15 +25,22 @@ export type ReportReason = (typeof REPORT_REASONS)[number];
 export type ReportOutcome = { ok: true; banned: number } | { ok: false; reason: ReportReason };
 
 /**
- * The open season's `started_at` for the server, or the epoch when no season
- * is open. Package-local twin of `scoring.ts`'s `openSeasonFor` — falling
- * back to the epoch (not "no prior offences count") is what stops an
- * unseeded database from reading every historical ban as a prior offence.
+ * The open season's `started_at` for the server, or `now` when no season is
+ * open. Package-local twin of `scoring.ts`'s `openSeasonFor`.
+ *
+ * ⚠️ The fallback is `now`, NOT the epoch. The prior-offence query below is
+ * `bannedAt >= seasonStart`, so an epoch fallback would match every ban ever
+ * written on the server — and between a season closing at a wipe and the
+ * next season's row being inserted, that turns a player's FIRST offence of
+ * the new season into their third, which `sentenceMsFor` makes permanent
+ * with no expire arm able to ever lift it. Falling back to `now` instead
+ * costs one first-offence player a slightly-short term in that gap, which is
+ * recoverable; the epoch fallback cost a player their account.
  */
-async function seasonStartFor(db: Database | Tx, serverId: number): Promise<Date> {
+async function seasonStartFor(db: Database | Tx, serverId: number, now: Date): Promise<Date> {
   const [s] = await db.select({ startedAt: seasons.startedAt }).from(seasons)
     .where(and(eq(seasons.serverId, serverId), isNull(seasons.endedAt)));
-  return s?.startedAt ?? new Date(0);
+  return s?.startedAt ?? now;
 }
 
 /**
@@ -165,16 +172,21 @@ export async function reportIncidentDb(
       partsDismantled: incident.partsDismantled, partsBuilt: incident.partsBuilt,
       stackItems: incident.stackItems, hasBreach: incident.hasBreach, hasGate: incident.hasGate,
     };
-    const seasonStart = await seasonStartFor(tx, incident.serverId);
+    const seasonStart = await seasonStartFor(tx, incident.serverId, now);
     const participants = await tx.select({
       dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag,
     }).from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, incidentId));
 
     let banned = 0;
     for (const p of participants) {
-      // Prior UPHELD reports this season — the bans table is the tally.
+      // Prior offences THIS SERVER, this season, that still stand. `lifted`
+      // is excluded — a ban lifted on appeal is the one status that means
+      // the offence did NOT hold up, not merely that enforcement stopped.
+      // `failed`/`expired` still count: the offence stood, only the
+      // mechanical enforcement did not (or ran its course).
       const prior = await tx.select({ id: bans.id }).from(bans).where(and(
-        eq(bans.dayzId, p.dayzId), gte(bans.bannedAt, seasonStart),
+        eq(bans.dayzId, p.dayzId), eq(bans.serverId, incident.serverId),
+        gte(bans.bannedAt, seasonStart), ne(bans.status, "lifted"),
       ));
       const ms = sentenceMsFor(damage, prior.length);
       await tx.insert(bans).values({

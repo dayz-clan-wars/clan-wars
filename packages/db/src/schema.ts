@@ -1494,7 +1494,13 @@ export const bans = pgTable("bans", {
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   status: text("status").$type<BanStatus>().notNull().default("pending"),
-  /** Written from BAN_DRY_RUN at creation; a dry-run row never reaches Nitrado. */
+  /**
+   * Left at the column default when the row is created (the report write
+   * never sets it). The ban tick stamps it at APPLY time with the mode that
+   * actually ran (`BAN_DRY_RUN`) — a dry-run row never reaches Nitrado. This
+   * is what lets a report write (the site) create a ban row with no
+   * knowledge of the bot's `BAN_DRY_RUN` setting.
+   */
   dryRun: boolean("dry_run").notNull().default(true),
   appliedAt: timestamp("applied_at", { withTimezone: true }),
   liftedAt: timestamp("lifted_at", { withTimezone: true }),

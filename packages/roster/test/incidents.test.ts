@@ -5,7 +5,7 @@ import {
   zoneIncidents, zoneIncidentParticipants, zoneViolations, bans,
   type Database,
 } from "@factions/db";
-import { VIOLATION_REPORT_WINDOW_MS } from "@factions/domain";
+import { VIOLATION_REPORT_WINDOW_MS, sentenceMsFor, type IncidentDamage } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { reportableIncidentsDb, reportIncidentDb } from "../src/internal/incidents";
 import { seedFaction, seedSeason } from "./seed";
@@ -197,5 +197,42 @@ describe("reportable incidents and pressing charges", () => {
   it("a stranger cannot report an incident at a base they do not own", async () => {
     const id = await seedIncident();
     expect(await reportIncidentDb(db, now, STRANGER_DISCORD, id)).toEqual({ ok: false, reason: "not-owner" });
+  });
+
+  // ⚠️ Regression: seasonStartFor's fallback must be `now`, not the epoch. An
+  // epoch fallback makes `bannedAt >= seasonStart` match every ban ever
+  // written on the server, so a season-less database (no open season row,
+  // e.g. the gap right after a wipe closes one) would count every historical
+  // ban as a prior offence and turn a player's FIRST offence into a
+  // permanent ban with no expire arm able to lift it.
+  it("with no open season, a first offence still gets the first-offence term, not permanent", async () => {
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const [firstBan] = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    expect(firstBan!.expiresAt).not.toBeNull();
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    const expectedMs = sentenceMsFor(damage, 0);
+    expect(firstBan!.expiresAt!.getTime() - firstBan!.bannedAt.getTime()).toBe(expectedMs);
+  });
+
+  it("a lifted ban does not count toward the ladder", async () => {
+    const seasonStart = new Date(openedAt.getTime() - 1_000_000);
+    await seedSeason(db, serverId, seasonStart);
+
+    // Two prior bans on OFFENDER_1 this season, one of them lifted.
+    await db.insert(bans).values([
+      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 500_000), expiresAt: null, status: "lifted" },
+      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 400_000), expiresAt: new Date(openedAt.getTime() + 86_400_000), status: "applied" },
+    ]);
+
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    const newBan = rows.find((b) => b.incidentId === id)!;
+    // Only ONE non-lifted prior counts, so this is the SECOND offence (doubled), not permanent.
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    const expectedMs = sentenceMsFor(damage, 1);
+    expect(newBan.expiresAt).not.toBeNull();
+    expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(expectedMs);
   });
 });

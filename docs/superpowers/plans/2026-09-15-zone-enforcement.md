@@ -1375,7 +1375,11 @@ export async function reportIncidentDb(
 }
 ```
 
-`seasonStartFor` reads the open season's `started_at` for the server, falling back to the epoch when no season is open, so an unseeded database cannot accidentally read every historical ban as a prior offence.
+`seasonStartFor` reads the open season's `started_at` for the server, **falling back to `now` when no season is open** — so with no season, zero priors are counted and the offender gets a first-offence term.
+
+⚠️ An earlier draft of this plan said "falling back to the epoch … so an unseeded database cannot accidentally read every historical ban as a prior offence." That reasoning is **exactly backwards** and shipped a Critical defect: the prior query is `gte(bans.bannedAt, seasonStart)`, so an epoch fallback matches *every ban ever written*. A player with two upheld bans from a closed season, reported in the gap before the next season opens, gets `priorOffences = 2` → `sentenceMsFor` returns `null` → a **permanent ban for a first offence**, written with `expiresAt` NULL, which nothing can ever expire. Falling back to `now` fails lenient; falling back to the epoch fails permanent-and-irreversible. When this fallback is wrong in the lenient direction it costs one short ban; wrong in the other direction it costs a player their account.
+
+The prior query must also filter to the incident's own `server_id` and exclude `lifted` bans — a ban lifted on appeal is not an upheld offence. `failed` and `expired` bans DO count: the offence stood, only the enforcement did not.
 
 ⚠️ The lock order in `CLAUDE.md` §4.12 is `factions` → `declarations` → `poles` → … Add `zone_incidents` → `zone_incident_participants` → `bans` at the END of that order and take them in that sequence here.
 
