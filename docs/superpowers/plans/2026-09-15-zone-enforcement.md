@@ -1774,7 +1774,13 @@ Assert the order: `violationTick` runs **after** `zoneTick` (it closes what zone
 
 - [ ] **Step 2: Register them**
 
-In `start()`, add `violationTick` immediately after the existing `zoneTick` call, and `banTick` into the 5-minute block beside `reaperTick`. Gate both on `config.enforcementTick`, and pass `since` as the bot's process start time so a first run after a dry-run flip cannot fire a historical backlog.
+In `start()`, add `violationTick` immediately after the existing `zoneTick` call, and `banTick` into the 5-minute block beside `reaperTick`. Gate both on `config.enforcementTick`. Pass `serverId` alongside each server's `NitradoClient`.
+
+⚠️ **`since` must NOT be the bot's process start time.** An earlier draft of this plan said it should be, and that is wrong in a way that is invisible: a ban written five minutes before a restart has `bannedAt < since`, so it is **never applied** — yet `reportIncidentDb` still counts it as a standing prior offence, because the prior query excludes only `lifted`. The player serves no ban but climbs the ladder anyway, and the next report against them is harsher for a punishment that never happened. Restarts are routine here (`RESTART_PERIOD_MS` is 2 hours), so this would fire constantly.
+
+Pass `since = now - BAN_APPLY_LOOKBACK_MS` instead, a new constant in `rules.ts` (24 h). That still blocks the hazard `since` exists for — a historical dry-run backlog firing the moment `BAN_DRY_RUN` goes false — while a ban written any time in the last day is applied normally regardless of restarts.
+
+To close the phantom-prior hole completely, the apply arm must also **age out** rows it will never apply: a `pending` row older than `BAN_APPLY_LOOKBACK_MS` moves to `failed` with a `lastError` saying it aged out. It then counts as a prior offence honestly and explicitly, rather than sitting `pending` forever as a ban that silently never happened.
 
 - [ ] **Step 3: Document the env**
 
