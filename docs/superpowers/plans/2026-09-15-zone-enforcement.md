@@ -403,9 +403,26 @@ describe("parsePlacement", () => {
     });
   });
 
-  it("parses a garden plot, whose display name has a space", () => {
-    const raw = `19:12:44 | Player "Sasha" (id=${ID} pos=<100.0, 200.0, 12.0>) placed Garden Plot<GardenPlot>`;
-    expect(parsePlacement(raw)).toMatchObject({ item: "Garden Plot", itemClass: "GardenPlot" });
+  it("parses a garden plot, whose DISPLAY NAME is useless", () => {
+    // ⚠️ Observed verbatim in DayZServer_X1_x64_2026-09-15_11-01-51.ADM. A garden
+    // plot logs its display name as "Nameless Object" — which is precisely why
+    // detection keys on the CLASSNAME in the angle brackets and never on the
+    // display name. Do not "fix" this test to say "Garden Plot".
+    const raw = `11:58:12 | Player "Sasha" (id=${ID} pos=<9727.9, 8545.3, 214.3>) placed Nameless Object<GardenPlot>`;
+    expect(parsePlacement(raw)).toMatchObject({ item: "Nameless Object", itemClass: "GardenPlot" });
+  });
+
+  it("parses a fireplace", () => {
+    // Observed verbatim in DayZServer_X1_x64_2026-09-14_19-01-58.ADM.
+    const raw = `19:58:00 | Player "Sasha" (id=${ID} pos=<2523.7, 12605.6, 304.8>) placed Fireplace<Fireplace>`;
+    expect(parsePlacement(raw)).toMatchObject({ item: "Fireplace", itemClass: "Fireplace" });
+  });
+
+  it("parses a classname carrying an underscore", () => {
+    // `Barrel_Blue` is real and observed; \w+ must cover it even though barrels
+    // are not currently in BOOST_ITEM_CLASSES.
+    const raw = `11:47:20 | Player "Sasha" (id=${ID} pos=<10774.3, 12572.5, 228.0>) placed Barrel<Barrel_Blue>`;
+    expect(parsePlacement(raw)).toMatchObject({ item: "Barrel", itemClass: "Barrel_Blue" });
   });
 
   it("a gamertag carrying placement-shaped text cannot forge an event", () => {
@@ -1770,7 +1787,9 @@ Check `05-raiding.html` for any sentence that repeats the carve-out and fix it t
 
 The bullet currently reads *"Legal boosting: a two-player boost, vehicles, and up to two stacked watchtowers, both grounded. Not legal: garden plots, fireplaces, backpacks, car parts, or anything of that kind."*
 
-Stacked garden plots and fireplaces are now sentenced on the proportional ladder, not as permanent-ban exploits. Move that clause into the Bases section and state the ladder. **Backpacks and car parts stay where they are** — the bot cannot see them in the log, so they keep the exploit rule and the ticket path.
+Stacked garden plots and fireplaces are now sentenced on the proportional ladder, not as permanent-ban exploits. Move that clause into the Bases section and state the ladder.
+
+**Backpacks and car parts stay where they are**, keeping the exploit rule and the ticket path — but do **not** justify that in the copy by saying the log cannot see them. ⚠️ An earlier draft of this plan and of the spec's §10 both claimed the bot "cannot see them in the log". That is **false**, verified against 12 live ADM files on 2026-09-15: barrels, wooden crates, large tents, sea chests and fire barrels all log `placed X<Class>` with a position, and a real four-barrel cluster was observed within ~1.5m horizontally with the player's `y` moving 224.8 → 228.0 — the exact signature `boostStackFor` detects. They are excluded because the approved spec scopes the rule to fireplaces and garden plots, not because they are invisible. Write the copy so it does not claim otherwise, and leave widening the list to a later decision.
 
 - [ ] **Step 3: State the enforcement**
 
