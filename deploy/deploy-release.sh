@@ -111,6 +111,70 @@ revert_tree() {
   run "$PNPM" install --frozen-lockfile || return 1
 }
 
+# Point both compose image tags back at the images captured in the preflight.
+# Shared by rollback() and restore_previous_release() so the two cannot drift —
+# they differ in what they DO about a failure, not in what counts as one.
+# Returns 1 and leaves the reason in $RETAG_ERROR.
+#
+# ⚠️ The tag to restore is whatever compose calls each service's image — derived
+# from the compose project name, NOT necessarily `clan-wars-web:latest`, so it is
+# asked for rather than assumed; a wrong tag would silently leave the NEW image
+# running while everything reported success. Resolved after the tree is back, so
+# the names come from the old tree's compose file.
+# ⚠️ BOTH services (Ruling 10): restoring web alone leaves ingest-worker on the
+# NEW image against the OLD schema, and no check here can see it — the worker
+# serves no HTTP.
+# ⚠️ An empty value is never skipped. $PREV_IMAGE_* is empty when no container
+# existed at capture time — exactly the state a previous failed deploy leaves —
+# and the compose lookup is empty when `sudo -n` is refused. Either way we cannot
+# name what we are restoring to, and continuing would leave the NEW image in
+# place under a message saying otherwise.
+# ⚠️ `docker compose config --images` runs even under --dry-run (read-only, but
+# privileged), so a dry run is not runnable unprivileged — same precedent as the
+# `compose images -q` capture in the flow below.
+retag_previous_images() {
+  local svc prev target
+  for svc in web ingest-worker; do
+    case "$svc" in
+      web) prev="${PREV_IMAGE_WEB:-}" ;;
+      *)   prev="${PREV_IMAGE_WORKER:-}" ;;
+    esac
+    if [ -z "$prev" ]; then
+      RETAG_ERROR="no previous image was captured for $svc; the NEW image would keep running"
+      return 1
+    fi
+    target=$(sudo -n docker compose config --images "$svc" 2>/dev/null | head -1 || true)
+    if [ -z "$target" ]; then
+      RETAG_ERROR="could not resolve the compose image name for $svc; the NEW image would keep running"
+      return 1
+    fi
+    if ! run sudo -n docker tag "$prev" "$target"; then
+      RETAG_ERROR="could not retag $target to $prev; the NEW $svc image would start"
+      return 1
+    fi
+  done
+  return 0
+}
+
+# Ruling 19. Put production back on the release it was running, WITHOUT touching
+# the database. For the pre-deploy aborts: by the time they run, the build has
+# already produced and tagged the NEW images and the tree is at $TAG, so a bare
+# start_all would recreate the containers on new code against the old schema —
+# the 2026-09-02 failure, on paths whose own alert says nothing was deployed.
+#
+# ⚠️ NOT rollback(): no migration has run, so there is no schema to undo, and on
+# the dump-failure path there may be no usable dump at all. Restoring the
+# database here would destroy writes for no reason.
+# ⚠️ Alerts and CONTINUES rather than calling rollback_abort. Every caller is
+# already on its way to `exit 1` with an alert of its own; a second abort path
+# would only obscure the first. Nothing here fails silently, which is the
+# requirement — not that it fails hard.
+restore_previous_release() {
+  revert_tree || alert "CRITICAL" "could not restore the tree to ${PREV_REF:-HEAD} after aborting the deploy of $TAG; live nginx/systemd config is still $TAG's"
+  retag_previous_images || alert "CRITICAL" "aborting the deploy of $TAG: ${RETAG_ERROR:-retag failed}"
+  start_all || alert "CRITICAL" "could not restart services after aborting the deploy of $TAG"
+}
+
 # ⚠️ `systemctl is-active` is NOT a health check, and believing it is is the
 # easiest mistake available here. CLAUDE.md: the bot holds no eager database
 # connection and every tick is individually try/caught, so a bot pointed at a
@@ -306,41 +370,14 @@ rollback() {
     rollback_abort "$reason (pnpm install failed at ${PREV_REF:-HEAD}; node_modules still belongs to $TAG)"
   fi
 
-  # ⚠️ The tag to restore is whatever compose calls each service's image — it is
-  # derived from the compose project name, NOT necessarily `clan-wars-web:latest`,
-  # so it is asked for rather than assumed; a wrong tag here would silently leave
-  # the NEW image running while reporting success. Resolved AFTER the checkout,
-  # so the names come from the old tree's compose file.
-  # ⚠️ BOTH services, since the deploy builds both (Ruling 10). Restoring web
-  # alone would leave ingest-worker on the NEW image against the RESTORED OLD
-  # schema — new-code/old-schema, the 2026-09-02 failure — and no health check
-  # can see it, because the worker serves no HTTP.
-  # ⚠️ An empty value is NOT skipped. $PREV_IMAGE_* comes back empty when no
-  # container existed at capture time — exactly the state a previous failed
-  # deploy leaves — and the compose lookup below comes back empty when `sudo -n`
-  # is refused. Either way a rollback that cannot name what it is rolling back to
-  # is not a rollback, and continuing would start the NEW image while alerting
-  # success. Abort instead: a stopped service is a visible outage.
-  # ⚠️ `docker compose config --images` runs even under --dry-run (read-only, but
-  # privileged), so a dry run is not runnable unprivileged — same precedent as
-  # the `compose images -q` capture in the flow below.
-  local svc prev target
-  for svc in web ingest-worker; do
-    case "$svc" in
-      web) prev="${PREV_IMAGE_WEB:-}" ;;
-      *)   prev="${PREV_IMAGE_WORKER:-}" ;;
-    esac
-    if [ -z "$prev" ]; then
-      rollback_abort "$reason (no previous image was captured for $svc; the NEW image would keep running)"
-    fi
-    target=$(sudo -n docker compose config --images "$svc" 2>/dev/null | head -1 || true)
-    if [ -z "$target" ]; then
-      rollback_abort "$reason (could not resolve the compose image name for $svc; the NEW image would keep running)"
-    fi
-    if ! run sudo -n docker tag "$prev" "$target"; then
-      rollback_abort "$reason (could not retag $target to $prev; the NEW $svc image would start)"
-    fi
-  done
+  # ⚠️ Shared with the pre-deploy aborts (retag_previous_images, above) so the
+  # two paths cannot disagree about what "the previous image" means. Here a
+  # failure is fatal: a rollback that cannot name what it is rolling back to is
+  # not a rollback, and continuing would start the NEW image while alerting
+  # success. Abort instead — a stopped service is a visible outage.
+  if ! retag_previous_images; then
+    rollback_abort "$reason (${RETAG_ERROR:-retag failed})"
+  fi
 
   # ⚠️ nginx -t before the reload, never after: this host serves three other
   # production sites from the same nginx. A reload of a bad config is refused and
@@ -453,14 +490,23 @@ run git checkout --quiet "$TAG"
 # rather than resolving to something nobody tested. Still in the preflight,
 # where a failure costs only a revert with nothing stopped.
 if ! run "$PNPM" install --frozen-lockfile; then
+  # ⚠️ The one abort that is a bare revert_tree, deliberately: it sits BEFORE the
+  # build, so no image has been retagged and the running containers are untouched
+  # — there is nothing for restore_previous_release to put back, and starting
+  # services that were never stopped would be noise.
   revert_tree || alert "CRITICAL" "pnpm install failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
   alert "BLOCKED" "pnpm install --frozen-lockfile failed for $TAG; reverted to $PREV_REF, nothing stopped"
   exit 1
 fi
 
+# ⚠️ restore_previous_release, not a bare revert_tree: `build` builds two
+# services, so a build that fails on the SECOND has already retagged the first's
+# compose image to new code. Nothing has been stopped, so the containers still
+# run the old images — until the next `up -d` anywhere silently promotes the new
+# one against the old schema (Ruling 19).
 if ! run sudo -n docker compose build -q web ingest-worker; then
-  revert_tree || alert "CRITICAL" "build failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
-  alert "BLOCKED" "build failed for $TAG; reverted to $PREV_REF, nothing stopped"
+  restore_previous_release
+  alert "BLOCKED" "build failed for $TAG; restored $PREV_REF, nothing stopped"
   exit 1
 fi
 
@@ -472,10 +518,13 @@ fi
 DUMP="$BACKUPS/predeploy-$TAG-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
 
 # ⚠️ Belt and braces on the same point: refuse rather than overwrite, always,
-# whatever the name resolves to. Checked BEFORE stop_all, so this exits with
-# nothing stopped.
+# whatever the name resolves to. Checked BEFORE stop_all, so nothing is stopped
+# here — but it is AFTER the build, so the tree is at $TAG and both compose image
+# tags already point at new code. It therefore restores like the other aborts
+# (Ruling 19): "nothing stopped" is not the same as "nothing changed".
 if [ -e "$DUMP" ]; then
-  alert "BLOCKED" "$DUMP already exists; refusing to overwrite a pre-deploy dump"
+  restore_previous_release
+  alert "BLOCKED" "$DUMP already exists; refusing to overwrite a pre-deploy dump; restored $PREV_REF"
   exit 1
 fi
 
@@ -488,10 +537,12 @@ fi
 # "restore" the release that failed.
 if ! stop_all; then
   alert "CRITICAL" "could not stop all writers before the dump for $TAG; NOT deploying"
-  # `|| true`: the stop already failed, so some of these are likely running
-  # anyway, and a failure to start what is already started must not mask the
-  # alert above.
-  start_all || true
+  # ⚠️ Ruling 19: restore, not a bare start_all. The build above already retagged
+  # both compose images to new code and the tree is at $TAG, so starting here
+  # would recreate the containers on new code against the old schema — on a path
+  # whose own alert says nothing was deployed. Every step inside alerts on
+  # failure and continues; nothing here is silent.
+  restore_previous_release
   mark_failed
   exit 1
 fi
@@ -505,9 +556,13 @@ if [ "$DRY_RUN" = "0" ]; then
   # down and nothing said.
   if ! { sudo -n docker exec "$CONTAINER" pg_dump -U factions -d factions_live --no-owner \
       | gzip -9 > "$DUMP.part"; } || ! mv "$DUMP.part" "$DUMP"; then
-    alert "CRITICAL" "pre-deploy dump for $TAG failed to complete; restarting services, NOT deploying"
-    start_all
-    # ⚠️ After start_all, and never fatal: this is bookkeeping, and a failure
+    alert "CRITICAL" "pre-deploy dump for $TAG failed to complete; restoring $PREV_REF and restarting services, NOT deploying"
+    # ⚠️ Ruling 19: the tree is at $TAG and both compose images are already
+    # retagged to new code, so a bare start_all would bring production up on new
+    # code against the old schema. The database is deliberately NOT touched —
+    # no migration has run, and on this path there may be no usable dump at all.
+    restore_previous_release
+    # ⚠️ After the restore, and never fatal: this is bookkeeping, and a failure
     # to write it must not leave production stopped. The cost of losing it is
     # a retry two minutes later, not an outage. $FAILED_MARKER lives under
     # /var/lib/clan-wars, created as root while the unit runs as acab — a
@@ -520,10 +575,12 @@ if [ "$DRY_RUN" = "0" ]; then
   # aborting costs only the downtime already spent — after the migration
   # there is no way back except this file.
   if ! gzip -t "$DUMP" || [ "$(stat -c %s "$DUMP")" -lt 1000 ]; then
-    alert "CRITICAL" "pre-deploy dump for $TAG failed verification; restarting services, NOT deploying"
-    start_all
-    # ⚠️ Same as above: never fatal, and after start_all — bookkeeping must
-    # not be able to strand the outage.
+    alert "CRITICAL" "pre-deploy dump for $TAG failed verification; restoring $PREV_REF and restarting services, NOT deploying"
+    # ⚠️ Same as above (Ruling 19): restore the tree and both image tags before
+    # starting, or production comes up on new code against the old schema.
+    restore_previous_release
+    # ⚠️ Never fatal, and after the restore — bookkeeping must not be able to
+    # strand the outage.
     printf '%s\n' "$TAG" > "$FAILED_MARKER" || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
     exit 1
   fi
