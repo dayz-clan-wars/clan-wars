@@ -59,6 +59,24 @@ describe("createGuildGateway", () => {
     expect(call.permissionOverwrites[1]).toEqual({ id: "r-Bears", allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] });
     expect(call.permissionOverwrites[2]).toEqual({ id: "bot", allow: [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.Connect] });
   });
+  it("⚠️ creates a clan role mentionable — a non-mentionable role makes every base alert's ping silent", async () => {
+    const f = fakeClient();
+    const g = createGuildGateway(f.client as never, CFG);
+    await g.createRole("Night Bears");
+    expect(f.guild.roles.create.mock.calls[0]![0]).toEqual({ name: "Night Bears", mentionable: true });
+  });
+  it("reads mentionable from the cache and flips it, tolerating a role that is not cached", async () => {
+    const f = fakeClient();
+    const setMentionable = vi.fn();
+    f.rolesCache.set("r1", { id: "r1", name: "Bears", members: new Map(), mentionable: false, setMentionable } as never);
+    const g = createGuildGateway(f.client as never, CFG);
+    await g.fetchAllMembers();
+    expect(g.roleMentionable("r1")).toBe(false);
+    expect(g.roleMentionable("nope")).toBeNull();
+    await g.makeRoleMentionable("r1");
+    expect(setMentionable).toHaveBeenCalledWith(true);
+    await expect(g.makeRoleMentionable("nope")).resolves.toBeUndefined();
+  });
   it("⚠️ deleteRole and deleteChannel tolerate an object that is already gone", async () => {
     const f = fakeClient();
     const g = createGuildGateway(f.client as never, CFG);

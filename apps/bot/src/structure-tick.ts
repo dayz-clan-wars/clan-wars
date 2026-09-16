@@ -13,6 +13,8 @@ export type StructureTickResult = {
   alphaAdds: number;
   alphaRemoves: number;
   nicknamesCleared: number;
+  /** Clan roles flipped back to mentionable (step 3) so the base alerts that open with `<@&role>` actually notify. */
+  mentionableFixed: number;
   /** Channel notices stamped `failed_at` because their clan's channel was torn down. */
   noticesFailed: number;
   /** Voice-channel overwrites granted for an open guest pass. */
@@ -60,6 +62,7 @@ export async function structureTick(
     alphaAdds: 0,
     alphaRemoves: 0,
     nicknamesCleared: 0,
+    mentionableFixed: 0,
     noticesFailed: 0,
     guestGrants: 0,
     guestRevokes: 0,
@@ -151,9 +154,21 @@ export async function structureTick(
       const roleName = guild.roleName(row.roleId!);
       if (roleName === null) {
         opts.onError?.(`missing:${row.roleId}`, new Error("role deleted by hand"));
-      } else if (roleName !== roleNameFor(row)) {
-        await guild.renameRole(row.roleId!, roleNameFor(row));
-        renamedAny = true;
+      } else {
+        if (roleName !== roleNameFor(row)) {
+          await guild.renameRole(row.roleId!, roleNameFor(row));
+          renamedAny = true;
+        }
+        // ⚠️ Drift that fails SILENTLY, unlike a wrong name: every role made
+        // before `createRole` passed `mentionable: true` is still
+        // non-mentionable, and so is any role an admin flipped back in the UI.
+        // The base alerts still post, they just stop notifying anyone — which
+        // is the whole point of them. Repaired here rather than at create time
+        // alone so the fleet converges without a backfill script.
+        if (guild.roleMentionable(row.roleId!) === false) {
+          await guild.makeRoleMentionable(row.roleId!);
+          out.mentionableFixed++;
+        }
       }
 
       const textName = guild.channelName(row.textChannelId!);

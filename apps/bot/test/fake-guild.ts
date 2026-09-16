@@ -2,7 +2,7 @@ import type { GuildGateway, NicknameOutcome } from "../src/guild.js";
 
 /** In-memory `GuildGateway` shared by structure-tick.test.ts. */
 export class FakeGuild implements GuildGateway {
-  roles = new Map<string, { name: string; members: Set<string> }>();
+  roles = new Map<string, { name: string; members: Set<string>; mentionable: boolean }>();
   channels = new Map<string, { name: string; kind: "text" | "voice"; roleId: string }>();
   members = new Map<string, { nickname: string | null }>();
   overwrites = new Map<string, Set<string>>();
@@ -21,7 +21,7 @@ export class FakeGuild implements GuildGateway {
   async createRole(name: string) {
     this.fail("createRole");
     const id = `role-${++this.n}`;
-    this.roles.set(id, { name, members: new Set() });
+    this.roles.set(id, { name, members: new Set(), mentionable: true });
     this.calls.push(`createRole ${name}`);
     return id;
   }
@@ -56,6 +56,16 @@ export class FakeGuild implements GuildGateway {
   }
   roleName(id: string) {
     return this.roles.get(id)?.name ?? null;
+  }
+  roleMentionable(id: string) {
+    return this.roles.get(id)?.mentionable ?? null;
+  }
+  async makeRoleMentionable(id: string) {
+    this.fail("makeRoleMentionable");
+    const role = this.roles.get(id);
+    if (role === undefined) return;
+    role.mentionable = true;
+    this.calls.push(`makeRoleMentionable ${id}`);
   }
   channelName(id: string) {
     return this.channels.get(id)?.name ?? null;

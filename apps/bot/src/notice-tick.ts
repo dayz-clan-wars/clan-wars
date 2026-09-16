@@ -1,13 +1,31 @@
 import type { NoticeStore } from "@factions/roster/internal";
 import { NOTICE_MAX_ATTEMPTS } from "@factions/roster/internal";
-import type { NoticeTarget } from "@factions/domain";
+import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { APIEmbed } from "discord.js";
 import { noticeText } from "./notice-text.js";
 import { achievementEmbed, achievementMention } from "./achievement-embed.js";
 
-/** What one queued row posts: a line, an embed, or both (an achievement in a clan channel is a mention plus the card). */
-export type NoticeMessage = { content: string; embeds?: APIEmbed[] };
-export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[]) => Promise<void>;
+/** What one queued row posts: a line, an embed, or both (an achievement in a clan channel is a mention plus the card). `mentionRoleId` is set only when the line opens with that role's ping. */
+export type NoticeMessage = { content: string; embeds?: APIEmbed[]; mentionRoleId?: string };
+export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[], mentionRoleId?: string) => Promise<void>;
+
+/**
+ * The channel kinds that open with `<@&role>` so every clanmate's phone
+ * buzzes: someone is at the base right now, or the flag is down. Everything
+ * else posts silently and is read when the channel is next opened.
+ *
+ * ⚠️ Channel kinds ONLY. The `solo_*` twins are DM rows — a DM is already a
+ * ping, and a solo player has no role to mention.
+ *
+ * ⚠️ A role ping is only audible if the role is mentionable or the bot holds
+ * Mention Everyone; `structure-tick.ts` keeps every clan role mentionable for
+ * exactly this reason. Without that, these lines render as grey text and
+ * nobody is notified — a silent failure, since the message still posts.
+ */
+export const PING_KINDS: ReadonlySet<ClanNoticeKind> = new Set<ClanNoticeKind>([
+  "intruder", "dismantle", "gate_built", "built",
+  "flag_down", "non_member_raise", "colors_elsewhere",
+]);
 
 /**
  * An achievement posts as an embed (the badge, the group colour) rather than
@@ -16,8 +34,14 @@ export type NoticeSender = (target: NoticeTarget, discordTargetId: string, conte
  * pinged the way the text line pinged them — a DM needs no ping, and the
  * public wall never pinged anyone.
  */
-export function noticeMessage(row: Parameters<typeof noticeText>[0], now: Date, siteBaseUrl: string): NoticeMessage {
-  if (row.kind !== "achievement") return { content: noticeText(row, now) };
+export function noticeMessage(row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null }, now: Date, siteBaseUrl: string): NoticeMessage {
+  if (row.kind !== "achievement") {
+    const line = noticeText(row, now);
+    // A clan with no role column yet (activation is mid-flight) still gets
+    // the alert — unpinged beats undelivered.
+    const roleId = row.target === "channel" && PING_KINDS.has(row.kind) ? row.discordRoleId ?? null : null;
+    return roleId === null ? { content: line } : { content: `<@&${roleId}> ${line}`, mentionRoleId: roleId };
+  }
   const mention = row.target === "channel" && !row.payload.public ? achievementMention(row.payload) : "";
   return { content: mention, embeds: [achievementEmbed(row.payload, siteBaseUrl)] };
 }
@@ -60,7 +84,7 @@ export async function noticeTick(
     if (blocked.has(target)) continue;
     try {
       const msg = noticeMessage(row, opts.now, opts.siteBaseUrl);
-      await send(row.target, target, msg.content, msg.embeds);
+      await send(row.target, target, msg.content, msg.embeds, msg.mentionRoleId);
       await store.markPosted(row.id, opts.now);
       out.posted++;
     } catch (err) {
