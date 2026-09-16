@@ -134,23 +134,50 @@ services_ok() {
   return 1
 }
 
-# ⚠️ The weakest of the checks, knowingly — see the ⚠️ above on what
-# `is-active` does and does not prove. It runs only after services_ok has
-# already exercised the whole data path, so all it adds is "the unit did not die
-# on startup", which is exactly what a missing dependency or a bad env produces.
+# Did the bot actually come up? Takes the timestamp captured immediately before
+# the start, so the journal scan cannot match a previous run's line.
+#
+# ⚠️ `is-active` is NOT a readiness signal here, and sampling it at t≈0 proves
+# nothing at all: systemd reports a Type=simple unit active the instant it forks,
+# before the bot has loaded config, taken the advisory lock or logged in to
+# Discord. Worse, the instance-lock refusal (apps/bot/src/instance-lock.ts)
+# exits 0 deliberately, so `Restart=on-failure` leaves it exited — and a t≈0
+# sample still says active, which would alert DEPLOYED with no bot running.
+# `bot ready as <tag>` is logged once, unconditionally, from the `clientReady`
+# handler in apps/bot/src/discord.ts, AFTER the Discord login: the first moment
+# the bot genuinely exists.
 bot_ok() {
-  local deadline=$((SECONDS + 30))
+  local since="$1" deadline=$((SECONDS + 90))
+
+  # ⚠️ Fail CLOSED is wrong here. If acab cannot read this unit's journal, the
+  # grep below never matches and every healthy deploy rolls back — dropping and
+  # restoring factions_live each time. So probe the journal once first, and fall
+  # back if it is unreadable.
+  if ! journalctl -u clan-wars-bot -n 1 >/dev/null 2>&1; then
+    # ⚠️ The weaker check, knowingly, and only because the alternative is a
+    # rollback loop: sleep FIRST and sample `is-active` at the END of the window,
+    # so at least a bot that died or refused during startup has had time to do
+    # it. It still cannot distinguish "logged in to Discord" from "forked".
+    alert "WARN" "cannot read clan-wars-bot's journal; falling back to a late is-active check, which cannot see a bot that forked but never logged in"
+    sleep 60
+    if systemctl is-active --quiet clan-wars-bot; then return 0; fi
+    return 1
+  fi
+
   while [ "$SECONDS" -lt "$deadline" ]; do
-    systemctl is-active --quiet clan-wars-bot && return 0
+    if journalctl -u clan-wars-bot --since "$since" 2>/dev/null | grep -q 'bot ready as'; then
+      return 0
+    fi
     sleep 5
   done
   return 1
 }
 
 # The whole path, for rollback(): it brings everything back up at once, so there
-# is nothing to be gained by staging the checks the way the deploy does.
+# is nothing to be gained by staging the checks the way the deploy does. Takes
+# the same pre-start timestamp bot_ok needs.
 health_ok() {
-  services_ok && bot_ok
+  services_ok && bot_ok "$1"
 }
 
 # ⚠️ Non-fatal, always: this is bookkeeping, and a failure to write it must
@@ -325,6 +352,12 @@ rollback() {
     rollback_abort "$reason (host config would not reload at ${PREV_REF:-HEAD})"
   fi
 
+  # ⚠️ Captured BEFORE the start: bot_ok scans the journal from this instant, so
+  # taking it afterwards could miss the `bot ready as` line it is waiting for,
+  # and taking it earlier could match the line from the run we just stopped.
+  local since
+  since=$(date '+%Y-%m-%d %H:%M:%S')
+
   if ! start_all; then
     rollback_abort "$reason (services would not start on the restored release)"
   fi
@@ -335,7 +368,7 @@ rollback() {
   # dump, and another drop-and-restore of factions_live — every 2 minutes.
   mark_failed
 
-  if [ "$DRY_RUN" = "1" ] || health_ok; then
+  if [ "$DRY_RUN" = "1" ] || health_ok "$since"; then
     alert "ROLLED BACK" "restored ${CURRENT:-the previous release} after: $reason"
     exit 1
   fi
@@ -446,7 +479,22 @@ if [ -e "$DUMP" ]; then
   exit 1
 fi
 
-stop_all
+# ⚠️ Guarded, in the same shape as the dump-failure branch below, and for a
+# sharper reason. stop_all returns 1 the moment `systemctl stop clan-wars-bot`
+# fails, so a bare call would exit here instantly under set -e: no alert, no
+# marker, `docker compose stop` never reached (web and the worker stay UP), and
+# the tree left at $TAG. Two minutes later the dirty-tree guard sees a clean
+# tree and PREV_REF captures $TAG — so a later rollback would faithfully
+# "restore" the release that failed.
+if ! stop_all; then
+  alert "CRITICAL" "could not stop all writers before the dump for $TAG; NOT deploying"
+  # `|| true`: the stop already failed, so some of these are likely running
+  # anyway, and a failure to start what is already started must not mask the
+  # alert above.
+  start_all || true
+  mark_failed
+  exit 1
+fi
 
 # Same idiom as deploy/backup/backup-factions-live.sh: dump inside the
 # container, write .part, rename only on success.
@@ -543,15 +591,32 @@ else
     rollback "health check failed after deploying $TAG (discarding up to 90s of web/ingest-worker writes; the bot never started)"
   fi
 
+  # ⚠️ Captured immediately before the start: bot_ok scans the journal from this
+  # instant, so an earlier stamp could match the `bot ready as` line of the run
+  # stop_all just ended, and a later one could miss this run's.
+  BOT_SINCE=$(date '+%Y-%m-%d %H:%M:%S')
   start_bot
 
-  if ! bot_ok; then
-    rollback "the bot did not come up after deploying $TAG (discarding up to 2min of web/ingest-worker writes)"
+  if ! bot_ok "$BOT_SINCE"; then
+    rollback "the bot did not come up after deploying $TAG (discarding up to 3min of web/ingest-worker writes)"
   fi
 
-  state_write "$TAG"
-  # ⚠️ Only reached once state_write has succeeded — a stale marker here would
-  # silently block the next real deploy of this same tag forever.
-  run rm -f "$FAILED_MARKER"
+  # ⚠️ Disarm before the bookkeeping. Past this point the deploy is verified
+  # healthy and the bot is LIVE; a failure to write $STATE is worth an alert and
+  # a retry, never a rollback — which would stop everything and drop and restore
+  # factions_live out from under a working release, discarding every write since
+  # the services came up, the bot's included. That is precisely what starting the
+  # bot after the health check exists to prevent, and leaving this path armed is
+  # how that gets undone. $STATE and $FAILED_MARKER share /var/lib/clan-wars,
+  # created as root while this unit runs as acab, so this is the same
+  # "reachable, not hypothetical" permission failure the dump branches call out.
+  trap - ERR
+
+  state_write "$TAG" || alert "CRITICAL" "deploy of $TAG is healthy but $STATE could not be written; it will redeploy in 2 minutes"
+  # ⚠️ Cleared unconditionally now, because the release above is verified
+  # healthy: a marker left behind from an earlier failed attempt at this same
+  # tag would silently BLOCK its next real deploy forever. Non-fatal for the same
+  # reason as the write above — bookkeeping never decides whether production runs.
+  run rm -f "$FAILED_MARKER" || alert "CRITICAL" "deploy of $TAG is healthy but $FAILED_MARKER could not be cleared; the next deploy of this tag will be BLOCKED until it is removed"
   alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 fi
