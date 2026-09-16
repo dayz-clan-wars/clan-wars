@@ -16,11 +16,14 @@ export type ReportableIncident = {
   stackItems: number;
   hasBreach: boolean;
   hasGate: boolean;
-  participants: { gamertag: string }[];
+  participants: { dayzId: string; gamertag: string }[];
   acts: { kind: ViolationKind; what: string; x: number; z: number; at: Date }[];
 };
 
-export const REPORT_REASONS = ["not-linked", "not-owner", "not-officer", "no-incident", "window-closed", "already-reported"] as const;
+export const REPORT_REASONS = [
+  "not-linked", "not-owner", "not-officer", "no-incident", "window-closed", "already-reported",
+  "no-selection", "not-participant",
+] as const;
 export type ReportReason = (typeof REPORT_REASONS)[number];
 export type ReportOutcome = { ok: true; banned: number } | { ok: false; reason: ReportReason };
 
@@ -91,7 +94,7 @@ export async function reportableIncidentsDb(db: Database, now: Date, discordId: 
 
   const out: ReportableIncident[] = [];
   for (const i of reportable) {
-    const participants = await db.select({ gamertag: zoneIncidentParticipants.gamertag })
+    const participants = await db.select({ dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag })
       .from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, i.id));
     const violations = await db.select().from(zoneViolations)
       .where(eq(zoneViolations.incidentId, i.id)).orderBy(asc(zoneViolations.occurredAt));
@@ -109,21 +112,45 @@ export async function reportableIncidentsDb(db: Database, now: Date, discordId: 
 }
 
 /**
- * Press charges on a bot-witnessed incident.
+ * Press charges on a bot-witnessed incident, against a chosen subset of its
+ * participants.
  *
  * ⚠️ This is a PROSECUTION TOGGLE, not a report form. It carries no free
  * text and cannot describe an act the log did not witness — the reporter
- * chooses only WHETHER to charge, never WHAT the charge is. That property is
- * the whole reason a player's click may trigger a ban with no staff
- * adjudicator in the loop (spec §1). Do not add a caller-supplied field to
- * it.
+ * chooses only WHOM among the witnessed participants to charge, never WHAT
+ * the charge is, and never anyone the log did not put on this incident. That
+ * property is the whole reason a player's click may trigger a ban with no
+ * staff adjudicator in the loop (spec §1). Do not add a caller-supplied field
+ * that describes an act — only a selection FROM the incident's own
+ * `zone_incident_participants` rows is accepted.
  *
- * Liability is JOINT (spec §7): every participant is sentenced on the
- * incident's full damage total, which removes the incentive to spread
- * dismantling across accounts to stay under a threshold.
+ * ⚠️ `chargedDayzIds` is validated against THIS incident's own participant
+ * rows below, and an id that is not one of them is a REFUSAL
+ * (`not-participant`), never a silent skip. Silently dropping an unknown id
+ * would look identical, from the caller's side, to accepting a caller-chosen
+ * name the log never witnessed — the exact property spec §1 says must never
+ * be true. An empty selection is refused too (`no-selection`): "report but
+ * charge nobody" is not a state this function has any reason to reach.
+ *
+ * Liability is still JOINT per charged person (spec §7): each of the charged
+ * participants is sentenced on the incident's FULL damage total, not only
+ * their own acts — spreading damage across accounts still gains an attacker
+ * nothing. What changed from the original design is only WHO gets charged:
+ * an owner who invited a helper to build can charge the raider alone,
+ * without also banning the helper on the raider's damage (spec §2.4).
+ *
+ * ⚠️ `reportedAt`/`reportedByDiscordId` still stamp the incident ONCE, even
+ * when only some participants are charged — an incident is reported once.
+ * Re-reporting later to charge someone else is a plausible future request
+ * and is refused (`already-reported`) rather than silently allowed: the
+ * evidence window and the sentence (prior-offence count, damage totals) are
+ * both computed AT REPORT TIME, so a second pass could compute a different
+ * sentence for the same incident depending on when it ran. If a legitimate
+ * "charge someone else later" need shows up, it wants its own deliberate
+ * design, not a fallthrough here.
  */
 export async function reportIncidentDb(
-  db: Database, now: Date, discordId: string, incidentId: number,
+  db: Database, now: Date, discordId: string, incidentId: number, chargedDayzIds: string[],
 ): Promise<ReportOutcome> {
   return db.transaction(async (tx) => {
     const [link] = await tx.select({ dayzId: identityLinks.dayzId })
@@ -164,6 +191,21 @@ export async function reportIncidentDb(
       }
     }
 
+    const seasonStart = await seasonStartFor(tx, incident.serverId, now);
+    const participants = await tx.select({
+      dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag,
+    }).from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, incidentId));
+
+    if (chargedDayzIds.length === 0) return { ok: false as const, reason: "no-selection" as const };
+    const participantIds = new Set(participants.map((p) => p.dayzId));
+    // ⚠️ Every charged id MUST be a participant THIS incident's own log
+    // witnessed. This is the check that keeps a report from ever describing
+    // an act the log did not record — see the function's own comment.
+    if (!chargedDayzIds.every((id) => participantIds.has(id))) {
+      return { ok: false as const, reason: "not-participant" as const };
+    }
+    const charged = new Set(chargedDayzIds);
+
     await tx.update(zoneIncidents)
       .set({ reportedAt: now, reportedByDiscordId: discordId })
       .where(eq(zoneIncidents.id, incidentId));
@@ -172,13 +214,9 @@ export async function reportIncidentDb(
       partsDismantled: incident.partsDismantled, partsBuilt: incident.partsBuilt,
       stackItems: incident.stackItems, hasBreach: incident.hasBreach, hasGate: incident.hasGate,
     };
-    const seasonStart = await seasonStartFor(tx, incident.serverId, now);
-    const participants = await tx.select({
-      dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag,
-    }).from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, incidentId));
 
     let banned = 0;
-    for (const p of participants) {
+    for (const p of participants.filter((p) => charged.has(p.dayzId))) {
       // Prior offences THIS SERVER, this season, that were actually SERVED.
       //
       // ⚠️ REVERSED from an earlier ruling of mine ("failed counts: the

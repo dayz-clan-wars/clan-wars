@@ -119,24 +119,24 @@ describe("reportable incidents and pressing charges", () => {
     const id = await seedIncident();
     const rows = await reportableIncidentsDb(db, now, MEMBER_DISCORD);
     expect(rows.map((i) => i.id)).toEqual([id]);
-    expect(await reportIncidentDb(db, now, MEMBER_DISCORD, id)).toEqual({ ok: false, reason: "not-officer" });
+    expect(await reportIncidentDb(db, now, MEMBER_DISCORD, id, [OFFENDER_1, OFFENDER_2])).toEqual({ ok: false, reason: "not-officer" });
   });
 
   it("an incident older than the report window is not reportable", async () => {
     const id = await seedIncident();
     const late = new Date(closedAt.getTime() + VIOLATION_REPORT_WINDOW_MS + 1000);
-    expect(await reportIncidentDb(db, late, OFFICER_DISCORD, id)).toEqual({ ok: false, reason: "window-closed" });
+    expect(await reportIncidentDb(db, late, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2])).toEqual({ ok: false, reason: "window-closed" });
   });
 
   it("an open incident is not reportable", async () => {
     const id = await seedIncident({ closedAt: null });
-    expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id)).toEqual({ ok: false, reason: "no-incident" });
+    expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2])).toEqual({ ok: false, reason: "no-incident" });
     expect(await reportableIncidentsDb(db, now, OFFICER_DISCORD)).toEqual([]);
   });
 
   it("reporting writes one ban per participant with the joint incident total", async () => {
     const id = await seedIncident();
-    const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     expect(r).toEqual({ ok: true, banned: 2 });
     const rows = await db.select().from(bans);
     expect(rows).toHaveLength(2);
@@ -146,8 +146,8 @@ describe("reportable incidents and pressing charges", () => {
 
   it("a second report on the same incident is refused", async () => {
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
-    expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id)).toEqual({ ok: false, reason: "already-reported" });
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
+    expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2])).toEqual({ ok: false, reason: "already-reported" });
   });
 
   it("a repeat offender's second upheld report doubles the term", async () => {
@@ -155,7 +155,7 @@ describe("reportable incidents and pressing charges", () => {
     await seedSeason(db, serverId, seasonStart);
 
     const first = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, first);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, first, [OFFENDER_1, OFFENDER_2]);
     const [firstBan] = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const firstTermMs = firstBan!.expiresAt!.getTime() - firstBan!.bannedAt.getTime();
     // Priors only count once actually SERVED (Critical 2) — stand in for
@@ -165,7 +165,7 @@ describe("reportable incidents and pressing charges", () => {
     const laterClosed = new Date(closedAt.getTime() + 1000);
     const second = await seedIncident({ closedAt: laterClosed });
     const laterNow = new Date(laterClosed.getTime() + 1000);
-    await reportIncidentDb(db, laterNow, OFFICER_DISCORD, second);
+    await reportIncidentDb(db, laterNow, OFFICER_DISCORD, second, [OFFENDER_1, OFFENDER_2]);
     const secondRows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const secondBan = secondRows.find((b) => b.incidentId === second)!;
     const secondTermMs = secondBan.expiresAt!.getTime() - secondBan.bannedAt.getTime();
@@ -180,14 +180,14 @@ describe("reportable incidents and pressing charges", () => {
     let closedTime = closedAt.getTime();
     for (let i = 0; i < 2; i++) {
       const inc = await seedIncident({ closedAt: new Date(closedTime) });
-      await reportIncidentDb(db, new Date(closedTime + 1000), OFFICER_DISCORD, inc);
+      await reportIncidentDb(db, new Date(closedTime + 1000), OFFICER_DISCORD, inc, [OFFENDER_1, OFFENDER_2]);
       // Priors only count once actually SERVED (Critical 2) — stand in for
       // ban-tick's apply arm so this test still exercises real escalation.
       await db.update(bans).set({ status: "applied", dryRun: false }).where(eq(bans.incidentId, inc));
       closedTime += 2000;
     }
     const third = await seedIncident({ closedAt: new Date(closedTime) });
-    await reportIncidentDb(db, new Date(closedTime + 1000), OFFICER_DISCORD, third);
+    await reportIncidentDb(db, new Date(closedTime + 1000), OFFICER_DISCORD, third, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const thirdBan = rows.find((b) => b.incidentId === third)!;
     expect(thirdBan.expiresAt).toBeNull();
@@ -195,14 +195,14 @@ describe("reportable incidents and pressing charges", () => {
 
   it("the ban freezes dayzId and the gamertag recorded at event time", async () => {
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     expect(rows[0]).toMatchObject({ dayzId: OFFENDER_1, gamertag: "Offender1" });
   });
 
   it("a stranger cannot report an incident at a base they do not own", async () => {
     const id = await seedIncident();
-    expect(await reportIncidentDb(db, now, STRANGER_DISCORD, id)).toEqual({ ok: false, reason: "not-owner" });
+    expect(await reportIncidentDb(db, now, STRANGER_DISCORD, id, [OFFENDER_1, OFFENDER_2])).toEqual({ ok: false, reason: "not-owner" });
   });
 
   // ⚠️ Regression: seasonStartFor's fallback must be `now`, not the epoch. An
@@ -213,7 +213,7 @@ describe("reportable incidents and pressing charges", () => {
   // permanent ban with no expire arm able to lift it.
   it("with no open season, a first offence still gets the first-offence term, not permanent", async () => {
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const [firstBan] = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     expect(firstBan!.expiresAt).not.toBeNull();
     const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
@@ -232,7 +232,7 @@ describe("reportable incidents and pressing charges", () => {
     ]);
 
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const newBan = rows.find((b) => b.incidentId === id)!;
     // Only ONE non-lifted prior counts, so this is the SECOND offence (doubled), not permanent.
@@ -260,7 +260,7 @@ describe("reportable incidents and pressing charges", () => {
     });
 
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const newBan = rows.find((b) => b.incidentId === id)!;
     const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
@@ -281,7 +281,7 @@ describe("reportable incidents and pressing charges", () => {
     });
 
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const newBan = rows.find((b) => b.incidentId === id)!;
     const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
@@ -300,7 +300,7 @@ describe("reportable incidents and pressing charges", () => {
     });
 
     const id = await seedIncident();
-    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const newBan = rows.find((b) => b.incidentId === id)!;
     const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
@@ -321,7 +321,61 @@ describe("reportable incidents and pressing charges", () => {
     // so simulate the only way this onConflict path is reachable: the report
     // write racing a hand-seeded row under the same (incidentId, dayzId).
     await db.update(zoneIncidents).set({ reportedAt: null }).where(eq(zoneIncidents.id, id));
-    const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
     expect(r).toEqual({ ok: true, banned: 1 });
+  });
+
+  // Per-participant charging (spec §2.4, §7 amended): the owner picks WHO
+  // to charge among the incident's own participants, not merely whether to
+  // report at all. This is the escape hatch a raid-in-progress needs — a
+  // raider and an invited helper folded into the same incident can now be
+  // charged separately.
+  describe("per-participant charging", () => {
+    it("charging one of two participants bans only that one, on the incident's full damage total", async () => {
+      const id = await seedIncident();
+      const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1]);
+      expect(r).toEqual({ ok: true, banned: 1 });
+      const rows = await db.select().from(bans);
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ dayzId: OFFENDER_1, gamertag: "Offender1" });
+      const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+      expect(rows[0]!.expiresAt!.getTime() - rows[0]!.bannedAt.getTime()).toBe(sentenceMsFor(damage, 0));
+    });
+
+    it("charging both participants still bans both for the SAME (full-total) term as charging one", async () => {
+      const id = await seedIncident();
+      await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
+      const rows = await db.select().from(bans);
+      expect(rows).toHaveLength(2);
+      expect(new Set(rows.map((b) => b.expiresAt!.getTime())).size).toBe(1);
+    });
+
+    it("an id that was not a participant on THIS incident is refused, and stamps nothing", async () => {
+      const id = await seedIncident();
+      const NOT_A_PARTICIPANT = "N".repeat(40);
+      expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, NOT_A_PARTICIPANT]))
+        .toEqual({ ok: false, reason: "not-participant" });
+      expect(await db.select().from(bans)).toHaveLength(0);
+      // Refused, not reported: the incident must still be reportable afterwards.
+      const [row] = await db.select({ reportedAt: zoneIncidents.reportedAt }).from(zoneIncidents).where(eq(zoneIncidents.id, id));
+      expect(row!.reportedAt).toBeNull();
+    });
+
+    it("an empty selection is refused, and stamps nothing", async () => {
+      const id = await seedIncident();
+      expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [])).toEqual({ ok: false, reason: "no-selection" });
+      expect(await db.select().from(bans)).toHaveLength(0);
+      const [row] = await db.select({ reportedAt: zoneIncidents.reportedAt }).from(zoneIncidents).where(eq(zoneIncidents.id, id));
+      expect(row!.reportedAt).toBeNull();
+    });
+
+    it("charging one participant still marks the incident reported, refusing a later report naming the other", async () => {
+      const id = await seedIncident();
+      expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1])).toEqual({ ok: true, banned: 1 });
+      expect(await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_2]))
+        .toEqual({ ok: false, reason: "already-reported" });
+      const rows = await db.select().from(bans);
+      expect(rows.map((b) => b.dayzId)).toEqual([OFFENDER_1]);
+    });
   });
 });

@@ -17,4 +17,6 @@ export const REPORT_COPY: Record<ReportReason, string> = {
   "no-incident": "That incident could not be found.",
   "window-closed": "The report window on this incident has closed.",
   "already-reported": "This incident has already been reported.",
+  "no-selection": "Pick at least one player to charge.",
+  "not-participant": "One of the selected players was not part of this incident.",
 };

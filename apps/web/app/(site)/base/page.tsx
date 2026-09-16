@@ -73,7 +73,7 @@ function Incident({ incident }: { incident: ReportableIncident }) {
         ))}
       </ul>
       <div className="mt-3">
-        <ReportButton incidentId={incident.id} gamertags={gamertags} minTermLabel={minTermMs === null ? "permanent" : days(minTermMs)} />
+        <ReportButton incidentId={incident.id} participants={incident.participants} minTermLabel={minTermMs === null ? "permanent" : days(minTermMs)} />
       </div>
     </li>
   );

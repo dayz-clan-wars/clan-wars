@@ -232,14 +232,18 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     revokeGuestPass: (discordId: string, passId: number) => revokeGuestPassDbFor(getDb(), getNow(), discordId, passId),
 
     /**
-     * Press charges on a bot-witnessed incident at your own base. A SOLO
-     * base is reportable only by its declarant; a clan base, officer+ only.
-     * Every participant is sentenced on the incident's full damage total —
-     * liability is joint. This writes ban rows with no staff review; see
-     * `reportIncidentDb`'s own comment for why that is safe here.
+     * Press charges on a bot-witnessed incident at your own base, against a
+     * chosen subset of its participants (`chargedDayzIds`, validated against
+     * the incident's own participant rows — an id that was not witnessed on
+     * THIS incident is refused, never silently dropped). A SOLO base is
+     * reportable only by its declarant; a clan base, officer+ only. Each
+     * charged person is still sentenced on the incident's full damage total
+     * — liability is joint per charged person. This writes ban rows with no
+     * staff review; see `reportIncidentDb`'s own comment for why that is
+     * safe here.
      */
-    reportIncident: (discordId: string, incidentId: number): Promise<ReportOutcome> =>
-      reportIncidentDb(getDb(), getNow(), discordId, incidentId),
+    reportIncident: (discordId: string, incidentId: number, chargedDayzIds: string[]): Promise<ReportOutcome> =>
+      reportIncidentDb(getDb(), getNow(), discordId, incidentId, chargedDayzIds),
   };
 }
 

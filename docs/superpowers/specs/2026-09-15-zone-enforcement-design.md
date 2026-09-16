@@ -70,7 +70,8 @@ never becomes reportable on its own.
 
 A base owner who wants help building does not pre-authorise anyone. The helper is a
 non-member, so the bot records the acts and sends the warning DM — but nothing
-happens, because the owner simply does not report someone they invited.
+happens, because the owner simply does not report someone they invited **for that
+person specifically**.
 
 **Consequence for copy:** invited helpers *will* receive a warning DM. Its wording
 carries the entire burden of not alarming them, and must read as a heads-up rather
@@ -81,6 +82,27 @@ a permit is ever added, it must be evaluated **at event time and frozen onto the
 violation row** — otherwise an owner grants a permit, gets their base rebuilt,
 revokes it, and reports the helper retroactively. Same pattern as `membershipAt` in
 the kills consumer.
+
+**Amended (fix wave 2): charging is per participant, not per incident.** A report
+does not cover a whole incident as an indivisible unit — it covers the incident's
+DAMAGE (§7), applied to a CHOSEN SUBSET of the participants the log recorded on it.
+This matters because an incident is a time-boxed bundle: `zone-tick.ts` folds every
+non-member act at one base within `VIOLATION_INCIDENT_GAP_MS` into a single incident
+with a single participant set. A raider stripping twenty parts and, twenty minutes
+later, an invited helper placing one wall — called in for exactly the reason a raid
+is happening — land in the SAME incident. Before this amendment, the owner's only
+choice was whether to report that incident at all, which meant charging the raider
+required also banning the helper on the raider's damage. The escape hatch this
+section promises ("the owner simply does not report someone they invited") failed
+in precisely the scenario it exists to cover.
+
+The fix: `reportIncidentDb` takes an explicit set of `dayzId`s to charge, validated
+against that incident's own `zone_incident_participants` rows — an id the log did
+not witness on THIS incident is a refusal, never a silent skip (see §1: a report
+must never describe anything the log did not witness, and accepting an
+unwitnessed id would break that property as surely as free text would). An empty
+selection is refused too. Liability stays JOINT **per charged person** — see §7's
+amendment — so this changes only WHO can be named, not what they are sentenced on.
 
 ---
 
@@ -248,6 +270,20 @@ only class that costs the owner materials to undo.
 **Liability is joint on the incident.** Each participant is sentenced on the
 incident's full damage total, not only on their own acts. This removes the incentive
 to spread dismantling across accounts so that nobody crosses a threshold.
+
+**Amended (fix wave 2): joint liability is per CHARGED person, not per incident
+participant.** §2.4 found that binding a report to the whole incident — every
+participant or nobody — broke the "an invited helper simply isn't reported" escape
+hatch exactly when a raid was in progress: a raider and a helper folded into the
+same incident could not be charged separately. The owner now chooses WHICH
+participants to charge (§2.4); this section's rule is unchanged for each of them —
+**every charged person is still sentenced on the incident's full damage total**,
+never only their own share of it. Joint liability was never about punishing
+everyone who was present; it is about denying an attacker any benefit from
+spreading the SAME raid's damage across several accounts, and that deterrent is
+identical whether one, some, or all of the incident's participants end up charged.
+What changed is only the selection of defendants, never the arithmetic of the
+sentence.
 
 Boost stacks are folded into this ladder rather than sentenced as exploits. That is a
 deliberate softening of the written rule and requires the guide change in §10.
