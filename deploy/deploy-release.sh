@@ -92,6 +92,139 @@ health_ok() {
   return 1
 }
 
+# ⚠️ Non-fatal, always: this is bookkeeping, and a failure to write it must
+# never decide whether production runs. Same contract as the two inline marker
+# writes in the dump section — $FAILED_MARKER lives under /var/lib/clan-wars,
+# created as root while this unit runs as acab, so a permission failure here is
+# reachable, not hypothetical. Losing it costs a retry, not an outage.
+# Goes through run() so --dry-run stays a total no-op.
+mark_failed() {
+  # ${TAG:-} rather than $TAG: set -u is on, and an unbound variable here would
+  # abort a rollback mid-way instead of costing only the marker.
+  run sh -c "printf '%s\n' '${TAG:-}' > '$FAILED_MARKER'" \
+    || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
+}
+
+# ⚠️ The end of the line for an automated deploy: stop, stay stopped, exit 2.
+# Do NOT retry. A deploy loop thrashing against a database it cannot read is how
+# the 2026-09-01 duplicate-DM incident reaches a real player; a stopped bot is a
+# visible outage a human fixes, which is strictly better. The marker is written
+# here too — without it the timer sees the same newest tag in 2 minutes and
+# repeats the whole drop-and-restore of factions_live, indefinitely.
+# Separate from rollback() only so every failing step inside it lands here
+# identically instead of falling out through `set -e` with an arbitrary code.
+rollback_abort() {
+  stop_all || alert "CRITICAL" "could not stop services during a failed rollback; production may be UP on a half-restored state"
+  mark_failed
+  alert "CRITICAL" "ROLLBACK FAILED after: $1 — services STOPPED, needs a human. Dump: ${DUMP:-none}"
+  exit 2
+}
+
+# Restore the previous release completely: code, image, host config, schema.
+#
+# ⚠️ This is lossless ONLY because stop_all() ran before the dump was taken.
+# No writer existed between dump and restore, so no player action can be
+# destroyed. If a future change starts the services earlier, this function
+# becomes a data-loss event and must be reconsidered.
+#
+# ⚠️ This function NEVER returns — exit 1 when the rollback succeeded, exit 2
+# when it did not. That is an invariant of its CALL SITES, not of its own
+# logic: they are written as `if ! run … ; then rollback "…"; fi`, so a return
+# would fall through to daemon-reload, `reload nginx` and start_all, bringing
+# production up on a half-applied migration and reporting success.
+#
+# ⚠️ Every variable it reads is defaulted (`${VAR:-}`). set -u is on, and an
+# unbound variable inside the rollback would abort it mid-way — with production
+# stopped — rather than reaching either exit.
+rollback() {
+  # ⚠️ FIRST statement, before anything that can fail: the flow arms
+  # `trap 'rollback …' ERR`, so a failure inside the rollback would otherwise
+  # re-enter the rollback recursively, stopping and dropping again each time.
+  trap - ERR
+
+  local reason="$1"
+  alert "ROLLING BACK" "$reason"
+
+  # ⚠️ Abort rather than restore if the stop did not take: the restore below is
+  # lossless only while nothing is writing, and a bot still ticking against
+  # factions_live during a drop-and-restore is exactly the data-loss case the
+  # comment at the top of this function rules out.
+  if ! stop_all; then
+    rollback_abort "$reason (services would not stop; database NOT touched)"
+  fi
+
+  if [ "$DRY_RUN" = "0" ]; then
+    # ⚠️ Terminate anything still holding the database, or DROP blocks forever —
+    # a rollback that hangs here leaves production stopped with no timeout.
+    # Each step is checked: under a disarmed ERR trap a bare failure would exit
+    # with psql's status and never reach rollback_abort's alert, so a failed
+    # restore would look like an ordinary error instead of "the database is
+    # gone and a human is needed".
+    if ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c \
+        "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'factions_live'" >/dev/null \
+      || ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c "drop database factions_live" \
+      || ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c "create database factions_live" \
+      || ! { gzip -dc "${DUMP:-}" | sudo -n docker exec -i "$CONTAINER" psql -U factions -d factions_live -X -q; }
+    then
+      rollback_abort "$reason (restoring factions_live from ${DUMP:-none} FAILED — the database may be empty)"
+    fi
+  fi
+
+  # ⚠️ Back to the exact ref the deploy started from, not to the tag $CURRENT:
+  # $CURRENT is empty on a first run and may have been pruned by the fetch, and
+  # checking out a tag leaves the repo detached — which `git status --porcelain`
+  # calls clean, so the dirty-tree guard would never catch it. Same reasoning as
+  # the build-failure revert above. This checkout also restores live nginx and
+  # systemd config: /etc symlinks into this tree.
+  if [ -n "${PREV_REF:-}" ] && ! run git checkout --quiet "${PREV_REF}"; then
+    rollback_abort "$reason (could not check out ${PREV_REF}; host config is still $TAG's)"
+  fi
+
+  # ⚠️ The tag to restore is whatever compose calls this service's image — it is
+  # derived from the compose project name, NOT necessarily `clan-wars-web:latest`,
+  # so it is asked for rather than assumed; a wrong tag here would silently leave
+  # the NEW image running while reporting success. Resolved AFTER the checkout,
+  # so the name comes from the old tree's compose file.
+  # ⚠️ web only. The build step builds web AND ingest-worker, but $PREV_IMAGE
+  # captures web's image alone, so a rollback leaves the worker on the NEW image
+  # against the restored schema. The worker writes events and the supply file;
+  # this gap is deliberate and unhandled here — see the task report.
+  if [ -n "${PREV_IMAGE:-}" ]; then
+    local WEB_IMAGE
+    WEB_IMAGE=$(sudo -n docker compose config --images web 2>/dev/null | head -1 || true)
+    if [ -n "$WEB_IMAGE" ] && ! run sudo -n docker tag "${PREV_IMAGE}" "$WEB_IMAGE"; then
+      rollback_abort "$reason (could not retag $WEB_IMAGE to ${PREV_IMAGE}; the NEW web image would start)"
+    fi
+  fi
+
+  # ⚠️ nginx -t before the reload, never after: this host serves three other
+  # production sites from the same nginx. A reload of a bad config is refused and
+  # leaves the old one live, but testing first is what keeps the failure legible.
+  if ! run sudo -n systemctl daemon-reload \
+    || ! run sudo -n nginx -t \
+    || ! run sudo -n systemctl reload nginx
+  then
+    rollback_abort "$reason (host config would not reload at ${PREV_REF:-HEAD})"
+  fi
+
+  if ! start_all; then
+    rollback_abort "$reason (services would not start on the restored release)"
+  fi
+
+  # ⚠️ After start_all, so bookkeeping can never strand the outage, and on the
+  # SUCCESS path too: the tag still deploys cleanly from the timer's point of
+  # view, and without the marker it re-enters this whole outage window — stop,
+  # dump, and another drop-and-restore of factions_live — every 2 minutes.
+  mark_failed
+
+  if [ "$DRY_RUN" = "1" ] || health_ok; then
+    alert "ROLLED BACK" "restored ${CURRENT:-the previous release} after: $reason"
+    exit 1
+  fi
+
+  rollback_abort "$reason (health check failed on the restored release)"
+}
+
 # --- executable flow ---
 
 # ⚠️ flock, not a pidfile. A deploy that outruns the 2-minute timer must not
