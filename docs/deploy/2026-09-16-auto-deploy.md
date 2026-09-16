@@ -202,31 +202,37 @@ dumps can never prune a good one out from under a future rollback).
 
 ## After a `CRITICAL` alert
 
-`CRITICAL` means the script gave up rather than guess: it has already tried to
-restore the previous release (tree, dependencies, images, host config) and
-either that failed too, or the failure was in the restore path itself. Either
-way, **the services are stopped, deliberately** — `clan-wars-bot`, `web` and
-`ingest-worker`. This is not a partial outage to route around; it is the
-script refusing to leave a half-restored host looking fine while it silently
-serves a mismatched version (spec §4: a stopped host is a visible outage a
-human fixes, which is strictly better than a deploy loop thrashing against a
-database it cannot read — that thrashing is exactly how the 2026-09-01
-duplicate-DM incident would reach a real player again, automated).
+⚠️ **`CRITICAL` is not one situation — `deploy-release.sh` has three
+structurally different call sites for it, and they call for opposite actions.**
+Applying the wrong recovery is worse than the failure that paged you: acting
+on a healthy, live system as though the database needs restoring is a
+self-inflicted outage, with data loss, on top of nothing having actually been
+wrong. **Read the alert's own wording before doing anything** — it tells you
+which class you're in; do not assume from the word `CRITICAL` alone.
 
-To recover:
+### Class 1 — the rollback itself failed (`rollback_abort()`)
 
-1. Read the alert. It names the dump it was trying to restore from
-   (`Dump: /var/backups/clan-wars/predeploy-<tag>-<timestamp>.sql.gz`) and the
-   step that failed.
-2. Establish `factions_live`'s actual state before touching anything — it may
+**Recognize it by:** the text contains "`ROLLBACK FAILED after:`" or "`could
+not stop services during a failed rollback`".
+
+This is the only class where "the services are stopped and stay stopped, and
+the alert names a dump" is true. A migration **did** run before this fired, so
+`factions_live` genuinely may need hand recovery, and the alert carries
+`Dump: /var/backups/clan-wars/predeploy-<tag>-<timestamp>.sql.gz` (or
+`Dump: none` if it never got that far).
+
+Recovery:
+
+1. Establish `factions_live`'s actual state before touching anything — it may
    already be correctly restored, mid-restore, or untouched, depending on
-   which step failed. `deploy/README.md`'s "Restoring" section has the
-   scratch-database comparison sequence; use it here rather than guessing.
-3. If a restore from the named dump is still needed, run it by hand — the
-   same drop/recreate/`psql -v ON_ERROR_STOP=1` sequence `rollback()` uses is
-   in `deploy/deploy-release.sh`'s `rollback()` function, read it rather than
+   which step inside the rollback failed. `deploy/README.md`'s "Restoring"
+   section has the scratch-database comparison sequence; use it here rather
+   than guessing.
+2. If a restore from the named dump is still needed, run it by hand — the
+   same drop/recreate/`psql -v ON_ERROR_STOP=1` sequence is in
+   `deploy/deploy-release.sh`'s `rollback()` function; read it rather than
    retype it from memory.
-4. Once the database, tree and images agree with each other, start the
+3. Once the database, tree and images agree with each other, start the
    services by hand, in the order the script itself uses and for the same
    reason — `web`/`ingest-worker` first, confirm they're healthy, **the bot
    last**: `notifyCompleted` DMs a player before it marks the DM sent, so
@@ -239,8 +245,56 @@ To recover:
        sudo systemctl start clan-wars-bot
        journalctl -u clan-wars-bot -n 50 --no-pager   # look for "bot ready as"
 
-5. Find and fix the underlying cause before letting the timer near this tag
+4. Find and fix the underlying cause before letting the timer near this tag
    again — a `CRITICAL` never fixes itself.
+
+### Class 2 — a pre-migration abort's own recovery failed (`restore_previous_release()` / a bare `revert_tree`)
+
+**Recognize it by:** the text contains "`aborting the deploy of $TAG`",
+"`restore the tree`", "`retag`", "`NOT starting web/ingest-worker`",
+"`NOT starting clan-wars-bot`", "`could not stop all writers before the dump`",
+or "`pnpm install failed … AND the revert … failed`".
+
+**No migration ever ran at these call sites.** `factions_live` was never
+touched, and must not be touched now — `restore_previous_release()`'s own
+comment in the script says restoring the database here "would destroy writes
+for no reason." No dump is referenced in any of these alerts, because none is
+relevant: there is nothing to restore from, only host state (tree, dependencies,
+image tags, config) to put back.
+
+What actually happened is a **half-restored host, not a down one**: some
+pieces may already be back on the previous release, and others are
+*deliberately* left down because the one thing that would make starting them
+safe — the tree checkout, or an image retag — itself failed. The alert names
+exactly which half refused, e.g. "deliberately NOT starting clan-wars-bot …
+the tree is still at $TAG" or "could not restore the tree to $PREV_REF".
+
+Recovery is to fix the *specific* piece the alert names — check out
+`$PREV_REF` by hand, retag the image, rerun `pnpm install --frozen-lockfile`
+— and then start only the service(s) that were withheld, exactly as
+`restore_previous_release()` would have. Never touch the database for this
+class.
+
+### Class 3 — bookkeeping only; the deploy already succeeded
+
+**Recognize it by:** the text contains "`is healthy but … could not be
+written`" or "`is healthy but … could not be cleared`".
+
+⚠️ **The deploy is healthy. The bot, `web` and `ingest-worker` are running the
+new release right now. Do not touch `factions_live` for this alert — there is
+nothing to restore, and nothing is down.** The only thing that failed is a
+file write under `/var/lib/clan-wars` (the state file, or `$STATE.failed`) —
+most likely because step 1's `install -d -o acab -g acab /var/lib/clan-wars`
+was skipped or undone (e.g. by a `sudo mkdir` recreating the directory as
+root) or the volume is full.
+
+The cost of ignoring it is not data loss: at worst, the timer sees the same
+(already-good) tag as "new" again in two minutes and redeploys it — a second,
+needless outage window, not a corrupted one. Recovery: fix `/var/lib/clan-wars`'s
+ownership or free space, then write the missing file by hand as `acab`
+(`echo <tag> | sudo -u acab tee /var/lib/clan-wars/deployed-tag`, or
+`sudo -u acab rm /var/lib/clan-wars/deployed-tag.failed` if that's the one
+that wouldn't clear).
 
 ### The `FAILED-<tag>` marker
 
