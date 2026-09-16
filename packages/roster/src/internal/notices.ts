@@ -96,6 +96,8 @@ export type QueuedNotice = {
   factionId: number | null;
   target: NoticeTarget;
   discordTargetId: string | null;
+  /** The clan's Discord role, for the alert kinds that ping it (see PING_KINDS in apps/bot/src/notice-tick.ts). Null for a DM, the achievements wall, or a clan whose role column is not filled yet. */
+  discordRoleId: string | null;
   kind: ClanNoticeKind;
   occurredAt: Date;
   payload: NoticePayload;
@@ -130,6 +132,7 @@ export class PgNoticeStore implements NoticeStore {
         factionId: clanNotices.factionId,
         target: clanNotices.target,
         discordTargetId: sql<string | null>`coalesce(${clanNotices.discordTargetId}, ${factions.discordTextChannelId})`,
+        discordRoleId: factions.discordRoleId,
         kind: clanNotices.kind,
         occurredAt: clanNotices.occurredAt,
         payload: clanNotices.payload,

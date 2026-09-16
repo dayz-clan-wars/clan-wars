@@ -22,6 +22,7 @@ export function voiceChannelNameFor(n: ClanNames): string {
 export interface GuildGateway {
   /** Populate the member cache. Returns the member count. Called once at start. */
   fetchAllMembers(): Promise<number>;
+  /** Created mentionable: the clan's own alerts open with `<@&role>` (see PING_KINDS in notice-tick.ts), and a non-mentionable role would render that as grey text nobody is notified by. */
   createRole(name: string): Promise<string>;
   /** Text channel under CLAN_TEXT_CATEGORY_ID, visible only to `roleId`. */
   createTextChannel(name: string, roleId: string): Promise<string>;
@@ -32,6 +33,10 @@ export interface GuildGateway {
   deleteChannel(channelId: string): Promise<void>;
   /** Cache lookups; null when the id is not in the cache (deleted by hand, or never existed). */
   roleName(roleId: string): string | null;
+  /** Cache: is the role mentionable by anyone; null for an unknown role. */
+  roleMentionable(roleId: string): boolean | null;
+  /** `role.setMentionable(true)`. No-op for a role that is not in the cache. */
+  makeRoleMentionable(roleId: string): Promise<void>;
   channelName(channelId: string): string | null;
   /** Cache: id of a role with exactly this name, or null. Used to adopt an object a lost column write orphaned. */
   findRoleByName(name: string): string | null;
@@ -64,8 +69,8 @@ type RealGuild = {
   id: string;
   ownerId: string;
   roles: {
-    cache: Map<string, { id: string; name: string; members: Map<string, unknown>; setName(name: string): Promise<unknown> }>;
-    create(opts: { name: string }): Promise<{ id: string }>;
+    cache: Map<string, { id: string; name: string; mentionable: boolean; members: Map<string, unknown>; setName(name: string): Promise<unknown>; setMentionable(v: boolean): Promise<unknown> }>;
+    create(opts: { name: string; mentionable: boolean }): Promise<{ id: string }>;
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
   channels: {
@@ -153,7 +158,7 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
 
     async createRole(name) {
       const guild = await getGuild();
-      const role = await guild.roles.create({ name });
+      const role = await guild.roles.create({ name, mentionable: true });
       return role.id;
     },
 
@@ -220,6 +225,17 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
 
     roleName(roleId) {
       return cachedGuild().roles.cache.get(roleId)?.name ?? null;
+    },
+
+    roleMentionable(roleId) {
+      return cachedGuild().roles.cache.get(roleId)?.mentionable ?? null;
+    },
+
+    async makeRoleMentionable(roleId) {
+      const guild = await getGuild();
+      const role = guild.roles.cache.get(roleId);
+      if (role === undefined) return;
+      await role.setMentionable(true);
     },
 
     channelName(channelId) {

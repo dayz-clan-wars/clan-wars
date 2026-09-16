@@ -11,6 +11,7 @@ const row = (id: number, discordTargetId: string, overrides: Partial<QueuedNotic
   factionId: 1,
   target: "channel",
   discordTargetId,
+  discordRoleId: null,
   kind: "left",
   occurredAt: now,
   payload: { gamertag: "X" },
@@ -63,6 +64,39 @@ describe("noticeTick", () => {
     const left = noticeMessage(row(3, "chan"), now, site);
     expect(left.content).toContain("X");
     expect(left.embeds).toBeUndefined();
+  });
+
+  it("opens an alert kind with the clan role ping, and leaves every other kind alone", async () => {
+    const roleId = "role-1";
+    const alert = noticeMessage(row(1, "chan", { discordRoleId: roleId, kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), now, site);
+    expect(alert.content).toBe(`<@&${roleId}> 👁 Sasha (not a member) was seen 42 m from your base — 0 min ago`);
+    expect(alert.mentionRoleId).toBe(roleId);
+
+    // A membership line is not an emergency: same channel, same role on the
+    // row, no ping.
+    const quiet = noticeMessage(row(2, "chan", { discordRoleId: roleId }), now, site);
+    expect(quiet.content).toBe("➖ X left");
+    expect(quiet.mentionRoleId).toBeUndefined();
+  });
+
+  it("⚠️ a DM never carries a role ping, and a clan with no role column yet still gets the alert unpinged", () => {
+    // The solo twin of an intruder alert: a DM is already a notification, and
+    // a solo player has no role. The leftJoin in readUnposted still hands the
+    // row a role id when the player happens to be in a clan.
+    const dm = noticeMessage(row(1, "user", { target: "dm", discordRoleId: "role-1", kind: "solo_intruder", payload: { gamertag: "Sasha", distance: 14 } }), now, site);
+    expect(dm.content).toBe("👁 Sasha (not a member) was seen 14 m from your base — 0 min ago");
+    expect(dm.mentionRoleId).toBeUndefined();
+
+    const noRole = noticeMessage(row(2, "chan", { kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), now, site);
+    expect(noRole.content).toBe("👁 Sasha (not a member) was seen 42 m from your base — 0 min ago");
+    expect(noRole.mentionRoleId).toBeUndefined();
+  });
+
+  it("hands the sender the role to allow, so nothing else in the line can ping", async () => {
+    const store = fakeStore([row(1, "chan", { discordRoleId: "role-1", kind: "flag_down", payload: { gamertag: "Sasha", raiderClan: "Wolves" } })]);
+    const send = vi.fn<NoticeSender>().mockResolvedValue(undefined);
+    await noticeTick(store, send, { now, siteBaseUrl: site });
+    expect(send.mock.calls[0]![4]).toBe("role-1");
   });
 
   it("posts in id order per target and marks each posted", async () => {

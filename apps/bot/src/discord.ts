@@ -422,10 +422,21 @@ export function createChannelPoster(client: Client, channelId: string): WarLogPo
  * `PgNoticeStore.markAttempt` exists for.
  */
 export function createNoticeSender(client: Client): NoticeSender {
-  return async (target, discordTargetId, content, embeds) => {
+  return async (target, discordTargetId, content, embeds, mentionRoleId) => {
     // ⚠️ `content: ""` with embeds is a valid message; `content: ""` alone is
     // rejected by Discord — so the key is dropped when empty, never sent blank.
-    const message = { ...(content ? { content } : {}), ...(embeds?.length ? { embeds } : {}) };
+    //
+    // ⚠️ `allowedMentions` is named only on a role-ping line, and names the ONE
+    // role the line opens with. Discord's default is "everything in the text
+    // pings", so an unnamed list would let a gamertag that happens to look
+    // like `@here` — or any future payload field — ping the channel. `parse:
+    // ["users"]` keeps the user mentions the renderers put there (`person()`
+    // renders an unresolved id as `<@id>`) working as before.
+    const message = {
+      ...(content ? { content } : {}),
+      ...(embeds?.length ? { embeds } : {}),
+      ...(mentionRoleId ? { allowedMentions: { parse: ["users" as const], roles: [mentionRoleId] } } : {}),
+    };
     if (target === "dm") {
       const user = await client.users.fetch(discordTargetId);
       await user.send(message);
@@ -584,6 +595,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (s.alphaAdds) parts.push(`alphaAdds ${s.alphaAdds}`);
     if (s.alphaRemoves) parts.push(`alphaRemoves ${s.alphaRemoves}`);
     if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
+    if (s.mentionableFixed) parts.push(`mentionableFixed ${s.mentionableFixed}`);
     if (s.noticesFailed) parts.push(`noticesFailed ${s.noticesFailed}`);
     if (s.guestGrants) parts.push(`guestGrants ${s.guestGrants}`);
     if (s.guestRevokes) parts.push(`guestRevokes ${s.guestRevokes}`);

@@ -58,8 +58,8 @@ describe("structureTick", () => {
     ]);
 
     guild = new FakeGuild();
-    guild.roles.set("linked", { name: "Linked", members: new Set() });
-    guild.roles.set("alpha", { name: "Alpha", members: new Set() });
+    guild.roles.set("linked", { name: "Linked", members: new Set(), mentionable: true });
+    guild.roles.set("alpha", { name: "Alpha", members: new Set(), mentionable: true });
     for (const id of ["d1", "d2", "d3", "d4"]) guild.members.set(id, { nickname: null });
   });
 
@@ -82,6 +82,25 @@ describe("structureTick", () => {
     r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     expect(guild.calls.filter((c) => c.startsWith("createRole"))).toHaveLength(1);
+  });
+
+  it("⚠️ flips a clan role back to mentionable — an unpingable role makes every base alert silent", async () => {
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    const [row] = await store.clansWithStructure();
+    // A role from before `createRole` asked for mentionable, or one an admin
+    // turned off in the UI.
+    guild.roles.get(row!.roleId!)!.mentionable = false;
+    guild.calls.length = 0;
+
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(r).toMatchObject({ mentionableFixed: 1, renamed: 0, errors: 0 });
+    expect(guild.roles.get(row!.roleId!)!.mentionable).toBe(true);
+
+    // And it is a one-time repair, not a REST call every tick.
+    guild.calls.length = 0;
+    const again = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(again.mentionableFixed).toBe(0);
+    expect(guild.calls).toEqual([]);
   });
 
   it("does not create structures for a reserved clan (§5.1: at activation)", async () => {
@@ -208,7 +227,7 @@ describe("structureTick", () => {
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toEqual({
       created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0,
-      alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, noticesFailed: 0,
+      alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, mentionableFixed: 0, noticesFailed: 0,
       guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0, errors: 0,
     });
     expect(guild.calls).toEqual([]);
@@ -226,7 +245,7 @@ describe("structureTick", () => {
   it("⚠️ adopts a role that already carries the clan's exact name instead of creating a second one", async () => {
     // The shape of a create whose column write was lost: the object exists, no
     // clan owns it, and the name matches exactly.
-    guild.roles.set("stray", { name: "Night Bears", members: new Set() });
+    guild.roles.set("stray", { name: "Night Bears", members: new Set(), mentionable: true });
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     const [row] = await store.clansWithStructure();
@@ -302,6 +321,8 @@ describe("structureTick", () => {
       deleteRole: (i) => guild.deleteRole(i),
       deleteChannel: (i) => guild.deleteChannel(i),
       roleName: (i) => guild.roleName(i),
+      roleMentionable: (i) => guild.roleMentionable(i),
+      makeRoleMentionable: (i) => guild.makeRoleMentionable(i),
       channelName: (i) => guild.channelName(i),
       findRoleByName: (n) => guild.findRoleByName(n),
       findChannelByName: (n, k) => guild.findChannelByName(n, k),
@@ -327,7 +348,7 @@ describe("structureTick", () => {
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
       alphaAdds: 0, alphaRemoves: 0,
-      nicknamesCleared: 0, noticesFailed: 0,
+      nicknamesCleared: 0, mentionableFixed: 0, noticesFailed: 0,
       guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0,
       // step 4's isMember, step 5's read, step 6's read, step 8's read — the pass still finishes
       errors: 4,
