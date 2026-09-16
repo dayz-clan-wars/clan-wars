@@ -118,6 +118,18 @@ Detection lives in `zone-tick.ts` rather than a new consumer because a second
 consumer would need its own copy of the zone lookup and its own cursor, and two
 consumers reading the same events is how cursors drift apart.
 
+**Amended (fix wave 1): the incident WRITES are gated on `ENFORCEMENT_TICK`; the
+owner ALERTS are not.** `zoneTick` takes a required `enforcementEnabled`. With the
+flag off — the default — no incident, violation or placement row is written, while
+the intruder/dismantle/gate alerts that predate this feature keep firing unchanged.
+
+Without this gate the feature was dangerous while switched OFF: `zoneTick` ran
+unconditionally, so `zone_incidents_one_open` held a single open incident per
+declaration quietly absorbing months of acts and participants. The day an operator
+enabled the flag, `violationTick` would close it at `now`, DM every accumulated
+participant at once, and make all of them reportable on one sentence. That is the
+same backlog hazard `BAN_APPLY_LOOKBACK_MS` guards for bans, one layer up.
+
 ⚠️ `zone-tick.ts`'s existing `INTRUDER_PIN_TTL_MS` staleness guard — documented there
 as "the belt to the runbook's braces" — must cover the new writes too. An unseeded or
 hand-rewound cursor must not be able to replay the historical log into a mass
@@ -142,10 +154,27 @@ The regex must be anchored on the identity block's own closing paren, exactly as
 `structure.ts`'s `BUILT_RE` is and for the same reason — the gamertag is
 attacker-controlled and sits earlier on the line.
 
-⚠️ **Open item, blocking the parser:** `BOOST_ITEM_CLASSES` is currently inferred
-(`Fireplace`, `FireplaceIndoor`, `GardenPlot`) from the single `placed …<…>` sample in
-`flagpole.test.ts`. It must be confirmed against a real ADM line from the live server
-before the parser is pinned by tests.
+**Resolved 2026-09-15.** `BOOST_ITEM_CLASSES` was inferred; it has since been checked
+against 12 live ADM files. Observed verbatim:
+
+    placed Fireplace<Fireplace>
+    placed Nameless Object<GardenPlot>
+
+⚠️ A garden plot's DISPLAY NAME is "Nameless Object". Detection therefore keys on the
+classname inside the angle brackets and must never match on the display name.
+Classnames also carry underscores (`Barrel_Blue` is real), which is why the capture is
+`(\w+)`. `FireplaceIndoor` remains in the list unobserved: an extra classname that
+never matches costs nothing, while omitting a real variant is a silently unenforced
+exploit.
+
+⚠️ **Log visibility is not the reason other items are excluded.** Barrels, crates,
+tents and fire barrels all log `placed X<Class>` with a position — an earlier draft of
+this spec claimed the bot could not see them, and that was false. They are out of
+scope because this design covers fireplaces and garden plots. Separately and more
+importantly: **a barrel cannot be stood on in DayZ**, so a barrel cluster is not a
+boost at all. Which deployables bear a player's weight is a game fact the log cannot
+tell you — log evidence can prove an item family is visible, never that it is
+climbable. Confirm any future addition in game, not from a log sample.
 
 ### 4.2 The stack rule
 
@@ -224,8 +253,23 @@ placed against `dayzId`, which does not require a Discord link.
 
 ### 6.2 The owner's alert
 
-Unchanged: the existing `dismantle` / `gate_built` / `solo_*` notices fire from
-`zone-tick.ts` as they do today, gaining a pointer to `/base`.
+The existing `dismantle` / `gate_built` / `solo_*` notices fire from `zone-tick.ts`
+as they do today, gaining a pointer to `/base`.
+
+**Amended (fix wave 2): the owner is alerted on ANY non-member build, not only a
+gate.** New `built` / `solo_built` kinds name the part, so an owner can tell a
+watchtower from a fence. Before this, building a watchtower inside someone else's
+zone was recorded as a breach violation but produced no alert at all — it surfaced
+only if the owner happened to open `/base`. That was the silent half of a wider gap:
+the guide never stated the general no-building rule either, so the code was enforcing
+something the rules did not say (§10).
+
+⚠️ These alerts have **no cooldown**, unlike `intruder` (`INTRUDER_ALERT_COOLDOWN_MS`).
+A raid that erects several parts inside the zone emits one notice per part. This
+matches the pre-existing `dismantle` alert's behaviour rather than introducing a new
+pattern, but it multiplies the volume during a real raid. A per-(declaration, dayzId)
+cooldown on build and dismantle alerts is the obvious follow-up if clan channels get
+noisy.
 
 ⚠️ `clan_notices` carries a `clan_notices_no_coordinates` CHECK
 (`packages/db/src/schema.ts:1057`) forbidding `x`, `y`, `z` and `poleKey` in any

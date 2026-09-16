@@ -82,7 +82,12 @@ in Discord.
      firing at Nitrado in the first live tick — nothing manual to do here beyond knowing
      it is true before flipping the flag.
 
-5. **Rollback: set `ENFORCEMENT_TICK=0`.** ⚠️ Do **not** roll back by re-enabling
+5. **Rollback: set `ENFORCEMENT_TICK=0`.** This stops all incident, violation and
+   placement writes, so nothing accumulates while the feature is off. ⚠️ The owner
+   alerts (`intruder`, `dismantle`, `gate_built`, `built` and their solo variants) are
+   deliberately NOT gated and keep firing — they predate this feature and are not part
+   of it. A silent clan channel is therefore not evidence the flag took effect; check
+   that no new `zone_incidents` rows appear instead. ⚠️ Do **not** roll back by re-enabling
    `BAN_DRY_RUN` while any ban is `status = 'applied'` — the expire arm would then close
    that row without ever calling Nitrado, orphaning its ban-list entry **permanently**. An
    orphaned account hash cannot be shed by renaming. If a real ban needs undoing, set its
