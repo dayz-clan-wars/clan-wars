@@ -24,6 +24,83 @@ manicdotes.com, regime.fi). Run `sudo nginx -t` before every reload, and
 only after that certificate exists — `nginx -t` fails on a missing
 `ssl_certificate` path, and a failing test blocks reloads for every site here.
 
+## Install — the release deployer
+
+`deploy/deploy-release.sh` polls for a new release tag and deploys it end to
+end (preflight, outage window, health check, automatic rollback). Spec:
+`docs/superpowers/specs/2026-09-16-auto-deploy-design.md`.
+
+⚠️ **Do not enable `clan-wars-deploy.timer` until the rollback rehearsals in
+the plan have been run.** `rollback()` has never executed against this host —
+until it has been exercised deliberately once, it is a design, not a proven
+capability, and enabling the timer makes an unrehearsed rollback a production
+event, triggered by whatever the first bad release happens to be.
+
+1. **Create the state directory, owned by `acab`.** The script runs as `acab`
+   (see the service unit below) and writes two files under `/var/lib/clan-wars`:
+   the deployed-tag state file, on every successful deploy, and a failure
+   marker, on every failed one. If the directory is root-owned, both writes
+   fail — and the state-file failure is the serious one, because it happens
+   *after* a successful deploy, so the tag is never recorded, and the next
+   poll two minutes later redeploys the same tag over and over: a permanent
+   redeploy loop, each iteration a full production outage. The script alerts
+   instead of dying when this happens, but the loop itself remains until the
+   directory's ownership is fixed. A future operator who recreates this
+   directory as root (e.g. `sudo mkdir /var/lib/clan-wars`) reintroduces the
+   loop.
+
+       sudo install -d -o acab -g acab /var/lib/clan-wars
+
+2. **Seed the state file with the tag currently live**, run as `acab` so it
+   matches the directory's ownership from step 1 (substitute the real tag —
+   `pnpm deploy:select` prints it):
+
+       echo v1.15.0 | sudo -u acab tee /var/lib/clan-wars/deployed-tag
+
+   Skipping this makes the first run deploy the newest tag over whatever is
+   actually live, with no comparison to catch it.
+
+3. **Add `DEPLOY_WEBHOOK_URL` to `/opt/clan-wars/.env`.** Create a Discord
+   webhook in the ops channel (Channel Settings → Integrations → Webhooks) and
+   append `DEPLOY_WEBHOOK_URL=<url>` to the file. ⚠️ Never commit it — `.env`
+   is gitignored and has never been in this repo's history. The alert path is
+   deliberately independent of the bot: the bot is stopped for most of a
+   deploy and may be the thing that failed, so it cannot also be the thing
+   that reports the failure.
+
+4. **Run a dry run on the host, by hand, before enabling the timer.** This is
+   the first point at which the script can run end to end at all — it cannot
+   complete on a developer machine: no `flock` binary contention to model, no
+   `/home/acab/.local/bin/pnpm`, and its `stat -c` usage is GNU-only (macOS's
+   `stat` takes different flags). Do not treat this as optional or skip
+   straight to enabling the timer:
+
+       cd /opt/clan-wars && ./deploy/deploy-release.sh --dry-run
+
+   Expect a `DRY:`-prefixed line per command it would have run, and no
+   mutation. Read it before going further.
+
+5. **Install the units:**
+
+       sudo ln -s /opt/clan-wars/deploy/systemd/clan-wars-deploy.service \
+         /etc/systemd/system/clan-wars-deploy.service
+       sudo ln -s /opt/clan-wars/deploy/systemd/clan-wars-deploy.timer \
+         /etc/systemd/system/clan-wars-deploy.timer
+       sudo systemctl daemon-reload && sudo systemctl enable --now clan-wars-deploy.timer
+
+⚠️ The deploy state lives at `/var/lib/clan-wars/deployed-tag`, deliberately
+outside this tree: a file inside it would be rewritten by the deploy's own
+`git checkout`, so a rollback would restore a file claiming the rollback never
+happened.
+
+### Verify the timer arms without deploying
+
+    sudo systemctl daemon-reload && systemctl list-timers clan-wars-deploy
+    journalctl -u clan-wars-deploy -n 20
+
+Expected: the timer listed with a next-elapse time, and a run that exits 0
+silently, because the state file (step 2) matches the newest tag.
+
 ## Operating the bot
 
     systemctl status clan-wars-bot     # includes the cgroup: the real instance count
@@ -48,12 +125,13 @@ not just this one:
 - `certbot.timer` runs daily and reloads nginx after a renewal. That is the realistic
   way this bites: unattended, at 11:03, days after the checkout that caused it.
 
-The systemd units have the SAME property — `/etc/systemd/system/clan-wars-bot.service`
-and the two backup units are symlinks into this tree. Editing them in the repo changes
-the live unit, and systemd notices only on `daemon-reload`. This already happened once:
-a review fix touched the bot unit's comments, and the next `systemctl restart` warned
-that the unit file had changed on disk. The running service kept the OLD definition until
-`daemon-reload` — so an edit you believe is deployed may not be.
+The systemd units have the SAME property — `/etc/systemd/system/clan-wars-bot.service`,
+the two backup units, and the two deploy-timer units (`clan-wars-deploy.service`,
+`clan-wars-deploy.timer`) are all symlinks into this tree. Editing them in the repo
+changes the live unit, and systemd notices only on `daemon-reload`. This already
+happened once: a review fix touched the bot unit's comments, and the next `systemctl
+restart` warned that the unit file had changed on disk. The running service kept the
+OLD definition until `daemon-reload` — so an edit you believe is deployed may not be.
 
 ⚠️ Before checking out any branch or commit on this host, know that you are editing live
 nginx and systemd configuration. After any checkout, run `sudo nginx -t` and

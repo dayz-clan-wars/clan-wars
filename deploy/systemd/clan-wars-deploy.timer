@@ -1,0 +1,12 @@
+[Unit]
+Description=Poll for a new Clan Wars release every 2 minutes
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=2min
+# ⚠️ No Persistent=true. A missed poll is not worth catching up on — the next
+# one is two minutes away, and catching up would fire a deploy at boot.
+AccuracySec=30s
+
+[Install]
+WantedBy=timers.target
