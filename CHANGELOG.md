@@ -21,3 +21,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - `CLAUDE.md` documents the CI gate, the `main`-is-protected PR workflow, the
   committed-changelog requirement, and the secret-scanning boundary — including
   that the history was swept clean once at adoption.
+- Design for automatic deployment on release (`docs/superpowers/specs/2026-09-16-auto-deploy-design.md`),
+  approved but not implemented: a host-side timer deploys each new tag, applies
+  migrations, and rolls back both code and database automatically on failure,
+  with the implementation plan in `docs/superpowers/plans/2026-09-16-auto-deploy.md`.
