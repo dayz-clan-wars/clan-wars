@@ -169,10 +169,50 @@ retag_previous_images() {
 # already on its way to `exit 1` with an alert of its own; a second abort path
 # would only obscure the first. Nothing here fails silently, which is the
 # requirement — not that it fails hard.
+#
+# ⚠️ But CONTINUING IS NOT STARTING. No start runs whose precondition failed:
+# the bot runs from the tree, so a failed revert_tree means it would launch
+# $TAG's code against the un-migrated OLD schema; the two containers run from
+# the image tags, so a failed retag means they would come up on NEW images. Both
+# are the 2026-09-02 new-code/old-schema failure, and both are LOUD — CRITICAL
+# fires either way. Loudness is not enough: a half-restored host with services
+# down is a visible outage a human recovers from, while a half-restored host
+# serving a split version looks fine and is silently wrong. So when a
+# precondition fails we deliberately leave that half down, and say so.
 restore_previous_release() {
-  revert_tree || alert "CRITICAL" "could not restore the tree to ${PREV_REF:-HEAD} after aborting the deploy of $TAG; live nginx/systemd config is still $TAG's"
-  retag_previous_images || alert "CRITICAL" "aborting the deploy of $TAG: ${RETAG_ERROR:-retag failed}"
-  start_all || alert "CRITICAL" "could not restart services after aborting the deploy of $TAG"
+  local tree_ok=1 images_ok=1
+
+  if ! revert_tree; then
+    tree_ok=0
+    alert "CRITICAL" "could not restore the tree to ${PREV_REF:-HEAD} after aborting the deploy of $TAG; live nginx/systemd config is still $TAG's"
+  fi
+
+  if ! retag_previous_images; then
+    images_ok=0
+    alert "CRITICAL" "aborting the deploy of $TAG: ${RETAG_ERROR:-retag failed}"
+  fi
+
+  # The containers depend on the image tags only — a wrong tree does not stop
+  # them being correct, because their code came from the image.
+  if [ "$images_ok" = "1" ]; then
+    start_services || alert "CRITICAL" "could not restart web/ingest-worker after aborting the deploy of $TAG"
+  else
+    # ⚠️ "not started", not "stopped": on the aborts that never reached stop_all
+    # these containers are still up on the OLD code they were already running,
+    # and that is fine — the hazard is `up -d` RECREATING them on a new tag.
+    alert "CRITICAL" "deliberately NOT starting web/ingest-worker after aborting the deploy of $TAG: their image tags could not be restored, so starting them would recreate the containers on NEW code against the OLD schema. If they are down, they stay down until a human fixes the tags."
+  fi
+
+  # The bot is not containerised: it runs from this tree, so the tree is its
+  # whole precondition.
+  if [ "$tree_ok" = "1" ]; then
+    start_bot || alert "CRITICAL" "could not restart clan-wars-bot after aborting the deploy of $TAG"
+  else
+    # ⚠️ Same distinction: an already-running bot is untouched — it loaded its
+    # code at start and is still on the old release. What must not happen is
+    # STARTING one from a tree that is still at $TAG.
+    alert "CRITICAL" "deliberately NOT starting clan-wars-bot after aborting the deploy of $TAG: the tree is still at $TAG, so it would run NEW code against the OLD schema. If it is down, it stays down until a human restores ${PREV_REF:-HEAD}."
+  fi
 }
 
 # ⚠️ `systemctl is-active` is NOT a health check, and believing it is is the
