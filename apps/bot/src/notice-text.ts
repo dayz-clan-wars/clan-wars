@@ -106,9 +106,17 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
   dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
   gate_built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  // ⚠️ A non-gate build inside the zone was ALREADY a breach violation
+  // (zone-tick.ts folds any base.built by a non-member into the incident);
+  // this is only the alert catching up to that — before this kind existed,
+  // a watchtower going up next to your base was recorded silently and
+  // surfaced only if you happened to check /base. Names the part so an
+  // owner can tell a watchtower from a fence.
+  built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built ${p.part} at your base — ${ctx.age}`,
   solo_intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
   solo_dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
   solo_gate: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  solo_built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built ${p.part} at your base — ${ctx.age}`,
   leader_removed: (p) => `👑 ${person(p.old)} is no longer in the Discord. ${person(p.new)} is now leader.`,
   succession_claimed: (p) => `⏳ ${person(p.gamertag)} has claimed leadership — ${person(p.leader)} has ${hours(SUCCESSION_WINDOW_MS)}h to show up in game`,
   succession_voided: (p) => `⏳ ${person(p.leader)} showed up in game. The claim by ${person(p.claimant)} is void.`,

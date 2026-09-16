@@ -96,14 +96,19 @@ async function recordViolation(
  * prefixed; the payload is identical and never carries a coordinate (§9.5).
  * A solo owner with no link (unlinked since declaring) gets nothing.
  */
-async function alertOwner(tx: Tx, zone: Zone, serverId: number, kind: "intruder" | "dismantle" | "gate_built", occurredAt: Date, payload: NoticePayload): Promise<boolean> {
+async function alertOwner(tx: Tx, zone: Zone, serverId: number, kind: "intruder" | "dismantle" | "gate_built" | "built", occurredAt: Date, payload: NoticePayload): Promise<boolean> {
   if (zone.ownerFactionId !== null) {
     await noticeClanTx(tx, { serverId, factionId: zone.ownerFactionId, kind, occurredAt, payload });
     return true;
   }
   const [link] = await tx.select({ discordId: identityLinks.discordId }).from(identityLinks).where(eq(identityLinks.dayzId, zone.ownerDayzId!));
   if (!link) return false;
-  await noticeUserTx(tx, { serverId, factionId: null, discordId: link.discordId, kind: `solo_${kind === "gate_built" ? "gate" : kind}` as ClanNoticeKind, occurredAt, payload });
+  // ⚠️ `gate_built` maps to the solo kind "gate" (not "gate_built") and
+  // "built" maps to itself — solo_${kind} for every OTHER kind is already
+  // the right name (solo_intruder, solo_dismantle), so this ternary only
+  // needs the one exception the naming convention breaks.
+  const soloKind = kind === "gate_built" ? "gate" : kind;
+  await noticeUserTx(tx, { serverId, factionId: null, discordId: link.discordId, kind: `solo_${soloKind}` as ClanNoticeKind, occurredAt, payload });
   return true;
 }
 
@@ -181,7 +186,18 @@ export async function zoneTick(
               const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
               if (await recordViolation(tx, incidentId, ev.id, kind, fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
             }
-            if (kind === "gate" && await alertOwner(tx, hit.zone, ev.serverId, "gate_built", ev.occurredAt, { gamertag })) out.alerts++;
+            // ⚠️ Alerts on EVERY non-member build now, not only a gate — a
+            // watchtower is already sentenced as a breach (isGate() aside),
+            // so silently recording it while alerting only on a gate meant
+            // the owner learned about the one act that can never be undone
+            // (a permanently-open wall) but not about a tower that clears
+            // it. `gate_built`'s copy stays gate-specific and correct; an
+            // ordinary build gets the new "built" kind, naming the part.
+            if (kind === "gate") {
+              if (await alertOwner(tx, hit.zone, ev.serverId, "gate_built", ev.occurredAt, { gamertag })) out.alerts++;
+            } else {
+              if (await alertOwner(tx, hit.zone, ev.serverId, "built", ev.occurredAt, { gamertag, part })) out.alerts++;
+            }
           }
           return done();
         }

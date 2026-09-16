@@ -74,18 +74,32 @@ describe("zoneTick", () => {
     expect(await notices()).toEqual([{ kind: "solo_intruder", target: "dm", payload: { gamertag: "Sasha", distance: 14 }, to: "900" }]);
   });
 
-  it("dismantle and gate-build inside the zone by a non-member alert; by a member they do not; a gate is matched by name", async () => {
+  it("dismantle, gate-build and an ordinary build inside the zone by a non-member all alert; by a member none do; a gate is matched by name", async () => {
     await built(STRANGER, 5010, 5010, "wall_base_down", "Fence", "base.dismantled");
     await built(STRANGER, 5010, 5010, "gate_base", "Fence");
-    await built(STRANGER, 5010, 5010, "wall_base_up", "Fence");   // built, not a gate: nothing
+    await built(STRANGER, 5010, 5010, "wall_base_up", "Fence");   // built, not a gate: still alerts, as "built"
     await built(MEMBER, 5010, 5010, "gate_base", "Fence");
     const r = await zoneTick(db, { now, enforcementEnabled: true });
-    expect(r.alerts).toBe(2);
+    expect(r.alerts).toBe(3);
     expect((await notices()).map((n) => [n.kind, n.payload])).toEqual([
       ["dismantle", { gamertag: "Sasha", part: "wall_base_down" }],
       ["gate_built", { gamertag: "Sasha" }],
+      ["built", { gamertag: "Sasha", part: "wall_base_up" }],
     ]);
     expect(await db.select().from(intruderSightings)).toHaveLength(0);   // a build is not a sighting
+  });
+
+  it("a solo owner sees solo_built for an ordinary non-gate build", async () => {
+    await db.insert(identityLinks).values({ discordId: "900", dayzId: SOLO, gamertag: "Solo", verifiedAt: now });
+    await db.insert(events).values({ serverId, admFileId, lineIndex: line++, type: "flag.raised", occurredAt: at(-5000), payload: { dayzId: SOLO, gamertag: "Solo", texture: "Flag_White", poleKey: Q, pole: { x: 8000, y: 100, z: 8000 } } });
+    expect(await declareSolo(db, { serverId, dayzId: SOLO, poleKey: Q, at: at(-4000) })).toMatchObject({ ok: true });
+    await db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, type: "base.built", occurredAt: now,
+      payload: { dayzId: STRANGER, gamertag: "Sasha", action: "built", part: "watchtower_kit", structure: "Fence", tool: null, pos: { x: 8001, y: 100, z: 8001 } },
+    });
+    const r = await zoneTick(db, { now, enforcementEnabled: true });
+    expect(r.alerts).toBe(1);
+    expect(await notices()).toEqual([{ kind: "solo_built", target: "dm", payload: { gamertag: "Sasha", part: "watchtower_kit" }, to: "900" }]);
   });
 
   it("⚠️ never writes a coordinate into a notice, and is replay-safe (cursor per event)", async () => {

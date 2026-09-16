@@ -27,7 +27,7 @@ export const CLAN_NOTICE_KINDS = [
   "non_member_raise", "colors_elsewhere", "rebind_proposed", "rebind_confirmed",
   "joined", "became_full", "left", "kicked", "promoted", "demoted", "transferred", "renamed",
   "invited", "request_accepted", "request_declined", "pending_expired", "solo_non_member_raise", "solo_lapsed",
-  "intruder", "dismantle", "gate_built", "solo_intruder", "solo_dismantle", "solo_gate",
+  "intruder", "dismantle", "gate_built", "built", "solo_intruder", "solo_dismantle", "solo_gate", "solo_built",
   "leader_removed", "succession_claimed", "succession_voided", "succession_done",
   "vote_opened", "vote_passed", "vote_failed", "codes_rotated", "guest", "achievement",
   "zone_warning", "ban_applied",
