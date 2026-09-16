@@ -126,10 +126,17 @@ PREV_IMAGE=$(sudo -n docker compose images -q web 2>/dev/null || true)
 # sites — which is why nginx -t is checked, further down, before nginx ever
 # reloads it. Still in the preflight, before any stop: build is the longest
 # step, and a failed build reverts the tree and aborts with nothing stopped.
+#
+# ⚠️ Revert to the exact ref we were on, not to the tag $CURRENT: $CURRENT is
+# empty on a first run and may have been pruned by the fetch above, and
+# checking out a tag would silently leave the repo detached — which
+# `git status --porcelain` reports as clean, so the dirty-tree guard would
+# never catch it.
+PREV_REF=$(git rev-parse HEAD)
 run git checkout --quiet "$TAG"
 if ! run sudo -n docker compose build -q web ingest-worker; then
-  run git checkout --quiet "$CURRENT"
-  alert "BLOCKED" "build failed for $TAG; reverted to $CURRENT, nothing stopped"
+  run git checkout --quiet "$PREV_REF" || alert "CRITICAL" "build failed for $TAG AND the revert to $PREV_REF failed; tree is at $TAG with nothing stopped — needs a human"
+  alert "BLOCKED" "build failed for $TAG; reverted to $PREV_REF, nothing stopped"
   exit 1
 fi
 
@@ -147,8 +154,13 @@ if [ "$DRY_RUN" = "0" ]; then
   if ! { sudo -n docker exec "$CONTAINER" pg_dump -U factions -d factions_live --no-owner \
       | gzip -9 > "$DUMP.part"; } || ! mv "$DUMP.part" "$DUMP"; then
     alert "CRITICAL" "pre-deploy dump for $TAG failed to complete; restarting services, NOT deploying"
-    printf '%s\n' "$TAG" > "$FAILED_MARKER"
     start_all
+    # ⚠️ After start_all, and never fatal: this is bookkeeping, and a failure
+    # to write it must not leave production stopped. The cost of losing it is
+    # a retry two minutes later, not an outage. $FAILED_MARKER lives under
+    # /var/lib/clan-wars, created as root while the unit runs as acab — a
+    # permission failure here is reachable, not hypothetical.
+    printf '%s\n' "$TAG" > "$FAILED_MARKER" || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
     exit 1
   fi
 
@@ -157,8 +169,10 @@ if [ "$DRY_RUN" = "0" ]; then
   # there is no way back except this file.
   if ! gzip -t "$DUMP" || [ "$(stat -c %s "$DUMP")" -lt 1000 ]; then
     alert "CRITICAL" "pre-deploy dump for $TAG failed verification; restarting services, NOT deploying"
-    printf '%s\n' "$TAG" > "$FAILED_MARKER"
     start_all
+    # ⚠️ Same as above: never fatal, and after start_all — bookkeeping must
+    # not be able to strand the outage.
+    printf '%s\n' "$TAG" > "$FAILED_MARKER" || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
     exit 1
   fi
 else
