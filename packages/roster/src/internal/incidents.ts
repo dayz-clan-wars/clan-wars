@@ -179,17 +179,37 @@ export async function reportIncidentDb(
 
     let banned = 0;
     for (const p of participants) {
-      // Prior offences THIS SERVER, this season, that still stand. `lifted`
-      // is excluded — a ban lifted on appeal is the one status that means
-      // the offence did NOT hold up, not merely that enforcement stopped.
-      // `failed`/`expired` still count: the offence stood, only the
-      // mechanical enforcement did not (or ran its course).
+      // Prior offences THIS SERVER, this season, that were actually SERVED.
+      //
+      // ⚠️ REVERSED from an earlier ruling of mine ("failed counts: the
+      // offence stood, only enforcement lapsed"). That was wrong: `bans` rows
+      // stamped `dryRun: true` never reached Nitrado at all — and
+      // `BAN_DRY_RUN` defaults true, so that is the NORMAL state during a
+      // dry-run period — and `failed` rows aged out or exhausted
+      // `BAN_MAX_ATTEMPTS` without ever landing either. Counting either as a
+      // prior offence means a player reported twice during a dry-run week,
+      // who served NOTHING, hits `priorOffences = 2` on their first
+      // genuinely-enforced report — `sentenceMsFor` returns `null` there,
+      // i.e. a PERMANENT ban on a first real punishment. The ladder must
+      // escalate on punishments actually served, not on rows that merely
+      // exist. `lifted` was already excluded (a ban lifted on appeal is the
+      // one status meaning the offence did NOT hold up); `dryRun` and
+      // `failed` join it here for the same reason: never enforced, never a
+      // strike.
       const prior = await tx.select({ id: bans.id }).from(bans).where(and(
         eq(bans.dayzId, p.dayzId), eq(bans.serverId, incident.serverId),
-        gte(bans.bannedAt, seasonStart), ne(bans.status, "lifted"),
+        gte(bans.bannedAt, seasonStart),
+        ne(bans.status, "lifted"), ne(bans.status, "failed"),
+        eq(bans.dryRun, false),
       ));
       const ms = sentenceMsFor(damage, prior.length);
-      await tx.insert(bans).values({
+      // ⚠️ `banned` counts ROWS ACTUALLY INSERTED, not participants iterated.
+      // `onConflictDoNothing` (on `bans_incident_person_uq`) makes a retried
+      // report a no-op per already-banned participant; incrementing outside
+      // this check reports "N players banned" on the UI's one ban-issuing
+      // action even when some of those N were already banned by an earlier
+      // attempt on this same incident.
+      const [inserted] = await tx.insert(bans).values({
         serverId: incident.serverId, incidentId, dayzId: p.dayzId,
         // ⚠️ Frozen here, both of them. Never re-resolved at apply time.
         gamertag: p.gamertag,
@@ -200,8 +220,8 @@ export async function reportIncidentDb(
         // apply time with the mode that actually ran. The web app must not
         // need to know the bot's BAN_DRY_RUN setting.
         status: "pending",
-      }).onConflictDoNothing();
-      banned++;
+      }).onConflictDoNothing().returning({ id: bans.id });
+      if (inserted) banned++;
     }
     return { ok: true as const, banned };
   });

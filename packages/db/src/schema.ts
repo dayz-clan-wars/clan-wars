@@ -1488,7 +1488,17 @@ export const zoneIncidentParticipants = pgTable("zone_incident_participants", {
 export const bans = pgTable("bans", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   serverId: integer("server_id").notNull().references(() => servers.id),
-  incidentId: bigint("incident_id", { mode: "number" }).references(() => zoneIncidents.id),
+  // ⚠️ `SET NULL`, not the default `NO ACTION`. `zone_incidents.declaration_id`
+  // cascades from `declarations` (releaseTx/presenceTick lapse/unlink/disband,
+  // and wipeTx's season wipe, all delete a declaration outright), and `bans`
+  // is durable — it must outlive the incident that produced it, never block
+  // the delete that removes that incident. With `NO ACTION` here, the very
+  // first ban row ever written makes its declaration's incident permanently
+  // undeletable: the FK refuses the cascade and the whole deleting
+  // transaction aborts, including the season wipe. A ban keeps everything it
+  // needs to stand alone — dayzId, gamertag, bannedAt, expiresAt — without
+  // incidentId.
+  incidentId: bigint("incident_id", { mode: "number" }).references(() => zoneIncidents.id, { onDelete: "set null" }),
   dayzId: text("dayz_id").notNull(),
   gamertag: text("gamertag").notNull(),
   bannedAt: timestamp("banned_at", { withTimezone: true }).notNull(),

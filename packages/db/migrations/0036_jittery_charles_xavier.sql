@@ -72,7 +72,7 @@ EXCEPTION
 END $$;
 --> statement-breakpoint
 DO $$ BEGIN
- ALTER TABLE "bans" ADD CONSTRAINT "bans_incident_id_zone_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."zone_incidents"("id") ON DELETE no action ON UPDATE no action;
+ ALTER TABLE "bans" ADD CONSTRAINT "bans_incident_id_zone_incidents_id_fk" FOREIGN KEY ("incident_id") REFERENCES "public"."zone_incidents"("id") ON DELETE set null ON UPDATE no action;
 EXCEPTION
  WHEN duplicate_object THEN null;
 END $$;

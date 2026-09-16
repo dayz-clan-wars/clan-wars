@@ -30,6 +30,18 @@ effect, by design. That is what makes a typo unable to truncate live player data
 more. `TEST_DATABASE_FRESH=1` drops and recreates a package's database — the right
 response to *editing* a migration rather than adding one.
 
+⚠️ **0036 was hand-edited on this branch** (`bans.incident_id` → `zone_incidents.id`
+changed from `ON DELETE no action` to `ON DELETE set null`, in both the migration SQL
+and its `meta/0036_snapshot.json`) after a whole-branch review found the original FK
+made a base with any ban row permanently undeletable — `releaseTx`, solo lapse,
+unlink, disband and `wipeTx`'s season wipe all delete a `declarations` row, which
+cascades to `zone_incidents`, which the original `no action` FK refused once any
+`bans` row referenced it, aborting the whole transaction. 0036 has never been applied
+to any database on this branch (unmerged; `factions_live` does not have it), so it was
+amended in place rather than adding 0037. A `factions_test_<package>` created before
+this edit carries the stale FK — drop it once so the migration re-applies (same
+remedy as 0023 below).
+
 ⚠️ **0023 was hand-edited on this branch** (`clan_notices_dm_has_target`,
 `raids.last_lower_event_id`) after it was first generated. A `factions_test_<package>`
 created before that edit carries the stale 0023 and will not pick up the fix — drop it

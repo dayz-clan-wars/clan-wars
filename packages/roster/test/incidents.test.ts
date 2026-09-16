@@ -158,6 +158,9 @@ describe("reportable incidents and pressing charges", () => {
     await reportIncidentDb(db, now, OFFICER_DISCORD, first);
     const [firstBan] = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
     const firstTermMs = firstBan!.expiresAt!.getTime() - firstBan!.bannedAt.getTime();
+    // Priors only count once actually SERVED (Critical 2) — stand in for
+    // ban-tick's apply arm so this test still exercises real escalation.
+    await db.update(bans).set({ status: "applied", dryRun: false }).where(eq(bans.id, firstBan!.id));
 
     const laterClosed = new Date(closedAt.getTime() + 1000);
     const second = await seedIncident({ closedAt: laterClosed });
@@ -178,6 +181,9 @@ describe("reportable incidents and pressing charges", () => {
     for (let i = 0; i < 2; i++) {
       const inc = await seedIncident({ closedAt: new Date(closedTime) });
       await reportIncidentDb(db, new Date(closedTime + 1000), OFFICER_DISCORD, inc);
+      // Priors only count once actually SERVED (Critical 2) — stand in for
+      // ban-tick's apply arm so this test still exercises real escalation.
+      await db.update(bans).set({ status: "applied", dryRun: false }).where(eq(bans.incidentId, inc));
       closedTime += 2000;
     }
     const third = await seedIncident({ closedAt: new Date(closedTime) });
@@ -221,8 +227,8 @@ describe("reportable incidents and pressing charges", () => {
 
     // Two prior bans on OFFENDER_1 this season, one of them lifted.
     await db.insert(bans).values([
-      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 500_000), expiresAt: null, status: "lifted" },
-      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 400_000), expiresAt: new Date(openedAt.getTime() + 86_400_000), status: "applied" },
+      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 500_000), expiresAt: null, status: "lifted", dryRun: false },
+      { serverId, dayzId: OFFENDER_1, gamertag: "Offender1", bannedAt: new Date(openedAt.getTime() - 400_000), expiresAt: new Date(openedAt.getTime() + 86_400_000), status: "applied", dryRun: false },
     ]);
 
     const id = await seedIncident();
@@ -234,5 +240,88 @@ describe("reportable incidents and pressing charges", () => {
     const expectedMs = sentenceMsFor(damage, 1);
     expect(newBan.expiresAt).not.toBeNull();
     expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(expectedMs);
+  });
+
+  // ⚠️ CRITICAL regression (reverses an earlier ruling recorded in the SDD
+  // ledger, "failed counts: the offence stood, only enforcement lapsed" —
+  // that reasoning was wrong): a `dryRun: true` prior never reached Nitrado —
+  // `BAN_DRY_RUN` defaults true, so this is the NORMAL state during a
+  // dry-run period — and must not escalate the ladder. Without this
+  // exclusion, two reports served during a dry-run week turn a player's
+  // FIRST genuinely-enforced offence into a permanent ban.
+  it("a dry-run prior does not escalate the ladder", async () => {
+    const seasonStart = new Date(openedAt.getTime() - 1_000_000);
+    await seedSeason(db, serverId, seasonStart);
+    await db.insert(bans).values({
+      serverId, dayzId: OFFENDER_1, gamertag: "Offender1",
+      bannedAt: new Date(openedAt.getTime() - 400_000),
+      expiresAt: new Date(openedAt.getTime() + 86_400_000),
+      status: "applied", dryRun: true,
+    });
+
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    const newBan = rows.find((b) => b.incidentId === id)!;
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(sentenceMsFor(damage, 0));
+  });
+
+  // ⚠️ CRITICAL regression: a `failed` prior (aged out past the apply
+  // lookback, or exhausted BAN_MAX_ATTEMPTS) never reached Nitrado either —
+  // it must not escalate the ladder any more than a dry-run row does.
+  it("a failed prior does not escalate the ladder", async () => {
+    const seasonStart = new Date(openedAt.getTime() - 1_000_000);
+    await seedSeason(db, serverId, seasonStart);
+    await db.insert(bans).values({
+      serverId, dayzId: OFFENDER_1, gamertag: "Offender1",
+      bannedAt: new Date(openedAt.getTime() - 400_000),
+      expiresAt: new Date(openedAt.getTime() + 86_400_000),
+      status: "failed", dryRun: false,
+    });
+
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    const newBan = rows.find((b) => b.incidentId === id)!;
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(sentenceMsFor(damage, 0));
+  });
+
+  // Sanity converse: a real, enforced prior (applied, not dry-run) DOES escalate.
+  it("an applied non-dry-run prior escalates the ladder", async () => {
+    const seasonStart = new Date(openedAt.getTime() - 1_000_000);
+    await seedSeason(db, serverId, seasonStart);
+    await db.insert(bans).values({
+      serverId, dayzId: OFFENDER_1, gamertag: "Offender1",
+      bannedAt: new Date(openedAt.getTime() - 400_000),
+      expiresAt: new Date(openedAt.getTime() + 86_400_000),
+      status: "applied", dryRun: false,
+    });
+
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    const newBan = rows.find((b) => b.incidentId === id)!;
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(sentenceMsFor(damage, 1));
+  });
+
+  // MINOR regression: `banned` must count rows actually INSERTED, not
+  // participants iterated — a retried report on an incident where one
+  // participant is already banned (onConflictDoNothing) must not claim it
+  // banned that participant again.
+  it("banned counts inserted rows, not participants, when one is already banned", async () => {
+    const id = await seedIncident();
+    await db.insert(bans).values({
+      serverId, incidentId: id, dayzId: OFFENDER_1, gamertag: "Offender1",
+      bannedAt: now, expiresAt: null, status: "pending",
+    });
+    // reportIncidentDb itself refuses a second report on the SAME incident,
+    // so simulate the only way this onConflict path is reachable: the report
+    // write racing a hand-seeded row under the same (incidentId, dayzId).
+    await db.update(zoneIncidents).set({ reportedAt: null }).where(eq(zoneIncidents.id, id));
+    const r = await reportIncidentDb(db, now, OFFICER_DISCORD, id);
+    expect(r).toEqual({ ok: true, banned: 1 });
   });
 });
