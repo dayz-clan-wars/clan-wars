@@ -1,0 +1,266 @@
+import type { Database } from "@factions/db";
+import {
+  bans, declarations, factionMembers, identityLinks, seasons, zoneIncidentParticipants, zoneIncidents, zoneViolations,
+} from "@factions/db";
+import type { Tx } from "@factions/declarations";
+import { sentenceMsFor, VIOLATION_REPORT_WINDOW_MS, type IncidentDamage, type ViolationKind } from "@factions/domain";
+import { and, asc, eq, gte, inArray, isNull, ne } from "drizzle-orm";
+import { activeServerId } from "../server";
+
+export type ReportableIncident = {
+  id: number;
+  openedAt: Date;
+  closedAt: Date;
+  partsDismantled: number;
+  partsBuilt: number;
+  stackItems: number;
+  hasBreach: boolean;
+  hasGate: boolean;
+  participants: { dayzId: string; gamertag: string }[];
+  acts: { kind: ViolationKind; what: string; x: number; z: number; at: Date }[];
+};
+
+export const REPORT_REASONS = [
+  "not-linked", "not-owner", "not-officer", "no-incident", "window-closed", "already-reported",
+  "no-selection", "not-participant",
+] as const;
+export type ReportReason = (typeof REPORT_REASONS)[number];
+export type ReportOutcome = { ok: true; banned: number } | { ok: false; reason: ReportReason };
+
+/**
+ * The open season's `started_at` for the server, or `now` when no season is
+ * open. Package-local twin of `scoring.ts`'s `openSeasonFor`.
+ *
+ * ⚠️ The fallback is `now`, NOT the epoch. The prior-offence query below is
+ * `bannedAt >= seasonStart`, so an epoch fallback would match every ban ever
+ * written on the server — and between a season closing at a wipe and the
+ * next season's row being inserted, that turns a player's FIRST offence of
+ * the new season into their third, which `sentenceMsFor` makes permanent
+ * with no expire arm able to ever lift it. Falling back to `now` instead
+ * costs one first-offence player a slightly-short term in that gap, which is
+ * recoverable; the epoch fallback cost a player their account.
+ */
+async function seasonStartFor(db: Database | Tx, serverId: number, now: Date): Promise<Date> {
+  const [s] = await db.select({ startedAt: seasons.startedAt }).from(seasons)
+    .where(and(eq(seasons.serverId, serverId), isNull(seasons.endedAt)));
+  return s?.startedAt ?? now;
+}
+
+/**
+ * The incidents at the caller's own base that are ready to be reported:
+ * CLOSED, not yet reported, inside `VIOLATION_REPORT_WINDOW_MS` of closing.
+ * Every participant and every act the log recorded is included — this is
+ * the ONLY place the evidence a report is based on is shown (CLAUDE.md: no
+ * coordinates in any Discord notice, so this can only ever be a site read).
+ *
+ * A SOLO base surfaces to its declarant; a clan base surfaces to every full
+ * member (the officer gate is on the WRITE, `reportIncidentDb`, not here —
+ * a member who cannot press charges can still see why an officer might).
+ */
+export async function reportableIncidentsDb(db: Database, now: Date, discordId: string): Promise<ReportableIncident[]> {
+  const [link] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks)
+    .where(eq(identityLinks.discordId, discordId));
+  if (!link) return [];
+
+  const serverId = await activeServerId(db);
+  const [member] = await db.select({ factionId: factionMembers.factionId }).from(factionMembers)
+    .where(and(
+      eq(factionMembers.serverId, serverId),
+      eq(factionMembers.dayzId, link.dayzId),
+      eq(factionMembers.status, "full"),
+    ));
+
+  const declRows = member
+    ? await db.select({ id: declarations.id }).from(declarations)
+      .where(and(eq(declarations.serverId, serverId), eq(declarations.ownerFactionId, member.factionId)))
+    : await db.select({ id: declarations.id }).from(declarations)
+      .where(and(eq(declarations.serverId, serverId), eq(declarations.ownerDayzId, link.dayzId)));
+  if (declRows.length === 0) return [];
+  const declIds = declRows.map((d) => d.id);
+
+  const incidents = await db.select().from(zoneIncidents)
+    .where(and(
+      inArray(zoneIncidents.declarationId, declIds),
+      // ⚠️ isNotNull(closedAt) is asserted below rather than in the query —
+      // drizzle's generated type still says `Date | null` either way, and
+      // the filter is cheap at this table's size.
+    ));
+
+  const reportable = incidents.filter((i) =>
+    i.closedAt !== null && i.reportedAt === null &&
+    now.getTime() - i.closedAt.getTime() <= VIOLATION_REPORT_WINDOW_MS,
+  );
+  if (reportable.length === 0) return [];
+
+  const out: ReportableIncident[] = [];
+  for (const i of reportable) {
+    const participants = await db.select({ dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag })
+      .from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, i.id));
+    const violations = await db.select().from(zoneViolations)
+      .where(eq(zoneViolations.incidentId, i.id)).orderBy(asc(zoneViolations.occurredAt));
+    out.push({
+      id: i.id, openedAt: i.openedAt, closedAt: i.closedAt!,
+      partsDismantled: i.partsDismantled, partsBuilt: i.partsBuilt, stackItems: i.stackItems,
+      hasBreach: i.hasBreach, hasGate: i.hasGate,
+      participants,
+      acts: violations.map((v) => ({
+        kind: v.kind, what: v.what, x: Number(v.x), z: Number(v.z), at: v.occurredAt,
+      })),
+    });
+  }
+  return out;
+}
+
+/**
+ * Press charges on a bot-witnessed incident, against a chosen subset of its
+ * participants.
+ *
+ * ⚠️ This is a PROSECUTION TOGGLE, not a report form. It carries no free
+ * text and cannot describe an act the log did not witness — the reporter
+ * chooses only WHOM among the witnessed participants to charge, never WHAT
+ * the charge is, and never anyone the log did not put on this incident. That
+ * property is the whole reason a player's click may trigger a ban with no
+ * staff adjudicator in the loop (spec §1). Do not add a caller-supplied field
+ * that describes an act — only a selection FROM the incident's own
+ * `zone_incident_participants` rows is accepted.
+ *
+ * ⚠️ `chargedDayzIds` is validated against THIS incident's own participant
+ * rows below, and an id that is not one of them is a REFUSAL
+ * (`not-participant`), never a silent skip. Silently dropping an unknown id
+ * would look identical, from the caller's side, to accepting a caller-chosen
+ * name the log never witnessed — the exact property spec §1 says must never
+ * be true. An empty selection is refused too (`no-selection`): "report but
+ * charge nobody" is not a state this function has any reason to reach.
+ *
+ * Liability is still JOINT per charged person (spec §7): each of the charged
+ * participants is sentenced on the incident's FULL damage total, not only
+ * their own acts — spreading damage across accounts still gains an attacker
+ * nothing. What changed from the original design is only WHO gets charged:
+ * an owner who invited a helper to build can charge the raider alone,
+ * without also banning the helper on the raider's damage (spec §2.4).
+ *
+ * ⚠️ `reportedAt`/`reportedByDiscordId` still stamp the incident ONCE, even
+ * when only some participants are charged — an incident is reported once.
+ * Re-reporting later to charge someone else is a plausible future request
+ * and is refused (`already-reported`) rather than silently allowed: the
+ * evidence window and the sentence (prior-offence count, damage totals) are
+ * both computed AT REPORT TIME, so a second pass could compute a different
+ * sentence for the same incident depending on when it ran. If a legitimate
+ * "charge someone else later" need shows up, it wants its own deliberate
+ * design, not a fallthrough here.
+ */
+export async function reportIncidentDb(
+  db: Database, now: Date, discordId: string, incidentId: number, chargedDayzIds: string[],
+): Promise<ReportOutcome> {
+  return db.transaction(async (tx) => {
+    const [link] = await tx.select({ dayzId: identityLinks.dayzId })
+      .from(identityLinks).where(eq(identityLinks.discordId, discordId));
+    if (!link) return { ok: false as const, reason: "not-linked" as const };
+
+    // Lock order (CLAUDE.md §4.12): zone_incidents is locked here; the
+    // declarations and faction_members reads right after are PLAIN reads
+    // (no FOR UPDATE), so no conflicting lock order is created — see the
+    // note in CLAUDE.md.
+    const [incident] = await tx.select().from(zoneIncidents)
+      .where(eq(zoneIncidents.id, incidentId)).for("update");
+    if (!incident || incident.closedAt === null) return { ok: false as const, reason: "no-incident" as const };
+    if (incident.reportedAt !== null) return { ok: false as const, reason: "already-reported" as const };
+    if (now.getTime() - incident.closedAt.getTime() > VIOLATION_REPORT_WINDOW_MS) {
+      return { ok: false as const, reason: "window-closed" as const };
+    }
+
+    const [decl] = await tx.select({
+      ownerFactionId: declarations.ownerFactionId, ownerDayzId: declarations.ownerDayzId,
+    }).from(declarations).where(eq(declarations.id, incident.declarationId));
+    if (!decl) return { ok: false as const, reason: "no-incident" as const };
+
+    if (decl.ownerFactionId === null) {
+      // A solo base: only the declarant may press charges.
+      if (decl.ownerDayzId !== link.dayzId) return { ok: false as const, reason: "not-owner" as const };
+    } else {
+      // A clan base: officer+, the same gate grantGuestPassDbFor uses.
+      const [member] = await tx.select({ role: factionMembers.role }).from(factionMembers)
+        .where(and(
+          eq(factionMembers.factionId, decl.ownerFactionId),
+          eq(factionMembers.dayzId, link.dayzId),
+          eq(factionMembers.status, "full"),
+        ));
+      if (!member) return { ok: false as const, reason: "not-owner" as const };
+      if (member.role !== "leader" && member.role !== "officer") {
+        return { ok: false as const, reason: "not-officer" as const };
+      }
+    }
+
+    const seasonStart = await seasonStartFor(tx, incident.serverId, now);
+    const participants = await tx.select({
+      dayzId: zoneIncidentParticipants.dayzId, gamertag: zoneIncidentParticipants.gamertag,
+    }).from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, incidentId));
+
+    if (chargedDayzIds.length === 0) return { ok: false as const, reason: "no-selection" as const };
+    const participantIds = new Set(participants.map((p) => p.dayzId));
+    // ⚠️ Every charged id MUST be a participant THIS incident's own log
+    // witnessed. This is the check that keeps a report from ever describing
+    // an act the log did not record — see the function's own comment.
+    if (!chargedDayzIds.every((id) => participantIds.has(id))) {
+      return { ok: false as const, reason: "not-participant" as const };
+    }
+    const charged = new Set(chargedDayzIds);
+
+    await tx.update(zoneIncidents)
+      .set({ reportedAt: now, reportedByDiscordId: discordId })
+      .where(eq(zoneIncidents.id, incidentId));
+
+    const damage: IncidentDamage = {
+      partsDismantled: incident.partsDismantled, partsBuilt: incident.partsBuilt,
+      stackItems: incident.stackItems, hasBreach: incident.hasBreach, hasGate: incident.hasGate,
+    };
+
+    let banned = 0;
+    for (const p of participants.filter((p) => charged.has(p.dayzId))) {
+      // Prior offences THIS SERVER, this season, that were actually SERVED.
+      //
+      // ⚠️ REVERSED from an earlier ruling of mine ("failed counts: the
+      // offence stood, only enforcement lapsed"). That was wrong: `bans` rows
+      // stamped `dryRun: true` never reached Nitrado at all — and
+      // `BAN_DRY_RUN` defaults true, so that is the NORMAL state during a
+      // dry-run period — and `failed` rows aged out or exhausted
+      // `BAN_MAX_ATTEMPTS` without ever landing either. Counting either as a
+      // prior offence means a player reported twice during a dry-run week,
+      // who served NOTHING, hits `priorOffences = 2` on their first
+      // genuinely-enforced report — `sentenceMsFor` returns `null` there,
+      // i.e. a PERMANENT ban on a first real punishment. The ladder must
+      // escalate on punishments actually served, not on rows that merely
+      // exist. `lifted` was already excluded (a ban lifted on appeal is the
+      // one status meaning the offence did NOT hold up); `dryRun` and
+      // `failed` join it here for the same reason: never enforced, never a
+      // strike.
+      const prior = await tx.select({ id: bans.id }).from(bans).where(and(
+        eq(bans.dayzId, p.dayzId), eq(bans.serverId, incident.serverId),
+        gte(bans.bannedAt, seasonStart),
+        ne(bans.status, "lifted"), ne(bans.status, "failed"),
+        eq(bans.dryRun, false),
+      ));
+      const ms = sentenceMsFor(damage, prior.length);
+      // ⚠️ `banned` counts ROWS ACTUALLY INSERTED, not participants iterated.
+      // `onConflictDoNothing` (on `bans_incident_person_uq`) makes a retried
+      // report a no-op per already-banned participant; incrementing outside
+      // this check reports "N players banned" on the UI's one ban-issuing
+      // action even when some of those N were already banned by an earlier
+      // attempt on this same incident.
+      const [inserted] = await tx.insert(bans).values({
+        serverId: incident.serverId, incidentId, dayzId: p.dayzId,
+        // ⚠️ Frozen here, both of them. Never re-resolved at apply time.
+        gamertag: p.gamertag,
+        bannedAt: now,
+        // ⚠️ null means PERMANENT, not unknown.
+        expiresAt: ms === null ? null : new Date(now.getTime() + ms),
+        // `dry_run` is left at the column default and STAMPED BY ban-tick at
+        // apply time with the mode that actually ran. The web app must not
+        // need to know the bot's BAN_DRY_RUN setting.
+        status: "pending",
+      }).onConflictDoNothing().returning({ id: bans.id });
+      if (inserted) banned++;
+    }
+    return { ok: true as const, banned };
+  });
+}

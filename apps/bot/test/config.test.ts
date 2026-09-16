@@ -398,4 +398,50 @@ describe("loadConfig", () => {
   it("reads the @Alpha role id", () => {
     expect(loadConfig(OK)).toMatchObject({ alphaRoleId: "42345678901234567" });
   });
+
+  describe("BAN_DRY_RUN", () => {
+    it("⚠️ defaults TRUE — real bans require explicitly setting it to \"false\"", () => {
+      expect(loadConfig(OK).banDryRun).toBe(true);
+    });
+
+    it('"false" turns dry-run OFF — bans become real', () => {
+      expect(loadConfig({ ...OK, BAN_DRY_RUN: "false" }).banDryRun).toBe(false);
+    });
+
+    // ⚠️ These are the exact shapes an operator would reasonably type expecting
+    // to turn real bans on. If the parse ever regresses to something that
+    // doesn't trim/lowercase, every one of these silently STAYS dry-run —
+    // the safe direction, but the operator believes otherwise and nothing
+    // says so.
+    it('"FALSE" and whitespace-padded "false" also turn dry-run off, normalized before the comparison', () => {
+      expect(loadConfig({ ...OK, BAN_DRY_RUN: "FALSE" }).banDryRun).toBe(false);
+      expect(loadConfig({ ...OK, BAN_DRY_RUN: " false " }).banDryRun).toBe(false);
+    });
+
+    // ⚠️ Anything that is NOT the normalized string "false" must leave real
+    // bans OFF. This is the inversion-proof set: a parse accidentally written
+    // as `=== "true"` would pass every test above and still let every one of
+    // these enforce for real.
+    it.each(["0", "no", "off", "", "true", "1"])(
+      '%j does NOT turn dry-run off — only "false" does', (raw) => {
+        expect(loadConfig({ ...OK, BAN_DRY_RUN: raw }).banDryRun).toBe(true);
+      },
+    );
+  });
+
+  describe("ENFORCEMENT_TICK / NITRADO_TOKEN", () => {
+    it("defaults off", () => {
+      expect(loadConfig(OK).enforcementTick).toBe(false);
+    });
+
+    it('"1" and "true" both turn it on, matching the other boolean flags in this file', () => {
+      expect(loadConfig({ ...OK, ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).enforcementTick).toBe(true);
+      expect(loadConfig({ ...OK, ENFORCEMENT_TICK: "true", NITRADO_TOKEN: "nt" }).enforcementTick).toBe(true);
+    });
+
+    it("⚠️ on without a token refuses to load — an enforcer that cannot authenticate would attempts-out and permanently fail every pending ban", () => {
+      expect(() => loadConfig({ ...OK, ENFORCEMENT_TICK: "1" })).toThrow(/NITRADO_TOKEN/u);
+      expect(() => loadConfig({ ...OK, ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "  " })).toThrow(/NITRADO_TOKEN/u);
+    });
+  });
 });

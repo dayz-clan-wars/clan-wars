@@ -2,8 +2,8 @@ import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags, PermissionFlagsBits,
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
-import { eq } from "drizzle-orm";
-import { emoteLabel, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
+import { and, eq, isNotNull } from "drizzle-orm";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
 import { verificationTick } from "./tick.js";
@@ -19,6 +19,8 @@ import { dormancyTick } from "./dormancy-tick.js";
 import { presenceTick, expirePendingMembers } from "./presence-tick.js";
 import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
+import { violationTick } from "./violation-tick.js";
+import { banTick } from "./ban-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
@@ -515,7 +517,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   // must not hold that loop up for a full minute, every pass, for the whole ten-minute
   // grace window.
   const nitradoClients = new Map<number, NitradoClient>();
-  const nitradoFor = (serviceId: number): RestartTarget => {
+  // ⚠️ Returns the concrete NitradoClient, not the narrower RestartTarget —
+  // banTick needs addBans/removeBans, which RestartTarget doesn't declare.
+  // Both restartTick and banTick take this same map (one client per service
+  // id) so a slow or failing call for one purpose never spins up a second,
+  // competing client for the other.
+  const nitradoFor = (serviceId: number): NitradoClient => {
     let c = nitradoClients.get(serviceId);
     if (!c) {
       // ⚠️ loadConfig guarantees nitradoToken whenever restartSchedule is on; this
@@ -747,10 +754,25 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("positions tick failed", err);
     }
     try {
-      const z = await zoneTick(db, { now: new Date() });
+      const z = await zoneTick(db, { now: new Date(), enforcementEnabled: cfg.enforcementTick });
       if (z.alerts > 0) console.log(`zone watch: ${z.sightings} sighting(s), ${z.alerts} alert(s)`);
     } catch (err) {
       console.error("zone tick failed", err);
+    }
+
+    // ⚠️ Right after zoneTick, every tick, gated on cfg.enforcementTick:
+    // violationTick closes what zoneTick opens (an incident gone quiet past
+    // VIOLATION_INCIDENT_GAP_MS) and queues the participant's warning DM. It
+    // must run before the posters below — specifically noticeTick, which
+    // drains clan_notices — so a warning queued THIS tick is posted THIS
+    // tick rather than sitting an extra interval.
+    if (cfg.enforcementTick) {
+      try {
+        const v = await violationTick(db, { now: new Date() });
+        if (v.closed > 0 || v.warned > 0) console.log(`violations: ${v.closed} closed, ${v.warned} warned`);
+      } catch (err) {
+        console.error("violation tick failed", err);
+      }
     }
 
     // ⚠️ Its own try/catch: runs after zone (which needs membership
@@ -970,6 +992,40 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (r.pins + r.positions + r.sightings + r.guestPasses > 0) console.log(`reaper: ${r.pins} pin(s), ${r.positions} position(s), ${r.sightings} sighting(s), ${r.guestPasses} guest pass(es)`);
       } catch (err) {
         console.error("reaper tick failed", err);
+      }
+
+      // ⚠️ Beside reaperTick, NOT the every-tick block above: `banTick` does a
+      // whole-field read-modify-write of Nitrado's `settings.general.bans`
+      // per call, and doing that every BOT_TICK_INTERVAL_MS (10s default)
+      // is a rate-limit waiting to happen. Once per server, using that
+      // server's own NitradoClient (via nitradoFor, the same map restartTick
+      // shares) so a slow or failing call to one server's ban list can never
+      // touch another's.
+      //
+      // `since` is `now - BAN_APPLY_LOOKBACK_MS` (24h), NEVER the bot's
+      // process start time — see the comment on `BAN_APPLY_LOOKBACK_MS` in
+      // `packages/domain/src/rules.ts` for why: a ban written shortly before
+      // a routine restart would otherwise sit `pending` forever while still
+      // counting as a standing prior offence.
+      if (cfg.enforcementTick) {
+        try {
+          const banServers = await db.select({ id: servers.id, serviceId: servers.nitradoServiceId })
+            .from(servers).where(and(eq(servers.active, true), isNotNull(servers.nitradoServiceId)));
+          const banNow = new Date();
+          const since = new Date(banNow.getTime() - BAN_APPLY_LOOKBACK_MS);
+          for (const s of banServers) {
+            try {
+              const b = await banTick(db, nitradoFor(s.serviceId!), { now: banNow, dryRun: cfg.banDryRun, since, serverId: s.id });
+              if (b.applied + b.expired + b.failed > 0) {
+                console.log(`ban tick (server ${s.id}): ${b.applied} applied, ${b.expired} expired, ${b.failed} failed`);
+              }
+            } catch (err) {
+              console.error(`ban tick failed for server ${s.id}`, err);
+            }
+          }
+        } catch (err) {
+          console.error("ban tick server lookup failed", err);
+        }
       }
     }
 

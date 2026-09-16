@@ -9,6 +9,7 @@ import { parseHit, type HitLine } from "./hit.js";
 import { parseUnconscious, type UnconsciousLine } from "./unconscious.js";
 import { parseSession, type SessionEvent } from "./session.js";
 import { parseTeleport, type TeleportEvent } from "./teleport.js";
+import { parsePlacement, type PlacementEvent } from "./placement.js";
 
 export type ParsedLine =
   | { kind: "flag"; change: FlagChange }
@@ -21,7 +22,8 @@ export type ParsedLine =
   | { kind: "hit"; event: HitLine }
   | { kind: "unconscious"; event: UnconsciousLine }
   | { kind: "session"; event: SessionEvent }
-  | { kind: "teleport"; event: TeleportEvent };
+  | { kind: "teleport"; event: TeleportEvent }
+  | { kind: "placement"; event: PlacementEvent };
 
 /**
  * Every ParsedLine a single raw line yields, in a FIXED order.
@@ -65,6 +67,9 @@ export function parseLine(raw: string): ParsedLine[] {
   const emote = parseEmote(raw);
   if (emote) return [{ kind: "emote", event: emote }];
 
+  const placement = parsePlacement(raw);
+  if (placement) return [{ kind: "placement", event: placement }];
+
   return [];
 }
 
@@ -97,6 +102,8 @@ export function eventTypeFor(line: ParsedLine): EventType | null {
       return line.event.kind === "connected" ? "player.connected" : "player.disconnected";
     case "teleport":
       return "player.teleported";
+    case "placement":
+      return "item.placed";
     case "roster":
       return null;
   }

@@ -206,5 +206,19 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
       };
     case "roster":
       return { count: line.count };
+    case "placement":
+      return {
+        gamertag: line.event.gamertag, dayzId: line.event.dayzId,
+        item: line.event.item, itemClass: line.event.itemClass, pos: line.event.pos,
+      };
+    default: {
+      // ⚠️ Exhaustiveness guard. `toPayload` returns `unknown` and the repo does not
+      // set `noImplicitReturns`, so before this existed a new ParsedLine kind fell
+      // through and stored an undefined payload against a NOT NULL jsonb column —
+      // with `tsc --noEmit` passing clean. That is exactly the silent failure this
+      // codebase's conventions exist to prevent.
+      const _exhaustive: never = line;
+      throw new Error(`toPayload: unhandled ParsedLine kind ${JSON.stringify(_exhaustive)}`);
+    }
   }
 }

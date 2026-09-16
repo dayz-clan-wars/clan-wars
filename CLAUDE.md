@@ -30,6 +30,18 @@ effect, by design. That is what makes a typo unable to truncate live player data
 more. `TEST_DATABASE_FRESH=1` drops and recreates a package's database — the right
 response to *editing* a migration rather than adding one.
 
+⚠️ **0036 was hand-edited on this branch** (`bans.incident_id` → `zone_incidents.id`
+changed from `ON DELETE no action` to `ON DELETE set null`, in both the migration SQL
+and its `meta/0036_snapshot.json`) after a whole-branch review found the original FK
+made a base with any ban row permanently undeletable — `releaseTx`, solo lapse,
+unlink, disband and `wipeTx`'s season wipe all delete a `declarations` row, which
+cascades to `zone_incidents`, which the original `no action` FK refused once any
+`bans` row referenced it, aborting the whole transaction. 0036 has never been applied
+to any database on this branch (unmerged; `factions_live` does not have it), so it was
+amended in place rather than adding 0037. A `factions_test_<package>` created before
+this edit carries the stale FK — drop it once so the migration re-applies (same
+remedy as 0023 below).
+
 ⚠️ **0023 was hand-edited on this branch** (`clan_notices_dm_has_target`,
 `raids.last_lower_event_id`) after it was first generated. A `factions_test_<package>`
 created before that edit carries the stale 0023 and will not pick up the fix — drop it
@@ -38,6 +50,22 @@ once so the migration re-applies. `TEST_DATABASE_FRESH=1` does not help through
 `DATABASE_URL` in its `env`, so `TEST_DATABASE_FRESH` does not reach the child process.
 Run the affected package's `vitest` directly with `TEST_DATABASE_FRESH=1` set, or drop
 the specific `factions_test_<package>` database by hand — never touch `factions_live`.
+
+⚠️ **Two concurrent `pnpm turbo run test` (or `vitest`) invocations share `factions_test_<package>`** —
+the database name is derived from the package alone, not from the process, so a second run
+started while a first is still going writes into the same tables. On this branch that
+produced a four-test failure in `apps/bot` that looked exactly like a real regression and
+cost a full investigation; every suite passed again in isolation. Don't run the gate twice
+at once, and don't run a package's `vitest` by hand while `turbo run test` is also running.
+
+**`BAN_DRY_RUN` (base-zone enforcement) has two hazards, not one.** First: the apply arm in
+`ban-tick.ts` is bounded to `BAN_APPLY_LOOKBACK_MS` (24h) precisely so that flipping
+`BAN_DRY_RUN` from true to false does not fire the entire historical backlog of `pending`
+bans at Nitrado in a single tick — every dry-run ban ever written, going back to the
+feature's first day, would otherwise become a live ban attempt at once. Second: never flip
+`BAN_DRY_RUN` back to `true` while any `bans` row is `status = 'applied'` — the expire arm
+would then close that row without calling Nitrado, orphaning its ban-list entry
+**permanently**. An orphaned account hash cannot be shed by renaming.
 
 **Port 5434 only.** 5432 and 5433 belong to other projects on this machine — never
 stop, remove, or repoint their containers.
@@ -295,6 +323,7 @@ turbo gate stays the gate, because it runs `typecheck` too.
 | Scheduled restarts (even UTC hours) | `apps/bot/src/restart-tick.ts`, gated on `RESTART_SCHEDULE`; slots from `restartSlot()` in `packages/domain/src/restarts.ts` (`RESTART_PERIOD_MS`, `RESTART_GRACE_MS` in `rules.ts`); one row per server per slot in `server_restarts`. `messages.xml` is never touched. Runbook `docs/deploy/2026-09-12-scheduled-restarts.md` |
 | The daily truck wipe | Rides on the restart slots: `applyTruckWipe` in `apps/bot/src/restart-tick.ts`, the wanted state from `truckWipeActive()` in `packages/domain/src/restarts.ts`, the surgical edit in `apps/bot/src/events-xml.ts`. Gated on `TRUCK_WIPE_EVENTS` (empty = off, and it refuses to load without `RESTART_SCHEDULE`). ⚠️ **Level-triggered** — every slot recomputes the state the server should boot into, so a lost write self-heals at the next restart instead of leaving the trucks off for a day. `events.xml` lives in the mission's **`db`** directory (`missionDbDir()`), not the root and not `custom`. Runbook `docs/deploy/2026-09-12-truck-wipe.md` |
 | The weekly vehicle rotation | `rotationActiveFor()`/`weeklyWipeVehicle()` in `packages/domain/src/restarts.ts` (list and anchor in `rules.ts`), applied by `applyTruckWipe` in `apps/bot/src/restart-tick.ts`; the Sunday notice is `apps/bot/src/announce-tick.ts` + `announce-text.ts` over `vehicle_wipe_announcements` (migration 0033). Gated on `WEEKLY_VEHICLE_WIPE` + `ANNOUNCEMENTS_CHANNEL_ID`. ⚠️ The rotation is **derived from the calendar, never stored**, so the announcement and the wipe cannot disagree; and **all five converge every slot**, or a bot down across a Monday 10:00 strands that week's vehicle at `active=0` forever. ⚠️ `vehicle_wipe_announcements` is keyed on `wipe_at` ALONE — no `server_id`, or one message posts per server. Runbook `docs/deploy/2026-09-12-weekly-vehicle-rotation.md` |
+| Base-zone enforcement (intruder detection, dismantle/gate/boost-stack violations, warnings and automatic bans) | Detection in `apps/bot/src/zone-tick.ts` (extends the map's zone consumer with `base.built`/`base.dismantled`/`item.placed` handling and `boostStackFor`); incident close-out and warning DMs in `apps/bot/src/violation-tick.ts`; the ban reconciler (Nitrado apply/expire/lift, dry-run) in `apps/bot/src/ban-tick.ts`; the sentencing ladder and boost-stack math in `packages/domain/src/enforcement.ts`; the officer "press charges" read/write in `packages/roster/src/internal/incidents.ts`; schema in migration `0036_jittery_charles_xavier.sql` (`zone_incidents`, `zone_incident_participants`, `zone_placements`, `zone_violations`, `bans`). Runbook `docs/deploy/2026-09-15-zone-enforcement.md` |
 | The wipe, the launch grace stamp, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm launch --server <id> --at <ISO>` (`scripts/launch.ts`; stamps every pole on the server to `--at` + 7 days, spec §4.2; same `--at`-is-required rule, idempotent for the same instant), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — all three refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
@@ -356,7 +385,15 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
-  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices`.**
+  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices` →
+  `zone_incidents` → `zone_incident_participants` → `bans`.**
+  The zone-enforcement report write (`reportIncidentDb`, `packages/roster/src/internal/incidents.ts`)
+  locks `zone_incidents` FIRST (`FOR UPDATE`, by incident id — that row is already known from the
+  caller's `reportableIncidentsDb` read), then reads `declarations` and `faction_members` for the
+  officer gate as PLAIN selects, no `FOR UPDATE` — so despite reading tables earlier in the order
+  second, no conflicting lock is taken out of sequence, because those two reads never lock a row.
+  It then writes `zone_incident_participants` and `bans` in that order, all inside the incident's
+  own transaction.
   The achievements tick writes the three achievement tables in exactly that order inside each
   owner's transaction, before it appends that owner's notices.
   `server_restarts` and `vehicle_wipe_announcements` are outside the order: each written by

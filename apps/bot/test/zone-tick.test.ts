@@ -40,7 +40,7 @@ describe("zoneTick", () => {
     await fix(STRANGER, 5030, 5040);           // 50 m
     await fix(MEMBER, 5001, 5001);
     await fix(STRANGER, 5000 + WATCH_ZONE_RADIUS_M + 1, 5000, at(1000));
-    const r = await zoneTick(db, { now });
+    const r = await zoneTick(db, { now, enforcementEnabled: true });
     expect(r).toMatchObject({ sightings: 1, alerts: 1 });
     const [s] = await db.select().from(intruderSightings);
     expect(s).toMatchObject({ dayzId: STRANGER, distanceM: 50, lastX: "5030.00", lastZ: "5040.00" });
@@ -49,7 +49,7 @@ describe("zoneTick", () => {
 
   it("a pending member is an intruder (§7)", async () => {
     await fix(PENDING, 5010, 5010);
-    expect((await zoneTick(db, { now })).alerts).toBe(1);
+    expect((await zoneTick(db, { now, enforcementEnabled: true })).alerts).toBe(1);
   });
 
   it("moves the pin on every fix, alerts once per INTRUDER_ALERT_COOLDOWN_MS, and the last in-zone fix survives a fix outside", async () => {
@@ -57,7 +57,7 @@ describe("zoneTick", () => {
     await fix(STRANGER, 5020, 5020, at(5 * 60_000));
     await fix(STRANGER, 5030, 5030, at(INTRUDER_ALERT_COOLDOWN_MS + 1000));
     await fix(STRANGER, 9000, 9000, at(INTRUDER_ALERT_COOLDOWN_MS + 2000));
-    const r = await zoneTick(db, { now });
+    const r = await zoneTick(db, { now, enforcementEnabled: true });
     expect(r).toMatchObject({ sightings: 3, alerts: 2 });
     const [s] = await db.select().from(intruderSightings);
     expect(s).toMatchObject({ lastX: "5030.00", lastZ: "5030.00", lastSeenAt: at(INTRUDER_ALERT_COOLDOWN_MS + 1000), lastAlertAt: at(INTRUDER_ALERT_COOLDOWN_MS + 1000) });
@@ -70,29 +70,43 @@ describe("zoneTick", () => {
     expect(await declareSolo(db, { serverId, dayzId: SOLO, poleKey: Q, at: at(-4000) })).toMatchObject({ ok: true });
     await fix(SOLO, 8001, 8001);
     await fix(STRANGER, 8010, 8010);
-    expect((await zoneTick(db, { now })).alerts).toBe(1);
+    expect((await zoneTick(db, { now, enforcementEnabled: true })).alerts).toBe(1);
     expect(await notices()).toEqual([{ kind: "solo_intruder", target: "dm", payload: { gamertag: "Sasha", distance: 14 }, to: "900" }]);
   });
 
-  it("dismantle and gate-build inside the zone by a non-member alert; by a member they do not; a gate is matched by name", async () => {
+  it("dismantle, gate-build and an ordinary build inside the zone by a non-member all alert; by a member none do; a gate is matched by name", async () => {
     await built(STRANGER, 5010, 5010, "wall_base_down", "Fence", "base.dismantled");
     await built(STRANGER, 5010, 5010, "gate_base", "Fence");
-    await built(STRANGER, 5010, 5010, "wall_base_up", "Fence");   // built, not a gate: nothing
+    await built(STRANGER, 5010, 5010, "wall_base_up", "Fence");   // built, not a gate: still alerts, as "built"
     await built(MEMBER, 5010, 5010, "gate_base", "Fence");
-    const r = await zoneTick(db, { now });
-    expect(r.alerts).toBe(2);
+    const r = await zoneTick(db, { now, enforcementEnabled: true });
+    expect(r.alerts).toBe(3);
     expect((await notices()).map((n) => [n.kind, n.payload])).toEqual([
       ["dismantle", { gamertag: "Sasha", part: "wall_base_down" }],
       ["gate_built", { gamertag: "Sasha" }],
+      ["built", { gamertag: "Sasha", part: "wall_base_up" }],
     ]);
     expect(await db.select().from(intruderSightings)).toHaveLength(0);   // a build is not a sighting
   });
 
+  it("a solo owner sees solo_built for an ordinary non-gate build", async () => {
+    await db.insert(identityLinks).values({ discordId: "900", dayzId: SOLO, gamertag: "Solo", verifiedAt: now });
+    await db.insert(events).values({ serverId, admFileId, lineIndex: line++, type: "flag.raised", occurredAt: at(-5000), payload: { dayzId: SOLO, gamertag: "Solo", texture: "Flag_White", poleKey: Q, pole: { x: 8000, y: 100, z: 8000 } } });
+    expect(await declareSolo(db, { serverId, dayzId: SOLO, poleKey: Q, at: at(-4000) })).toMatchObject({ ok: true });
+    await db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, type: "base.built", occurredAt: now,
+      payload: { dayzId: STRANGER, gamertag: "Sasha", action: "built", part: "watchtower_kit", structure: "Fence", tool: null, pos: { x: 8001, y: 100, z: 8001 } },
+    });
+    const r = await zoneTick(db, { now, enforcementEnabled: true });
+    expect(r.alerts).toBe(1);
+    expect(await notices()).toEqual([{ kind: "solo_built", target: "dm", payload: { gamertag: "Sasha", part: "watchtower_kit" }, to: "900" }]);
+  });
+
   it("⚠️ never writes a coordinate into a notice, and is replay-safe (cursor per event)", async () => {
     await fix(STRANGER, 5010, 5010);
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     await db.execute(sql`update consumer_cursors set last_event_id = 0`);
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     expect(await notices()).toHaveLength(1);
     for (const n of await notices()) expect(Object.keys(n.payload as object)).not.toEqual(expect.arrayContaining(["x", "z", "pos", "poleKey"]));
   });
@@ -100,19 +114,19 @@ describe("zoneTick", () => {
 
   it("⚠️ a fix older than INTRUDER_PIN_TTL_MS is skipped entirely — no sighting, no notice — so an unseeded cursor cannot flood the channel", async () => {
     await fix(STRANGER, 5010, 5010, at(-(INTRUDER_PIN_TTL_MS + 60_000)));
-    const stale = await zoneTick(db, { now });
+    const stale = await zoneTick(db, { now, enforcementEnabled: true });
     expect(stale).toMatchObject({ scanned: 0, sightings: 0, alerts: 0 });
     expect(await db.select().from(intruderSightings)).toHaveLength(0);
     expect(await notices()).toHaveLength(0);
 
     await fix(STRANGER, 5010, 5010, at(-(INTRUDER_PIN_TTL_MS - 60_000)));
-    const fresh = await zoneTick(db, { now });
+    const fresh = await zoneTick(db, { now, enforcementEnabled: true });
     expect(fresh).toMatchObject({ sightings: 1, alerts: 1 });
     expect(await notices()).toHaveLength(1);
   });
 
   it("the Hub is nobody's zone: a fix at (100, 93) alerts no one", async () => {
     await fix(STRANGER, 100, 93);
-    expect((await zoneTick(db, { now })).alerts).toBe(0);
+    expect((await zoneTick(db, { now, enforcementEnabled: true })).alerts).toBe(0);
   });
 });

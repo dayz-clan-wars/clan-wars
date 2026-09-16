@@ -106,9 +106,17 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
   dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
   gate_built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  // ⚠️ A non-gate build inside the zone was ALREADY a breach violation
+  // (zone-tick.ts folds any base.built by a non-member into the incident);
+  // this is only the alert catching up to that — before this kind existed,
+  // a watchtower going up next to your base was recorded silently and
+  // surfaced only if you happened to check /base. Names the part so an
+  // owner can tell a watchtower from a fence.
+  built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built ${p.part} at your base — ${ctx.age}`,
   solo_intruder: (p, ctx) => `👁 ${person(p.gamertag)} (not a member) was seen ${p.distance} m from your base — ${ctx.age}`,
   solo_dismantle: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) dismantled ${p.part} at your base — ${ctx.age}`,
   solo_gate: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built a gate at your base — ${ctx.age}`,
+  solo_built: (p, ctx) => `🔧 ${person(p.gamertag)} (not a member) built ${p.part} at your base — ${ctx.age}`,
   leader_removed: (p) => `👑 ${person(p.old)} is no longer in the Discord. ${person(p.new)} is now leader.`,
   succession_claimed: (p) => `⏳ ${person(p.gamertag)} has claimed leadership — ${person(p.leader)} has ${hours(SUCCESSION_WINDOW_MS)}h to show up in game`,
   succession_voided: (p) => `⏳ ${person(p.leader)} showed up in game. The claim by ${person(p.claimant)} is void.`,
@@ -122,6 +130,17 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       : `**${p.clan}** rotated its codes. See the vault: ${p.link}`,
   guest: (p) => `🎟️ ${person(p.officer)} gave ${person(p.user)} a ${hours(GUEST_PASS_MS)}h voice guest pass.`,
   achievement: (p) => `🏆 ${p.ownerKind === "clan" ? `**${p.ownerName}**` : person(String(p.ownerName))}${p.clanTag && p.ownerKind === "player" && p.public ? ` [${p.clanTag}]` : ""} earned **${p.name}** — ${p.description}.`,
+  zone_warning: (p) => {
+    const acts = [
+      Number(p.dismantled) > 0 ? `dismantling ${p.dismantled} part(s)` : null,
+      Number(p.built) > 0 ? `building ${p.built} part(s)` : null,
+      Number(p.stacked) > 0 ? `stacking ${p.stacked} item(s)` : null,
+    ].filter(Boolean).join(" and ");
+    return `⚠️ The log recorded you ${acts} inside ${p.tag}'s declared base zone. **If they asked you to help, ignore this.** If not, an officer of that clan can report it, and the penalty scales with the damage.`;
+  },
+  ban_applied: (p) => p.until
+    ? `⛔ You are banned from the server until ${p.until} — ${p.reason}.`
+    : `⛔ You are permanently banned from the server — ${p.reason}.`,
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */

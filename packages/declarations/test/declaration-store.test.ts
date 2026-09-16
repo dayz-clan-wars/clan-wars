@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, declarations, poles, events, admFiles, ceremonies, type Database,
+  servers, factions, declarations, poles, events, admFiles, ceremonies, zoneIncidents, bans, type Database,
 } from "@factions/db";
 import { RELEASED_POLE_GRACE_MS, HUB_POSITION } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
@@ -96,6 +96,33 @@ describe("declaration store", () => {
     expect(await declarationForPlayer(db, serverId, "A")).toBeNull();
     const [p] = await db.select().from(poles).where(and(eq(poles.serverId, serverId), eq(poles.poleKey, key(5000, 5000))));
     expect(p!.graceUntil.getTime()).toBe(at.getTime() + RELEASED_POLE_GRACE_MS);
+  });
+
+  it("release still succeeds when the base has a reported incident with a ban row, and the ban survives with incident_id null", async () => {
+    // CRITICAL 1 regression: bans.incident_id used to be ON DELETE no action,
+    // so any ban row referencing an incident blocked the cascade from
+    // declarations -> zone_incidents, aborting release/lapse/unlink/disband
+    // and the season wipe outright the moment any base was ever reported.
+    await seedPole(5000, 5000);
+    await solo(5000, 5000, "A");
+    const decl = await declarationForPlayer(db, serverId, "A");
+    const [incident] = await db.insert(zoneIncidents).values({
+      serverId, declarationId: decl!.id, openedAt: now, lastActAt: now, closedAt: now, reportedAt: now,
+    }).returning();
+    const [ban] = await db.insert(bans).values({
+      serverId, incidentId: incident!.id, dayzId: "B", gamertag: "Intruder",
+      bannedAt: now, expiresAt: null, status: "applied", dryRun: false,
+    }).returning();
+
+    const at = new Date(now.getTime() + 60_000);
+    expect(await db.transaction((tx) => releaseTx(tx, { dayzId: "A", serverId }, at))).toBe(true);
+    expect(await declarationForPlayer(db, serverId, "A")).toBeNull();
+
+    const [survivor] = await db.select().from(bans).where(eq(bans.id, ban!.id));
+    expect(survivor).toBeTruthy();
+    expect(survivor!.incidentId).toBeNull();
+    expect(survivor!.dayzId).toBe("B");
+    expect(survivor!.status).toBe("applied");
   });
 
   it("release of an owner with no declaration is false, not an error", async () => {

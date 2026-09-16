@@ -6,6 +6,8 @@ import {
 import { RELEASED_POLE_GRACE_MS } from "@factions/domain";
 import { and, desc, eq, gt } from "drizzle-orm";
 import { activeServerId } from "./server";
+import { reportableIncidentsDb } from "./internal/incidents";
+import type { ReportableIncident } from "./internal/incidents";
 
 export const DECLARE_SOLO_REASONS = ["not-linked", "in-clan", "no-raise", "too-close", "pole-taken", "owner-has-base"] as const;
 export type DeclareSoloReason = (typeof DECLARE_SOLO_REASONS)[number];
@@ -18,6 +20,7 @@ export type BaseView =
       declaration: { poleKey: string; x: number; z: number; declaredAt: Date } | null;
       lapsed: { at: Date } | null;
       candidates: { poleKey: string; x: number; z: number; raisedAt: Date }[];
+      incidents: ReportableIncident[];
     };
 
 /**
@@ -44,6 +47,7 @@ export async function baseForDb(db: Database, discordId: string): Promise<BaseVi
     ));
   const declaration = await declarationForPlayer(db, serverId, link.dayzId);
   const raised = await raisedPolesFor(db, serverId, link.dayzId);
+  const incidents = await reportableIncidentsDb(db, new Date(), discordId);
 
   // When there's no declaration, check for a recent solo_lapsed notice
   let lapsed: { at: Date } | null = null;
@@ -78,6 +82,7 @@ export async function baseForDb(db: Database, discordId: string): Promise<BaseVi
     candidates: raised
       .filter((r) => r.poleKey !== declaration?.poleKey)
       .map((r) => ({ poleKey: r.poleKey, x: r.x, z: r.z, raisedAt: r.occurredAt })),
+    incidents,
   };
 }
 

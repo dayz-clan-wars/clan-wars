@@ -15,4 +15,5 @@ export type EventType =
   | "player.died"
   | "player.hit"
   | "player.unconscious"
-  | "player.teleported";
+  | "player.teleported"
+  | "item.placed";

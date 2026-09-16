@@ -160,3 +160,74 @@ export const ROTATION_ANCHOR_MS = Date.UTC(2026, 8, 14);
  *  effectively already arrived, which is worse than silence. */
 export const ANNOUNCE_LEAD_MS = 24 * HOUR;
 export const ANNOUNCE_CUTOFF_MS = 1 * HOUR;
+
+// Base-zone enforcement (spec 2026-09-15)
+/** How long a base's owner has to press charges on a closed incident. */
+export const VIOLATION_REPORT_WINDOW_MS = 7 * DAY;
+/** Quiet time that closes an open incident. */
+export const VIOLATION_INCIDENT_GAP_MS = 30 * MIN;
+
+/**
+ * A boost stack: fireplaces or garden plots stacked to climb a wall.
+ *
+ * ⚠️ BOTH signals must agree, and each rules out a different false positive.
+ * RADIUS separates stacking from farming — a garden plot's own footprint is
+ * ~2.5 m, so two side-by-side plots cannot be this close unless one is on top
+ * of the other. RISE separates stacking from a cluster of ground-level
+ * placements — to put the second item on the first you must stand on the
+ * first, so the player's own altitude climbs. Tightness alone flags a
+ * fireplace dropped and replaced in one spot; rise alone flags two cook-fires
+ * on a hillside.
+ *
+ * These two are the only numbers in this block derived from physical
+ * reasoning rather than a policy choice, and are the likeliest to need
+ * tuning after live observation.
+ */
+export const BOOST_STACK_MIN_ITEMS = 2;
+export const BOOST_STACK_RADIUS_M = 1.5;
+export const BOOST_STACK_MIN_RISE_M = 0.5;
+export const BOOST_STACK_WINDOW_MS = 30 * MIN;
+
+/**
+ * The sentence. Breach is FLAT, loss is SCALED — they are different crimes.
+ * Breaching is binary: one watchtower is the whole act, and five stacked
+ * fireplaces are not worse than three. Loss is cumulative: twenty walls is
+ * twice ten, and it is the only class that costs the owner materials to undo.
+ */
+export const BAN_BASE_MS = 24 * HOUR;
+export const BAN_BREACH_MS = 48 * HOUR;
+export const BAN_GATE_MS = 24 * HOUR;
+export const BAN_PER_DISMANTLE_MS = 12 * HOUR;
+export const BAN_FIRST_OFFENCE_CAP_MS = 7 * DAY;
+export const BAN_REPEAT_MULTIPLIER = 2;
+/** The nth upheld report against one dayz_id within a season is permanent. */
+export const BAN_PERMANENT_AT_OFFENCE = 3;
+
+/**
+ * ⚠️ How far back `banTick`'s apply arm looks for `pending` rows to send to
+ * Nitrado. This guards against a historical dry-run backlog firing at
+ * Nitrado in a single tick the moment `BAN_DRY_RUN` flips to `false` — every
+ * pending row ever written, going back to the feature's first day, would
+ * otherwise become a live ban attempt at once. One Life's unbounded detect
+ * query did exactly this.
+ *
+ * ⚠️ This is NOT, and must never become, the bot's process start time. An
+ * earlier draft used that and it is wrong in a way that is invisible: a ban
+ * written five minutes before a routine restart has `bannedAt < since`, so
+ * it is never applied — yet `reportIncidentDb`'s prior-offence query still
+ * counts it as a standing prior (it excludes only `lifted`), so the player
+ * serves no ban but still climbs the sentencing ladder, and their next
+ * report is harsher for a punishment that never happened. `RESTART_PERIOD_MS`
+ * is 2 hours, so a process-start-time bound would trigger this on almost
+ * every tick. A fixed lookback from `now` is immune to restarts entirely.
+ */
+export const BAN_APPLY_LOOKBACK_MS = 24 * HOUR;
+
+/**
+ * DayZ classnames that can be stacked into a boost.
+ *
+ * ⚠️ VERIFY AGAINST A REAL ADM LINE before trusting this list. It is inferred
+ * from the single `placed …<…>` sample in the flagpole parser's test, not
+ * observed. A missing classname is a silently unenforced exploit.
+ */
+export const BOOST_ITEM_CLASSES = ["Fireplace", "FireplaceIndoor", "GardenPlot"] as const;
