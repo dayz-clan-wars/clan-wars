@@ -1,6 +1,7 @@
 import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or } from "drizzle-orm";
-import { bans, type Database } from "@factions/db";
+import { bans, identityLinks, type Database } from "@factions/db";
 import { BAN_MAX_ATTEMPTS } from "@factions/domain";
+import { noticeUserTx } from "@factions/roster/internal";
 
 /**
  * The Nitrado-facing surface this tick needs. `NitradoClient` satisfies it;
@@ -142,12 +143,37 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
     }
     for (const row of pending) {
       if (failure === undefined) {
-        await db.update(bans)
-          .set({ status: "applied", appliedAt: now, dryRun: opts.dryRun, lastError: null })
-          .where(and(eq(bans.id, row.id), eq(bans.status, "pending")));
-        out.applied++;
+        await db.transaction(async (tx) => {
+          const [applied] = await tx.update(bans)
+            .set({ status: "applied", appliedAt: now, dryRun: opts.dryRun, lastError: null })
+            .where(and(eq(bans.id, row.id), eq(bans.status, "pending")))
+            .returning({ id: bans.id });
+          if (!applied) return;   // another tick won the race
+          out.applied++;
+          // ⚠️ IMPORTANT 6: the offender is never told otherwise — no
+          // pre-charge notice exists (`ban_applied` was defined and never
+          // emitted). Only a GENUINELY enforced ban gets one: a dry-run row
+          // never reached Nitrado, so telling the offender would be a lie.
+          // `clan_notices_no_coordinates` forbids x/y/z/poleKey in the
+          // payload — `until`/`reason` are the only fields the renderer
+          // reads, both coordinate-free. An unlinked offender gets nothing,
+          // same as every other notice kind.
+          if (opts.dryRun) return;
+          const [link] = await tx.select({ discordId: identityLinks.discordId })
+            .from(identityLinks).where(eq(identityLinks.dayzId, row.dayzId));
+          if (!link) return;
+          await noticeUserTx(tx, {
+            serverId, factionId: null, discordId: link.discordId,
+            kind: "ban_applied", occurredAt: now,
+            payload: {
+              until: row.expiresAt ? row.expiresAt.toISOString() : null,
+              reason: "base-zone enforcement",
+            },
+          });
+        });
       } else {
         const attempts = row.attempts + 1;
+        const nowFailed = attempts >= BAN_MAX_ATTEMPTS;
         // ⚠️ On the last permitted attempt the row must become `failed`, NOT
         // stay `pending`. A stuck `pending` renders as an active ban that no
         // later query revisits (the `attempts < BAN_MAX_ATTEMPTS` predicate
@@ -156,10 +182,42 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         // nothing surfacing the gap.
         await db.update(bans).set({
           attempts,
-          status: attempts >= BAN_MAX_ATTEMPTS ? "failed" : "pending",
+          status: nowFailed ? "failed" : "pending",
           lastError: String(failure).slice(0, 500),
         }).where(eq(bans.id, row.id));
-        if (attempts >= BAN_MAX_ATTEMPTS) out.failed++;
+        if (nowFailed) {
+          out.failed++;
+          // ⚠️ IMPORTANT 3: `addBans` is a whole-field read-modify-write — if
+          // the write actually landed on Nitrado but the RESPONSE was lost,
+          // the client throws anyway, attempts climb, and this row becomes
+          // `failed` with a LIVE entry still sitting on the ban list. The
+          // expire and lift arms below only ever select `applied` /
+          // `lift_pending` rows, so a `failed` row is never revisited by
+          // either — that live entry is orphaned FOREVER, the exact
+          // un-liftable ban this whole design exists to prevent, reached by
+          // a different door. Best-effort clean it up now, guarded by
+          // `stillBanned` so this can never free another live ban's entry
+          // (same reference-counting rule the expire/lift arms use).
+          //
+          // ⚠️ Gated on `opts.dryRun`, NOT `row.dryRun` — the row's `dry_run`
+          // column is still whatever it was left at when written (the
+          // column default is `true`; `reportIncidentDb` never sets it) and
+          // is only ever STAMPED at the moment a row successfully reaches
+          // `applied`. A row that fails out here never got that far, so
+          // `row.dryRun` says nothing about whether THIS attempt reached
+          // Nitrado. `opts.dryRun` is also structurally always false when
+          // this branch runs (a dry-run tick skips the `addBans` call
+          // entirely above, so `failure` can never be set) — checked
+          // explicitly anyway as a guard against that invariant changing
+          // silently underfoot.
+          if (!opts.dryRun && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
+            try {
+              await client.removeBans([row.dayzId, row.gamertag]);
+            } catch (err) {
+              console.error(`ban-tick: cleanup removeBans failed for failed ban ${row.id} (dayzId ${row.dayzId}) — its Nitrado entry may be orphaned`, err);
+            }
+          }
+        }
       }
     }
   }
@@ -206,6 +264,13 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         // must be retried next tick, not silently marked done. Only the
         // error is recorded here; the row is revisited because it still
         // matches the `applied` + past-due predicate above.
+        //
+        // ⚠️ IMPORTANT 8: the retry itself stays UNBOUNDED, correctly — an
+        // expiry must not give up, unlike the apply arm's attempt cap. But
+        // `lastError` alone is a silent signal nobody polls; log at error
+        // level (the `feed queue blocked at …` precedent) so a human notices
+        // a ban that keeps failing to lift.
+        console.error(`ban-tick: expire removeBans failed for ban ${row.id} (dayzId ${row.dayzId}) — retrying next tick`, failure);
         await db.update(bans).set({ lastError: String(failure).slice(0, 500) }).where(eq(bans.id, row.id));
         continue;
       }
@@ -251,6 +316,11 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         // arm: a failed Nitrado call must be retried, never silently marked
         // `lifted` (that would repeat One Life's short-circuit) and never
         // left to rot as `applied` either.
+        //
+        // ⚠️ IMPORTANT 8: unbounded retry stays correct (a lift must not give
+        // up either), but log at error level so this doesn't rely on someone
+        // polling `lastError` — same precedent as the expire arm above.
+        console.error(`ban-tick: lift removeBans failed for ban ${row.id} (dayzId ${row.dayzId}) — retrying next tick`, failure);
         await db.update(bans).set({ lastError: String(failure).slice(0, 500) }).where(eq(bans.id, row.id));
         continue;
       }

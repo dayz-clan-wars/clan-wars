@@ -126,7 +126,10 @@ async function alertOwner(tx: Tx, zone: Zone, serverId: number, kind: "intruder"
  * guard is the belt to the runbook's braces, and turns a missed seed from
  * catastrophic into noisy-but-bounded.
  */
-export async function zoneTick(db: Database, opts: { batchSize?: number; now?: Date } = {}): Promise<ZoneTickResult> {
+export async function zoneTick(
+  db: Database,
+  opts: { batchSize?: number; now?: Date; enforcementEnabled: boolean },
+): Promise<ZoneTickResult> {
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   const oldest = now.getTime() - INTRUDER_PIN_TTL_MS;
@@ -155,20 +158,40 @@ export async function zoneTick(db: Database, opts: { batchSize?: number; now?: D
       await db.transaction(async (tx) => {
         const done = async () => { await writeCursor(tx, ZONE_CONSUMER, ev.id); };
         if (isBuild) {
-          const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
           const part = readPart(ev.payload);
           const pos: Vec3 = { x: fix.x, y: fix.alt, z: fix.z };
+          // ⚠️ IMPORTANT 4: the intruder/dismantle/gate ALERTS below predate
+          // this branch and are unconditional, always. The incident WRITE
+          // (openIncident/recordViolation) is this feature's own, and is
+          // gated on `enforcementEnabled` — with it off (the default),
+          // `zone_incidents_one_open` would otherwise keep exactly ONE open
+          // row per declaration absorbing months of acts and participants,
+          // then fire a mass warning DM to everyone accumulated the moment
+          // an operator flips the flag on. Nothing must accumulate while the
+          // feature is off.
           if (ev.type === "base.dismantled") {
-            if (await recordViolation(tx, incidentId, ev.id, "dismantle", fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            if (opts.enforcementEnabled) {
+              const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
+              if (await recordViolation(tx, incidentId, ev.id, "dismantle", fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            }
             if (await alertOwner(tx, hit.zone, ev.serverId, "dismantle", ev.occurredAt, { gamertag, part })) out.alerts++;
           } else {
             const kind: ViolationKind = isGate(ev.payload) ? "gate" : "build";
-            if (await recordViolation(tx, incidentId, ev.id, kind, fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            if (opts.enforcementEnabled) {
+              const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
+              if (await recordViolation(tx, incidentId, ev.id, kind, fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
+            }
             if (kind === "gate" && await alertOwner(tx, hit.zone, ev.serverId, "gate_built", ev.occurredAt, { gamertag })) out.alerts++;
           }
           return done();
         }
         if (isPlacement) {
+          // ⚠️ IMPORTANT 4: the whole boost-stack detector — recording a
+          // placement and folding it into an incident — is this feature's
+          // own (there is no pre-existing alert here to preserve), so it is
+          // gated entirely on `enforcementEnabled`; with it off, nothing
+          // about a placement is written at all.
+          if (!opts.enforcementEnabled) return done();
           // ⚠️ A LONE placement is recorded and is NOT a violation (spec §2.3):
           // a player may legitimately cook or farm near a base they cannot see.
           // It becomes one only when a LATER placement stacks on it.

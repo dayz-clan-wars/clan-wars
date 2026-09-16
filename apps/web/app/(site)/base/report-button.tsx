@@ -63,7 +63,7 @@ export function ReportButton({ incidentId, gamertags, minTermLabel }: { incident
     return (
       <div role="status" className="flex flex-col gap-3">
         <p className="text-sm leading-relaxed text-ink-2">
-          This automatically bans <span className="text-ink">{names}</span> for at least <span className="text-ink">{minTermLabel}</span> each — longer for a repeat offender. There is no further review after you confirm.
+          This automatically bans <span className="text-ink">{names}</span> for at least <span className="text-ink">{minTermLabel}</span> each — doubled on a repeat offence, and <span className="text-ink">permanent</span> on a third upheld report this season. Prior offences are checked when you confirm, so a permanent ban can happen on THIS click without further warning. There is no further review after you confirm.
         </p>
         <div className="flex flex-wrap gap-3">
           <button type="button" className={btnDanger} disabled={busy} onClick={() => void submit()}>

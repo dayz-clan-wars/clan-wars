@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events,
   factionMembers, declarations, zoneIncidents, zoneViolations, zonePlacements,
-  zoneIncidentParticipants, type Database,
+  zoneIncidentParticipants, clanNotices, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { zoneTick } from "../src/zone-tick.js";
@@ -47,35 +47,50 @@ describe("zoneTick enforcement", () => {
   it("a non-member dismantling inside the zone opens an incident and counts the loss", async () => {
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
     await structure(STRANGER, 5011, 5010, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     const [i] = await incidents();
     expect(i).toMatchObject({ partsDismantled: 2, partsBuilt: 0, hasBreach: false, hasGate: false, closedAt: null });
     expect(await violations()).toHaveLength(2);
   });
 
+  // IMPORTANT 4 regression: with the flag off (the default), the incident
+  // WRITE must not happen at all — otherwise zone_incidents_one_open keeps
+  // ONE open row per declaration absorbing every act until an operator
+  // enables the flag, which then closes it and warns every participant
+  // accumulated at once. The pre-existing dismantle ALERT (predates this
+  // branch) must keep firing regardless.
+  it("with enforcementEnabled off, a non-member dismantle still alerts the owner but writes no incident", async () => {
+    await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
+    await zoneTick(db, { now, enforcementEnabled: false });
+    expect(await incidents()).toHaveLength(0);
+    expect(await violations()).toHaveLength(0);
+    const notices = await db.select().from(clanNotices).where(eq(clanNotices.kind, "dismantle"));
+    expect(notices).toHaveLength(1);
+  });
+
   it("a full member is never a violation", async () => {
     await structure(MEMBER, 5010, 5010, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     expect(await incidents()).toHaveLength(0);
   });
 
   it("an act outside the zone is never a violation", async () => {
     await structure(STRANGER, 5300, 5300, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     expect(await incidents()).toHaveLength(0);
   });
 
   it("building is a breach, and a gate sets hasGate too", async () => {
     await structure(STRANGER, 5010, 5010, "Watchtower Kit", "base.built");
     await structure(STRANGER, 5012, 5010, "Gate", "base.built");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     const [i] = await incidents();
     expect(i).toMatchObject({ partsBuilt: 2, hasBreach: true, hasGate: true });
   });
 
   it("a lone fireplace is recorded but is not a violation", async () => {
     await placed(STRANGER, 5010, 100, 5010, "Fireplace");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     expect(await db.select().from(zonePlacements)).toHaveLength(1);
     expect(await incidents()).toHaveLength(0);
   });
@@ -83,7 +98,7 @@ describe("zoneTick enforcement", () => {
   it("a co-located pair with a rise is a stack: one breach, both items counted", async () => {
     await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
     await placed(STRANGER, 5010.3, 100.9, 5010.2, "GardenPlot", at(60_000));
-    await zoneTick(db, { now: at(120_000) });
+    await zoneTick(db, { now: at(120_000), enforcementEnabled: true });
     const [i] = await incidents();
     expect(i).toMatchObject({ stackItems: 2, hasBreach: true, hasGate: false });
   });
@@ -92,7 +107,7 @@ describe("zoneTick enforcement", () => {
     await placed(STRANGER, 5010, 100, 5010, "GardenPlot");
     await placed(STRANGER, 5013, 100, 5010, "GardenPlot", at(60_000));
     await placed(STRANGER, 5016, 100, 5010, "GardenPlot", at(120_000));
-    await zoneTick(db, { now: at(180_000) });
+    await zoneTick(db, { now: at(180_000), enforcementEnabled: true });
     expect(await incidents()).toHaveLength(0);
   });
 
@@ -100,7 +115,7 @@ describe("zoneTick enforcement", () => {
     await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
     await placed(STRANGER, 5010.2, 100.5, 5010.1, "GardenPlot", at(20_000));
     await placed(STRANGER, 5010.1, 101.0, 5010.2, "GardenPlot", at(40_000));
-    await zoneTick(db, { now: at(120_000) });
+    await zoneTick(db, { now: at(120_000), enforcementEnabled: true });
     const [i] = await incidents();
     expect(i).toMatchObject({ stackItems: 3, hasBreach: true });
     const stackViolations = (await violations()).filter((v) => v.kind === "stack");
@@ -111,9 +126,9 @@ describe("zoneTick enforcement", () => {
     await placed(STRANGER, 5010, 100.0, 5010, "Fireplace");
     await placed(STRANGER, 5010.2, 100.5, 5010.1, "GardenPlot", at(20_000));
     const [last] = await placed(STRANGER, 5010.1, 101.0, 5010.2, "GardenPlot", at(40_000));
-    await zoneTick(db, { now: at(120_000) });
+    await zoneTick(db, { now: at(120_000), enforcementEnabled: true });
     await db.execute(sql`update consumer_cursors set last_event_id = ${last!.id - 1} where consumer_name = 'zone-watch'`);
-    await zoneTick(db, { now: at(120_000) });
+    await zoneTick(db, { now: at(120_000), enforcementEnabled: true });
     const [i] = await incidents();
     expect(i!.stackItems).toBe(3);
     expect((await violations()).filter((v) => v.kind === "stack")).toHaveLength(3);
@@ -122,7 +137,7 @@ describe("zoneTick enforcement", () => {
   it("every contributor to one incident becomes a participant, gamertag frozen", async () => {
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
     await structure(FRIEND, 5011, 5010, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     const [i] = await incidents();
     const parts = await db.select().from(zoneIncidentParticipants).where(eq(zoneIncidentParticipants.incidentId, i!.id));
     expect(parts.map((p) => p.dayzId).sort()).toEqual([FRIEND, STRANGER].sort());
@@ -131,18 +146,18 @@ describe("zoneTick enforcement", () => {
 
   it("acts separated by more than the gap belong to different incidents", async () => {
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     await db.update(zoneIncidents).set({ closedAt: at(60_000) });
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled", "Fence", at(120_000));
-    await zoneTick(db, { now: at(180_000) });
+    await zoneTick(db, { now: at(180_000), enforcementEnabled: true });
     expect(await incidents()).toHaveLength(2);
   });
 
   it("a replayed event does not double-count damage", async () => {
     const [e] = await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled");
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     await db.execute(sql`update consumer_cursors set last_event_id = ${e!.id - 1} where consumer_name = 'zone-watch'`);
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     const [i] = await incidents();
     expect(i!.partsDismantled).toBe(1);
     expect(await violations()).toHaveLength(1);
@@ -150,7 +165,7 @@ describe("zoneTick enforcement", () => {
 
   it("a stale act is skipped entirely — a rewound cursor cannot manufacture incidents", async () => {
     await structure(STRANGER, 5010, 5010, "Fence Kit", "base.dismantled", "Fence", at(-10 * 86_400_000));
-    await zoneTick(db, { now });
+    await zoneTick(db, { now, enforcementEnabled: true });
     expect(await incidents()).toHaveLength(0);
   });
 });

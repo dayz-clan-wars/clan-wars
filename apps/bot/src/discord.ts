@@ -754,7 +754,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("positions tick failed", err);
     }
     try {
-      const z = await zoneTick(db, { now: new Date() });
+      const z = await zoneTick(db, { now: new Date(), enforcementEnabled: cfg.enforcementTick });
       if (z.alerts > 0) console.log(`zone watch: ${z.sightings} sighting(s), ${z.alerts} alert(s)`);
     } catch (err) {
       console.error("zone tick failed", err);
