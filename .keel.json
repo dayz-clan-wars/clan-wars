@@ -1,0 +1,9 @@
+{
+  "topology": "trunk",
+  "branches": {
+    "production": "main"
+  },
+  "contributions": "branch",
+  "reviewPolicy": "review",
+  "requireChangelog": true
+}

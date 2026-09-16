@@ -1,0 +1,7 @@
+{
+  "name": "security",
+  "scanner": "trufflehog",
+  "pushBranches": [
+    "main"
+  ]
+}
