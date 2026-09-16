@@ -18,3 +18,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Secret scanning (`.github/workflows/security.yml`) runs trufflehog rather
   than gitleaks: this repo is organization-owned, and the gitleaks action
   exits 1 without a licence key before scanning anything.
+- Design for automatic deployment on release (`docs/superpowers/specs/2026-09-16-auto-deploy-design.md`),
+  approved but not implemented: a host-side timer deploys each new tag, applies
+  migrations, and rolls back both code and database automatically on failure.
