@@ -75,7 +75,8 @@ stop, remove, or repoint their containers.
     TEST_DATABASE_URL="postgres://factions:factions@localhost:5434/factions" \
       npx turbo run typecheck test --concurrency=1 --force
 
-Expect **28/28 tasks** (`packages/roster`, `packages/declarations` and `packages/copy` each add `typecheck` and `test`). A cached pass
+Expect **30/30 tasks** (`packages/roster`, `packages/declarations`, `packages/copy` and
+`packages/deploy` each add `typecheck` and `test`). A cached pass
 proves nothing; check the count, not the exit code.
 `pnpm -r test` also passes now and exits 0, which it never did before isolation — but the
 turbo gate stays the gate, because it runs `typecheck` too.
@@ -285,18 +286,23 @@ anything.
   dependable manual fallback is process **cwd**, not a command-line pattern: clan-wars
   processes have `/proc/<pid>/cwd` under `/opt/clan-wars`; dayzonelife.com's are under
   `/var/www/dayzonelife.com`.
-- **⚠️ Nothing applies migrations automatically.** Not the bot, not the site, not a
-  container entrypoint: `runMigrations` is called only from test setup and from
-  `pnpm db:migrate`, which a human runs. A deploy that assumes "the bot migrates at
-  startup" starts a bot whose queries reference columns the live database does not
-  have; on 2026-09-02 that produced a `dormancy tick failed … column "dormant_since"
-  does not exist` loop until `0015` was applied by hand. **`pnpm db:migrate`**
-  (`scripts/migrate.ts`) is the migration path — a dry run by default, printing the
-  exact journal tags it would apply; `--apply --production` writes, and the
-  `factions_live` guard runs *both* ways. It refuses outright when
-  `drizzle.__drizzle_migrations` disagrees with the journal, which is the case that
-  silently replays old migrations against live data. Runbook:
-  `docs/deploy/2026-09-14-db-migrate.md`. Generate with
+- **⚠️ Migrations are applied automatically on a release deploy, and by nothing
+  else.** `clan-wars-deploy.timer` runs `deploy/deploy-release.sh`, which stops
+  all three writers, dumps `factions_live`, and only then runs
+  `pnpm db:migrate --apply --production` — rolling code, image, host config and
+  schema back if anything after the checkout fails. Outside that script nothing
+  migrates: not the bot, not the site, not a container entrypoint. A migration
+  you apply by hand is still `pnpm db:migrate`, and the stop-the-bot-first rule
+  still applies to it. ⚠️ This reverses what this file said until 2026-09-16;
+  the 2026-09-02 `dormant_since` incident is why it said otherwise, and the
+  stop-first ordering in the deploy script is what makes the reversal safe.
+  **`pnpm db:migrate`** (`scripts/migrate.ts`) is the migration path either
+  way — a dry run by default, printing the exact journal tags it would apply;
+  `--apply --production` writes, and the `factions_live` guard runs *both*
+  ways. It refuses outright when `drizzle.__drizzle_migrations` disagrees with
+  the journal, which is the case that silently replays old migrations against
+  live data. Runbook: `docs/deploy/2026-09-14-db-migrate.md` (manual path) and
+  `docs/deploy/2026-09-16-auto-deploy.md` (the deployer). Generate with
   `cd packages/db && npx drizzle-kit generate`, and **read the generated SQL** before
   letting it near `factions_live`.
 - **⚠️ Stop the bot before migrating** when a migration adds NOT NULL columns or

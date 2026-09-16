@@ -97,25 +97,40 @@ downtime for no benefit.
 12. `sudo systemctl daemon-reload`; `sudo systemctl reload nginx`.
     ⚠️ `reload`, never `restart` — a restart on a bad config takes down all
     four sites rather than leaving the old config live.
-13. Start `web` and `ingest-worker` (new image), then `clan-wars-bot`.
+13. Start `web` and `ingest-worker` (new image). **Not the bot yet** — see the
+    amendment below.
 
 ### Health check — the gate
 
-14. All four must hold, within a 90-second budget:
+14. `web`/`ingest-worker`/`postgres` must hold, within a 90-second budget:
     - `docker compose ps` reports `postgres` healthy;
     - `web` returns HTTP 200 on `127.0.0.1:3020`;
-    - a `select 1` against `factions_live` succeeds;
-    - the bot's journal shows a completed tick with no error since start.
+    - a `select 1` against `factions_live` succeeds.
+
+    Only once that passes does the script start `clan-wars-bot`, and then wait
+    (a further 90-second budget) for its journal to show `bot ready as <tag>` —
+    logged once, after Discord login, the first moment the bot genuinely
+    exists rather than merely having forked.
 
 ⚠️ `systemctl is-active` is **not** a health check, and this is the single
-easiest mistake to make here. `CLAUDE.md` says it outright: the bot holds no
-eager database connection and every tick is individually try/caught, so a bot
-pointed at a dead database reports `active (running)` forever with the entire
-data path down. The HTTP 200 is the load-bearing check of the four, because
-`web` reads through `packages/roster` to the database and therefore exercises
-the whole path rather than just process liveness.
+easiest mistake to make here, for either service. `CLAUDE.md` says it outright:
+the bot holds no eager database connection and every tick is individually
+try/caught, so a bot pointed at a dead database reports `active (running)`
+forever with the entire data path down. The HTTP 200 is the load-bearing check
+of the three services-first checks, because `web` reads through
+`packages/roster` to the database and therefore exercises the whole path
+rather than just process liveness.
 
 15. Healthy → write the state file, post success, exit 0.
+
+> **Amended 2026-09-16 (implementation), after this section was written.** The
+> sequence above described starting all three services together, then
+> checking health. The shipped script (`deploy/deploy-release.sh`) instead
+> starts `web` and `ingest-worker`, runs the services-only health check, and
+> only starts `clan-wars-bot` after that check passes — with its own
+> `bot ready as <tag>` wait gating the final success. See §4's amendment for
+> why: the bot is the one writer in the post-start window whose writes a
+> rollback cannot discard safely.
 
 ## 4. Rollback
 
@@ -129,16 +144,49 @@ Any failure at step 9 or later triggers it, automatically:
     start all three
     re-run the health check
 
-**Why this loses no data, which is the whole reason it is allowed to be
-automatic.** The dump is taken *after* every writer is stopped and restored
-before any is started. No writer exists in between, so there is no window in
-which a player action could occur and be destroyed. The restore is exact, not
+**Why this loses no data — at the call sites reached before anything starts,
+which is the whole reason those aborts are allowed to be automatic.** The dump
+is taken *after* every writer is stopped, and at the `nginx -t failed` and
+`migration failed` failure points nothing has started since: no writer exists
+between dump and restore, so there is no window in which a player action could
+occur and be destroyed. The restore at those two call sites is exact, not
 approximate.
 
 In-game activity during the window is not lost either: DayZ keeps writing its
 ADM logs on the Nitrado server, and `ingest-worker` re-ingests from its cursor
 when it starts. Discord commands issued during the window fail outright. That
 is visible downtime, not silent loss, and it is the honest cost.
+
+> **Amended 2026-09-16 (implementation), after this section was written.**
+> The paragraph above is too strong: it holds only for the two call sites
+> that fail *before any service has been started* (`nginx -t` and the
+> migration). The shipped script has two more rollback call sites, both
+> reached only after `web` and `ingest-worker` are already running:
+>
+> - **The services health check fails.** `web` and `ingest-worker` have been
+>   up for as long as the check ran (up to 90 s), and the restore discards
+>   whatever they wrote in that window. This is accepted, *bounded* damage:
+>   `web` writes only on an explicit user action, and `ingest-worker`'s writes
+>   are re-ingested from the ADM logs once its cursor rewinds — nothing here
+>   is unrecoverable, only re-derivable.
+> - **The bot fails to come up.** Same window, plus the time spent waiting on
+>   `bot ready as <tag>`. A bot that never reached that line did not tick, so
+>   in practice it wrote nothing — but that is an inference from the log, not
+>   a guarantee the way "no writer was running" is at the first two sites.
+>
+> **This is exactly why the bot starts last, after both service checks pass,
+> rather than alongside `web` and `ingest-worker` as originally specified in
+> §3.** The bot is the one writer in this window that is both high-frequency
+> (every tick, ~10 s) and *not* recoverable the way the other two are: for the
+> other two, worst case, a fact is momentarily invisible or re-derived. For
+> the bot, `notifyCompleted` DMs a player **before** it marks the DM sent —
+> the same shape as the 2026-09-01 duplicate-DM incident (CLAUDE.md, "Exactly
+> one bot instance may run"). A rollback that rewound the mark without also
+> rewinding whatever had already happened over Discord would resend that DM
+> automatically, on every restore, forever. Keeping the bot out of the
+> pre-health-check window removes that hazard entirely rather than merely
+> bounding it — there is no width of "up to 90 s of bot writes" that is safe
+> to discard, so the only correct bound is zero.
 
 ⚠️ **If the rollback itself fails, stop and stay stopped.** Alert CRITICAL,
 leave the services down, and do not retry. A deploy loop that keeps restarting

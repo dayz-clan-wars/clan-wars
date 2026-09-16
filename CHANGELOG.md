@@ -7,6 +7,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
+- Releases deploy themselves: a new `vX.Y.Z` tag on `main` is deployed to
+  production within two minutes, applying migrations and rolling back code,
+  image, host config and database together if any phase fails.
 - Repository lifecycle, CI, hygiene, secret-scanning and dependency-update
   configuration via the shipyard plugins: `.keel.json`, `.rigging.json`,
   `.stow.json`, `.hull.json` and `.bosun.json`, with the GitHub Actions
