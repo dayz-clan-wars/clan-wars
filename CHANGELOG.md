@@ -18,3 +18,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Secret scanning (`.github/workflows/security.yml`) runs trufflehog rather
   than gitleaks: this repo is organization-owned, and the gitleaks action
   exits 1 without a licence key before scanning anything.
+- `CLAUDE.md` documents the CI gate, the `main`-is-protected PR workflow, the
+  committed-changelog requirement, and the secret-scanning boundary — including
+  that the history was swept clean once at adoption.
