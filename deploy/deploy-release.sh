@@ -7,7 +7,15 @@
 # when there is no new tag — see ⚠️ on alert() below.
 #
 # The sequence and its reasoning: docs/superpowers/specs/2026-09-16-auto-deploy-design.md
-set -euo pipefail
+#
+# ⚠️ -E, not just -e. Without it bash does NOT inherit the ERR trap into shell
+# functions — and every mutating statement after the trap is armed is a call to
+# run() or to a helper, i.e. inside a function. So daemon-reload, `reload nginx`
+# and the service starts would all exit silently with no rollback, no alert and
+# no marker, AFTER the migration had applied; the timer would then re-run two
+# minutes later and re-dump a post-migration database over the good pre-deploy
+# dump, destroying the only artifact the rollback depends on.
+set -Eeuo pipefail
 
 # --- configuration ---
 
@@ -20,6 +28,9 @@ set -euo pipefail
 : "${FAILED_MARKER:=${STATE}.failed}"
 CONTAINER=clan-wars-postgres-1
 PNPM=/home/acab/.local/bin/pnpm
+# Matches KEEP in deploy/backup/backup-factions-live.sh — these dumps share that
+# script's volume, and it only ever rotates its own `factions_live-*` files.
+KEEP_PREDEPLOY=14
 
 DRY_RUN=0
 [ "${1:-}" = "--dry-run" ] && DRY_RUN=1
@@ -61,13 +72,43 @@ stop_all() {
   # running between the dump and the restore.
   # ⚠️ systemctl, never pkill: ~15 dayzonelife.com services match
   # `src/main.ts`-style patterns, and pkill here is a site-outage command.
-  run sudo -n systemctl stop clan-wars-bot
-  run sudo -n docker compose stop web ingest-worker
+  # ⚠️ `|| return 1` on every line, in all four helpers. Called in a condition
+  # (`if ! stop_all`), set -e is SUSPENDED for the whole body, so without this
+  # the function's status is its LAST command's only: a failed bot stop followed
+  # by a successful `compose stop` would return 0, and rollback()'s guard —
+  # written precisely to catch a bot still ticking during a drop-and-restore —
+  # would miss the one failure it exists for.
+  run sudo -n systemctl stop clan-wars-bot || return 1
+  run sudo -n docker compose stop web ingest-worker || return 1
 }
 
+# ⚠️ Split from the bot start on purpose; see the ⚠️ at the tail of the flow.
+# On a deploy the bot starts LAST, after the services have been proved healthy,
+# because it is the only writer in that window whose writes a rollback cannot
+# undo safely.
+start_services() {
+  run sudo -n docker compose up -d web ingest-worker || return 1
+}
+
+start_bot() {
+  run sudo -n systemctl start clan-wars-bot || return 1
+}
+
+# Everything at once. Used where the release is NOT on trial: the pre-deploy
+# abort paths (nothing has been changed yet) and rollback() (the old release is
+# back, and staging the checks would buy nothing).
 start_all() {
-  run sudo -n docker compose up -d web ingest-worker
-  run sudo -n systemctl start clan-wars-bot
+  start_services || return 1
+  start_bot || return 1
+}
+
+# ⚠️ The preflight's undo. The install is part of it, not an afterthought
+# (Ruling 17): reverting the tree without reverting node_modules leaves the host
+# tree at $PREV_REF and its dependencies at $TAG's, and the bot — which is not
+# containerised and runs straight from this tree — is what finds out.
+revert_tree() {
+  run git checkout --quiet "${PREV_REF:-}" || return 1
+  run "$PNPM" install --frozen-lockfile || return 1
 }
 
 # ⚠️ `systemctl is-active` is NOT a health check, and believing it is is the
@@ -77,19 +118,39 @@ start_all() {
 # down. The HTTP check is the load-bearing one — web reads through
 # packages/roster to the database, so a 200 exercises the entire path.
 # sudo -n docker, same as everywhere else in this file: the unit runs as acab.
-health_ok() {
+# ⚠️ Deliberately does NOT check the bot: on a deploy this runs while the bot is
+# still stopped, which is what keeps the health path's rollback cheap.
+services_ok() {
   local deadline=$((SECONDS + 90))
   while [ "$SECONDS" -lt "$deadline" ]; do
     if sudo -n docker compose ps postgres --format '{{.Health}}' 2>/dev/null | grep -q healthy \
       && curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3020/ \
-      && sudo -n docker exec "$CONTAINER" psql -U factions -d factions_live -X -tAc 'select 1' >/dev/null 2>&1 \
-      && systemctl is-active --quiet clan-wars-bot
+      && sudo -n docker exec "$CONTAINER" psql -U factions -d factions_live -X -tAc 'select 1' >/dev/null 2>&1
     then
       return 0
     fi
     sleep 5
   done
   return 1
+}
+
+# ⚠️ The weakest of the checks, knowingly — see the ⚠️ above on what
+# `is-active` does and does not prove. It runs only after services_ok has
+# already exercised the whole data path, so all it adds is "the unit did not die
+# on startup", which is exactly what a missing dependency or a bad env produces.
+bot_ok() {
+  local deadline=$((SECONDS + 30))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    systemctl is-active --quiet clan-wars-bot && return 0
+    sleep 5
+  done
+  return 1
+}
+
+# The whole path, for rollback(): it brings everything back up at once, so there
+# is nothing to be gained by staging the checks the way the deploy does.
+health_ok() {
+  services_ok && bot_ok
 }
 
 # ⚠️ Non-fatal, always: this is bookkeeping, and a failure to write it must
@@ -120,18 +181,34 @@ rollback_abort() {
   exit 2
 }
 
-# Restore the previous release completely: code, image, host config, schema.
+# Restore the previous release completely: code, deps, images, host config, schema.
 #
-# ⚠️ This is lossless ONLY because stop_all() ran before the dump was taken.
-# No writer existed between dump and restore, so no player action can be
-# destroyed. If a future change starts the services earlier, this function
-# becomes a data-loss event and must be reconsidered.
+# ⚠️ Losslessness is NOT a property of this function — it is a property of the
+# call site, and only two of them have it:
+#   - `nginx -t failed`  and  `migration failed`: stop_all() ran before the dump
+#     and nothing has started since, so no writer existed between dump and
+#     restore and no player action can be destroyed.
+#   - the HEALTH path: `web` and `ingest-worker` have been up for as long as
+#     services_ok ran (up to 90 s), and the restore DISCARDS whatever they wrote
+#     in that window. That is accepted, bounded damage: `web` writes only on an
+#     explicit user action, and `ingest-worker`'s writes are re-ingested from the
+#     ADM logs once its cursor rewinds. The bot is deliberately NOT running in
+#     that window — its writes are the ones that would be neither bounded nor
+#     recoverable (`notifyCompleted` DMs before it marks, so rewinding a mark
+#     reproduces the 2026-09-01 duplicate-DM incident automatically).
+#   - the BOT path (`bot_ok` failed): the same window, plus a bot that was asked
+#     to start and never reached `active`. A bot that never came up did not tick,
+#     so in practice it wrote nothing; this is the one call site where that is an
+#     inference rather than a guarantee, and it is the price of checking the bot
+#     at all.
+# ⚠️ So: if a future change starts the BOT any earlier than the tail of the flow
+# does today, this function becomes a data-loss event and must be reconsidered.
 #
 # ⚠️ This function NEVER returns — exit 1 when the rollback succeeded, exit 2
 # when it did not. That is an invariant of its CALL SITES, not of its own
 # logic: they are written as `if ! run … ; then rollback "…"; fi`, so a return
-# would fall through to daemon-reload, `reload nginx` and start_all, bringing
-# production up on a half-applied migration and reporting success.
+# would fall through to daemon-reload, `reload nginx` and the service starts,
+# bringing production up on a half-applied migration and reporting success.
 #
 # ⚠️ Every variable it reads is defaulted (`${VAR:-}`). set -u is on, and an
 # unbound variable inside the rollback would abort it mid-way — with production
@@ -154,48 +231,89 @@ rollback() {
   fi
 
   if [ "$DRY_RUN" = "0" ]; then
-    # ⚠️ Terminate anything still holding the database, or DROP blocks forever —
-    # a rollback that hangs here leaves production stopped with no timeout.
+    # ⚠️ Terminate anything still holding the database, or DROP blocks forever.
     # Each step is checked: under a disarmed ERR trap a bare failure would exit
     # with psql's status and never reach rollback_abort's alert, so a failed
     # restore would look like an ordinary error instead of "the database is
     # gone and a human is needed".
+    #
+    # ⚠️ -v ON_ERROR_STOP=1 on the restore is load-bearing. psql reading a
+    # script from stdin exits 0 even when individual statements fail, so a dump
+    # that decompresses but whose COPY blocks error out would restore PARTIALLY
+    # and report success — and nothing downstream could catch it: `select 1`
+    # succeeds against a half-empty database and an empty-roster page still
+    # answers HTTP 200.
+    #
+    # ⚠️ A `timeout` around this was considered and REJECTED. A restore killed
+    # part-way leaves factions_live half-populated, which passes `select 1`,
+    # serves 200, and looks live while being silently wrong — the exact failure
+    # ON_ERROR_STOP exists to prevent. An indefinite hang is visible, and the
+    # ROLLING BACK alert above has already fired to say a human should look.
+    # Do not add one.
     if ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c \
         "select pg_terminate_backend(pid) from pg_stat_activity where datname = 'factions_live'" >/dev/null \
       || ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c "drop database factions_live" \
       || ! sudo -n docker exec "$CONTAINER" psql -U factions -d factions -X -c "create database factions_live" \
-      || ! { gzip -dc "${DUMP:-}" | sudo -n docker exec -i "$CONTAINER" psql -U factions -d factions_live -X -q; }
+      || ! { gzip -dc "${DUMP:-}" | sudo -n docker exec -i "$CONTAINER" \
+               psql -U factions -d factions_live -X -q -v ON_ERROR_STOP=1; }
     then
       rollback_abort "$reason (restoring factions_live from ${DUMP:-none} FAILED — the database may be empty)"
     fi
   fi
 
   # ⚠️ Back to the exact ref the deploy started from, not to the tag $CURRENT:
-  # $CURRENT is empty on a first run and may have been pruned by the fetch, and
-  # checking out a tag leaves the repo detached — which `git status --porcelain`
-  # calls clean, so the dirty-tree guard would never catch it. Same reasoning as
-  # the build-failure revert above. This checkout also restores live nginx and
-  # systemd config: /etc symlinks into this tree.
+  # $CURRENT is empty on a first run, and may have been pruned by the fetch
+  # above. (It is NOT about detachment: $PREV_REF is a bare SHA, so HEAD ends up
+  # equally detached either way — and after the first deploy it already is.)
+  # Same reasoning as the build-failure revert below. This checkout also restores
+  # live nginx and systemd config: /etc symlinks into this tree.
   if [ -n "${PREV_REF:-}" ] && ! run git checkout --quiet "${PREV_REF}"; then
     rollback_abort "$reason (could not check out ${PREV_REF}; host config is still $TAG's)"
   fi
 
-  # ⚠️ The tag to restore is whatever compose calls this service's image — it is
+  # ⚠️ Ruling 17. The bot is NOT containerised: it runs from this tree against
+  # host node_modules, and nothing else installs them. Rolling the tree back
+  # without rolling the dependencies back starts a bot importing whatever the
+  # failed release left behind. Before anything starts, and fatal.
+  if ! run "$PNPM" install --frozen-lockfile; then
+    rollback_abort "$reason (pnpm install failed at ${PREV_REF:-HEAD}; node_modules still belongs to $TAG)"
+  fi
+
+  # ⚠️ The tag to restore is whatever compose calls each service's image — it is
   # derived from the compose project name, NOT necessarily `clan-wars-web:latest`,
   # so it is asked for rather than assumed; a wrong tag here would silently leave
   # the NEW image running while reporting success. Resolved AFTER the checkout,
-  # so the name comes from the old tree's compose file.
-  # ⚠️ web only. The build step builds web AND ingest-worker, but $PREV_IMAGE
-  # captures web's image alone, so a rollback leaves the worker on the NEW image
-  # against the restored schema. The worker writes events and the supply file;
-  # this gap is deliberate and unhandled here — see the task report.
-  if [ -n "${PREV_IMAGE:-}" ]; then
-    local WEB_IMAGE
-    WEB_IMAGE=$(sudo -n docker compose config --images web 2>/dev/null | head -1 || true)
-    if [ -n "$WEB_IMAGE" ] && ! run sudo -n docker tag "${PREV_IMAGE}" "$WEB_IMAGE"; then
-      rollback_abort "$reason (could not retag $WEB_IMAGE to ${PREV_IMAGE}; the NEW web image would start)"
+  # so the names come from the old tree's compose file.
+  # ⚠️ BOTH services, since the deploy builds both (Ruling 10). Restoring web
+  # alone would leave ingest-worker on the NEW image against the RESTORED OLD
+  # schema — new-code/old-schema, the 2026-09-02 failure — and no health check
+  # can see it, because the worker serves no HTTP.
+  # ⚠️ An empty value is NOT skipped. $PREV_IMAGE_* comes back empty when no
+  # container existed at capture time — exactly the state a previous failed
+  # deploy leaves — and the compose lookup below comes back empty when `sudo -n`
+  # is refused. Either way a rollback that cannot name what it is rolling back to
+  # is not a rollback, and continuing would start the NEW image while alerting
+  # success. Abort instead: a stopped service is a visible outage.
+  # ⚠️ `docker compose config --images` runs even under --dry-run (read-only, but
+  # privileged), so a dry run is not runnable unprivileged — same precedent as
+  # the `compose images -q` capture in the flow below.
+  local svc prev target
+  for svc in web ingest-worker; do
+    case "$svc" in
+      web) prev="${PREV_IMAGE_WEB:-}" ;;
+      *)   prev="${PREV_IMAGE_WORKER:-}" ;;
+    esac
+    if [ -z "$prev" ]; then
+      rollback_abort "$reason (no previous image was captured for $svc; the NEW image would keep running)"
     fi
-  fi
+    target=$(sudo -n docker compose config --images "$svc" 2>/dev/null | head -1 || true)
+    if [ -z "$target" ]; then
+      rollback_abort "$reason (could not resolve the compose image name for $svc; the NEW image would keep running)"
+    fi
+    if ! run sudo -n docker tag "$prev" "$target"; then
+      rollback_abort "$reason (could not retag $target to $prev; the NEW $svc image would start)"
+    fi
+  done
 
   # ⚠️ nginx -t before the reload, never after: this host serves three other
   # production sites from the same nginx. A reload of a bad config is refused and
@@ -265,12 +383,17 @@ fi
 
 echo "deploying $CURRENT -> $TAG (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 
-# ⚠️ Capture the currently-running image before checkout moves the tree to
-# $TAG, so rollback() (Task 7) can identify what "back to $CURRENT" means.
+# ⚠️ Capture the currently-running images before checkout moves the tree to
+# $TAG, so rollback() can identify what "back to $CURRENT" means.
+# ⚠️ BOTH services (Ruling 10): the build below builds web AND ingest-worker, so
+# capturing web alone would let a rollback leave the worker on the new image
+# against the restored old schema — invisible to every health check here,
+# because the worker serves no HTTP.
 # sudo -n docker, not bare docker: our unit runs as acab, not root (contrast
 # deploy/systemd/clan-wars-backup.service, which has no User= and can use
 # bare docker) — see deploy/deploy-web.sh for the house pattern.
-PREV_IMAGE=$(sudo -n docker compose images -q web 2>/dev/null || true)
+PREV_IMAGE_WEB=$(sudo -n docker compose images -q web 2>/dev/null || true)
+PREV_IMAGE_WORKER=$(sudo -n docker compose images -q ingest-worker 2>/dev/null || true)
 
 # ⚠️ Checkout BEFORE build, not after: building the old tree and checking
 # out $TAG only afterward ships OLD web/worker code against the NEW schema —
@@ -289,13 +412,39 @@ PREV_IMAGE=$(sudo -n docker compose images -q web 2>/dev/null || true)
 # never catch it.
 PREV_REF=$(git rev-parse HEAD)
 run git checkout --quiet "$TAG"
+
+# ⚠️ Ruling 17. The bot is NOT containerised — it runs from this tree against
+# host node_modules, and nothing else installs them, so a release that adds or
+# bumps a dependency would start a bot importing a package that is not there.
+# --frozen-lockfile, so a lockfile the release forgot to update fails here
+# rather than resolving to something nobody tested. Still in the preflight,
+# where a failure costs only a revert with nothing stopped.
+if ! run "$PNPM" install --frozen-lockfile; then
+  revert_tree || alert "CRITICAL" "pnpm install failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
+  alert "BLOCKED" "pnpm install --frozen-lockfile failed for $TAG; reverted to $PREV_REF, nothing stopped"
+  exit 1
+fi
+
 if ! run sudo -n docker compose build -q web ingest-worker; then
-  run git checkout --quiet "$PREV_REF" || alert "CRITICAL" "build failed for $TAG AND the revert to $PREV_REF failed; tree is at $TAG with nothing stopped — needs a human"
+  revert_tree || alert "CRITICAL" "build failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
   alert "BLOCKED" "build failed for $TAG; reverted to $PREV_REF, nothing stopped"
   exit 1
 fi
 
-DUMP="$BACKUPS/predeploy-$TAG.sql.gz"
+# ⚠️ Timestamped, not keyed on the tag alone. Two attempts at the same tag —
+# the ordinary case after a human clears $FAILED_MARKER — would otherwise write
+# the SECOND attempt's dump over the first, and the second attempt dumps a
+# database the first attempt's migration has already touched. That overwrite
+# destroys the only artifact a rollback can restore from.
+DUMP="$BACKUPS/predeploy-$TAG-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
+
+# ⚠️ Belt and braces on the same point: refuse rather than overwrite, always,
+# whatever the name resolves to. Checked BEFORE stop_all, so this exits with
+# nothing stopped.
+if [ -e "$DUMP" ]; then
+  alert "BLOCKED" "$DUMP already exists; refusing to overwrite a pre-deploy dump"
+  exit 1
+fi
 
 stop_all
 
@@ -330,14 +479,28 @@ if [ "$DRY_RUN" = "0" ]; then
     printf '%s\n' "$TAG" > "$FAILED_MARKER" || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
     exit 1
   fi
+
+  # ⚠️ Rotate, and only AFTER the dump above verified — same rule as
+  # deploy/backup/backup-factions-live.sh, and for the same reason: rotation
+  # that runs regardless of dump success deletes good dumps over successive
+  # failing runs. These live on the volume the nightly backups need, and that
+  # script only rotates `factions_live-*`, so nothing else would ever prune
+  # `predeploy-*`. Never fatal: a failed prune is disk hygiene, not a deploy
+  # fault, and must not strand the services this script has already stopped.
+  ls -1t "$BACKUPS"/predeploy-*.sql.gz 2>/dev/null | tail -n +$((KEEP_PREDEPLOY + 1)) | xargs -r rm -- \
+    || alert "WARN" "could not prune old pre-deploy dumps in $BACKUPS"
 else
   printf 'DRY: pg_dump → %s\n' "$DUMP"
 fi
 
 # ⚠️ Every failure past this point must reach rollback(), not abort with the
-# services stopped and nothing said. rollback() (Task 7) disarms this trap
-# on entry so it cannot recurse into itself.
-trap 'rollback "unhandled failure at line $LINENO"' ERR
+# services stopped and nothing said. rollback() disarms this trap on entry so it
+# cannot recurse into itself. It fires inside functions too — see the ⚠️ on
+# `set -E` at the top of this file, without which it would fire almost nowhere.
+# ⚠️ $LINENO here is the line inside whichever function failed, NOT this call
+# site, precisely because the trap is inherited — so the message says "near",
+# and the rollback's own reason strings are what actually locate the step.
+trap 'rollback "unhandled failure near line $LINENO"' ERR
 
 if ! run sudo -n nginx -t; then
   rollback "nginx -t failed after checking out $TAG"
@@ -352,23 +515,43 @@ run sudo -n systemctl daemon-reload
 # sites, where a failed reload leaves the old config live.
 run sudo -n systemctl reload nginx
 
-start_all
+# ⚠️ The bot starts LAST, after the services have passed, and this ordering is
+# load-bearing — not tidiness. rollback() restores a dump taken before anything
+# started, so every write made between the start and the rollback is DISCARDED.
+# In this window that is `web` (writes only on an explicit user action) and
+# `ingest-worker` (whose writes are re-ingested from the ADM logs once its
+# cursor rewinds): bounded, recoverable damage. The bot is neither — it writes
+# every 10 s and `notifyCompleted` DMs BEFORE it marks, so rewinding a mark
+# re-sends a DM to a real player, which is the 2026-09-01 incident, automated.
+# Starting the bot before the services are proved healthy would put that inside
+# the rollback's blast radius for the sake of a few seconds.
+start_services
 
-# ⚠️ The gate: state is recorded and the marker cleared ONLY after health_ok
-# passes, so a bad health result can never land on a cleared marker — the
-# marker is what stops a failed deploy re-entering the outage window every
-# 2 minutes. On a real failure this falls through to rollback() (Task 7),
-# never to a bare exit — see the ⚠️ on the ERR trap above.
+# ⚠️ The gate: state is recorded and the marker cleared ONLY after both checks
+# pass, so a bad health result can never land on a cleared marker — the marker
+# is what stops a failed deploy re-entering the outage window every 2 minutes.
+# On a real failure this goes to rollback(), never to a bare exit — see the ⚠️
+# on the ERR trap above.
 if [ "$DRY_RUN" = "1" ]; then
-  echo "DRY: health_ok (skipped)"
+  echo "DRY: services_ok (skipped)"
+  echo "DRY: start_bot (skipped)"
+  echo "DRY: bot_ok (skipped)"
 else
-  if health_ok; then
-    state_write "$TAG"
-    # ⚠️ Only reached once state_write has succeeded — a stale marker here
-    # would silently block the next real deploy of this same tag forever.
-    run rm -f "$FAILED_MARKER"
-    alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
-  else
-    rollback "health check failed after deploying $TAG"
+  if ! services_ok; then
+    # ⚠️ Says what the rollback throws away, because at this call site — unlike
+    # the two above — it is not nothing.
+    rollback "health check failed after deploying $TAG (discarding up to 90s of web/ingest-worker writes; the bot never started)"
   fi
+
+  start_bot
+
+  if ! bot_ok; then
+    rollback "the bot did not come up after deploying $TAG (discarding up to 2min of web/ingest-worker writes)"
+  fi
+
+  state_write "$TAG"
+  # ⚠️ Only reached once state_write has succeeded — a stale marker here would
+  # silently block the next real deploy of this same tag forever.
+  run rm -f "$FAILED_MARKER"
+  alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 fi
