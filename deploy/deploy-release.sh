@@ -70,6 +70,28 @@ start_all() {
   run sudo -n systemctl start clan-wars-bot
 }
 
+# ⚠️ `systemctl is-active` is NOT a health check, and believing it is is the
+# easiest mistake available here. CLAUDE.md: the bot holds no eager database
+# connection and every tick is individually try/caught, so a bot pointed at a
+# dead database reports `active (running)` forever with the whole data path
+# down. The HTTP check is the load-bearing one — web reads through
+# packages/roster to the database, so a 200 exercises the entire path.
+# sudo -n docker, same as everywhere else in this file: the unit runs as acab.
+health_ok() {
+  local deadline=$((SECONDS + 90))
+  while [ "$SECONDS" -lt "$deadline" ]; do
+    if sudo -n docker compose ps postgres --format '{{.Health}}' 2>/dev/null | grep -q healthy \
+      && curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3020/ \
+      && sudo -n docker exec "$CONTAINER" psql -U factions -d factions_live -X -tAc 'select 1' >/dev/null 2>&1 \
+      && systemctl is-active --quiet clan-wars-bot
+    then
+      return 0
+    fi
+    sleep 5
+  done
+  return 1
+}
+
 # --- executable flow ---
 
 # ⚠️ flock, not a pidfile. A deploy that outruns the 2-minute timer must not
@@ -198,6 +220,22 @@ run sudo -n systemctl daemon-reload
 run sudo -n systemctl reload nginx
 
 start_all
-# ⚠️ Only reached once start_all() itself succeeds — a stale marker here
-# would silently block the next real deploy of this same tag forever.
-run rm -f "$FAILED_MARKER"
+
+# ⚠️ The gate: state is recorded and the marker cleared ONLY after health_ok
+# passes, so a bad health result can never land on a cleared marker — the
+# marker is what stops a failed deploy re-entering the outage window every
+# 2 minutes. On a real failure this falls through to rollback() (Task 7),
+# never to a bare exit — see the ⚠️ on the ERR trap above.
+if [ "$DRY_RUN" = "1" ]; then
+  echo "DRY: health_ok (skipped)"
+else
+  if health_ok; then
+    state_write "$TAG"
+    # ⚠️ Only reached once state_write has succeeded — a stale marker here
+    # would silently block the next real deploy of this same tag forever.
+    run rm -f "$FAILED_MARKER"
+    alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
+  else
+    rollback "health check failed after deploying $TAG"
+  fi
+fi
