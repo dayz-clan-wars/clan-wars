@@ -1,0 +1,28 @@
+name: changelog
+# Least privilege: this job only reads the repo and reports a status.
+# Without an explicit block the job inherits the repository default,
+# which is write-scoped in any repo not configured otherwise.
+permissions:
+  contents: read
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+
+jobs:
+  changelog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          fetch-depth: 0
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+        run: git fetch origin "$BASE_REF"
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
+        with:
+          python-version: "3.12"
+      - env:
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          KEEL_PR_IS_FORK: ${{ github.event.pull_request.head.repo.fork }}
+        run: python3 scripts/check_changelog.py "$BASE_REF" "$HEAD_REF"

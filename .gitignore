@@ -15,3 +15,18 @@ dist/
 # during a deploy is not, and would be committable with live credentials in it.
 .env.*
 !.env.example
+
+# >>> stow:base >>>
+# managed by stow — edits inside this block are overwritten; put custom entries outside it
+.DS_Store
+Thumbs.db
+# <<< stow:base <<<
+
+# >>> stow:node >>>
+# managed by stow — edits inside this block are overwritten; put custom entries outside it
+node_modules/
+npm-debug.log*
+dist/
+coverage/
+.env
+# <<< stow:node <<<
