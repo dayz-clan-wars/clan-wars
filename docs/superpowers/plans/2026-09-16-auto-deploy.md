@@ -1,5 +1,14 @@
 # Automatic Deployment on Release — Implementation Plan
 
+> ⚠️ **Superseded as an operational document (2026-09-16).** This plan is the
+> record of what was *planned*; implementation review changed several behaviours
+> deliberately. Notably it describes building the image before checking out the
+> tag — found during implementation to be a Critical defect (it builds from the
+> old tree) — and calls rehearsal 1 "with nothing at stake", which is false: with
+> the health gate unproven, rehearsal 1 can trigger a real drop-and-restore of
+> `factions_live`. **Operate from `docs/deploy/2026-09-16-auto-deploy.md` and the
+> amended spec, never from this file.**
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A new `vX.Y.Z` tag on `main` deploys itself to `regime` — schema, code, host config and services — rolling back both code and database automatically if any phase fails.
