@@ -250,10 +250,17 @@ Recovery:
 
 ### Class 2 — a pre-migration abort's own recovery failed (`restore_previous_release()` / a bare `revert_tree`)
 
-**Recognize it by:** the text contains "`aborting the deploy of $TAG`",
-"`restore the tree`", "`retag`", "`NOT starting web/ingest-worker`",
-"`NOT starting clan-wars-bot`", "`could not stop all writers before the dump`",
-or "`pnpm install failed … AND the revert … failed`".
+**Recognize it by:** the text contains any of these literal substrings —
+"`aborting the deploy of`" (five call sites: a failed tree restore, a failed
+retag, and both "deliberately NOT starting …" alerts),
+"`could not stop all writers before the dump`",
+"`tree or node_modules is still`" (the `pnpm install`-then-`revert_tree`
+double failure), "`failed to complete; restoring`" (the pre-deploy dump
+itself failed), or "`failed verification; restoring`" (the dump completed
+but didn't pass its integrity check). The last two are worth calling out on
+their own: a bad dump is one of the likelier things to actually page someone,
+and it is exactly the moment an operator most needs to be told the database
+was never touched.
 
 **No migration ever ran at these call sites.** `factions_live` was never
 touched, and must not be touched now — `restore_previous_release()`'s own
@@ -275,26 +282,44 @@ Recovery is to fix the *specific* piece the alert names — check out
 `restore_previous_release()` would have. Never touch the database for this
 class.
 
-### Class 3 — bookkeeping only; the deploy already succeeded
+### Class 3 — bookkeeping only; the thing it was recording is already fine
 
 **Recognize it by:** the text contains "`is healthy but … could not be
-written`" or "`is healthy but … could not be cleared`".
+written`", "`is healthy but … could not be cleared`", or
+"`this deploy will retry in 2 minutes`".
 
-⚠️ **The deploy is healthy. The bot, `web` and `ingest-worker` are running the
-new release right now. Do not touch `factions_live` for this alert — there is
-nothing to restore, and nothing is down.** The only thing that failed is a
-file write under `/var/lib/clan-wars` (the state file, or `$STATE.failed`) —
-most likely because step 1's `install -d -o acab -g acab /var/lib/clan-wars`
-was skipped or undone (e.g. by a `sudo mkdir` recreating the directory as
-root) or the volume is full.
+⚠️ **Whatever this alert is bookkeeping for has already finished correctly —
+a healthy deploy, or a correctly-completed rollback. Do not touch
+`factions_live` for this alert — there is nothing to restore, and nothing is
+down.** The only thing that failed is a file write under `/var/lib/clan-wars`
+(the state file, or `$FAILED_MARKER`) — most likely because step 1's
+`install -d -o acab -g acab /var/lib/clan-wars` was skipped or undone (e.g. by
+a `sudo mkdir` recreating the directory as root) or the volume is full.
 
-The cost of ignoring it is not data loss: at worst, the timer sees the same
-(already-good) tag as "new" again in two minutes and redeploys it — a second,
-needless outage window, not a corrupted one. Recovery: fix `/var/lib/clan-wars`'s
+The first two phrases (`state_write`/marker-clear failures on the success
+path) only ever mean this. The third — `mark_failed()`'s own alert,
+"`could not write $FAILED_MARKER; this deploy will retry in 2 minutes`" — is
+reused by three call sites and needs one extra check before you trust it:
+it fires right after a **successful** rollback has already put production
+back and started it (the database is correctly restored at that point, before
+this alert can even fire), but the identical text is also reachable from
+*inside* Class 1 (nested in `rollback_abort()`) and Class 2 (nested in both
+dump-failure paths) when the marker write fails there too. So: if this text
+is the **only** `CRITICAL` you see — typically right next to a non-`CRITICAL`
+`ROLLED BACK` alert — it is this class, standalone, and the database is fine.
+If it appears **alongside** a `ROLLBACK FAILED` or a Class 2 alert, that other
+alert is what actually happened and drives your recovery; this one only means
+the bookkeeping file *also* failed to write, which changes nothing about what
+you do, since a human is already needed either way.
+
+The cost of ignoring a standalone one is not data loss: at worst, the timer
+sees the same (already-good) tag as "new" again in two minutes and redeploys
+it, or retries a tag whose earlier failure was real — a second, needless
+outage window, not a corrupted one. Recovery: fix `/var/lib/clan-wars`'s
 ownership or free space, then write the missing file by hand as `acab`
 (`echo <tag> | sudo -u acab tee /var/lib/clan-wars/deployed-tag`, or
 `sudo -u acab rm /var/lib/clan-wars/deployed-tag.failed` if that's the one
-that wouldn't clear).
+that wouldn't write or clear).
 
 ### The `FAILED-<tag>` marker
 
