@@ -703,3 +703,68 @@ this tag.**
   (2026-09-07) and this one (2026-09-09) — the first stretch of rapid,
   unversioned feature work after launch, which is why it is dense.
 
+## [1.0.0] - 2026-09-07
+
+The target-state build order complete: increments 0 through 8, the point at
+which the game the field guide describes was actually playable end to end —
+found a clan at a flagpole, hold it, raid another, and see the war reflected
+back on the site and in Discord. Everything below shipped as one consolidated
+deploy against a fresh `factions_live` (migrations 0020–0028 together, zero
+clans in the database beforehand); the acceptance record is
+`docs/acceptance/2026-09-08-launch.md`.
+
+### Added
+
+- Base declarations: the 200 m minimum between declared bases, `declareTx` as
+  the one writer of the `declarations` table, and the solo lapse clock that
+  releases an inactive player's claim.
+- Site foundation: Tailwind, `packages/roster`, and `/me` reading from the
+  database — the site's first real page.
+- Identity linking and solo basing move to Discord: `/link` (autocomplete,
+  three emotes in order, budgeted) and unlink on `/me`; `/base` for solo
+  declare and release.
+- The roster store: pending and full membership with presence promotion, the
+  10-member cap, join requests, identity holds, and the recruiting post —
+  then, in the same increment, roster administration itself moves off Discord
+  and onto the site.
+- Raids, defenses and dormancy revival: a non-member lowering a clan's flag
+  starts a 24h clock; a member's re-raise inside it records a defense, a miss
+  makes the clan dormant. The notice and war-log queues carry the results.
+- Discord structure: one role, text channel and voice channel per clan,
+  reconciled every tick against the roster rather than written once and left
+  to drift — the `@Linked` role included.
+- Scoring and seasons: weekly Alphas and a season champion, computed from
+  raid and defense points, with `#war-log` posting each week's and season's
+  close.
+- The map: player positions and intruder sightings projected from the log,
+  rendered with the guide's four rules — every fix shows its age, no trails,
+  no position outside your own clan except an intruder in your own zone, and
+  a dormant clan keeps its map.
+- Sessions, kills and membership history: connect/disconnect and PvP/PvE
+  kills projected from the ADM log into player stats, with membership
+  resolved at the instant each kill happened rather than at query time.
+- Leadership and the vault: succession claims against a silent leader,
+  no-confidence votes, and the clan vault (door/safe codes behind a
+  per-lock role, never DM'd or posted) with 24h guest passes onto a clan's
+  voice channel.
+- Launch: the field guide moves into the site, `pnpm launch` stamps every
+  pole's 7-day grace from the real launch instant so nothing appears on the
+  public-bases layer before it, and the raid window (base damage Friday
+  00:00 UTC to Monday 00:00 UTC) is enforced on the game server, not the bot.
+- The faction feed (`#🎌-faction-feed`), faction dormancy (7 days unraised
+  loses the supply kit, 14 further days disbands), faction rebind (move an
+  established base to an unheld pole, one raise and a leader confirmation,
+  7-day cooldown), and the supply-spawner projection (the worker regenerates
+  and hashes `faction-supplies.json` from `factions` every sweep, uploading
+  only on a change) were all already in place by this build.
+
+### Notes
+
+- ⚠️ Only `founded` and `activated` feed events had ever posted to a real
+  channel anywhere at this point — both from a backfill against a database
+  that no longer exists. The other five kinds were tested but unexercised in
+  production.
+- The database this build deployed to holds one registered server and zero
+  clans: nothing in this entry had yet been exercised against real player
+  data on this deployment.
+
