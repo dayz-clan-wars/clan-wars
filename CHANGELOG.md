@@ -238,11 +238,11 @@ this tag.**
 
 ### Added
 
-- Migration 0035: a unique index on `faction_members (server_id, discord_id)`,
-  the mirror of the one that has always existed on `(server_id, dayz_id)`. One
-  person, one membership per server, whichever of their two ids identifies
-  them. First migration applied with `pnpm db:migrate` (shipped in v1.11.0)
-  instead of a hand-assembled runner.
+- ⚠️ Carries a migration (0035): a unique index on `faction_members
+  (server_id, discord_id)`, the mirror of the one that has always existed on
+  `(server_id, dayz_id)`. One person, one membership per server, whichever of
+  their two ids identifies them. First migration applied with `pnpm
+  db:migrate` (shipped in v1.11.0) instead of a hand-assembled runner.
 
 ### Notes
 
@@ -355,6 +355,7 @@ this tag.**
   bot survive states it previously died in.
 - No new player-facing behaviour; no migration.
 - Runbook: `docs/deploy/2026-09-14-single-instance-lock.md`.
+
 ## [1.9.0] - 2026-09-13
 
 ### Added
