@@ -7,6 +7,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
+- The release deployer no longer dies at its first step: `pnpm` prints a
+  lifecycle banner to stdout before a script's own output, and the deployer
+  fed that banner to a JSON parser. Every deploy would have failed.
+
+### Fixed
+
 - `/backups/` is ignored, so hand-made dumps kept on the production host no
   longer leave the working tree dirty — which would otherwise make the release
   deployer refuse every deploy.

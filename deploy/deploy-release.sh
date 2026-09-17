@@ -531,7 +531,14 @@ set -a; . ./.env; set +a
 run git fetch --tags --prune origin
 
 CURRENT=$(state_read)
-PLAN=$("$PNPM" deploy:select "$CURRENT")
+# ⚠️ --silent AND tail -1, because `pnpm <script>` prints a lifecycle banner
+# ("> factions@ deploy:select …", "> tsx …") to STDOUT before the script's own
+# output. Captured whole, that banner reaches python's json.load and every
+# deploy dies at this line before doing anything. --silent suppresses it today;
+# tail -1 keeps this working if a future pnpm, or a warning, prints anyway.
+# Found by the first real --dry-run on the host — it cannot reproduce on a
+# developer machine, which is why the runbook makes that dry run mandatory.
+PLAN=$("$PNPM" --silent deploy:select "$CURRENT" | tail -1)
 TAG=$(printf '%s' "$PLAN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag"] or "")')
 HOST_CONFIG=$(printf '%s' "$PLAN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["touchesHostConfig"])')
 MIGRATIONS=$(printf '%s' "$PLAN" | python3 -c 'import json,sys; print(json.load(sys.stdin)["touchesMigrations"])')
