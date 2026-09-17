@@ -720,9 +720,9 @@ clans in the database beforehand); the acceptance record is
   releases an inactive player's claim.
 - Site foundation: Tailwind, `packages/roster`, and `/me` reading from the
   database — the site's first real page.
-- Identity linking and solo basing move to Discord: `/link` (autocomplete,
-  three emotes in order, budgeted) and unlink on `/me`; `/base` for solo
-  declare and release.
+- Identity linking and solo basing as site flows: gamertag autocomplete over
+  seen-and-unclaimed players, three emotes in order, budgeted, and unlink on
+  `/me`; solo declare and release for a base.
 - The roster store: pending and full membership with presence promotion, the
   10-member cap, join requests, identity holds, and the recruiting post —
   then, in the same increment, roster administration itself moves off Discord
@@ -747,10 +747,11 @@ clans in the database beforehand); the acceptance record is
   no-confidence votes, and the clan vault (door/safe codes behind a
   per-lock role, never DM'd or posted) with 24h guest passes onto a clan's
   voice channel.
-- Launch: the field guide moves into the site, `pnpm launch` stamps every
-  pole's 7-day grace from the real launch instant so nothing appears on the
-  public-bases layer before it, and the raid window (base damage Friday
-  00:00 UTC to Monday 00:00 UTC) is enforced on the game server, not the bot.
+- Launch: `/guide` redirects to the field guide's own host, `pnpm launch`
+  stamps every pole's 7-day grace from the real launch instant so nothing
+  appears on the public-bases layer before it, and the raid window (base
+  damage Friday 00:00 UTC to Monday 00:00 UTC) is enforced on the game
+  server, not the bot.
 - The faction feed (`#🎌-faction-feed`), faction dormancy (7 days unraised
   loses the supply kit, 14 further days disbands), faction rebind (move an
   established base to an unheld pole, one raise and a leader confirmation,
