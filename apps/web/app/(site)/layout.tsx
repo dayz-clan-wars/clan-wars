@@ -1,9 +1,10 @@
 import { currentSession } from "@/lib/viewer";
-import { attention, liveServers } from "@factions/roster";
+import { attention, baseDamageWindow, liveServers } from "@factions/roster";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
 import { ServerStrip } from "@/app/components/server-strip";
+import { RaidStrip } from "@/app/components/raid-strip";
 import { serverStripLines } from "@/lib/server-strip";
 import { SkipLink } from "@/app/components/ui";
 
@@ -27,11 +28,14 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   // The server-name strip: one cheap read, and like the counts never a
   // reason to fail the page — unreachable means no strip.
   const serverLines = serverStripLines(await liveServers().catch(() => []));
+  // Same shape as the strip above: one cheap read, never a reason to fail the page.
+  const raidWindow = await baseDamageWindow().catch(() => undefined);
   return (
     <>
       <SkipLink />
       <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
       <ServerStrip lines={serverLines} />
+      <RaidStrip window={raidWindow} />
       <InstallStrip />
       {children}
     </>

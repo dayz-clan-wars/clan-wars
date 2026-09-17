@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, type Database } from "@factions/db";
-import { asc, sql } from "drizzle-orm";
+import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
+import { asc, eq, sql } from "drizzle-orm";
 import { restartTick, RESTART_MESSAGE, type RestartTarget } from "../src/restart-tick.js";
+import { raidWindowTick } from "../src/raid-window-tick.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -12,15 +13,19 @@ function fakeNitrado(statusValue = "started", restartImpl?: () => Promise<void>)
   const restart = vi.fn(restartImpl ?? (async () => {}));
   const status = vi.fn(async () => statusValue);
   // ⚠️ The file methods throw rather than no-op: none of the tests using this fake
-  // configure a truck wipe, so reaching one of these means the tick touched
-  // events.xml when it had no business doing so, and the test must say so loudly.
-  const unreachable = (name: string) => vi.fn(async () => {
-    throw new Error(`${name} must not be called without a configured truck wipe`);
+  // configure a truck wipe or a raid window, so reaching one of these means the
+  // tick touched events.xml or cfggameplay.json when it had no business doing so,
+  // and the test must say so loudly — with the reason that actually applies to it,
+  // not a copy-pasted one (a wrong "without a configured truck wipe" message on
+  // missionRootDir would point at the wrong feature when this fires).
+  const unreachable = (name: string, reason = "without a configured truck wipe") => vi.fn(async () => {
+    throw new Error(`${name} must not be called ${reason}`);
   });
   const target = {
     status,
     restart,
     missionDbDir: unreachable("missionDbDir"),
+    missionRootDir: unreachable("missionRootDir", "without a configured raid window"),
     downloadFile: unreachable("downloadFile"),
     uploadFile: unreachable("uploadFile"),
   } as unknown as RestartTarget;
@@ -39,7 +44,11 @@ describe("restartTick", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
+    // ⚠️ The raid-window tables too: `servers ... cascade` clears the flips (they
+    // carry a server FK), but skips and announcements do not, and a skip left behind
+    // by one test silently suppresses a later test's window.
     await db.execute(sql`truncate table server_restarts, servers restart identity cascade`);
+    await db.execute(sql`truncate table raid_window_skips, raid_window_announcements`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 4242, active: true }).returning();
     serverId = s!.id;
     lastError.clear();
@@ -316,6 +325,245 @@ describe("restartTick", () => {
     expect(f.uploads).toHaveLength(1);
     expect(active(f.uploads[0]!.content, "VehicleCivilianSedan")).toBe(0);
     expect(active(f.uploads[0]!.content, "VehicleTruck01")).toBe(1);
+  });
+
+  // ── Raid window flip ─────────────────────────────────────────────────────
+  // Level-triggered, exactly like the truck wipe: every slot recomputes the
+  // wanted disableBaseDamage value and re-uploads only on drift.
+  const cfg = (disabled: boolean) => JSON.stringify({ GeneralData: { disableBaseDamage: disabled } });
+  // Missing the key entirely — trips setBaseDamageDisabled's own guard, which is
+  // exactly the "someone corrupted the file" case a refusal exists to catch.
+  const BROKEN_CFG = JSON.stringify({ GeneralData: {} });
+
+  function fakeRaid(initial: string, opts: { failUpload?: boolean; restartImpl?: () => Promise<void> } = {}) {
+    let current = initial;
+    const order: string[] = [];
+    const uploads: Array<{ dir: string; name: string; content: string }> = [];
+    const restart = vi.fn(opts.restartImpl ?? (async () => { order.push("restart"); }));
+    const target = {
+      status: vi.fn(async () => "started"),
+      restart,
+      missionRootDir: vi.fn(async () => "/mission"),
+      downloadFile: vi.fn(async () => current),
+      uploadFile: vi.fn(async (dir: string, name: string, content: string) => {
+        if (opts.failUpload) throw new Error("upload boom");
+        order.push("upload");
+        uploads.push({ dir, name, content });
+        current = content; // subsequent downloads see this tick's write
+      }),
+    } as unknown as RestartTarget;
+    return {
+      target, order, uploads, restart,
+      setContent: (c: string) => { current = c; }, // simulate an operator's hand revert
+      t: target as any,
+    };
+  }
+
+  const raidRows = () => db.select().from(raidWindowFlips)
+    .where(eq(raidWindowFlips.serverId, serverId)).orderBy(asc(raidWindowFlips.boundaryAt));
+
+  const FRI_OPEN = at("2026-09-18T00:00:00Z");
+  const MON_CLOSE_PREV = at("2026-09-14T00:00:00Z");
+  const MON_CLOSE_NEXT = at("2026-09-21T00:00:00Z");
+
+  it("converges across a simulated week — missed slots and a hand-reverted file both self-heal", async () => {
+    // Correctly closed already, from the prior Monday — nothing to do.
+    const f = fakeRaid(cfg(true));
+    await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(f.uploads).toEqual([]);
+    // ⚠️ No upload, but a row all the same: this Monday's close IS realised — the
+    // file already carries it — and both readers treat a missing row as a failed
+    // flip. `previous_content` stays null: nothing was overwritten.
+    const monRows = await raidRows();
+    expect(monRows).toMatchObject([{ boundaryAt: MON_CLOSE_PREV, outcome: "applied", wantedDisabled: true }]);
+    expect(monRows[0]!.restartConfirmedAt).not.toBeNull();
+    expect(monRows[0]!.previousContent).toBeNull();
+
+    // ⚠️ A stretch of slots (through the rest of the week) never runs — the bot
+    // is down. Nothing simulates that beyond simply not calling the tick for
+    // them: the next call is the whole point of level-triggered.
+    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r1.restarted).toBe(1);
+    expect(f.uploads).toHaveLength(1);
+    expect(JSON.parse(f.uploads[0]!.content).GeneralData.disableBaseDamage).toBe(false);
+    let rows = await raidRows();
+    expect(rows).toMatchObject([
+      { boundaryAt: MON_CLOSE_PREV, outcome: "applied" },
+      { boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false },
+    ]);
+    expect(rows[1]!.restartConfirmedAt).not.toBeNull();
+
+    // An operator (or a lost write elsewhere) puts the file back to disabled —
+    // a hand revert mid-weekend, well past the Friday slot.
+    f.setContent(cfg(true));
+    const r2 = await restartTick(db, () => f.target, { now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r2.restarted).toBe(1);
+    expect(f.uploads).toHaveLength(2);
+    rows = await raidRows();
+    // ⚠️ Still ONE row for this window — the repair upserts the same
+    // (serverId, boundaryAt) key rather than adding a Saturday row of its own.
+    expect(rows).toHaveLength(2); // the prior Monday's close, and this window's open
+    expect(rows[1]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false });
+
+    // Monday close, several more missed slots later.
+    const r3 = await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r3.restarted).toBe(1);
+    expect(JSON.parse(f.uploads[2]!.content).GeneralData.disableBaseDamage).toBe(true);
+    rows = await raidRows();
+    expect(rows).toHaveLength(3);
+    expect(rows[2]).toMatchObject({ boundaryAt: MON_CLOSE_NEXT, outcome: "applied", wantedDisabled: true });
+  });
+
+  it("⚠️ I1 — a restart failure right after a successful flip still gets confirmed once a later restart lands", async () => {
+    let restartCalls = 0;
+    const f = fakeRaid(cfg(true), {
+      restartImpl: async () => {
+        restartCalls++;
+        if (restartCalls === 1) throw new Error("Nitrado 503 for /restart");
+      },
+    });
+    // First pass at the boundary: the upload succeeds, the row is written
+    // `applied`, then the restart POST throws — the per-server catch swallows
+    // it, and nothing confirms the row.
+    const r1 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r1.failed).toBe(1);
+    let rows = await raidRows();
+    expect(rows).toMatchObject([{ outcome: "applied", wantedDisabled: false }]);
+    expect(rows[0]!.restartConfirmedAt).toBeNull();
+
+    // Later pass, same slot (no server_restarts row was written on the failed
+    // attempt, so this retries it): the file is ALREADY in the wanted state, so
+    // `changed` is false this time — and the restart now succeeds. Gating the
+    // confirm write on `changed` would leave the row unconfirmed forever; the
+    // confirm-by-lookup must still find and confirm it.
+    const r2 = await restartTick(db, () => f.target, { now: at("2026-09-18T00:05:00Z"), lastError, raidWindow: { enabled: true } });
+    expect(r2.restarted).toBe(1);
+    expect(f.uploads).toHaveLength(1); // no second upload — it was already correct
+    rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+  });
+
+  it("uploads before the restart POST", async () => {
+    const f = fakeRaid(cfg(true));
+    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(f.order).toEqual(["upload", "restart"]);
+  });
+
+  it("does not confirm when the restart POST fails, even though the upload already succeeded", async () => {
+    const f = fakeRaid(cfg(true), { restartImpl: async () => { throw new Error("boom"); } });
+    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const rows = await raidRows();
+    expect(rows).toMatchObject([{ outcome: "applied" }]);
+    expect(rows[0]!.restartConfirmedAt).toBeNull();
+  });
+
+  it("⚠️ setWhere: a later refusal never downgrades an already-applied row", async () => {
+    const f = fakeRaid(cfg(true));
+    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    let rows = await raidRows();
+    expect(rows).toMatchObject([{ outcome: "applied" }]);
+    const confirmedAt = rows[0]!.restartConfirmedAt;
+
+    // A later pass in the SAME window finds a file some other actor corrupted —
+    // the guard in setBaseDamageDisabled refuses it.
+    f.setContent(BROKEN_CFG);
+    const r2 = await restartTick(db, () => f.target, { now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r2.restarted).toBe(1); // the refusal never costs the restart
+    rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    // ⚠️ Still `applied`, not downgraded to `refused` — and the earlier
+    // confirmation survives, which is the whole point of setWhere: without it,
+    // this refusal would make the website stop saying LIVE for a window that
+    // genuinely is live.
+    expect(rows[0]!.outcome).toBe("applied");
+    expect(rows[0]!.restartConfirmedAt).toEqual(confirmedAt);
+  });
+
+  // ── A boundary that needed no file change (whole-branch review, finding 1) ───
+  // ⚠️ Both readers treat the ABSENCE of a flip row as "not confirmed", and the
+  // runbook tells the operator that means the flip FAILED. So a boundary whose file
+  // already carried the wanted value must still record itself, or the website warns
+  // forever about a window that is working perfectly.
+
+  it("⚠️ day one — the file already correct at a boundary records a confirmed flip, and the close posts", async () => {
+    // The feature is switched on with disableBaseDamage already true, which is the
+    // right value for the Monday close. Nothing to upload.
+    const f = fakeRaid(cfg(true));
+    const r = await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r.restarted).toBe(1);
+    expect(f.uploads).toEqual([]);
+
+    const rows = await raidRows();
+    expect(rows).toMatchObject([{ boundaryAt: MON_CLOSE_PREV, outcome: "applied", wantedDisabled: true }]);
+    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+    expect(rows[0]!.previousContent).toBeNull();
+
+    // The reader: the announcer posts the close, which it only does for a
+    // confirmed flip. Before this fix it reported `skipped` here, forever.
+    const announce = vi.fn(async (_c: string) => undefined);
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-14T00:10:00Z") });
+    expect(out).toMatchObject({ posted: 1, skipped: 0 });
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("⚠️ the Monday after a SKIPPED weekend records its close, though the skip left nothing to change", async () => {
+    await db.insert(raidWindowSkips).values({
+      opensAt: FRI_OPEN, reason: "server migration", decidedAt: at("2026-09-15T00:00:00Z"),
+    });
+    // The skip kept base damage off all weekend, so the Monday close changes nothing.
+    const f = fakeRaid(cfg(true));
+    await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(f.uploads).toEqual([]);
+
+    const rows = await raidRows();
+    expect(rows).toMatchObject([{ boundaryAt: MON_CLOSE_NEXT, outcome: "applied", wantedDisabled: true }]);
+    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+
+    const announce = vi.fn(async (_c: string) => undefined);
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-21T00:10:00Z") });
+    expect(out).toMatchObject({ posted: 1, skipped: 0 });
+  });
+
+  it("⚠️ a no-change slot never rewrites an already-applied row, and clears a stale refusal", async () => {
+    // A refusal first: the file is corrupt at the boundary slot.
+    const f = fakeRaid(BROKEN_CFG);
+    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(await raidRows()).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "refused" }]);
+
+    // An operator hand-fixes the file to the wanted value and the next slot finds
+    // nothing to change. ⚠️ Without a no-change write, this `refused` row would only
+    // ever be cleared by a slot that happened to rewrite the file — so the website
+    // would keep warning for the rest of a window that is live.
+    f.setContent(cfg(false));
+    await restartTick(db, () => f.target, { now: at("2026-09-18T02:00:03Z"), lastError, raidWindow: { enabled: true } });
+    let rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", detail: {} });
+    const appliedAt = rows[0]!.appliedAt;
+
+    // A later no-change slot in the same window leaves the applied row untouched:
+    // moving `applied_at` forward every two hours would lose the real flip's time.
+    await restartTick(db, () => f.target, { now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true } });
+    rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.appliedAt).toEqual(appliedAt);
+  });
+
+  it("a refused flip still restarts the server, and one server's refusal does not block another's", async () => {
+    const bad = fakeRaid(BROKEN_CFG); // the guard rejects from the very first pass
+    const good = fakeRaid(cfg(true));
+    const [s2] = await db.insert(servers).values({ name: "R2", map: "chernarus", clockOffsetMs: 0, nitradoServiceId: 5151, active: true }).returning();
+    const r = await restartTick(db, (id) => (id === 4242 ? bad.target : good.target), {
+      now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true },
+    });
+    expect(r.restarted).toBe(2);
+    expect(bad.restart).toHaveBeenCalledTimes(1);
+    expect(good.restart).toHaveBeenCalledTimes(1);
+    const badRows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(badRows).toMatchObject([{ outcome: "refused" }]);
+    const goodRows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, s2!.id));
+    expect(goodRows).toMatchObject([{ outcome: "applied" }]);
   });
 });
 

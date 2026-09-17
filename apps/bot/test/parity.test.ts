@@ -85,6 +85,7 @@ describe("Discord parity with the site", () => {
       "makeRoster",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
       "ISSUE_OUTCOME_KINDS", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
+      "baseDamageWindow",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

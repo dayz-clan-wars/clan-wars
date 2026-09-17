@@ -24,6 +24,7 @@ import { banTick } from "./ban-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
+import { raidWindowTick } from "./raid-window-tick.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -508,6 +509,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
   const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
   const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
+  const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
   // The same embed poster the feed uses, aimed at #kill-feed.
   const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
   const killFeedStore = new PgKillFeedStore(db);
@@ -1243,10 +1245,32 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
+      }
+    }
+
+    // ⚠️ After the restart tick, same reason the announce tick is: a slow Discord
+    // call must not delay a due restart. Its own try/catch, like every step.
+    // ⚠️ Gated on the flag alone, not `&& announcePoster` — config load refuses
+    // RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster is
+    // guaranteed non-null here. Gating on it too would make a refused flip's
+    // alert disappear along with the tick whenever announce is unset — exactly
+    // the silent-alert-loss this feature must not have.
+    if (cfg.raidWindow.enabled) {
+      try {
+        // ⚠️ Gated like WAR_LOG_CHANNEL_ID: an unset OPS_CHANNEL_ID falls back to
+        // logging the failure alert at error level and nothing else — that is how
+        // the rest of this codebase degrades, not a regression.
+        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
+        // ⚠️ Non-null by construction: config load throws if RAID_WINDOW_TICK is on
+        // without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster was built above.
+        const r = await raidWindowTick(db, { announce: announcePoster!, ops: opsPoster }, { now: new Date() });
+        if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
+      } catch (err) {
+        console.error("raid window tick failed", err);
       }
     }
 
@@ -1297,6 +1321,9 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
     else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}`);
     if (!cfg.announcementsChannelId) console.warn("ANNOUNCEMENTS_CHANNEL_ID is unset: wipes happen without notice.");
+
+    if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
+    else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)

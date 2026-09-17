@@ -12,6 +12,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the six-minute outage the second one caused and why, the measured downtime of
   a real rollback, and an explicit list of what the acceptance does **not**
   establish.
+- The raid weekend opens and closes itself. Base damage is flipped on the
+  Friday and Monday boundaries by the bot, on the restart slots that already
+  apply it, and repaired within two hours if a write is lost or reverted.
+- The site's top bar states whether raiding is live, with a countdown — read
+  from confirmed flips, so a failed flip shows "not yet confirmed" rather than
+  telling players base damage is on when it is not.
+- Discord announces the weekend a day ahead, at its open and at its close, and
+  alerts ops once per boundary if a flip is refused.
+- `pnpm raid:skip` records a weekend deliberately not opened, with its reason;
+  the site and the Thursday notice both explain the skip.
+- `docs/deploy/2026-09-17-raid-window.md`, the deploy runbook for the automatic
+  raid window: the `.env` additions and the two config-load refusals they carry,
+  what the site says before the first boundary, and what to check at it.
+
+### Fixed
+
+- A raid-window boundary whose `cfggameplay.json` already held the wanted value
+  recorded nothing, and the site and Discord both read a missing record as "the
+  flip did not happen". The site warned indefinitely on day one, on the Monday
+  after a skipped weekend, and after an operator's own manual flip. Every
+  boundary now records itself, whether or not the file needed changing.
+- An unconfirmed Monday close showed "OPENING" on the site, though base damage
+  was still on. It now says "CLOSING".
+- The raid-window failure alert scanned every failed flip ever recorded on every
+  tick, and could post its first alert about a weekend long past.
+- The raid-window countdown seeded itself from the clock during render, which
+  could differ between the server's markup and the browser's first paint.
+- `docs/deploy/raid-window.md` said the window decides whether "walls, gates and
+  containers" take damage. Container damage has never been windowed on this
+  server. No player-facing promise was affected — the guide says only that walls
+  do not take damage.
 
 ## [1.16.6] - 2026-09-17
 

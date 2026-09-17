@@ -308,6 +308,57 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("RAID_WINDOW_TICK", () => {
+    it("is off by default", () => {
+      expect(loadConfig(OK).raidWindow.enabled).toBe(false);
+    });
+
+    it("⚠️ refuses RAID_WINDOW_TICK without RESTART_SCHEDULE", () => {
+      // Same failure shape as TRUCK_WIPE_EVENTS above: the flip only takes
+      // effect at a restart, so it must ride on RESTART_SCHEDULE.
+      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1" })).toThrow(/RESTART_SCHEDULE/u);
+    });
+
+    it("accepts RAID_WINDOW_TICK with RESTART_SCHEDULE on", () => {
+      const c = loadConfig({
+        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
+        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+      });
+      expect(c.raidWindow.enabled).toBe(true);
+    });
+
+    it("accepts the 'true' spelling, matching every other boolean flag", () => {
+      const c = loadConfig({
+        ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
+        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+      });
+      expect(c.raidWindow.enabled).toBe(true);
+    });
+
+    it("⚠️ refuses RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID", () => {
+      // The advance/open/close notices are the player-facing point of this
+      // feature; with no channel to post them to it is misconfigured, not
+      // merely degraded — unlike OPS_CHANNEL_ID, which has a real fallback
+      // (an error-level log line).
+      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" }))
+        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
+    });
+  });
+
+  describe("OPS_CHANNEL_ID", () => {
+    it("is optional, off by default", () => {
+      expect(loadConfig(OK).opsChannelId).toBeUndefined();
+    });
+
+    it("reads a snowflake", () => {
+      expect(loadConfig({ ...OK, OPS_CHANNEL_ID: "12345678901234567" }).opsChannelId).toBe("12345678901234567");
+    });
+
+    it("rejects a malformed id", () => {
+      expect(() => loadConfig({ ...OK, OPS_CHANNEL_ID: "not-a-snowflake" })).toThrow(/OPS_CHANNEL_ID/u);
+    });
+  });
+
   describe("FLAG_IMAGE_BASE_URL", () => {
     it("⚠️ is optional, so embeds keep posting without thumbnails when unset", () => {
       // The feed shipped before any artwork existed and must keep working
