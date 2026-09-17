@@ -26,6 +26,12 @@ set -Eeuo pipefail
 : "${LOCK:=/var/lock/clan-wars-deploy}"
 : "${BACKUPS:=/var/backups/clan-wars}"
 : "${FAILED_MARKER:=${STATE}.failed}"
+# ⚠️ The two "we have already alerted about this" sidecars. Both BLOCKED
+# conditions are refusals that only a human clears, so without these the timer
+# repeats the same alert every 2 minutes — 720 a day — and the CRITICALs this
+# design relies on someone reading get buried under them.
+: "${NOTIFIED_MARKER:=${FAILED_MARKER}.notified}"
+: "${DIRTY_NOTIFIED:=${STATE}.dirty-notified}"
 CONTAINER=clan-wars-postgres-1
 PNPM=/home/acab/.local/bin/pnpm
 # Matches KEEP in deploy/backup/backup-factions-live.sh — these dumps share that
@@ -52,7 +58,15 @@ run() {
 }
 
 state_read()  { cat "$STATE" 2>/dev/null || true; }
-state_write() { run mkdir -p "$(dirname "$STATE")"; run sh -c "printf '%s\n' '$1' > '$STATE'"; }
+# ⚠️ `|| return 1` on both lines, for the reason spelled out in stop_all below:
+# without it this function's status is its LAST command's only, so a failed
+# mkdir followed by a redirect that failed for the same reason could still be
+# read as success by the `state_write … || alert` call site — and losing the
+# state file silently is what redeploys the same tag every 2 minutes forever.
+state_write() {
+  run mkdir -p "$(dirname "$STATE")" || return 1
+  run sh -c "printf '%s\n' '$1' > '$STATE'" || return 1
+}
 
 # ⚠️ Never called on a no-op. At a 2-minute interval that is 720 messages a
 # day, and an alert channel nobody reads is not an alert channel.
@@ -60,8 +74,16 @@ alert() {
   local level="$1" text="$2"
   printf '[%s] %s\n' "$level" "$text"
   [ -n "${DEPLOY_WEBHOOK_URL:-}" ] || return 0
+  # ⚠️ Escape backslashes then double quotes before this goes into the JSON
+  # body. Reason strings interpolate $RETAG_ERROR and $DUMP, and a single `"`
+  # or `\` in either produces invalid JSON: Discord answers 400, `|| true`
+  # swallows it, and the alert nobody sees is the one saying production needs a
+  # human. Backslashes first — doing it the other way round would re-escape the
+  # backslashes this step introduces.
+  local json="${text//\\/\\\\}"
+  json="${json//\"/\\\"}"
   run curl -fsS -X POST -H 'Content-Type: application/json' \
-    -d "$(printf '{"content": "**%s** %s"}' "$level" "$text")" \
+    -d "$(printf '{"content": "**%s** %s"}' "$level" "$json")" \
     "$DEPLOY_WEBHOOK_URL" >/dev/null || true
 }
 
@@ -192,8 +214,14 @@ restore_previous_release() {
     alert "CRITICAL" "aborting the deploy of $TAG: ${RETAG_ERROR:-retag failed}"
   fi
 
-  # The containers depend on the image tags only — a wrong tree does not stop
-  # them being correct, because their code came from the image.
+  # The containers' CODE depends on the image tags only, so a wrong tree does
+  # not stop the code they run being the previous release's.
+  # ⚠️ Their CONFIGURATION does not: `docker compose up -d` reads the tree's
+  # docker-compose.yml for environment, ports, volumes, `command` and
+  # depends_on, so starting them with the tree still at $TAG gives them the old
+  # image under the new release's compose settings. That is a narrower hazard
+  # than new code on the old schema — which is why we still start them — but it
+  # is not nothing, and the CRITICAL above is what says a human must look.
   if [ "$images_ok" = "1" ]; then
     start_services || alert "CRITICAL" "could not restart web/ingest-worker after aborting the deploy of $TAG"
   else
@@ -224,12 +252,23 @@ restore_previous_release() {
 # sudo -n docker, same as everywhere else in this file: the unit runs as acab.
 # ⚠️ Deliberately does NOT check the bot: on a deploy this runs while the bot is
 # still stopped, which is what keeps the health path's rollback cheap.
+# ⚠️ `timeout 10` on every docker probe, because the deadline above is tested
+# only at the TOP of the loop. A wedged docker daemon or a container in
+# uninterruptible sleep makes `docker compose ps`/`docker exec` block forever;
+# the loop then never re-tests the deadline, and the unit is Type=oneshot,
+# where TimeoutStartSec defaults to infinity — so the deploy hangs indefinitely
+# with the bot stopped and not one alert sent. curl is already bounded by its
+# own --max-time.
+# ⚠️ Deliberately UNLIKE the restore in rollback(), which must never be given a
+# timeout: killing a restore leaves a half-populated database that passes every
+# check here. A probe is different — nothing is mid-write, so killing one costs
+# an iteration.
 services_ok() {
   local deadline=$((SECONDS + 90))
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if sudo -n docker compose ps postgres --format '{{.Health}}' 2>/dev/null | grep -q healthy \
+    if timeout 10 sudo -n docker compose ps postgres --format '{{.Health}}' 2>/dev/null | grep -q healthy \
       && curl -fsS -o /dev/null --max-time 5 http://127.0.0.1:3020/ \
-      && sudo -n docker exec "$CONTAINER" psql -U factions -d factions_live -X -tAc 'select 1' >/dev/null 2>&1
+      && timeout 10 sudo -n docker exec "$CONTAINER" psql -U factions -d factions_live -X -tAc 'select 1' >/dev/null 2>&1
     then
       return 0
     fi
@@ -247,9 +286,11 @@ services_ok() {
 # Discord. Worse, the instance-lock refusal (apps/bot/src/instance-lock.ts)
 # exits 0 deliberately, so `Restart=on-failure` leaves it exited — and a t≈0
 # sample still says active, which would alert DEPLOYED with no bot running.
-# `bot ready as <tag>` is logged once, unconditionally, from the `clientReady`
-# handler in apps/bot/src/discord.ts, AFTER the Discord login: the first moment
-# the bot genuinely exists.
+# `bot ready as <discord user tag>` is logged once, unconditionally, from the
+# `clientReady` handler in apps/bot/src/discord.ts, AFTER the Discord login: the
+# first moment the bot genuinely exists. ⚠️ The line carries the bot's DISCORD
+# user tag, not the release tag — so only the fixed prefix is matched here, and
+# an operator reading the journal should not expect to see $TAG in it.
 bot_ok() {
   local since="$1" deadline=$((SECONDS + 90))
 
@@ -257,7 +298,14 @@ bot_ok() {
   # grep below never matches and every healthy deploy rolls back — dropping and
   # restoring factions_live each time. So probe the journal once first, and fall
   # back if it is unreadable.
-  if ! journalctl -u clan-wars-bot -n 1 >/dev/null 2>&1; then
+  # ⚠️ Non-empty OUTPUT, not exit status. `journalctl -u <system unit>` run by a
+  # user outside adm/systemd-journal does NOT fail: it silently opens only that
+  # user's journal, matches nothing, and exits 0. An exit-status probe therefore
+  # passes exactly when it should have failed — the fallback never runs, the
+  # grep loop below spins out its 90 s, bot_ok returns 1, and a HEALTHY deploy
+  # rolls back, dropping and restoring factions_live. Emptiness is the only
+  # signal that distinguishes the two.
+  if [ -z "$(timeout 10 journalctl -u clan-wars-bot -n 1 --no-pager -q 2>/dev/null)" ]; then
     # ⚠️ The weaker check, knowingly, and only because the alternative is a
     # rollback loop: sleep FIRST and sample `is-active` at the END of the window,
     # so at least a bot that died or refused during startup has had time to do
@@ -269,7 +317,10 @@ bot_ok() {
   fi
 
   while [ "$SECONDS" -lt "$deadline" ]; do
-    if journalctl -u clan-wars-bot --since "$since" 2>/dev/null | grep -q 'bot ready as'; then
+    # timeout 10 for the same reason as services_ok's probes: the deadline is
+    # tested only at the top of this loop, so a journalctl that blocks would
+    # hang the deploy forever with the unit's infinite TimeoutStartSec.
+    if timeout 10 journalctl -u clan-wars-bot --since "$since" 2>/dev/null | grep -q 'bot ready as'; then
       return 0
     fi
     sleep 5
@@ -295,6 +346,10 @@ mark_failed() {
   # abort a rollback mid-way instead of costing only the marker.
   run sh -c "printf '%s\n' '${TAG:-}' > '$FAILED_MARKER'" \
     || alert "CRITICAL" "could not write $FAILED_MARKER; this deploy will retry in 2 minutes"
+  # A fresh failure must be able to alert again, whatever we said about an
+  # earlier one — the sidecar suppresses repeats of a refusal, never the first
+  # report of a new failure.
+  run rm -f "$NOTIFIED_MARKER" || true
 }
 
 # ⚠️ The end of the line for an automated deploy: stop, stay stopped, exit 2.
@@ -393,8 +448,10 @@ rollback() {
   fi
 
   # ⚠️ Back to the exact ref the deploy started from, not to the tag $CURRENT:
-  # $CURRENT is empty on a first run, and may have been pruned by the fetch
-  # above. (It is NOT about detachment: $PREV_REF is a bare SHA, so HEAD ends up
+  # $CURRENT is empty on a first run, and a tag is in any case not evidence of
+  # what this tree was actually checked out at. (It is NOT about pruning —
+  # `git fetch --tags --prune` does not prune tags; that needs --prune-tags. And
+  # it is NOT about detachment: $PREV_REF is a bare SHA, so HEAD ends up
   # equally detached either way — and after the first deploy it already is.)
   # Same reasoning as the build-failure revert below. This checkout also restores
   # live nginx and systemd config: /etc symlinks into this tree.
@@ -480,16 +537,44 @@ MIGRATIONS=$(printf '%s' "$PLAN" | python3 -c 'import json,sys; print(json.load(
 # which once rollback() (Task 7) lands means a repeated drop-and-restore of
 # factions_live. A human deletes the marker once the cause is fixed.
 if [ -f "$FAILED_MARKER" ] && [ "$(cat "$FAILED_MARKER" 2>/dev/null)" = "$TAG" ]; then
-  alert "BLOCKED" "previous deploy of $TAG failed and left $FAILED_MARKER; refusing to retry automatically until it is removed"
+  # ⚠️ Alert ONCE per condition, not once per poll. Neither BLOCKED condition
+  # self-clears — only a human clears them — so alerting on every tick is 720
+  # Discord messages a day, which buries the CRITICALs this whole design
+  # depends on somebody actually reading. The sidecar records what we have
+  # already said; the FIRST alert still fires immediately, because a refusal
+  # nobody hears about is how a release sits undeployed for a week.
+  # ⚠️ Keyed on the tag, so a marker for a DIFFERENT tag alerts afresh, and
+  # cleared wherever $FAILED_MARKER is (mark_failed, the dump-failure paths and
+  # the success path) so the next genuine failure is never silent.
+  if [ "$(cat "$NOTIFIED_MARKER" 2>/dev/null)" != "$TAG" ]; then
+    alert "BLOCKED" "previous deploy of $TAG failed and left $FAILED_MARKER; refusing to retry automatically until it is removed (this is the only alert for it; the refusal repeats silently every 2 minutes)"
+    run sh -c "printf '%s\n' '$TAG' > '$NOTIFIED_MARKER'" \
+      || alert "WARN" "could not write $NOTIFIED_MARKER; this BLOCKED alert will repeat every 2 minutes"
+  fi
   exit 1
 fi
 
 # ⚠️ An edit on the box is either an emergency hotfix or a mistake. Both
 # deserve a human: `git checkout` would discard either one silently.
-if [ -n "$(git status --porcelain)" ]; then
-  alert "BLOCKED" "working tree at $REPO is dirty; refusing to deploy $TAG"
+DIRTY=$(git status --porcelain)
+if [ -n "$DIRTY" ]; then
+  # ⚠️ Same once-per-condition rule, keyed on a checksum of the porcelain
+  # output rather than on the tag: the dirt is what has to change before this
+  # is news again, and keying on the tag would re-alert on every unrelated
+  # release while a stale edit sits on the box. A changed edit re-alerts, which
+  # is right — it is a different fact about the host.
+  DIRTY_KEY=$(printf '%s' "$DIRTY" | cksum)
+  if [ "$(cat "$DIRTY_NOTIFIED" 2>/dev/null)" != "$DIRTY_KEY" ]; then
+    alert "BLOCKED" "working tree at $REPO is dirty; refusing to deploy $TAG (this is the only alert until the tree changes; the refusal repeats silently every 2 minutes)"
+    run sh -c "printf '%s\n' '$DIRTY_KEY' > '$DIRTY_NOTIFIED'" \
+      || alert "WARN" "could not write $DIRTY_NOTIFIED; this BLOCKED alert will repeat every 2 minutes"
+  fi
   exit 1
 fi
+
+# Past both refusals: the tree is clean and this tag is not blocked, so any
+# earlier "we already said so" record is stale.
+run rm -f "$DIRTY_NOTIFIED" || true
 
 echo "deploying $CURRENT -> $TAG (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 
@@ -505,6 +590,36 @@ echo "deploying $CURRENT -> $TAG (host-config=$HOST_CONFIG migrations=$MIGRATION
 PREV_IMAGE_WEB=$(sudo -n docker compose images -q web 2>/dev/null || true)
 PREV_IMAGE_WORKER=$(sudo -n docker compose images -q ingest-worker 2>/dev/null || true)
 
+# ⚠️ Pin each captured image under a NAME immediately, and roll back to the
+# name rather than the id. The `docker compose build` below retags the compose
+# image name onto the newly built image, which leaves the image captured above
+# DANGLING — reachable only by the bare id in these variables. Any
+# `docker image prune` on this host deletes dangling images, and this host also
+# serves three unrelated production sites, so that command is run here for
+# reasons that have nothing to do with clan-wars. The rollback target would
+# then evaporate silently between the build and the rollback that needed it,
+# and retag_previous_images would fail with "no such image" at the worst
+# possible moment. A named tag is not dangling and cannot be pruned that way.
+# ⚠️ Non-fatal: if the pin fails we keep the bare id, which is still a correct
+# rollback target for as long as nothing prunes. Refusing to deploy because a
+# protective retag failed would trade a small risk for a certain outage.
+ROLLBACK_IMAGE_WEB=clan-wars-web:rollback
+ROLLBACK_IMAGE_WORKER=clan-wars-ingest-worker:rollback
+if [ -n "$PREV_IMAGE_WEB" ]; then
+  if run sudo -n docker tag "$PREV_IMAGE_WEB" "$ROLLBACK_IMAGE_WEB"; then
+    PREV_IMAGE_WEB="$ROLLBACK_IMAGE_WEB"
+  else
+    alert "WARN" "could not pin the current web image as $ROLLBACK_IMAGE_WEB; the rollback target is an unpinned image id that a docker prune would destroy"
+  fi
+fi
+if [ -n "$PREV_IMAGE_WORKER" ]; then
+  if run sudo -n docker tag "$PREV_IMAGE_WORKER" "$ROLLBACK_IMAGE_WORKER"; then
+    PREV_IMAGE_WORKER="$ROLLBACK_IMAGE_WORKER"
+  else
+    alert "WARN" "could not pin the current ingest-worker image as $ROLLBACK_IMAGE_WORKER; the rollback target is an unpinned image id that a docker prune would destroy"
+  fi
+fi
+
 # ⚠️ Checkout BEFORE build, not after: building the old tree and checking
 # out $TAG only afterward ships OLD web/worker code against the NEW schema —
 # the "new schema + old code" failure CLAUDE.md records from 2026-09-02, now
@@ -516,8 +631,8 @@ PREV_IMAGE_WORKER=$(sudo -n docker compose images -q ingest-worker 2>/dev/null |
 # step, and a failed build reverts the tree and aborts with nothing stopped.
 #
 # ⚠️ Revert to the exact ref we were on, not to the tag $CURRENT: $CURRENT is
-# empty on a first run and may have been pruned by the fetch above, and
-# checking out a tag would silently leave the repo detached — which
+# empty on a first run, and a tag is in any case not evidence of what this tree
+# was checked out at. Checking out a tag would also silently leave it detached — which
 # `git status --porcelain` reports as clean, so the dirty-tree guard would
 # never catch it.
 PREV_REF=$(git rev-parse HEAD)
@@ -587,9 +702,34 @@ if ! stop_all; then
   exit 1
 fi
 
+# ⚠️ THE point of no return, recorded the moment it is crossed — this marker
+# write is the important one, and the later ones on the failure paths are only
+# belt and braces. Nothing in this script handles SIGTERM, SIGKILL, the OOM
+# killer or a power cut, so a host that reboots anywhere inside the window
+# below leaves: services stopped, possibly a migrated schema, the tree at $TAG
+# — and, without this line, NO marker. The timer then redeploys the same tag in
+# 2 minutes, takes its "pre-deploy" dump of an ALREADY-MIGRATED database, and a
+# rollback from that dump restores the new schema under the old code. That is
+# the 2026-09-02 new-code/old-schema incident this entire design exists to
+# avoid, arrived at automatically and silently.
+# The success path clears the marker unconditionally, so writing it here costs
+# a healthy deploy nothing.
+mark_failed
+
 # Same idiom as deploy/backup/backup-factions-live.sh: dump inside the
 # container, write .part, rename only on success.
-run mkdir -p "$BACKUPS"
+# ⚠️ Guarded like the dump below it, and for the same reason. This is the one
+# mutation inside the outage window that is not: under `set -e` with the ERR
+# trap not yet armed, a failed mkdir (a full or unwritable /var/backups, or the
+# directory owned by root while this unit runs as acab) would exit IMMEDIATELY
+# — all three writers stopped, no alert, nothing restored — and the timer would
+# repeat it every 2 minutes forever.
+if ! run mkdir -p "$BACKUPS"; then
+  alert "CRITICAL" "could not create $BACKUPS for $TAG's pre-deploy dump; restoring $PREV_REF and restarting services, NOT deploying"
+  restore_previous_release
+  mark_failed
+  exit 1
+fi
 if [ "$DRY_RUN" = "0" ]; then
   # ⚠️ Not left to bare `set -e`: a pg_dump error, a full disk, or a failed
   # mv must restart services and alert, not exit instantly with production
@@ -715,5 +855,8 @@ else
   # tag would silently BLOCK its next real deploy forever. Non-fatal for the same
   # reason as the write above — bookkeeping never decides whether production runs.
   run rm -f "$FAILED_MARKER" || alert "CRITICAL" "deploy of $TAG is healthy but $FAILED_MARKER could not be cleared; the next deploy of this tag will be BLOCKED until it is removed"
+  # ⚠️ Removed with the marker, always: a sidecar outliving the marker it
+  # describes would suppress the FIRST alert of the next real failure.
+  run rm -f "$NOTIFIED_MARKER" || true
   alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 fi
