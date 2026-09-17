@@ -1,0 +1,17 @@
+[Unit]
+# Polls for a new release tag and deploys it. See deploy-release.sh.
+Description=Clan Wars release deployer
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acab
+WorkingDirectory=/opt/clan-wars
+# ⚠️ DEPLOY_WEBHOOK_URL comes from the file. The bot is stopped for most of a
+# deploy and may be the thing that failed, so the alert path must not share a
+# failure domain with it.
+EnvironmentFile=/opt/clan-wars/.env
+ExecStart=/opt/clan-wars/deploy/deploy-release.sh
+StandardOutput=journal
+StandardError=journal

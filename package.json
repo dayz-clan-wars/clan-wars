@@ -18,7 +18,8 @@
     "backfill:achievements": "tsx scripts/backfill-achievements.ts",
     "backfill:achievement-notices": "tsx scripts/backfill-achievement-notices.ts",
     "wipe": "tsx scripts/wipe.ts",
-    "launch": "tsx scripts/launch.ts"
+    "launch": "tsx scripts/launch.ts",
+    "deploy:select": "tsx scripts/deploy-select.ts"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
@@ -29,6 +30,7 @@
   },
   "dependencies": {
     "@factions/db": "workspace:*",
+    "@factions/deploy": "workspace:*",
     "drizzle-orm": "^0.36.0"
   }
 }
