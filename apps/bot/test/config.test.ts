@@ -320,13 +320,28 @@ describe("loadConfig", () => {
     });
 
     it("accepts RAID_WINDOW_TICK with RESTART_SCHEDULE on", () => {
-      const c = loadConfig({ ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" });
+      const c = loadConfig({
+        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
+        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+      });
       expect(c.raidWindow.enabled).toBe(true);
     });
 
     it("accepts the 'true' spelling, matching every other boolean flag", () => {
-      const c = loadConfig({ ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" });
+      const c = loadConfig({
+        ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
+        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+      });
       expect(c.raidWindow.enabled).toBe(true);
+    });
+
+    it("⚠️ refuses RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID", () => {
+      // The advance/open/close notices are the player-facing point of this
+      // feature; with no channel to post them to it is misconfigured, not
+      // merely degraded — unlike OPS_CHANNEL_ID, which has a real fallback
+      // (an error-level log line).
+      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" }))
+        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
     });
   });
 

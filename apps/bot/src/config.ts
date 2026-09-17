@@ -378,6 +378,18 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.raidWindow.enabled && !config.restartSchedule) {
     throw new Error("RAID_WINDOW_TICK is on but RESTART_SCHEDULE is off — the flip only takes effect at a restart, so nothing would ever apply it.");
   }
+  // ⚠️ Fatal, unlike OPS_CHANNEL_ID below: the ops alert has a real degrade (an
+  // error-level log line, same as WAR_LOG_CHANNEL_ID unset), but the advance/open/
+  // close notices are the player-facing point of this feature — with no channel to
+  // post them to, this is misconfigured, not merely degraded. It also closes a
+  // write-order hazard: gating the tick on `announcePoster` being present instead
+  // would either skip the tick silently (so a refused flip raises no alert either,
+  // since that check also guards the ops path) or, if the gate were dropped, let a
+  // no-op "post" return successfully and have postOnce's post-first-row-second
+  // order write an announcements row claiming the message went out when it did not.
+  if (config.raidWindow.enabled && !config.announcementsChannelId) {
+    throw new Error("RAID_WINDOW_TICK is on but ANNOUNCEMENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
+  }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.
   if (config.truckWipe.offHour === config.truckWipe.onHour) {

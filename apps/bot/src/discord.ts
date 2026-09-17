@@ -1254,13 +1254,20 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     // ⚠️ After the restart tick, same reason the announce tick is: a slow Discord
     // call must not delay a due restart. Its own try/catch, like every step.
-    if (cfg.raidWindow.enabled && announcePoster) {
+    // ⚠️ Gated on the flag alone, not `&& announcePoster` — config load refuses
+    // RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster is
+    // guaranteed non-null here. Gating on it too would make a refused flip's
+    // alert disappear along with the tick whenever announce is unset — exactly
+    // the silent-alert-loss this feature must not have.
+    if (cfg.raidWindow.enabled) {
       try {
         // ⚠️ Gated like WAR_LOG_CHANNEL_ID: an unset OPS_CHANNEL_ID falls back to
         // logging the failure alert at error level and nothing else — that is how
         // the rest of this codebase degrades, not a regression.
         const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        const r = await raidWindowTick(db, { announce: announcePoster, ops: opsPoster }, { now: new Date() });
+        // ⚠️ Non-null by construction: config load throws if RAID_WINDOW_TICK is on
+        // without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster was built above.
+        const r = await raidWindowTick(db, { announce: announcePoster!, ops: opsPoster }, { now: new Date() });
         if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
       } catch (err) {
         console.error("raid window tick failed", err);
