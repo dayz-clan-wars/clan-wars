@@ -20,22 +20,25 @@ export const EMBED_DESCRIPTION_MAX = 4096;
 const COLOR = 0x5865f2;
 
 /**
- * Split a body into pieces that each fit an embed, preferring the largest
- * markdown boundary that works: `###` sections, then paragraphs, then a hard
- * cut. A hard cut is ugly; dropping the overflow would be a silent loss.
+ * Split the body into pieces that each fit an embed, preferring the largest
+ * markdown boundary that works: `###` sections, then blank-line paragraph
+ * breaks, then a hard cut.
  *
- * ⚠️ The split on `### ` boundaries is zero-width (`(?<=\n)(?=### )`) to consume
- * nothing. A consuming split would drop one newline per section boundary, and the
- * loss is invisible until a boundary lands exactly at an embed edge.
+ * ⚠️ Every split is by INDEX, never `String.split` on a consuming pattern, so
+ * the pieces concatenate back to the input EXACTLY. That is the whole promise
+ * of this file. A consuming split drops the whitespace it matched; a trim plus
+ * a fixed separator replaces a run of any length with two characters. Both are
+ * invisible in Discord, and both only surface once a boundary lands at an embed
+ * edge — by which point the notes have already been posted, wrong, for good.
  */
 function pieces(body: string): string[] {
   const out: string[] = [];
-  for (const section of body.split(/(?<=\n)(?=### )/u)) {
+  for (const section of splitAt(body, sectionStarts(body))) {
     if (section.length <= EMBED_DESCRIPTION_MAX) {
       out.push(section);
       continue;
     }
-    for (const paragraph of section.split(/\n{2,}/u)) {
+    for (const paragraph of splitAt(section, paragraphStarts(section))) {
       if (paragraph.length <= EMBED_DESCRIPTION_MAX) {
         out.push(paragraph);
         continue;
@@ -45,30 +48,57 @@ function pieces(body: string): string[] {
       }
     }
   }
-  return out.filter((p) => p !== "");
+  return out;
 }
 
-/** Greedily refill pieces into as few embeds as fit. */
+/** The index of the `#` of every `### ` heading that starts a line. */
+function sectionStarts(text: string): number[] {
+  const out: number[] = [];
+  const re = /\n### /gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) out.push(m.index + 1);
+  return out;
+}
+
+/** The index of the first character AFTER each run of two or more newlines. */
+function paragraphStarts(text: string): number[] {
+  const out: number[] = [];
+  const re = /\n{2,}/gu;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text)) !== null) out.push(m.index + m[0].length);
+  return out;
+}
+
+/** Slice `text` at the given indices. The pieces always rejoin to `text`. */
+function splitAt(text: string, starts: number[]): string[] {
+  const bounds = [0, ...starts, text.length];
+  const out: string[] = [];
+  for (let i = 0; i < bounds.length - 1; i += 1) {
+    const piece = text.slice(bounds[i]!, bounds[i + 1]!);
+    if (piece !== "") out.push(piece);
+  }
+  return out;
+}
+
+/**
+ * Greedily refill pieces into as few embeds as fit.
+ *
+ * ⚠️ Joined with nothing at all. `pieces()` leaves every character, whitespace
+ * included, on the piece it came from — so a separator here would ADD text the
+ * body never had, and a trim before joining would REMOVE text it did.
+ */
 function pack(parts: string[]): string[] {
   const out: string[] = [];
   let buf = "";
   for (const part of parts) {
-    if (buf === "") {
-      buf = part;
+    if (buf.length + part.length <= EMBED_DESCRIPTION_MAX) {
+      buf += part;
       continue;
     }
-    // The zero-width split leaves the preceding `\n` on the end of the previous
-    // piece. Strip it before joining so the padding produces the right spacing.
-    const bufTrimmed = buf.trimEnd();
-    const next = `${bufTrimmed}\n\n${part}`;
-    if (next.length <= EMBED_DESCRIPTION_MAX) {
-      buf = next;
-      continue;
-    }
-    if (bufTrimmed !== "") out.push(bufTrimmed);
+    if (buf !== "") out.push(buf);
     buf = part;
   }
-  if (buf !== "") out.push(buf.trimEnd());
+  if (buf !== "") out.push(buf);
   return out;
 }
 

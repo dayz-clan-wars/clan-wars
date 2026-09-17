@@ -60,16 +60,26 @@ describe("releaseEmbeds", () => {
     expect(embeds.map((e) => (e.description ?? "").length).reduce((a, b) => a + b, 0)).toBe(body.length);
   });
 
-  it("loses no characters when splitting on ### boundaries", () => {
-    // ⚠️ The regression this guards: a CONSUMING split (`/\n(?=### )/`) drops one
-    // newline per section boundary, and the loss is invisible until a boundary
-    // lands exactly at an embed edge.
-    const section = (n: number) => `### Section ${n}\n\n${"- a bullet of some length.\n".repeat(120)}`;
-    const body = [section(1), section(2), section(3)].join("\n");
+  it("concatenates back to the exact body, whatever the boundary whitespace", () => {
+    // ⚠️ The regression this guards, twice over: a consuming split drops the
+    // whitespace it matched, and a trim-then-rejoin replaces a run of any
+    // length with a fixed separator. The two boundaries below are deliberately
+    // different widths — two newlines at one, three at the next — because a
+    // fixture with uniform boundaries passes under both bugs.
+    const body = "### A\n\nLine one.\n\n\n### B\n\nLine two.\n";
 
     const embeds = releaseEmbeds(row({ body }));
 
-    const rejoined = embeds.map((e) => e.description ?? "").join("\n\n");
-    expect(rejoined).toBe(body.trim());
+    expect(embeds.map((e) => e.description ?? "").join("")).toBe(body.trim());
+  });
+
+  it("concatenates back to the exact body when the split is real", () => {
+    const section = (n: number) => `### Section ${n}\n\n${"- a bullet of some length.\n".repeat(120)}`;
+    const body = `${section(1)}\n\n${section(2)}\n${section(3)}`;
+
+    const embeds = releaseEmbeds(row({ body }));
+
+    expect(embeds.length).toBeGreaterThan(1);
+    expect(embeds.map((e) => e.description ?? "").join("")).toBe(body.trim());
   });
 });
