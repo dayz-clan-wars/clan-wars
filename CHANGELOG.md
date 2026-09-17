@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.16.6] - 2026-09-17
+
 ### Fixed
 
 - The release deployer can no longer be rewritten out from under itself. It
