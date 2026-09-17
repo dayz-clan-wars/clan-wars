@@ -12,6 +12,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the six-minute outage the second one caused and why, the measured downtime of
   a real rollback, and an explicit list of what the acceptance does **not**
   establish.
+- The raid weekend opens and closes itself. Base damage is flipped on the
+  Friday and Monday boundaries by the bot, on the restart slots that already
+  apply it, and repaired within two hours if a write is lost or reverted.
+- The site's top bar states whether raiding is live, with a countdown — read
+  from confirmed flips, so a failed flip shows "not yet confirmed" rather than
+  telling players base damage is on when it is not.
+- Discord announces the weekend a day ahead, at its open and at its close, and
+  alerts ops once per boundary if a flip is refused.
+- `pnpm raid:skip` records a weekend deliberately not opened, with its reason;
+  the site and the Thursday notice both explain the skip.
+
+### Fixed
+
+- `docs/deploy/raid-window.md` said the window decides whether "walls, gates and
+  containers" take damage. Container damage has never been windowed on this
+  server. No player-facing promise was affected — the guide says only that walls
+  do not take damage.
 
 ## [1.16.6] - 2026-09-17
 

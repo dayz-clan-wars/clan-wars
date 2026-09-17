@@ -246,6 +246,15 @@ anything.
   downtime). `/guest grant`/`/guest revoke` are real commands now (`commands/guest.ts`)
   — see below; the hand-written `handleGuestCommand` and its channel-bound `/guest user:`
   form are gone as of plan 2.
+  Since raid-window-automation, `discord.ts` also runs `raid-window-tick.ts` alongside
+  the restart tick, gated on `RAID_WINDOW_TICK`: after `restart-tick.ts` (the flip only
+  ever takes effect at a restart, so it has to land first) and before `announce-tick.ts`
+  (both, like the restart tick, run last among the Discord posters, so a slow Nitrado or
+  Discord call never delays a due restart). It is level-triggered the same way the truck
+  wipe is — every slot recomputes what `GeneralData.disableBaseDamage` should be and
+  repairs a lost or hand-reverted write — and posts advance/open/close notices to
+  `ANNOUNCEMENTS_CHANNEL_ID` plus a once-per-boundary failure alert to `OPS_CHANNEL_ID`
+  (or an error-level log line if that is unset). See `docs/deploy/raid-window.md`.
 - **⚠️ Exactly one bot instance may run.** `notifyCompleted` DMs before it marks, which
   is right for one process and at-least-once across two — we shipped a duplicate DM to a
   real player this way on 2026-09-01. The bot runs as a **systemd unit**, which makes the
@@ -364,7 +373,7 @@ anything.
 | **The running to-do list** | `docs/superpowers/plans/PLAN-3-INBOX.md` |
 | Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
-| The raid window, flipped by hand twice a week | `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
+| The raid window, opened and closed by the bot on the restart slots | `packages/domain/src/raid-window.ts` (`raidWindowAt`, level-triggered against `RAID_WINDOW`), the surgical edit in `apps/bot/src/cfggameplay.ts`, the tick in `apps/bot/src/raid-window-tick.ts` (gated on `RAID_WINDOW_TICK`; requires `RESTART_SCHEDULE` and `ANNOUNCEMENTS_CHANNEL_ID`, degrades on missing `OPS_CHANNEL_ID`), `raid_window_flips`/`raid_window_skips`/`raid_window_announcements` (migration `0037_fresh_moira_mactaggert.sql`), `pnpm raid:skip` (`scripts/raid-skip.ts`) to record a deliberately skipped weekend. `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | Repo tooling config (lifecycle, CI, ignore, scanning, dependencies) | `.keel.json`, `.rigging.json`, `.stow.json`, `.hull.json`, `.bosun.json` — each owned by its shipyard plugin and **regenerated, not hand-edited**: change the config and re-run that plugin's `init`. ⚠️ `.gitignore` is a *managed merge* — entries inside the `# >>> stow:... >>>` markers are overwritten every run, so hand-written ones must sit outside them |
