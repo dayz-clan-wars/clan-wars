@@ -1394,6 +1394,81 @@ export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
 }));
 
 /**
+ * One row per raid-window boundary actually brought into effect, per server.
+ *
+ * ⚠️ `boundary_at` is the WINDOW BOUNDARY, not the restart slot. A repair write at
+ * Saturday 14:00 belongs to that Friday's row, not to a row of its own — the table
+ * answers "did this window's flip happen", and a row per slot would bury the four
+ * rows a week that matter under the 84 checks that do not.
+ *
+ * ⚠️ A file already in the wanted state writes NO row. Absence of a row for a past
+ * boundary is exactly the signal the website and the open/close announcements read
+ * as "not confirmed", which is what stops a failed flip producing a confident lie.
+ *
+ * ⚠️ `previous_content` is the pre-edit file. The truck wipe keeps no such copy and
+ * does not need one: a malformed events.xml degrades, a malformed cfggameplay.json
+ * stops the server booting for everyone. 4.5 KB per flip buys a one-command recovery.
+ *
+ * ⚠️ Written by restart-tick.ts alone, with statements that touch no other table;
+ * it needs no place in the §4.12 lock order.
+ */
+export const raidWindowFlips = pgTable("raid_window_flips", {
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  /** The Friday-open or Monday-close instant this flip realises. */
+  boundaryAt: timestamp("boundary_at", { withTimezone: true }).notNull(),
+  /** What GeneralData.disableBaseDamage was set to — the FILE's value. */
+  wantedDisabled: boolean("wanted_disabled").notNull(),
+  /** applied = the upload succeeded; refused = a guard rejected it; failed = the API call failed. */
+  outcome: text("outcome").$type<"applied" | "refused" | "failed">().notNull(),
+  appliedAt: timestamp("applied_at", { withTimezone: true }),
+  /** Set once the slot's restart is known to have run — an upload without it is not in effect. */
+  restartConfirmedAt: timestamp("restart_confirmed_at", { withTimezone: true }),
+  previousContent: text("previous_content"),
+  detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.serverId, t.boundaryAt] }),
+  outcomeValid: check("raid_window_flips_outcome_valid", sql`${t.outcome} IN ('applied','refused','failed')`),
+}));
+
+/**
+ * A raid weekend deliberately not opened.
+ *
+ * ⚠️ A skip is a DECISION, never a missed flip to catch up. The runbook's rule is
+ * inherited: a skipped weekend is not compensated by opening a window on another day.
+ *
+ * Keyed on `opens_at` alone — the schedule is a property of the calendar, not of a
+ * server, exactly as vehicle_wipe_announcements is.
+ */
+export const raidWindowSkips = pgTable("raid_window_skips", {
+  /** The Friday 00:00 UTC instant that will not open. */
+  opensAt: timestamp("opens_at", { withTimezone: true }).primaryKey(),
+  reason: text("reason").notNull(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * One row per raid-window message posted.
+ *
+ * ⚠️ Keyed on (boundary_at, kind) with NO server_id. These are single messages about
+ * a single schedule; a per-server key posts one identical message per active server,
+ * which is the bug vehicle_wipe_announcements already carries a ⚠️ about.
+ *
+ * ⚠️ That key is also what makes a `failure` alert fire ONCE per boundary. The
+ * level-triggered tick retries every two hours; without this the same failure would
+ * be re-announced 12 times a day and bury the alerts this design needs someone to read.
+ */
+export const raidWindowAnnouncements = pgTable("raid_window_announcements", {
+  boundaryAt: timestamp("boundary_at", { withTimezone: true }).notNull(),
+  kind: text("kind").$type<"advance" | "open" | "close" | "failure">().notNull(),
+  announcedAt: timestamp("announced_at", { withTimezone: true }).notNull(),
+  outcome: text("outcome").$type<"posted" | "missed">().notNull(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.boundaryAt, t.kind] }),
+  kindValid: check("raid_window_announcements_kind_valid", sql`${t.kind} IN ('advance','open','close','failure')`),
+  outcomeValid: check("raid_window_announcements_outcome_valid", sql`${t.outcome} IN ('posted','missed')`),
+}));
+
+/**
  * Every boost-item placement inside a declared zone by a non-member.
  *
  * ⚠️ A LONE placement is recorded here and is NOT a violation: a player may
