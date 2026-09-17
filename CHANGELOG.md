@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Design for release announcements in Discord
+  (`docs/superpowers/specs/2026-09-17-release-announcements-design.md`), not yet
+  implemented: `CHANGELOG.md` is the single source, `deploy-release.sh` queues a
+  row after a *successful* deploy rather than on the tag push, and a bot tick
+  drains the queue oldest-first into a player-facing channel. The same
+  `pnpm release:sync` call is the backfill, the per-deploy hook and the repair
+  tool.
+
 ## [1.17.0] - 2026-09-17
 
 ### Added
