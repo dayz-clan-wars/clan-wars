@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `/backups/` is ignored, so hand-made dumps kept on the production host no
+  longer leave the working tree dirty — which would otherwise make the release
+  deployer refuse every deploy.
+
 ## [1.16.0] - 2026-09-16
 
 ### Added
