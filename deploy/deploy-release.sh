@@ -649,8 +649,16 @@ if ! run "$PNPM" install --frozen-lockfile; then
   # build, so no image has been retagged and the running containers are untouched
   # — there is nothing for restore_previous_release to put back, and starting
   # services that were never stopped would be noise.
-  revert_tree || alert "CRITICAL" "pnpm install failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
-  alert "BLOCKED" "pnpm install --frozen-lockfile failed for $TAG; reverted to $PREV_REF, nothing stopped"
+  # ⚠️ The BLOCKED line only claims the revert happened when it did. The
+  # runbook's CRITICAL section opens by telling the operator to read the
+  # alert's WORDING before acting, so a BLOCKED saying "reverted to $PREV_REF"
+  # immediately under a CRITICAL saying the tree is still $TAG's is worse than
+  # no second line at all.
+  if revert_tree; then
+    alert "BLOCKED" "pnpm install --frozen-lockfile failed for $TAG; reverted to $PREV_REF, nothing stopped"
+  else
+    alert "CRITICAL" "pnpm install failed for $TAG AND the revert to $PREV_REF failed; tree or node_modules is still $TAG's with nothing stopped — needs a human"
+  fi
   exit 1
 fi
 
@@ -661,7 +669,13 @@ fi
 # one against the old schema (Ruling 19).
 if ! run sudo -n docker compose build -q web ingest-worker; then
   restore_previous_release
-  alert "BLOCKED" "build failed for $TAG; restored $PREV_REF, nothing stopped"
+  # ⚠️ "attempted", not "restored". restore_previous_release alerts CRITICAL and
+  # CONTINUES when a half of it fails, so this line cannot claim the restore
+  # succeeded — and a BLOCKED saying "restored $PREV_REF" directly under a
+  # CRITICAL saying the tree is still $TAG's is a contradiction an operator has
+  # to resolve at exactly the wrong moment. Any CRITICAL above names what
+  # actually failed; this line only says the deploy stopped here.
+  alert "BLOCKED" "build failed for $TAG; a restore of $PREV_REF was attempted, nothing stopped — trust any CRITICAL above this line over this one"
   exit 1
 fi
 
@@ -679,7 +693,11 @@ DUMP="$BACKUPS/predeploy-$TAG-$(date -u +%Y%m%dT%H%M%SZ).sql.gz"
 # (Ruling 19): "nothing stopped" is not the same as "nothing changed".
 if [ -e "$DUMP" ]; then
   restore_previous_release
-  alert "BLOCKED" "$DUMP already exists; refusing to overwrite a pre-deploy dump; restored $PREV_REF"
+  # ⚠️ Says "nothing stopped", like the structurally identical build-failure
+  # site above: this abort is BEFORE stop_all, and an operator reading the
+  # alert needs to know production is still up before deciding what to do.
+  # "attempted" for the same reason as there.
+  alert "BLOCKED" "$DUMP already exists; refusing to overwrite a pre-deploy dump; a restore of $PREV_REF was attempted, nothing stopped — trust any CRITICAL above this line over this one"
   exit 1
 fi
 
