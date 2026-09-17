@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.16.3] - 2026-09-17
+
 ### Fixed
 
 - The deployer's rollback no longer retags the **postgres** image when
@@ -18,6 +20,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - Rehearsal 2's deliberately unhealthy release is reverted.
+
+## [1.16.2] - 2026-09-17 [WITHDRAWN]
+
+Not a release. This tag is rehearsal 2 — a deliberately unhealthy build, cut to
+prove the deployer's automatic rollback works against real production data. It
+is recorded here rather than deleted because the production host's failure
+marker names it, and a tag a runbook points at should not be a mystery.
+
+The rollback restored the tree, the host config and `factions_live` correctly,
+and refused to retry. It failed at one step, fixed in 1.16.3. **Never deploy
+this tag.**
 
 ## [1.16.1] - 2026-09-17
 
