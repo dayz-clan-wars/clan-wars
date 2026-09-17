@@ -13,6 +13,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   a real rollback, and an explicit list of what the acceptance does **not**
   establish.
 
+## [1.16.6] - 2026-09-17
+
 ### Fixed
 
 - The release deployer can no longer be rewritten out from under itself. It
