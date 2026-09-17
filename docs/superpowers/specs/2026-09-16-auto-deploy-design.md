@@ -380,8 +380,8 @@ Honest about what is and is not provable:
 - **`--dry-run`:** prints every command it would run, executes none. The
   reviewable artifact.
 - **First live exercise on a no-op release:** tag a commit that changes
-  nothing, so the full path — stop, dump, checkout, migrate, start, health
-  check — runs with nothing at stake.
+  nothing, so the full path — checkout, build, stop, dump, migrate, start,
+  health check — runs with nothing at stake.
 - **Rehearse the rollback deliberately, once, while watching.** Cut a tag with
   a deliberately failing health check and confirm the database, the code and
   the image all come back. ⚠️ Until this is done, the rollback is a design,

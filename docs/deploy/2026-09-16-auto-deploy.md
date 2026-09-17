@@ -14,15 +14,16 @@ Until today, `CLAUDE.md` said nothing applies migrations automatically, and
 said so because of a real incident: on 2026-09-02 the bot looped on
 `dormancy tick failed … column "dormant_since" does not exist` until `0015`
 was applied by hand. That is now false. `clan-wars-deploy.timer` runs
-`deploy/deploy-release.sh` every two minutes; on a new tag it stops all three
-writers, dumps `factions_live`, checks out the tag, and only then runs
-`pnpm db:migrate --apply --production` — rolling code, image, host config and
-schema all back together if anything from that point fails. What makes this
-safe rather than merely automated is the **stop-first ordering**: the dump is
-taken after every writer that touches `factions_live` is stopped, which is
-what turns "restore the database" from a data-loss event into an exact undo
-at most of the failure points (see the design doc's §4 amendment for the two
-call sites where that is no longer exactly true, and why).
+`deploy/deploy-release.sh` every two minutes; on a new tag it checks out the
+tag and builds the images first, then stops all three writers, dumps
+`factions_live`, and only then runs `pnpm db:migrate --apply --production` —
+rolling code, image, host config and schema all back together if anything
+from that point fails. What makes this safe rather than merely automated is
+the **stop-before-dump ordering**: the dump is taken after every writer that
+touches `factions_live` is stopped, which is what turns "restore the
+database" from a data-loss event into an exact undo at most of the failure
+points (see the design doc's §4 amendment for the two call sites where that
+is no longer exactly true, and why).
 
 ## 0. Prerequisite: `acab`'s passwordless sudo
 
@@ -199,10 +200,11 @@ correctly on this host.
 
     git tag v1.9.1 && git push origin v1.9.1
 
-Watch `journalctl -u clan-wars-deploy -f`. Expect the full path to run — stop,
-dump, checkout, migrate (a no-op), reload nginx, start `web`/`ingest-worker`,
-health check, start the bot, its `bot ready as …` line, state write — a
-`DEPLOYED` webhook, and roughly 1–3 minutes of downtime.
+Watch `journalctl -u clan-wars-deploy -f`. Expect the full path to run —
+checkout, build, stop, dump, migrate (a no-op), reload nginx, start
+`web`/`ingest-worker`, health check, start the bot, its `bot ready as …`
+line, state write — a `DEPLOYED` webhook, and roughly 1–3 minutes of
+downtime.
 
 ⚠️ **Do not read "a release that changes nothing" as "nothing at stake".** The
 health gate has never run on this host, and a miscalibration in it — an
@@ -219,10 +221,20 @@ watching.
 expect `bot ready as v1.9.1`, and do not treat its absence as a failed deploy
 on that basis; the script matches only the fixed `bot ready as` prefix.
 
-**Rehearsal 2 — deliberate rollback, while watching.** Temporarily break the
-health check so it cannot pass — e.g. point `services_ok`'s curl at a port
-nothing serves — tag a release, and watch it fail on purpose. Confirm, in
-order:
+**Rehearsal 2 — deliberate rollback, while watching.** ⚠️ Take the row counts
+below **before** tagging this rehearsal's release — rehearsal 3 needs the
+pre-rollback numbers, and by the time rehearsal 2 has run there is no going
+back to "before" without redoing it:
+
+    docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "
+      select (select count(*) from factions) as factions,
+             (select count(*) from faction_members) as members,
+             (select count(*) from identity_links) as links,
+             (select count(*) from faction_events) as events"
+
+Then temporarily break the health check so it cannot pass — e.g. point
+`services_ok`'s curl at a port nothing serves — tag a release, and watch it
+fail on purpose. Confirm, in order:
 
 - the webhook says `ROLLING BACK`, then `ROLLED BACK`;
 - `factions_live` is back (the dump-then-restore actually round-tripped);
@@ -242,15 +254,8 @@ exits 0 even when individual `COPY` blocks fail, which is why the restore runs
 under `-v ON_ERROR_STOP=1`; this rehearsal is the only check that confirms that
 guard works here, on this host, against a real dump. Row counts, not liveness.
 
-Take the counts **before** tagging rehearsal 2's release:
-
-    docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "
-      select (select count(*) from factions) as factions,
-             (select count(*) from faction_members) as members,
-             (select count(*) from identity_links) as links,
-             (select count(*) from faction_events) as events"
-
-Run the identical query after the rollback has completed and compare. These
+Run the identical query from rehearsal 2's opening step again, now that the
+rollback has completed, and compare against the counts taken there. These
 four tables are the ones `deploy/README.md` names as unrecoverable by any other
 means — `events` can be re-ingested from the ADM logs, these cannot — so they
 are what a restore has to get exactly right.
@@ -271,9 +276,9 @@ state. Running it manually is identical to letting the timer fire once:
 
     cd /opt/clan-wars && sudo -u acab ./deploy/deploy-release.sh
 
-Everything downstream — preflight, stop, dump, checkout, migrate, health
-check, bot start — is the same path either way; the timer is only what
-schedules it.
+Everything downstream — preflight, checkout, build, stop, dump, migrate,
+health check, bot start — is the same path either way; the timer is only
+what schedules it.
 
 ## Disabling it in a hurry
 

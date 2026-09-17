@@ -117,13 +117,18 @@ outside this tree: a file inside it would be rewritten by the deploy's own
 `git checkout`, so a rollback would restore a file claiming the rollback never
 happened.
 
-### Verify the timer arms without deploying
+### Verify the units install without arming the timer
 
-    sudo systemctl daemon-reload && systemctl list-timers clan-wars-deploy
-    journalctl -u clan-wars-deploy -n 20
+    sudo systemctl cat clan-wars-deploy.timer
+    systemd-analyze verify /etc/systemd/system/clan-wars-deploy.{service,timer}
 
-Expected: the timer listed with a next-elapse time, and a run that exits 0
-silently, because the state file (step 2) matches the newest tag.
+⚠️ The timer is not enabled at this point (step 5 stopped at
+`daemon-reload` on purpose), so `systemctl list-timers clan-wars-deploy` shows
+nothing and `journalctl -u clan-wars-deploy` is empty — that emptiness is
+expected here, not a fault, and is not the thing to fix by enabling the timer.
+`systemctl cat` confirms the symlink resolves to the real unit file;
+`systemd-analyze verify` (where available) checks both unit files for syntax
+errors without starting anything.
 
 ## Operating the bot
 

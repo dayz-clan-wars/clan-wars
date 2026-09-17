@@ -317,10 +317,18 @@ bot_ok() {
   fi
 
   while [ "$SECONDS" -lt "$deadline" ]; do
-    # timeout 10 for the same reason as services_ok's probes: the deadline is
-    # tested only at the top of this loop, so a journalctl that blocks would
-    # hang the deploy forever with the unit's infinite TimeoutStartSec.
-    if timeout 10 journalctl -u clan-wars-bot --since "$since" 2>/dev/null | grep -q 'bot ready as'; then
+    # ⚠️ timeout 30 here, not 10 like the `-n 1` probe above and services_ok's
+    # probes. Those are readability/liveness checks, where a slow response is
+    # itself the signal something is wrong. This is a scan of the whole
+    # journal since $since on a host running ~15 other services that log —
+    # a slow scan is not evidence the bot failed to start, and cutting it at
+    # 10 s would spin this loop's 90 s deadline out on a busy journal alone,
+    # returning 1 and rolling back a healthy deploy: the exact failure the
+    # journal-readability fix above exists to prevent, through a narrower
+    # door. The deadline below is still tested only at the top of the loop,
+    # so a wedged journalctl can still only cost one iteration, not hang
+    # forever.
+    if timeout 30 journalctl -u clan-wars-bot --since "$since" 2>/dev/null | grep -q 'bot ready as'; then
       return 0
     fi
     sleep 5
