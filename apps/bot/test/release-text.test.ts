@@ -59,4 +59,17 @@ describe("releaseEmbeds", () => {
     expect(embeds).toHaveLength(3);
     expect(embeds.map((e) => (e.description ?? "").length).reduce((a, b) => a + b, 0)).toBe(body.length);
   });
+
+  it("loses no characters when splitting on ### boundaries", () => {
+    // ⚠️ The regression this guards: a CONSUMING split (`/\n(?=### )/`) drops one
+    // newline per section boundary, and the loss is invisible until a boundary
+    // lands exactly at an embed edge.
+    const section = (n: number) => `### Section ${n}\n\n${"- a bullet of some length.\n".repeat(120)}`;
+    const body = [section(1), section(2), section(3)].join("\n");
+
+    const embeds = releaseEmbeds(row({ body }));
+
+    const rejoined = embeds.map((e) => e.description ?? "").join("\n\n");
+    expect(rejoined).toBe(body.trim());
+  });
 });

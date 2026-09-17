@@ -23,10 +23,14 @@ const COLOR = 0x5865f2;
  * Split a body into pieces that each fit an embed, preferring the largest
  * markdown boundary that works: `###` sections, then paragraphs, then a hard
  * cut. A hard cut is ugly; dropping the overflow would be a silent loss.
+ *
+ * ⚠️ The split on `### ` boundaries is zero-width (`(?<=\n)(?=### )`) to consume
+ * nothing. A consuming split would drop one newline per section boundary, and the
+ * loss is invisible until a boundary lands exactly at an embed edge.
  */
 function pieces(body: string): string[] {
   const out: string[] = [];
-  for (const section of body.split(/\n(?=### )/u)) {
+  for (const section of body.split(/(?<=\n)(?=### )/u)) {
     if (section.length <= EMBED_DESCRIPTION_MAX) {
       out.push(section);
       continue;
@@ -49,15 +53,22 @@ function pack(parts: string[]): string[] {
   const out: string[] = [];
   let buf = "";
   for (const part of parts) {
-    const next = buf === "" ? part : `${buf}\n\n${part}`;
+    if (buf === "") {
+      buf = part;
+      continue;
+    }
+    // The zero-width split leaves the preceding `\n` on the end of the previous
+    // piece. Strip it before joining so the padding produces the right spacing.
+    const bufTrimmed = buf.trimEnd();
+    const next = `${bufTrimmed}\n\n${part}`;
     if (next.length <= EMBED_DESCRIPTION_MAX) {
       buf = next;
       continue;
     }
-    if (buf !== "") out.push(buf);
+    if (bufTrimmed !== "") out.push(bufTrimmed);
     buf = part;
   }
-  if (buf !== "") out.push(buf);
+  if (buf !== "") out.push(buf.trimEnd());
   return out;
 }
 
