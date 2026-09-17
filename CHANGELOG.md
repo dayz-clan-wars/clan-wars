@@ -161,3 +161,197 @@ this tag.**
   approved but not implemented: a host-side timer deploys each new tag, applies
   migrations, and rolls back both code and database automatically on failure,
   with the implementation plan in `docs/superpowers/plans/2026-09-16-auto-deploy.md`.
+
+## [1.15.0] - 2026-09-15
+
+### Added
+
+- Automated base-zone enforcement. A non-member who builds, dismantles, or
+  stacks fireplaces and garden plots inside a declared base's 100 m watch zone
+  is recorded and warned. Nothing happens until the base's owner presses
+  charges from `/base` — and then the ban is automatic, scaled to the damage,
+  with no staff step. The bot only ever sentences incidents it witnessed
+  itself: a report carries no free text and cannot describe an act the log
+  did not record. The owner chooses whether to charge and which participants
+  to charge; they never choose what the charge is.
+- The sentence: 24h base, +48h for any breach, +24h for a fence-to-gate, +12h
+  per part dismantled, capped at 7 days on a first offence, doubled on the
+  second, permanent on the third in a season.
+- Migration 0036 adds `zone_incidents`, `zone_violations`, `zone_placements`,
+  `zone_incident_participants` and `bans`. CREATE only — the bot does not
+  need stopping to apply it.
+- Runbook: `docs/deploy/2026-09-15-zone-enforcement.md`.
+
+### Changed
+
+- Dismantling a base that is not yours is a violation 24/7. The "inside the
+  window, dismantling while raiding is part of raiding" carve-out is deleted.
+- Building anything inside someone else's watch zone is a breach — watchtower,
+  fence, anything.
+- Stacked fireplaces and garden plots move off the permanent-ban exploit list
+  onto the proportional ladder.
+- These three skip the ticket queue. Every other fair-play rule still needs
+  one. (`apps/web/content/guide/12-fair-play.html`)
+
+### Notes
+
+- ⚠️ Ships dark. `ENFORCEMENT_TICK` defaults off and `BAN_DRY_RUN` defaults
+  true: audit rows are always written, and a real ban needs both flags set
+  deliberately. The dry-run week is where `BOOST_STACK_RADIUS_M` and
+  `BOOST_STACK_MIN_RISE_M` get tuned before anyone is banned.
+- ⚠️ `parity.test.ts`'s `PENDING` list is no longer empty. `reportIncident` is
+  deferred deliberately: the evidence an officer needs to judge a report
+  cannot appear in Discord under `clan_notices_no_coordinates`, so the
+  decision surface is the owner-gated `/base` page.
+
+## [1.14.0] - 2026-09-14
+
+### Fixed
+
+- A typo'd `BOT_TICK_INTERVAL_MS` was a database hammer, not a slow loop.
+  `tickIntervalMs` goes straight into `setInterval`, which stores its delay in
+  a signed 32-bit int: past 2,147,483,647 Node warns and uses 1 ms, so an
+  extra-digit typo in `.env` fired the tick loop a thousand times a second
+  while the value on the page read like a longer interval than intended.
+  ⚠️ Operationally new: the bot now refuses to start on an out-of-range
+  `BOT_TICK_INTERVAL_MS`, naming the limit, rather than clamping it — clamping
+  would silently run an interval the config does not say. The cap is on this
+  key alone; the dormancy windows stay uncapped.
+- A thrown tick no longer takes the notifier down with it. `verificationTick`
+  and `notifyCompleted` shared one `try`, so a persistently throwing tick
+  meant players who had already completed their sequence were never told —
+  indefinitely, with nothing saying the notifier had stopped too. Every other
+  pair in that pass already had its own catch.
+- `liveChallenges` is read once per batch instead of once per emote event —
+  one query per batch plus a lookup per event × challenge, instead of one
+  query per event (2,093 on the historical backfill). ⚠️ The per-event re-read
+  was load-bearing, not merely wasteful: the cache is dropped on every write,
+  or safe-pool emotes arriving after a completion in the same batch would
+  re-enter the finished challenge and fail its `stillOpen` guard, surfacing as
+  `alreadyLinked` — a code that means "this UID belongs to someone else."
+
+### Notes
+
+- Bot only. No migration, no web change, no player-facing behaviour change.
+
+## [1.13.0] - 2026-09-14
+
+### Added
+
+- Migration 0035: a unique index on `faction_members (server_id, discord_id)`,
+  the mirror of the one that has always existed on `(server_id, dayz_id)`. One
+  person, one membership per server, whichever of their two ids identifies
+  them. First migration applied with `pnpm db:migrate` (shipped in v1.11.0)
+  instead of a hand-assembled runner.
+
+### Notes
+
+- No player-facing behaviour change — nothing a player could do before is
+  refused now. The index forbids only rows that four separate write paths
+  already refuse to write; it is defence in depth, not a fix for a live bug.
+  What was open is that none of those paths was backed by a constraint, so a
+  fifth one getting it wrong would have raised a raw Postgres error at a
+  player instead of degrading gracefully.
+- ⚠️ The index caught three test fixtures on its first run, each seeding one
+  Discord account as leader of two clans on one server — always illegal, but
+  only the dayz-keyed index had been watching for it.
+- Runbook: `docs/deploy/2026-09-14-membership-uniqueness.md`.
+
+## [1.12.0] - 2026-09-14
+
+### Fixed
+
+- A map pin dropped within half a card's width of the world's edge opened a
+  popup that was simply cut off — the note and the Delete button off the
+  page, with no gesture that could bring them back. Leaflet's only answer to
+  an overrunning popup is to pan the map, and this map cannot pan: the world
+  is the max bounds with viscosity 1 and the zoom floor already fits all of
+  it, so there is no headroom to pan into. The card now moves instead of the
+  map (`apps/web/lib/map-popup-fit.ts`, pure and unit-tested) — the tip stays
+  where Leaflet put it, still pointing at the pin, and hides past the point
+  where it would slide off the card's own corner. A card that overruns the
+  top flips below its pin instead of sliding down onto it.
+
+### Notes
+
+- Web only. No migration, no bot change, no operational change.
+
+## [1.11.0] - 2026-09-14
+
+### Added
+
+- `pnpm db:migrate` (`scripts/migrate.ts`): applying a migration to
+  `factions_live` is now a checked step instead of a script hand-assembled at
+  deploy time. Dry run by default — prints the target, the journal, what is
+  applied, and the exact tags it would apply, then exits without writing.
+  `--apply` writes. After applying, it re-reads the migrations table and
+  checks the result against the plan, because the migrator itself reports
+  neither what it applied nor that it applied anything.
+- Root scripts are typechecked (`scripts/tsconfig.json`, `pnpm
+  typecheck:scripts`, run by both `typecheck` and CI). Its first run found a
+  live bug: `rebuild-kills.ts` and `rebuild-sessions.ts` import `drizzle-orm`,
+  which was not a root dependency and does not resolve from the repo root
+  under pnpm's strict layout — both scripts would have failed at startup with
+  `ERR_MODULE_NOT_FOUND`. Fixed by adding the dependency.
+
+### Notes
+
+- ⚠️ The production guard runs both ways, unlike `pnpm wipe` / `pnpm launch`:
+  `--production` is required to apply to `factions_live` and refused against
+  any other database, so the flag cannot be carried by muscle memory onto a
+  database it did not mean.
+- ⚠️ It refuses outright when `drizzle.__drizzle_migrations` disagrees with
+  the journal. The postgres-js migrator applies every entry whose `when` is
+  newer than the newest `created_at` — comparing timestamps, not names — so a
+  table ever filled in by hand replays old migrations against live data,
+  silently. That case is now a unit test instead of a runbook paragraph.
+- No player-facing change, no runtime change to the bot or the site, and no
+  migration of its own — nothing needs deploying to use this release.
+- Runbook: `docs/deploy/2026-09-14-db-migrate.md`.
+
+## [1.10.0] - 2026-09-13
+
+### Added
+
+- Single-instance enforcement: the bot takes a Postgres session-scoped
+  advisory lock before it opens a pool, logs in, or registers commands. A
+  second process prints one line and exits 0 — deliberate, so
+  `Restart=on-failure` leaves it exited instead of restart-looping every
+  interval. Session-scoped, so a SIGKILLed or power-lost bot releases the
+  lock on connection death: no TTL, no stale holder to clear by hand.
+  Two things already depended on this invariant without enforcing it: the
+  notifier is at-least-once across processes — a verified player was DM'd
+  twice on 2026-09-01 after a `pkill` pattern missed a stale process — and
+  `/found` keeps its draft in memory, because ten 17-character participant
+  ids do not fit in a 100-character `custom_id`, so two processes could lose
+  a player's founding choices between their select menu and their modal.
+
+### Changed
+
+- Crash logs no longer print request bodies. `unhandledRejection` and
+  `uncaughtException` now log through `safeErrorInfo` — Node prints an
+  error's own enumerable properties by default, and both drivers attach
+  payloads: `@discordjs/rest` carries `requestBody.json` (for `/vault
+  reveal`, a clan's lock code) and `url` (an interaction token); postgres.js
+  carries `.query` and `.parameters`, and `/vault add` submits a code as a
+  bound parameter. The diagnosis still reaches the journal.
+
+### Fixed
+
+- `idOf` no longer coerces. `Number("9e2")` is `900` and passed
+  `Number.isInteger`, so it was a valid row id on all sixteen call sites that
+  bridge a slash option to a roster row — every `lock:`, `pin:`, `invite:`,
+  `request:` and `pass:`. Now matches `DECIMAL_RE`, the house rule it broke.
+  No privilege escalation: the roster re-derives permission and answers
+  "gone" for a row that isn't yours.
+
+### Notes
+
+- ⚠️ Operationally new: hand-starting a second bot no longer works. That is
+  the feature. To hand a running bot's job to a new one, stop the old one
+  first — `systemctl restart` is unaffected, since systemd waits for the stop
+  and the lock releases after `client.destroy()`.
+- ⚠️ The process still exits on a crash. Sanitising the log does not make the
+  bot survive states it previously died in.
+- No new player-facing behaviour; no migration.
+- Runbook: `docs/deploy/2026-09-14-single-instance-lock.md`.
