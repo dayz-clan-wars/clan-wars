@@ -11,6 +11,13 @@ dist/
 # each is a full checkout of this repo.
 .claude/worktrees/
 
+# Hand-made database dumps on the production host live at /opt/clan-wars/backups/.
+# ⚠️ They must be ignored, not merely untracked: deploy/deploy-release.sh refuses
+# to deploy when `git status --porcelain` is non-empty — an edit on the box is
+# either an emergency hotfix or a mistake, and `git checkout` would discard
+# either silently. An untracked directory there blocks every automatic deploy.
+/backups/
+
 # Backups of the env file — .env itself is ignored above, but a .env.bak written
 # during a deploy is not, and would be committable with live credentials in it.
 .env.*
