@@ -5,6 +5,26 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The release deployer can no longer be rewritten out from under itself. It
+  moves the tree to the new tag, which replaces `deploy-release.sh` while bash
+  is executing it, and bash reads a script lazily by byte offset rather than
+  loading it whole — so a replacement of a different length makes the
+  interpreter resume at a stale offset in new bytes. Reproduced: the victim
+  script silently stopped running at the rewrite and **exited 0**, which in a
+  deploy means all three writers stopped, a failure marker written, and a
+  success reported. The deployer now re-execs from a private copy, so its own
+  text cannot change mid-run.
+- A deploy can no longer report success while production runs the previous
+  release's image. `docker compose up -d` was observed starting the stopped
+  containers again rather than recreating them on the newly built image; web
+  and ingest-worker are build-only services whose definitions name no image, so
+  an unchanged definition can look up to date. No health check could catch it —
+  the old image is perfectly healthy. The deployer now passes
+  `--force-recreate`, which costs nothing because those containers have already
+  been stopped.
+
 ## [1.16.5] - 2026-09-17
 
 ### Changed
