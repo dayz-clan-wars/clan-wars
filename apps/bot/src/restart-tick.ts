@@ -1,6 +1,6 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
 import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow } from "@factions/domain";
-import { and, eq, isNotNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 import { setBaseDamageDisabled } from "./cfggameplay.js";
 
@@ -210,52 +210,86 @@ export async function restartTick(
 
       // ⚠️ BEFORE the restart POST and only for a server actually being restarted:
       // DayZ reads cfggameplay.json at boot, so a write after the POST does not take
-      // effect for another two hours. ⚠️ Its own try/catch — a refused flip must
-      // never cost the restart; the next slot recomputes the wanted state anyway.
+      // effect for another two hours. ⚠️ The whole block is one outer try/catch — a
+      // failure anywhere here (the skips SELECT included) must never cost the
+      // restart; the next slot recomputes the wanted state anyway.
       let flip: RaidFlip | undefined;
+      // ⚠️ Captured even when nothing changed and even when the attempt below
+      // refuses, so the confirm step after the restart POST can still find and
+      // confirm an EARLIER slot's still-unconfirmed `applied` row (I1) — a restart
+      // that succeeds now is evidence for whatever the file currently contains,
+      // not only for a flip this exact slot made.
+      let raidBoundaryAt: Date | undefined;
       if (opts.raidWindow?.enabled) {
-        // ⚠️ The boundary is computed BEFORE the attempt, so the catch below can key
-        // its row on the same boundary a success would have used. Keying a refusal on
-        // the SLOT instead would write a fresh row every two hours — up to 12 a day —
-        // and the failure alert, which fires once per (boundary, kind), would fire
-        // once per slot with it. That is the exact alert-burial this design refuses.
-        const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason })
-          .from(raidWindowSkips);
-        const state = raidWindowAt(slot.start, skips);
-        const boundaryAt = state.boundaryAt;
         try {
-          flip = await applyRaidWindow(nitrado, slot.start, skips);
-          if (flip.changed) {
+          // ⚠️ The boundary is computed BEFORE the attempt, so a refusal below can
+          // key its row on the same boundary a success would have used. Keying a
+          // refusal on the SLOT instead would write a fresh row every two hours —
+          // up to 12 a day — and the failure alert, which fires once per
+          // (boundary, kind), would fire once per slot with it. That is the exact
+          // alert-burial this design refuses.
+          const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason })
+            .from(raidWindowSkips);
+          const state = raidWindowAt(slot.start, skips);
+          const boundaryAt = state.boundaryAt;
+          raidBoundaryAt = boundaryAt;
+
+          try {
+            flip = await applyRaidWindow(nitrado, slot.start, skips);
+          } catch (err) {
+            const detail = { error: err instanceof Error ? err.message : String(err) };
+            console.error(`raid window: server ${s.id} REFUSED the flip for slot ${slot.start.toISOString()} — restarting anyway`, err);
             await db.insert(raidWindowFlips).values({
               serverId: s.id,
-              boundaryAt: flip.boundaryAt,
-              wantedDisabled: flip.wantedDisabled,
-              outcome: "applied",
-              appliedAt: opts.now,
-              previousContent: flip.previousContent,
+              boundaryAt,
+              wantedDisabled: state.baseDamageDisabled,
+              outcome: "refused",
+              detail,
             }).onConflictDoUpdate({
               target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
-              set: { outcome: "applied", appliedAt: opts.now, wantedDisabled: flip.wantedDisabled },
-            });
-            console.log(`raid window: server ${s.id} set disableBaseDamage=${flip.wantedDisabled} for ${flip.boundaryAt.toISOString()}`);
+              // ⚠️ Only downgrade a row that is not already applied. A later slot that
+              // fails must never turn a confirmed flip into a refusal — that would make
+              // the website stop saying LIVE for a window that genuinely is live.
+              setWhere: sql`${raidWindowFlips.outcome} <> 'applied'`,
+              set: { outcome: "refused", detail },
+            }).catch(() => undefined);
+          }
+
+          if (flip?.changed) {
+            // ⚠️ A SEPARATE try/catch from the flip attempt above. The file upload
+            // already succeeded by this point — a failure here is a bookkeeping
+            // failure, not a refusal, and must never be recorded as one: a
+            // `refused` row for a flip that actually happened would tell the
+            // website a live window is not live.
+            try {
+              await db.insert(raidWindowFlips).values({
+                serverId: s.id,
+                boundaryAt: flip.boundaryAt,
+                wantedDisabled: flip.wantedDisabled,
+                outcome: "applied",
+                appliedAt: opts.now,
+                previousContent: flip.previousContent,
+              }).onConflictDoUpdate({
+                target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
+                // ⚠️ Also clears any earlier refusal's `detail` and writes this
+                // flip's `previousContent` — otherwise the one-command rollback the
+                // schema promises is unavailable for exactly the flip that wrote a
+                // file, and the applied row keeps stale refusal text (I4).
+                set: {
+                  outcome: "applied",
+                  appliedAt: opts.now,
+                  wantedDisabled: flip.wantedDisabled,
+                  previousContent: flip.previousContent,
+                  detail: {},
+                },
+              });
+              console.log(`raid window: server ${s.id} set disableBaseDamage=${flip.wantedDisabled} for ${flip.boundaryAt.toISOString()}`);
+            } catch (err) {
+              console.error(`raid window: server ${s.id} flipped disableBaseDamage=${flip.wantedDisabled} but failed to record it for ${flip.boundaryAt.toISOString()}`, err);
+            }
           }
         } catch (err) {
-          const detail = { error: err instanceof Error ? err.message : String(err) };
-          console.error(`raid window: server ${s.id} REFUSED the flip for slot ${slot.start.toISOString()} — restarting anyway`, err);
-          await db.insert(raidWindowFlips).values({
-            serverId: s.id,
-            boundaryAt,
-            wantedDisabled: state.baseDamageDisabled,
-            outcome: "refused",
-            detail,
-          }).onConflictDoUpdate({
-            target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
-            // ⚠️ Only downgrade a row that is not already applied. A later slot that
-            // fails must never turn a confirmed flip into a refusal — that would make
-            // the website stop saying LIVE for a window that genuinely is live.
-            setWhere: sql`${raidWindowFlips.outcome} <> 'applied'`,
-            set: { outcome: "refused", detail },
-          }).catch(() => undefined);
+          console.error(`raid window: server ${s.id} could not evaluate the raid window for slot ${slot.start.toISOString()} — restarting anyway`, err);
         }
       }
 
@@ -263,9 +297,21 @@ export async function restartTick(
       // ⚠️ An upload whose restart did not happen is NOT in effect. Confirmation is
       // what the website and the open/close announcements read; recording it before
       // the restart would make them assert a flip the server has not loaded.
-      if (flip?.changed) {
+      //
+      // ⚠️ Confirm by LOOKUP, not by `flip?.changed` (I1). Gating on `changed` leaves
+      // an `applied` row from an EARLIER slot permanently unconfirmed whenever that
+      // slot's own restart failed and every later slot finds the file already
+      // correct (so `changed` is false forever after). This restart's success is
+      // evidence the current file — whatever slot wrote it — is now loaded, so any
+      // still-unconfirmed `applied` row for this boundary is confirmed here too.
+      if (raidBoundaryAt) {
         await db.update(raidWindowFlips).set({ restartConfirmedAt: opts.now })
-          .where(and(eq(raidWindowFlips.serverId, s.id), eq(raidWindowFlips.boundaryAt, flip.boundaryAt)))
+          .where(and(
+            eq(raidWindowFlips.serverId, s.id),
+            eq(raidWindowFlips.boundaryAt, raidBoundaryAt),
+            eq(raidWindowFlips.outcome, "applied"),
+            isNull(raidWindowFlips.restartConfirmedAt),
+          ))
           .catch(() => undefined);
       }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
