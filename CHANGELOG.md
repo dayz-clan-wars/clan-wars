@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Rehearsal 2: a deliberately unhealthy release, used once to prove the
+  deployer's automatic rollback restores code, images, host config and
+  database. Reverted immediately afterwards.
+
 ## [1.16.1] - 2026-09-17
 
 ### Fixed
