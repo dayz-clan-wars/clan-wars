@@ -376,6 +376,11 @@ All notable changes to this project are documented in this file.
 ### Added
 
 - The ninth release.
+
+## [1.8.0] - 2026-09-13 [WITHDRAWN]
+
+Not a release. A deliberately unhealthy build, cut to rehearse a rollback.
+**Never deploy this tag.**
 `;
 
 describe("parseChangelog", () => {
@@ -407,6 +412,16 @@ describe("parseChangelog", () => {
     expect(body).not.toContain("## [1.9.0]");
   });
 
+  it("skips a [WITHDRAWN] heading", () => {
+    // ⚠️ Load-bearing, and the reason the heading regex is anchored. v1.16.2
+    // and v1.16.4 are real sections in this repo's CHANGELOG.md that say
+    // "Not a release … Never deploy this tag" — deliberately unhealthy builds
+    // cut to rehearse the deployer's rollback. Announcing one to players would
+    // advertise a build that does not exist. The marker IS the per-release
+    // opt-out; nothing else provides one.
+    expect(parseChangelog(SAMPLE).map((r) => r.version)).not.toContain("1.8.0");
+  });
+
   it("returns nothing for a changelog with no releases", () => {
     expect(parseChangelog("# Changelog\n\n## [Unreleased]\n\n- nothing yet\n")).toEqual([]);
   });
@@ -420,8 +435,11 @@ describe("parseChangelog", () => {
 
     const releases = parseChangelog(text);
 
-    expect(releases.length).toBeGreaterThanOrEqual(25);
+    // 26 `## [` headings minus `[Unreleased]` minus the two [WITHDRAWN] tags.
+    expect(releases.length).toBe(23);
     expect(releases[0]!.version).toBe("1.0.0");
+    expect(releases.map((r) => r.version)).not.toContain("1.16.2");
+    expect(releases.map((r) => r.version)).not.toContain("1.16.4");
     expect(releases.every((r) => /^\d{4}-\d{2}-\d{2}$/u.test(r.date))).toBe(true);
     expect(releases.every((r) => r.body.length > 0)).toBe(true);
   });
@@ -443,7 +461,14 @@ Create `packages/deploy/src/changelog.ts`:
 ```ts
 import { compareSemver } from "./tags";
 
-/** `## [1.17.0] - 2026-09-17`. `[Unreleased]` does not match, by design. */
+/**
+ * `## [1.17.0] - 2026-09-17`. Anchored at both ends, which is load-bearing:
+ * `[Unreleased]` has no date and does not match, and neither does
+ * `## [1.16.2] - 2026-09-17 [WITHDRAWN]` — a tag this repo records as "not a
+ * release, never deploy this tag". ⚠️ The trailing `$` is therefore the only
+ * thing keeping a rehearsal build out of a player-facing channel. A future
+ * "tidy-up" that loosens this regex announces both withdrawn tags.
+ */
 const HEADING = /^## \[(\d+\.\d+\.\d+)\]\s*-\s*(\d{4}-\d{2}-\d{2})\s*$/u;
 
 export interface ChangelogRelease {
@@ -762,7 +787,7 @@ DATABASE_URL="postgres://factions:factions@localhost:5434/factions_test_db" \
   pnpm release:sync --dry-run --allow-test-db
 ```
 
-Expected: 25 `DRY: would queue …` lines, starting at `1.0.0` and ending at `1.17.0`, **in ascending order**. The ordering here is the one thing this step exists to check.
+Expected: **23** `DRY: would queue …` lines, starting at `1.0.0` and ending at `1.17.0`, **in ascending order**. 23, not 25: `1.16.2` and `1.16.4` are `[WITHDRAWN]` in the changelog and are deliberately never announced. Two things are checked here — the ascending order, and the absence of those two.
 
 - [ ] **Step 6: Commit**
 
@@ -1388,9 +1413,10 @@ Create `docs/deploy/2026-09-17-release-announcements.md` covering, in order:
    `sudo systemctl restart clan-wars-bot`. Confirm with
    `journalctl -u clan-wars-bot --since "2 min ago" | grep -i release` — the
    `RELEASE_CHANNEL_ID is unset` warn must be **gone**.
-4. **Backfill:** `cd /opt/clan-wars && pnpm release:sync --dry-run`, read the 25
-   lines and check they ascend from 1.0.0, then `pnpm release:sync`.
-5. **Watch:** one message about every 10 s for roughly four minutes.
+4. **Backfill:** `cd /opt/clan-wars && pnpm release:sync --dry-run`, read the 23
+   lines and check they ascend from 1.0.0 and that `1.16.2`/`1.16.4` are absent,
+   then `pnpm release:sync`.
+5. **Watch:** one message about every 10 s for roughly four minutes (23, not 25).
    `psql -c "select count(*) from release_announcements where posted_at is null"`
    should reach 0.
 6. **If it blocks:** the bot logs `release queue blocked at release_announcements row N`
@@ -1401,7 +1427,12 @@ Create `docs/deploy/2026-09-17-release-announcements.md` covering, in order:
    restoring an older dump re-announces everything; steps 3 and 4 belong
    together; a version with no changelog section is never announced, and
    `release:sync --dry-run` is how you find one.
-8. **Rollback:** unset `RELEASE_CHANNEL_ID` and restart. Rows keep queuing and
+8. **Suppressing one release:** mark its heading
+   `## [X.Y.Z] - YYYY-MM-DD [WITHDRAWN]` and it is never announced — the same
+   marker v1.16.2 and v1.16.4 already carry. ⚠️ It only works BEFORE
+   `release:sync` has queued that version; once a row exists, the marker does
+   nothing and the row must be deleted by hand.
+9. **Rollback:** unset `RELEASE_CHANNEL_ID` and restart. Rows keep queuing and
    nothing posts. Nothing already posted is retracted.
 
 - [ ] **Step 2: Add the CLAUDE.md "Where things live" row**
@@ -1409,7 +1440,7 @@ Create `docs/deploy/2026-09-17-release-announcements.md` covering, in order:
 In the table, after the weekly vehicle rotation row:
 
 ```markdown
-| Release notes in Discord | `CHANGELOG.md` is the source; parsed by `parseChangelog` in `packages/deploy/src/changelog.ts`, queued into `release_announcements` by `pnpm release:sync` (`scripts/release-sync.ts`, called by `deploy/deploy-release.sh` after a verified deploy), rendered by `apps/bot/src/release-text.ts` and posted one per tick by `apps/bot/src/release-tick.ts`. Gated on `RELEASE_CHANNEL_ID`. ⚠️ The table is the ONLY thing preventing a re-post — truncating it, or restoring a dump from before a release was announced, re-announces the whole history into the channel. ⚠️ A version with no `## [x.y.z] - DATE` section is never announced, silently; `pnpm release:sync --dry-run` is the check. Runbook `docs/deploy/2026-09-17-release-announcements.md` |
+| Release notes in Discord | `CHANGELOG.md` is the source; parsed by `parseChangelog` in `packages/deploy/src/changelog.ts`, queued into `release_announcements` by `pnpm release:sync` (`scripts/release-sync.ts`, called by `deploy/deploy-release.sh` after a verified deploy), rendered by `apps/bot/src/release-text.ts` and posted one per tick by `apps/bot/src/release-tick.ts`. Gated on `RELEASE_CHANNEL_ID`. ⚠️ The table is the ONLY thing preventing a re-post — truncating it, or restoring a dump from before a release was announced, re-announces the whole history into the channel. ⚠️ A version with no `## [x.y.z] - DATE` section is never announced, silently; `pnpm release:sync --dry-run` is the check. ⚠️ A heading suffixed `[WITHDRAWN]` is deliberately never announced — that is the ONLY per-release opt-out, it is the anchored `$` in `HEADING` that enforces it, and it works only before `release:sync` has queued that version. Runbook `docs/deploy/2026-09-17-release-announcements.md` |
 ```
 
 - [ ] **Step 3: Add the table to the lock order**

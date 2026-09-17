@@ -264,9 +264,18 @@ that flood happens it is the intent; every time after it is a surprise.
 
 ## 7. What this does not do
 
-- No per-release opt-out. Every version with a changelog section is announced,
-  including the v1.16.1–v1.16.6 deployer rehearsals. A "do not announce" flag is
-  a column and a decision for whoever first wants one.
+- No per-release opt-out **flag**. Every version with a dated changelog section
+  is announced, including the v1.16.1–v1.16.6 deployer rehearsals.
+
+  ⚠️ Amended 2026-09-17, during implementation: an opt-out does exist, and it
+  was already in the file. `## [1.16.2] - 2026-09-17 [WITHDRAWN]` and
+  `## [1.16.4] … [WITHDRAWN]` are sections this repo keeps for tags that are
+  "not a release … never deploy this tag" — deliberately unhealthy builds cut to
+  rehearse the deployer's rollback. The heading regex is anchored, so a suffixed
+  heading does not match and those two are never announced. That is now the
+  documented rule rather than an accident, and it is the only opt-out: it works
+  by marking the heading BEFORE `release:sync` has queued the version, and does
+  nothing once a row exists.
 - No editing or deleting a posted message. A correction is a new release.
 - No alerting on a blocked queue — it is an error-level log line and nothing
   else, the same known gap `CLAUDE.md` records for the faction feed.
