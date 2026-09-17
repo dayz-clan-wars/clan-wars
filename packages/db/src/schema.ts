@@ -1401,9 +1401,13 @@ export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
  * answers "did this window's flip happen", and a row per slot would bury the four
  * rows a week that matter under the 84 checks that do not.
  *
- * ⚠️ A file already in the wanted state writes NO row. Absence of a row for a past
- * boundary is exactly the signal the website and the open/close announcements read
- * as "not confirmed", which is what stops a failed flip producing a confident lie.
+ * ⚠️ A row is written even when the file already held the wanted value. Absence of a
+ * row for a past boundary is exactly the signal the website and the open/close
+ * announcements read as "not confirmed" — so a boundary that legitimately needed no
+ * edit (day one, the Monday after a skipped weekend, or after the runbook's manual
+ * fallback) would otherwise read as a FAILED flip forever. This costs nothing: the
+ * primary key caps it at one row per boundary however many slots run, and a
+ * no-change upsert onto an already-`applied` row is blocked by its setWhere.
  *
  * ⚠️ `previous_content` is the pre-edit file. The truck wipe keeps no such copy and
  * does not need one: a malformed events.xml degrades, a malformed cfggameplay.json
@@ -1458,6 +1462,13 @@ export const raidWindowSkips = pgTable("raid_window_skips", {
  * be re-announced 12 times a day and bury the alerts this design needs someone to read.
  */
 export const raidWindowAnnouncements = pgTable("raid_window_announcements", {
+  /**
+   * ⚠️ NOT always a past boundary, unlike raid_window_flips.boundary_at. `open`,
+   * `close` and `failure` rows key on the boundary that has happened; an `advance`
+   * row keys on the COMING open, a future instant, because that is what the notice
+   * is about. `kind` is what distinguishes them, and it is part of the primary key,
+   * so the two meanings can never collide on one row.
+   */
   boundaryAt: timestamp("boundary_at", { withTimezone: true }).notNull(),
   kind: text("kind").$type<"advance" | "open" | "close" | "failure">().notNull(),
   announcedAt: timestamp("announced_at", { withTimezone: true }).notNull(),

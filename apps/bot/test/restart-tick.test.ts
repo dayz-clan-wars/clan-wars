@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
 import { restartTick, RESTART_MESSAGE, type RestartTarget } from "../src/restart-tick.js";
+import { raidWindowTick } from "../src/raid-window-tick.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -43,7 +44,11 @@ describe("restartTick", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
+    // ⚠️ The raid-window tables too: `servers ... cascade` clears the flips (they
+    // carry a server FK), but skips and announcements do not, and a skip left behind
+    // by one test silently suppresses a later test's window.
     await db.execute(sql`truncate table server_restarts, servers restart identity cascade`);
+    await db.execute(sql`truncate table raid_window_skips, raid_window_announcements`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 4242, active: true }).returning();
     serverId = s!.id;
     lastError.clear();
@@ -358,6 +363,7 @@ describe("restartTick", () => {
     .where(eq(raidWindowFlips.serverId, serverId)).orderBy(asc(raidWindowFlips.boundaryAt));
 
   const FRI_OPEN = at("2026-09-18T00:00:00Z");
+  const MON_CLOSE_PREV = at("2026-09-14T00:00:00Z");
   const MON_CLOSE_NEXT = at("2026-09-21T00:00:00Z");
 
   it("converges across a simulated week — missed slots and a hand-reverted file both self-heal", async () => {
@@ -365,6 +371,13 @@ describe("restartTick", () => {
     const f = fakeRaid(cfg(true));
     await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(f.uploads).toEqual([]);
+    // ⚠️ No upload, but a row all the same: this Monday's close IS realised — the
+    // file already carries it — and both readers treat a missing row as a failed
+    // flip. `previous_content` stays null: nothing was overwritten.
+    const monRows = await raidRows();
+    expect(monRows).toMatchObject([{ boundaryAt: MON_CLOSE_PREV, outcome: "applied", wantedDisabled: true }]);
+    expect(monRows[0]!.restartConfirmedAt).not.toBeNull();
+    expect(monRows[0]!.previousContent).toBeNull();
 
     // ⚠️ A stretch of slots (through the rest of the week) never runs — the bot
     // is down. Nothing simulates that beyond simply not calling the tick for
@@ -374,8 +387,11 @@ describe("restartTick", () => {
     expect(f.uploads).toHaveLength(1);
     expect(JSON.parse(f.uploads[0]!.content).GeneralData.disableBaseDamage).toBe(false);
     let rows = await raidRows();
-    expect(rows).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false }]);
-    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+    expect(rows).toMatchObject([
+      { boundaryAt: MON_CLOSE_PREV, outcome: "applied" },
+      { boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false },
+    ]);
+    expect(rows[1]!.restartConfirmedAt).not.toBeNull();
 
     // An operator (or a lost write elsewhere) puts the file back to disabled —
     // a hand revert mid-weekend, well past the Friday slot.
@@ -386,16 +402,16 @@ describe("restartTick", () => {
     rows = await raidRows();
     // ⚠️ Still ONE row for this window — the repair upserts the same
     // (serverId, boundaryAt) key rather than adding a Saturday row of its own.
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false });
+    expect(rows).toHaveLength(2); // the prior Monday's close, and this window's open
+    expect(rows[1]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", wantedDisabled: false });
 
     // Monday close, several more missed slots later.
     const r3 = await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
     expect(r3.restarted).toBe(1);
     expect(JSON.parse(f.uploads[2]!.content).GeneralData.disableBaseDamage).toBe(true);
     rows = await raidRows();
-    expect(rows).toHaveLength(2);
-    expect(rows[1]).toMatchObject({ boundaryAt: MON_CLOSE_NEXT, outcome: "applied", wantedDisabled: true });
+    expect(rows).toHaveLength(3);
+    expect(rows[2]).toMatchObject({ boundaryAt: MON_CLOSE_NEXT, outcome: "applied", wantedDisabled: true });
   });
 
   it("⚠️ I1 — a restart failure right after a successful flip still gets confirmed once a later restart lands", async () => {
@@ -462,6 +478,76 @@ describe("restartTick", () => {
     // genuinely is live.
     expect(rows[0]!.outcome).toBe("applied");
     expect(rows[0]!.restartConfirmedAt).toEqual(confirmedAt);
+  });
+
+  // ── A boundary that needed no file change (whole-branch review, finding 1) ───
+  // ⚠️ Both readers treat the ABSENCE of a flip row as "not confirmed", and the
+  // runbook tells the operator that means the flip FAILED. So a boundary whose file
+  // already carried the wanted value must still record itself, or the website warns
+  // forever about a window that is working perfectly.
+
+  it("⚠️ day one — the file already correct at a boundary records a confirmed flip, and the close posts", async () => {
+    // The feature is switched on with disableBaseDamage already true, which is the
+    // right value for the Monday close. Nothing to upload.
+    const f = fakeRaid(cfg(true));
+    const r = await restartTick(db, () => f.target, { now: at("2026-09-14T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(r.restarted).toBe(1);
+    expect(f.uploads).toEqual([]);
+
+    const rows = await raidRows();
+    expect(rows).toMatchObject([{ boundaryAt: MON_CLOSE_PREV, outcome: "applied", wantedDisabled: true }]);
+    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+    expect(rows[0]!.previousContent).toBeNull();
+
+    // The reader: the announcer posts the close, which it only does for a
+    // confirmed flip. Before this fix it reported `skipped` here, forever.
+    const announce = vi.fn(async (_c: string) => undefined);
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-14T00:10:00Z") });
+    expect(out).toMatchObject({ posted: 1, skipped: 0 });
+    expect(announce).toHaveBeenCalledTimes(1);
+  });
+
+  it("⚠️ the Monday after a SKIPPED weekend records its close, though the skip left nothing to change", async () => {
+    await db.insert(raidWindowSkips).values({
+      opensAt: FRI_OPEN, reason: "server migration", decidedAt: at("2026-09-15T00:00:00Z"),
+    });
+    // The skip kept base damage off all weekend, so the Monday close changes nothing.
+    const f = fakeRaid(cfg(true));
+    await restartTick(db, () => f.target, { now: at("2026-09-21T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(f.uploads).toEqual([]);
+
+    const rows = await raidRows();
+    expect(rows).toMatchObject([{ boundaryAt: MON_CLOSE_NEXT, outcome: "applied", wantedDisabled: true }]);
+    expect(rows[0]!.restartConfirmedAt).not.toBeNull();
+
+    const announce = vi.fn(async (_c: string) => undefined);
+    const out = await raidWindowTick(db, { announce, ops: announce }, { now: at("2026-09-21T00:10:00Z") });
+    expect(out).toMatchObject({ posted: 1, skipped: 0 });
+  });
+
+  it("⚠️ a no-change slot never rewrites an already-applied row, and clears a stale refusal", async () => {
+    // A refusal first: the file is corrupt at the boundary slot.
+    const f = fakeRaid(BROKEN_CFG);
+    await restartTick(db, () => f.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    expect(await raidRows()).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "refused" }]);
+
+    // An operator hand-fixes the file to the wanted value and the next slot finds
+    // nothing to change. ⚠️ Without a no-change write, this `refused` row would only
+    // ever be cleared by a slot that happened to rewrite the file — so the website
+    // would keep warning for the rest of a window that is live.
+    f.setContent(cfg(false));
+    await restartTick(db, () => f.target, { now: at("2026-09-18T02:00:03Z"), lastError, raidWindow: { enabled: true } });
+    let rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ boundaryAt: FRI_OPEN, outcome: "applied", detail: {} });
+    const appliedAt = rows[0]!.appliedAt;
+
+    // A later no-change slot in the same window leaves the applied row untouched:
+    // moving `applied_at` forward every two hours would lose the real flip's time.
+    await restartTick(db, () => f.target, { now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true } });
+    rows = await raidRows();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.appliedAt).toEqual(appliedAt);
   });
 
   it("a refused flip still restarts the server, and one server's refusal does not block another's", async () => {

@@ -1,5 +1,5 @@
 import type { BaseDamageWindow } from "@factions/roster";
-import { raidStripLine } from "@/lib/raid-strip";
+import { humanizeUntil, raidStripLine } from "@/lib/raid-strip";
 import { RaidCountdown } from "./raid-countdown";
 
 const TONE: Record<string, string> = {
@@ -15,7 +15,11 @@ const TONE: Record<string, string> = {
  */
 export function RaidStrip({ window: w }: { window: BaseDamageWindow | undefined }) {
   if (!w) return null;
-  const line = raidStripLine(w, new Date());
+  // ⚠️ One clock read for both the line and the countdown's seed. The seed is what
+  // the client hydrates against, so it must come from this render, not from a second
+  // `new Date()` a millisecond (or a minute) later.
+  const now = new Date();
+  const line = raidStripLine(w, now);
   const target = w.status === "live" ? w.closesAt : w.opensAt;
   const countdownPrefix = w.status === "live" ? "closes in" : "opens in";
   return (
@@ -25,7 +29,7 @@ export function RaidStrip({ window: w }: { window: BaseDamageWindow | undefined 
         <span className={TONE[line.tone]}>{line.value}</span>
         <span className="text-muted">
           {w.status === "live" || w.status === "closed"
-            ? <RaidCountdown prefix={countdownPrefix} target={target.toISOString()} />
+            ? <RaidCountdown prefix={countdownPrefix} initial={humanizeUntil(now, target)} target={target.toISOString()} />
             : line.detail}
         </span>
       </div>

@@ -21,8 +21,18 @@ describe("raidStripLine", () => {
   });
 
   it("⚠️ unconfirmed never reads as live", () => {
-    const l = raidStripLine({ status: "unconfirmed", opensAt: FRI, closesAt: MON }, FRI);
+    const l = raidStripLine({ status: "unconfirmed", pending: "open", opensAt: FRI, closesAt: MON }, FRI);
     expect(l.value).toBe("OPENING");
+    expect(l.detail).toBe("not yet confirmed");
+    expect(l.tone).toBe("warn");
+  });
+
+  // ⚠️ An unconfirmed CLOSE leaves base damage ON. "OPENING" there is the wrong
+  // word in the reassuring direction, which is the direction this design never
+  // takes; it must name the flip that has not happened.
+  it("⚠️ an unconfirmed close reads as CLOSING, not OPENING", () => {
+    const l = raidStripLine({ status: "unconfirmed", pending: "close", opensAt: FRI, closesAt: MON }, MON);
+    expect(l.value).toBe("CLOSING");
     expect(l.detail).toBe("not yet confirmed");
     expect(l.tone).toBe("warn");
   });

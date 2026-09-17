@@ -72,4 +72,13 @@ describe("baseDamageWindowDb", () => {
     const w = await baseDamageWindowDb(db, wed);
     expect(w.status).toBe("closed");
   });
+
+  // ⚠️ The direction the strip has to name. An unconfirmed CLOSE leaves base damage
+  // ON, so the site must not call it an opening; deriving that at the render site
+  // from the two instants is the drift this feature avoids everywhere else.
+  it("says which flip is missing when unconfirmed", async () => {
+    expect((await baseDamageWindowDb(db, FRI)).pending).toBe("open");
+    const wed = new Date("2026-09-16T00:00:00.000Z");
+    expect((await baseDamageWindowDb(db, wed)).pending).toBe("close");
+  });
 });

@@ -342,9 +342,13 @@ anything.
   map plus the read-only groups, so the live command list is `/link /base /me /roster
   /clan /clans /lead /found /guest /vault /map /scoreboard /alphas /seasons /warlog
   /player /board /achievements`. `apps/bot/test/parity.test.ts` lists every write and
-  its command; its `PENDING` map is empty — every write `@factions/roster` exports has
-  a command, and the test fails the moment a future increment ships one without a
-  Discord command, naming which plan owes it. **`retired-commands.ts` and its stubs
+  its command; its `PENDING` map holds exactly one entry — `reportIncident: "base
+  report"`, deliberately site-only because the evidence an officer needs to press
+  charges (part names, distances, coordinates) may never appear in Discord, and a
+  command that triggered a ban without it would be worse than no command. Every other
+  write `@factions/roster` exports has a command, and the test fails the moment a
+  future increment ships one that is neither mapped nor explicitly deferred, naming
+  which plan owes it. **`retired-commands.ts` and its stubs
   (`whoami`, `faction`, the bare `unlink`) are gone** (plan 3, task 7): the condition
   their own comment set for removal — "deleted only when parity is complete" — is now
   met, and this repeats an invariant this file stated the opposite way before that: the

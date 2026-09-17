@@ -5,6 +5,16 @@ import { and, eq, isNotNull } from "drizzle-orm";
 
 export type BaseDamageWindow = {
   status: "live" | "closed" | "unconfirmed" | "skipped";
+  /**
+   * Which flip is missing. Set ONLY when status is "unconfirmed".
+   *
+   * ⚠️ The strip needs the direction: an unconfirmed CLOSE leaves base damage ON,
+   * and calling that "OPENING" is wrong half the time. Carried from the phase the
+   * domain already computed rather than re-derived from the two instants at the
+   * render site — re-derivation is the drift this feature has a ⚠️ about in three
+   * other places.
+   */
+  pending?: "open" | "close";
   opensAt: Date;
   closesAt: Date;
   skipReason?: string;
@@ -34,6 +44,11 @@ export async function baseDamageWindowDb(db: Database, now: Date): Promise<BaseD
     return { status: "skipped", opensAt: state.opensAt, closesAt: state.closesAt, skipReason: state.skipReason };
   }
 
+  // ⚠️ ANY server's confirmed flip answers for the whole site. Known limitation,
+  // accepted because there is one registered server and one host: with two, one
+  // server's confirmed flip would make the strip say LIVE while the other server's
+  // failed flip leaves its players swinging at walls. Scope this per server — and
+  // give the strip a server — before a second one is registered.
   const [row] = await db
     .select({ serverId: raidWindowFlips.serverId })
     .from(raidWindowFlips)
@@ -45,7 +60,12 @@ export async function baseDamageWindowDb(db: Database, now: Date): Promise<BaseD
     .limit(1);
 
   if (!row) {
-    return { status: "unconfirmed", opensAt: state.opensAt, closesAt: state.closesAt };
+    return {
+      status: "unconfirmed",
+      pending: state.phase === "open" ? "open" : "close",
+      opensAt: state.opensAt,
+      closesAt: state.closesAt,
+    };
   }
   return {
     status: state.phase === "open" ? "live" : "closed",

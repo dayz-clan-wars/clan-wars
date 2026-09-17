@@ -252,15 +252,34 @@ export async function restartTick(
               // the website stop saying LIVE for a window that genuinely is live.
               setWhere: sql`${raidWindowFlips.outcome} <> 'applied'`,
               set: { outcome: "refused", detail },
+              // ⚠️ Swallowed on purpose: a bookkeeping failure must never cost the
+              // restart this slot was going to perform anyway. What is lost is
+              // SILENT — with no `refused` row, raid-window-tick.ts's failure scan
+              // finds nothing and NO ops alert ever fires for this flip; the
+              // console.error above is then the only trace it happened. The next
+              // slot re-attempts the flip and writes the row if it fails again.
             }).catch(() => undefined);
           }
 
-          if (flip?.changed) {
+          if (flip) {
             // ⚠️ A SEPARATE try/catch from the flip attempt above. The file upload
             // already succeeded by this point — a failure here is a bookkeeping
             // failure, not a refusal, and must never be recorded as one: a
             // `refused` row for a flip that actually happened would tell the
             // website a live window is not live.
+            //
+            // ⚠️ A row is written even when the file already held the wanted value
+            // (`changed === false`). Both readers — the website's strip and the
+            // open/close announcer — treat the ABSENCE of a row as "not confirmed",
+            // so a boundary that needed no edit would otherwise read as a failed
+            // flip forever: on day one (the feature switched on with the file
+            // already correct), on the Monday after a skipped weekend, and after
+            // the operator's own manual fallback in docs/deploy/raid-window.md —
+            // which tells them "not yet confirmed" means the flip FAILED.
+            // The (server_id, boundary_at) key caps this at ONE row per boundary
+            // however many slots run, and the setWhere below makes every later
+            // no-change upsert a no-op; the spec's earlier "~84 rows a week" cost
+            // for recording no-op slots does not exist.
             try {
               await db.insert(raidWindowFlips).values({
                 serverId: s.id,
@@ -268,24 +287,49 @@ export async function restartTick(
                 wantedDisabled: flip.wantedDisabled,
                 outcome: "applied",
                 appliedAt: opts.now,
-                previousContent: flip.previousContent,
+                // ⚠️ Only a write that actually overwrote the file has something to
+                // recover; a no-change slot must not clobber a real pre-edit copy
+                // with the identical current contents.
+                ...(flip.changed ? { previousContent: flip.previousContent } : {}),
               }).onConflictDoUpdate({
                 target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
                 // ⚠️ Also clears any earlier refusal's `detail` and writes this
                 // flip's `previousContent` — otherwise the one-command rollback the
                 // schema promises is unavailable for exactly the flip that wrote a
                 // file, and the applied row keeps stale refusal text (I4).
-                set: {
-                  outcome: "applied",
-                  appliedAt: opts.now,
-                  wantedDisabled: flip.wantedDisabled,
-                  previousContent: flip.previousContent,
-                  detail: {},
-                },
+                //
+                // ⚠️ The no-change arm carries `setWhere outcome <> 'applied'`, so
+                // it never rewrites an already-applied row (it would otherwise move
+                // `applied_at` forward every two hours and lose the real flip's
+                // timestamp). It DOES clear a stale `refused` row once the file is
+                // observed correct again — today such a row can only be cleared by a
+                // slot that happens to rewrite the file.
+                ...(flip.changed
+                  ? {
+                    set: {
+                      outcome: "applied" as const,
+                      appliedAt: opts.now,
+                      wantedDisabled: flip.wantedDisabled,
+                      previousContent: flip.previousContent,
+                      detail: {},
+                    },
+                  }
+                  : {
+                    setWhere: sql`${raidWindowFlips.outcome} <> 'applied'`,
+                    set: {
+                      outcome: "applied" as const,
+                      appliedAt: opts.now,
+                      wantedDisabled: flip.wantedDisabled,
+                      detail: {},
+                    },
+                  }),
               });
-              console.log(`raid window: server ${s.id} set disableBaseDamage=${flip.wantedDisabled} for ${flip.boundaryAt.toISOString()}`);
+              if (flip.changed) {
+                console.log(`raid window: server ${s.id} set disableBaseDamage=${flip.wantedDisabled} for ${flip.boundaryAt.toISOString()}`);
+              }
             } catch (err) {
-              console.error(`raid window: server ${s.id} flipped disableBaseDamage=${flip.wantedDisabled} but failed to record it for ${flip.boundaryAt.toISOString()}`, err);
+              const what = flip.changed ? "flipped" : "verified";
+              console.error(`raid window: server ${s.id} ${what} disableBaseDamage=${flip.wantedDisabled} but failed to record it for ${flip.boundaryAt.toISOString()}`, err);
             }
           }
         } catch (err) {
@@ -312,6 +356,12 @@ export async function restartTick(
             eq(raidWindowFlips.outcome, "applied"),
             isNull(raidWindowFlips.restartConfirmedAt),
           ))
+          // ⚠️ Swallowed on purpose: the restart POST has already gone out, and a
+          // throw here would abort the slot's `server_restarts` row and make the
+          // next pass restart the server a second time. What is lost is SILENT —
+          // the flip row stays `applied` with a null `restart_confirmed_at`, so the
+          // website reads "not yet confirmed" and no open/close message posts, until
+          // a later slot's restart succeeds and this same lookup confirms it.
           .catch(() => undefined);
       }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {

@@ -51,7 +51,9 @@ Three tables record it (migration `0037_fresh_moira_mactaggert.sql`):
 
 The website's top bar and Discord's open/close messages both read **confirmed** flips —
 `outcome = 'applied'` with `restart_confirmed_at` set — never the clock. An unconfirmed
-boundary renders `OPENING — not yet confirmed`, never `LIVE`; a confirmed flip is what
+boundary renders `OPENING — not yet confirmed` (or `CLOSING — not yet confirmed`, when it
+is the close that is unconfirmed — base damage is still ON in that case), never `LIVE`
+and never `CLOSED`; a confirmed flip is what
 lets the open message go out at all. So:
 
 1. After the Friday 00:00 UTC slot, check `raid_window_flips` for an `applied` row with
@@ -125,6 +127,11 @@ first, which is what this procedure is for.
 6. **Confirm it applied.** After the server is back: on Friday, a player hitting a wall with
    a tool sees damage; on Monday they do not. If you cannot check in game, the read-back
    in step 4 plus a completed restart in the panel is the evidence — record both.
+7. **The site catches up by itself**, at the next restart slot (at most two hours). The
+   slot finds the file already correct, records that boundary as `applied` and confirms it
+   after its own restart, and the strip stops saying "not yet confirmed". ⚠️ Do not read
+   the warning in the meantime as evidence the manual flip failed — only a missing row
+   *more than one slot later* means that.
 
 ## The two flips
 

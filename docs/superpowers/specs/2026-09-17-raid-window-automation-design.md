@@ -173,11 +173,29 @@ Saturday 14:00 belongs to that Friday's row, not to a row of its own. The row is
 **upserted**, one per (server, boundary): the first write that achieves the wanted state
 creates it, and a later repair of a reverted file updates it.
 
-⚠️ **A file already in the wanted state writes no row.** The level-triggered tick
-checks 12 times a day; recording each check would put ~84 rows a week into a table whose
-entire purpose is to answer "did the flip happen", and bury the four rows that matter.
-Absence of a row for a past boundary is exactly the signal the website and the `open`/
-`close` announcements read as "not confirmed".
+⚠️ **A file already in the wanted state still writes its boundary's row**
+(amended 2026-09-17, after the whole-branch review; this reverses what this section
+said when the design was approved). The original rule was "a file already in the
+wanted state writes no row", justified by ~84 rows a week from the 12 daily checks.
+**That cost does not exist**: the `(server_id, boundary_at)` primary key caps the
+table at one row per boundary however many slots run, and the no-change upsert
+carries `setWhere outcome <> 'applied'`, so every slot after the first is a no-op.
+
+Meanwhile the hole the old rule left is on the happy path, three ways: day one, with
+the feature switched on while the file is already correct; the Monday after a skipped
+weekend, where the skip left the file `true` so the close changes nothing; and after
+the manual fallback in `docs/deploy/raid-window.md`, where the next slot finds the file
+already right. In all three, both readers treat absence of a row as "not confirmed" and
+the website warns forever — which that same runbook tells the operator means the flip
+*failed*. The no-change write also un-sticks a stale `refused` row, which otherwise
+clears only on a slot that happens to rewrite the file.
+
+`previous_content` is left alone on a no-change write: nothing was overwritten, so
+there is nothing to recover, and clobbering a real pre-edit copy with the identical
+current contents would lose the rollback guard 3 exists for.
+
+Absence of a row for a past boundary remains exactly the signal the website and the
+`open`/`close` announcements read as "not confirmed".
 
 ⚠️ `restart_confirmed_at` is filled **after** the slot's restart result is known —
 `restart-tick.ts` performs the write and the restart in that order within one slot, and

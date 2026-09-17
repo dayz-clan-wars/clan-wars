@@ -28,9 +28,17 @@ export function raidStripLine(w: BaseDamageWindow, now: Date): RaidStripLine {
     case "skipped":
       return { label, value: "SKIPPED THIS WEEK", detail: w.skipReason ?? "", tone: "muted" };
     case "unconfirmed":
-      // ⚠️ Never "LIVE". The boundary has passed with no confirmed flip, so the
-      // server's actual behaviour is unknown — saying LIVE here is the confident
-      // lie this whole design exists to avoid.
-      return { label, value: "OPENING", detail: "not yet confirmed", tone: "warn" };
+      // ⚠️ Never "LIVE" and never "CLOSED". The boundary has passed with no
+      // confirmed flip, so the server's actual behaviour is unknown — stating
+      // either is the confident lie this whole design exists to avoid.
+      // ⚠️ State-aware: an unconfirmed CLOSE leaves base damage ON, so announcing
+      // "OPENING" there would be the wrong word half the time — and the wrong
+      // word in the direction that reads as reassurance.
+      return {
+        label,
+        value: w.pending === "close" ? "CLOSING" : "OPENING",
+        detail: "not yet confirmed",
+        tone: "warn",
+      };
   }
 }
