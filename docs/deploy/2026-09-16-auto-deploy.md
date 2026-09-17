@@ -48,6 +48,55 @@ Each should print `OK` (or nginx's own success message) with no password
 prompt. A prompt means the entry is missing or wrong — fix it before going any
 further; every later step assumes this already works.
 
+### The other four prerequisites
+
+Each of these is something the script cannot check for itself, and each maps to
+a way it fails quietly rather than loudly.
+
+**1. `acab` can read the bot's journal.** The bot health gate greps
+`journalctl -u clan-wars-bot` for `bot ready as`:
+
+    sudo -u acab journalctl -u clan-wars-bot -n 1
+
+⚠️ This must print a **real log line**. `-- No entries --`, or empty output,
+means `acab` is outside `adm`/`systemd-journal` and is being shown only its own
+user journal — `journalctl` does **not** fail in that case; it matches nothing
+and exits 0. The script detects this by testing for non-empty output rather
+than exit status, and falls back to a weaker late `is-active` check with a
+`WARN`. This command is the more certain answer, and adding `acab` to
+`systemd-journal` now is better than deploying on the fallback: before that
+detection was corrected, this condition rolled back every **healthy** deploy —
+a real drop-and-restore of `factions_live` each time.
+
+**2. `/var/backups/clan-wars` exists and is writable by `acab`.**
+
+    sudo -u acab test -w /var/backups/clan-wars && echo OK
+
+The nightly backup unit runs as **root** and creates this directory root-owned;
+the deployer runs as `acab`. `deploy/README.md`'s install steps have the
+`install -d -o acab -g acab` that fixes it. A failure here lands inside the
+outage window — guarded, with a `CRITICAL` and a restore, but an outage.
+
+**3. `acab`'s git can reach `origin`.**
+
+    sudo -u acab git -C /opt/clan-wars fetch --tags --prune origin
+
+Nothing anywhere checks this, and `git fetch` is inside `run()`, so `--dry-run`
+prints it rather than proving it. Without a credential or key for the remote
+the script fetches nothing and deploys against whatever tags happen to be local
+already — including never seeing a new release at all.
+
+**4. `NODE_ENV` is absent from `/opt/clan-wars/.env`.**
+
+    grep '^NODE_ENV' /opt/clan-wars/.env && echo "REMOVE THIS" || echo OK
+
+The script does `set -a; . ./.env; set +a`, which **exports** everything in
+that file to every child process. `NODE_ENV=production` makes
+`pnpm install --frozen-lockfile` prune devDependencies — including `tsx`, which
+`pnpm db:migrate`, the bot's `start` script and the rollback's own
+`pnpm install` all need. The first failure lands mid-outage, and the rollback's
+install is pruned by the same variable.
+
 ## 1. Install
 
 **The state directory must be owned by `acab`, and this order matters.**
@@ -93,10 +142,13 @@ thing that failed, so it cannot also be the channel that reports the failure.
       /etc/systemd/system/clan-wars-deploy.timer
     sudo systemctl daemon-reload
 
-⚠️ **Do not `enable --now` the timer yet.** Step 2 (the dry run) and the
-rehearsals in step 4 both need to run first — see `deploy/README.md`'s note on
-why an unrehearsed rollback triggered by the timer, on whatever tag happens to
-be first, is not an acceptable way to find out it works.
+⚠️ **`daemon-reload` only here — do not `enable --now` the timer yet.** Step 2
+(the dry run) has to pass first, and the timer must not be armed until someone
+is ready to run step 4's rehearsals immediately and watch them: they are what
+proves the rollback works, and until they have run, an unrehearsed
+`rollback()` — a real drop-and-restore of `factions_live` — is what the first
+failing release triggers. `deploy/README.md`'s install steps say the same, and
+deliberately stop at `daemon-reload` for this reason.
 
 ## 2. The dry run — required, and it cannot happen anywhere but here
 
@@ -117,7 +169,13 @@ hand, is the first point in this project's life the script has ever run start
 to finish at all. Treat it as exactly that, not as a formality on the way to
 enabling the timer.
 
-## 3. Enable the timer
+## 3. Enable the timer — with step 4 starting immediately afterwards
+
+⚠️ Step 4's rehearsals need the timer running (they tag a release and watch the
+deployer pick it up), which is why this step comes before them. That makes this
+the moment the machinery becomes live: from here until the rehearsals are done,
+any tag reaching `main` deploys itself, and a failing one rolls back for real.
+Do not enable the timer and walk away.
 
     sudo systemctl enable --now clan-wars-deploy.timer
     systemctl list-timers clan-wars-deploy
@@ -131,7 +189,7 @@ channel).
 
 ## 4. Rehearsal — a gate, not a suggestion
 
-⚠️ **Until both of these have been run, the rollback is a design, not a
+⚠️ **Until all three of these have been run, the rollback is a design, not a
 capability, and must not be described as one** (spec §8). This is not a
 formality to skip under time pressure — it is the only way anyone will know,
 before it matters, whether `rollback()` actually restores `factions_live`
@@ -141,10 +199,25 @@ correctly on this host.
 
     git tag v1.9.1 && git push origin v1.9.1
 
-Watch `journalctl -u clan-wars-deploy -f`. Expect the full path to run with
-nothing at stake — stop, dump, checkout, migrate (a no-op), reload nginx,
-start `web`/`ingest-worker`, health check, start the bot, `bot ready as v1.9.1`,
-state write — a `DEPLOYED` webhook, and roughly 1–3 minutes of downtime.
+Watch `journalctl -u clan-wars-deploy -f`. Expect the full path to run — stop,
+dump, checkout, migrate (a no-op), reload nginx, start `web`/`ingest-worker`,
+health check, start the bot, its `bot ready as …` line, state write — a
+`DEPLOYED` webhook, and roughly 1–3 minutes of downtime.
+
+⚠️ **Do not read "a release that changes nothing" as "nothing at stake".** The
+health gate has never run on this host, and a miscalibration in it — an
+unreadable journal, a probe that cannot reach `web`, a bot that takes longer
+than 90 s to log in — does not merely fail the deploy: it triggers a genuine
+`rollback()`, which **drops and restores `factions_live`** from the dump taken
+minutes earlier. A no-op release makes the *code* change nothing. It does not
+make the *deploy machinery* a no-op. Do this at a quiet hour, at a terminal,
+watching.
+
+⚠️ The journal line is `bot ready as <the bot's Discord user tag>`, from
+`apps/bot/src/discord.ts`'s `clientReady` handler — it logs
+`client.user?.tag`, the Discord account's name, **not** the release tag. Do not
+expect `bot ready as v1.9.1`, and do not treat its absence as a failed deploy
+on that basis; the script matches only the fixed `bot ready as` prefix.
 
 **Rehearsal 2 — deliberate rollback, while watching.** Temporarily break the
 health check so it cannot pass — e.g. point `services_ok`'s curl at a port
@@ -161,6 +234,34 @@ order:
 Then revert the sabotage and confirm a normal deploy still works. Do this at a
 quiet hour, at a terminal, with `/var/backups/clan-wars/` in view so you can
 watch the dump appear.
+
+**Rehearsal 3 — prove the restore actually round-tripped.** ⚠️ Rehearsal 2's
+checks — the site answers, the bot is up, `select 1` succeeds — are **all
+produced by a half-restored database too**. `psql` reading a dump from stdin
+exits 0 even when individual `COPY` blocks fail, which is why the restore runs
+under `-v ON_ERROR_STOP=1`; this rehearsal is the only check that confirms that
+guard works here, on this host, against a real dump. Row counts, not liveness.
+
+Take the counts **before** tagging rehearsal 2's release:
+
+    docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "
+      select (select count(*) from factions) as factions,
+             (select count(*) from faction_members) as members,
+             (select count(*) from identity_links) as links,
+             (select count(*) from faction_events) as events"
+
+Run the identical query after the rollback has completed and compare. These
+four tables are the ones `deploy/README.md` names as unrecoverable by any other
+means — `events` can be re-ingested from the ADM logs, these cannot — so they
+are what a restore has to get exactly right.
+
+⚠️ Expect **equal** counts, not "close". `web` and `ingest-worker` are up for
+up to 90 s before the health check fails, so a difference is possible in
+principle; it is not possible in any of these four tables without a player
+having founded, joined, linked or triggered a feed row in that window, so treat
+any difference as a failed rehearsal and investigate rather than explain it
+away. For extra certainty, `pg_dump` the restored database and diff its
+schema-only output against the pre-deploy dump's.
 
 ## Deploying by hand, if the timer is off
 
@@ -251,8 +352,11 @@ Recovery:
 ### Class 2 — a pre-migration abort's own recovery failed (`restore_previous_release()` / a bare `revert_tree`)
 
 **Recognize it by:** the text contains any of these literal substrings —
-"`aborting the deploy of`" (five call sites: a failed tree restore, a failed
-retag, and both "deliberately NOT starting …" alerts),
+"`aborting the deploy of`" (**six** call sites in `restore_previous_release()`:
+a failed tree restore, a failed retag, both "deliberately NOT starting …"
+alerts, and — the two that are easy to miss because they name no service in
+the phrase — "`could not restart web/ingest-worker after aborting the deploy
+of`" and "`could not restart clan-wars-bot after aborting the deploy of`"),
 "`could not stop all writers before the dump`",
 "`tree or node_modules is still`" (the `pnpm install`-then-`revert_tree`
 double failure), "`failed to complete; restoring`" (the pre-deploy dump
@@ -281,6 +385,18 @@ Recovery is to fix the *specific* piece the alert names — check out
 — and then start only the service(s) that were withheld, exactly as
 `restore_previous_release()` would have. Never touch the database for this
 class.
+
+⚠️ **The two "could not restart …" alerts are not that case.** There the
+precondition was fine and the start was *attempted and failed* — nothing was
+withheld, so "start what was withheld" is the wrong instruction and the service
+is simply **down**. Read the rest of the alert stream first: if any other Class
+2 alert is present, fix that piece first, because the failed start may be its
+consequence. Then start the named service by hand and read its own journal
+(`journalctl -u clan-wars-bot -n 50 --no-pager`, or
+`sudo -n docker compose logs --tail 50 web ingest-worker`) for why it refused —
+the deploy script only knows that `systemctl start` / `up -d` returned
+non-zero, never why. Order still matters: `web`/`ingest-worker` first, the bot
+last, for the reason in Class 1 step 3.
 
 ### Class 3 — bookkeeping only; the thing it was recording is already fine
 
@@ -332,6 +448,22 @@ entire stop/dump/migrate/start outage for the same broken release, every two
 minutes, forever. The script refuses to retry a tag while this marker names
 it — the alert says `BLOCKED`, not `CRITICAL`, because production is fine;
 only the retry is refused.
+
+⚠️ **A `BLOCKED` state does not go away on its own, and neither does the
+refusal.** The script alerts **once** per condition and then refuses silently
+every two minutes until a human clears it: the failure marker's alert is keyed
+on the tag it names (`deployed-tag.failed.notified`), and the dirty-tree
+refusal's on a checksum of `git status --porcelain`
+(`deployed-tag.dirty-notified`). That suppression exists because the
+alternative — 720 identical Discord messages a day — buries the `CRITICAL`s
+this whole design depends on somebody reading. The consequence for the
+operator: **one `BLOCKED` message means the deploys have stopped, not that one
+poll was skipped.** There will be no reminder. A release sitting undeployed
+with no further alerts is the expected appearance of this state, so treat the
+first message as the whole notice. Both sidecars are removed whenever the thing
+they describe is — on a successful deploy, on a fresh failure, and when the
+tree stops being dirty — so the next genuine event always alerts. Clearing the
+files by hand is never necessary and never harmful.
 
 To let it retry (normally: after a fix has been pushed and re-tagged, or once
 you've confirmed the earlier failure was transient):
