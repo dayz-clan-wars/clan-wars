@@ -15,6 +15,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   `pnpm release:sync` call is the backfill, the per-deploy hook and the repair
   tool. Implementation plan:
   `docs/superpowers/plans/2026-09-17-release-announcements.md`.
+- `CHANGELOG.md` now records every release back to v1.0.0. The v1.1.0–v1.15.0
+  entries are reconstructed from the release tags' annotations and the commits
+  behind them; v1.0.0 is written from the increment specs, since its tag carries
+  only a subject line.
 
 ## [1.17.0] - 2026-09-17
 
