@@ -51,6 +51,20 @@ event, triggered by whatever the first bad release happens to be.
 
        sudo install -d -o acab -g acab /var/lib/clan-wars
 
+   **And the backup directory, for the same reason.** The deployer writes its
+   pre-deploy dump to `/var/backups/clan-wars`, which the nightly backup unit
+   (`clan-wars-backup.service`, no `User=`) creates **root-owned** — so on a
+   host where the nightly backup ran first, `acab`'s dump fails with EACCES.
+   That failure is recoverable (it aborts before the migration, restores and
+   alerts `CRITICAL`), but it happens inside the outage window and it will fail
+   rehearsal 1:
+
+       sudo install -d -o acab -g acab /var/backups/clan-wars
+
+   ⚠️ `install -d` on an existing directory resets its ownership, which is what
+   is wanted here: root can still write to a directory owned by `acab`, so the
+   nightly backup is unaffected, while the deployer gains the access it needs.
+
 2. **Seed the state file with the tag currently live**, run as `acab` so it
    matches the directory's ownership from step 1 (substitute the real tag —
    `pnpm deploy:select` prints it):
@@ -86,7 +100,17 @@ event, triggered by whatever the first bad release happens to be.
          /etc/systemd/system/clan-wars-deploy.service
        sudo ln -s /opt/clan-wars/deploy/systemd/clan-wars-deploy.timer \
          /etc/systemd/system/clan-wars-deploy.timer
-       sudo systemctl daemon-reload && sudo systemctl enable --now clan-wars-deploy.timer
+       sudo systemctl daemon-reload
+
+   ⚠️ **`daemon-reload` only — do not `enable --now` the timer here.** This
+   step installs the units; enabling the timer is a separate decision, taken in
+   `docs/deploy/2026-09-16-auto-deploy.md`, and only once its step 0
+   prerequisites and step 2 dry run have passed and someone is at a terminal
+   ready to run its step 4 rehearsals and watch them. Enabling it from here —
+   four lines under the ⚠️ above saying the rollback has never executed on this
+   host — makes an unrehearsed `rollback()`, which drops and recreates
+   `factions_live`, a production event triggered by whatever release happens to
+   fail first.
 
 ⚠️ The deploy state lives at `/var/lib/clan-wars/deployed-tag`, deliberately
 outside this tree: a file inside it would be rewritten by the deploy's own
