@@ -13,13 +13,20 @@
  * throws rather than doing its best: refusing to write costs at most a window
  * that opens two hours late, and the next slot retries.
  */
+// The match is textual, not JSON-aware — it finds bytes to splice, never the
+// authority on the current value; the same scope note events-xml.ts carries
+// for its own `[^>]*` bounding.
 const KEY_RE = /("disableBaseDamage"\s*:\s*)(true|false)/g;
 
 export function setBaseDamageDisabled(json: string, wanted: boolean): { json: string; changed: boolean } {
   // Guard: the input itself must be valid. A file that is already broken is not
-  // one we should be splicing into and re-uploading.
+  // one we should be splicing into and re-uploading. Keep the parsed result —
+  // it is the only trustworthy source for "is this already in the wanted
+  // state", because the regex below cannot tell GeneralData's key apart from
+  // an identically-named one that has drifted somewhere else in the file.
+  let input: unknown;
   try {
-    JSON.parse(json);
+    input = JSON.parse(json);
   } catch (err) {
     throw new Error(`cfggameplay.json: input did not parse — refusing to edit it (${(err as Error).message})`);
   }
@@ -35,9 +42,24 @@ export function setBaseDamageDisabled(json: string, wanted: boolean): { json: st
     );
   }
 
-  const m = matches[0]!;
-  if ((m[2] === "true") === wanted) return { json, changed: false };
+  // The no-op decision — and every other decision below — comes from the
+  // parsed GeneralData value, never from the regex match: a key that appears
+  // exactly once but has drifted outside GeneralData still passes the two
+  // guards above, so only this check catches it. Read it as absent (missing,
+  // wrong type, or simply not under GeneralData) and throw, the same as a
+  // literally-missing key — "the key the server reads" means GeneralData's,
+  // not any key with this name anywhere in the file.
+  const current = (input as { GeneralData?: { disableBaseDamage?: unknown } })?.GeneralData?.disableBaseDamage;
+  if (typeof current !== "boolean") {
+    throw new Error(
+      `cfggameplay.json: no "disableBaseDamage" key found under GeneralData.disableBaseDamage — ` +
+        "refusing to guess where the key the server reads went",
+    );
+  }
 
+  if (current === wanted) return { json, changed: false };
+
+  const m = matches[0]!;
   const from = m.index!;
   const to = from + m[0].length;
   const next = json.slice(0, from) + m[1] + String(wanted) + json.slice(to);

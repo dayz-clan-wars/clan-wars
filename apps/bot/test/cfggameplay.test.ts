@@ -62,4 +62,27 @@ describe("setBaseDamageDisabled", () => {
     const misplaced = '{\n\t"GeneralData": {\n\t\t"disableContainerDamage": false\n\t},\n\t"Other": {\n\t\t"disableBaseDamage": true\n\t}\n}';
     expect(() => setBaseDamageDisabled(misplaced, false)).toThrow(/GeneralData\.disableBaseDamage/);
   });
+
+  it("⚠️ throws rather than reporting a no-op when the key has drifted out of GeneralData and happens to already match", () => {
+    // GeneralData does not carry the key at all; a different object does, exactly
+    // once, with a value equal to `wanted`. Deciding the no-op from the regex
+    // match alone (rather than from GeneralData itself) reads this as "already
+    // correct" and returns the input untouched — no throw, no upload, no record,
+    // nothing says the window never opened.
+    const drifted = '{\n\t"GeneralData": {\n\t\t"disableContainerDamage": false\n\t},\n\t"Other": {\n\t\t"disableBaseDamage": true\n\t}\n}';
+    expect(() => setBaseDamageDisabled(drifted, true)).toThrow(/GeneralData\.disableBaseDamage/);
+  });
+
+  it("⚠️ throws when GeneralData.disableBaseDamage is present but not a boolean", () => {
+    // GeneralData's own value is the string "true" (not the bare token KEY_RE
+    // matches), while an unrelated object carries a real, bare `false` that
+    // happens to equal `wanted`. Deciding from the regex match alone reads
+    // this as "already correct" and returns silently, with GeneralData's
+    // string never touched or reported — it must throw instead.
+    const wrongType = REAL.replace(
+      '"disableBaseDamage": true',
+      '"disableBaseDamage": "true"',
+    ).replace('"VehicleData": {', '"SomeModData": {\n\t\t"disableBaseDamage": false\n\t},\n\t"VehicleData": {');
+    expect(() => setBaseDamageDisabled(wrongType, false)).toThrow(/GeneralData\.disableBaseDamage/);
+  });
 });
