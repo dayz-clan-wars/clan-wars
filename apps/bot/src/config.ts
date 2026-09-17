@@ -29,6 +29,12 @@ export type BotConfig = {
    * fixture would otherwise need a channel id for a feature it does not use.
    */
   warLogChannelId: string | undefined;
+  /**
+   * Where release notes post, oldest first, one per tick. Undefined means it
+   * is OFF: `release_announcements` rows keep queuing and nothing posts —
+   * same degrade-not-refuse shape as `warLogChannelId`.
+   */
+  releaseChannelId: string | undefined;
   /** #kill-feed. Optional: the kill feed is off unless deliberately turned on. */
   killFeedChannelId?: string;
   /** #hit-feed. Optional: the hit feed is off unless deliberately turned on. */
@@ -299,6 +305,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     disbandAfterDormantMs: positiveInt(env, "BOT_DISBAND_AFTER_DORMANT_MS", DEFAULT_DISBAND_AFTER_DORMANT_MS),
     feedChannelId: optionalSnowflake(env, "BOT_FEED_CHANNEL_ID"),
     warLogChannelId: optionalSnowflake(env, "WAR_LOG_CHANNEL_ID"),
+    releaseChannelId: optionalSnowflake(env, "RELEASE_CHANNEL_ID"),
     killFeedChannelId: optionalSnowflake(env, "KILL_FEED_CHANNEL_ID"),
     hitFeedChannelId: optionalSnowflake(env, "HIT_FEED_CHANNEL_ID"),
     killstreakFeedChannelId: optionalSnowflake(env, "KILLSTREAK_FEED_CHANNEL_ID"),

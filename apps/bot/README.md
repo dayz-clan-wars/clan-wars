@@ -17,6 +17,7 @@ in-game verification tick confirms it.
 | `BOT_DISBAND_AFTER_DORMANT_MS` | no (default `1209600000`, 14 days) | How long a clan stays dormant before it is disbanded. Default from `packages/domain/src/rules.ts` (`DISBAND_AFTER_DORMANT_MS`). Plain decimal digits only. |
 | `BOT_FEED_CHANNEL_ID` | no (unset means the feed is off) | The Discord channel id the faction feed posts embeds to. Unset by default: `faction_events` rows still accumulate, nothing posts. The bot needs **View Channel, Send Messages and Embed Links** in that channel — without Embed Links every post fails and blocks the queue at that row. |
 | `WAR_LOG_CHANNEL_ID` | no (unset means the war log is off) | The Discord channel id `#war-log` posts to — raids, defenses, and (later) week and season closes (`war_log_events`, spec §9.2). Unset by default: rows still accumulate, nothing posts. The bot needs **View Channel and Send Messages** in that channel. |
+| `RELEASE_CHANNEL_ID` | no (unset means release notes are off) | The Discord channel release notes post to, one message per release, oldest first (`release_announcements`). Rows are queued by `pnpm release:sync`, which `deploy/deploy-release.sh` runs after a verified deploy. Unset by default: rows still accumulate, nothing posts — and ⚠️ they all post at once when a channel is first configured. The bot needs **View Channel and Send Messages** in that channel. |
 | `FLAG_IMAGE_BASE_URL` | no (unset means embeds post without a thumbnail) | An absolute http(s) URL — a bare origin, no path, query string or fragment — that `apps/web` serves the 33 flag images from. Set, the feed's resolver returns `<base>/flags/<texture>.png` for each embed's thumbnail; unset or empty, it returns `null` and embeds post exactly as they do today. Use `https://dayzclanwars.com`; a trailing slash is tolerated and stripped. The bot never fetches this URL to check it — a wrong value costs a missing thumbnail, nothing more. |
 | `SITE_BASE_URL` | no (default `https://dayzclanwars.com`) | Bare origin of the site. Every command embed links here, the unrouted-interaction fallback (a stale client or a dead button) points here, and so does the ceremony DM. |
 | `CLAN_TEXT_CATEGORY_ID` | yes | The Discord category id the bot creates clan text channels in. Right-click the category with Developer Mode enabled to copy it. |
@@ -49,6 +50,7 @@ BOT_DORMANT_AFTER_MS=604800000
 BOT_DISBAND_AFTER_DORMANT_MS=1209600000
 BOT_FEED_CHANNEL_ID=1234567890123456789
 WAR_LOG_CHANNEL_ID=1234567890123456789
+RELEASE_CHANNEL_ID=1549900456078090260
 FLAG_IMAGE_BASE_URL=https://dayzclanwars.com
 SITE_BASE_URL=https://dayzclanwars.com
 CLAN_TEXT_CATEGORY_ID=12345678901234567
