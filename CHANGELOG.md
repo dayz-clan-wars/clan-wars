@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- An acceptance record for the automatic deployment system,
+  `docs/acceptance/2026-09-17-auto-deploy.md`: what the three rehearsals proved,
+  the six-minute outage the second one caused and why, the measured downtime of
+  a real rollback, and an explicit list of what the acceptance does **not**
+  establish.
+
 ### Fixed
 
 - The release deployer can no longer be rewritten out from under itself. It
