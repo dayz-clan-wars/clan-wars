@@ -42,14 +42,16 @@ export function closeText(state: RaidWindowState): string {
 export function failureText(boundaryAt: Date, wantedDisabled: boolean, error: string): string {
   // ⚠️ "still" is the OPPOSITE of `wantedDisabled`, not that value restated: a failed
   // flip leaves the file exactly where it was before the attempt, and a boundary flip
-  // always tries to move AWAY from that prior value (open wants disableBaseDamage=false,
-  // close wants disableBaseDamage=true) — so what the file "still" is, is whatever
-  // `wantedDisabled` was trying to leave behind.
+  // always wants to move AWAY from that prior value (open wants disableBaseDamage=false,
+  // close wants disableBaseDamage=true). disableBaseDamage=true means raiding is OFF
+  // (see raid-window.ts), so failing to write wantedDisabled=false leaves the file at
+  // disableBaseDamage=true — still OFF — and failing to write wantedDisabled=true
+  // leaves it at disableBaseDamage=false — still ON.
   return [
     "⚠️ **Raid window flip failed.**",
     `Boundary: ${boundaryAt.toISOString()}`,
     `Wanted: disableBaseDamage=${wantedDisabled}`,
-    `The file was NOT changed, so base damage is still ${wantedDisabled ? "OFF" : "ON"}.`,
+    `The file was NOT changed, so base damage is still ${wantedDisabled ? "ON" : "OFF"}.`,
     `Error: ${error}`,
     "The next restart slot retries automatically. This alert fires once per boundary.",
   ].join("\n");

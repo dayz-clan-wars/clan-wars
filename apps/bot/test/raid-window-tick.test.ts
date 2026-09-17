@@ -91,11 +91,29 @@ describe("raidWindowTick", () => {
     await raidWindowTick(db, { announce, ops }, { now: FRI });
     expect(ops).toHaveBeenCalledTimes(1);
     expect(ops.mock.calls[0]![0]).toMatch(/Raid window flip failed/);
-    expect(ops.mock.calls[0]![0]).toMatch(/still ON/);
+    // Friday open wants disableBaseDamage=false; refused, the file stays at
+    // disableBaseDamage=true (its prior, unopened value) — still OFF.
+    expect(ops.mock.calls[0]![0]).toMatch(/still OFF/);
 
     // Two hours later the tick runs again. The flip retries; the alert must not.
     await raidWindowTick(db, { announce, ops }, { now: new Date(FRI.getTime() + 2 * 60 * 60 * 1000) });
     expect(ops).toHaveBeenCalledTimes(1);
+  });
+
+  it("⚠️ a refused CLOSE flip (wantedDisabled=true) reports 'still ON'", async () => {
+    // The unexercised case: Monday close wants disableBaseDamage=true; refused, the
+    // file stays at disableBaseDamage=false (its prior, still-open value) — still ON.
+    await seedServer(db, 915);
+    const MON = new Date("2026-09-21T00:00:00.000Z");
+    await db.insert(raidWindowFlips).values({
+      serverId: 915, boundaryAt: MON, wantedDisabled: true,
+      outcome: "refused", detail: { error: "boom" },
+    });
+    const announce = vi.fn(async (_content: string) => undefined);
+    const ops = vi.fn(async (_content: string) => undefined);
+    await raidWindowTick(db, { announce, ops }, { now: MON });
+    expect(ops).toHaveBeenCalledTimes(1);
+    expect(ops.mock.calls[0]![0]).toMatch(/still ON/);
   });
 
   it("⚠️ a refused flip never produces an 'open' message", async () => {
