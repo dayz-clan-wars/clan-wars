@@ -14,6 +14,7 @@
 
 - **The window's numbers live in `RAID_WINDOW = { openDow: 5, closeDow: 1 }`** in `packages/domain/src/rules.ts` and are never restated. The guide renders them through `packages/domain/src/guide-numbers.ts`.
 - **All time arithmetic is UTC.** No local time, no DST handling anywhere in this feature.
+- **⚠️ `boundaryAt` is computed ONCE, in `raidWindowAt`, and is always in the past.** The flip writer, the announcer and the website all read `state.boundaryAt`. No consumer derives it again — three independent derivations disagreed for midweek instants during the pre-flight scan, which would have left the site reading "unconfirmed" every midweek forever.
 - **The file value, not the player value.** `baseDamageDisabled: true` means raiding is OFF. Nothing inverts this at a write site.
 - **Never `JSON.parse` → mutate → `JSON.stringify` on `cfggameplay.json`.** Surgical regex replacement only. A malformed `cfggameplay.json` means the game server does not start, for every player.
 - **No upload unless the content actually changed.** The download is the check.
@@ -137,6 +138,29 @@ describe("raidWindowAt", () => {
     expect(s.opensAt.toISOString()).toBe(FRI_OPEN.toISOString());
   });
 
+  it("⚠️ boundaryAt is the open instant while the window is open", () => {
+    expect(raidWindowAt(new Date("2026-09-19T13:45:00.000Z"), []).boundaryAt.toISOString())
+      .toBe(FRI_OPEN.toISOString());
+  });
+
+  it("⚠️ boundaryAt is the PREVIOUS close midweek, never the coming one", () => {
+    // Wednesday. Base damage is off because the PREVIOUS Monday's close turned it
+    // off; the coming Monday has not happened and nothing can have recorded it.
+    const s = raidWindowAt(new Date("2026-09-16T12:00:00.000Z"), []);
+    expect(s.phase).toBe("closed");
+    expect(s.closesAt.toISOString()).toBe("2026-09-21T00:00:00.000Z"); // ahead
+    expect(s.boundaryAt.toISOString()).toBe("2026-09-14T00:00:00.000Z"); // behind
+  });
+
+  it("⚠️ boundaryAt is never in the future, at any instant across a full week", () => {
+    // The invariant every consumer leans on. Half-hourly across a week.
+    const start = Date.parse("2026-09-14T00:00:00.000Z");
+    for (let i = 0; i < 7 * 48; i++) {
+      const when = new Date(start + i * 30 * 60 * 1000);
+      expect(raidWindowAt(when, []).boundaryAt.getTime()).toBeLessThanOrEqual(when.getTime());
+    }
+  });
+
   it("tolerates duplicate skip rows for the same window", () => {
     const s = raidWindowAt(FRI_OPEN, [
       { opensAt: FRI_OPEN, reason: "first" },
@@ -176,6 +200,18 @@ export type RaidWindowState = {
   /** The window containing `when`, or the next one if `when` is outside one. */
   opensAt: Date;
   closesAt: Date;
+  /**
+   * The most recent window boundary at or before `when` — the open instant while
+   * the window is open, the previous close instant while it is closed.
+   *
+   * ⚠️ ALWAYS in the past. A flip record describes something that has already
+   * happened, so every consumer keys on this and none of them derives it again.
+   * Three independent derivations of it disagreed for midweek instants during the
+   * pre-flight scan: the writer recorded the COMING Monday while the readers looked
+   * for the PREVIOUS one, which would have left the website reading "unconfirmed"
+   * every midweek forever and never posted a close announcement.
+   */
+  boundaryAt: Date;
   /** Set only when phase is "skipped". */
   skipReason?: string;
 };
@@ -209,13 +245,18 @@ export function raidWindowAt(when: Date, skips: SkippedWindow[]): RaidWindowStat
   const opensAt = inWindow ? lastOpen : new Date(lastOpen.getTime() + 7 * DAY_MS);
   const closesAt = inWindow ? closeOfLast : new Date(closeOfLast.getTime() + 7 * DAY_MS);
 
+  // ⚠️ The boundary already passed, never the one ahead. In the window that is
+  // its open; outside it, the close that ended the PREVIOUS window — which is
+  // `closesAt` shifted back one week, since closesAt is the next window's close.
+  const boundaryAt = inWindow ? opensAt : new Date(closesAt.getTime() - 7 * DAY_MS);
+
   const skip = skips.find((s) => s.opensAt.getTime() === opensAt.getTime());
   if (skip) {
-    return { phase: "skipped", baseDamageDisabled: true, opensAt, closesAt, skipReason: skip.reason };
+    return { phase: "skipped", baseDamageDisabled: true, opensAt, closesAt, boundaryAt, skipReason: skip.reason };
   }
   return inWindow
-    ? { phase: "open", baseDamageDisabled: false, opensAt, closesAt }
-    : { phase: "closed", baseDamageDisabled: true, opensAt, closesAt };
+    ? { phase: "open", baseDamageDisabled: false, opensAt, closesAt, boundaryAt }
+    : { phase: "closed", baseDamageDisabled: true, opensAt, closesAt, boundaryAt };
 }
 ```
 
@@ -230,7 +271,7 @@ export * from "./raid-window";
 - [ ] **Step 5: Run the tests**
 
 Run: `cd packages/domain && npx vitest run test/raid-window.test.ts`
-Expected: PASS, 9 tests.
+Expected: PASS, 12 tests.
 
 - [ ] **Step 6: Commit**
 
@@ -958,12 +999,13 @@ describe("applyRaidWindow", () => {
     expect(t.uploadFile).not.toHaveBeenCalled();
   });
 
-  it("⚠️ a midweek slot reports the CLOSE boundary, not the slot", async () => {
+  it("⚠️ a midweek slot reports the close that ALREADY happened", async () => {
     const t = target();
     const r = await applyRaidWindow(t as never, WED, []);
-    // Wednesday sits after Monday's close and before Friday's open; the flip that
-    // put base damage off is the close, and that is the row it belongs to.
-    expect(r.boundaryAt.toISOString()).toBe("2026-09-21T00:00:00.000Z");
+    // Wednesday sits after Monday's close and before Friday's open. The flip that
+    // put base damage off is the PREVIOUS Monday — the coming one has not happened,
+    // so nothing could have recorded it, and the readers would find nothing.
+    expect(r.boundaryAt.toISOString()).toBe("2026-09-14T00:00:00.000Z");
   });
 });
 ```
@@ -1037,19 +1079,23 @@ export async function applyRaidWindow(
 
   const { json, changed } = setBaseDamageDisabled(original, state.baseDamageDisabled);
 
-  // ⚠️ The boundary this flip realises: the open instant while the window is
-  // open or skipped, the close instant once it has closed.
-  const boundaryAt = state.phase === "open" ? state.opensAt : state.closesAt;
-
   if (changed) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
 
-  return { boundaryAt, wantedDisabled: state.baseDamageDisabled, changed, previousContent: original };
+  // ⚠️ state.boundaryAt, never a local derivation. The announcer and the website
+  // key their confirmation lookups on the same field; deriving it here independently
+  // is how the writer and the readers ended up disagreeing about midweek instants.
+  return {
+    boundaryAt: state.boundaryAt,
+    wantedDisabled: state.baseDamageDisabled,
+    changed,
+    previousContent: original,
+  };
 }
 ```
 
-⚠️ For a `closed` or `skipped` state the boundary is `closesAt`, which for a
-midweek instant is the coming Monday. That is intended: a midweek repair belongs to
-the close that put base damage off, and the row is upserted so it converges.
+⚠️ For a `closed` state the boundary is the close that ALREADY happened — the
+previous Monday, not the coming one. A midweek repair belongs to the close that put
+base damage off, and the row is upserted so repeated repairs converge on one row.
 
 - [ ] **Step 4: Run the tests**
 
@@ -1075,7 +1121,7 @@ In `restartTick`, inside the per-server `try`, immediately AFTER the `opts.truck
         const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason })
           .from(raidWindowSkips);
         const state = raidWindowAt(slot.start, skips);
-        const boundaryAt = state.phase === "open" ? state.opensAt : state.closesAt;
+        const boundaryAt = state.boundaryAt;
         try {
           flip = await applyRaidWindow(nitrado, slot.start, skips);
           if (flip.changed) {
@@ -1377,11 +1423,11 @@ export async function raidWindowTick(
       if (await postOnce(db, posters.announce, state.opensAt, "open", openText(state), opts.now)) out.posted++;
     } else out.skipped++;
   } else if (state.phase === "closed") {
-    // The close that just happened is the previous window's closesAt, which for a
-    // closed state is exactly one week before the next one.
-    const justClosed = new Date(state.opensAt.getTime() - (7 * 24 * 60 * 60 * 1000 - (state.closesAt.getTime() - state.opensAt.getTime())));
-    if (await confirmed(db, justClosed)) {
-      if (await postOnce(db, posters.announce, justClosed, "close", closeText(state), opts.now)) out.posted++;
+    // ⚠️ state.boundaryAt is the close that already happened — the same field the
+    // flip was recorded under. Deriving it here instead is what made the writer and
+    // this reader disagree about midweek instants during the pre-flight scan.
+    if (await confirmed(db, state.boundaryAt)) {
+      if (await postOnce(db, posters.announce, state.boundaryAt, "close", closeText(state), opts.now)) out.posted++;
     } else out.skipped++;
   }
 
@@ -1711,9 +1757,9 @@ export async function baseDamageWindowDb(db: Database, now: Date): Promise<BaseD
     return { status: "skipped", opensAt: state.opensAt, closesAt: state.closesAt, skipReason: state.skipReason };
   }
 
-  const boundary = state.phase === "open"
-    ? state.opensAt
-    : new Date(state.opensAt.getTime() - (7 * 24 * 60 * 60 * 1000 - (state.closesAt.getTime() - state.opensAt.getTime())));
+  // ⚠️ state.boundaryAt, never derived here. One statement of one fact: the flip
+  // was written under this instant, and this is where we look for it.
+  const boundary = state.boundaryAt;
 
   const [row] = await db.select({ serverId: raidWindowFlips.serverId })
     .from(raidWindowFlips)
