@@ -1,7 +1,8 @@
-import { serverRestarts, servers, type Database } from "@factions/db";
-import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
+import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow } from "@factions/domain";
+import { and, eq, isNotNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
+import { setBaseDamageDisabled } from "./cfggameplay.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -9,6 +10,8 @@ export type RestartTarget = {
   restart(message: string): Promise<void>;
   /** Only reached when a truck wipe is configured. */
   missionDbDir(): Promise<string>;
+  /** Only reached when the raid window flip is enabled. */
+  missionRootDir(): Promise<string>;
   downloadFile(path: string): Promise<string>;
   uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
 };
@@ -54,6 +57,60 @@ async function applyTruckWipe(nitrado: RestartTarget, wipe: TruckWipe, slot: Dat
   await nitrado.uploadFile(dir, EVENTS_FILE, xml);
   return true;
 }
+
+export type RaidWindow = { enabled: boolean };
+
+/** The cfggameplay.json file name, in the mission ROOT (not `db`, not `custom`). */
+const GAMEPLAY_FILE = "cfggameplay.json";
+
+export type RaidFlip = {
+  boundaryAt: Date;
+  wantedDisabled: boolean;
+  changed: boolean;
+  previousContent: string;
+};
+
+/**
+ * Bring one server's cfggameplay.json to the state `slot` wants, immediately
+ * before its restart.
+ *
+ * ⚠️ Level-triggered, exactly like applyTruckWipe. Every slot recomputes the
+ * wanted value, so a bot down across Friday 00:00 opens the window LATE rather
+ * than not at all, and a lost or hand-reverted write is corrected within two
+ * hours. An edge-triggered version ("on the Friday slot, set false") loses a
+ * whole weekend to one missed tick and nothing anywhere notices.
+ *
+ * ⚠️ The returned boundaryAt is the WINDOW boundary, never the slot: a Saturday
+ * repair belongs to that Friday's row.
+ *
+ * ⚠️ Throws rather than uploading whenever a guard in setBaseDamageDisabled
+ * rejects the edit. Refusing costs a window that opens two hours late; writing a
+ * cfggameplay.json that does not parse costs every player the server itself.
+ */
+export async function applyRaidWindow(
+  nitrado: RestartTarget,
+  slot: Date,
+  skips: SkippedWindow[],
+): Promise<RaidFlip> {
+  const state = raidWindowAt(slot, skips);
+  const dir = await nitrado.missionRootDir();
+  const original = await nitrado.downloadFile(`${dir}/${GAMEPLAY_FILE}`);
+
+  const { json, changed } = setBaseDamageDisabled(original, state.baseDamageDisabled);
+
+  if (changed) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
+
+  // ⚠️ state.boundaryAt, never a local derivation. The announcer and the website
+  // key their confirmation lookups on the same field; deriving it here independently
+  // is how the writer and the readers ended up disagreeing about midweek instants.
+  return {
+    boundaryAt: state.boundaryAt,
+    wantedDisabled: state.baseDamageDisabled,
+    changed,
+    previousContent: original,
+  };
+}
+
 export const RESTART_MESSAGE = "Scheduled restart";
 
 type Outcome = "restarted" | "skipped" | "missed";
@@ -95,7 +152,7 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
 export async function restartTick(
   db: Database,
   nitradoFor: (serviceId: number) => RestartTarget,
-  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe },
+  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
   const lastError = opts.lastError ?? moduleLastError;
@@ -151,7 +208,66 @@ export async function restartTick(
         }
       }
 
+      // ⚠️ BEFORE the restart POST and only for a server actually being restarted:
+      // DayZ reads cfggameplay.json at boot, so a write after the POST does not take
+      // effect for another two hours. ⚠️ Its own try/catch — a refused flip must
+      // never cost the restart; the next slot recomputes the wanted state anyway.
+      let flip: RaidFlip | undefined;
+      if (opts.raidWindow?.enabled) {
+        // ⚠️ The boundary is computed BEFORE the attempt, so the catch below can key
+        // its row on the same boundary a success would have used. Keying a refusal on
+        // the SLOT instead would write a fresh row every two hours — up to 12 a day —
+        // and the failure alert, which fires once per (boundary, kind), would fire
+        // once per slot with it. That is the exact alert-burial this design refuses.
+        const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason })
+          .from(raidWindowSkips);
+        const state = raidWindowAt(slot.start, skips);
+        const boundaryAt = state.boundaryAt;
+        try {
+          flip = await applyRaidWindow(nitrado, slot.start, skips);
+          if (flip.changed) {
+            await db.insert(raidWindowFlips).values({
+              serverId: s.id,
+              boundaryAt: flip.boundaryAt,
+              wantedDisabled: flip.wantedDisabled,
+              outcome: "applied",
+              appliedAt: opts.now,
+              previousContent: flip.previousContent,
+            }).onConflictDoUpdate({
+              target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
+              set: { outcome: "applied", appliedAt: opts.now, wantedDisabled: flip.wantedDisabled },
+            });
+            console.log(`raid window: server ${s.id} set disableBaseDamage=${flip.wantedDisabled} for ${flip.boundaryAt.toISOString()}`);
+          }
+        } catch (err) {
+          const detail = { error: err instanceof Error ? err.message : String(err) };
+          console.error(`raid window: server ${s.id} REFUSED the flip for slot ${slot.start.toISOString()} — restarting anyway`, err);
+          await db.insert(raidWindowFlips).values({
+            serverId: s.id,
+            boundaryAt,
+            wantedDisabled: state.baseDamageDisabled,
+            outcome: "refused",
+            detail,
+          }).onConflictDoUpdate({
+            target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
+            // ⚠️ Only downgrade a row that is not already applied. A later slot that
+            // fails must never turn a confirmed flip into a refusal — that would make
+            // the website stop saying LIVE for a window that genuinely is live.
+            setWhere: sql`${raidWindowFlips.outcome} <> 'applied'`,
+            set: { outcome: "refused", detail },
+          }).catch(() => undefined);
+        }
+      }
+
       await nitrado.restart(RESTART_MESSAGE);
+      // ⚠️ An upload whose restart did not happen is NOT in effect. Confirmation is
+      // what the website and the open/close announcements read; recording it before
+      // the restart would make them assert a flip the server has not loaded.
+      if (flip?.changed) {
+        await db.update(raidWindowFlips).set({ restartConfirmedAt: opts.now })
+          .where(and(eq(raidWindowFlips.serverId, s.id), eq(raidWindowFlips.boundaryAt, flip.boundaryAt)))
+          .catch(() => undefined);
+      }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;
         console.log(`restart: server ${s.id} restarted for ${slot.start.toISOString()}`);

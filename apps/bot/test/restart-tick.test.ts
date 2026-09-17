@@ -21,6 +21,7 @@ function fakeNitrado(statusValue = "started", restartImpl?: () => Promise<void>)
     status,
     restart,
     missionDbDir: unreachable("missionDbDir"),
+    missionRootDir: unreachable("missionRootDir"),
     downloadFile: unreachable("downloadFile"),
     uploadFile: unreachable("uploadFile"),
   } as unknown as RestartTarget;
