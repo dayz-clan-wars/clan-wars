@@ -151,9 +151,18 @@ revert_tree() {
 # and the compose lookup is empty when `sudo -n` is refused. Either way we cannot
 # name what we are restoring to, and continuing would leave the NEW image in
 # place under a message saying otherwise.
-# ⚠️ `docker compose config --images` runs even under --dry-run (read-only, but
-# privileged), so a dry run is not runnable unprivileged — same precedent as the
-# `compose images -q` capture in the flow below.
+# ⚠️ NEVER resolve the target with `docker compose config --images <svc>`. It
+# returns the service's image AND its dependencies', newest-first, so for `web`
+# it prints:
+#     postgres:16-alpine
+#     clan-wars-web
+# A `head -1` on that retags the POSTGRES tag to the web image. That is not
+# hypothetical: it happened on 2026-09-17 during rehearsal 2 and took production
+# down — postgres entered a restart loop, the rollback could not start the
+# restored release, and rollback_abort stopped everything. The image name is
+# derived from the compose project name instead, which is what compose itself
+# uses for a build-only service (`<project>-<service>`), and $COMPOSE_PROJECT is
+# resolved once in the preflight and verified against a real image there.
 retag_previous_images() {
   local svc prev target
   for svc in web ingest-worker; do
@@ -165,11 +174,12 @@ retag_previous_images() {
       RETAG_ERROR="no previous image was captured for $svc; the NEW image would keep running"
       return 1
     fi
-    target=$(sudo -n docker compose config --images "$svc" 2>/dev/null | head -1 || true)
-    if [ -z "$target" ]; then
-      RETAG_ERROR="could not resolve the compose image name for $svc; the NEW image would keep running"
+    if [ -z "${COMPOSE_PROJECT:-}" ]; then
+      RETAG_ERROR="the compose project name was never resolved; cannot name the image to restore for $svc"
       return 1
     fi
+    target="${COMPOSE_PROJECT}-${svc}:latest"
+
     if ! run sudo -n docker tag "$prev" "$target"; then
       RETAG_ERROR="could not retag $target to $prev; the NEW $svc image would start"
       return 1
@@ -605,6 +615,29 @@ echo "deploying $CURRENT -> $TAG (host-config=$HOST_CONFIG migrations=$MIGRATION
 PREV_IMAGE_WEB=$(sudo -n docker compose images -q web 2>/dev/null || true)
 PREV_IMAGE_WORKER=$(sudo -n docker compose images -q ingest-worker 2>/dev/null || true)
 
+# ⚠️ The compose project name, resolved ONCE here and used by
+# retag_previous_images to name what it restores to. Compose names a
+# build-only service's image `<project>-<service>`, so this plus the service
+# name is the whole derivation.
+# ⚠️ Verified against a real image immediately below, and the deploy REFUSES if
+# it does not resolve. That refusal is deliberate and cheap: nothing is stopped
+# yet. The alternative — discovering at rollback time that we cannot name the
+# image to restore — is what took production down on 2026-09-17, when the old
+# `docker compose config --images <svc> | head -1` resolved to postgres:16-alpine
+# and the rollback retagged the POSTGRES tag onto an application image.
+COMPOSE_PROJECT=$(sudo -n docker compose config --format json 2>/dev/null \
+  | python3 -c 'import json,sys; print(json.load(sys.stdin).get("name") or "")' 2>/dev/null || true)
+if [ -z "$COMPOSE_PROJECT" ]; then
+  alert "BLOCKED" "could not resolve the compose project name, so a rollback could not name the images to restore; refusing to deploy $TAG with nothing stopped"
+  exit 1
+fi
+for svc in web ingest-worker; do
+  if [ -z "$(sudo -n docker images -q "${COMPOSE_PROJECT}-${svc}:latest" 2>/dev/null)" ]; then
+    alert "BLOCKED" "derived image name ${COMPOSE_PROJECT}-${svc}:latest matches no image, so a rollback could not restore $svc; refusing to deploy $TAG with nothing stopped"
+    exit 1
+  fi
+done
+
 # ⚠️ Pin each captured image under a NAME immediately, and roll back to the
 # name rather than the id. The `docker compose build` below retags the compose
 # image name onto the newly built image, which leaves the image captured above
@@ -618,8 +651,10 @@ PREV_IMAGE_WORKER=$(sudo -n docker compose images -q ingest-worker 2>/dev/null |
 # ⚠️ Non-fatal: if the pin fails we keep the bare id, which is still a correct
 # rollback target for as long as nothing prunes. Refusing to deploy because a
 # protective retag failed would trade a small risk for a certain outage.
-ROLLBACK_IMAGE_WEB=clan-wars-web:rollback
-ROLLBACK_IMAGE_WORKER=clan-wars-ingest-worker:rollback
+# ⚠️ Same derivation as the restore target, not a second hardcoded copy — two
+# statements of one fact drift, and the one that drifts here retags a wrong tag.
+ROLLBACK_IMAGE_WEB="${COMPOSE_PROJECT}-web:rollback"
+ROLLBACK_IMAGE_WORKER="${COMPOSE_PROJECT}-ingest-worker:rollback"
 if [ -n "$PREV_IMAGE_WEB" ]; then
   if run sudo -n docker tag "$PREV_IMAGE_WEB" "$ROLLBACK_IMAGE_WEB"; then
     PREV_IMAGE_WEB="$ROLLBACK_IMAGE_WEB"

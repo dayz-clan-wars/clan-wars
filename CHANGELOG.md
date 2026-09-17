@@ -5,11 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The deployer's rollback no longer retags the **postgres** image when
+  restoring the previous release. It resolved the target with
+  `docker compose config --images <service>`, which also lists the service's
+  dependencies, so the first line was `postgres:16-alpine` — pointing the
+  database's image tag at an application image and putting postgres into a
+  restart loop. Found by rehearsal 2 on 2026-09-17, which took production down
+  for about six minutes; no data was lost.
+
 ### Changed
 
-- Rehearsal 2: a deliberately unhealthy release, used once to prove the
-  deployer's automatic rollback restores code, images, host config and
-  database. Reverted immediately afterwards.
+- Rehearsal 2's deliberately unhealthy release is reverted.
 
 ## [1.16.1] - 2026-09-17
 
