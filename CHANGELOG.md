@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.16.5] - 2026-09-17
+
 ### Changed
 
 - Rehearsal 2, re-run: a deliberately unhealthy release, used once to prove the
@@ -12,6 +14,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   after the image-retag fix in 1.16.3. Reverted here. The rollback passed: 1
   minute 57 seconds of downtime, including a full drop-and-restore of
   `factions_live`, with no human involved.
+
+## [1.16.4] - 2026-09-17 [WITHDRAWN]
+
+Not a release. This tag is rehearsal 2's re-run — a deliberately unhealthy
+build, cut to prove the automatic rollback after the image-retag fix in 1.16.3.
+It is recorded rather than deleted for the same reason as 1.16.2: a tag the
+deploy history names should not be a mystery.
+
+The rollback passed in full this time. **Never deploy this tag.**
 
 ## [1.16.3] - 2026-09-17
 
