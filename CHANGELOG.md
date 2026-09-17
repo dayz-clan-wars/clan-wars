@@ -355,3 +355,214 @@ this tag.**
   bot survive states it previously died in.
 - No new player-facing behaviour; no migration.
 - Runbook: `docs/deploy/2026-09-14-single-instance-lock.md`.
+## [1.9.0] - 2026-09-13
+
+### Added
+
+- Discord command parity is complete: everything a player can do on the site,
+  they can now do in Discord. `/vault list|add|edit|reveal|confirm|delete|
+  rotate`, `/map pins|pin|unpin|view`, and the read-only group `/scoreboard
+  /alphas /seasons /warlog /player /board /achievements`.
+- A shared embed budget that counts the "+N more" line against Discord's
+  6000-character cap, closing the gap plan 2 left open. A router that can
+  open a modal from a slash command, and update a select menu in place
+  instead of stacking a new card per interaction.
+- Scoring, stats and achievement wording moved from `apps/web/lib` into
+  `@factions/copy`, byte-identical, with the web files re-exporting — the
+  site renders exactly what it rendered before; no web redeploy needed.
+
+### Fixed
+
+- A lock code could reach an operator log: `@discordjs/rest` attaches the
+  failed request body to the errors it throws, and the router's `editReply`
+  sat outside its own try/catch, so a rate limit on a `/vault reveal` reply
+  could carry the code into `console.error`. Sanitised at both logging sites.
+- `/alphas` failed outright on a week nobody scored — Discord rejects an
+  empty embed field and the roster emits every closed week, empty ones
+  included.
+- `/board` never printed the season it resolved to, so a fumbled scope could
+  silently return a different season's numbers.
+
+### Notes
+
+- ⚠️ `/unlink`, `/whoami` and `/faction` are gone the instant the bot
+  restarts. Registration is one PUT that replaces the whole command list, so
+  there is no transition period — the stubs stop existing at the same moment
+  the nine new commands appear.
+- `apps/bot/test/parity.test.ts`'s `PENDING` list is empty, and the suite
+  re-checks that on every run — a new write in `@factions/roster` with no
+  command now fails the build.
+- No migration. `apps/bot` only in effect — do not run `deploy-web.sh`.
+- Runbook: `docs/deploy/2026-09-13-discord-commands-3.md`.
+
+## [1.8.0] - 2026-09-13
+
+### Added
+
+- Discord clan commands: plan 2 of the command-parity work. Every clan-side
+  write the website supports can now be made from Discord, over the same
+  `@factions/roster` layer, with every player-facing sentence coming from
+  `@factions/copy` so an outcome cannot be covered on one surface and missing
+  on the other. New commands: `/me` (show, accept, decline, withdraw),
+  `/roster` (invite, revoke, decide, kick, promote, demote, transfer), `/clan`
+  (info, leave, rename, recruiting, rebind, disband), `/clans` (list, show,
+  join), `/lead` (claim, vote, ballot), `/found` (flag select, crew
+  multi-select, name/tag modal), `/guest` (grant, revoke).
+- Confirm buttons and modal submits route through a shared handler. The press
+  IS the write for disband, transfer, claim-succession and open-vote — the
+  slash handler never touches the roster. The router re-checks the presser
+  against the actor named in the custom id, and every write re-derives
+  eligibility from `@factions/roster` under its own row lock regardless: a
+  button is never a permission.
+
+### Fixed
+
+- `/clan info` would have shown a clan's exact base coordinate to a PENDING
+  member. `clanForDb` computes `base` for every rank while gating everything
+  else, and the website renders no coordinate on that page at all, so nothing
+  had needed the gate before. Found by the whole-branch review; now gated on
+  full membership.
+
+### Notes
+
+- ⚠️ Behaviour changes for players: `/guest` changes shape, from `/guest
+  user:` to `/guest grant user:`, plus a new `/guest revoke pass:`.
+  Registration is one PUT, so the change is instant and total — tell officers
+  before deploying. `/guest` also no longer has to be run in the clan's
+  channel; the clan is derived from the actor's own membership.
+- The retired stubs `/unlink`, `/whoami` and `/faction` stay registered and
+  still answer with a site pointer; they are removed in plan 3, along with
+  `/vault` and `/map`.
+- No migration. `apps/bot` only — do not run `deploy-web.sh`.
+- Runbook: `docs/deploy/2026-09-13-discord-commands-2.md`.
+
+## [1.7.1] - 2026-09-13
+
+### Fixed
+
+- v1.7.0 shipped a broken web image. `packages/copy/src/vault.ts` imported
+  `VAULT_NAME_MAX` and `VAULT_NOTE_MAX` as runtime values from
+  `@factions/roster`, and because `src/index.ts` is a barrel, that pulled
+  roster's pooled postgres client into the browser bundle of every page
+  importing any copy table — `apps/web/lib/link-copy.ts` is imported by
+  `link-flow.tsx`, a client component, so Turbopack failed to resolve `fs`,
+  `net`, `tls` and `perf_hooks`. The gate went 28/28 green on v1.7.0 and could
+  not have caught it: `tsc --noEmit` and vitest both resolve modules the Node
+  way, and neither runs a bundler. The failure surfaced inside the web image
+  on the production host, mid-deploy; the bot was unaffected, being Node
+  rather than a browser bundle, and shipped fine.
+- The two constants move to `@factions/domain`, beside `PIN_NOTE_MAX`, where a
+  player-facing limit belonged anyway. `vault-store.ts` re-exports them, so
+  `@factions/roster`'s pinned export list is unchanged. `@factions/roster`
+  becomes a devDependency of `@factions/copy`, every remaining use being
+  `import type`.
+
+### Notes
+
+- ⚠️ Do not deploy v1.7.0. `packages/copy/test/leaf.test.ts` is the standing
+  guard: it fails on any runtime import of `@factions/roster` from that
+  package and names the offending specifiers.
+- Deployed to regime: web image rebuilt, bot restarted on the same commit.
+
+## [1.7.0] - 2026-09-13
+
+### Added
+
+- The slash commands come back, as a second front door beside the site: an
+  earlier spec had retired every Discord command in favour of
+  `dayzclanwars.com`. `/link status|start|cancel|unlink` and `/base
+  show|declare|release` return, without giving the bot its own copy of a
+  single rule — `@factions/roster`'s 61 capability wrappers move behind
+  `makeRoster(getDb, getNow)`, so the bot binds them to its own handle and
+  runs the identical code the site runs. `interaction.user.id` is the same
+  Discord snowflake the site's session holds, so there is no new credential
+  and no impersonation path.
+- The six outcome-copy tables move to `@factions/copy`. One table per action,
+  read by both surfaces, so an outcome cannot be worded on the site and blank
+  in Discord. Autocomplete runs over live rows: characters the log has seen,
+  and — for `/base declare` — only poles the actor themselves raised at,
+  because a pole coordinate is a raid target and the scoping is a query
+  filter, not a post-hoc trim.
+
+### Notes
+
+- ⚠️ Every reply is ephemeral, by construction: the flag is set once at
+  `deferReply` and `command-registration.test.ts` asserts it structurally. A
+  challenge sequence in a public message is a challenge any reader can
+  perform, binding their own UID to someone else's Discord account.
+- Three standing guards: `parity.test.ts` accounts for all 70 roster exports
+  and fails on a new one nobody classified; the registry bijection forbids a
+  command with no handler or a handler no command reaches; and the vocabulary
+  scan now walks `packages/copy/src`, with a non-vacuity assertion so it
+  cannot silently stop walking.
+- The retired stubs for `unlink`, `whoami` and `faction` stay registered and
+  still answer with a link — they go when parity is complete, not before.
+- ⚠️ This release's web image does not build — see v1.7.1. Do not deploy this
+  tag; deploy v1.7.1 instead.
+- No migration. Runbook: `docs/deploy/2026-09-13-discord-commands.md`.
+
+## [1.6.0] - 2026-09-12
+
+### Added
+
+- Three combat feeds share one cursor loop. The hit feed groups PvP hits into
+  engagements and posts once per burst with a detail line per hit; an
+  engagement that ends in a kill is suppressed and its hits are appended to
+  the `#kill-feed` embed instead, so a fight never splits across two
+  channels. Closing is guarded three ways: the quiet window, a 120s settle
+  floor (`RECENT_HIT_WINDOW_S`, so a late "finished" death cannot claim an
+  already-posted burst), and the kills-projector cursor as the frontier
+  rather than the wall clock. The killstreak feed posts every
+  `KILLSTREAK_EVERY` kills on a hot hand; friendly fire neither advances nor
+  breaks a streak, PvE deaths do not reset one, and streaks are not
+  season-scoped. The long-range feed posts a season rank capped at 10th; a
+  null distance is skipped, never read as zero. `cursor-feed.ts` holds the
+  post-then-advance loop all four feeds share, with a render that may decline
+  an item and still advance the cursor; `kill-feed-tick.ts` folded onto it
+  with its tests unedited.
+- Daily truck wipe: event-spawned trucks are cleared once a day, riding the
+  restart slots that already exist rather than a new tick. ⚠️
+  Level-triggered, not edge-triggered — every slot recomputes the state the
+  server should boot into, so a lost write self-heals at the next restart
+  instead of leaving the trucks gone for a full day.
+- Weekly vehicle rotation: a Monday 08:00Z wipe of one of five vehicles,
+  rotating weekly and derived from the calendar rather than a stored
+  pointer, announced to Discord 24h ahead (`vehicle_wipe_announcements`,
+  migration 0033).
+
+### Notes
+
+- ⚠️ The cursor watermark took four fix rounds. Emitting an engagement whose
+  `lastEventId` sits above another's `firstEventId` buries that one's early
+  hits below the cursor forever. The rule is a fixed point — emit the largest
+  safe prefix, with the batch limit applied inside the loop and a liveness
+  fallback that deliberately exceeds the limit rather than stall, since
+  nested spans admit no smaller safe set. Verified against an exhaustive
+  subset search over 200k configurations.
+- ⚠️ Migration 0034 is additive but must be applied by hand; nothing here
+  migrates at startup. It creates two indexes on `events` NOT concurrently,
+  briefly locking writes on the largest table. Skipping it fails silently — a
+  seq scan per tick with nothing logged.
+- ⚠️ Known gap: the hit feed's frontier is global, not per-server. Latent
+  with one registered server; close it before a second is added.
+- Runbook: `docs/deploy/2026-09-12-combat-feeds.md`.
+
+## [1.5.0] - 2026-09-12
+
+### Added
+
+- Achievement badges on every surface: the design hand-off's 150 PNGs and 50
+  glyphs wired into the wall, the owner's unlock toasts, the Discord unlock
+  card and a 1200x630 share card. `ACHIEVEMENT_GROUP_COLORS` in
+  `@factions/domain` is the one statement of the four group colours. The 104
+  historical unlocks were announced to `#achievements` in earned order by
+  `scripts/backfill-achievement-notices.ts`.
+- Scheduled restarts: the bot restarts the server at the top of every even
+  UTC hour through Nitrado, behind `RESTART_SCHEDULE`, recording one
+  `server_restarts` row per server per slot. `messages.xml` keeps its own
+  countdown. Migration 0032 is additive.
+
+### Notes
+
+- Runbook: `docs/deploy/2026-09-12-scheduled-restarts.md`.
+
