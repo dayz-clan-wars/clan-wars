@@ -100,14 +100,26 @@ export class NitradoClient {
   }
 
   /**
+   * The mission root — where `cfggameplay.json` lives.
+   *
+   * ⚠️ Verified against the live file server on 2026-09-17: the root holds 25
+   * files, `cfggameplay.json` among them, plus the `db`, `env` and `custom`
+   * directories.
+   */
+  async missionRootDir(): Promise<string> {
+    return this.missionDir();
+  }
+
+  /**
    * The mission's `db` directory — where `events.xml` lives.
    *
    * ⚠️ NOT the mission root and NOT `custom`. Verified against the live file
-   * server on 2026-09-12: the mission root holds only cfgeconomycore.xml,
-   * cfgeventspawns.xml, cfgeventgroups.xml and the `db`/`env`/`custom` dirs,
-   * and a download of `<mission>/events.xml` answers "File doesn't exist
-   * (anymore?)". Composing the wrong one of these three would upload into a
-   * directory the game never reads, and report success.
+   * server on 2026-09-12: a download of `<mission>/events.xml` answers "File
+   * doesn't exist (anymore?)", because events.xml lives in `db`. (The root does
+   * hold plenty of other files — cfgeconomycore.xml, cfggameplay.json and ~23
+   * more — so do not read this as a listing of it.) Composing the wrong one of
+   * these three would upload into a directory the game never reads, and report
+   * success.
    */
   async missionDbDir(): Promise<string> {
     return `${await this.missionDir()}/db`;
