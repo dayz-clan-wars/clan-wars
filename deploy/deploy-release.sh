@@ -17,6 +17,40 @@
 # dump, destroying the only artifact the rollback depends on.
 set -Eeuo pipefail
 
+# ⚠️ Re-exec from a private copy before anything else happens. This deploy
+# moves the tree to "$TAG", which REWRITES this very file while bash is
+# executing it - and bash does not load a script whole. It reads it lazily, by
+# byte offset, returning to the file for the next command. Replace the file
+# mid-run with content of a different length and the interpreter resumes at a
+# stale offset in new bytes: it can run a fragment of a line, skip a function
+# definition, or die of a syntax error partway through - with all three writers
+# stopped, a marker written, and the database mid-migration. The failure is
+# silent in the worst way, because the text bash executes is not the text
+# anyone later reads. Copying and re-execing makes the running text immutable
+# for the rest of the run, whatever the checkout does to the file on disk.
+# ⚠️ `exec -a "$0"` keeps argv[0] at the real path, so journald keeps
+# labelling these lines `deploy-release.sh[pid]` - the runbook's alert matchers
+# grep for exactly that, and a deploy that logs under a random temp name is a
+# deploy nobody can find afterwards.
+if [ -z "${DEPLOY_SELF_COPY:-}" ]; then
+  _copy=$(mktemp "${TMPDIR:-/tmp}/deploy-release.selfcopy.XXXXXX") || {
+    echo "deploy-release.sh: could not create a private copy of itself" >&2
+    exit 1
+  }
+  cat "$0" > "$_copy" || { rm -f "$_copy"; exit 1; }
+  DEPLOY_SELF_COPY="$_copy" exec -a "$0" bash "$_copy" "$@"
+fi
+# Unlink the copy immediately. Unlinking does not touch the bytes - the kernel
+# keeps the inode alive for this process's open descriptor - so the running
+# text stays readable while the file stops existing for anyone else, and no
+# copy is left behind when the deploy exits by any path, including a signal.
+# ⚠️ Guarded on the name mktemp gave it, NOT on $0. A stray
+# DEPLOY_SELF_COPY in the environment would otherwise send this `rm` at the
+# repo's own script.
+case "${DEPLOY_SELF_COPY:-}" in
+  */deploy-release.selfcopy.*) rm -f "$DEPLOY_SELF_COPY" ;;
+esac
+
 # --- configuration ---
 
 # ⚠️ Overridable so `--dry-run` can be exercised off the production host; the
@@ -109,7 +143,19 @@ stop_all() {
 # because it is the only writer in that window whose writes a rollback cannot
 # undo safely.
 start_services() {
-  run sudo -n docker compose up -d web ingest-worker || return 1
+  # ⚠️ --force-recreate, not a bare `up -d`. web and ingest-worker are
+  # build-only services, so their compose definitions name no image; when the
+  # definition itself is unchanged, compose can decide a stopped container is
+  # already up to date and simply START it again - on the image it was created
+  # with, which is the PREVIOUS release's. The deploy would then report DEPLOYED
+  # while production ran the old code, and nothing here could see it: the old
+  # image is perfectly healthy, so the health check passes. Observed on
+  # 2026-09-17, when a deploy left both containers on the images the preceding
+  # rollback had created; that release happened to be byte-identical so nothing
+  # was actually wrong, but the same path with real code changes is a silent
+  # stale-code deploy. Recreating costs nothing here - stop_all has already
+  # stopped both containers.
+  run sudo -n docker compose up -d --force-recreate web ingest-worker || return 1
 }
 
 start_bot() {
