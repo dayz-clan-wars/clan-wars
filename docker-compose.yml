@@ -79,5 +79,17 @@ services:
     # 3020 is deliberately outside the 3000-3011 band the other projects on
     # this host occupy (dayzonelife.com :3010, factory.eli5hq.com :3100).
     ports: ["127.0.0.1:3020:3000"]
+    # ⚠️ REHEARSAL 2 (re-run) SABOTAGE — reverted immediately afterwards.
+    # The container starts (so `docker compose up -d` succeeds) but never serves
+    # HTTP, so the deploy health check's `curl http://127.0.0.1:3020/` fails and
+    # the release deployer must roll back to the previous tag.
+    # ⚠️ The port mapping is deliberately left alone: deployment-config.test.ts
+    # pins it as one of two statements of a single fact, and defeating a drift
+    # test to stage a rehearsal is a worse trade than the rehearsal is worth.
+    # ⚠️ deploy-release.sh is deliberately byte-identical across this checkout.
+    # Bash reads a script lazily by byte offset, so a script rewritten beneath a
+    # running process can be misparsed mid-execution. Keeping it unchanged keeps
+    # that variable out of the rehearsal.
+    command: ["sh", "-c", "sleep infinity"]
 volumes:
   factions-pg:
