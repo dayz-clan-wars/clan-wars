@@ -9,7 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Rehearsal 2, re-run: a deliberately unhealthy release, used once to prove the
   deployer's automatic rollback restores code, images, host config and database
-  after the image-retag fix in 1.16.3. Reverted immediately afterwards.
+  after the image-retag fix in 1.16.3. Reverted here. The rollback passed: 1
+  minute 57 seconds of downtime, including a full drop-and-restore of
+  `factions_live`, with no human involved.
 
 ## [1.16.3] - 2026-09-17
 
