@@ -566,3 +566,139 @@ this tag.**
 
 - Runbook: `docs/deploy/2026-09-12-scheduled-restarts.md`.
 
+## [1.4.0] - 2026-09-12
+
+### Added
+
+- Achievements: fifty lifetime achievements for players and clans — eleven
+  solo, twelve PvE, fifteen PvP and twelve team rules, defined as data in
+  `@factions/domain`. A tick scans touched owners each pass and writes
+  unlocks with evidence, posting a notice for each; a backfill script drains
+  the whole history and is resumable, feeding the lifetime counters
+  (explorer, cartographer) before it starts so the tick can't double-count
+  against them. The badge wall shows on profiles and clan pages — a locked
+  tile says "Locked", not only dim — with the closest-to-unlocking rules
+  surfaced for the owner. Guide chapter 14, Achievements, renders from the
+  same definitions.
+- Server-name strip: the in-game hostname from Nitrado, shown under the top
+  bar as a marquee, no Copy button — read live, never configured or
+  hard-coded.
+
+### Fixed
+
+- The first raid weekend is delayed one week: the 2026-09-11 and
+  2026-09-14 flips are skipped so a freshly launched season doesn't open
+  raiding before clans have had time to build.
+- Map pin popups were a white card on phones — the Delete button unreadable.
+
+### Notes
+
+- Runbook (achievements backfill): included in the achievements commits;
+  see `pnpm backfill:achievements`.
+
+## [1.3.0] - 2026-09-09
+
+### Fixed
+
+- Credited kills, mutual kills and grenades: an audit of every kill-shaped
+  line in the live log against `kills` found three gaps. The kill and hit
+  regexes missed the killer's own `(DEAD)` marker on a mutual kill, filing
+  two real PvP kills as "environment" and three player hits as environment
+  hits. A grenade death named no thrower and read as the environment; it is
+  now `explosion`. And a player shot to `FINISH_HP_MAX` (25) or below, or
+  knocked out after the shot, who then died with nothing but a player having
+  hurt them since, was never credited — the game writes "died." when the
+  last damage tick is bleeding. `finishedBy` now credits that kill (killer,
+  weapon and range from the hit line, cause `finished`); the site says
+  "Finished by", the Discord feed "finished". Hits in the same second are
+  tie-broken on lowest HP, since a burst logs several at one timestamp. Four
+  such deaths were sitting in the live log; 27 PvP kills became 31.
+
+### Notes
+
+- ⚠️ A reparse never corrects a misparsed line, so the wrong events must be
+  deleted before a rebuild picks up the fix.
+- Runbook: `docs/deploy/2026-09-10-credited-kills.md`.
+
+## [1.2.0] - 2026-09-09
+
+### Added
+
+- Death causes: the feed now says what a player died of, not just that they
+  died. The ADM parser keeps two line shapes it used to drop — `hit by`
+  (`player.hit`: attacker, HP after) and `is unconscious`
+  (`player.unconscious`) — and reads the `Stats>` tail off a bare `died.`.
+  The kills consumer hands a bare `died` to `@factions/domain`'s
+  `classifyDeath` (lifted from One Life) with the victim's hits and
+  knockouts from the two minutes before, and writes the verdict — `mauled`,
+  `starvation`, `dehydration`, `fall`, `bled_out` — into `kills.cause`.
+  Named killers gain `wolf` and `bear`.
+
+### Notes
+
+- Evidence is matched by `occurred_at` and victim id, never by event id, so a
+  reparse followed by a rebuild attributes history too.
+- Runbook: `docs/deploy/2026-09-10-death-causes.md`.
+
+## [1.1.0] - 2026-09-09
+
+### Added
+
+- Player pages: a linked member's `/me` now forwards to their own profile
+  page, which carries the owner's controls. The hero wears the clan's flag
+  colours, with hero copy that never runs under the flag itself and player
+  names sized as one word. The page gets its own feed, with expandable
+  Killed / Killed by rows, and the feed's death causes cover the parser's
+  full vocabulary.
+- New boards: Most PvP deaths (friendly fire earns nothing toward K/D), best
+  killstreak, longest kill, and build points — a seventh board, public and
+  per clan, with a matching profile number. Boards are reordered into a
+  logical sequence (raiding, offensive PvP, building, play time, the
+  shameful two), each shows a full paged page with the top 10, board rows
+  carry the player's clan flag, and a find-a-player row sits above all of
+  them.
+- The site redesign: new shell primitives, a top bar with a drawer on every
+  page but the landing page and the guide, a live landing page ("Your clan.
+  Your war." over a still of the live map), and redesigned you/your-clan/
+  clans/clan-detail, scoreboard/players/war-log/alphas/seasons, and the map
+  overlays and guide shell.
+- The field guide moves into `apps/web` (chapter fragments and manifest,
+  rendered at `/guide`, replacing the redirect to its old host) and is
+  integrated: numbers render from `guide-numbers.ts` (computed from
+  `rules.ts`, not vendored JSON), the guide's own search matches section
+  bodies, and it carries the site's shared chrome and cross-links. It is
+  also mirrored into Discord, kept in sync with the site.
+- The map gains its marker set (from `Map Markers.dc.html`), place names as
+  their own layer above travel points (the Hub marker goes), a zoom floor,
+  a Centre-on-me button, and its layers behind a settings sprocket. An
+  active clan's declared flagpole becomes a fast-travel point.
+- Discord gains `#kill-feed` (every PvP kill as an embed with a running
+  tally) and `#players-online` (one message kept edited to the open
+  sessions, names linking to profiles on the site).
+- App icons, favicons, a manifest, and a home-screen install strip on
+  phones. A share image for links ("Your clan. Your war." on every page).
+- The ingest worker can reparse stored raw lines, so a parser's new line
+  shapes reach the event log without waiting for fresh log data.
+
+### Fixed
+
+- Reserved clans receive the supply kit, since the kit is where their flag
+  comes from — previously only active clans did.
+- Home's "Raids this season" counted only faction raids; it now counts
+  victims, so solo raids show too.
+- The All-time scope button links `?season=all` rather than the bare path.
+- The kill-feed tally counts in the season the kill belongs to.
+- A gamertag with a space in it now finds its profile.
+- Clanmate names on the map stack by recency, the most recently seen on top.
+- Several rounds of UX review: contrast, focus, overflow, text floors and
+  touch targets; confirms and announced notices unified to one page shape;
+  field-level form errors (the refused field marked, explained under it,
+  and focused); notice focus waits a frame past hydration; the vault lock
+  date renders once instead of drifting.
+
+### Notes
+
+- This release covers everything that shipped between the v1.0.0 launch tag
+  (2026-09-07) and this one (2026-09-09) — the first stretch of rapid,
+  unversioned feature work after launch, which is why it is dense.
+
