@@ -7,6 +7,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- Public bases on the map are now a small marker like every other layer,
+  instead of the clan flag that last flew there. They were the one marker
+  drawn at a different size and the one carrying an image, so a pole nobody
+  holds stood out more than your own base. It is now the same flag-on-a-pole
+  shape as your base, hollow and muted rather than gold: claimed against
+  unclaimed, at a glance. Which clan's flag once flew at an abandoned pole is
+  no longer shown, or sent to the page at all.
+
 - Corrected the release-announcements runbook and design notes after the real
   v1.18.0 deploy showed the deployer hook can't fire on the deploy that ships
   it: `deploy-release.sh` re-execs from a private copy of itself before moving

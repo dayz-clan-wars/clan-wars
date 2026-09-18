@@ -6,7 +6,6 @@ import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
   baseIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
 } from "@/lib/map-icons";
-import { flagImagePath } from "@/src/flag-images";
 
 /**
  * The pure drawing half of the map. Split out of map-view.tsx, which owns the
@@ -27,7 +26,7 @@ export type WireState = {
   base: { x: number; z: number; radiusM: number; kind: "clan" | "solo" } | null;
   clanmates: { dayzId: string; gamertag: string; fix: WireFix }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: string; distanceM: number }[];
-  publicBases: { x: number; z: number; texture: string | null }[];
+  publicBases: { x: number; z: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string; at: string; expiresAt: string }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
@@ -295,9 +294,7 @@ export function drawIntruders({ L, group, pt, data, now, ages, p }: Ctx): void {
 
 export function drawPublicBases({ L, group, pt, data, p }: Ctx): void {
   for (const b of data.publicBases) {
-    // Flags are 2:1; 28x14 keeps them legible without swamping the chips.
-    const src = b.texture ? `/${escapeHtml(flagImagePath(b.texture))}` : null;
-    const icon = chipIcon(L, publicBaseIcon(p, src), ICON.publicBase, "cw-mk-public");
+    const icon = chipIcon(L, publicBaseIcon(p), ICON.publicBase, "cw-mk-public");
     L.marker(pt(b.x, b.z), { icon, keyboard: false }).bindTooltip("Public base", { direction: "right", opacity: 1, className: TAG }).addTo(group);
   }
 }

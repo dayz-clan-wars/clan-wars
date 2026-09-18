@@ -32,8 +32,8 @@ export const ICON = {
   base: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
   clanmate: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   intruder: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
-  /** A 3px pole and a framed 28×14 flag beside it; anchored bottom-left, at the foot. */
-  publicBase: { size: [35, 34], anchor: [1, 34], tooltipAnchor: [22, -17] },
+  /** Same chip and same foot as `base` — an abandoned pole is still a pole. */
+  publicBase: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
   travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   pin: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
 } as const satisfies Record<string, { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }>;
@@ -108,15 +108,17 @@ export function intruderIcon(p: Palette): string {
 }
 
 /**
- * A public base: the clan's real flag, black-framed, beside a black pole so
- * the foot marks the pole. No flag: a dashed empty one. `src` is already
- * escaped by the caller.
+ * A public base: the same pennant-and-pole as `baseIcon`, hollow and muted
+ * where yours is gold and filled — claimed against unclaimed, one silhouette.
+ *
+ * ⚠️ It deliberately does NOT carry the clan flag that last flew there. It
+ * used to, as a 28×14 image beside the pole, which made it the one marker
+ * loading an outside asset and the one marker that was not a chip. A public
+ * base is a pole nobody holds; whose flag it once wore identifies a player to
+ * everyone looking at the map, and the map has no reason to say it.
  */
-export function publicBaseIcon(p: Palette, src: string | null): string {
-  const flag = src
-    ? `<span style="border:2px solid ${p.frame};line-height:0;background:${p.frame}"><img src="${src}" alt="" width="28" height="14" style="object-fit:cover;display:block"></span>`
-    : `<span style="width:32px;height:18px;border:2px solid ${p.frame};background:${p.frame}99;box-sizing:border-box;display:block"><span style="display:block;width:100%;height:100%;border:1px dashed ${p.ink2};box-sizing:border-box"></span></span>`;
-  return `<span style="display:flex;align-items:flex-start"><span style="width:3px;height:34px;background:${p.frame};flex:none"></span>${flag}</span>`;
+export function publicBaseIcon(p: Palette): string {
+  return chip(p, p.ink2, `<path d="M10 23V5M10 6h9l-2 3.5 2 3.5h-9" fill="none"/>`);
 }
 
 /**
