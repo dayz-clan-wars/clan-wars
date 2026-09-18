@@ -18,3 +18,4 @@ export * from "./streaks";
 export * from "./restarts";
 export * from "./raid-window";
 export * from "./enforcement";
+export * from "./pc-gate";
