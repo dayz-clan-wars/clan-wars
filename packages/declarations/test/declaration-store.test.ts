@@ -188,5 +188,26 @@ describe("declaration store", () => {
         { poleKey: key(9000, 9000), x: "9000.00", y: "100.00", z: "9000.00", texture: "Flag_White" },
       ]);
     });
+
+    it("⚠️ 2026-09-18 SNA regression: a stale raised pole ~19 m inside another owner's declared base is not published", async () => {
+      // A pre-wipe pole at 5551.69:311.63:8790.97 was published while SNA held
+      // a live declaration 18.6 m away at 5565,8804 — same building, but a
+      // DIFFERENT poleKey, so the old `isNull(declarations.id)` join (keyed on
+      // exact pole identity) never suppressed it. A server wipe produced the
+      // gap: the ADM logs still held the old flag.raised events, ingestion
+      // replayed them into `poles`, and the wipe had removed the declaration
+      // that used to sit on that exact pole.
+      await clan(5565, 8804, factionId, ceremonyId);
+      await seedPole(5551.69, 8790.97);
+      expect(await publicPoles(db, serverId, now)).toEqual([]);
+    });
+
+    it("still publishes a stale raised pole well outside every declaration's 100 m watch zone", async () => {
+      await clan(5000, 5000, factionId, ceremonyId);
+      await seedPole(9000, 9000, { texture: "Flag_Wolf" });
+      expect(await publicPoles(db, serverId, now)).toEqual([
+        { poleKey: key(9000, 9000), x: "9000.00", y: "100.00", z: "9000.00", texture: "Flag_Wolf" },
+      ]);
+    });
   });
 });

@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The public bases layer could publish a live clan's base coordinates when a
+  stale flagpole (left over from a server wipe replaying old flag-raise
+  events) stood inside it, because the pole and the clan's own declared pole
+  didn't share the same key. It now suppresses any public pole within 100 m
+  of a declared base, not just one sitting on the exact same pole.
+
 ## [1.18.0] - 2026-09-18
 
 ### Added
