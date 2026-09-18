@@ -96,3 +96,12 @@ export const BAN_MAX_ATTEMPTS = 3;
  */
 export const BAN_REASONS = ["zone", "unlinked_pc"] as const;
 export type BanReason = (typeof BAN_REASONS)[number];
+
+/**
+ * The three REAL ban transitions the public `#bans` channel announces.
+ * ⚠️ Never `pending` and never `failed` — a dry-run or a Nitrado error never
+ * reached the game server, so announcing either would tell players something
+ * happened that did not.
+ */
+export const BAN_ANNOUNCEMENT_KINDS = ["applied", "lifted", "expired"] as const;
+export type BanAnnouncementKind = (typeof BAN_ANNOUNCEMENT_KINDS)[number];
