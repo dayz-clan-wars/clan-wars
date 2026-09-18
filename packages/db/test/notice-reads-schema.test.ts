@@ -12,9 +12,20 @@ describe("notice read state", () => {
     await db.execute(sql`truncate table notice_reads, notice_read_marks`);
   });
 
+  /** A real notice to hang read-state on. The FK means a made-up id cannot be used. */
+  const seedNotice = async (): Promise<number> => {
+    await db.execute(sql`insert into servers (id, name, map, clock_offset_ms, active) overriding system value
+                         values (940, 'nr-940', 'livonia', 0, true) on conflict do nothing`);
+    const [n] = await db.execute<{ id: string }>(sql`
+      insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+      values (940, null, 'dm', 'd1', 'invited', now(), '{}'::jsonb) returning id`);
+    return Number(n!.id);
+  };
+
   it("marks one notice read, idempotently", async () => {
-    await db.insert(noticeReads).values({ discordId: "d1", noticeId: 1 }).onConflictDoNothing();
-    await db.insert(noticeReads).values({ discordId: "d1", noticeId: 1 }).onConflictDoNothing();
+    const noticeId = await seedNotice();
+    await db.insert(noticeReads).values({ discordId: "d1", noticeId }).onConflictDoNothing();
+    await db.insert(noticeReads).values({ discordId: "d1", noticeId }).onConflictDoNothing();
     const rows = await db.select().from(noticeReads);
     expect(rows).toHaveLength(1);
   });
@@ -39,12 +50,7 @@ describe("notice read state", () => {
    * the highest id the player had seen, and must survive that row being wiped.
    */
   it("⚠️ cascades reads when a notice is deleted, but never the watermark", async () => {
-    await db.execute(sql`insert into servers (id, name, map, clock_offset_ms, active) overriding system value
-                         values (940, 'nr-940', 'livonia', 0, true) on conflict do nothing`);
-    const [n] = await db.execute<{ id: string }>(sql`
-      insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
-      values (940, null, 'dm', 'd1', 'invited', now(), '{}'::jsonb) returning id`);
-    const noticeId = Number(n!.id);
+    const noticeId = await seedNotice();
 
     await db.insert(noticeReads).values({ discordId: "d1", noticeId });
     await db.insert(noticeReadMarks).values({ discordId: "d1", throughId: noticeId });
