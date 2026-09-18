@@ -9,7 +9,7 @@ export type AdmFileRef = {
 };
 
 const API_BASE = "https://api.nitrado.net";
-const FILENAME_RE = /DayZServer_X1_x64_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.ADM$/u;
+const FILENAME_RE = /DayZServer_X1_x64_(\d{4})-(\d{2})-(\d{2})_(\d{2})-(\d{2})-(\d{2})\.(ADM|RPT)$/u;
 
 /**
  * Reads ADM files from a Nitrado game server.
@@ -213,6 +213,36 @@ export class NitradoClient {
     // introduce a worse hazard that fires on routine re-uploads.
     files.sort((a, b) => a.localTimestampMs - b.localTimestampMs);
     return files;
+  }
+
+  /**
+   * The path of the newest .RPT file, or null when there is none.
+   *
+   * ⚠️ Newest by FILENAME timestamp, like `listAdmFiles`, not by Nitrado's
+   * `modified_at`: that is the game server's clock, fixed UTC+4/+7, and
+   * comparing it to anything of ours reads as permanent drift.
+   *
+   * Only the newest is ever wanted. A device is a stable fact about an
+   * account, learned once — see the design doc §2 for why this is not a
+   * second ingest pipeline.
+   */
+  async newestRptPath(): Promise<string | null> {
+    const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
+    const base = gs?.data?.gameserver?.game_specific?.path;
+    if (!base) throw new Error("Nitrado: could not resolve gameserver path");
+
+    const listing = await this.getJson(
+      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(base + "config")}`,
+    );
+    const entries: any[] = listing?.data?.entries ?? [];
+    let best: { path: string; ts: number } | null = null;
+    for (const e of entries) {
+      if (!(typeof e.name === "string" && e.name.endsWith(".RPT") && e.path)) continue;
+      const ts = this.parseFilenameTs(e.name);
+      if (ts === null) continue;
+      if (!best || ts > best.ts) best = { path: e.path as string, ts };
+    }
+    return best?.path ?? null;
   }
 
   /**
