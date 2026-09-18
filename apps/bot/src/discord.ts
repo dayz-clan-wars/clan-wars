@@ -21,6 +21,7 @@ import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
+import { pcBanTick } from "./pc-ban-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
@@ -1021,6 +1022,35 @@ export async function start(cfg: BotConfig): Promise<void> {
       // shares) so a slow or failing call to one server's ban list can never
       // touch another's.
       //
+      // ⚠️ Before banTick, in the same block: this writes the rows banTick
+      // applies, so running it afterwards would delay every PC ban by a
+      // whole five-minute cycle.
+      if (cfg.unlinkedPcBan) {
+        // Same fallback shape as the raid-window poster at line 1299: with no
+        // OPS_CHANNEL_ID a ban still happens, and must still be visible
+        // somewhere, so it goes to the log at error level.
+        const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
+        try {
+          const pcServers = await db.select({ id: servers.id })
+            .from(servers).where(and(eq(servers.active, true), isNotNull(servers.nitradoServiceId)));
+          for (const s of pcServers) {
+            try {
+              const r = await pcBanTick(db, { serverId: s.id, now: new Date() });
+              for (const b of r.banned) {
+                await ops(`🚫 PC ban queued: **${b.gamertag}** (\`${b.dayzId}\`) plays on PC and has not linked.`);
+              }
+              for (const b of r.lifted) {
+                await ops(`🔓 PC ban lifting: **${b.gamertag}** (\`${b.dayzId}\`) has started linking — this is their one lift.`);
+              }
+            } catch (err) {
+              console.error(`pc ban tick failed for server ${s.id}`, err);
+            }
+          }
+        } catch (err) {
+          console.error("pc ban tick: could not list servers", err);
+        }
+      }
+
       // `since` is `now - BAN_APPLY_LOOKBACK_MS` (24h), NEVER the bot's
       // process start time — see the comment on `BAN_APPLY_LOOKBACK_MS` in
       // `packages/domain/src/rules.ts` for why: a ban written shortly before

@@ -131,6 +131,12 @@ export type BotConfig = {
   banDryRun: boolean;
   /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
   enforcementTick: boolean;
+  /**
+   * ⚠️ Independent of `banDryRun` on purpose. In production BAN_DRY_RUN is
+   * already false, so the first PC ban is REAL the moment this is set. That
+   * is a deliberate act on a chosen day, never a side effect of a deploy.
+   */
+  unlinkedPcBan: boolean;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -354,6 +360,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
+    unlinkedPcBan: ["1", "true"].includes((env.UNLINKED_PC_BAN ?? "").toLowerCase()),
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at
@@ -371,6 +378,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // bans it was supposed to place, silently.
   if (config.enforcementTick && !config.nitradoToken) {
     throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
+  }
+
+  // ⚠️ pcBanTick only ever writes `bans` rows — banTick is what applies them
+  // to Nitrado. Without enforcementTick on too, rows would pile up and never
+  // be applied: a silent success from the operator's point of view.
+  if (config.unlinkedPcBan && !config.enforcementTick) {
+    throw new Error("UNLINKED_PC_BAN is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule
