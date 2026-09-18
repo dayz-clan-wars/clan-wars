@@ -62,6 +62,27 @@ describe("parseDevices", () => {
     expect(parseDevices(odd)).toEqual([]);
   });
 
+  /**
+   * ⚠️ REGRESSION, from real production logs: DayZ space-pads a single-digit
+   * hour, so a line logged before 10:00 server time starts with SPACES, not a
+   * digit. An anchor demanding a digit at the line start silently dropped
+   * 462 of 3899 StateMachine lines and 67 of 566 device lines across the 37
+   * retained RPTs — 11.8% of the log, and one real player vanished from the
+   * parse. A PC player who only ever connects between 00:00 and 09:59 would
+   * never be recorded as desktop, never banned, and nothing would say so.
+   * The fixture below is a verbatim production line.
+   */
+  it("reads a line whose hour is space-padded, as DayZ writes it before 10:00", () => {
+    const earlyMorning = [
+      `  9:55:00.100 [StateMachine]: Player PineappleMan352 (dpnid 2026696098 uid ) Entering AuthPlayerLoginState`,
+      `  9:55:01.400  LOGINQUEUE   : Player 2026696098 updated with device type 'console'`,
+      `  9:55:02.719 [StateMachine]: Player PineappleMan352 (dpnid 2026696098 uid 214D6AB1B9DA0F408A20C02CC2C7025250515399) Entering DBGetLoginTimeLoginState`,
+    ].join("\n");
+    expect(parseDevices(earlyMorning)).toEqual([
+      { dayzId: "214D6AB1B9DA0F408A20C02CC2C7025250515399", gamertag: "PineappleMan352", device: "console" },
+    ]);
+  });
+
   it("handles a gamertag containing spaces", () => {
     const spaced = [
       `17:02:57.100 [StateMachine]: Player Sir Alatorre (dpnid 77 uid ) Entering AuthPlayerLoginState`,

@@ -27,10 +27,21 @@ export type DeviceSighting = { dayzId: string; gamertag: string; device: "consol
  * they do not play on. Greedy `(.+)` plus the mandatory ` Entering` suffix
  * makes the LAST `(dpnid … uid …)` on the line — the server's own — the one
  * that binds; anything the player typed stays inside the gamertag.
+ *
+ * ⚠️ The leading `\s*` is NOT slack in the anchor — it is load-bearing. DayZ
+ * space-pads a single-digit hour ("  9:55:02.719 …"), so an anchor that
+ * demanded a digit at the line start silently ignored every line logged
+ * between 00:00 and 09:59 server time: measured against the 37 retained RPTs,
+ * 462 of 3899 StateMachine lines and 67 of 566 device lines, and one real
+ * player disappeared from the parse entirely. A PC player who only ever
+ * connects in those hours would never be recorded as desktop, never banned,
+ * and nothing would report a problem. Whitespace is not free text, so this
+ * costs the anchor nothing: everything between the line start and the dpnid is
+ * still fixed structure.
  */
-const STATE_RE = /^[\d:.]+\s+\[StateMachine\]: Player (.+) \(dpnid (\d+) uid ([0-9A-F]{40})\) Entering/gmu;
-/** ⚠️ Anchored for the same reason. Nothing before the dpnid may be free text. */
-const DEVICE_RE = /^[\d:.]+\s+LOGINQUEUE\s+: Player (\d+) updated with device type '(\w+)'/gmu;
+const STATE_RE = /^\s*[\d:.]+\s+\[StateMachine\]: Player (.+) \(dpnid (\d+) uid ([0-9A-F]{40})\) Entering/gmu;
+/** ⚠️ Anchored, and space-padded-hour tolerant, for the same two reasons. */
+const DEVICE_RE = /^\s*[\d:.]+\s+LOGINQUEUE\s+: Player (\d+) updated with device type '(\w+)'/gmu;
 
 /** ⚠️ Anything not exactly one of these is not a device we act on. See the drop below. */
 const KNOWN = new Set(["console", "desktop"]);
