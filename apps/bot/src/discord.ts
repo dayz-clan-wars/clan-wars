@@ -1026,7 +1026,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       // applies, so running it afterwards would delay every PC ban by a
       // whole five-minute cycle.
       if (cfg.unlinkedPcBan) {
-        // Same fallback shape as the raid-window poster at line 1299: with no
+        // Same null-poster fallback the raid-window tick uses: with no
         // OPS_CHANNEL_ID a ban still happens, and must still be visible
         // somewhere, so it goes to the log at error level.
         const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
