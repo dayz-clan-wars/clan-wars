@@ -310,12 +310,14 @@ export async function lapseSolos(
  * OWN declaration — it is keyed on exact pole identity (`poleKey`), and a
  * stale raised pole standing inside someone ELSE's declared base has a
  * different `poleKey` from the pole they actually declared, so that join
- * never sees the two as related. On 2026-09-18 that published a live base's
- * coordinates to everyone: a pre-wipe pole at 5551.69:311.63:8790.97 was
- * published while SNA held a live declaration 18.6 m away at 5565,8804, same
- * building — a wipe had removed the declaration that used to sit on that
- * exact pole, but the ADM logs still held the old `flag.raised` events, and
- * ingestion replayed them into `poles`. So a candidate is also suppressed
+ * never sees the two as related. On 2026-09-18 that put a clan's occupied
+ * base on the public layer: a leftover pole stood about 19 m from their
+ * declared pole, in the same building. A server wipe produced the gap — it
+ * removed the declaration that used to sit on that exact pole, but the ADM
+ * logs still held the old `flag.raised` events and ingestion replayed them
+ * into `poles`. (Deliberately no coordinates here: this repo is public, and
+ * a base's grid reference is exactly what this function must not leak.)
+ * So a candidate is also suppressed
  * when it falls within `WATCH_ZONE_RADIUS_M` of ANY declaration on the
  * server, not just one sharing its `poleKey` — the same "inside someone's
  * base" radius the zone-enforcement watch already uses, not a new number.

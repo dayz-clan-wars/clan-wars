@@ -189,16 +189,16 @@ describe("declaration store", () => {
       ]);
     });
 
-    it("⚠️ 2026-09-18 SNA regression: a stale raised pole ~19 m inside another owner's declared base is not published", async () => {
-      // A pre-wipe pole at 5551.69:311.63:8790.97 was published while SNA held
-      // a live declaration 18.6 m away at 5565,8804 — same building, but a
-      // DIFFERENT poleKey, so the old `isNull(declarations.id)` join (keyed on
-      // exact pole identity) never suppressed it. A server wipe produced the
-      // gap: the ADM logs still held the old flag.raised events, ingestion
-      // replayed them into `poles`, and the wipe had removed the declaration
-      // that used to sit on that exact pole.
-      await clan(5565, 8804, factionId, ceremonyId);
-      await seedPole(5551.69, 8790.97);
+    it("⚠️ 2026-09-18 regression: a stale raised pole ~19 m inside another owner's declared base is not published", async () => {
+      // A leftover pole ~19 m from an occupied base's own pole — same building
+      // — was published, because it had a DIFFERENT poleKey and the old
+      // `isNull(declarations.id)` join (keyed on exact pole identity) never
+      // suppressed it. A server wipe produced the gap: the ADM logs still held
+      // the old flag.raised events, ingestion replayed them into `poles`, and
+      // the wipe had removed the declaration that used to sit on that exact
+      // pole. Coordinates here are invented; the real ones are a live base's.
+      await clan(3200, 4100, factionId, ceremonyId);
+      await seedPole(3187.4, 4113.2);
       expect(await publicPoles(db, serverId, now)).toEqual([]);
     });
 

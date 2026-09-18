@@ -7,11 +7,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Fixed
 
-- The public bases layer could publish a live clan's base coordinates when a
-  stale flagpole (left over from a server wipe replaying old flag-raise
-  events) stood inside it, because the pole and the clan's own declared pole
-  didn't share the same key. It now suppresses any public pole within 100 m
-  of a declared base, not just one sitting on the exact same pole.
+- The map's abandoned-bases layer no longer lists a flagpole that stands
+  inside a clan's declared base. A pole left standing from an earlier season
+  can sit metres from a base someone has since declared, and it was only ever
+  matched against the one pole a clan had declared on. Any leftover pole
+  within 100 m of a declared base is now left off the layer.
 
 ## [1.18.0] - 2026-09-18
 
