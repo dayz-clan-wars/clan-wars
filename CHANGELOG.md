@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- This is an Xbox server, and playing it from a PC now requires a linked
+  account. A PC player who has not linked is banned; starting a link lifts
+  that ban once, so they can perform the three emotes linking asks for. Console
+  players are unaffected, and so is any PC player who has already linked.
+
 ## [1.19.0] - 2026-09-18
 
 ### Changed
