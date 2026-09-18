@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { declarations, events, factionMembers, identityLinks, poles } from "@factions/db";
-import { tooClose, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS } from "@factions/domain";
+import { tooClose, distance2d, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -305,9 +305,29 @@ export async function lapseSolos(
 /**
  * Rule 2: every raised, undeclared pole past its grace, with the flag flying
  * there (spec §4.2). Texture-agnostic on purpose — see the test.
+ *
+ * ⚠️ The `isNull(declarations.id)` join only rules out a pole that has ITS
+ * OWN declaration — it is keyed on exact pole identity (`poleKey`), and a
+ * stale raised pole standing inside someone ELSE's declared base has a
+ * different `poleKey` from the pole they actually declared, so that join
+ * never sees the two as related. On 2026-09-18 that put a clan's occupied
+ * base on the public layer: a leftover pole stood about 19 m from their
+ * declared pole, in the same building. A server wipe produced the gap — it
+ * removed the declaration that used to sit on that exact pole, but the ADM
+ * logs still held the old `flag.raised` events and ingestion replayed them
+ * into `poles`. (Deliberately no coordinates here: this repo is public, and
+ * a base's grid reference is exactly what this function must not leak.)
+ * So a candidate is also suppressed
+ * when it falls within `WATCH_ZONE_RADIUS_M` of ANY declaration on the
+ * server, not just one sharing its `poleKey` — the same "inside someone's
+ * base" radius the zone-enforcement watch already uses, not a new number.
+ * Deliberately `distance2d`, not `tooClose`: `tooClose` also checks against
+ * `HUB_POSITION`, which is right for deciding where a base may be declared
+ * but would suppress genuinely abandoned poles near the Hub here, for a
+ * reason that has nothing to do with anyone's base.
  */
 export async function publicPoles(db: Database | Tx, serverId: number, now: Date) {
-  return db.select({ poleKey: poles.poleKey, x: poles.x, y: poles.y, z: poles.z, texture: poles.currentTexture })
+  const candidates = await db.select({ poleKey: poles.poleKey, x: poles.x, y: poles.y, z: poles.z, texture: poles.currentTexture })
     .from(poles)
     .leftJoin(declarations, and(eq(declarations.serverId, poles.serverId), eq(declarations.poleKey, poles.poleKey)))
     .where(and(
@@ -317,4 +337,13 @@ export async function publicPoles(db: Database | Tx, serverId: number, now: Date
       lt(poles.graceUntil, now),
     ))
     .orderBy(poles.poleKey);
+
+  // One read of this server's declarations, checked by distance rather than
+  // by the join above's exact poleKey match — see the comment above.
+  const declared = await db.select({ x: declarations.x, z: declarations.z })
+    .from(declarations)
+    .where(eq(declarations.serverId, serverId));
+
+  return candidates.filter((p) => !declared.some((d) =>
+    distance2d({ x: Number(p.x), z: Number(p.z) }, { x: Number(d.x), z: Number(d.z) }) < WATCH_ZONE_RADIUS_M));
 }
