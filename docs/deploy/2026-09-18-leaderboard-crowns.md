@@ -53,6 +53,12 @@ tick does not run at all. Nothing else in this deploy changes behaviour.
    Each is validated at load, not at first write: a malformed id fails the bot's start
    with a message naming the variable, rather than looking configured for a week.
 
+   ⚠️ **Two crowns set to the same role id also fails the start**, naming both
+   variables. That is the easy mistake to make pasting nine ids in a row, and nothing
+   downstream would have errored: the two boards would take the role off each other
+   every pass forever, printing a steady `crowns: 1 added, 1 removed` that reads just
+   like normal churn.
+
 3. **Restart the bot**: `sudo systemctl restart clan-wars-bot`. No migration, so
    nothing needs stopping first and the order does not matter.
 

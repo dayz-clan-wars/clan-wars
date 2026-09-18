@@ -527,4 +527,29 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, UNLINKED_PC_BAN: "1", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" })).not.toThrow();
     });
   });
+
+  describe("the leaderboard crowns", () => {
+    it("are all off by default", () => {
+      expect(loadConfig(OK).crownRoleIds).toEqual({});
+    });
+
+    it("reads only the ones that are set, so they can be rolled out a few at a time", () => {
+      const cfg = loadConfig({ ...OK, CROWN_KILLERS_ROLE_ID: "52345678901234567" });
+      expect(cfg.crownRoleIds).toEqual({ killers: "52345678901234567" });
+    });
+
+    it("defaults the interval to five minutes", () => {
+      expect(loadConfig(OK).crownTickIntervalMs).toBe(300_000);
+    });
+
+    it("rejects a malformed role id at load, naming the variable", () => {
+      expect(() => loadConfig({ ...OK, CROWN_KD_ROLE_ID: "nope" })).toThrow(/CROWN_KD_ROLE_ID/u);
+    });
+
+    it("⚠️ refuses two crowns sharing one role id — they would fight over it every pass, forever", () => {
+      const env = { ...OK, CROWN_KILLERS_ROLE_ID: "52345678901234567", CROWN_DEATHS_ROLE_ID: "52345678901234567" };
+      expect(() => loadConfig(env)).toThrow(/CROWN_KILLERS_ROLE_ID/u);
+      expect(() => loadConfig(env)).toThrow(/CROWN_DEATHS_ROLE_ID/u);
+    });
+  });
 });

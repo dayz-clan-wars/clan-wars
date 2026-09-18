@@ -262,12 +262,33 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
   friendlyFire: "CROWN_FRIENDLY_FIRE_ROLE_ID",
 };
 
-/** Whichever crowns are configured, validated at load like every other snowflake. */
+/**
+ * Whichever crowns are configured, validated at load like every other snowflake.
+ *
+ * ⚠️ Two boards sharing one role id REFUSES to load. Nothing downstream would
+ * error: each board's diff would see the other's holder as a stray, so the
+ * reconciler would strip and re-add that role every pass, forever, at two
+ * Discord writes a time. It prints as a steady `crowns: 1 added, 1 removed`,
+ * which reads exactly like normal churn — the silent kind of wrong this file's
+ * other validators exist to catch, and an easy copy-paste to make when pasting
+ * nine ids in a row.
+ */
 function crownRoleIds(env: NodeJS.ProcessEnv): Partial<Record<BoardKind, string>> {
   const out: Partial<Record<BoardKind, string>> = {};
+  const seen = new Map<string, string>();
   for (const kind of BOARD_KINDS) {
-    const id = optionalSnowflake(env, CROWN_ROLE_ENV[kind]);
-    if (id !== undefined) out[kind] = id;
+    const key = CROWN_ROLE_ENV[kind];
+    const id = optionalSnowflake(env, key);
+    if (id === undefined) continue;
+    const first = seen.get(id);
+    if (first !== undefined) {
+      throw new Error(
+        `${first} and ${key} are both set to ${id}. Each crown needs its own role: ` +
+        "two boards sharing one would take it off each other on every pass, forever.",
+      );
+    }
+    seen.set(id, key);
+    out[kind] = id;
   }
   return out;
 }
