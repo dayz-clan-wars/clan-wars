@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.21.0] - 2026-09-18
+
 ### Added
 
 - Enforced bans and unbans on the server now post to a public `#bans`
