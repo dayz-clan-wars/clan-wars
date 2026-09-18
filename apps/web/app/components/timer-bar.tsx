@@ -60,7 +60,7 @@ function RestartCell({ nextAt, now, divided }: { nextAt: Date; now: Date; divide
         <span className="lg:hidden">Restart</span><span className="hidden lg:inline">Server restart</span>
       </span>
       <span aria-hidden="true" className={`${DIVIDER} bg-rule-2`} />
-      <RestartCountdown initial={restartColumn(nextAt, now)} target={nextAt.toISOString()} valueClass={VALUE} />
+      <RestartCountdown initial={restartColumn(nextAt, now)} valueClass={VALUE} />
     </div>
   );
 }

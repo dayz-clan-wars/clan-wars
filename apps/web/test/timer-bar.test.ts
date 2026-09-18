@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { RESTART_PERIOD_MS } from "@factions/domain";
+import { RESTART_PERIOD_MS, nextRestartAt } from "@factions/domain";
 import { humanizeUntil, raidColumn, restartColumn, RESTART_SOON_MS } from "@/lib/timer-bar";
 
 const FRI = new Date("2026-09-18T00:00:00.000Z");
@@ -138,6 +138,21 @@ describe("restartColumn", () => {
     expect(late.value).toBe("00:00");
     expect(late.fill).toBe(0);
     expect(late.soon).toBe(true);
+  });
+
+  /**
+   * ⚠️ The composition RestartCountdown ticks on: the slot is recomputed against
+   * the live clock, never counted down to an instant chosen once. Against a fixed
+   * target, a tab left open across a restart reads 00:00 for as long as it stays
+   * open — and this bar's whole job is to be left sitting on a second monitor.
+   */
+  it("⚠️ recomputing the slot each tick rolls over instead of sticking at zero", () => {
+    const justAfter = at("2026-09-18T16:00:30.000Z");
+    // What a fixed 16:00 target gives you half a minute later, forever.
+    expect(restartColumn(at("2026-09-18T16:00:00.000Z"), justAfter).value).toBe("00:00");
+    // What recomputing gives you: already counting to the 18:00 slot.
+    expect(restartColumn(nextRestartAt(justAfter), justAfter).value).toBe("119:30");
+    expect(restartColumn(nextRestartAt(justAfter), justAfter).soon).toBe(false);
   });
 
   it("a full period never overflows the rule", () => {
