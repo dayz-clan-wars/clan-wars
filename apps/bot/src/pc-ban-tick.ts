@@ -40,6 +40,15 @@ export async function pcBanTick(db: Database, opts: { serverId: number; now?: Da
   for (const c of candidates) {
     const [link] = await db.select({ id: identityLinks.id }).from(identityLinks).where(eq(identityLinks.dayzId, c.dayzId));
 
+    // ⚠️ KNOWN, UNFIXED (2026-09-18): a challenge is matched on
+    // `target_dayz_id` ALONE, and any Discord user may open one against any
+    // known unlinked gamertag — gamertags are public. So a third party can
+    // burn a banned player's ONE automatic lift: start a link against them,
+    // let it lapse, and that player has no automatic route back in, ever.
+    // Not fixed here because the fix is deciding who OWNS a link attempt,
+    // which is a change to the linking model and needs its own design. The
+    // remedy meanwhile is a hand-lift — see the runbook's "someone burned a
+    // player's lift" section.
     const [open] = await db.select({ id: verificationChallenges.id }).from(verificationChallenges).where(and(
       eq(verificationChallenges.targetDayzId, c.dayzId),
       isNull(verificationChallenges.completedAt),

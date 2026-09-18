@@ -73,6 +73,32 @@ describe("parseDevices", () => {
     ]);
   });
 
+  /**
+   * ⚠️ The gamertag is PLAYER-CONTROLLED, and in the raw line it comes
+   * BEFORE the dpnid and uid the server wrote. That is why both regexes are
+   * anchored to a whole line: without it, a gamertag containing the literal
+   * text `(dpnid <n> uid <40 hex>)` binds the attacker's own StateMachine line
+   * to a dpnid and uid they chose — so the attacker's `desktop` device line is
+   * attributed to the victim, who is then banned for a platform they do not
+   * play on, on a path with no dry-run net.
+   */
+  it("does not let a hostile gamertag bind a victim's uid to another dpnid", () => {
+    const VICTIM = "B".repeat(40);
+    const ATTACKER = "C".repeat(40);
+    const hostile = [
+      `17:02:57.100 [StateMachine]: Player Evil (dpnid 999 uid ${VICTIM}) (dpnid 4242 uid ) Entering AuthPlayerLoginState`,
+      `17:02:59.532  LOGINQUEUE   : Player 4242 updated with device type 'desktop'`,
+      `17:03:00.010 [StateMachine]: Player Evil (dpnid 999 uid ${VICTIM}) (dpnid 4242 uid ${ATTACKER}) Entering DBGetLoginTimeLoginState`,
+    ].join("\n");
+    const out = parseDevices(hostile);
+    // The attacker's own uid is what the device line resolves to — never the
+    // one they typed into their gamertag.
+    expect(out).toEqual([
+      { dayzId: ATTACKER, gamertag: `Evil (dpnid 999 uid ${VICTIM})`, device: "desktop" },
+    ]);
+    expect(out.some((s) => s.dayzId === VICTIM)).toBe(false);
+  });
+
   it("returns nothing for an RPT with no login activity", () => {
     expect(parseDevices("17:02:15.199 SCRIPT : Module: GameLib; loaded 13x files")).toEqual([]);
   });

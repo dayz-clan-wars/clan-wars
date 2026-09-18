@@ -1036,11 +1036,25 @@ export async function start(cfg: BotConfig): Promise<void> {
           for (const s of pcServers) {
             try {
               const r = await pcBanTick(db, { serverId: s.id, now: new Date() });
+              // ⚠️ Each post is isolated. The `bans` rows are ALREADY COMMITTED
+              // and `banTick` will apply them to Nitrado on this same pass, so
+              // a failed notification (revoked permission, deleted channel, a
+              // Discord blip) must never swallow the rest — the runbook tells
+              // the operator to watch this channel, and losing the whole
+              // batch hides bans precisely while bans are happening. Nothing
+              // retries these, so a failure falls back to the log.
+              const post = async (content: string) => {
+                try {
+                  await ops(content);
+                } catch (err) {
+                  console.error(`pc ban tick: ops post failed, the ban still stands: ${content}`, err);
+                }
+              };
               for (const b of r.banned) {
-                await ops(`🚫 PC ban queued: **${b.gamertag}** (\`${b.dayzId}\`) plays on PC and has not linked.`);
+                await post(`🚫 PC ban queued: **${b.gamertag}** (\`${b.dayzId}\`) plays on PC and has not linked.`);
               }
               for (const b of r.lifted) {
-                await ops(`🔓 PC ban lifting: **${b.gamertag}** (\`${b.dayzId}\`) has started linking — this is their one lift.`);
+                await post(`🔓 PC ban lifting: **${b.gamertag}** (\`${b.dayzId}\`) has started linking — this is their one lift.`);
               }
             } catch (err) {
               console.error(`pc ban tick failed for server ${s.id}`, err);

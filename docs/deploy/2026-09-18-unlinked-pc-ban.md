@@ -108,6 +108,29 @@ automatically on a later pass, once `banTick` has applied it first; nothing is l
 in the meantime, because no lift is spent until the row actually reaches
 `lift_pending`.
 
+### Someone burned a player's lift — a third party started the link
+
+⚠️ **Known and unfixed.** A link challenge is matched on `target_dayz_id`
+alone, and any Discord user may open one against any known unlinked gamertag —
+gamertags are public. So a third party can start a link *against* a banned
+player, which spends that player's ONE automatic lift, let it lapse without
+completing it, and leave them with no automatic route back in.
+
+**Symptom:** a player insists they never started a link, but their ban shows a
+row that reached `lift_pending` or `lifted`:
+
+    docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c \
+      "select id, status, banned_at from bans where reason = 'unlinked_pc' and dayz_id = '<dayz id>' order by id desc;"
+
+**Remedy:** hand-lift them (§5 above) — and note that the automatic lift is
+**already spent**, so it will not open again on its own. Every later occasion
+for this account needs another hand-lift. Believe the player: there is nothing
+in the data that distinguishes a lift they asked for from one someone else
+triggered on their behalf.
+
+The proper fix means deciding who owns a link attempt, which is a change to the
+linking model and needs its own design; it is deliberately not in this ship.
+
 ## 6. ⚠️ Never backfill `player_devices`
 
 Do not, under any circumstance — not in a migration, not in a one-off script, not "just

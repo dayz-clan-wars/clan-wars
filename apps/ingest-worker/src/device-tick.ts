@@ -34,6 +34,13 @@ export async function deviceTick(db: Database, opts: { serverId: number; client:
 
   // Does ANY recently-connected account still have an unknown device? One row
   // is enough to justify the fetch, and the fetch answers it for everyone.
+  //
+  // ⚠️ The cutoff is interpolated as an ISO string cast to timestamptz:
+  // binding a raw JS Date inside a drizzle sql`` template THROWS under
+  // postgres.js. The throw lands in `ingestSweep`'s per-concern try/catch, so
+  // device learning would simply stop — no row is ever written, every account
+  // reads as "not PC", and no ban is ever written again, with nothing failing
+  // loudly to say so.
   const unknown = await db.execute(sql`
     select 1
     from events e

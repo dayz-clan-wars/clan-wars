@@ -49,10 +49,18 @@ describe("pcBanTick", () => {
     expect((await pcBanTick(db, { serverId: 1, now })).banned).toEqual([]);
   });
 
-  it("does not ban someone with a live challenge", async () => {
+  /**
+   * ⚠️ A live challenge does NOT exempt an unbanned player: they are banned
+   * now and lifted on a later pass, once `banTick` has applied it. An
+   * exemption would renew on every re-rolled challenge and so never lapse —
+   * no ban, no lift spent, and the gate would never fire at all.
+   */
+  it("bans someone with a live challenge, to be lifted after it is applied", async () => {
     await desktop();
     await challenge(PC, new Date(now.getTime() + 3600_000));
-    expect((await pcBanTick(db, { serverId: 1, now })).banned).toEqual([]);
+    expect((await pcBanTick(db, { serverId: 1, now })).banned.map((b) => b.dayzId)).toEqual([PC]);
+    await db.update(bans).set({ status: "applied" });
+    expect((await pcBanTick(db, { serverId: 1, now })).lifted.map((b) => b.dayzId)).toEqual([PC]);
   });
 
   it("bans once the challenge has expired", async () => {

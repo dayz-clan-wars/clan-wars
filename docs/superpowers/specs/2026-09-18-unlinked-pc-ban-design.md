@@ -144,14 +144,23 @@ earned by griefing inside another clan's base.
 
 ### 3.4 The predicate — `packages/domain`
 
-An account is ban-worthy when **all three** hold:
+An account is ban-worthy when **both** hold:
 
 1. it has a `player_devices` row with `device = 'desktop'`; **and**
-2. it has no `identity_links` row; **and**
-3. it has no open `verification_challenges` row — `target_dayz_id` matches,
-   `completed_at` null, `canceled_at` null, `expires_at` in the future.
+2. it has no `identity_links` row.
 
-Pure, table-driven, no database access. The tick supplies the three facts.
+Pure, table-driven, no database access. The tick supplies the facts.
+
+⚠️ **An open challenge is NOT a third condition** (amended 2026-09-18, after
+review). It does not suppress the ban; it only earns the one lift in §3.6, for
+a ban already in force. The earlier rule — "and it has no open
+`verification_challenges` row" — was unsound: a challenge lives 24 hours and
+the draw cap permits a re-roll a day, so the exemption **renews** and never
+lapses. Under it no ban is ever written while a challenge is open, so
+`liftSpent` can never become true, and a player who keeps re-rolling is never
+banned at all — the feature silently does nothing, and §4's lift-once cap
+guards a door the player never has to open. A player mid-link is therefore
+banned, and lifted on a later pass once that ban is `applied`.
 
 ### 3.5 The tick — `apps/bot`
 

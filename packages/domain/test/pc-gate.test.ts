@@ -19,8 +19,26 @@ describe("pcGateAction", () => {
     expect(pcGateAction(facts({ linked: true }))).toBe("none");
   });
 
-  it("does not ban someone mid-link", () => {
-    expect(pcGateAction(facts({ challengeOpen: true }))).toBe("none");
+  /**
+   * ⚠️ Deliberate behaviour change: an open challenge no longer exempts an
+   * unbanned player. They are banned now and LIFTED on a later pass, once the
+   * ban is applied. The old rule (return "none" here) meant a ban was never
+   * written while a challenge was open, so `liftSpent` never became true and a
+   * player could re-roll a fresh 24 h challenge forever — the gate never fired.
+   */
+  it("bans someone mid-link, to be lifted once the ban is applied", () => {
+    expect(pcGateAction(facts({ challengeOpen: true }))).toBe("ban");
+  });
+
+  /**
+   * ⚠️ The corner the old rule hid, both ways round: an unbanned desktop
+   * player mid-link is banned whether or not their one lift is already spent.
+   * This is the renewing-exemption case — if either of these returned "none",
+   * a re-rolled challenge would be a permanent exemption.
+   */
+  it("bans an unlinked desktop player with an open challenge and no active ban", () => {
+    expect(pcGateAction(facts({ challengeOpen: true, activeBan: false, liftSpent: false }))).toBe("ban");
+    expect(pcGateAction(facts({ challengeOpen: true, activeBan: false, liftSpent: true }))).toBe("ban");
   });
 
   it("lifts for a banned player who has started linking", () => {

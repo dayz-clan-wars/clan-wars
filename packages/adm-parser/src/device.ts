@@ -13,9 +13,24 @@
 
 export type DeviceSighting = { dayzId: string; gamertag: string; device: "console" | "desktop" };
 
-/** `Player <gamertag> (dpnid <n> uid <40 hex>)` — the empty-uid form deliberately does not match. */
-const STATE_RE = /\[StateMachine\]: Player (.+?) \(dpnid (\d+) uid ([0-9A-F]{40})\)/gu;
-const DEVICE_RE = /LOGINQUEUE\s+: Player (\d+) updated with device type '(\w+)'/gu;
+/**
+ * `<timestamp> [StateMachine]: Player <gamertag> (dpnid <n> uid <40 hex>) Entering <state>`
+ * — the empty-uid form deliberately does not match.
+ *
+ * ⚠️ The whole LINE is mandatory, not just the middle of it: anchored to the
+ * start of a line (`^` + the timestamp, hence the `m` flag), and closed by the
+ * ` Entering` the real line always carries. The gamertag is PLAYER-CONTROLLED
+ * and is matched BEFORE the structured fields, so without both ends pinned a
+ * gamertag containing the literal text `(dpnid <n> uid <40 hex>)` binds an
+ * attacker's own line to whatever dpnid/uid pair they typed — and this parser
+ * feeds a ban path with no dry-run net, so the victim is banned for a platform
+ * they do not play on. Greedy `(.+)` plus the mandatory ` Entering` suffix
+ * makes the LAST `(dpnid … uid …)` on the line — the server's own — the one
+ * that binds; anything the player typed stays inside the gamertag.
+ */
+const STATE_RE = /^[\d:.]+\s+\[StateMachine\]: Player (.+) \(dpnid (\d+) uid ([0-9A-F]{40})\) Entering/gmu;
+/** ⚠️ Anchored for the same reason. Nothing before the dpnid may be free text. */
+const DEVICE_RE = /^[\d:.]+\s+LOGINQUEUE\s+: Player (\d+) updated with device type '(\w+)'/gmu;
 
 /** ⚠️ Anything not exactly one of these is not a device we act on. See the drop below. */
 const KNOWN = new Set(["console", "desktop"]);

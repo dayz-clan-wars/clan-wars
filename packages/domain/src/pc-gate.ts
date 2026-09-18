@@ -28,11 +28,19 @@ export function pcGateAction(f: PcGateFacts): PcGateAction {
   // Not a PC player, or a known one: nothing here applies.
   if (!f.seenOnDesktop || f.linked) return "none";
 
-  if (f.challengeOpen) {
-    // ⚠️ Starting a link opens the door ONCE. Without liftSpent this is an
-    // infinite supply of play time: link, get unbanned, never finish, repeat.
-    return f.activeBan && !f.liftSpent ? "lift" : "none";
+  if (f.activeBan) {
+    // ⚠️ Starting a link opens the door ONCE, and only for a ban that is
+    // already in force. `liftSpent` is what stops "link, get unbanned, never
+    // finish, repeat" from being an infinite supply of play time.
+    return f.challengeOpen && !f.liftSpent ? "lift" : "none";
   }
 
-  return f.activeBan ? "none" : "ban";
+  // ⚠️ An open challenge does NOT exempt an unbanned player. Being mid-link
+  // is honoured by the once-only LIFT above, never by a standing exemption:
+  // an exemption renews every time the player re-rolls their challenge (24 h
+  // TTL, and the draw cap permits a re-roll a day), so it would never lapse,
+  // no ban would ever be written, no lift would ever be spent, and the whole
+  // gate would silently do nothing. Ban first; the lift is what honours the
+  // attempt, on a later pass once the ban is applied.
+  return "ban";
 }

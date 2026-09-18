@@ -288,6 +288,35 @@ describe("reportable incidents and pressing charges", () => {
     expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(sentenceMsFor(damage, 0));
   });
 
+  // ⚠️ CRITICAL regression: an `unlinked_pc` ban is access control, not a
+  // zone punishment — and its `expires_at` is null, so it never ages into
+  // `expired`. If it counted as a prior, a PC-banned player's FIRST real zone
+  // offence would be sentenced as a second for the rest of the season, and
+  // their second would reach the permanent tier.
+  it("an unlinked_pc ban does not escalate the zone ladder", async () => {
+    const seasonStart = new Date(openedAt.getTime() - 1_000_000);
+    await seedSeason(db, serverId, seasonStart);
+    await db.insert(bans).values({
+      serverId, dayzId: OFFENDER_1, gamertag: "Offender1",
+      bannedAt: new Date(openedAt.getTime() - 400_000),
+      // Permanent, exactly as pcBanTick writes it: never expires, so without
+      // the reason filter it is a prior offence forever.
+      expiresAt: null,
+      status: "applied", dryRun: false, reason: "unlinked_pc",
+    });
+
+    const id = await seedIncident();
+    await reportIncidentDb(db, now, OFFICER_DISCORD, id, [OFFENDER_1, OFFENDER_2]);
+    const rows = await db.select().from(bans).where(eq(bans.dayzId, OFFENDER_1));
+    const newBan = rows.find((b) => b.incidentId === id)!;
+    const damage: IncidentDamage = { partsDismantled: 4, partsBuilt: 0, stackItems: 0, hasBreach: false, hasGate: false };
+    // Specific on purpose: dropping the reason filter makes this the SECOND
+    // offence (sentenceMsFor(damage, 1)), which is a different number.
+    expect(newBan.expiresAt).not.toBeNull();
+    expect(newBan.expiresAt!.getTime() - newBan.bannedAt.getTime()).toBe(sentenceMsFor(damage, 0));
+    expect(sentenceMsFor(damage, 1)).not.toBe(sentenceMsFor(damage, 0));
+  });
+
   // Sanity converse: a real, enforced prior (applied, not dry-run) DOES escalate.
   it("an applied non-dry-run prior escalates the ladder", async () => {
     const seasonStart = new Date(openedAt.getTime() - 1_000_000);
