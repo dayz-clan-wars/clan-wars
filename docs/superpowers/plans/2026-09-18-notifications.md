@@ -241,10 +241,12 @@ describe("notificationsForDb", () => {
                          values (941, 'ntf-941', 'livonia', 0, true) on conflict do nothing`);
   });
 
+  // Columns verified against packages/db/src/schema.ts:502 — `texture`, not
+  // `flag`, and leader_discord_id is NOT NULL with no default.
   const faction = async (tag: string): Promise<number> => {
     const [f] = await db.execute<{ id: string }>(sql`
-      insert into factions (server_id, name, tag, status, flag, created_at)
-      values (941, ${`Notif ${tag}`}, ${tag}, 'active', ${`flag_${tag}`}, now()) returning id`);
+      insert into factions (server_id, name, tag, texture, status, leader_discord_id, created_at)
+      values (941, ${`Notif ${tag}`}, ${tag}, 'tex', 'active', 'u-leader', now()) returning id`);
     return Number(f!.id);
   };
 
@@ -1181,7 +1183,7 @@ Expected: PASS (6 tests)
 Create `apps/web/app/(site)/notifications/page.tsx`:
 
 ```tsx
-import { notificationsFor, markAllNoticesRead } from "@factions/roster";
+import { notificationsFor } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { redirect } from "next/navigation";
 import { NOTICE_GROUPS, noticeGroup } from "@/lib/notice-copy";
@@ -1274,7 +1276,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
 }
 ```
 
-⚠️ `markAllNoticesRead` is imported but used by the route in Task 6, not here. Remove it from this file's imports — the page posts a form; it does not write.
+⚠️ The page reads and never writes: "Mark all read" is a form POST to the route in Task 6. A page that wrote on render would fire on every refresh.
 
 - [ ] **Step 6: Create a placeholder for actions so the page compiles**
 
@@ -1678,9 +1680,11 @@ git commit -m "feat(web): the notifications bell and its panel"
 - Modify: `apps/web/lib/menu.ts` (only if the page belongs in the drawer — see step 1)
 - Modify: `CLAUDE.md`, `CHANGELOG.md`
 
-- [ ] **Step 1: Decide the drawer entry**
+- [ ] **Step 1: Add the drawer entry**
 
-⚠️ The bell is in the bar on desktop, but a phone shows the Drawer, not the bar's cells. Add `{ label: "Notifications", href: "/notifications" }` to `MINE` in `apps/web/lib/menu.ts` so a phone can reach the page at all. `apps/web/test/menu.test.ts` pins the menu shape and will fail — update it to expect the new item.
+Task 7 already renders the bell in the phone group, so the page is reachable on a phone. Add the drawer entry anyway: the panel is for glancing at the newest few, and the drawer is where a phone player looks for a *page*. Add `{ label: "Notifications", href: "/notifications" }` to `MINE` in `apps/web/lib/menu.ts`.
+
+⚠️ `apps/web/test/menu.test.ts` pins the menu shape and WILL fail until updated to expect the new item. That is the pin working — update the expectation, never relax the test.
 
 Run: `cd apps/web && npx vitest run test/menu.test.ts` and fix until green.
 
