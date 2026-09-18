@@ -49,6 +49,8 @@ import { PgOnlineStore, onlineTick, type OnlineBoard, type OnlineState } from ".
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
+import { crownTick } from "./crown-tick.js";
+import { PgCrownStore } from "./crown-store.js";
 import { membershipTick } from "./membership-tick.js";
 import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
@@ -734,6 +736,13 @@ export async function start(cfg: BotConfig): Promise<void> {
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
 
+  // The nine leaderboard crowns. Throttled the same way the reaper is, and for
+  // the same reason — one interval in this process — but on its own clock,
+  // because a pass is nine leaderboard queries rather than four deletes.
+  const crownStore = new PgCrownStore(db);
+  const crownsConfigured = Object.keys(cfg.crownRoleIds).length > 0;
+  let lastCrownAt = 0;
+
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
@@ -873,6 +882,31 @@ export async function start(cfg: BotConfig): Promise<void> {
       await runStructure("tick");
     } catch (err) {
       console.error("structure tick failed", err);
+    }
+
+    // ⚠️ Its own try/catch, right after structure and on its own throttle: the
+    // crowns read the same leaderboards the public /players pages do, so they
+    // belong after the kills and sessions consumers have projected this tick's
+    // events, and after structure so a clan role and a crown never race for the
+    // same member's role list within one pass.
+    //
+    // ⚠️ `membersFetched` gates it: with a cold member cache `roleMembers`
+    // reads empty, and while that only ever under-acts (nothing is stripped,
+    // because `desired` is filtered by `isMember` too), skipping the pass
+    // entirely keeps the log honest about what actually reconciled.
+    if (crownsConfigured && membersFetched && Date.now() - lastCrownAt >= cfg.crownTickIntervalMs) {
+      try {
+        const c = await crownTick(crownStore, guildGateway, {
+          roleIds: cfg.crownRoleIds,
+          onError: (what, err) => console.error(`crowns: ${what}`, err),
+        });
+        lastCrownAt = Date.now();
+        if (c.adds > 0 || c.removes > 0 || c.errors > 0) {
+          console.log(`crowns: ${c.adds} added, ${c.removes} removed, ${c.errors} error(s)`);
+        }
+      } catch (err) {
+        console.error("crown tick failed", err);
+      }
     }
 
     // ⚠️ Its own try/catch, like every other step: a failure raiding or
