@@ -267,6 +267,13 @@
       "when": 1789673585104,
       "tag": "0037_fresh_moira_mactaggert",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1789687038828,
+      "tag": "0038_release_announcements",
+      "breakpoints": true
     }
   ]
 }

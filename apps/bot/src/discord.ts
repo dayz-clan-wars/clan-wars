@@ -37,6 +37,7 @@ import { raiseTick } from "./raise-tick.js";
 import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
+import { releaseTick, pgReleaseStore } from "./release-tick.js";
 import { PgHitFeedStore, hitFeedTick } from "./hit-feed-tick.js";
 import { PgKillFeedStore, killFeedTick } from "./kill-feed-tick.js";
 import { PgKillstreakFeedStore, killstreakFeedTick } from "./killstreak-feed-tick.js";
@@ -508,6 +509,9 @@ export async function start(cfg: BotConfig): Promise<void> {
 
   const feedPoster = cfg.feedChannelId ? createFeedPoster(client, cfg.feedChannelId) : null;
   const warLogPoster = cfg.warLogChannelId ? createChannelPoster(client, cfg.warLogChannelId) : null;
+  // An embed poster, not a plain-content one: releaseTick takes a FeedPoster.
+  const releasePoster = cfg.releaseChannelId ? createFeedPoster(client, cfg.releaseChannelId) : null;
+  const releaseStore = pgReleaseStore(db);
   const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
   // The same embed poster the feed uses, aimed at #kill-feed.
@@ -675,6 +679,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   // One log per bot instance, mirroring feedFailures/lastReportedBlockedAt above.
   const warLogFailures = new Set<number>();
   let lastReportedWarLogBlockedAt: number | null = null;
+  let lastReportedReleaseBlockedAt: number | null = null;
   const killFeedFailures = new Set<number>();
   let lastReportedKillFeedBlockedAt: number | null = null;
   const hitFeedFailures = new Set<number>();
@@ -1110,6 +1115,33 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // ⚠️ After the war log, among the posters — it is a poster, not a consumer,
+    // and it depends on nothing the other ticks produce. Gated on a channel id
+    // the same way: unset means rows queue and nothing posts.
+    if (releasePoster) {
+      try {
+        const r = await releaseTick(releaseStore, releasePoster, {
+          now: new Date(),
+          onError: (id, err) => {
+            if (id === lastReportedReleaseBlockedAt) return;
+            console.error(`release post failed for release_announcements row ${id}`, err);
+          },
+        });
+        if (r.posted > 0) console.log(`release posted ${r.posted}`);
+        if (r.blockedAt !== null && r.blockedAt !== lastReportedReleaseBlockedAt) {
+          console.error(
+            `release queue blocked at release_announcements row ${r.blockedAt}; nothing behind it will ` +
+            `post until this row succeeds. Check the bot's View Channel / Send Messages permission ` +
+            `on ${cfg.releaseChannelId}.`,
+          );
+          lastReportedReleaseBlockedAt = r.blockedAt;
+        }
+        if (r.blockedAt === null) lastReportedReleaseBlockedAt = null;
+      } catch (err) {
+        console.error("release tick failed", err);
+      }
+    }
+
     // ⚠️ After killsTick above, so a kill and its post land in the same tick.
     // Gated on a channel id like the feed and the war log; the first run
     // seeds the cursor at the head and posts nothing (see kill-feed-tick.ts).
@@ -1332,6 +1364,13 @@ export async function start(cfg: BotConfig): Promise<void> {
           "They will post in order when a channel is configured.",
         ))
         .catch((err: unknown) => console.error("could not count the war log queue", err));
+    }
+
+    if (!cfg.releaseChannelId) {
+      console.warn(
+        "RELEASE_CHANNEL_ID is unset: release notes queue but nothing posts. " +
+        "⚠️ They will ALL post, oldest first, when a channel is configured.",
+      );
     }
 
     // §9.1 "reconciled on start": populate the member cache and run one

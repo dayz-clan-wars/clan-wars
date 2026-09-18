@@ -972,5 +972,19 @@ else
   # ⚠️ Removed with the marker, always: a sidecar outliving the marker it
   # describes would suppress the FIRST alert of the next real failure.
   run rm -f "$NOTIFIED_MARKER" || true
+
+  # ⚠️ Below the disarm, with the rest of the bookkeeping, and NEVER above it.
+  # Past that line the release is verified healthy and the bot is live; a failed
+  # announcement is worth an alert and a re-run, never a rollback that would drop
+  # and restore factions_live out from under a working release. Same reasoning as
+  # the state_write above.
+  #
+  # ⚠️ Idempotent and cheap: release:sync queues only versions that have no row,
+  # so a re-run after a failure announces exactly what was missed and nothing else.
+  # It reads CHANGELOG.md from the tree this deploy just moved to "$TAG", which is
+  # why it runs here and not before the checkout.
+  run "$PNPM" release:sync \
+    || alert "CRITICAL" "$TAG is live but its release notes were not queued; run 'pnpm release:sync' in $REPO"
+
   alert "DEPLOYED" "$TAG is live (host-config=$HOST_CONFIG migrations=$MIGRATIONS)"
 fi

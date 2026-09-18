@@ -7,14 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Design for release announcements in Discord
-  (`docs/superpowers/specs/2026-09-17-release-announcements-design.md`), not yet
-  implemented: `CHANGELOG.md` is the single source, `deploy-release.sh` queues a
-  row after a *successful* deploy rather than on the tag push, and a bot tick
-  drains the queue oldest-first into a player-facing channel. The same
-  `pnpm release:sync` call is the backfill, the per-deploy hook and the repair
-  tool. Implementation plan:
-  `docs/superpowers/plans/2026-09-17-release-announcements.md`.
+- Every release announces itself in Discord. `CHANGELOG.md` is the source:
+  `deploy-release.sh` queues a row after a **verified** deploy (not on the tag
+  push — a deploy can roll back), and the bot posts one release per tick,
+  oldest first, stopping at the first failure so the channel stays a history.
+  `pnpm release:sync` is the backfill, the per-deploy hook and the repair tool,
+  all one idempotent call. Migration 0038 adds `release_announcements`, CREATE
+  only. Off until `RELEASE_CHANNEL_ID` is set — ⚠️ and everything queued posts
+  at once when it is. Runbook:
+  `docs/deploy/2026-09-17-release-announcements.md`.
 - `CHANGELOG.md` now records every release back to v1.0.0. The v1.1.0–v1.15.0
   entries are reconstructed from the release tags' annotations and the commits
   behind them; v1.0.0 is written from the increment specs, since its tag carries
@@ -199,10 +200,9 @@ this tag.**
 
 ### Notes
 
-- ⚠️ Ships dark. `ENFORCEMENT_TICK` defaults off and `BAN_DRY_RUN` defaults
-  true: audit rows are always written, and a real ban needs both flags set
-  deliberately. The dry-run week is where `BOOST_STACK_RADIUS_M` and
-  `BOOST_STACK_MIN_RISE_M` get tuned before anyone is banned.
+- ⚠️ Shipped dark: detection and audit rows from day one, automatic bans off by
+  default, to be enabled deliberately once the boost-stack thresholds had been
+  tuned against real data.
 - ⚠️ `parity.test.ts`'s `PENDING` list is no longer empty. `reportIncident` is
   deferred deliberately: the evidence an officer needs to judge a report
   cannot appear in Discord under `clan_notices_no_coordinates`, so the
@@ -467,7 +467,7 @@ this tag.**
 - ⚠️ Do not deploy v1.7.0. `packages/copy/test/leaf.test.ts` is the standing
   guard: it fails on any runtime import of `@factions/roster` from that
   package and names the offending specifiers.
-- Deployed to regime: web image rebuilt, bot restarted on the same commit.
+- Deployed: web image rebuilt, bot restarted on the same commit.
 
 ## [1.7.0] - 2026-09-13
 

@@ -1394,6 +1394,43 @@ export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
 }));
 
 /**
+ * One row per released version, queued for #releases and drained by the bot.
+ *
+ * Written by `pnpm release:sync` alone (from `deploy/deploy-release.sh` after a
+ * verified deploy, or by hand to backfill), a single statement touching no other
+ * table — so it is OUTSIDE the §4.12 lock order, the same reason
+ * `server_restarts` and `vehicle_wipe_announcements` are: no other writer ever
+ * needs it locked before touching the roster tables.
+ *
+ * ⚠️ This table is the only thing that prevents a re-post. Truncating it, or
+ * restoring a dump taken before a release was announced, re-announces every
+ * release it no longer records — the whole history, in order, into the channel.
+ *
+ * ⚠️ No `attempts`/`failed_at`, unlike `clan_notices`. A notice's targets are
+ * independent, so a stuck one is abandoned after three tries rather than
+ * blocking the rest. A release queue is the opposite: order is the point, so a
+ * failure blocks and retries until a human clears it, as `war_log_events` does.
+ */
+export const releaseAnnouncements = pgTable("release_announcements", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  /** "1.17.0", without the leading `v` — as `CHANGELOG.md` writes it. */
+  version: text("version").notNull().unique(),
+  /** The date on the changelog heading, which is the tag's date. */
+  releasedAt: timestamp("released_at", { withTimezone: true }).notNull(),
+  /**
+   * The tag's subject line. Null when the tag carried none beyond the bare
+   * version — v1.16.0 and v1.17.0 were tagged that way, and post untitled.
+   */
+  title: text("title"),
+  /** The changelog section, markdown, verbatim. */
+  body: text("body").notNull(),
+  queuedAt: timestamp("queued_at", { withTimezone: true }).notNull().defaultNow(),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+}, (t) => ({
+  queue: index("release_announcements_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
+}));
+
+/**
  * One row per raid-window boundary actually brought into effect, per server.
  *
  * ⚠️ `boundary_at` is the WINDOW BOUNDARY, not the restart slot. A repair write at
