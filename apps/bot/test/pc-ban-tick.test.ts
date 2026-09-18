@@ -79,6 +79,23 @@ describe("pcBanTick", () => {
     expect(row!.status).toBe("lift_pending");
   });
 
+  it("does not lift a still-pending ban, only delays it", async () => {
+    await desktop();
+    await pcBanTick(db, { serverId: 1, now }); // writes a `pending` ban
+    await challenge(PC, new Date(now.getTime() + 3600_000));
+    const r1 = await pcBanTick(db, { serverId: 1, now });
+    expect(r1.lifted).toEqual([]);
+    const [pendingRow] = await db.select().from(bans);
+    expect(pendingRow!.status).toBe("pending");
+
+    // Once banTick has applied it, the same open challenge lifts it.
+    await db.update(bans).set({ status: "applied" });
+    const r2 = await pcBanTick(db, { serverId: 1, now });
+    expect(r2.lifted.map((b) => b.dayzId)).toEqual([PC]);
+    const [appliedRow] = await db.select().from(bans);
+    expect(appliedRow!.status).toBe("lift_pending");
+  });
+
   /** ⚠️ The abuse vector. Second time around, the door stays shut. */
   it("refuses a second lift, ever", async () => {
     await desktop();

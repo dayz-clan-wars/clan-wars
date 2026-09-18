@@ -80,7 +80,11 @@ export async function pcBanTick(db: Database, opts: { serverId: number; now?: Da
         reason: "unlinked_pc",
       });
       out.banned.push(c);
-    } else if (action === "lift" && active) {
+    } else if (action === "lift" && active?.status === "applied") {
+      // ⚠️ Only an `applied` ban has an entry on Nitrado's list to remove. A
+      // `pending` row is lifted on a later pass, once `banTick` has applied
+      // it — no lift is spent in the meantime, because nothing here reaches
+      // `lift_pending` until then.
       await db.update(bans).set({ status: "lift_pending" }).where(eq(bans.id, active.id));
       out.lifted.push(c);
     }
