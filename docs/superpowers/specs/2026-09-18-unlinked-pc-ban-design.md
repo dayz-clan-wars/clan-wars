@@ -162,15 +162,25 @@ account: `reason = 'unlinked_pc'`, `expires_at` **null**, `status = 'pending'`,
 The ban is permanent because it is not a sentence to serve. It is a door that
 opens when the player links.
 
-### 3.6 The lift — inside `startLink`
+### 3.6 The lift — level-triggered, in the same tick
 
-Opening a challenge marks any `applied` ban for that `dayz_id` with
-`reason = 'unlinked_pc'` as `lift_pending`, **in `startLink`'s own
-transaction**.
+An account with an open challenge, an `applied` ban whose reason is
+`unlinked_pc`, and no lift spent yet is marked `lift_pending` by the tick.
 
-⚠️ Same transaction, deliberately. A lift written separately could be lost
-between the two writes, leaving a player who did exactly what we asked locked
-out with nothing anywhere saying why.
+⚠️ **Level-triggered, not written by `startLink`.** An earlier draft of this
+section put the lift inside `startLink`'s transaction so it could not be lost
+between two writes. The tick answers that worry better: it recomputes what
+should be true on every pass, so a lift that is lost, never written, or
+hand-reverted in the database is repaired within one tick instead of leaving a
+player who did exactly what we asked locked out forever. It is the same
+discipline as the truck wipe and the raid window.
+
+It also avoids widening `PgVerificationStore`'s constructor from `Database` to
+`Database | Tx` — a type the bot and the site both depend on — for the benefit
+of one caller.
+
+The cost is that the lift lands up to one tick (~10 s) after the player starts
+their link, rather than instantly. The challenge lasts 24 hours.
 
 The ban tick's lift arm then removes the Nitrado entry, reference-counting
 against any other active ban for that account — which it already does
@@ -198,6 +208,10 @@ banned.
 One lift per account, for all time. A player who burns their window needs a
 human — and that conversation is the right outcome for someone who has already
 demonstrated they will not link.
+
+**"Already had its lift" needs no new column:** it is
+`exists (select 1 from bans where dayz_id = ? and reason = 'unlinked_pc'
+and status in ('lift_pending','lifted'))`. The ban history is the record.
 
 ---
 
@@ -264,8 +278,8 @@ it should be in the ops message when it happens.
   a restart whose `dpnid` never resolves.
 - **Predicate**, table-driven: linked, mid-challenge, expired challenge,
   canceled challenge, console, unknown device string, never-seen.
-- **Lift**: `startLink` marks `lift_pending` only for `reason = 'unlinked_pc'`,
-  and only once ever.
+- **Lift**: the tick marks `lift_pending` only for `reason = 'unlinked_pc'`,
+  only while a challenge is open, and only once ever.
 - **Mutation check on lift-once.** "Once" is exactly the kind of rule a test
   can assert while never exercising it; defeat the counter and the test must
   fail.
