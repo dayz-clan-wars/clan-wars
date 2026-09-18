@@ -2,7 +2,9 @@ import type { GuildGateway, NicknameOutcome } from "../src/guild.js";
 
 /** In-memory `GuildGateway` shared by structure-tick.test.ts. */
 export class FakeGuild implements GuildGateway {
-  roles = new Map<string, { name: string; members: Set<string>; mentionable: boolean }>();
+  // `color` is optional when seeding: a role stated without one is on
+  // Discord's default colour, which is 0.
+  roles = new Map<string, { name: string; members: Set<string>; mentionable: boolean; color?: number }>();
   channels = new Map<string, { name: string; kind: "text" | "voice"; roleId: string }>();
   members = new Map<string, { nickname: string | null }>();
   overwrites = new Map<string, Set<string>>();
@@ -18,11 +20,12 @@ export class FakeGuild implements GuildGateway {
   async fetchAllMembers() {
     return this.members.size;
   }
-  async createRole(name: string) {
+  async createRole(name: string, color: number | null) {
     this.fail("createRole");
     const id = `role-${++this.n}`;
-    this.roles.set(id, { name, members: new Set(), mentionable: true });
-    this.calls.push(`createRole ${name}`);
+    // 0 is Discord's "default colour", which is what a null colour means here.
+    this.roles.set(id, { name, members: new Set(), mentionable: true, color: color ?? 0 });
+    this.calls.push(`createRole ${name}${color === null ? "" : ` #${color.toString(16)}`}`);
     return id;
   }
   async createTextChannel(name: string, roleId: string) {
@@ -59,6 +62,17 @@ export class FakeGuild implements GuildGateway {
   }
   roleMentionable(id: string) {
     return this.roles.get(id)?.mentionable ?? null;
+  }
+  roleColor(id: string) {
+    const role = this.roles.get(id);
+    return role === undefined ? null : role.color ?? 0;
+  }
+  async setRoleColor(id: string, color: number) {
+    this.fail("setRoleColor");
+    const role = this.roles.get(id);
+    if (role === undefined) return;
+    role.color = color;
+    this.calls.push(`setRoleColor ${id} #${color.toString(16)}`);
   }
   async makeRoleMentionable(id: string) {
     this.fail("makeRoleMentionable");

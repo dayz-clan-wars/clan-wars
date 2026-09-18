@@ -10,6 +10,8 @@ export type StructureRow = {
   name: string;
   tag: string;
   status: string;
+  /** The clan's flag. The only thing its role colour is keyed off — see `flagColor`. */
+  texture: string;
   roleId: string | null;
   textChannelId: string | null;
   voiceChannelId: string | null;
@@ -71,6 +73,7 @@ export class PgStructureStore implements StructureStore {
         name: factions.name,
         tag: factions.tag,
         status: factions.status,
+        texture: factions.texture,
         roleId: factions.discordRoleId,
         textChannelId: factions.discordTextChannelId,
         voiceChannelId: factions.discordVoiceChannelId,
@@ -97,6 +100,7 @@ export class PgStructureStore implements StructureStore {
         name: factions.name,
         tag: factions.tag,
         status: factions.status,
+        texture: factions.texture,
         roleId: factions.discordRoleId,
         textChannelId: factions.discordTextChannelId,
         voiceChannelId: factions.discordVoiceChannelId,
@@ -123,6 +127,7 @@ export class PgStructureStore implements StructureStore {
         name: factions.name,
         tag: factions.tag,
         status: factions.status,
+        texture: factions.texture,
         roleId: factions.discordRoleId,
         textChannelId: factions.discordTextChannelId,
         voiceChannelId: factions.discordVoiceChannelId,

@@ -84,6 +84,47 @@ describe("structureTick", () => {
     expect(guild.calls.filter((c) => c.startsWith("createRole"))).toHaveLength(1);
   });
 
+  it("creates a clan role in its flag's colour", async () => {
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(r).toMatchObject({ created: 1, errors: 0 });
+    const [row] = await store.clansWithStructure();
+    // BEAR flies Flag_Bear, whose colour is #839E00.
+    expect(guild.roles.get(row!.roleId!)!.color).toBe(0x839e00);
+    expect(guild.calls).toContain("createRole Night Bears #839e00");
+  });
+
+  it("⚠️ repaints a clan role whose colour drifted — every role made before colours existed is on the default", async () => {
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    const [row] = await store.clansWithStructure();
+    // 0 is Discord's default: exactly what an old role, or one an admin
+    // recoloured by hand, looks like.
+    guild.roles.get(row!.roleId!)!.color = 0;
+    guild.calls.length = 0;
+
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(r).toMatchObject({ colorsFixed: 1, errors: 0 });
+    expect(guild.roles.get(row!.roleId!)!.color).toBe(0x839e00);
+
+    // And it is a one-time repair, not a REST call every tick.
+    guild.calls.length = 0;
+    const again = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(again).toMatchObject({ colorsFixed: 0, errors: 0 });
+    expect(guild.calls.filter((c) => c.startsWith("setRoleColor"))).toEqual([]);
+  });
+
+  it("⚠️ leaves the colour alone for a flag outside the pool, rather than blanking it", async () => {
+    // ⚠️ Its own pole: `seedFaction` writes the declaration directly, so two
+    // seeded clans in one test need distinct pole keys.
+    const white = await seedFaction(db, { serverId, name: "Ghosts", tag: "GHST", texture: "Flag_White", status: "active", createdAt: now, poleKey: "GHST:9:9", x: 9000, y: 0, z: 9000 });
+    await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    const row = (await store.clansWithStructure()).find((c) => c.id === white.id);
+    // Created with no colour, and left on the default rather than repaired to one.
+    expect(guild.roles.get(row!.roleId!)!.color).toBe(0);
+    guild.calls.length = 0;
+    const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
+    expect(r).toMatchObject({ colorsFixed: 0, errors: 0 });
+  });
+
   it("⚠️ flips a clan role back to mentionable — an unpingable role makes every base alert silent", async () => {
     await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     const [row] = await store.clansWithStructure();
@@ -227,7 +268,7 @@ describe("structureTick", () => {
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toEqual({
       created: 0, tornDown: 0, renamed: 0, roleAdds: 0, roleRemoves: 0, linkedAdds: 0, linkedRemoves: 0,
-      alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, mentionableFixed: 0, noticesFailed: 0,
+      alphaAdds: 0, alphaRemoves: 0, nicknamesCleared: 0, mentionableFixed: 0, colorsFixed: 0, noticesFailed: 0,
       guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0, errors: 0,
     });
     expect(guild.calls).toEqual([]);
@@ -315,7 +356,7 @@ describe("structureTick", () => {
     // What `cachedGuild()` does when `guilds.fetch` failed at start-up.
     const blind: GuildGateway = {
       fetchAllMembers: () => guild.fetchAllMembers(),
-      createRole: (n) => guild.createRole(n),
+      createRole: (n, c) => guild.createRole(n, c),
       createTextChannel: (n, r) => guild.createTextChannel(n, r),
       createVoiceChannel: (n, r) => guild.createVoiceChannel(n, r),
       deleteRole: (i) => guild.deleteRole(i),
@@ -323,6 +364,9 @@ describe("structureTick", () => {
       roleName: (i) => guild.roleName(i),
       roleMentionable: (i) => guild.roleMentionable(i),
       makeRoleMentionable: (i) => guild.makeRoleMentionable(i),
+      // Blind, like every other cache read on this stub.
+      roleColor: () => null,
+      setRoleColor: (i, c) => guild.setRoleColor(i, c),
       channelName: (i) => guild.channelName(i),
       findRoleByName: (n) => guild.findRoleByName(n),
       findChannelByName: (n, k) => guild.findChannelByName(n, k),
@@ -348,7 +392,7 @@ describe("structureTick", () => {
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
       alphaAdds: 0, alphaRemoves: 0,
-      nicknamesCleared: 0, mentionableFixed: 0, noticesFailed: 0,
+      nicknamesCleared: 0, mentionableFixed: 0, colorsFixed: 0, noticesFailed: 0,
       guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0,
       // step 4's isMember, step 5's read, step 6's read, step 8's read — the pass still finishes
       errors: 4,

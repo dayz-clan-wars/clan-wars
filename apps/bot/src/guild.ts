@@ -22,8 +22,15 @@ export function voiceChannelNameFor(n: ClanNames): string {
 export interface GuildGateway {
   /** Populate the member cache. Returns the member count. Called once at start. */
   fetchAllMembers(): Promise<number>;
-  /** Created mentionable: the clan's own alerts open with `<@&role>` (see PING_KINDS in notice-tick.ts), and a non-mentionable role would render that as grey text nobody is notified by. */
-  createRole(name: string): Promise<string>;
+  /**
+   * Created mentionable: the clan's own alerts open with `<@&role>` (see PING_KINDS in notice-tick.ts), and a non-mentionable role would render that as grey text nobody is notified by.
+   *
+   * `color` is the clan's flag colour as a Discord integer, or null to leave
+   * the role on Discord's default. It is set AT CREATION as well as repaired
+   * later, so a new clan's members are the right colour immediately rather
+   * than on the next reconciler pass.
+   */
+  createRole(name: string, color: number | null): Promise<string>;
   /** Text channel under CLAN_TEXT_CATEGORY_ID, visible only to `roleId`. */
   createTextChannel(name: string, roleId: string): Promise<string>;
   /** Voice channel under CLAN_VOICE_CATEGORY_ID, View + Connect only for `roleId`. */
@@ -35,6 +42,10 @@ export interface GuildGateway {
   roleName(roleId: string): string | null;
   /** Cache: is the role mentionable by anyone; null for an unknown role. */
   roleMentionable(roleId: string): boolean | null;
+  /** Cache: the role's colour as a Discord integer (0 is "default"); null for an unknown role. */
+  roleColor(roleId: string): number | null;
+  /** `role.setColor(color)`. No-op for a role that is not in the cache. */
+  setRoleColor(roleId: string, color: number): Promise<void>;
   /** `role.setMentionable(true)`. No-op for a role that is not in the cache. */
   makeRoleMentionable(roleId: string): Promise<void>;
   channelName(channelId: string): string | null;
@@ -69,8 +80,8 @@ type RealGuild = {
   id: string;
   ownerId: string;
   roles: {
-    cache: Map<string, { id: string; name: string; mentionable: boolean; members: Map<string, unknown>; setName(name: string): Promise<unknown>; setMentionable(v: boolean): Promise<unknown> }>;
-    create(opts: { name: string; mentionable: boolean }): Promise<{ id: string }>;
+    cache: Map<string, { id: string; name: string; mentionable: boolean; color: number; members: Map<string, unknown>; setName(name: string): Promise<unknown>; setMentionable(v: boolean): Promise<unknown>; setColor(c: number): Promise<unknown> }>;
+    create(opts: { name: string; mentionable: boolean; color?: number }): Promise<{ id: string }>;
     fetch(id: string): Promise<{ delete(): Promise<unknown> } | null>;
   };
   channels: {
@@ -156,9 +167,13 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
       return members.size;
     },
 
-    async createRole(name) {
+    async createRole(name, color) {
       const guild = await getGuild();
-      const role = await guild.roles.create({ name, mentionable: true });
+      // ⚠️ `color` omitted rather than passed as 0 when there is none: Discord
+      // reads 0 as "default colour", which is what we want, but sending it
+      // explicitly on every create would also blank a colour a future caller
+      // meant to keep. Omitting says nothing, which is the honest default.
+      const role = await guild.roles.create(color === null ? { name, mentionable: true } : { name, mentionable: true, color });
       return role.id;
     },
 
@@ -236,6 +251,17 @@ export function createGuildGateway(client: Client, cfg: GuildGatewayConfig): Gui
       const role = guild.roles.cache.get(roleId);
       if (role === undefined) return;
       await role.setMentionable(true);
+    },
+
+    roleColor(roleId) {
+      return resolvedGuild?.roles.cache.get(roleId)?.color ?? null;
+    },
+
+    async setRoleColor(roleId, color) {
+      const guild = await getGuild();
+      const role = guild.roles.cache.get(roleId);
+      if (role === undefined) return;
+      await role.setColor(color);
     },
 
     channelName(channelId) {

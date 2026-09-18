@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Every clan now has its own colour in Discord. Your name shows in your
+  clan's colour everywhere you appear, so you can read a member list or a
+  channel and see who runs with who. Each of the 33 flags has its own
+  colour and no two clans ever share one, so the colour is yours for as
+  long as you hold the flag. Claim a different flag and you take that
+  flag's colour with it.
+
 ## [1.23.0] - 2026-09-18
 
 ### Added

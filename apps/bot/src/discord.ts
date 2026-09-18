@@ -693,6 +693,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (s.alphaRemoves) parts.push(`alphaRemoves ${s.alphaRemoves}`);
     if (s.nicknamesCleared) parts.push(`nicknamesCleared ${s.nicknamesCleared}`);
     if (s.mentionableFixed) parts.push(`mentionableFixed ${s.mentionableFixed}`);
+    if (s.colorsFixed) parts.push(`colorsFixed ${s.colorsFixed}`);
     if (s.noticesFailed) parts.push(`noticesFailed ${s.noticesFailed}`);
     if (s.guestGrants) parts.push(`guestGrants ${s.guestGrants}`);
     if (s.guestRevokes) parts.push(`guestRevokes ${s.guestRevokes}`);
