@@ -62,8 +62,14 @@ describe("createGuildGateway", () => {
   it("⚠️ creates a clan role mentionable — a non-mentionable role makes every base alert's ping silent", async () => {
     const f = fakeClient();
     const g = createGuildGateway(f.client as never, CFG);
-    await g.createRole("Night Bears");
+    await g.createRole("Night Bears", null);
     expect(f.guild.roles.create.mock.calls[0]![0]).toEqual({ name: "Night Bears", mentionable: true });
+  });
+  it("⚠️ passes a clan's colour at create, so its members are right immediately rather than a tick later", async () => {
+    const f = fakeClient();
+    const g = createGuildGateway(f.client as never, CFG);
+    await g.createRole("Night Bears", 0xd17e3b);
+    expect(f.guild.roles.create.mock.calls[0]![0]).toEqual({ name: "Night Bears", mentionable: true, color: 0xd17e3b });
   });
   it("reads mentionable from the cache and flips it, tolerating a role that is not cached", async () => {
     const f = fakeClient();
@@ -99,7 +105,7 @@ describe("createGuildGateway", () => {
   it("finds a role and a channel by exact name, the channel scoped to its clan category", async () => {
     const f = fakeClient();
     const g = createGuildGateway(f.client as never, CFG);
-    await g.createRole("Night Bears");
+    await g.createRole("Night Bears", null);
     await g.createTextChannel("clan-bear", "r-Night Bears");
     f.channelsCache.set("elsewhere", { id: "elsewhere", name: "clan-bear", parentId: "some-other-category" });
     await g.fetchAllMembers();

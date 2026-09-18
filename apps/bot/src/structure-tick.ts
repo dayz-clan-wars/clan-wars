@@ -1,6 +1,7 @@
 import type { StructureStore } from "./structure-store.js";
 import type { GuildGateway, NicknameOutcome } from "./guild.js";
 import { roleNameFor, textChannelNameFor, voiceChannelNameFor } from "./guild.js";
+import { flagColor } from "@factions/domain";
 
 export type StructureTickResult = {
   created: number;
@@ -15,6 +16,8 @@ export type StructureTickResult = {
   nicknamesCleared: number;
   /** Clan roles flipped back to mentionable (step 3) so the base alerts that open with `<@&role>` actually notify. */
   mentionableFixed: number;
+  /** Clan roles repainted to their flag's colour (step 3) — new clans get it at create, existing ones converge here. */
+  colorsFixed: number;
   /** Channel notices stamped `failed_at` because their clan's channel was torn down. */
   noticesFailed: number;
   /** Voice-channel overwrites granted for an open guest pass. */
@@ -63,6 +66,7 @@ export async function structureTick(
     alphaRemoves: 0,
     nicknamesCleared: 0,
     mentionableFixed: 0,
+    colorsFixed: 0,
     noticesFailed: 0,
     guestGrants: 0,
     guestRevokes: 0,
@@ -101,7 +105,7 @@ export async function structureTick(
     await step(`create:${row.id}`, async () => {
       let roleId = row.roleId;
       if (roleId === null) {
-        roleId = adopt(guild.findRoleByName(roleNameFor(row))) ?? (await guild.createRole(roleNameFor(row)));
+        roleId = adopt(guild.findRoleByName(roleNameFor(row))) ?? (await guild.createRole(roleNameFor(row), flagColor(row.texture)));
         owned.add(roleId);
         await store.setRoleId(row.id, roleId);
       }
@@ -168,6 +172,23 @@ export async function structureTick(
         if (guild.roleMentionable(row.roleId!) === false) {
           await guild.makeRoleMentionable(row.roleId!);
           out.mentionableFixed++;
+        }
+
+        // ⚠️ Repaired here, not only at create time, for the same reason as
+        // mentionable above: every clan role made before colours existed is
+        // still on Discord's default, and a colour changed by hand should
+        // come back. `flagColor` is null only for a texture outside the pool
+        // — then leave the role alone rather than blanking it.
+        // ⚠️ `current === null` means the cache could not answer (a cold or
+        // failed guild fetch, or a role that is gone), NOT "no colour" — that
+        // is 0. Skipping then is the same under-acting discipline
+        // `roleMentionable`'s `=== false` check uses: a blind cache must never
+        // provoke a write it cannot verify, once per clan per tick, forever.
+        const wanted = flagColor(row.texture);
+        const current = guild.roleColor(row.roleId!);
+        if (wanted !== null && current !== null && current !== wanted) {
+          await guild.setRoleColor(row.roleId!, wanted);
+          out.colorsFixed++;
         }
       }
 

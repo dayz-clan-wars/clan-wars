@@ -92,7 +92,7 @@ describe("discord wiring", () => {
       roleAdds: 0, roleRemoves: 0,
       linkedAdds: 0, linkedRemoves: 0,
       alphaAdds: 0, alphaRemoves: 0,
-      nicknamesCleared: 0, mentionableFixed: 0, noticesFailed: 0,
+      nicknamesCleared: 0, mentionableFixed: 0, colorsFixed: 0, noticesFailed: 0,
       guestGrants: 0, guestRevokes: 0, guestConverted: 0, nicknamesSet: 0,
       errors: 0,
     });
