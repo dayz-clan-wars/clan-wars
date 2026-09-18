@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHAPTERS, CONTENT_DIR } from "../lib/guide";
-import { MESSAGE_MAX, channelNameFor, guideChannels, chapterMessages, contentsMessages, chunk, escape } from "../lib/guide-discord";
+import { MESSAGE_MAX, CONTENTS_CHANNEL, channelNameFor, plainChannelNameFor, canonicalChannelName, guideChannels, chapterMessages, contentsMessages, chunk, escape } from "../lib/guide-discord";
 
 /**
  * The Discord copy of the guide is rendered from the site's own fragments;
@@ -29,12 +29,18 @@ describe("guide → Discord", () => {
 
   it("names one channel per chapter plus the contents, valid for Discord and unique", () => {
     const names = guideChannels().map((c) => c.name);
-    expect(names[0]).toBe("00-start-here");
-    expect(names).toContain("01-what-this-is");
-    expect(names).toContain("13-rules-on-one-page");
-    expect(names).toContain("a-numbers");
+    // The names CARRY their number as keycaps; what identifies a chapter is
+    // the canonical form underneath.
+    const plain = names.map(canonicalChannelName);
+    expect(plain[0]).toBe("00-start-here");
+    expect(plain).toContain("01-what-this-is");
+    expect(plain).toContain("13-rules-on-one-page");
+    expect(plain).toContain("a-numbers");
     expect(new Set(names).size).toBe(names.length);
-    for (const n of names) expect(n).toMatch(/^[a-z0-9-]{1,100}$/u);
+    expect(new Set(plain).size).toBe(plain.length);
+    for (const n of plain) expect(n).toMatch(/^[a-z0-9-]{1,100}$/u);
+    // ⚠️ Discord's own limit is on the real name, decoration included.
+    for (const n of names) expect(n.length).toBeLessThanOrEqual(100);
   });
 
   it("turns a chapter link into that chapter's channel, or the site when the channel is unknown", () => {
@@ -69,5 +75,60 @@ describe("guide → Discord", () => {
   it("the contents names every chapter's channel", () => {
     const text = contentsMessages(ids).join("\n");
     for (const c of CHAPTERS) expect(text).toContain(`**${c.number}.** <#${ids.get(c.slug)}>`);
+  });
+});
+
+describe("decorated channel names", () => {
+  /** One keycap: the ascii character, then VS16, then the enclosing-keycap mark. */
+  const keycap = (d: string) => `${d}\uFE0F\u20E3`;
+
+  it("names a numbered chapter with keycap digits", () => {
+    const ch = CHAPTERS.find((c) => c.number === "1")!;
+    // ⚠️ Chapter 1's own slug is empty; `plainChannelNameFor` is what supplies
+    // the `what-this-is` fallback, so the decorated name is built from that
+    // rather than from `ch.slug`.
+    const plain = plainChannelNameFor(ch);
+    expect(plain).toBe("01-what-this-is");
+    expect(channelNameFor(ch)).toBe(`${keycap("0")}${keycap("1")}${plain.slice(2)}`);
+  });
+
+  it("names the lettered appendix with a regional indicator", () => {
+    const ch = CHAPTERS.find((c) => !/^\d+$/u.test(c.number));
+    if (ch === undefined) return;
+    expect(channelNameFor(ch)).toBe(`\u{1F1E6}-${ch.slug}`);
+  });
+
+  it("⚠️ round-trips every chapter through canonicalChannelName", () => {
+    for (const c of CHAPTERS) {
+      expect(canonicalChannelName(channelNameFor(c))).toBe(plainChannelNameFor(c));
+    }
+    expect(canonicalChannelName(CONTENTS_CHANNEL)).toBe("00-start-here");
+  });
+
+  it("⚠️ recognises the names already in Discord — this is what stops a rename creating duplicates", () => {
+    // Exactly as they are in the guild today, renamed by hand.
+    expect(canonicalChannelName("0️⃣0️⃣-start-here")).toBe("00-start-here");
+    expect(canonicalChannelName("0️⃣1️⃣-what-this-is")).toBe("01-what-this-is");
+    expect(canonicalChannelName("1️⃣4️⃣-achievements")).toBe("14-achievements");
+    // ⚠️ A regional indicator carries NO ascii letter, unlike a keycap digit.
+    expect(canonicalChannelName("\u{1F1E6}-numbers")).toBe("a-numbers");
+  });
+
+  it("leaves an undecorated name exactly as it is, so an untouched guild still matches", () => {
+    expect(canonicalChannelName("07-the-scoreboard")).toBe("07-the-scoreboard");
+    expect(canonicalChannelName("a-numbers")).toBe("a-numbers");
+  });
+
+  it("is idempotent — canonicalising twice is canonicalising once", () => {
+    for (const c of CHAPTERS) {
+      const once = canonicalChannelName(channelNameFor(c));
+      expect(canonicalChannelName(once)).toBe(once);
+    }
+  });
+
+  it("⚠️ never lets two different chapters collide on one canonical name", () => {
+    const keys = CHAPTERS.map((c) => canonicalChannelName(channelNameFor(c)));
+    expect(new Set(keys).size).toBe(keys.length);
+    expect(keys).not.toContain(canonicalChannelName(CONTENTS_CHANNEL));
   });
 });

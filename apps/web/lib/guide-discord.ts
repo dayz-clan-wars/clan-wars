@@ -26,15 +26,77 @@ import { substituteTokens } from "@/app/guide/render";
 export const SITE = "https://dayzclanwars.com";
 /** Discord's hard cap is 2000; the margin keeps edits safe from the odd escape. */
 export const MESSAGE_MAX = 1900;
-/** The channel that opens the category: the table of contents. */
-export const CONTENTS_CHANNEL = "00-start-here";
+/** VS16 and the combining enclosing keycap: the two marks that turn `1` into `1\uFE0F\u20E3`. */
+const KEYCAP = "\uFE0F\u20E3";
+/** 🇦 … 🇿. A regional indicator carries NO ascii letter inside it, unlike a keycap digit. */
+const REGIONAL_A = 0x1f1e6;
 
-/** `01-what-this-is` … `13-rules-on-one-page`, `a-every-number`. Discord lowercases and dashes channel names; these already are. */
-export function channelNameFor(c: Chapter): string {
+/**
+ * The plain, undecorated name: `01-what-this-is`, `a-numbers`.
+ *
+ * This is the MATCHING key, not what the channel is called. Everything that
+ * compares a live Discord channel to a chapter goes through here or through
+ * `canonicalChannelName`, never through the decorated form.
+ */
+export function plainChannelNameFor(c: Chapter): string {
   const n = /^\d+$/u.test(c.number) ? c.number.padStart(2, "0") : c.number.toLowerCase();
   const slug = c.slug || "what-this-is";
   return `${n}-${slug}`;
 }
+
+/** `01` → `0\uFE0F\u20E31\uFE0F\u20E3`, `a` → `\u{1F1E6}`. Anything else is passed through. */
+function decorate(prefix: string): string {
+  return [...prefix].map((ch) => {
+    if (ch >= "0" && ch <= "9") return `${ch}${KEYCAP}`;
+    if (ch >= "a" && ch <= "z") return String.fromCodePoint(REGIONAL_A + (ch.codePointAt(0)! - 97));
+    return ch;
+  }).join("");
+}
+
+/**
+ * What a guide channel is CALLED: the plain name with its number rendered as
+ * keycap digits (or a regional indicator for the lettered appendix), so a
+ * chapter added later is created looking like the fifteen already there.
+ *
+ * ⚠️ Never used to find an existing channel. Discord channel names are
+ * editable by hand and these were in fact renamed by hand on 2026-09-18;
+ * matching on this string is what would create a duplicate of every channel.
+ * Match on `canonicalChannelName` instead.
+ */
+export function channelNameFor(c: Chapter): string {
+  const plain = plainChannelNameFor(c);
+  const dash = plain.indexOf("-");
+  return `${decorate(plain.slice(0, dash))}${plain.slice(dash)}`;
+}
+
+/**
+ * A live channel name reduced to its plain form, so a decorated channel is
+ * recognised as the chapter it holds.
+ *
+ * ⚠️ This is the whole defence against a hand-rename turning into sixteen
+ * duplicate channels. A keycap digit is an ascii digit plus two combining
+ * marks, so dropping the marks recovers the digit; a regional indicator is a
+ * single codepoint with no ascii inside it, so it has to be mapped back.
+ * Both forms appear in the guild today.
+ *
+ * Anything it does not recognise is left alone, so an undecorated guild and a
+ * decorated one both match, and a channel that is genuinely not the guide's
+ * still fails to match any chapter.
+ */
+export function canonicalChannelName(name: string): string {
+  return [...name]
+    .filter((ch) => ch !== "\uFE0F" && ch !== "\u20E3")
+    .map((ch) => {
+      const cp = ch.codePointAt(0)!;
+      return cp >= REGIONAL_A && cp <= REGIONAL_A + 25
+        ? String.fromCharCode(97 + (cp - REGIONAL_A))
+        : ch;
+    })
+    .join("");
+}
+
+/** The channel that opens the category: the table of contents. */
+export const CONTENTS_CHANNEL = `${decorate("00")}-start-here`;
 
 /** Every channel the publisher owns, in sidebar order. */
 export function guideChannels(): { name: string; chapter: Chapter | null; topic: string }[] {

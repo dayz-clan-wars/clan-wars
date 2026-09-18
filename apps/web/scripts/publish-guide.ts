@@ -26,7 +26,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { CHAPTERS, CONTENT_DIR } from "../lib/guide";
-import { chapterMessages, contentsMessages, guideChannels } from "../lib/guide-discord";
+import { canonicalChannelName, chapterMessages, contentsMessages, guideChannels } from "../lib/guide-discord";
 
 const API = "https://discord.com/api/v10";
 const DRY = process.argv.includes("--dry-run");
@@ -87,27 +87,41 @@ async function main() {
 
   // 1. Channels: one per chapter plus the contents, in order, with the category's permissions.
   const wanted = guideChannels();
-  const byName = new Map(inCategory.map((c) => [c.name, c]));
+  // ⚠️ Keyed on the CANONICAL name, never the literal one. These channels are
+  // renamed by hand — they carry keycap digits in the guild today — and a
+  // literal match would find none of them and create a duplicate of every
+  // one, then report the originals as foreign. Decoration is deliberately
+  // NOT written back: what the channel is called is the operator's.
+  const byName = new Map<string, Channel>();
+  for (const c of [...inCategory].sort((a, b) => a.position - b.position)) {
+    const key = canonicalChannelName(c.name);
+    const first = byName.get(key);
+    // Two channels reducing to one chapter: keep the earlier one and say so,
+    // rather than letting which one wins depend on listing order.
+    if (first) { console.log(`⚠️ #${c.name} and #${first.name} both name ${key}; using #${first.name}`); continue; }
+    byName.set(key, c);
+  }
+  const keyOf = (name: string) => canonicalChannelName(name);
   for (const [i, w] of wanted.entries()) {
-    let ch = byName.get(w.name);
+    let ch = byName.get(keyOf(w.name));
     if (!ch) {
       ch = await write<Channel>(`create #${w.name}`, "POST", `/guilds/${GUILD}/channels`, {
         name: w.name, type: 0, parent_id: CATEGORY, topic: w.topic, position: i, permission_overwrites: category.permission_overwrites,
       });
-      if (ch) byName.set(w.name, ch);
+      if (ch) byName.set(keyOf(w.name), ch);
       continue;
     }
     if ((ch.topic ?? "") !== w.topic) await write(`retitle #${w.name}`, "PATCH", `/channels/${ch.id}`, { topic: w.topic });
   }
-  const order = wanted.map((w, i) => ({ id: byName.get(w.name)?.id, position: i })).filter((x): x is { id: string; position: number } => !!x.id);
+  const order = wanted.map((w, i) => ({ id: byName.get(keyOf(w.name))?.id, position: i })).filter((x): x is { id: string; position: number } => !!x.id);
   const misplaced = order.some((o) => inCategory.find((c) => c.id === o.id)?.position !== o.position);
   if (misplaced && order.length === wanted.length) await write("reorder the channels", "PATCH", `/guilds/${GUILD}/channels`, order);
 
   // 2. Messages: what each channel should say, given the channel ids that now exist.
   const ids = new Map<string, string>();
-  for (const w of wanted) { const id = w.chapter && byName.get(w.name)?.id; if (w.chapter && id) ids.set(w.chapter.slug, id); }
+  for (const w of wanted) { const id = w.chapter && byName.get(keyOf(w.name))?.id; if (w.chapter && id) ids.set(w.chapter.slug, id); }
   for (const w of wanted) {
-    const ch = byName.get(w.name);
+    const ch = byName.get(keyOf(w.name));
     if (!ch) { console.log(`skip #${w.name}: not created (dry run)`); continue; }
     const want = w.chapter
       ? chapterMessages(w.chapter, w.chapter.file ? readFileSync(join(CONTENT_DIR, w.chapter.file), "utf8") : null, ids)
@@ -127,12 +141,15 @@ async function main() {
         changed++; await write(`delete #${w.name} message ${i + 1}`, "DELETE", `/channels/${ch.id}/messages/${have.id}`);
       }
     }
-    if (!changed) console.log(`#${w.name}: in sync (${want.length} message${want.length === 1 ? "" : "s"})`);
+    if (!changed) console.log(`#${ch.name}: in sync (${want.length} message${want.length === 1 ? "" : "s"})`);
   }
 
   // 3. Channels in the category that are not the guide's.
-  const owned = new Set(wanted.map((w) => w.name));
-  for (const c of inCategory.filter((c) => !owned.has(c.name))) {
+  // ⚠️ Canonical here too. Keyed on the literal name this reports every
+  // renamed guide channel as foreign — and `--prune` would then DELETE the
+  // whole guide.
+  const owned = new Set(wanted.map((w) => keyOf(w.name)));
+  for (const c of inCategory.filter((c) => !owned.has(canonicalChannelName(c.name)))) {
     if (PRUNE) await write(`delete #${c.name} (not part of the guide)`, "DELETE", `/channels/${c.id}`);
     else console.log(`ℹ️ #${c.name} is in the category but not part of the guide; pass --prune to delete it`);
   }
