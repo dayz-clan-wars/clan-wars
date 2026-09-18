@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The nine leaderboards now live in Discord as well as on the site, one
+  message each in the leaderboards channel, in the same order and showing
+  the same top ten. They update themselves in place, so the channel stays
+  nine messages and never fills with reposts. The numbers are the current
+  season, the same as the site and the same as the nine crown roles, so
+  what you see on the board is who is wearing the role.
+
 ## [1.22.0] - 2026-09-18
 
 ### Added

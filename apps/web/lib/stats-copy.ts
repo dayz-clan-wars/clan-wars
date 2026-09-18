@@ -1,5 +1,5 @@
 import { KD_MIN_KILLS } from "@factions/domain";
-import { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "@factions/copy";
+import { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel, boardValue } from "@factions/copy";
 
 /**
  * Section headings for the nine boards, `EMPTY_BOARD`, `NO_PROFILE`,
@@ -7,7 +7,7 @@ import { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel } from "@fa
  * the bot's `/player`, `/board` and `/achievements` needed the identical
  * wording; re-exported here so nothing on the site changes its import.
  */
-export { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel };
+export { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel, boardValue };
 
 /** Under the streaks board: what ends one. */
 export const STREAK_NOTE = "Ends on a PvP death";

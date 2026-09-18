@@ -86,6 +86,17 @@ export type BotConfig = {
    */
   alphaRoleId: string;
   /**
+   * The leaderboards channel: nine standing messages, one per board, edited
+   * in place. Optional — unset and nothing is posted or edited anywhere.
+   */
+  leaderboardsChannelId: string | undefined;
+  /**
+   * How often the nine board messages reconcile. Default 5 minutes, the same
+   * clock the crowns run on: both read the same nine leaderboards, and a
+   * board that moved should move its crown and its message together.
+   */
+  leaderboardTickIntervalMs: number;
+  /**
    * The nine leaderboard crowns: one role per board, held by whoever is #1 on
    * it in the current season (`crown-tick.ts`).
    *
@@ -411,6 +422,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
     alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
+    leaderboardsChannelId: optionalSnowflake(env, "LEADERBOARDS_CHANNEL_ID"),
+    leaderboardTickIntervalMs: positiveInt(env, "LEADERBOARD_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
     crownRoleIds: crownRoleIds(env),
     crownTickIntervalMs: positiveInt(env, "CROWN_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
     achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),

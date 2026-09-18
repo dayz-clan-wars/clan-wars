@@ -1,6 +1,6 @@
 import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow, type RowClans } from "@factions/roster";
 import { flagImagePath } from "@/src/flag-images";
-import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, playTime, scopeLabel } from "@/lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, boardValue, scopeLabel } from "@/lib/stats-copy";
 import { BOARD_SLUGS, seasonQuery } from "@/lib/board-page";
 import { Panel, Rank, SegNav, linkMono } from "./ui";
 
@@ -23,12 +23,6 @@ const NUM = Object.fromEntries(BOARD_KINDS.map((k, i) => [k, String(i + 1).padSt
 const NOTE: Partial<Record<Kind, string>> = { kd: KD_NOTE, builders: BUILD_NOTE, streaks: STREAK_NOTE };
 export { NUM as BOARD_NUM, NOTE as BOARD_NOTE };
 
-function formatValue(kind: Kind, value: number): string {
-  if (kind === "playTime") return playTime(value);
-  if (kind === "longestKills") return `${value} m`;
-  return String(value);
-}
-
 /** The row's clan flag, or a blank of the same size so names line up. The tag is the alt text and the tooltip. */
 function RowFlag({ clan }: { clan: { tag: string; texture: string } | undefined }) {
   if (!clan) return <span aria-hidden="true" className="h-6 w-6 flex-none" />;
@@ -50,7 +44,7 @@ export function BoardRows({ kind, rows, clans, first = 1 }: { kind: Kind; rows: 
             <a className="truncate font-mono text-sm text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
             {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs text-muted">{r.kills} / {r.deaths}</span>}
             {kind === "longestKills" && "weapon" in r && r.weapon && <span className="ml-auto truncate font-mono text-xs text-muted">{r.weapon}</span>}
-            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{formatValue(kind, r.value)}</span>
+            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{boardValue(kind, r.value)}</span>
           </li>
         );
       })}

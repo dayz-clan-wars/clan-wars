@@ -1,28 +1,10 @@
-import { BOARD_KINDS, type BoardKind } from "@factions/roster";
-
-/** Rows on a board panel. The rest are on the board's own page. */
-export const BOARD_TOP = 10;
-
 /**
- * The URL segment of each board's full page (`/players/boards/{slug}`,
- * `/clan/board/{slug}`). Kebab-case, so the address reads as words.
+ * ⚠️ Re-exported, not defined here: `BOARD_TOP`, `BOARD_SLUGS` and
+ * `boardKindFromSlug` moved to `@factions/copy` (2026-09-18) once the bot's
+ * leaderboard channel needed the identical row count and the identical board
+ * links. Site imports are unchanged by design — keep importing them from here.
  */
-export const BOARD_SLUGS: Record<BoardKind, string> = {
-  raiders: "raiders",
-  killers: "killers",
-  deaths: "deaths",
-  kd: "kd",
-  playTime: "play-time",
-  friendlyFire: "friendly-fire",
-  builders: "builders",
-  streaks: "streaks",
-  longestKills: "longest-kills",
-};
-
-/** The board a URL segment names, or null. The raw segment is looked up, never echoed. */
-export function boardKindFromSlug(raw: string): BoardKind | null {
-  return BOARD_KINDS.find((k) => BOARD_SLUGS[k] === raw) ?? null;
-}
+export { BOARD_TOP, BOARD_SLUGS, boardKindFromSlug } from "@factions/copy";
 
 /**
  * `?page=` is attacker-supplied. A positive integer is that page; anything
