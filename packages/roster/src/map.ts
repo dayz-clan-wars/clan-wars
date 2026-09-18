@@ -23,7 +23,7 @@ export type MapState = {
   base: { x: number; z: number; radiusM: number; kind: "clan" | "solo" } | null;
   clanmates: { dayzId: string; gamertag: string; fix: MapFix }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: Date; distanceM: number }[];
-  publicBases: { x: number; z: number; texture: string | null }[];
+  publicBases: { x: number; z: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string; at: Date; expiresAt: Date }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
@@ -79,7 +79,7 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
     .from(clanPins).leftJoin(identityLinks, eq(identityLinks.dayzId, clanPins.dayzId))
     .where(and(eq(clanPins.factionId, clan.id), gt(clanPins.expiresAt, now))).orderBy(desc(clanPins.createdAt)) : [];
 
-  const publicBases = (await publicPoles(db, serverId, now)).map((p) => ({ x: n(p.x), z: n(p.z), texture: p.texture }));
+  const publicBases = (await publicPoles(db, serverId, now)).map((p) => ({ x: n(p.x), z: n(p.z) }));
 
   return {
     world: { size: WORLD_SIZE_M },

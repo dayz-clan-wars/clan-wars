@@ -23,7 +23,7 @@ const mapFixture = (over: Partial<MapState> = {}): MapState => ({
   base: { x: 6661, z: 6662, radiusM: 50, kind: "clan" },
   clanmates: [{ dayzId: "mate-1", gamertag: "Bex", fix: { x: 5551, z: 5552, at: new Date("2026-09-12T09:30:00Z") } }],
   intruders: [{ gamertag: "Rat", x: 4441, z: 4442, lastSeenAt: new Date("2026-09-12T09:45:00Z"), distanceM: 300 }],
-  publicBases: [{ x: 3331, z: 3332, texture: "wolf" }],
+  publicBases: [{ x: 3331, z: 3332 }],
   pins: [pin()],
   travelPoints: [{ x: 2221, z: 2222 }],
   hub: { x: 1111, z: 1112 },

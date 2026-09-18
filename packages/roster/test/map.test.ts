@@ -60,7 +60,7 @@ describe("mapState / dropPin / deletePin", () => {
     expect(s.base).toEqual({ x: 5000, z: 5000, radiusM: WATCH_ZONE_RADIUS_M, kind: "clan" });
     expect(s.clanmates.map((m) => [m.gamertag, m.fix.x])).toEqual([["Ben", 6000]]);      // not Ann (that is `you`), not Pat (pending), not Rex, not Xed
     expect(s.intruders).toEqual([{ gamertag: "Xed", x: 5030, z: 5030, lastSeenAt: ago(300_000), distanceM: 40 }]);
-    expect(s.publicBases).toEqual([{ x: 2000, z: 2000, texture: "Flag_Pirates" }]);
+    expect(s.publicBases).toEqual([{ x: 2000, z: 2000 }]);
     expect(s.travelPoints).toHaveLength(TRAVEL_POINTS);
     expect(s.hub).toEqual(HUB_POSITION);
     expect(s.layers).toEqual({ base: true, clanmates: true, intruders: true, pins: true });
