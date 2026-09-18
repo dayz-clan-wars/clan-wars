@@ -137,6 +137,13 @@ export type BotConfig = {
    * is a deliberate act on a chosen day, never a side effect of a deploy.
    */
   unlinkedPcBan: boolean;
+  /**
+   * The public #bans channel — enforced bans and unbans, announced. Undefined
+   * means it is OFF: `ban_announcements` rows keep queuing (written whether or
+   * not this is set) and nothing posts, same degrade-not-refuse shape as
+   * `warLogChannelId`/`releaseChannelId`.
+   */
+  bansChannelId?: string;
 };
 
 function required(env: NodeJS.ProcessEnv, key: string): string {
@@ -361,6 +368,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
     unlinkedPcBan: ["1", "true"].includes((env.UNLINKED_PC_BAN ?? "").toLowerCase()),
+    bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
   // ⚠️ A schedule that is on but cannot authenticate would fail every slot at

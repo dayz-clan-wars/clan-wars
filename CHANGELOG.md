@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Enforced bans and unbans on the server now post to a public `#bans`
+  channel — banned, unbanned because the ban was served, and unbanned
+  because a linked account was found. Nothing about a dry-run test ever
+  posts here, only real ones.
+
 ## [1.20.0] - 2026-09-18
 
 ### Added

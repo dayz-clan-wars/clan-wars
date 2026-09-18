@@ -1,5 +1,6 @@
 import {
   Client, GatewayIntentBits, REST, Routes, MessageFlags, PermissionFlagsBits,
+  type MessageMentionOptions,
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { and, eq, isNotNull } from "drizzle-orm";
@@ -21,6 +22,7 @@ import { positionsTick } from "./positions-tick.js";
 import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
+import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
 import { pcBanTick } from "./pc-ban-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
@@ -406,14 +408,36 @@ export function createOnlineBoard(client: Client, channelId: string): OnlineBoar
  * unreachable path rather than returning quietly, because `warLogTick`
  * marks a row posted only when this resolves — a swallowed failure would
  * mark it posted and lose the announcement permanently.
+ *
+ * ⚠️ `allowedMentions` is an OPTIONAL parameter, not a new default, and it is
+ * an option here — a sibling factory — rather than a fork, because the fetch
+ * + isSendable + throw-on-unreachable shape below is exactly what every
+ * caller needs; only the mention policy differs. Every existing caller
+ * (warLogPoster, announcePoster, opsChannelPoster) omits it and keeps
+ * today's behaviour — Discord's default, "parse everything in the text" —
+ * unchanged, because none of them post player-controlled text: war-log and
+ * announcement copy is bot-authored, and the ops channel is staff-only
+ * anyway. The public #bans channel is different: `banAnnouncementText`
+ * embeds a gamertag, which a player controls, straight into `content` — and
+ * markdown-escaping it (which the renderer already does) does not stop
+ * Discord from parsing a literal `@everyone`/`@here` in that text as a real
+ * mention. Only `allowedMentions: { parse: [] }` does, so the ban-announce
+ * poster below passes it explicitly.
  */
-export function createChannelPoster(client: Client, channelId: string): WarLogPoster {
+export function createChannelPoster(
+  client: Client,
+  channelId: string,
+  options?: { allowedMentions?: MessageMentionOptions },
+): WarLogPoster {
   return async (content) => {
     const channel = await client.channels.fetch(channelId);
     if (!channel?.isSendable()) {
       throw new Error(`channel ${channelId} is missing or not sendable by this bot`);
     }
-    await channel.send({ content });
+    await channel.send({
+      content,
+      ...(options?.allowedMentions ? { allowedMentions: options.allowedMentions } : {}),
+    });
   };
 }
 
@@ -515,6 +539,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   const releaseStore = pgReleaseStore(db);
   const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
+  // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
+  // This is the one poster in this file that publishes player-controlled
+  // text (a gamertag) to a public channel.
+  const banAnnouncePoster = cfg.bansChannelId
+    ? createChannelPoster(client, cfg.bansChannelId, { allowedMentions: { parse: [] } })
+    : null;
   // The same embed poster the feed uses, aimed at #kill-feed.
   const killFeedPoster = cfg.killFeedChannelId ? createFeedPoster(client, cfg.killFeedChannelId) : null;
   const killFeedStore = new PgKillFeedStore(db);
@@ -694,6 +724,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   // real problem becomes invisible. Keyed on wipeAt.getTime() so next week's
   // announcement — a different wipeAt — is reported again.
   const announceFailures = new Set<number>();
+  // banAnnounceTick is per-server, like banTick — so unlike the single-channel
+  // queues above, "the row currently reported blocked" is per server, not a
+  // single scalar.
+  const lastReportedBanAnnounceBlockedAt = new Map<number, number | null>();
 
   // The reaper's map half runs every REAPER_INTERVAL_MS rather than every
   // tick — see the throttle beside expirePendingMembers below.
@@ -1085,6 +1119,28 @@ export async function start(cfg: BotConfig): Promise<void> {
             } catch (err) {
               console.error(`ban tick failed for server ${s.id}`, err);
             }
+
+            // ⚠️ Immediately after banTick, in its own try/catch, per server:
+            // banTick is what writes the ban_announcements rows this drains,
+            // so draining first (or on a later tick) would always show the
+            // public channel a cycle behind the ban it is announcing.
+            if (banAnnouncePoster) {
+              try {
+                const a = await banAnnounceTick(db, banAnnouncePoster, { now: banNow, serverId: s.id });
+                if (a.posted > 0) console.log(`ban announce (server ${s.id}) posted ${a.posted}`);
+                if (a.blockedAt !== null && a.blockedAt !== lastReportedBanAnnounceBlockedAt.get(s.id)) {
+                  console.error(
+                    `ban announce queue blocked at ban_announcements row ${a.blockedAt} (server ${s.id}); ` +
+                    `nothing behind it will post until this row succeeds. Check the bot's View Channel / ` +
+                    `Send Messages permission on ${cfg.bansChannelId}.`,
+                  );
+                  lastReportedBanAnnounceBlockedAt.set(s.id, a.blockedAt);
+                }
+                if (a.blockedAt === null) lastReportedBanAnnounceBlockedAt.set(s.id, null);
+              } catch (err) {
+                console.error(`ban announce tick failed for server ${s.id}`, err);
+              }
+            }
           }
         } catch (err) {
           console.error("ban tick server lookup failed", err);
@@ -1416,6 +1472,24 @@ export async function start(cfg: BotConfig): Promise<void> {
         "⚠️ They will ALL post, oldest first, when a channel is configured.",
       );
     }
+
+    if (!cfg.bansChannelId) {
+      void countUnpostedBanAnnouncements(db)
+        .then((n) => console.warn(
+          `public ban announcements are OFF (BANS_CHANNEL_ID unset); ${n} row(s) queued. ` +
+          "⚠️ They will ALL post, oldest first, when a channel is configured.",
+        ))
+        .catch((err: unknown) => console.error("could not count the ban announcement queue", err));
+    } else {
+      console.log("public ban announcements on: #bans");
+    }
+
+    // ⚠️ Added 2026-09-18: this gate previously had no startup line at all,
+    // unlike every other gated feature above — "silence is not success"
+    // (CLAUDE.md). An operator flipping it on had no confirmation it took
+    // effect short of watching for the first real ban.
+    if (!cfg.unlinkedPcBan) console.warn("UNLINKED_PC_BAN is off: unlinked PC players are not being banned.");
+    else console.log("UNLINKED_PC_BAN on: unlinked PC players are banned on sight (one lift on starting to link).");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

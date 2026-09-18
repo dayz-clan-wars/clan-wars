@@ -1,4 +1,4 @@
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, isNull, sql } from "drizzle-orm";
 import { banAnnouncements, type Database } from "@factions/db";
 import { banAnnouncementText, type BanAnnouncement } from "./ban-announce-text.js";
 
@@ -54,4 +54,10 @@ export async function banAnnounceTick(
   }
 
   return out;
+}
+
+/** For the startup log when BANS_CHANNEL_ID is unset. See config.ts / feed-store.ts's countUnposted. */
+export async function countUnpostedBanAnnouncements(db: Database): Promise<number> {
+  const [r] = await db.select({ n: sql<number>`count(*)::int` }).from(banAnnouncements).where(isNull(banAnnouncements.postedAt));
+  return r!.n;
 }
