@@ -359,6 +359,55 @@ describe("banTick", () => {
     expect(await db.select().from(banAnnouncements)).toHaveLength(0);
   });
 
+  // ⚠️ Regression: the announcement used to be gated on `!row.dryRun` alone,
+  // so the FIRST of two concurrent real bans to close posted "unbanned" while
+  // the account was still on Nitrado's list — a public message saying
+  // something untrue about a real player.
+  it("two concurrent real bans: the first to expire removes nothing and announces nothing", async () => {
+    const first = await insertBan({
+      status: "applied", dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"), expiresAt: at("2026-09-15T00:00:00Z"), reason: "zone",
+    });
+    await insertBan({
+      status: "applied", dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"), expiresAt: null, reason: "unlinked_pc",
+    });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    expect(r.expired).toBe(1);
+    expect(fake.removed).toEqual([]);   // the shared list entry stays: the PC ban is still in force
+    const firstRow = (await allRows()).find((row) => row.id === first.id)!;
+    expect(firstRow.status).toBe("expired");
+    expect(await db.select().from(banAnnouncements)).toHaveLength(0);
+  });
+
+  it("…and closing the SECOND one removes the entry and yields exactly ONE unban announcement in total", async () => {
+    const first = await insertBan({
+      status: "applied", dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"), expiresAt: at("2026-09-15T00:00:00Z"), reason: "zone",
+    });
+    const second = await insertBan({
+      status: "applied", dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"), expiresAt: null, reason: "unlinked_pc",
+    });
+    const fake = fakeClient();
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+
+    // The PC ban is lifted (the player linked): now nothing else holds the entry.
+    await db.update(bans).set({ status: "lift_pending" }).where(eq(bans.id, second.id));
+    const r = await banTick(db, fake, { now: at("2026-09-15T03:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    expect(r.expired).toBe(0);
+    expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+
+    // Exactly ONE unban message for this account across BOTH ticks, and it is
+    // the one belonging to the ban that actually took the entry off the list.
+    const announcements = await db.select().from(banAnnouncements);
+    const unbans = announcements.filter((a) => a.kind === "lifted" || a.kind === "expired");
+    expect(unbans).toHaveLength(1);
+    expect(unbans[0]).toMatchObject({ banId: second.id, kind: "lifted" });
+    expect(unbans.filter((a) => a.banId === first.id)).toHaveLength(0);
+  });
+
   describe("multi-server isolation", () => {
     let server2Id = 0;
 

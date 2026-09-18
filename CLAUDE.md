@@ -478,9 +478,11 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `release:sync` alone, one statement, touching no other table.
   `player_devices` is outside the order too: it is keyed `(dayz_id, device)`, carries no
   `server_id`, and is written only by `deviceTick`'s single upsert, touching no other table.
-  `ban_announcements` is outside the order for the same reason: insert-only, referenced by
-  nothing, and appended last inside `banTick`'s own transaction, after the `bans` write that
-  transition is reporting on.
+  `ban_announcements` is outside the order for the same reason: insert-only and referenced
+  by nothing. It is appended inside `banTick`'s own transaction, immediately after the
+  `bans` write the transition is reporting on — not last: the apply arm's order is `bans`
+  → `ban_announcements` → `identity_links` → `clan_notices`, so `clan_notices` is the last
+  table that transaction touches. Being outside the order is what makes that harmless.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

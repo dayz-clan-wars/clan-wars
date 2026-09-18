@@ -35,8 +35,12 @@ at all. This is the same shape as `RELEASE_CHANNEL_ID`/`release_announcements` a
 **Consequence: setting the channel later posts the whole backlog at once.** If real
 enforcement has been running for a while before `BANS_CHANNEL_ID` is first configured,
 every ban and unban since enforcement began is queued and unposted, and the first
-restart with the channel set drains all of it, oldest first, at roughly one message per
-tick interval (10s default).
+restart with the channel set drains all of it, oldest first — but slowly.
+`banAnnounceTick` runs in the bot's **5-minute** block (beside `reaperTick`/`banTick`,
+not on the 10s tick interval) and posts at most `BAN_ANNOUNCE_BATCH_SIZE` = **20 rows
+per server per run**: **20 messages every 5 minutes**, about 240/hour. A 500-row backlog
+therefore takes roughly **two hours**, not a couple of minutes. Do not read a slow drain
+as a stall and restart the bot — the restart just costs you the next cycle.
 
 Before setting the channel, check what's queued:
 

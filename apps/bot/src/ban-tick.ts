@@ -323,10 +323,25 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           .returning({ id: bans.id });
         if (!expired) return;
         out.expired++;
-        // A dry-run row never put an entry on Nitrado's list, so its
-        // "expiry" never happened anywhere a player could see — no public
-        // announcement for it, same rule as the apply arm above.
-        if (!row.dryRun) {
+        // ⚠️ Gated on `removing`, NOT on the status change alone. The status
+        // change is OUR bookkeeping ("this row is done"); the #bans channel is
+        // a public claim about whether the player can actually PLAY. The two
+        // diverge exactly when a SECOND non-dry-run ban on the same account is
+        // still in force: `stillBanned` deliberately keeps the shared Nitrado
+        // list entry (two concurrent bans share ONE entry), so this row closing
+        // frees nobody — announcing "unbanned" here would publicly say
+        // something untrue about a real player, who would then try to rejoin
+        // and find themselves still banned. Reachable today: a `zone` ban plus
+        // a permanent `unlinked_pc` one, since `pc-ban-tick.ts`'s duplicate
+        // check only looks at `reason = 'unlinked_pc'` rows. Tying the
+        // announcement to the Nitrado removal instead yields exactly ONE unban
+        // message per account, posted when the LAST active ban actually lifts.
+        //
+        // A dry-run row never put an entry on the list at all, so it is never
+        // in `removing` either — same rule as the apply arm above, now carried
+        // by the same condition. A failed `removeBans` cannot reach here: every
+        // row in `removing` `continue`s above when `failure !== undefined`.
+        if (removing.has(row.id)) {
           await announceTx(tx, row, "expired", now, serverId);
         }
       });
@@ -385,10 +400,17 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           .where(and(eq(bans.id, row.id), eq(bans.status, "lift_pending")))
           .returning({ id: bans.id });
         if (!lifted) return;
+        // ⚠️ Gated on `removing`, for the reason spelled out in the expire arm
+        // above: the status change is our bookkeeping, the #bans channel is a
+        // claim about whether the player can actually play, and those diverge
+        // precisely when a second non-dry-run ban on the same account is still
+        // in force and `stillBanned` therefore keeps the shared Nitrado entry.
         // A dry-run row was never really banned — never really visible on
-        // Nitrado's list — so there is nothing for a public "unbanned"
-        // message to be truthfully about.
-        if (!row.dryRun) {
+        // Nitrado's list — so it is never in `removing` either, and there is
+        // nothing for a public "unbanned" message to be truthfully about. A
+        // failed `removeBans` cannot reach here: every row in `removing`
+        // `continue`s above when `failure !== undefined`.
+        if (removing.has(row.id)) {
           await announceTx(tx, row, "lifted", now, serverId);
         }
       });
