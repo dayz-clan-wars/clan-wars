@@ -17,6 +17,17 @@ export type BaseDamageWindow = {
   pending?: "open" | "close";
   opensAt: Date;
   closesAt: Date;
+  /**
+   * The most recent window boundary at or before now — this window's open while
+   * it is open, the PREVIOUS window's close while it is closed. Always past.
+   *
+   * ⚠️ Carried out of the domain rather than recomputed by the reader. The timer
+   * bar fills its progress rule from here to the instant ahead, and midweek that
+   * needs the previous close — which a render site would have to derive as
+   * `closesAt` minus a week. That is the third derivation of this instant, and
+   * the first two disagreed (see `RaidWindowState.boundaryAt`).
+   */
+  boundaryAt: Date;
   skipReason?: string;
 };
 
@@ -41,7 +52,7 @@ export async function baseDamageWindowDb(db: Database, now: Date): Promise<BaseD
   const state = raidWindowAt(now, skips);
 
   if (state.phase === "skipped") {
-    return { status: "skipped", opensAt: state.opensAt, closesAt: state.closesAt, skipReason: state.skipReason };
+    return { status: "skipped", opensAt: state.opensAt, closesAt: state.closesAt, boundaryAt: state.boundaryAt, skipReason: state.skipReason };
   }
 
   // ⚠️ ANY server's confirmed flip answers for the whole site. Known limitation,
@@ -65,11 +76,13 @@ export async function baseDamageWindowDb(db: Database, now: Date): Promise<BaseD
       pending: state.phase === "open" ? "open" : "close",
       opensAt: state.opensAt,
       closesAt: state.closesAt,
+      boundaryAt: state.boundaryAt,
     };
   }
   return {
     status: state.phase === "open" ? "live" : "closed",
     opensAt: state.opensAt,
     closesAt: state.closesAt,
+    boundaryAt: state.boundaryAt,
   };
 }

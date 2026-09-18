@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The top of the site now counts down to the next server restart, in
+  minutes and seconds, beside the raid timer. It turns gold for the last
+  ten minutes so you get the warning while there is still time to stash
+  your loot and find cover. The countdown only appears when the server is
+  actually on a restart schedule.
+
+### Changed
+
+- The raid line at the top of the site is now two timers side by side.
+  The left one is the raid window, with a rule along the bottom that fills
+  as the window runs down, and the whole panel goes rust while raiding is
+  open so you can tell at a glance without reading it. Both timers stay
+  side by side on a phone.
+
 ## [1.24.1] - 2026-09-18
 
 ### Fixed

@@ -3,6 +3,7 @@ import {
   RESTART_PERIOD_MS,
   RESTART_GRACE_MS,
   restartSlot,
+  nextRestartAt,
   truckWipeActive,
   weeklyWipeVehicle,
   wipeMondayFor,
@@ -30,6 +31,33 @@ describe("restartSlot", () => {
     expect(restartSlot(at("2026-09-12T14:09:59Z"))).toMatchObject({ due: true, missedIfUnhandled: false });
     expect(restartSlot(at("2026-09-12T14:10:00Z"))).toMatchObject({ due: false, missedIfUnhandled: true });
     expect(restartSlot(at("2026-09-12T15:30:00Z"))).toMatchObject({ start: at("2026-09-12T14:00:00Z"), due: false, missedIfUnhandled: true });
+  });
+});
+
+describe("nextRestartAt", () => {
+  it("is the slot boundary ahead, never the one just passed", () => {
+    expect(nextRestartAt(at("2026-09-12T14:00:00Z"))).toEqual(at("2026-09-12T16:00:00Z"));
+    expect(nextRestartAt(at("2026-09-12T15:59:59Z"))).toEqual(at("2026-09-12T16:00:00Z"));
+    expect(nextRestartAt(at("2026-09-12T13:59:59Z"))).toEqual(at("2026-09-12T14:00:00Z"));
+  });
+
+  // ⚠️ The site counts down to this and the tick fires on restartSlot().start.
+  // Two derivations of "the next even hour" is exactly the drift this repo has
+  // a ⚠️ about elsewhere, so this is the same arithmetic, one period on.
+  it("⚠️ is always exactly one period after the slot the same instant is in", () => {
+    for (const iso of ["2026-01-01T00:00:00Z", "2026-03-29T01:30:00Z", "2026-09-12T23:59:59Z", "1970-01-01T00:00:00Z"]) {
+      const now = at(iso);
+      expect(nextRestartAt(now).getTime() - restartSlot(now).start.getTime()).toBe(RESTART_PERIOD_MS);
+    }
+  });
+
+  it("is always in the future, and never more than a period away", () => {
+    for (const iso of ["2026-09-12T14:00:00Z", "2026-09-12T15:59:59Z", "2026-09-12T14:00:01Z"]) {
+      const now = at(iso);
+      const left = nextRestartAt(now).getTime() - now.getTime();
+      expect(left).toBeGreaterThan(0);
+      expect(left).toBeLessThanOrEqual(RESTART_PERIOD_MS);
+    }
   });
 });
 

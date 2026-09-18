@@ -1,13 +1,13 @@
 import "./guide.css";
 import { currentSession } from "@/lib/viewer";
-import { attention, baseDamageWindow, liveServers } from "@factions/roster";
+import { attention, baseDamageWindow, liveServers, restartsScheduled } from "@factions/roster";
 import { SiteBar } from "@/app/(site)/site-bar";
 import { buildIndex } from "./index";
 import { GuideSearch } from "./search";
 import Contents from "./contents";
 import { SkipLink } from "@/app/components/ui";
 import { ServerStrip } from "@/app/components/server-strip";
-import { RaidStrip } from "@/app/components/raid-strip";
+import { TimerBar } from "@/app/components/timer-bar";
 import { serverStripLines } from "@/lib/server-strip";
 
 /**
@@ -29,6 +29,9 @@ export default async function GuideLayout({ children }: { children: React.ReactN
   const serverLines = serverStripLines(await liveServers().catch(() => []));
   // Same shape as the strip above: one cheap read, never a reason to fail the page.
   const raidWindow = await baseDamageWindow().catch(() => undefined);
+  const restarts = await restartsScheduled().catch(() => false);
+  // ⚠️ One clock read for the bar's columns and both countdown seeds. See TimerBar.
+  const now = new Date();
   return (
     <>
       <SkipLink />
@@ -43,7 +46,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
         </details>
       } />
       <ServerStrip lines={serverLines} />
-      <RaidStrip window={raidWindow} />
+      <TimerBar window={raidWindow} restartsScheduled={restarts} now={now} />
       <div className="flex min-h-[calc(100dvh-var(--spacing-bar))]">
         <aside className="hidden w-[300px] flex-none border-r-2 border-rule-2 lg:block">
           <div className="sticky top-bar max-h-[calc(100dvh-var(--spacing-bar))] overflow-y-auto pb-10 pt-6">
