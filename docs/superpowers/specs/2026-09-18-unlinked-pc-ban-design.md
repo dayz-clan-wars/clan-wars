@@ -269,9 +269,15 @@ precisely why we have no Discord id for them.
 | `dpnid` never resolves to a uid | sighting dropped → no ban |
 | device string is not exactly `desktop` | not a ban |
 | account already linked | never evaluated |
-| challenge open | never evaluated |
+| challenge open | ⚠️ **still evaluated** — banned, then lifted once the ban is applied (§3.4) |
 
 Every unknown is "not PC". The design never bans on an inference.
+
+⚠️ That last row is the one entry here that is not a fail-closed: an open
+challenge does **not** suppress evaluation. It was "never evaluated" until
+2026-09-18, and that was the hole §3.4 now records — the exemption renews on
+every re-rolled challenge, so it never lapses and the ban never fires. Being
+mid-link is honoured by the one lift, not by an exemption.
 
 **One consequence worth naming:** a linked PC player who later unlinks becomes
 ban-worthy. That follows from the rule and is intended — unlinking is opting
