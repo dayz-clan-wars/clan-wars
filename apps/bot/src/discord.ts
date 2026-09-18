@@ -46,6 +46,9 @@ import { PgKillFeedStore, killFeedTick } from "./kill-feed-tick.js";
 import { PgKillstreakFeedStore, killstreakFeedTick } from "./killstreak-feed-tick.js";
 import { PgLongRangeFeedStore, longRangeFeedTick } from "./long-range-feed-tick.js";
 import { PgOnlineStore, onlineTick, type OnlineBoard, type OnlineState } from "./online-tick.js";
+import { PgLeaderboardStore, leaderboardTick, type LeaderboardChannel, type LeaderboardState } from "./leaderboard-tick.js";
+import { boardKindOfEmbedUrl } from "./leaderboard-embed.js";
+import type { BoardKind } from "@factions/roster";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
@@ -406,6 +409,61 @@ export function createOnlineBoard(client: Client, channelId: string): OnlineBoar
 }
 
 /**
+ * The nine standing messages in the leaderboards channel.
+ *
+ * ⚠️ `findMine` identifies a message by the board link in its embed, not by a
+ * stored id — that is what lets a restart adopt the nine already there. It
+ * reads a bounded slice of recent history (the channel holds nine messages;
+ * fifty is room for a few stray ones without an unbounded walk).
+ *
+ * ⚠️ Throws on every unreachable path, like the posters: `leaderboardTick`
+ * records a board as shown only when these resolve.
+ */
+export function createLeaderboardChannel(client: Client, channelId: string, siteBaseUrl: string): LeaderboardChannel {
+  const fetchChannel = async () => {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isSendable() || !channel.isTextBased() || channel.isDMBased()) {
+      throw new Error(`leaderboards channel ${channelId} is missing or not sendable by this bot`);
+    }
+    return channel;
+  };
+  const mine = async () => {
+    const channel = await fetchChannel();
+    const me = client.user?.id;
+    if (!me) throw new Error("leaderboards: the client has no user id yet");
+    const recent = await channel.messages.fetch({ limit: 50 });
+    return [...recent.values()].filter((m) => m.author.id === me);
+  };
+  return {
+    async findMine() {
+      const out = new Map<BoardKind, string>();
+      // Oldest first, so that if a board somehow has two of our messages the
+      // FIRST one wins — the one already sitting in the site's order.
+      for (const m of (await mine()).sort((a, b) => a.createdTimestamp - b.createdTimestamp)) {
+        const kind = boardKindOfEmbedUrl(m.embeds[0]?.url ?? undefined, siteBaseUrl);
+        if (kind !== null && !out.has(kind)) out.set(kind, m.id);
+      }
+      return out;
+    },
+    async purgeMine() {
+      const ours = await mine();
+      for (const m of ours) await m.delete();
+      return ours.length;
+    },
+    async post(_kind, embed) {
+      const channel = await fetchChannel();
+      const sent = await channel.send({ embeds: [embed] });
+      return sent.id;
+    },
+    async edit(messageId, embed) {
+      const channel = await fetchChannel();
+      const msg = await channel.messages.fetch(messageId);
+      await msg.edit({ embeds: [embed] });
+    },
+  };
+}
+
+/**
  * ⚠️ Same shape and reasoning as `createFeedPoster`: throws on every
  * unreachable path rather than returning quietly, because `warLogTick`
  * marks a row posted only when this resolves — a swallowed failure would
@@ -736,6 +794,15 @@ export async function start(cfg: BotConfig): Promise<void> {
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
 
+  // The leaderboards channel's nine standing messages, on the same clock as
+  // the crowns below — both read the same nine boards.
+  const leaderboardStore = new PgLeaderboardStore(db);
+  const leaderboardChannel = cfg.leaderboardsChannelId
+    ? createLeaderboardChannel(client, cfg.leaderboardsChannelId, cfg.siteBaseUrl)
+    : null;
+  const leaderboardState: LeaderboardState = { messageIds: null, keys: new Map() };
+  let lastLeaderboardAt = 0;
+
   // The nine leaderboard crowns. Throttled the same way the reaper is, and for
   // the same reason — one interval in this process — but on its own clock,
   // because a pass is nine leaderboard queries rather than four deletes.
@@ -906,6 +973,25 @@ export async function start(cfg: BotConfig): Promise<void> {
         }
       } catch (err) {
         console.error("crown tick failed", err);
+      }
+    }
+
+    // ⚠️ Its own try/catch, beside the crowns and on its own throttle: the
+    // nine board messages read the same leaderboards the crowns do, so they
+    // belong after the kills and sessions consumers have projected this
+    // tick's events.
+    if (leaderboardChannel && Date.now() - lastLeaderboardAt >= cfg.leaderboardTickIntervalMs) {
+      try {
+        const lb = await leaderboardTick(
+          leaderboardStore, leaderboardChannel, leaderboardState, cfg.siteBaseUrl,
+          (what, err) => console.error(`leaderboards: ${what}`, err),
+        );
+        lastLeaderboardAt = Date.now();
+        if (lb.posted > 0 || lb.edited > 0 || lb.errors > 0) {
+          console.log(`leaderboards: ${lb.posted} posted, ${lb.edited} edited${lb.rebuilt ? " (rebuilt)" : ""}, ${lb.errors} error(s)`);
+        }
+      } catch (err) {
+        console.error("leaderboard tick failed", err);
       }
     }
 

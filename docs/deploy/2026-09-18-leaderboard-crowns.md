@@ -69,8 +69,9 @@ tick does not run at all. Nothing else in this deploy changes behaviour.
        crowns: 7 added, 0 removed
 
    A first pass adds one line's worth of crowns and then goes quiet — silence after
-   that means nothing moved, which is the normal state. `0 error(s)` is never printed;
-   an error count only appears when there is one.
+   that means nothing moved, which is the normal state. All three counts are always
+   printed together, so a healthy line ends `0 error(s)`; the line appears at all only
+   when at least one of the three is non-zero.
 
 5. **Verify in Discord.** Open the member list and check a crown against
    `https://dayzclanwars.com/players` for the same board. They read the same query, so

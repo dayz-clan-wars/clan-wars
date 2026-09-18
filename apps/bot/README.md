@@ -24,6 +24,8 @@ in-game verification tick confirms it.
 | `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
+| `LEADERBOARDS_CHANNEL_ID` | no (unset means nothing is posted or edited) | The channel holding the nine standing leaderboard messages, one per board, edited in place. The bot posts them itself on its first pass; give it a channel players cannot post in, or a stray message will sit among them. |
+| `LEADERBOARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the nine board messages reconcile. Same clock as the crowns, which read the same boards. |
 | `CROWN_RAIDERS_ROLE_ID` | no (unset means that crown is never touched) | Role held by the #1 of the raiders board in the current season. Create the role by hand — the bot only adds and removes members, so the name, colour, icon and position stay yours. |
 | `CROWN_KILLERS_ROLE_ID` | no | Same, for the kills board. |
 | `CROWN_KD_ROLE_ID` | no | Same, for the K/D board (which already requires `KD_MIN_KILLS` kills to appear on at all). |

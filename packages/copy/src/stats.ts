@@ -23,6 +23,51 @@ export const BOARD_LABELS: Record<BoardKind, string> = {
   friendlyFire: "Most friendly fire",
 };
 
+/**
+ * Rows on a board panel, on the site and in the Discord leaderboards channel.
+ *
+ * Moved here from `apps/web/lib/board-page.ts` (2026-09-18) with `BOARD_SLUGS`
+ * below, once the bot's leaderboard channel needed the identical number and
+ * the identical links — the same two-surfaces-one-fact move the header of this
+ * file describes. `apps/web/lib/board-page.ts` re-exports both, so no import
+ * on the site changed.
+ */
+export const BOARD_TOP = 10;
+
+/**
+ * The URL segment of each board's full page (`/players/boards/{slug}`,
+ * `/clan/board/{slug}`). Kebab-case, so the address reads as words.
+ *
+ * ⚠️ The bot's leaderboard embeds set their URL from this AND identify their
+ * own standing message by reading the slug back off it — a message whose slug
+ * does not resolve is not recognised as that board's, so the channel is
+ * rebuilt. Changing a slug therefore rewrites nine links and orphans nine
+ * messages once; that is survivable (the rebuild handles it) but it is not a
+ * cosmetic edit.
+ */
+export const BOARD_SLUGS: Record<BoardKind, string> = {
+  raiders: "raiders",
+  killers: "killers",
+  deaths: "deaths",
+  kd: "kd",
+  playTime: "play-time",
+  friendlyFire: "friendly-fire",
+  builders: "builders",
+  streaks: "streaks",
+  longestKills: "longest-kills",
+};
+
+/**
+ * The board a URL segment names, or null. The raw segment is looked up, never echoed.
+ *
+ * ⚠️ Walks `BOARD_SLUGS`' own keys rather than importing `BOARD_KINDS`. This
+ * package must import no RUNTIME value from `@factions/roster` — see
+ * `test/leaf.test.ts` — and the keys here are the nine kinds anyway.
+ */
+export function boardKindFromSlug(raw: string): BoardKind | null {
+  return (Object.keys(BOARD_SLUGS) as BoardKind[]).find((k) => BOARD_SLUGS[k] === raw) ?? null;
+}
+
 /** A board page with no rows in the window — not a blank card. */
 export const EMPTY_BOARD = "Nothing yet.";
 
@@ -46,6 +91,21 @@ export function playTime(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
   const minutes = Math.floor((seconds % 3600) / 60);
   return `${hours}h ${String(minutes).padStart(2, "0")}m`;
+}
+
+/**
+ * One board row's number, as words. Play time is hours and minutes, a longest
+ * kill carries its unit, everything else is a plain count or ratio.
+ *
+ * ⚠️ Shared between the site's panels and the bot's leaderboard embeds. It was
+ * `formatValue` inside `apps/web/app/components/stat-boards.tsx` until
+ * 2026-09-18; a second copy in the bot would have let the channel and the page
+ * print the same play time two different ways.
+ */
+export function boardValue(kind: BoardKind, value: number): string {
+  if (kind === "playTime") return playTime(value);
+  if (kind === "longestKills") return `${value} m`;
+  return String(value);
 }
 
 /**
