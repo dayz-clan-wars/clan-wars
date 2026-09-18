@@ -5,6 +5,19 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Nine new roles, one for each leaderboard, worn by whoever is #1 on it:
+  Top Raider, Top Killer, Best K/D, Best Killstreak, Longest Kill, Top
+  Builder, Most Play Time, Most PVP Deaths and Most Friendly Fire. They
+  move on their own within a few minutes of the kill, raid or build that
+  moves them, so taking the top spot on the board takes the role off
+  whoever had it. If two players are dead even at the top, both wear it.
+  The boards are scored on the current season, so every season the nine
+  crowns are up for grabs again from scratch. Link your account with
+  `/link` if you have not: an unlinked #1 leaves the role sitting empty
+  rather than handing it to second place.
+
 ## [1.21.0] - 2026-09-18
 
 ### Added

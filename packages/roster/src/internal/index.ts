@@ -23,3 +23,9 @@ export * from "./vault-store";
 export * from "./guest-store";
 export * from "./removal-store";
 export * from "./incidents";
+
+// The leaderboards themselves, for the bot's crown reconciler (apps/bot/src/crown-store.ts).
+// Read-only, and the same query the public /players boards run — the bot must
+// never compute a second, drifting idea of who is #1.
+export { playerBoardsDb } from "../stats";
+export type { Boards, BoardKind, BoardRow, StatScope } from "../stats";

@@ -24,6 +24,16 @@ in-game verification tick confirms it.
 | `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
+| `CROWN_RAIDERS_ROLE_ID` | no (unset means that crown is never touched) | Role held by the #1 of the raiders board in the current season. Create the role by hand — the bot only adds and removes members, so the name, colour, icon and position stay yours. |
+| `CROWN_KILLERS_ROLE_ID` | no | Same, for the kills board. |
+| `CROWN_KD_ROLE_ID` | no | Same, for the K/D board (which already requires `KD_MIN_KILLS` kills to appear on at all). |
+| `CROWN_STREAKS_ROLE_ID` | no | Same, for the best-killstreak board. |
+| `CROWN_LONGEST_KILL_ROLE_ID` | no | Same, for the longest-kill board. |
+| `CROWN_BUILDERS_ROLE_ID` | no | Same, for the builders board. |
+| `CROWN_PLAYTIME_ROLE_ID` | no | Same, for the play-time board. |
+| `CROWN_DEATHS_ROLE_ID` | no | Same, for the most-PvP-deaths board. |
+| `CROWN_FRIENDLY_FIRE_ROLE_ID` | no | Same, for the friendly-fire board. |
+| `CROWN_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the nine crowns reconcile. Each pass is nine leaderboard queries, so this is deliberately not every tick. |
 | `ACHIEVEMENTS_CHANNEL_ID` | no (unset means the achievements wall is off) | The Discord channel id the public achievements wall posts to, alongside the normal clan-channel/DM notice for every unlock. Unset by default: unlocks still happen, nothing posts there. |
 | `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |
 | `RESTART_SCHEDULE` | no (default off; `"1"`/`"true"` = on) | Restart every active server with a `nitrado_service_id` at the top of every even UTC hour (00:00, 02:00 … 22:00), through Nitrado. Off by default. `messages.xml` is not touched — trim its own shutdown entry by hand or both fire. Runbook `docs/deploy/2026-09-12-scheduled-restarts.md`. |

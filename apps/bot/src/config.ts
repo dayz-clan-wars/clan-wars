@@ -1,4 +1,5 @@
 import { DEFAULT_HIT_BURST_WINDOW_S, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
+import { BOARD_KINDS, type BoardKind } from "@factions/roster";
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
 import { DEFAULT_KILLSTREAK_EVERY } from "./killstreak-feed-tick.js";
 import { DEFAULT_LONG_RANGE_MIN_M } from "./long-range-feed-tick.js";
@@ -84,6 +85,24 @@ export type BotConfig = {
    * `@Alpha`, only clan roles and channels inside them.
    */
   alphaRoleId: string;
+  /**
+   * The nine leaderboard crowns: one role per board, held by whoever is #1 on
+   * it in the current season (`crown-tick.ts`).
+   *
+   * Created by hand once, like `@Linked` and `@Alpha` — the bot only adds and
+   * removes members, so the name, colour, icon and position stay yours.
+   *
+   * ⚠️ Every one is OPTIONAL and a board with no id here is never touched, so
+   * the crowns can be rolled out a few at a time. All nine unset means the
+   * tick does not run at all.
+   */
+  crownRoleIds: Partial<Record<BoardKind, string>>;
+  /**
+   * How often the crowns reconcile. Default 5 minutes, not every tick: each
+   * pass is nine leaderboard queries, and a crown that moves within five
+   * minutes of the kill that moved it is as live as anyone can tell.
+   */
+  crownTickIntervalMs: number;
   /**
    * The achievements wall: a channel notice with no clan behind it, posted
    * alongside the normal clan-channel/DM notice for every unlock. Optional,
@@ -224,6 +243,56 @@ function optionalSnowflake(env: NodeJS.ProcessEnv, key: string): string | undefi
   return raw;
 }
 
+/**
+ * The env var holding each board's crown role id.
+ *
+ * ⚠️ Spelled out rather than derived from the board name, so renaming a board
+ * kind cannot silently rename a deployed env var and turn that crown off with
+ * nothing saying so.
+ */
+const CROWN_ROLE_ENV: Record<BoardKind, string> = {
+  raiders: "CROWN_RAIDERS_ROLE_ID",
+  killers: "CROWN_KILLERS_ROLE_ID",
+  kd: "CROWN_KD_ROLE_ID",
+  streaks: "CROWN_STREAKS_ROLE_ID",
+  longestKills: "CROWN_LONGEST_KILL_ROLE_ID",
+  builders: "CROWN_BUILDERS_ROLE_ID",
+  playTime: "CROWN_PLAYTIME_ROLE_ID",
+  deaths: "CROWN_DEATHS_ROLE_ID",
+  friendlyFire: "CROWN_FRIENDLY_FIRE_ROLE_ID",
+};
+
+/**
+ * Whichever crowns are configured, validated at load like every other snowflake.
+ *
+ * ⚠️ Two boards sharing one role id REFUSES to load. Nothing downstream would
+ * error: each board's diff would see the other's holder as a stray, so the
+ * reconciler would strip and re-add that role every pass, forever, at two
+ * Discord writes a time. It prints as a steady `crowns: 1 added, 1 removed`,
+ * which reads exactly like normal churn — the silent kind of wrong this file's
+ * other validators exist to catch, and an easy copy-paste to make when pasting
+ * nine ids in a row.
+ */
+function crownRoleIds(env: NodeJS.ProcessEnv): Partial<Record<BoardKind, string>> {
+  const out: Partial<Record<BoardKind, string>> = {};
+  const seen = new Map<string, string>();
+  for (const kind of BOARD_KINDS) {
+    const key = CROWN_ROLE_ENV[kind];
+    const id = optionalSnowflake(env, key);
+    if (id === undefined) continue;
+    const first = seen.get(id);
+    if (first !== undefined) {
+      throw new Error(
+        `${first} and ${key} are both set to ${id}. Each crown needs its own role: ` +
+        "two boards sharing one would take it off each other on every pass, forever.",
+      );
+    }
+    seen.set(id, key);
+    out[kind] = id;
+  }
+  return out;
+}
+
 /** A snowflake that the bot cannot run without (spec §9.1: "refuses to start with any missing"). */
 function requiredSnowflake(env: NodeJS.ProcessEnv, key: string, what: string): string {
   const raw = env[key];
@@ -342,6 +411,8 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
     alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
+    crownRoleIds: crownRoleIds(env),
+    crownTickIntervalMs: positiveInt(env, "CROWN_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
     achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),
     achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
     restartSchedule: ["1", "true"].includes((env.RESTART_SCHEDULE ?? "").toLowerCase()),
