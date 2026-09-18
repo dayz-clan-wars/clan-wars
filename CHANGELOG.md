@@ -5,6 +5,22 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Corrected the release-announcements runbook and design notes after the real
+  v1.18.0 deploy showed the deployer hook can't fire on the deploy that ships
+  it: `deploy-release.sh` re-execs from a private copy of itself before moving
+  the tree to the new tag, so the deployer that ships tag N is always tag
+  N-1's — a change to that script never takes effect on its own release. The
+  first backfill of `release_announcements` had to be run by hand for that
+  reason, and it was a one-time step: v1.18.1 was the first release whose
+  notes the deployer queued on its own, confirmed in the deploy journal.
+  Also fixed a miscount that would have recurred: a release announces itself,
+  since `release:sync` reads the checkout at the new tag, whose changelog
+  already carries that release's own section — the queued count is every
+  dated, non-`[WITHDRAWN]` changelog section at that moment, not a fixed
+  number (24 at v1.18.0, not the 23 originally documented).
+
 ## [1.18.1] - 2026-09-18
 
 ### Fixed

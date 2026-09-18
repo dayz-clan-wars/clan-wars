@@ -242,14 +242,34 @@ Runbook: `docs/deploy/2026-09-17-release-announcements.md`.
 
 1. Merge the backfill PR.
 2. Merge this feature; the deployer applies 0038 in the normal course.
-3. Add `RELEASE_CHANNEL_ID=1549900456078090260` to `.env` and restart the bot.
-4. `pnpm release:sync --dry-run`, read the list, then `pnpm release:sync`.
-5. Watch the channel fill over about four minutes. 25 messages, oldest first.
+3. On the production host, `pnpm release:sync --dry-run`, read the list, then
+   `pnpm release:sync` — by hand, once (the amendment below explains why this
+   step cannot be skipped).
+4. Add `RELEASE_CHANNEL_ID=1549900456078090260` to `.env` and restart the bot.
+5. Watch the channel fill over about four minutes: one message per dated,
+   non-`[WITHDRAWN]` changelog section as of that run, oldest first — not a
+   fixed number (see the amendment below).
 
 ⚠️ Steps 3 and 4 belong together. Rows inserted while no channel is configured
 queue indefinitely, so an operator who sets `RELEASE_CHANNEL_ID` weeks later
 gets the whole backlog at once with nothing having warned them. The first time
 that flood happens it is the intent; every time after it is a surprise.
+
+⚠️ Amended 2026-09-18, after the real deploy: step 3 is not "confirm the deploy
+already queued them," it's a required manual step. `deploy-release.sh` re-execs
+from a private copy of itself before it moves the tree to the new tag (the
+v1.16.6 fix), so **the deployer that ships tag N is tag N−1's deployer** — the
+deploy that lands this feature runs on a copy of the script that has no
+`release:sync` call in it at all. That copy can't queue anything, by
+construction, not by failure. It also means the count in step 5 is never a
+number fixed at design time: `release:sync` runs from the checkout at the new
+tag, whose `CHANGELOG.md` already carries that release's own dated section, so
+the release that finally makes the hook fire announces *itself*. At v1.18.0
+that was 24 releases, not the 23 this section originally said — 23 was the
+count only before v1.18.0's own section existed. From the next release onward
+the hook runs on its own, because v1.18.0's copy of the script is the one that
+carries the call — borne out by v1.18.1, which queued and posted its own notes
+with no manual step.
 
 ## 6. Testing
 
