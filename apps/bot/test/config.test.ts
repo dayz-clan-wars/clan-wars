@@ -495,4 +495,36 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "  " })).toThrow(/NITRADO_TOKEN/u);
     });
   });
+
+  describe("UNLINKED_PC_BAN / ENFORCEMENT_TICK", () => {
+    it("defaults off", () => {
+      expect(loadConfig(OK).unlinkedPcBan).toBe(false);
+    });
+
+    // ⚠️ Anything that is NOT "1" or "true" must leave the gate off. This is
+    // the inversion-proof case: ENFORCEMENT_TICK=true once silently left that
+    // tick off because only the literal "1" was accepted — the same parse is
+    // reused here, so a value like "yes" must fail to turn PC bans on, not
+    // succeed silently.
+    it('a value that is neither "1" nor "true" leaves it off', () => {
+      expect(loadConfig({ ...OK, UNLINKED_PC_BAN: "yes" }).unlinkedPcBan).toBe(false);
+    });
+
+    it('"1" and "true" both turn it on, matching the other boolean flags in this file', () => {
+      expect(loadConfig({ ...OK, UNLINKED_PC_BAN: "1", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).unlinkedPcBan).toBe(true);
+      expect(loadConfig({ ...OK, UNLINKED_PC_BAN: "true", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).unlinkedPcBan).toBe(true);
+    });
+
+    it('"TRUE" also turns it on — case-insensitive, like the other flags in this file', () => {
+      expect(loadConfig({ ...OK, UNLINKED_PC_BAN: "TRUE", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).unlinkedPcBan).toBe(true);
+    });
+
+    it("⚠️ on without ENFORCEMENT_TICK refuses to load — pcBanTick's rows would pile up with nothing to ever apply them", () => {
+      expect(() => loadConfig({ ...OK, UNLINKED_PC_BAN: "1" })).toThrow(/UNLINKED_PC_BAN is on but ENFORCEMENT_TICK is off/u);
+    });
+
+    it("on with ENFORCEMENT_TICK (and its NITRADO_TOKEN requirement satisfied) loads fine", () => {
+      expect(() => loadConfig({ ...OK, UNLINKED_PC_BAN: "1", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" })).not.toThrow();
+    });
+  });
 });

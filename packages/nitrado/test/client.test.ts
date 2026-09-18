@@ -371,6 +371,34 @@ describe("NitradoClient.hostname", () => {
   });
 });
 
+describe("NitradoClient.newestRptPath", () => {
+  const rptClient = (entries: unknown[]) =>
+    new NitradoClient("t", 1, fakeFetch({
+      "/file_server/list": listing(entries),
+      "/gameservers": GS,
+    }) as unknown as typeof fetch);
+
+  it("returns the newest .RPT by filename timestamp, ignoring .ADM and .log", async () => {
+    // ⚠️ Newest by FILENAME, not by modified_at: the biggest modified_at here
+    // deliberately belongs to a file that is NOT the answer.
+    const path = await rptClient([
+      { name: "DayZServer_X1_x64_2026-09-17_19-01-52.RPT", path: "/p/19.RPT", modified_at: 2 },
+      { name: "DayZServer_X1_x64_2026-09-17_15-02-05.RPT", path: "/p/15.RPT", modified_at: 1 },
+      { name: "DayZServer_X1_x64_2026-09-17_19-01-52.ADM", path: "/p/19.ADM", modified_at: 9 },
+      { name: "script_2026-09-17_19-01-56.log", path: "/p/s.log", modified_at: 9 },
+    ]).newestRptPath();
+    expect(path).toBe("/p/19.RPT");
+  });
+
+  it("returns null when the directory holds no RPT at all", async () => {
+    expect(await rptClient([{ name: "x.ADM", path: "/p/x.ADM", modified_at: 1 }]).newestRptPath()).toBeNull();
+  });
+
+  it("ignores an RPT whose filename carries no parseable timestamp", async () => {
+    expect(await rptClient([{ name: "crash.RPT", path: "/p/crash.RPT", modified_at: 5 }]).newestRptPath()).toBeNull();
+  });
+});
+
 describe("NitradoClient.status / restart", () => {
   it("reads the gameserver status", async () => {
     const fetchFn = fakeFetch({ "/gameservers": { status: "success", data: { gameserver: { status: "started" } } } });

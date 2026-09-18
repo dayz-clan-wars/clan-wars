@@ -10,3 +10,4 @@ export * from "./session.js";
 export * from "./teleport.js";
 export * from "./timestamps.js";
 export * from "./parse-line.js";
+export * from "./device.js";

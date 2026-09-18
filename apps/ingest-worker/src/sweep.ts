@@ -7,6 +7,7 @@ import type { SpawnObject } from "./supplies.js";
 import { travelTick, type TravelTickResult } from "./travel-tick.js";
 import type { TravelTemplate } from "./travel.js";
 import type { ProjectionDrift } from "./projection-upload.js";
+import { deviceTick, type DeviceClient } from "./device-tick.js";
 
 export type ClientFactory = (nitradoServiceId: number) => NitradoLike;
 
@@ -76,6 +77,12 @@ export type SweepDeps = {
    */
   hostnames?: { clientFor: (nitradoServiceId: number) => HostnameClient };
   onHostnameError?: (serverId: number, err: unknown) => void;
+  /**
+   * Learns players' platforms from the RPT files. Absent in tests that only
+   * exercise ingestion.
+   */
+  devices?: { clientFor: (nitradoServiceId: number) => DeviceClient };
+  onDeviceError?: (serverId: number, err: unknown) => void;
 };
 
 export type HostnameClient = { hostname(): Promise<string> };
@@ -136,6 +143,16 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         if (result.uploaded) deps.onSupplyUploaded?.(s.id, result);
       } catch (err) {
         deps.onSupplyError?.(s.id, err);
+      }
+    }
+
+    // ⚠️ Its own try/catch, like every other concern here: a Nitrado outage
+    // must cost us at most the platform of a player we will see again anyway.
+    if (deps.devices) {
+      try {
+        await deviceTick(db, { serverId: s.id, client: deps.devices.clientFor(s.nitradoServiceId!), now: new Date() });
+      } catch (err) {
+        deps.onDeviceError?.(s.id, err);
       }
     }
 

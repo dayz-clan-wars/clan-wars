@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -1628,6 +1628,11 @@ export const bans = pgTable("bans", {
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   status: text("status").$type<BanStatus>().notNull().default("pending"),
   /**
+   * ⚠️ Defaults to `'zone'` so the rows that existed before the PC gate keep
+   * their meaning. Only `unlinked_pc` rows are ever lifted by starting a link.
+   */
+  reason: text("reason").$type<BanReason>().notNull().default("zone"),
+  /**
    * Left at the column default when the row is created (the report write
    * never sets it). The ban tick stamps it at APPLY time with the mode that
    * actually ran (`BAN_DRY_RUN`) — a dry-run row never reaches Nitrado. This
@@ -1644,4 +1649,29 @@ export const bans = pgTable("bans", {
   oneperIncident: uniqueIndex("bans_incident_person_uq").on(t.incidentId, t.dayzId),
   work: index("bans_work_idx").on(t.status, t.expiresAt),
   byPerson: index("bans_person_idx").on(t.dayzId, t.bannedAt),
+}));
+
+/**
+ * Which platform an account plays on, learned from the server's .RPT files.
+ *
+ * ⚠️ Keyed on (dayz_id, device), NOT on dayz_id. An account seen on both
+ * platforms gets two rows, so the rule can ask "has this account EVER been
+ * seen on desktop?" A single last-write-wins column would let a PC player
+ * clear the flag by playing one session on a console.
+ *
+ * ⚠️ Outside the lock order (spec §4.12): written by the ingest worker alone,
+ * one statement, referencing nothing.
+ *
+ * ⚠️ NEVER backfill this from retained RPT files. It starts empty and fills
+ * only as accounts connect, and that emptiness is the entire mechanism by
+ * which this feature is forward-only — see the design doc §6.
+ */
+export const playerDevices = pgTable("player_devices", {
+  dayzId: text("dayz_id").notNull(),
+  device: text("device").notNull(),
+  gamertag: text("gamertag").notNull(),
+  firstSeenAt: timestamp("first_seen_at", { withTimezone: true }).notNull().defaultNow(),
+  lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.dayzId, t.device] }),
 }));

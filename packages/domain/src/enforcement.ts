@@ -88,3 +88,11 @@ export const BAN_STATUSES = ["pending", "applied", "lift_pending", "lifted", "ex
 export type BanStatus = (typeof BAN_STATUSES)[number];
 /** A Nitrado error this many times moves the row to `failed`. */
 export const BAN_MAX_ATTEMPTS = 3;
+
+/**
+ * Why a ban exists. ⚠️ Load-bearing: the PC-gate tick lifts a ban when the
+ * player starts linking, and without this column it would also lift a ban
+ * somebody earned by griefing inside another clan's base.
+ */
+export const BAN_REASONS = ["zone", "unlinked_pc"] as const;
+export type BanReason = (typeof BAN_REASONS)[number];

@@ -239,6 +239,14 @@ export async function reportIncidentDb(
         gte(bans.bannedAt, seasonStart),
         ne(bans.status, "lifted"), ne(bans.status, "failed"),
         eq(bans.dryRun, false),
+        // ⚠️ Only a ZONE offence is a strike on the zone ladder. An
+        // `unlinked_pc` ban is access control — "we do not know who you
+        // are" — not a punishment for anything done to anyone's base, and
+        // its `expires_at` is null, so it NEVER ages into `expired`. Without
+        // this filter it counts as a standing prior for the rest of the
+        // season: a PC-banned player's first real zone offence is sentenced
+        // as a second, and their second reaches the permanent tier.
+        eq(bans.reason, "zone"),
       ));
       const ms = sentenceMsFor(damage, prior.length);
       // ⚠️ `banned` counts ROWS ACTUALLY INSERTED, not participants iterated.

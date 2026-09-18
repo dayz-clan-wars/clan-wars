@@ -231,3 +231,14 @@ export const BAN_APPLY_LOOKBACK_MS = 24 * HOUR;
  * observed. A missing classname is a silently unenforced exploit.
  */
 export const BOOST_ITEM_CLASSES = ["Fireplace", "FireplaceIndoor", "GardenPlot"] as const;
+
+/**
+ * How far back the device lookup looks for connections from accounts whose
+ * platform we do not know yet.
+ *
+ * ⚠️ Bounded on purpose. Without a window, an account whose device can never
+ * be resolved (its login straddled a restart and the file has since rotated)
+ * would make the worker re-download the live RPT every single sweep, forever.
+ * Giving up is safe: the player is caught the next time they connect.
+ */
+export const DEVICE_LOOKUP_LOOKBACK_MS = 30 * 60 * 1000;
