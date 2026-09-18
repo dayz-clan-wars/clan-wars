@@ -288,6 +288,13 @@
       "when": 1789748494076,
       "tag": "0040_silent_slapstick",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1789774999391,
+      "tag": "0041_red_devos",
+      "breakpoints": true
     }
   ]
 }

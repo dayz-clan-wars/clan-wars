@@ -1058,6 +1058,47 @@ export const clanNotices = pgTable("clan_notices", {
 }));
 
 /**
+ * Which notices a player has read individually (spec §2).
+ *
+ * ⚠️ Cascades with the notice. A read row for a notice that no longer exists
+ * is meaningless rather than merely stale, and a season wipe deletes notices.
+ * Rows land here only when a player marks ONE thing read — in practice when an
+ * action resolves it. Everything else is covered by the watermark below.
+ */
+export const noticeReads = pgTable("notice_reads", {
+  discordId: text("discord_id").notNull(),
+  noticeId: bigint("notice_id", { mode: "number" }).notNull()
+    .references(() => clanNotices.id, { onDelete: "cascade" }),
+  readAt: timestamp("read_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.discordId, t.noticeId] }),
+}));
+
+/**
+ * "Mark all read", as a watermark: every notice at or below `through_id` is
+ * read (spec §2).
+ *
+ * ⚠️ One row per player, updated in place. The alternative — a `notice_reads`
+ * row per notice — makes the button's cost grow without bound, and grow
+ * fastest for exactly the player most likely to press it.
+ *
+ * ⚠️ `through_id` is a notice ID, never a timestamp. Ids are monotonic and
+ * assigned inside the writing transaction; `occurred_at` is backdated by
+ * several writers (an achievement is dated to its evidence, not its unlock),
+ * so a timestamp watermark would silently swallow a notice that arrived after
+ * the button was pressed.
+ *
+ * ⚠️ Deliberately NO foreign key. The row it names may be deleted by a season
+ * wipe, and the watermark must outlive it — a cascade here would silently
+ * re-unread the player's whole history.
+ */
+export const noticeReadMarks = pgTable("notice_read_marks", {
+  discordId: text("discord_id").primaryKey(),
+  throughId: bigint("through_id", { mode: "number" }).notNull(),
+  markedAt: timestamp("marked_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
  * Achievements (spec 2026-09-11 §5). One row per unlock, never deleted; the
  * primary key is what makes a rule firing twice harmless. `earnedAt` is when
  * the EVIDENCE happened — a backfilled Centurion is dated to the 100th kill,
