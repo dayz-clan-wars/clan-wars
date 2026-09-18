@@ -266,9 +266,10 @@ number fixed at design time: `release:sync` runs from the checkout at the new
 tag, whose `CHANGELOG.md` already carries that release's own dated section, so
 the release that finally makes the hook fire announces *itself*. At v1.18.0
 that was 24 releases, not the 23 this section originally said — 23 was the
-count only before v1.18.0's own section existed. From v1.19.0 onward the hook
-runs on its own, automatically, because v1.18.0's copy of the script is the one
-that carries the call.
+count only before v1.18.0's own section existed. From the next release onward
+the hook runs on its own, because v1.18.0's copy of the script is the one that
+carries the call — borne out by v1.18.1, which queued and posted its own notes
+with no manual step.
 
 ## 6. Testing
 

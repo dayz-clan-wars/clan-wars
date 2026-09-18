@@ -66,9 +66,10 @@ Both should read the same count as the dry-run listing (24 at v1.18.0) — every
 queued, none posted yet, because `RELEASE_CHANNEL_ID` isn't set.
 
 **From the next release onward this is automatic.** v1.18.0's own copy of
-`deploy-release.sh` carries the `release:sync` call, so the deploy that ships v1.19.0
-will run it itself. This manual step is one-time, for the deploy that introduces the
-hook only — see §9 for the unrelated case (a deploy that already has the call, but the
+`deploy-release.sh` carries the `release:sync` call, so the deploy that ships the
+release after it runs the call itself. Confirmed on 2026-09-18: the v1.18.1 deploy
+logged `release:sync: queued 1.18.1` before `[DEPLOYED]`, with nobody at a terminal.
+This manual step is one-time, for the deploy that introduces the hook only — see §9 for the unrelated case (a deploy that already has the call, but the
 call itself failed).
 
 ## 3. Enable — the irreversible step
