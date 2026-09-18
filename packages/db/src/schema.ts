@@ -1398,7 +1398,8 @@ export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
  *
  * Written by `pnpm release:sync` alone (from `deploy/deploy-release.sh` after a
  * verified deploy, or by hand to backfill), a single statement touching no other
- * table — so it sits LAST in the lock order (spec §4.12) and can safely.
+ * table — so it sits LAST in the lock order (spec §4.12) and can safely be: no
+ * other writer ever needs it locked before touching the roster tables.
  *
  * ⚠️ This table is the only thing that prevents a re-post. Truncating it, or
  * restoring a dump taken before a release was announced, re-announces every

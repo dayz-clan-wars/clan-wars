@@ -7,14 +7,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- Design for release announcements in Discord
-  (`docs/superpowers/specs/2026-09-17-release-announcements-design.md`), not yet
-  implemented: `CHANGELOG.md` is the single source, `deploy-release.sh` queues a
-  row after a *successful* deploy rather than on the tag push, and a bot tick
-  drains the queue oldest-first into a player-facing channel. The same
-  `pnpm release:sync` call is the backfill, the per-deploy hook and the repair
-  tool. Implementation plan:
-  `docs/superpowers/plans/2026-09-17-release-announcements.md`.
+- Every release announces itself in Discord. `CHANGELOG.md` is the source:
+  `deploy-release.sh` queues a row after a **verified** deploy (not on the tag
+  push — a deploy can roll back), and the bot posts one release per tick,
+  oldest first, stopping at the first failure so the channel stays a history.
+  `pnpm release:sync` is the backfill, the per-deploy hook and the repair tool,
+  all one idempotent call. Migration 0038 adds `release_announcements`, CREATE
+  only. Off until `RELEASE_CHANNEL_ID` is set — ⚠️ and everything queued posts
+  at once when it is. Runbook:
+  `docs/deploy/2026-09-17-release-announcements.md`.
 - `CHANGELOG.md` now records every release back to v1.0.0. The v1.1.0–v1.15.0
   entries are reconstructed from the release tags' annotations and the commits
   behind them; v1.0.0 is written from the increment specs, since its tag carries
