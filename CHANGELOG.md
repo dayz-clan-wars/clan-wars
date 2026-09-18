@@ -200,10 +200,9 @@ this tag.**
 
 ### Notes
 
-- ⚠️ Ships dark. `ENFORCEMENT_TICK` defaults off and `BAN_DRY_RUN` defaults
-  true: audit rows are always written, and a real ban needs both flags set
-  deliberately. The dry-run week is where `BOOST_STACK_RADIUS_M` and
-  `BOOST_STACK_MIN_RISE_M` get tuned before anyone is banned.
+- ⚠️ Shipped dark: detection and audit rows from day one, automatic bans off by
+  default, to be enabled deliberately once the boost-stack thresholds had been
+  tuned against real data.
 - ⚠️ `parity.test.ts`'s `PENDING` list is no longer empty. `reportIncident` is
   deferred deliberately: the evidence an officer needs to judge a report
   cannot appear in Discord under `clan_notices_no_coordinates`, so the
@@ -468,7 +467,7 @@ this tag.**
 - ⚠️ Do not deploy v1.7.0. `packages/copy/test/leaf.test.ts` is the standing
   guard: it fails on any runtime import of `@factions/roster` from that
   package and names the offending specifiers.
-- Deployed to regime: web image rebuilt, bot restarted on the same commit.
+- Deployed: web image rebuilt, bot restarted on the same commit.
 
 ## [1.7.0] - 2026-09-13
 
