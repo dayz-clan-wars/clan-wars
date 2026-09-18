@@ -71,6 +71,23 @@ export class NitradoClient {
   }
 
   /**
+   * List entries in the config directory.
+   *
+   * Resolves the gameserver path and fetches the file listing. Shared by
+   * `listAdmFiles` and `newestRptPath` to prevent drift on the path traversal.
+   */
+  private async listConfigEntries(): Promise<any[]> {
+    const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
+    const base = gs?.data?.gameserver?.game_specific?.path;
+    if (!base) throw new Error("Nitrado: could not resolve gameserver path");
+
+    const listing = await this.getJson(
+      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(base + "config")}`,
+    );
+    return listing?.data?.entries ?? [];
+  }
+
+  /**
    * Where this server's mission reads its object-spawner files from.
    *
    * ⚠️ NOT under `game_specific.path`. That is the `noftp` tree and exposes
@@ -171,14 +188,7 @@ export class NitradoClient {
   }
 
   async listAdmFiles(): Promise<AdmFileRef[]> {
-    const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
-    const base = gs?.data?.gameserver?.game_specific?.path;
-    if (!base) throw new Error("Nitrado: could not resolve gameserver path");
-
-    const listing = await this.getJson(
-      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(base + "config")}`,
-    );
-    const entries: any[] = listing?.data?.entries ?? [];
+    const entries = await this.listConfigEntries();
     const files: AdmFileRef[] = entries
       .filter((e) => {
         if (!(typeof e.name === "string" && e.name.endsWith(".ADM") && e.path)) return false;
@@ -227,14 +237,7 @@ export class NitradoClient {
    * second ingest pipeline.
    */
   async newestRptPath(): Promise<string | null> {
-    const gs = await this.getJson(`/services/${this.serviceId}/gameservers`);
-    const base = gs?.data?.gameserver?.game_specific?.path;
-    if (!base) throw new Error("Nitrado: could not resolve gameserver path");
-
-    const listing = await this.getJson(
-      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(base + "config")}`,
-    );
-    const entries: any[] = listing?.data?.entries ?? [];
+    const entries = await this.listConfigEntries();
     let best: { path: string; ts: number } | null = null;
     for (const e of entries) {
       if (!(typeof e.name === "string" && e.name.endsWith(".RPT") && e.path)) continue;
