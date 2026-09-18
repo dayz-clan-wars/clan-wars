@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The field guide channels can now be renamed to add icons without the
+  bot undoing it or posting a second copy of the guide beside them. It
+  recognises a channel by its chapter rather than its exact name, so
+  what the channels are called is yours to decide.
+
 ## [1.24.0] - 2026-09-18
 
 ### Added
