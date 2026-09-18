@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, players, identityLinks, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { PermissionFlagsBits } from "discord.js";
+import { PermissionFlagsBits, type Client } from "discord.js";
 import { PgVerificationStore } from "@factions/verification";
 import {
   buildCommands, notifyCompleted, guardedRunner, step,
-  createNicknameApplier, type NicknameClientLike, type RealGuildLike,
+  createNicknameApplier, createChannelPoster, type NicknameClientLike, type RealGuildLike,
 } from "../src/discord.js";
 import type { CommandDeps } from "../src/commands.js";
 import type { NicknameOutcome } from "../src/nickname.js";
@@ -495,5 +495,45 @@ describe("step", () => {
     const ran: string[] = [];
     await step("tick", async () => { ran.push("tick"); });
     expect(ran).toEqual(["tick"]);
+  });
+});
+
+/**
+ * ⚠️ The mention suppression is this branch's ONLY defence on the one path
+ * from player-controlled text (a gamertag) to a PUBLIC channel:
+ * `banAnnouncementText` markdown-escapes the tag but explicitly delegates the
+ * `@everyone`/`@here` defence here, to `allowedMentions: { parse: [] }`. Two
+ * statements of one fact with nothing holding them together is how the
+ * suppression gets dropped in a refactor and nothing fails — so this pins it,
+ * from both sides: the ban poster passes it, and every other caller (war-log,
+ * announcements, ops) keeps Discord's default by omitting it.
+ */
+describe("createChannelPoster mention policy", () => {
+  function fakeClient() {
+    const sent: unknown[] = [];
+    const client = {
+      channels: {
+        fetch: async () => ({
+          isSendable: () => true,
+          send: async (message: unknown) => { sent.push(message); },
+        }),
+      },
+    };
+    return { sent, client: client as unknown as Client };
+  }
+
+  it("passes allowedMentions: { parse: [] } through to send when the option is given", async () => {
+    const { sent, client } = fakeClient();
+    const post = createChannelPoster(client, "c-bans", { allowedMentions: { parse: [] } });
+    await post("🚫 **@everyone** banned");
+    expect(sent).toEqual([{ content: "🚫 **@everyone** banned", allowedMentions: { parse: [] } }]);
+  });
+
+  it("sends no allowedMentions key at all when the option is omitted — the existing posters are unchanged", async () => {
+    const { sent, client } = fakeClient();
+    const post = createChannelPoster(client, "c-war-log");
+    await post("hello");
+    expect(sent).toEqual([{ content: "hello" }]);
+    expect(sent[0]).not.toHaveProperty("allowedMentions");
   });
 });

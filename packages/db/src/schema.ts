@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -1649,6 +1649,44 @@ export const bans = pgTable("bans", {
   oneperIncident: uniqueIndex("bans_incident_person_uq").on(t.incidentId, t.dayzId),
   work: index("bans_work_idx").on(t.status, t.expiresAt),
   byPerson: index("bans_person_idx").on(t.dayzId, t.bannedAt),
+}));
+
+/**
+ * The public `#bans` queue: one row per REAL ban transition (`applied`,
+ * `lifted`, `expired`), posted by a later tick. Written in the same
+ * transaction as the `bans` row's status change.
+ *
+ * ⚠️ A dry-run ban must never produce a row here — it never reached Nitrado,
+ * so announcing it would tell players a ban happened that did not.
+ *
+ * ⚠️ `banId` is `SET NULL`, not the default `NO ACTION`, for the same reason
+ * spelled out on `bans.incidentId` above: this row is a published historical
+ * record and must outlive the `bans` row it describes. A `NO ACTION` FK here
+ * would make any future deletion of a ban row fail the moment its first
+ * announcement existed.
+ *
+ * ⚠️ The payload carries the gamertag frozen at ban time and the reason and
+ * expiry — never `dayzId`. That column is an account hash, and this table's
+ * whole purpose is to be posted to a public channel; a hash has no business
+ * there.
+ */
+export const banAnnouncements = pgTable("ban_announcements", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  banId: bigint("ban_id", { mode: "number" }).references(() => bans.id, { onDelete: "set null" }),
+  kind: text("kind").$type<BanAnnouncementKind>().notNull(),
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  postedAt: timestamp("posted_at", { withTimezone: true }),
+}, (t) => ({
+  kindValid: check("ban_announcements_kind_valid", sql`${t.kind} IN ('applied','lifted','expired')`),
+  // Same no-coordinates invariant as `faction_events`/`war_log_events`/
+  // `clan_notices`, and the reason is sharper here: a zone ban comes from an
+  // incident at someone's base, so the raw material for a coordinate leak is
+  // sitting right next to this write. The CHECK is what stops a future
+  // payload field from leaking a base location into a public channel.
+  noCoordinates: check("ban_announcements_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
+  queue: index("ban_announcements_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
 }));
 
 /**
