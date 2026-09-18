@@ -450,7 +450,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
   `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices` →
-  `zone_incidents` → `zone_incident_participants` → `bans` → `release_announcements`.**
+  `zone_incidents` → `zone_incident_participants` → `bans`.**
   The zone-enforcement report write (`reportIncidentDb`, `packages/roster/src/internal/incidents.ts`)
   locks `zone_incidents` FIRST (`FOR UPDATE`, by incident id — that row is already known from the
   caller's `reportableIncidentsDb` read), then reads `declarations` and `faction_members` for the

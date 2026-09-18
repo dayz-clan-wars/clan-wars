@@ -86,7 +86,12 @@ describe("parseChangelog", () => {
     const releases = parseChangelog(text);
 
     // 26 `## [` headings minus `[Unreleased]` minus the two [WITHDRAWN] tags.
-    expect(releases.length).toBe(23);
+    // A floor, not an exact count: keel:release rolls [Unreleased] into a new
+    // dated heading on every release, so this repo's own CHANGELOG.md gains
+    // one release with every release PR. An exact toBe(23) would go red on
+    // the very next one — the parser would be right and the test would be
+    // wrong, which is the opposite of what this test is for.
+    expect(releases.length).toBeGreaterThanOrEqual(23);
     expect(releases[0]!.version).toBe("1.0.0");
     expect(releases.map((r) => r.version)).not.toContain("1.16.2");
     expect(releases.map((r) => r.version)).not.toContain("1.16.4");

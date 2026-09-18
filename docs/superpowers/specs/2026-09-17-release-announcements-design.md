@@ -112,10 +112,11 @@ the opposite: order is the whole point, so a failure blocks and keeps retrying
 until a human unblocks it, exactly as `war_log_events` does. Columns nothing
 writes are two statements of one fact waiting to disagree.
 
-Insert-only, drained by one reader. It goes **last in the lock order** (spec
-§4.12), after `clan_notices` and the zone-enforcement tables, and can safely: it
-is written by a single statement from a single writer that touches no other
-table, exactly like `server_restarts` and `vehicle_wipe_announcements`.
+Insert-only, drained by one reader. It is **outside the lock order** (spec
+§4.12), for the same reason `server_restarts` and `vehicle_wipe_announcements`
+are: written by a single statement from a single writer that touches no other
+table, so no other writer ever needs it locked before touching the roster
+tables.
 
 CREATE only — no column is dropped or altered, so this migration does **not**
 require stopping the bot, and the deployer applies it in the normal course.
