@@ -48,6 +48,7 @@ import {
 import { attentionDb, type Attention } from "./attention";
 import { baseDamageWindowDb, type BaseDamageWindow } from "./base-damage-window";
 import { liveServersDb, type LiveServer } from "./servers";
+import { restartsScheduledDb } from "./restarts";
 import { reportIncidentDb, REPORT_REASONS, type ReportOutcome, type ReportableIncident } from "./internal/incidents";
 
 export type { Viewer, Role };
@@ -99,6 +100,7 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
 
     /** The server strip under the top bar: each live server's in-game name as Nitrado last reported it. The same for every viewer. */
     liveServers: (): Promise<LiveServer[]> => liveServersDb(getDb()),
+    restartsScheduled: (): Promise<boolean> => restartsScheduledDb(getDb(), getNow()),
 
     /** Who is looking: their link and their clan, or null for either. */
     viewerFor: (discordId: string): Promise<Viewer> => viewerForDb(getDb(), discordId),

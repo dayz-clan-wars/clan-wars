@@ -23,6 +23,18 @@ export function restartSlot(now: Date): RestartSlot {
   return { start, due, missedIfUnhandled: !due };
 }
 
+/**
+ * The slot boundary ahead of `now` — what the site's restart countdown runs to.
+ *
+ * ⚠️ Derived from the epoch, never stored, exactly like `weeklyWipeVehicle`. The
+ * countdown and the tick that actually restarts the server must not be able to
+ * disagree, so this is `restartSlot`'s own arithmetic one period on rather than a
+ * second "next even hour" of its own.
+ */
+export function nextRestartAt(now: Date): Date {
+  return new Date(restartSlot(now).start.getTime() + RESTART_PERIOD_MS);
+}
+
 /** `<active>` value an `events.xml` event should carry. */
 export type ActiveFlag = 0 | 1;
 

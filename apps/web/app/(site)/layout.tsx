@@ -1,10 +1,10 @@
 import { currentSession } from "@/lib/viewer";
-import { attention, baseDamageWindow, liveServers } from "@factions/roster";
+import { attention, baseDamageWindow, liveServers, restartsScheduled } from "@factions/roster";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
 import { ServerStrip } from "@/app/components/server-strip";
-import { RaidStrip } from "@/app/components/raid-strip";
+import { TimerBar } from "@/app/components/timer-bar";
 import { serverStripLines } from "@/lib/server-strip";
 import { SkipLink } from "@/app/components/ui";
 
@@ -30,12 +30,18 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const serverLines = serverStripLines(await liveServers().catch(() => []));
   // Same shape as the strip above: one cheap read, never a reason to fail the page.
   const raidWindow = await baseDamageWindow().catch(() => undefined);
+  // ⚠️ Whether the site may show a restart countdown at all. The countdown is pure
+  // arithmetic and always has an answer, so without this an install with no
+  // scheduled restarts would paint a confident clock for a restart that never comes.
+  const restarts = await restartsScheduled().catch(() => false);
+  // ⚠️ One clock read for the bar's columns and both countdown seeds. See TimerBar.
+  const now = new Date();
   return (
     <>
       <SkipLink />
       <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
       <ServerStrip lines={serverLines} />
-      <RaidStrip window={raidWindow} />
+      <TimerBar window={raidWindow} restartsScheduled={restarts} now={now} />
       <InstallStrip />
       {children}
     </>

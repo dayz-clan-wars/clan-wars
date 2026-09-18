@@ -81,4 +81,28 @@ describe("baseDamageWindowDb", () => {
     const wed = new Date("2026-09-16T00:00:00.000Z");
     expect((await baseDamageWindowDb(db, wed)).pending).toBe("close");
   });
+
+  /**
+   * ⚠️ `boundaryAt` is carried out, not left behind. The timer bar fills its
+   * progress rule from the LAST boundary passed to the next one, and midweek that
+   * is the previous close — `closesAt` minus a week. Re-deriving it at the render
+   * site is the same mistake the flip lookup has a ⚠️ about two lines up in the
+   * source: three independent derivations of this instant disagreed once already.
+   */
+  it("⚠️ carries the boundary already passed, for the bar's progress fill", async () => {
+    // In the window: the boundary is this window's open.
+    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
+
+    // Midweek: the PREVIOUS close, never the open ahead.
+    const wed = new Date("2026-09-16T00:00:00.000Z");
+    const w = await baseDamageWindowDb(db, wed);
+    expect(w.boundaryAt.toISOString()).toBe("2026-09-14T00:00:00.000Z");
+    expect(w.boundaryAt.getTime()).toBeLessThan(wed.getTime());
+    expect(w.boundaryAt.getTime()).toBeLessThan(w.opensAt.getTime());
+  });
+
+  it("carries the boundary on a skipped weekend too", async () => {
+    await db.insert(raidWindowSkips).values({ opensAt: FRI, reason: "launch weekend", decidedAt: FRI });
+    expect((await baseDamageWindowDb(db, FRI)).boundaryAt.toISOString()).toBe("2026-09-18T00:00:00.000Z");
+  });
 });
