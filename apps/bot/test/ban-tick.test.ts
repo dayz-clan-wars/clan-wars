@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, bans, servers, identityLinks, clanNotices, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, bans, servers, identityLinks, clanNotices, banAnnouncements, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { banTick, type BanTarget } from "../src/ban-tick.js";
 
@@ -31,7 +31,7 @@ describe("banTick", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table bans, clan_notices, identity_links, servers restart identity cascade`);
+    await db.execute(sql`truncate table bans, clan_notices, identity_links, servers, ban_announcements restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 1, active: true }).returning();
     serverId = s!.id;
   });
@@ -68,6 +68,48 @@ describe("banTick", () => {
     expect(r.applied).toBe(1);
     expect(fake.added).toEqual([]);
     expect((await allRows())[0]).toMatchObject({ status: "applied", dryRun: true });
+  });
+
+  it("a real (non-dry-run) apply writes exactly one `applied` ban_announcements row with the right payload", async () => {
+    const row = await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), expiresAt: at("2026-09-20T00:00:00Z"), reason: "zone" });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    expect(r.applied).toBe(1);
+    const rows = await db.select().from(banAnnouncements);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      serverId,
+      banId: row.id,
+      kind: "applied",
+      payload: { gamertag: "Sasha", reason: "zone", expiresAt: "2026-09-20T00:00:00.000Z" },
+    });
+  });
+
+  // ⚠️ The most important test in this file: a dry-run ban never reached
+  // Nitrado, so a public `#bans` announcement for it would tell players a
+  // ban happened that did not.
+  it("⚠️ a dry-run apply writes NO ban_announcements row", async () => {
+    await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: true, since: at("2026-09-15T00:00:00Z"), serverId });
+    expect(r.applied).toBe(1);
+    expect(await db.select().from(banAnnouncements)).toHaveLength(0);
+  });
+
+  it("a ban that fails to apply (Nitrado throws) writes NO ban_announcements row", async () => {
+    await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), attempts: 2 });
+    const fake = fakeClient({ addBans: async () => { throw new Error("nitrado down"); } });
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    expect(r.failed).toBe(1);
+    expect(await db.select().from(banAnnouncements)).toHaveLength(0);
+  });
+
+  it("a permanent ban's ban_announcements payload has expiresAt: null", async () => {
+    await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), expiresAt: null });
+    const fake = fakeClient();
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    const [row] = await db.select().from(banAnnouncements);
+    expect(row!.payload).toMatchObject({ expiresAt: null });
   });
 
   it("does not apply rows older than `since` — a dry-run flip must not fire the backlog", async () => {
@@ -119,6 +161,39 @@ describe("banTick", () => {
     expect(r.expired).toBe(1);
     expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
     expect((await allRows())[0]).toMatchObject({ status: "expired" });
+  });
+
+  it("an expiry writes exactly one `expired` ban_announcements row with the right payload", async () => {
+    const row = await insertBan({
+      status: "applied",
+      dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"),
+      expiresAt: at("2026-09-10T00:00:00Z"),
+      reason: "zone",
+    });
+    const fake = fakeClient();
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    const rows = await db.select().from(banAnnouncements);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      serverId,
+      banId: row.id,
+      kind: "expired",
+      payload: { gamertag: "Sasha", reason: "zone", expiresAt: "2026-09-10T00:00:00.000Z" },
+    });
+  });
+
+  it("a dry-run row's expiry writes NO ban_announcements row — it never reached Nitrado", async () => {
+    await insertBan({
+      status: "applied",
+      dryRun: true,
+      appliedAt: at("2026-09-01T00:00:00Z"),
+      expiresAt: at("2026-09-10T00:00:00Z"),
+    });
+    const fake = fakeClient();
+    const r = await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    expect(r.expired).toBe(1);
+    expect(await db.select().from(banAnnouncements)).toHaveLength(0);
   });
 
   it("a permanent ban (expiresAt null) is never expired", async () => {
@@ -250,6 +325,38 @@ describe("banTick", () => {
     const row = (await allRows())[0]!;
     expect(row.status).toBe("lifted");
     expect(row.liftedAt).not.toBeNull();
+  });
+
+  it("a lift writes exactly one `lifted` ban_announcements row with the right payload", async () => {
+    const row = await insertBan({
+      status: "lift_pending",
+      dryRun: false,
+      appliedAt: at("2026-09-01T00:00:00Z"),
+      expiresAt: null,
+      reason: "unlinked_pc",
+    });
+    const fake = fakeClient();
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    const rows = await db.select().from(banAnnouncements);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      serverId,
+      banId: row.id,
+      kind: "lifted",
+      payload: { gamertag: "Sasha", reason: "unlinked_pc", expiresAt: null },
+    });
+  });
+
+  it("a dry-run row's lift writes NO ban_announcements row — it was never really banned", async () => {
+    await insertBan({
+      status: "lift_pending",
+      dryRun: true,
+      appliedAt: at("2026-09-01T00:00:00Z"),
+      expiresAt: null,
+    });
+    const fake = fakeClient();
+    await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-08-01T00:00:00Z"), serverId });
+    expect(await db.select().from(banAnnouncements)).toHaveLength(0);
   });
 
   describe("multi-server isolation", () => {

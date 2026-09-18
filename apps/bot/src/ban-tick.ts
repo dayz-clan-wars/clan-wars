@@ -1,7 +1,35 @@
 import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or } from "drizzle-orm";
-import { bans, identityLinks, type Database } from "@factions/db";
+import { bans, banAnnouncements, identityLinks, type Database } from "@factions/db";
 import { BAN_MAX_ATTEMPTS } from "@factions/domain";
 import { noticeUserTx } from "@factions/roster/internal";
+
+/** The transaction handle drizzle hands to `db.transaction`. */
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+
+/**
+ * Appends one `ban_announcements` row for a REAL transition — always inside
+ * the SAME transaction that just changed the `bans` row's status, and always
+ * on the winning side of that write's own guard (a lost race, or a dry-run
+ * row, must never reach here — see call sites).
+ *
+ * ⚠️ `gamertag`/`reason`/`expiresAt` are read off `row`, the frozen `bans`
+ * record already in hand — never re-resolved through a join to the player's
+ * current name, for the same reason `bans.gamertag` itself is frozen (see
+ * the schema comment on `bans`).
+ */
+async function announceTx(tx: Tx, row: typeof bans.$inferSelect, kind: "applied" | "expired" | "lifted", now: Date, serverId: number): Promise<void> {
+  await tx.insert(banAnnouncements).values({
+    serverId,
+    banId: row.id,
+    kind,
+    occurredAt: now,
+    payload: {
+      gamertag: row.gamertag,
+      reason: row.reason,
+      expiresAt: row.expiresAt ? row.expiresAt.toISOString() : null,
+    },
+  });
+}
 
 /**
  * The Nitrado-facing surface this tick needs. `NitradoClient` satisfies it;
@@ -150,6 +178,17 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
             .returning({ id: bans.id });
           if (!applied) return;   // another tick won the race
           out.applied++;
+          // ⚠️ A dry-run row is still stamped `applied` locally (the audit
+          // trail says what WOULD have happened) but never reached Nitrado,
+          // so it must never produce a public `#bans` announcement — that
+          // channel is a record of real, enforced bans. This guard has to
+          // run BEFORE the offender-DM's own `if (opts.dryRun) return;`
+          // below, because that return would otherwise skip this insert too
+          // and silently make the two share one guard that happens to agree
+          // today but has no reason to keep agreeing.
+          if (!opts.dryRun) {
+            await announceTx(tx, row, "applied", now, serverId);
+          }
           // ⚠️ IMPORTANT 6: the offender is never told otherwise — no
           // pre-charge notice exists (`ban_applied` was defined and never
           // emitted). Only a GENUINELY enforced ban gets one: a dry-run row
@@ -274,9 +313,23 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         await db.update(bans).set({ lastError: String(failure).slice(0, 500) }).where(eq(bans.id, row.id));
         continue;
       }
-      await db.update(bans).set({ status: "expired" })
-        .where(and(eq(bans.id, row.id), eq(bans.status, "applied")));
-      out.expired++;
+      // Same transaction as the status change, and only on the winning side
+      // of it (`returning` empty means another tick already closed this row
+      // out) — otherwise a lost race here would post a second, phantom
+      // "unbanned" announcement for one real expiry.
+      await db.transaction(async (tx) => {
+        const [expired] = await tx.update(bans).set({ status: "expired" })
+          .where(and(eq(bans.id, row.id), eq(bans.status, "applied")))
+          .returning({ id: bans.id });
+        if (!expired) return;
+        out.expired++;
+        // A dry-run row never put an entry on Nitrado's list, so its
+        // "expiry" never happened anywhere a player could see — no public
+        // announcement for it, same rule as the apply arm above.
+        if (!row.dryRun) {
+          await announceTx(tx, row, "expired", now, serverId);
+        }
+      });
     }
   }
 
@@ -324,8 +377,21 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         await db.update(bans).set({ lastError: String(failure).slice(0, 500) }).where(eq(bans.id, row.id));
         continue;
       }
-      await db.update(bans).set({ status: "lifted", liftedAt: now })
-        .where(and(eq(bans.id, row.id), eq(bans.status, "lift_pending")));
+      // Same transaction as the status change, and only on the winning side
+      // of it — a lost race here (another tick already lifted the row) must
+      // not post a second "unbanned" announcement for one real lift.
+      await db.transaction(async (tx) => {
+        const [lifted] = await tx.update(bans).set({ status: "lifted", liftedAt: now })
+          .where(and(eq(bans.id, row.id), eq(bans.status, "lift_pending")))
+          .returning({ id: bans.id });
+        if (!lifted) return;
+        // A dry-run row was never really banned — never really visible on
+        // Nitrado's list — so there is nothing for a public "unbanned"
+        // message to be truthfully about.
+        if (!row.dryRun) {
+          await announceTx(tx, row, "lifted", now, serverId);
+        }
+      });
     }
   }
 
