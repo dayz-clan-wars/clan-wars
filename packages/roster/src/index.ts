@@ -41,6 +41,7 @@ export type { LiveServer } from "./api";
 export type { AchievementWall, AchievementTile, AchievementSubject } from "./api";
 export type { ReportOutcome, ReportableIncident } from "./api";
 export type { NotificationsPage, NoticeRow } from "./api";
+export type { NoticePayload } from "./api";
 
 export const {
   acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, cancelLink, castVote,

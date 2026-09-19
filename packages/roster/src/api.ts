@@ -75,6 +75,7 @@ export type { LiveServer };
 export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
 export type { NotificationsPage, NoticeRow };
+export type { NoticePayload } from "./internal/notices";
 export { NOTIFICATIONS_PAGE_SIZE };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
 export { DECLARE_SOLO_REASONS } from "./base";
