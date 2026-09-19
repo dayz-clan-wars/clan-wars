@@ -123,6 +123,33 @@ export async function saveBoosterKitSlotDb(db: Database, a: {
 export async function startKitPlacementDb(db: Database, a: {
   discordId: string; now: Date; rng: () => number;
 }): Promise<KitChallenge | null> {
+  // ⚠️ The kit row is created HERE, before the challenge, because until this
+  // existed nothing created one except a slot save. A booster who drew the
+  // sequence before picking any gear performed it in game against no row at
+  // all: `kitPlacementTick` took its `missing-kit` branch, closed the
+  // challenge, and threw the witnessed position away, while the page still
+  // said "No spot yet" and no copy explained why. They could repeat that
+  // forever.
+  //
+  // ⚠️ FIRST, and unconditionally — before the link check inside
+  // `issuePlacementChallenge`. A spare all-null row for an unlinked account
+  // costs nothing (booster-kit-tick.ts drops a kit with no items, and the
+  // position columns stay null), whereas a crash between the two statements
+  // the other way round would recreate exactly the bug above.
+  //
+  // ⚠️ `onConflictDoNothing`, never an upsert with a `set`: this must not
+  // touch an existing kit's slots, position or `placed_at`. Drawing a new
+  // sequence leaves the current spot alone until the new one is completed.
+  //
+  // ⚠️ Its own single statement, touching `booster_kits` alone — the lock
+  // order in CLAUDE.md records that `booster_kits` and
+  // `booster_kit_challenges` are each written by a transaction touching one
+  // table only. Folding this into `issuePlacementChallenge`'s transaction
+  // would make it the first writer to take both.
+  await db.insert(boosterKits)
+    .values({ discordId: a.discordId, updatedAt: a.now })
+    .onConflictDoNothing({ target: boosterKits.discordId });
+
   const issued = await issuePlacementChallenge(db, {
     discordId: a.discordId, now: a.now, ttlMs: KIT_PLACEMENT_TTL_MS, rng: a.rng,
   });

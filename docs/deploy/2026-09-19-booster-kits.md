@@ -25,7 +25,44 @@ from the picker, closed by the bot's witnessing tick).
    new tables. Nothing existing is touched, so the bot and ingest worker may keep running
    while it applies. Use the runner from `docs/deploy/2026-09-14-db-migrate.md`.
 
-2. **Deploy the bot and the ingest worker.** No feature flag gates either half. The bot's
+2. **Seed the `kit-placement` consumer cursor at the log head, BEFORE the bot is
+   restarted.** `consumer_cursors` is `@factions/event-log`'s table: `consumer_name`
+   (primary key), `last_event_id`, `updated_at`. `kit-placement-tick.ts` uses its own
+   cursor name (`KIT_PLACEMENT_CONSUMER = 'kit-placement'`), and nothing seeds it, so
+   without this `readCursor` returns `0` and the first bot tick walks the **entire**
+   `events` table looking for `emote.performed` lines. That runs inside
+   `step("kit placement")`, which sits ahead of verification, `notifyCompleted`, the
+   ceremonies and every poster in the same runner pass, so on deploy day `/link`
+   verification and its DMs stall behind the backfill for as long as it takes. Seed it
+   the same way `docs/deploy/2026-09-07-map.md` step 5 seeds `zone-watch`:
+
+       insert into consumer_cursors (consumer_name, last_event_id, updated_at)
+       select 'kit-placement', coalesce(max(id), 0), now() from events
+       on conflict (consumer_name) do update
+         set last_event_id = excluded.last_event_id, updated_at = now();
+
+   Verify before restarting the bot:
+
+       select consumer_name, last_event_id from consumer_cursors
+       where consumer_name = 'kit-placement';
+       select max(id) from events;
+
+   `kit-placement` must equal `max(id)`.
+
+   **If the bot was restarted first:** there is nothing to clean up, only to wait for.
+   Placement correctness is never at risk — the tick only considers events at or after
+   a challenge's `issued_at`, and no challenge can have been issued before this deploy,
+   so a backfill of historical emotes places nothing and queues nothing. Run the
+   statement above anyway (it is an upsert; it will jump the cursor forward and end the
+   backfill early), or simply let the backfill finish. Watch
+   `journalctl -u clan-wars-bot -f` for the other ticks resuming.
+
+   ⚠️ A runbook note is enough here, and only because of that issued-at guard. If a
+   future change ever makes the placement tick act on an event it did not expect to be
+   historical, this becomes a code problem — a seed-on-first-run in the tick — rather
+   than a step someone can forget.
+
+3. **Deploy the bot and the ingest worker.** No feature flag gates either half. The bot's
    `boosterTick` (interval `BOOSTER_TICK_INTERVAL_MS`, default 15 minutes — see
    `apps/bot/README.md`) starts mirroring guild boosters into `discord_boosters`
    immediately, and `kit-placement-tick.ts` starts watching for completed emote
@@ -35,7 +72,7 @@ from the picker, closed by the bot's witnessing tick).
    very next sweep. No env var or config switch turns this wiring on; it is on as soon as
    the worker is running the new build.
 
-3. **Confirm `booster-kits.json` appears in the mission's `custom` directory after one
+4. **Confirm `booster-kits.json` appears in the mission's `custom` directory after one
    sweep**, beside `faction-supplies.json` (`NitradoClient.missionCustomDir()`, the same
    directory `raid-window.md`'s manual procedure opens for `cfggameplay.json`). Check the
    worker's log for `booster kit file uploaded for server <id>: <n> kits`, or list the
@@ -44,12 +81,12 @@ from the picker, closed by the bot's witnessing tick).
    completed the in-game emote sequence yet at this point in the rollout, so an empty
    `Objects` array is exactly what a working pipeline produces.
 
-   Steps 1 to 3 are safe to deploy and safe to leave indefinitely. The game server does
+   Steps 1 to 4 are safe to deploy and safe to leave indefinitely. The game server does
    not read `booster-kits.json` unless something tells it to — see below — so until that
    happens the worker is uploading a file the server ignores. There is no rush to do step
-   4 the same day; nothing breaks and nothing is exposed by deploying only this far.
+   5 the same day; nothing breaks and nothing is exposed by deploying only this far.
 
-4. **The manual step.** ⚠️ Nothing in this codebase writes `cfggameplay.json`, deliberately —
+5. **The manual step.** ⚠️ Nothing in this codebase writes `cfggameplay.json`, deliberately —
    see the same warning in `docs/deploy/raid-window.md`: a bad automated write to a file
    the server parses at boot breaks the map for everyone. Through the Nitrado panel (*Tools*
    → *File Browser* → the mission directory → `cfggameplay.json`), add
@@ -62,7 +99,7 @@ from the picker, closed by the bot's witnessing tick).
    panel's editor flags a JSON error if not; when in doubt, paste it into
    `python3 -m json.tool` locally) and that the new entry is there.
 
-5. **Restart the server** from the panel, and confirm a placed kit appears. If no booster
+6. **Restart the server** from the panel, and confirm a placed kit appears. If no booster
    has placed a kit yet, this step only confirms the spawner entry itself did not break
    anything (still `{"Objects":[]}`, server starts clean); ask a booster to run the emote
    sequence to get an end-to-end confirmation, then restart once more and check their nine
@@ -71,9 +108,9 @@ from the picker, closed by the bot's witnessing tick).
 ## Rollback
 
 Remove the `./custom/booster-kits.json` entry from `WorldsData.objectSpawnersArr` in
-`cfggameplay.json` (same manual, by-hand edit as step 4, copy the file first) and restart.
+`cfggameplay.json` (same manual, by-hand edit as step 5, copy the file first) and restart.
 The bot and worker can keep running — nothing about them needs to stop or be flagged off.
 `booster-kits.json` keeps being regenerated and uploaded every sweep exactly as before;
-the server simply goes back to ignoring it, the same state steps 1–3 leave things in.
+the server simply goes back to ignoring it, the same state steps 1–4 leave things in.
 Nothing already placed in game is removed by this — items already spawned stay until the
 next restart re-places the mission's spawners without that entry.

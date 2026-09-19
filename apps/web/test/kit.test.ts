@@ -59,6 +59,20 @@ describe("the kit page's copy", () => {
     expect(PAGE).toContain("{view.challenge.steps.length} emotes");
   });
 
+  /**
+   * ⚠️ BOOSTER_TICK_INTERVAL_MS defaults to 15 minutes (apps/bot/src/config.ts)
+   * and is an env var an operator can change. The page said "within a few
+   * minutes", which was already false, and said "this page unlocks then",
+   * which was never true: the page is never locked, only the pickers appear.
+   * apps/web cannot import the bot's config, so the rule is that the sentence
+   * carries no figure at all rather than one that can drift out of it.
+   */
+  it("promises no delay figure for the boost, and never says the page is locked", () => {
+    expect(PAGE).not.toMatch(/within a few minutes|a few minutes of|\d+ minutes/u);
+    expect(PAGE.toLowerCase()).not.toContain("unlock");
+    expect(PAGE).toContain("the pickers appear on this page then");
+  });
+
   it("says plainly that the kit is on the ground, takeable, and back at the restart", () => {
     const all = GROUND_RULES.join(" ").toLowerCase();
     expect(all).toContain("on the ground");

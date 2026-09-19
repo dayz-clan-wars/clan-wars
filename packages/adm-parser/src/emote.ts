@@ -15,8 +15,15 @@ export type EmotePerformed = {
    */
   item: string | null;
   /**
-   * Where the player stood, in ADM order <x, z, altitude>. Null when the line
-   * carries no position block.
+   * Where the player stood, NORMALISED: a `Vec3` of `{x, y, z}` whose **y is
+   * always altitude**, whatever order the ADM line spelled it in —
+   * `parsePlayerPos` does that conversion, and it is the only place it
+   * happens. Null when the line carries no position block.
+   *
+   * ⚠️ Every consumer writes this straight across (`pos.y` → an altitude
+   * column, as `declarations.y` and `booster_kits.pos_y` are). There is no
+   * second reordering to apply anywhere downstream. Adding one would swap y
+   * and z and bury every kit underground.
    *
    * ⚠️ Read by the booster kit placement challenge, which writes it to the
    * map. parsePlayerPos is anchored INSIDE the identity parenthetical for

@@ -81,6 +81,16 @@ export async function boosterKitTick(db: Database, deps: {
       // roster (spec §4.5), so flying the clan's armband would be wrong.
       eq(factionMembers.status, "full"),
     ))
+    // ⚠️ NO faction-status filter here, while the site's armband read goes
+    // through `viewerForDb`, which restricts the clan to HOLDING_STATUSES.
+    // The two agree today only because the paths out of a holding status —
+    // reservation lapse and disband — DELETE the `faction_members` rows, so
+    // this join finds nothing for a clan that has stopped holding. Behaviour
+    // is unchanged here deliberately: adding the filter would be a silent
+    // divergence from `viewerForDb` in the other direction if that ever
+    // stopped deleting. If a future status is ever left with its roster rows
+    // intact, this join starts flying that clan's armband on the server while
+    // the page shows no armband at all, and THAT is the failure to look for.
     .leftJoin(factions, eq(factions.id, factionMembers.factionId))
     // Placed, or there is nowhere to put the kit. A null coordinate reaching
     // Number() below would be 0, dropping every unplaced kit at the map

@@ -13,6 +13,17 @@ export type IssuedPlacementChallenge = { sequence: string[]; expiresAt: Date };
  * ever advance it for that character — see the security boundary there. That
  * is why a three-emote sequence is enough, and why an unlinked account gets
  * nothing rather than a challenge anyone could satisfy.
+ *
+ * ⚠️ The dayz_id is pinned AT ISSUE TIME and never re-read. If the booster
+ * unlinks while the challenge is open and a different Discord account links
+ * that same character, that third party's emotes would set the FIRST
+ * booster's spot. Unexploitable in practice — the sequence is drawn at random
+ * and shown only to the account that asked for it, so the new holder does not
+ * know which three emotes to perform — and the blast radius is one booster's
+ * own kit landing somewhere they did not choose. Left as-is rather than
+ * re-resolving the link on every emote, which would cost a lookup per event
+ * in the tick's hot path. Revisit if a placement is ever worth more than the
+ * clothing it drops.
  */
 export async function issuePlacementChallenge(
   db: Database,

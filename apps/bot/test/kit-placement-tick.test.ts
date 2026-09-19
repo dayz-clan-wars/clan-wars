@@ -89,6 +89,28 @@ describe("kitPlacementTick", () => {
     expect(ch!.closedAt).not.toBeNull();
   });
 
+  /**
+   * ⚠️ The branch that survived review untested. `startKitPlacementDb`
+   * creates the kit row now, so this is no longer reachable from the site —
+   * but the tick is a separate process reading rows it did not write, and
+   * the one thing it must never do is report a placement it did not make.
+   */
+  it("reports a completed sequence with no kit row as missing-kit, never as a placement", async () => {
+    await seedChallenge({ sequence: ["EmoteSalute"] });
+    await seedEmote({ emote: "EmoteSalute", pos: { x: 300, y: 6, z: 400 } });
+
+    const r = await tick();
+
+    expect(r.placed).toBe(0);
+    expect(r.missingKit).toBe(1);
+    expect(r.advanced).toBe(1);
+    expect(await db.select().from(boosterKits)).toEqual([]);
+    // Closed anyway: an open challenge nothing can complete would have the
+    // player performing the sequence forever.
+    const [ch] = await db.select().from(boosterKitChallenges);
+    expect(ch!.closedAt).not.toBeNull();
+  });
+
   it("ignores emotes from a character the challenge does not name", async () => {
     await seedKit();
     await seedChallenge({ sequence: ["EmoteSalute"] });

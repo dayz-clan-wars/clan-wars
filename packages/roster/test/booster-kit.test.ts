@@ -159,12 +159,35 @@ describe("the booster kit page's reads and writes", () => {
     it("never writes a position — drawing a new sequence leaves the current spot alone", async () => {
       await link();
       await db.insert(boosterKits).values({
-        discordId: "1", posX: "1.00", posY: "2.00", posZ: "3.00", placedAt: now, updatedAt: now,
+        discordId: "1", mask: "HockeyMask", posX: "1.00", posY: "2.00", posZ: "3.00", placedAt: now, updatedAt: now,
       });
       await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
       const [row] = await db.select().from(boosterKits);
       expect(Number(row!.posX)).toBe(1);
       expect(row!.placedAt).toEqual(now);
+      // The row-creating insert must be onConflictDoNothing, not an upsert:
+      // an existing kit's gear is not the placement flow's to touch.
+      expect(row!.mask).toBe("HockeyMask");
+    });
+
+    /**
+     * ⚠️ The whole point of creating the row here. Nothing but a slot save
+     * used to create `booster_kits`, so a booster who drew the sequence
+     * before picking any gear and then performed it in game hit
+     * `kitPlacementTick`'s `missing-kit` branch: the challenge closed, the
+     * witnessed position was discarded, and the page still said "No spot
+     * yet" with no copy explaining why. They could repeat it forever.
+     */
+    it("creates the kit row, so a sequence drawn before any gear is picked has something to move", async () => {
+      await link();
+      await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
+      const [row] = await db.select().from(boosterKits);
+      expect(row!.discordId).toBe("1");
+      // Empty in every other respect: no gear, and no spot until the emotes
+      // are witnessed. An all-null kit spawns nothing (booster-kit-tick.ts).
+      expect(row!.mask).toBeNull();
+      expect(row!.posX).toBeNull();
+      expect(row!.placedAt).toBeNull();
     });
 
     it("closes the previous open challenge rather than leaving two", async () => {

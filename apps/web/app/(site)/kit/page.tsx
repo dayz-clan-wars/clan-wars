@@ -136,7 +136,7 @@ export default async function KitPage({ searchParams }: { searchParams: Promise<
                 To boost, open the Discord server, tap the server name at the top, and choose Boosts. Discord charges you, not us. Boosts also raise the whole server, so everyone gets the upload limits and the audio quality.
               </p>
               <p className="text-sm leading-relaxed text-ink-2">
-                Your kit turns on within a few minutes of the boost landing, and this page unlocks then. Stop boosting and the kit stops spawning at the next restart. Your nine picks are kept, so it comes straight back if you boost again.
+                We check Discord for new boosts on a timer, so your kit turns on at the next check rather than the instant you boost, and the pickers appear on this page then. Stop boosting and the kit stops spawning at the next restart. Your nine picks are kept, so it comes straight back if you boost again.
               </p>
             </PanelBody>
           </Panel>

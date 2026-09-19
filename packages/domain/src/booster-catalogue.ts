@@ -1,24 +1,33 @@
-import { readFileSync } from "node:fs";
 import { loadCatalogue, type Catalogue } from "./booster-kit";
+import raw from "../assets/booster-catalogue.json";
 
 /**
- * The committed catalogue, read from this package's own asset.
+ * The committed catalogue, IMPORTED as a module rather than read from disk.
  *
- * ⚠️ Deliberately NOT re-exported from `src/index.ts`, and reached through
- * the `@factions/domain/catalogue` subpath instead. `@factions/domain` is in
- * `apps/web`'s `transpilePackages` and its root IS in the browser graph
+ * ⚠️ It used to be a runtime `readFileSync` of the asset through
+ * `new URL(..., import.meta.url)`, and that is broken in production. `/kit`
+ * is `force-dynamic`, so the read happens on every request inside the web
+ * container, whose runtime image copies only `.next/standalone`. A successful
+ * `next build` proves nothing about that: Next's file tracing did NOT pull
+ * `packages/domain/assets/booster-catalogue.json` into the standalone output,
+ * confirmed empirically on 2026-09-19 by building the image and finding no
+ * such file anywhere in it. `/kit` threw ENOENT on every request while every
+ * other page was fine. An import makes the data part of the bundle, so there
+ * is nothing left to trace.
+ *
+ * ⚠️ Still deliberately NOT re-exported from `src/index.ts`, and still
+ * reached through the `@factions/domain/catalogue` subpath. `@factions/domain`
+ * is in `apps/web`'s `transpilePackages` and its root IS in the browser graph
  * (client components import `LINK_EMOTES`, `PIN_ICONS`, `nextRestartAt`), so
- * anything re-exported from the index reaches the client bundle. The
- * `node:fs` import below has no browser build: putting this module behind the
- * index would fail `next build` with a module-not-found for `fs`, and
- * nothing at typecheck or test time would catch it first.
+ * anything re-exported from the index reaches the client bundle. The reason
+ * changed with the read: it is no longer `node:fs` that would break the build,
+ * it is the catalogue's own weight landing in every visitor's download.
  *
- * ⚠️ Lazy and memoised, for the same reason: a module-scope read would run on
- * import rather than on use, so merely resolving the module would touch the
- * disk in every process that reached it.
+ * ⚠️ Lazy and memoised VALIDATION, for what is left of the original reason:
+ * `loadCatalogue` is not free, and the ingest worker calls `boosterCatalogue()`
+ * at module scope on purpose so a malformed catalogue stops it at startup.
+ * The import itself is eager now, which is the point.
  */
-const CATALOGUE_URL = new URL("../assets/booster-catalogue.json", import.meta.url);
-
 let cached: Catalogue | null = null;
 
 /**
@@ -29,8 +38,6 @@ let cached: Catalogue | null = null;
  * slot would let the picker accept anything for it.
  */
 export function boosterCatalogue(): Catalogue {
-  if (cached === null) {
-    cached = loadCatalogue(JSON.parse(readFileSync(CATALOGUE_URL, "utf8")));
-  }
+  if (cached === null) cached = loadCatalogue(raw);
   return cached;
 }

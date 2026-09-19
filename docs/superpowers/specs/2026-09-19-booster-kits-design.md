@@ -13,7 +13,7 @@ the web app, `armbandFor()` in `packages/domain/src/flags.ts`
 ## 1. Purpose
 
 Boosting the Discord server currently earns nothing here. This design gives a
-booster a personal clothing kit: ten pieces of their own choosing, lying at a
+booster a personal clothing kit: ten pieces, nine of their own choosing, lying at a
 spot on the map they picked themselves, restored whole at every server restart
 for as long as they keep boosting.
 
@@ -139,8 +139,8 @@ Faction supplies needed `flag-supplies.template.json` and `loadTemplate()`
 because the kit is a spatial arrangement captured at a real pole and the offsets
 had to survive being moved to another pole.
 
-A booster kit has no arrangement: all eight items spawn at the identical
-position. The generator emits eight objects directly from the row, so this
+A booster kit has no arrangement: all ten items spawn at the identical
+position. The generator emits those objects directly from the row, so this
 feature adds no template file and no template loader.
 
 ---
@@ -245,7 +245,7 @@ For each eligible booster, emit up to ten objects, all at the stored position:
 
 `customString` carries the owner's gamertag rather than being blank. Faction
 supplies already use it this way (`customString: f.tag`) so that an operator
-finding a stray object can tell whose kit it belongs to. Eight unexplained
+finding a stray object can tell whose kit it belongs to. Ten unexplained
 clothing items on the ground are exactly the case that needs it.
 
 `enableCEPersistency: 0` is the whole mechanism for "every reboot": the spawner
@@ -311,9 +311,10 @@ generation skips one that has since left it.
 
 Generation is pure functions in the style of `supplies.ts`, unit tested:
 
-- a row plus a faction becomes eight objects at one position
+- a row plus a faction becomes ten objects at one position (nine chosen slots
+  plus the derived armband)
 - coordinate order: ADM `pos=<x, z, alt>` becomes JSON `[x, alt, z]`
-- armband derivation, including the no-faction case producing seven objects
+- armband derivation, including the no-faction case producing nine objects
 - the eligibility filter, one case per row of §6's table
 - a slot holding a class name absent from the catalogue is skipped, not fatal
 
