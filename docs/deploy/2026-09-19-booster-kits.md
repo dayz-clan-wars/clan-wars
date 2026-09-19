@@ -31,9 +31,13 @@ from the picker, closed by the bot's witnessing tick).
    cursor name (`KIT_PLACEMENT_CONSUMER = 'kit-placement'`), and nothing seeds it, so
    without this `readCursor` returns `0` and the first bot tick walks the **entire**
    `events` table looking for `emote.performed` lines. That runs inside
-   `step("kit placement")`, which sits ahead of verification, `notifyCompleted`, the
-   ceremonies and every poster in the same runner pass, so on deploy day `/link`
-   verification and its DMs stall behind the backfill for as long as it takes. Seed it
+   `step("kit placement")`, which sits AFTER verification and `notifyCompleted` but
+   BEFORE the ceremony tick, the ceremony DMs and dormancy in the same runner pass
+   (`apps/bot/src/discord.ts`: `step("tick")`, `step("notify")`, then
+   `step("kit placement")`). So the first pass still verifies `/link` normally; what
+   stalls behind the backfill is that pass's ceremonies, ceremony DMs and dormancy —
+   and, because the pass itself runs long, everything in every later pass, verification
+   included, until it finishes. Seed it
    the same way `docs/deploy/2026-09-07-map.md` step 5 seeds `zone-watch`:
 
        insert into consumer_cursors (consumer_name, last_event_id, updated_at)

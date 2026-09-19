@@ -497,8 +497,9 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   → `ban_announcements` → `identity_links` → `clan_notices`, so `clan_notices` is the last
   table that transaction touches. Being outside the order is what makes that harmless.
   `booster_kits` and `booster_kit_challenges` are outside the order too: each is written
-  by its own transaction touching only that table — `booster-kit.ts`'s single upsert into
-  `booster_kits`, and `kit-placement-issue.ts`'s close-then-insert into
+  by its own transaction touching only that table — `booster-kit.ts`'s two upserts into
+  `booster_kits` (one per slot save, one row-creating `onConflictDoNothing` before a
+  placement challenge is issued), and `kit-placement-issue.ts`'s close-then-insert into
   `booster_kit_challenges`, both in `packages/roster`, the picker and emote-challenge
   writer reachable from the website's `/kit` page. Neither table is written by the bot.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
