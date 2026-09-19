@@ -8,5 +8,5 @@ export default defineConfig({
   // and no React import anywhere); a test that renders a component needs
   // vitest's esbuild told the same, or it emits `React.createElement`.
   esbuild: { jsx: "automatic" },
-  test: { include: ["test/**/*.test.ts"] },
+  test: { include: ["test/**/*.test.ts", "test/**/*.test.tsx"] },
 });
