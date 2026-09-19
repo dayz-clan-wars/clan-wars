@@ -8,6 +8,7 @@ import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factio
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
 import { verificationTick } from "./tick.js";
+import { kitPlacementTick } from "./kit-placement-tick.js";
 import { runPlayerProjection } from "./player-tick.js";
 import { runPoleProjection } from "./pole-tick.js";
 import type { BotConfig } from "./config.js";
@@ -54,6 +55,7 @@ import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
 import { crownTick } from "./crown-tick.js";
 import { PgCrownStore } from "./crown-store.js";
+import { boosterTick, guildBoosterSource } from "./booster-tick.js";
 import { membershipTick } from "./membership-tick.js";
 import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
@@ -811,6 +813,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const crownsConfigured = Object.keys(cfg.crownRoleIds).length > 0;
   let lastCrownAt = 0;
 
+  // The booster mirror. Throttled like the crowns, but on its own (longer)
+  // clock: `guild.members.fetch()` is a heavy full-cache call, and a stale
+  // read here is bounded by the next server restart anyway.
+  let lastBoosterAt = 0;
+
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
@@ -977,6 +984,27 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // ⚠️ Its own try/catch, on its own (longer) throttle: `guild.members.fetch()`
+    // is a heavy full-cache call, and the booster kit's effect is bounded by
+    // the next server restart anyway, so live-within-a-tick precision is not
+    // needed here the way it is for verification. Level-triggered like every
+    // other reconciler in this pass — a failed fetch throws before anything
+    // is written or deleted (see booster-tick.ts), so a bad pass here just
+    // leaves last tick's mirror in place instead of stripping every booster's
+    // kit off the server.
+    if (Date.now() - lastBoosterAt >= cfg.boosterTickIntervalMs) {
+      try {
+        const guild = await client.guilds.fetch(cfg.guildId);
+        const b = await boosterTick(db, { source: guildBoosterSource(guild), now: new Date() });
+        lastBoosterAt = Date.now();
+        if (b.added > 0 || b.removed > 0) {
+          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed`);
+        }
+      } catch (err) {
+        console.error("booster tick failed", err);
+      }
+    }
+
     // ⚠️ Its own try/catch, beside the crowns and on its own throttle: the
     // nine board messages read the same leaderboards the crowns do, so they
     // belong after the kills and sessions consumers have projected this
@@ -1060,6 +1088,19 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     });
     await step("notify", () => notifyCompleted(deps, send, notifyFailures, renameOnLink, cfg.guildId));
+
+    // ⚠️ Beside the verification tick, on the per-tick path rather than
+    // `boosterTickIntervalMs`. The booster tick is throttled because it does a
+    // heavy `guild.members.fetch()`; this one only reads the event log with
+    // its own cursor, and it is the step a player is actively waiting on —
+    // they are standing in the spot they just marked. Its own `step`, like
+    // every other: a failure here must not stop the ceremony DMs below.
+    await step("kit placement", async () => {
+      const kp = await kitPlacementTick(db, { now: new Date() });
+      if (kp.placed > 0 || kp.lockedOut > 0 || kp.expired > 0) {
+        console.log(`kit placement: ${kp.placed} placed, ${kp.lockedOut} out of emotes, ${kp.expired} expired`);
+      }
+    });
 
     // Each of the two ceremony steps gets its own try/catch: a failing
     // detector must not stop ceremony DMs, and vice versa.

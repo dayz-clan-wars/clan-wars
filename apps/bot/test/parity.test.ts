@@ -51,6 +51,17 @@ const PENDING: Record<string, string> = {
   // listed incidents by id WITHOUT the evidence would be a ban trigger with the
   // reasoning stripped out, which is worse than no command.
   reportIncident: "base report",
+
+  // 2026-09-19 booster kits. Deferred by the design itself:
+  // docs/superpowers/specs/2026-09-19-booster-kits-design.md, "Out of scope,
+  // deliberately" — "A Discord command for any of this. The site is the
+  // picker. If boosters ask for /kit later it is a small addition on top of
+  // the same table." The reason it is out of scope is the catalogue: nine
+  // dropdowns over ~200 class names is not a list a slash command can show,
+  // and an autocomplete over it is a worse version of the page. If it is ever
+  // wanted, `/kit pick` and `/kit place` are the shapes.
+  saveBoosterKitSlot: "kit pick",
+  startKitPlacement: "kit place",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
@@ -82,7 +93,7 @@ describe("Discord parity with the site", () => {
       "baseFor", "clanFor", "directory", "clanByTag", "claimContext", "myInvites", "myRequests",
       "scoreboard", "alphas", "seasons", "warLog", "mapState", "playerBoards", "playerProfile",
       "achievementsFor", "clanBoard", "clanBoardPage", "boardPage", "playerFeed", "vaultFor",
-      "makeRoster", "notificationsFor",
+      "makeRoster", "notificationsFor", "boosterKit",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
       "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
       "baseDamageWindow", "restartsScheduled",

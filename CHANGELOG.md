@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Server boosters can now pick a nine piece outfit on the site at `/kit` and place it
+  in game with a short emote sequence. Once placed, your kit spawns back at that same
+  spot every time the server restarts. It is a pile of clothing on the ground and it is
+  loot like any other loot. Stop boosting and the kit stops spawning at the next restart.
+
 ## [1.26.1] - 2026-09-19
 
 ### Fixed

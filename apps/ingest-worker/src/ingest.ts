@@ -170,6 +170,7 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
         dayzId: line.event.dayzId,
         emote: line.event.emote,
         item: line.event.item,
+        pos: line.event.pos,
       };
     case "death":
       return line.event.kind === "killed"
