@@ -37,18 +37,7 @@ export function NoticeArticle({ row, actions, now = new Date() }: {
           <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${kicker}`}>
             {c.kicker}{row.unread && <span className="sr-only"> (Unread)</span>}
           </span>
-          {/*
-            ⚠️ Lowercase `datetime` on purpose. React's SSR renderer has no
-            attribute-name mapping for `dateTime` (unlike `className`/
-            `tabIndex`), so the camelCase prop is emitted VERBATIM as
-            `dateTime="…"` in the markup string — parses fine in a real
-            browser (HTML attributes are case-insensitive) but is the wrong
-            literal bytes for a test, or any other exact-string reader, that
-            expects the spec's lowercase `datetime`. Passing it lowercase
-            trips React's one-time "did you mean `dateTime`" dev warning
-            (deduped process-wide) in exchange for the correct bytes.
-          */}
-          <time {...{ datetime: row.occurredAt.toISOString() }} className="font-mono text-[10px] tracking-[0.1em] text-dim">
+          <time dateTime={row.occurredAt.toISOString()} className="font-mono text-[10px] tracking-[0.1em] text-dim">
             {noticeAge(row.occurredAt, now)}
           </time>
         </div>

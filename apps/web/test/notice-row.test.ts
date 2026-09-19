@@ -38,7 +38,14 @@ describe("a notification row", () => {
     expect(render(row())).not.toContain("<button");
   });
 
+  /**
+   * ⚠️ Case-insensitive on the attribute name, exact on the value. React renders
+   * this as `dateTime`, and HTML attribute names are case-insensitive, so the
+   * browser reads it as `datetime` either way. Asserting the lowercase spelling
+   * pins a renderer detail rather than the behaviour, which is that the row
+   * carries a machine-readable timestamp.
+   */
   it("carries a machine-readable timestamp", () => {
-    expect(render(row())).toContain('datetime="2026-09-18T10:00:00.000Z"');
+    expect(render(row())).toMatch(/datetime="2026-09-18T10:00:00\.000Z"/iu);
   });
 });
