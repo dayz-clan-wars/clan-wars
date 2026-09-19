@@ -66,10 +66,14 @@ This is what makes revocation free. Nothing deletes a kit. A booster who stops
 boosting stops appearing in the generated file, and the kit is gone at the next
 restart.
 
-It carries the same known limit the supplies design records: the stored hash
-describes what we last *sent*, not what is on the server now. It heals upload
-failures. It does not detect server-side drift from a mission wipe, an FTP
-restore, or an operator with a text editor.
+The supplies design records a limitation here that **no longer applies**:
+that the stored hash describes what we last sent, so server-side drift goes
+undetected forever. `projection-upload.ts` has since grown drift detection. It
+stores the remote file's size and modified time as a baseline, re-stats the
+file on every tick whose hash already matches, and calls `onDrift` and
+re-uploads when the server's copy is not the one we sent. Booster kits get
+that for free by using `syncProjection`, and the tick passes an `onDrift`
+handler like its neighbours do.
 
 ### 2.2 The armband is derived, never stored
 
@@ -229,9 +233,14 @@ For each eligible booster, emit eight objects, all at the stored position:
   "ypr": [0.0, 0.0, 0.0],
   "scale": 1.0,
   "enableCEPersistency": 0,
-  "customString": ""
+  "customString": "<the booster's gamertag>"
 }
 ```
+
+`customString` carries the owner's gamertag rather than being blank. Faction
+supplies already use it this way (`customString: f.tag`) so that an operator
+finding a stray object can tell whose kit it belongs to. Eight unexplained
+clothing items on the ground are exactly the case that needs it.
 
 `enableCEPersistency: 0` is the whole mechanism for "every reboot": the spawner
 re-places the objects at mission start regardless of what happened to the
