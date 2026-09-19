@@ -1,5 +1,7 @@
 import type { SearchEntry } from "@/app/guide/index";
+import type { NoticeRow } from "@factions/roster";
 import { BarNav, Drawer } from "./menu-list";
+import { NotificationsBell } from "@/app/components/notifications-bell";
 import type { Counts } from "@/lib/menu";
 
 /**
@@ -18,7 +20,11 @@ import type { Counts } from "@/lib/menu";
  * player spends the most time on.
  */
 /** `guideIndex`: the guide search box at the top of the phone drawer. Omit it and the drawer has no search (the guide layout carries its own). */
-export function SiteBar({ signedIn, crumb, extra, guideIndex, counts }: { signedIn: boolean; crumb?: string; extra?: React.ReactNode; guideIndex?: SearchEntry[]; counts?: Counts }) {
+export function SiteBar({ signedIn, crumb, extra, guideIndex, counts, notifications }: {
+  signedIn: boolean; crumb?: string; extra?: React.ReactNode; guideIndex?: SearchEntry[]; counts?: Counts;
+  /** The bell. Omitted for a signed-out visitor, who has no notices. */
+  notifications?: { unread: number; recent: NoticeRow[]; now?: Date };
+}) {
   return (
     <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame pl-4 pr-4 lg:pl-8 lg:pr-8">
       <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href="/">
@@ -26,9 +32,13 @@ export function SiteBar({ signedIn, crumb, extra, guideIndex, counts }: { signed
         Clan Wars
         {crumb && <span className="ml-1.5 hidden text-muted lg:inline">/ {crumb}</span>}
       </a>
-      <div className="hidden h-full lg:block"><BarNav signedIn={signedIn} counts={counts} /></div>
+      <div className="hidden h-full items-stretch lg:flex">
+        <BarNav signedIn={signedIn} counts={counts} />
+        {signedIn && notifications && <NotificationsBell {...notifications} />}
+      </div>
       <div className="flex items-center gap-2 lg:hidden">
         {extra}
+        {signedIn && notifications && <NotificationsBell {...notifications} />}
         <Drawer signedIn={signedIn} guideIndex={guideIndex} counts={counts} />
       </div>
     </header>

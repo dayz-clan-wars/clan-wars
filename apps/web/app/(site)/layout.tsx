@@ -1,5 +1,5 @@
 import { currentSession } from "@/lib/viewer";
-import { attention, baseDamageWindow, liveServers, restartsScheduled } from "@factions/roster";
+import { attention, baseDamageWindow, liveServers, notificationsFor, restartsScheduled } from "@factions/roster";
 import { SiteBar } from "./site-bar";
 import { buildIndex } from "@/app/guide/index";
 import { InstallStrip } from "@/app/components/install-strip";
@@ -36,10 +36,17 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
   const restarts = await restartsScheduled().catch(() => false);
   // ⚠️ One clock read for the bar's columns and both countdown seeds. See TimerBar.
   const now = new Date();
+  // The bell's panel: the newest four, and never a reason to fail the page.
+  const recent = session ? await notificationsFor(session.sub, 1).then((p) => p.rows.slice(0, 4)).catch(() => []) : [];
   return (
     <>
       <SkipLink />
-      <SiteBar signedIn={session !== null} guideIndex={buildIndex()} counts={counts} />
+      <SiteBar
+        signedIn={session !== null}
+        guideIndex={buildIndex()}
+        counts={counts}
+        notifications={session ? { unread: counts?.notices ?? 0, recent, now } : undefined}
+      />
       <ServerStrip lines={serverLines} />
       <TimerBar window={raidWindow} restartsScheduled={restarts} now={now} />
       <InstallStrip />
