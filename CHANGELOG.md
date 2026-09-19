@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.26.1] - 2026-09-19
+
 ### Fixed
 
 - A raided clan can always re-raise. Your flag keeps spawning at your pole
