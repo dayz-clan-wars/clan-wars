@@ -1,7 +1,8 @@
 import { notificationsFor } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { redirect } from "next/navigation";
-import { NOTICE_GROUPS, noticeGroup } from "@/lib/notice-copy";
+import { NOTICE_GROUPS, noticeGroup, type NoticeGroup } from "@/lib/notice-copy";
+import { notificationsHref, noticeDay } from "@/lib/notifications-page";
 import { NoticeArticle } from "@/app/components/notice-row";
 import { Pager } from "@/app/components/ui";
 import { NoticeActions } from "./actions";
@@ -14,14 +15,6 @@ import { NoticeActions } from "./actions";
  * every row, so there is nothing here to cache.
  */
 export const dynamic = "force-dynamic";
-
-const DAY = (d: Date, now: Date): string => {
-  const days = Math.floor((Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-    - Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())) / 86_400_000);
-  if (days <= 0) return "Today";
-  if (days === 1) return "Yesterday";
-  return "Earlier";
-};
 
 export default async function NotificationsPage({ searchParams }: { searchParams: Promise<{ page?: string; group?: string }> }) {
   const session = await currentSession();
@@ -39,16 +32,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
   // boundary gets its heading on both, which beats a pager that cannot say how
   // many pages there are.
   const days = ["Today", "Yesterday", "Earlier"]
-    .map((day) => ({ day, items: shown.filter((r) => DAY(r.occurredAt, now) === day) }))
+    .map((day) => ({ day, items: shown.filter((r) => noticeDay(r.occurredAt, now) === day) }))
     .filter((d) => d.items.length > 0);
 
-  const href = (o: { page?: number; group?: string }) => {
-    const s = new URLSearchParams();
-    if (o.group ?? group) s.set("group", String(o.group ?? group));
-    if ((o.page ?? page) > 1) s.set("page", String(o.page ?? page));
-    const qs = s.toString();
-    return qs ? `/notifications?${qs}` : "/notifications";
-  };
+  const href = (o: { page?: number; group?: NoticeGroup | null }) => notificationsHref({ page, group }, o);
 
   const chip = (label: string, on: boolean, to: string) =>
     <a key={label} href={to} aria-current={on ? "true" : undefined}
@@ -67,12 +54,14 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       </p>
 
       <div role="group" aria-label="Filter" className="mt-6 flex flex-wrap gap-2">
-        {chip("All", !group, href({ group: undefined, page: 1 }))}
-        {NOTICE_GROUPS.map((g) => chip(g, group === g, `/notifications?group=${g}`))}
+        {chip("All", !group, href({ group: null, page: 1 }))}
+        {NOTICE_GROUPS.map((g) => chip(g, group === g, href({ group: g, page: 1 })))}
       </div>
 
       {days.length === 0 ? (
-        <p className="mt-9 border-2 border-rule-2 bg-frame px-4 py-8 text-center text-sm text-muted">Nothing here yet.</p>
+        <p className="mt-9 border-2 border-rule-2 bg-frame px-4 py-8 text-center text-sm text-muted">
+          {group ? "Nothing in this filter on this page." : "Nothing here yet."}
+        </p>
       ) : days.map((d) => (
         <section key={d.day} className="mt-9">
           <h2 className="m-0 mb-2.5 font-mono text-[11px] font-bold uppercase tracking-[0.18em] text-dim">{d.day}</h2>
