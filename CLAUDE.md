@@ -496,6 +496,11 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `bans` write the transition is reporting on — not last: the apply arm's order is `bans`
   → `ban_announcements` → `identity_links` → `clan_notices`, so `clan_notices` is the last
   table that transaction touches. Being outside the order is what makes that harmless.
+  `booster_kits` and `booster_kit_challenges` are outside the order too: each is written
+  by its own transaction touching only that table — `booster-kit.ts`'s single upsert into
+  `booster_kits`, and `kit-placement-issue.ts`'s close-then-insert into
+  `booster_kit_challenges`, both in `packages/roster`, the picker and emote-challenge
+  writer reachable from the website's `/kit` page. Neither table is written by the bot.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of
