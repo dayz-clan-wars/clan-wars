@@ -1207,6 +1207,97 @@ export const travelUploads = pgTable("travel_uploads", {
 });
 
 /**
+ * One booster's kit. Keyed by Discord account, because the BOOST is a property
+ * of the Discord account, not of a character.
+ *
+ * ⚠️ No dayz_id column, on purpose. The character is joined from
+ * identity_links on discord_id. Copying it here would leave a kit bound to a
+ * character the player has since unlinked, and something would have to
+ * remember to rewrite it. Joining makes unlinking remove the kit by itself.
+ *
+ * ⚠️ pos_x/pos_y/pos_z are `numeric(12,2)`, matching `declarations.x/y/z` —
+ * the only other world coordinates in this database — not `doublePrecision`.
+ * Same convention, same hazard: Drizzle returns a numeric column as a
+ * STRING, never a number, and callers must `Number()` it themselves.
+ *
+ * ⚠️ Coordinates are never reordered. `Vec3` (packages/domain/src/vec3.ts) is
+ * `{ x, y, z }` with y ALWAYS altitude, so pos_y holds altitude directly,
+ * exactly as `declarations.y` does — there is no "ADM order" conversion
+ * anywhere in this column's path.
+ *
+ * Position is null until the first placement emote is witnessed. A configured
+ * but unplaced kit generates nothing.
+ */
+export const boosterKits = pgTable("booster_kits", {
+  discordId: text("discord_id").primaryKey(),
+  posX: numeric("pos_x", { precision: 12, scale: 2 }),
+  posY: numeric("pos_y", { precision: 12, scale: 2 }),
+  posZ: numeric("pos_z", { precision: 12, scale: 2 }),
+  mask: text("mask"),
+  eyewear: text("eyewear"),
+  hat: text("hat"),
+  jacket: text("jacket"),
+  pants: text("pants"),
+  boots: text("boots"),
+  gloves: text("gloves"),
+  hipPack: text("hip_pack"),
+  backpack: text("backpack"),
+  placedAt: timestamp("placed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Who is boosting, as last observed from Discord. Written by the bot's
+ * booster tick, read by the ingest worker, which has no Discord client and
+ * should not grow one.
+ *
+ * ⚠️ Rows are DELETED when someone stops boosting, not flagged. The kit
+ * projection tests for presence, so a soft-delete flag would be one more
+ * thing every reader must remember to filter.
+ */
+export const discordBoosters = pgTable("discord_boosters", {
+  discordId: text("discord_id").primaryKey(),
+  premiumSince: timestamp("premium_since", { withTimezone: true }).notNull(),
+  observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+});
+
+/**
+ * Same columns as supply_uploads, so storeFor() serves both. One table per
+ * projected file, so the two files' hashes and baselines cannot cross — see
+ * `supply_uploads` above.
+ */
+export const boosterKitUploads = pgTable("booster_kit_uploads", {
+  serverId: integer("server_id").primaryKey().references(() => servers.id),
+  contentHash: text("content_hash").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+  remoteSize: integer("remote_size"),
+  remoteModifiedAt: timestamp("remote_modified_at", { withTimezone: true }),
+});
+
+/**
+ * A live placement challenge. Separate from the link challenge tables because
+ * it proves something different: link binds an account to a character, this
+ * binds a LOCATION to an existing kit. Reusing the link challenge would make
+ * "already-linked" and "taken" outcomes meaningful here, which they are not.
+ */
+export const boosterKitChallenges = pgTable("booster_kit_challenges", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  discordId: text("discord_id").notNull(),
+  targetDayzId: text("target_dayz_id").notNull(),
+  sequence: text("sequence").array().notNull(),
+  progressIndex: integer("progress_index").notNull().default(0),
+  seenCount: integer("seen_count").notNull().default(0),
+  lastMatchedEventId: bigint("last_matched_event_id", { mode: "number" }).notNull().default(0),
+  issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+}, (t) => ({
+  // One open challenge per account. Partial, so closed rows do not collide.
+  openPerAccount: uniqueIndex("booster_kit_challenges_open_uniq")
+    .on(t.discordId).where(sql`${t.closedAt} IS NULL`),
+}));
+
+/**
  * The confirmed roster.
  *
  * Created in this plan only because activation must verify that the UID which
