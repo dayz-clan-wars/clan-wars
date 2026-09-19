@@ -37,3 +37,23 @@ export type MemberStatus = (typeof MEMBER_STATUSES)[number];
  * pins the spelling.
  */
 export const SUPPLIED_PREDICATE = "status in ('reserved', 'active') and flag_down_since is null";
+
+/**
+ * SUPPLIED_PREDICATE as a function, for a caller that already holds the row.
+ *
+ * ⚠️ NOT "does this clan appear in the spawner file". Since 2026-09-19 the
+ * file covers every HOLDING clan with a declared pole; this decides whether
+ * such a clan gets the whole kit or only its flags. Flags are nominal 0 /
+ * min 0 in types.xml, so the kit is the only source of a clan's flag on the
+ * server, and a raided clan cut from the file entirely could not raise, so
+ * could not clear `flag_down_since`, so could not earn the kit back — it ran
+ * out the 24 h clock and went dormant with no move available. Losing the
+ * crate is the cost of a raid; losing the flag was a dead end.
+ *
+ * ⚠️ Two statements of one fact with SUPPLIED_PREDICATE above, which the
+ * worker no longer spells in SQL. `packages/db/test/holding-index-drift.test.ts`
+ * is the only thing holding them together.
+ */
+export function isSupplied(status: string, flagDownSince: Date | null): boolean {
+  return (status === "reserved" || status === "active") && flagDownSince === null;
+}

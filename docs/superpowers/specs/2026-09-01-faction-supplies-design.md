@@ -144,6 +144,17 @@ unchanged: a kit silently short, with nothing reporting it.
 the faction's chosen texture substituted — a spare, so a raided faction can
 re-raise without waiting for the next sweep.
 
+**Amended 2026-09-19: the flag half is emitted for every HOLDING clan, not
+only supplied ones.** The original predicate cut an unsupplied clan out of the
+file entirely, which took its flags with it. Flags are `nominal 0` / `min 0`
+in `livonia/db/types.xml`, so the kit is the only source of a clan's flag on
+the server, and the result was a dead end: a raided clan had no flag, so could
+not raise, so could not clear `flag_down_since`, so could not earn the kit
+back — it ran out the 24 h clock and went dormant with no move available. The
+file now covers every clan in `HOLDING_STATUSES` with a declared pole;
+`@factions/domain`'s `isSupplied` decides whether each gets the whole kit or
+only its two flags. Losing the crate is still the cost of a raid.
+
 ---
 
 ## 4. Data model

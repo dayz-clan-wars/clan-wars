@@ -166,7 +166,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   // ---- Raid ----
   flag_down: { group: "Raid", render: (p) => ({
     kicker: "Raid", title: "Your flag is down",
-    body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within ${HOURS(FLAG_DOWN_MS)} or you go dormant. Supplies are paused until you do.` }) },
+    body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within ${HOURS(FLAG_DOWN_MS)} or you go dormant. Your supply crate is paused until you do. A spare flag keeps spawning at your pole, so you always have one to raise.` }) },
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
     body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },
@@ -259,7 +259,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
     body: `${HOURS(FLAG_DOWN_MS)} passed with the flag down. Any member raising it brings you back.` }) },
   dormant_inactive: { group: "Dormancy", render: () => ({
     kicker: "Dormancy", title: "You went dormant",
-    body: `No member has raised the flag in ${DAYS(DORMANT_AFTER_MS)}. Supplies stopped until someone does.` }) },
+    body: `No member has raised the flag in ${DAYS(DORMANT_AFTER_MS)}. Your supply crate stopped until someone does. A spare flag keeps spawning at your pole.` }) },
   revived: { group: "Dormancy", render: (p) => ({
     kicker: "Dormancy", title: "You are active again",
     body: p.gamertag ? `${who(p.gamertag)} raised the flag.` : "The flag went back up." }) },

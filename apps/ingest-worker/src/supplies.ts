@@ -9,7 +9,18 @@ export type SpawnObject = {
   customString: string;
 };
 
-export type SupplyFaction = { tag: string; texture: string; x: number; y: number; z: number };
+/**
+ * A clan to emit for, and whether it gets the whole kit or only its flags.
+ *
+ * ⚠️ `supplied: false` is NOT "emit nothing". Flags have nominal 0 / min 0 in
+ * types.xml, so the kit is the ONLY source of a clan's flag on the server. A
+ * raided clan dropped from the file entirely could never raise, so could
+ * never clear `flag_down_since`, so could never earn its kit back — it just
+ * ran out the 24 h clock and went dormant. Losing the crate is the cost of a
+ * raid; losing the flag was a dead end. The sweep decides which clans are
+ * supplied (supply-tick.ts); this only honours the flag.
+ */
+export type SupplyFaction = { tag: string; texture: string; x: number; y: number; z: number; supplied: boolean };
 
 /** The template object whose position every other object is measured from. */
 const ANCHOR = "TerritoryFlag";
@@ -118,6 +129,8 @@ export function generateSupplies(offsets: SpawnObject[], factions: SupplyFaction
   for (const f of factions) {
     const seen = new Map<string, number>();
     for (const o of offsets) {
+      // An unsupplied clan gets its flags and nothing else — see SupplyFaction.
+      if (!f.supplied && o.name !== NEUTRAL_FLAG) continue;
       const index = seen.get(o.name) ?? 0;
       seen.set(o.name, index + 1);
       const total = KIT_QUANTITIES.get(o.name);

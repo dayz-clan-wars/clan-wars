@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A raided clan can always re-raise. Your flag keeps spawning at your pole
+  while your flag is down, and while you are dormant. Before this, losing
+  your flag also stopped the spawn that was the only place your flag came
+  from, so a clan that lost the spares on the ground had no way to raise
+  and ran out the 24 hour clock with nothing it could do. The supply crate
+  still stops when your flag comes down. That part is the cost of a raid.
+
 ## [1.26.0] - 2026-09-19
 
 ### Added

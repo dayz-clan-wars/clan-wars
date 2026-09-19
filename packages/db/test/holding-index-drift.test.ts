@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
-import { HOLDING_STATUSES } from "@factions/domain";
+import { HOLDING_STATUSES, SUPPLIED_PREDICATE, isSupplied } from "@factions/domain";
 import { sql } from "drizzle-orm";
 
 const URL = requireTestDatabaseUrl();
@@ -53,15 +53,29 @@ describe("faction scarcity indexes match HOLDING_STATUSES", () => {
     expect(rows.length).toBe(3);
   });
 
-  it("the supplied predicate is 'reserved or active, and flag_down_since is null', spelled in the worker's query", () => {
+  it("the worker decides supplied through the domain helper, not a re-spelled predicate", () => {
     const worker = readFileSync(join(import.meta.dirname, "..", "..", "..", "apps", "ingest-worker", "src", "supply-tick.ts"), "utf8");
-    // ⚠️ Both statuses, in this order — the same two SUPPLIED_PREDICATE names.
-    // A worker that drifts back to `eq(factions.status, "active")` compiles,
-    // passes its own tests against active fixtures, and quietly starves
-    // every reserved clan of the flag it needs to activate.
-    expect(worker).toMatch(/inArray\(factions\.status, \["reserved", "active"\]\)/u);
+    // ⚠️ The query is now the HOLDING set — dormant and flag-down clans are
+    // IN the file, for their flags alone (supplies.ts's SupplyFaction says
+    // why). What separates a crate from a bare flag is `isSupplied`, and it
+    // lives in @factions/domain so the predicate has exactly one statement.
+    expect(worker).toMatch(/inArray\(factions\.status, \[\.\.\.HOLDING_STATUSES\]\)/u);
+    expect(worker).toMatch(/isSupplied\(/u);
+    // A worker that spells the predicate inline again compiles, passes its
+    // own tests, and drifts the moment the domain's version changes.
+    expect(worker).not.toMatch(/isNull\(factions\.flagDownSince\)/u);
+    expect(worker).not.toMatch(/inArray\(factions\.status, \["reserved", "active"\]\)/u);
     expect(worker).not.toMatch(/eq\(factions\.status, "active"\)/u);
-    expect(worker).toMatch(/isNull\(factions\.flagDownSince\)/u);
-    expect(worker).not.toMatch(/SUPPLIED_STATUSES/u);
+  });
+
+  it("isSupplied is SUPPLIED_PREDICATE: reserved or active, and no flag down", () => {
+    // ⚠️ The SQL string in SUPPLIED_PREDICATE and this function are two
+    // statements of one fact. Nothing but this test holds them together, and
+    // drift means a clan silently keeps or loses its crate.
+    expect(SUPPLIED_PREDICATE).toBe("status in ('reserved', 'active') and flag_down_since is null");
+    expect(isSupplied("reserved", null)).toBe(true);
+    expect(isSupplied("active", null)).toBe(true);
+    expect(isSupplied("active", new Date())).toBe(false);
+    expect(isSupplied("dormant", null)).toBe(false);
   });
 });

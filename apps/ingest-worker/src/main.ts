@@ -60,7 +60,7 @@ for (;;) {
       // Only fires on an actual upload, so this stays quiet on the ticks where
       // nothing changed — which is almost all of them.
       onSupplyUploaded: (serverId, r) =>
-        console.log(`supply file uploaded for server ${serverId}: ${r.factions} holding factions`),
+        console.log(`supply file uploaded for server ${serverId}: ${r.factions} supplied clans, ${r.flagsOnly} flags-only`),
       // ⚠️ Loud on purpose. The tick has already repaired the file by the time
       // this runs, so nothing is broken — but something outside this system
       // rewrote it, and whatever did is unlikely to have stopped at one file.

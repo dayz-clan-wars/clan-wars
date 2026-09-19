@@ -455,8 +455,17 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   existence of a `declarations` row. Do not narrow it to change behaviour; add a set.
   Supply kits are governed by a predicate, not a status set: `status in ('reserved',
   'active') and flag_down_since is null` (`SUPPLIED_PREDICATE` in `packages/domain`,
-  spelled in SQL by the worker and pinned by `holding-index-drift.test.ts`) — a raided
-  clan keeps `status = 'active'` but loses its kit the moment its flag comes down.
+  and `isSupplied` beside it, pinned together by `holding-index-drift.test.ts`) — a
+  raided clan keeps `status = 'active'` but loses its **crate** the moment its flag
+  comes down.
+  ⚠️ **It does not lose its flags.** Since 2026-09-19 the spawner file covers every
+  HOLDING clan with a declared pole, and `isSupplied` decides crate-or-just-flags; the
+  worker's SQL is `inArray(factions.status, HOLDING_STATUSES)` and no longer spells the
+  predicate. Cutting an unsupplied clan out of the file entirely took its flags with it,
+  and flags are `nominal 0` / `min 0` in `livonia/db/types.xml`, so the kit is the only
+  source of a clan's flag on the server: a raided clan could not raise, could not clear
+  `flag_down_since`, could not earn the crate back, and simply went dormant. Do not
+  narrow the query back to SUPPLIED.
   ⚠️ `reserved` is in on purpose (2026-09-08): the kit is the only source of a clan's own
   flag and raising it is the activation, so an active-only predicate leaves every new clan
   unable to activate. The 2026-09-04 spec's §4.3 shipped with `active` alone and did
