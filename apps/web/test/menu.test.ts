@@ -13,7 +13,7 @@ import { barFor, isCurrent, menuFor, signInHref } from "../lib/menu";
 describe("menuFor (the phone drawer)", () => {
   it("signed in: your places first, then the boards, then the guide", () => {
     expect(menuFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan"],
+      ["/me", "/map", "/clan", "/notifications"],
       ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/war-log"],
       ["/guide"],
     ]);
@@ -27,7 +27,7 @@ describe("menuFor (the phone drawer)", () => {
 describe("barFor (the desktop bar)", () => {
   it("is the short form: Alphas and Seasons live in the scoreboard's own nav", () => {
     expect(barFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan"],
+      ["/me", "/map", "/clan", "/notifications"],
       ["/clans", "/players", "/scoreboard", "/war-log", "/guide"],
     ]);
     expect(barFor(false)).toEqual(barFor(true).slice(1));

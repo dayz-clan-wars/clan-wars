@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Every notice the bot sends you now has a home on the site. There is a
+  bell at the top of the page with a count on it, and a notifications
+  page behind it with everything the bot has told you, plus everything
+  it posted to your clan channel since you joined. Miss a DM and you can
+  still read it.
+- You can act straight from a notification. An invite can be accepted or
+  declined, a no-confidence vote cast, and a proposed pole move reviewed,
+  without going looking for the right page.
+
 ## [1.25.0] - 2026-09-18
 
 ### Added

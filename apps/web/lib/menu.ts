@@ -30,6 +30,7 @@ const MINE: readonly MenuItem[] = [
   { label: "You", href: "/me", badge: "you" },
   { label: "Map", href: "/map" },
   { label: "Your clan", href: "/clan", badge: "clan" },
+  { label: "Notifications", href: "/notifications" },
 ];
 
 const BOARDS: readonly MenuItem[] = [
