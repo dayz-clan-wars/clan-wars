@@ -1,3 +1,5 @@
+import type { Vec3 } from "@factions/domain";
+import { parsePlayerPos } from "./coords.js";
 import { parseIdentity } from "./identity.js";
 
 export type EmotePerformed = {
@@ -12,6 +14,16 @@ export type EmotePerformed = {
    * consumer must validate it rather than trust it.
    */
   item: string | null;
+  /**
+   * Where the player stood, in ADM order <x, z, altitude>. Null when the line
+   * carries no position block.
+   *
+   * ⚠️ Read by the booster kit placement challenge, which writes it to the
+   * map. parsePlayerPos is anchored INSIDE the identity parenthetical for
+   * exactly this reason: unanchored, a gamertag carrying a pos block moves
+   * someone else's kit.
+   */
+  pos: Vec3 | null;
 };
 
 /**
@@ -42,5 +54,6 @@ export function parseEmote(raw: string): EmotePerformed | null {
     dayzId: who.dayzId,
     emote: m[1]!,
     item: m[2] != null ? m[2].trim() : null,
+    pos: parsePlayerPos(raw),
   };
 }

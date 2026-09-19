@@ -6,12 +6,24 @@ const UID = "A".repeat(40);
 describe("parseEmote", () => {
   it("parses a bare emote line", () => {
     const raw = `| 15:24:30 | Player "Steve" (id=${UID} pos=<11201.5, 6703.0, 56.4>) performed EmoteSalute`;
-    expect(parseEmote(raw)).toEqual({ gamertag: "Steve", dayzId: UID, emote: "EmoteSalute", item: null });
+    expect(parseEmote(raw)).toEqual({
+      gamertag: "Steve",
+      dayzId: UID,
+      emote: "EmoteSalute",
+      item: null,
+      pos: { x: 11201.5, z: 6703.0, y: 56.4 },
+    });
   });
 
   it("parses the 'with <item>' variant", () => {
     const raw = `| 18:58:20 | Player "Steve" (id=${UID} pos=<1.0, 2.0, 3.0>) performed EmoteSuicide with SteakKnife`;
-    expect(parseEmote(raw)).toEqual({ gamertag: "Steve", dayzId: UID, emote: "EmoteSuicide", item: "SteakKnife" });
+    expect(parseEmote(raw)).toEqual({
+      gamertag: "Steve",
+      dayzId: UID,
+      emote: "EmoteSuicide",
+      item: "SteakKnife",
+      pos: { x: 1.0, z: 2.0, y: 3.0 },
+    });
   });
 
   it("handles the (DEAD) identity variant", () => {
@@ -26,9 +38,9 @@ describe("parseEmote", () => {
     expect(out?.emote).toBe("EmoteDance");
   });
 
-  it("does not capture the player position", () => {
+  it("captures the player position", () => {
     const raw = `| 15:24:30 | Player "Steve" (id=${UID} pos=<11201.5, 6703.0, 56.4>) performed EmoteSalute`;
-    expect(JSON.stringify(parseEmote(raw))).not.toContain("11201");
+    expect(parseEmote(raw)?.pos).toEqual({ x: 11201.5, z: 6703.0, y: 56.4 });
   });
 
   it("returns null for a line with no identity", () => {
@@ -66,13 +78,31 @@ describe("parseEmote", () => {
       const raw = `| 1 | Player "${HOSTILE}" (id=${UID} pos=<11201.5, 6703.0, 56.4>) performed EmoteSuicide with SteakKnife`;
       const out = parseEmote(raw);
       expect(out?.item).toBe("SteakKnife");
-      expect(JSON.stringify(out)).not.toContain("11201");
-      expect(JSON.stringify(out)).not.toContain("pos=");
+      expect(JSON.stringify(out?.item)).not.toContain("11201");
+      expect(JSON.stringify(out?.item)).not.toContain("pos=");
     });
 
     it("does not leak a second player's UID into the item field", () => {
       const raw = `| 1 | Player "x performed EmoteDance with y" (id=${UID} pos=<1.0, 2.0, 3.0>) killed by Player "Bob" (id=${"C".repeat(40)})`;
       expect(JSON.stringify(parseEmote(raw))).not.toContain("C".repeat(40));
+    });
+  });
+
+  describe("position", () => {
+    it("captures the player position from the identity block", () => {
+      const raw = `01:02:03 | Player "Bob" (id=${UID} pos=<5572.7, 8811.8, 312.8>) performed EmoteSalute`;
+      expect(parseEmote(raw)?.pos).toEqual({ x: 5572.7, z: 8811.8, y: 312.8 });
+    });
+
+    it("is null when the line carries no position", () => {
+      const noPos = `01:02:03 | Player "Bob" (id=${UID}) performed EmoteSalute`;
+      expect(parseEmote(noPos)?.pos).toBeNull();
+    });
+
+    it("ignores a pos worn in the gamertag", () => {
+      const hostile =
+        `01:02:03 | Player "pos=<1.0, 2.0, 3.0>" (id=${UID} pos=<5572.7, 8811.8, 312.8>) performed EmoteSalute`;
+      expect(parseEmote(hostile)?.pos).toEqual({ x: 5572.7, z: 8811.8, y: 312.8 });
     });
   });
 });
