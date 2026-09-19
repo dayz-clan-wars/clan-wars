@@ -7,6 +7,15 @@ const OPTIONS = [
   { className: "NoArt", label: "No Art Yet" },
 ];
 
+/**
+ * ⚠️ The <input> tag alone, never a slice of the surrounding markup: every
+ * tile's class list contains `has-[:checked]`, so a substring search over a
+ * character window matches "checked" on tiles that are not checked. Two
+ * earlier assertions passed unconditionally for exactly that reason.
+ */
+const inputFor = (html: string, value: string): string =>
+  html.match(new RegExp(`<input[^>]*value="${value}"[^>]*>`, "u"))?.[0] ?? "";
+
 describe("ItemCarousel", () => {
   it("renders one radio per option, plus the empty one", () => {
     const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current={null} />);
@@ -20,16 +29,17 @@ describe("ItemCarousel", () => {
     expect(html).toContain('name="className"');
   });
 
-  it("marks the saved pick as checked", () => {
+  it("marks the saved pick as checked, and nothing else", () => {
     const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current="GasMask" />);
-    const tile = html.slice(html.indexOf('value="GasMask"'));
-    expect(tile.slice(0, 200)).toContain("checked");
+    expect(inputFor(html, "GasMask")).toContain("checked");
+    expect(inputFor(html, "")).not.toContain("checked");
+    expect(inputFor(html, "NoArt")).not.toContain("checked");
   });
 
   it("checks the empty option when nothing is saved", () => {
     const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current={null} />);
-    const empty = html.slice(html.indexOf('value=""'));
-    expect(empty.slice(0, 200)).toContain("checked");
+    expect(inputFor(html, "")).toContain("checked");
+    expect(inputFor(html, "GasMask")).not.toContain("checked");
   });
 
   // ⚠️ Coverage gaps are expected and must look deliberate, not broken.
