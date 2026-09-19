@@ -8,6 +8,7 @@ import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factio
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
 import { verificationTick } from "./tick.js";
+import { kitPlacementTick } from "./kit-placement-tick.js";
 import { runPlayerProjection } from "./player-tick.js";
 import { runPoleProjection } from "./pole-tick.js";
 import type { BotConfig } from "./config.js";
@@ -1087,6 +1088,19 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     });
     await step("notify", () => notifyCompleted(deps, send, notifyFailures, renameOnLink, cfg.guildId));
+
+    // ⚠️ Beside the verification tick, on the per-tick path rather than
+    // `boosterTickIntervalMs`. The booster tick is throttled because it does a
+    // heavy `guild.members.fetch()`; this one only reads the event log with
+    // its own cursor, and it is the step a player is actively waiting on —
+    // they are standing in the spot they just marked. Its own `step`, like
+    // every other: a failure here must not stop the ceremony DMs below.
+    await step("kit placement", async () => {
+      const kp = await kitPlacementTick(db, { now: new Date() });
+      if (kp.placed > 0 || kp.lockedOut > 0 || kp.expired > 0) {
+        console.log(`kit placement: ${kp.placed} placed, ${kp.lockedOut} out of emotes, ${kp.expired} expired`);
+      }
+    });
 
     // Each of the two ceremony steps gets its own try/catch: a failing
     // detector must not stop ceremony DMs, and vice versa.
