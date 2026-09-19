@@ -7,7 +7,6 @@
  */
 export const NOTIFICATIONS_RESULT_COPY: Record<string, string> = Object.assign(Object.create(null), {
   "notice.invite-gone": "That invite is no longer open. It may have been withdrawn or it ran out.",
-  "notice.rebind-gone": "There is no pole move waiting for you now.",
   "notice.bad-input": "That action did not come through. Try it from the page it belongs to.",
 });
 

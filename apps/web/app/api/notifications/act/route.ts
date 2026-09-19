@@ -1,7 +1,7 @@
 import type { NextRequest, NextResponse } from "next/server";
 import {
-  acceptInvite, declineInvite, castVote, confirmRebind,
-  markNoticeRead, myInvites, clanFor,
+  acceptInvite, declineInvite, castVote,
+  markNoticeRead, myInvites,
 } from "@factions/roster";
 import { formAction, id, safeBack, confirmed } from "@/lib/form";
 import { code } from "@/lib/clan-copy";
@@ -9,13 +9,16 @@ import { leadershipCode } from "@/lib/leadership-copy";
 import { gone } from "@/lib/notifications-copy";
 
 /**
- * The three actions a notice can carry (spec §5).
+ * The actions a notice can carry (spec §5).
  *
  * ⚠️ Every target is resolved from LIVE state, never from the notice's payload.
  * An invite id frozen at write time can be revoked, expired or superseded
  * before the player opens the page, and acting on it would act on something
- * that no longer means what the notice said. For rebind it is forced anyway:
- * clan_notices_no_coordinates forbids the pole key from ever being stored.
+ * that no longer means what the notice said. Rebind has no act here at all:
+ * `rebindCandidatesFor` can return several poles, `clan_notices_no_coordinates`
+ * forbids the notice payload from saying which one, and there is nothing to
+ * correlate against — so `rebind_proposed`'s button is a link to the picker
+ * on `/clan/settings` instead (see notifications/actions.tsx).
  */
 export async function POST(req: NextRequest): Promise<NextResponse> {
   return formAction(req, "/notifications", async (session, form) => {
@@ -49,19 +52,6 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (act === "vote") {
       if (!confirmed(form)) return done(leadershipCode("cast-vote", "unconfirmed"));
       return done(leadershipCode("cast-vote", await castVote(session.sub)));
-    }
-
-    if (act === "rebind") {
-      const clan = await clanFor(session.sub);
-      if (typeof clan === "string") return { back, code: gone("rebind") };
-      // ⚠️ Takes the first candidate rather than the one this notice named. Same
-      // hazard as the invite match above, at lower severity: `clan_notices_no_coordinates`
-      // forbids a pole key in the payload, so the notice cannot say which pole it
-      // means and there is nothing here to match against. Fix if a reliable
-      // correlation ever becomes possible; do not fake one that could be wrong.
-      const candidate = clan.rebindCandidates[0];
-      if (!candidate) return { back, code: gone("rebind") };
-      return done(code("rebind", await confirmRebind(session.sub, candidate.poleKey)));
     }
 
     return { back, code: "notice.bad-input" };

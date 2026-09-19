@@ -13,17 +13,6 @@ const btn = (tone: "primary" | "ghost") =>
   `flex min-h-[38px] items-center border px-4 font-display text-xs uppercase tracking-[0.06em] ${
     tone === "primary" ? "border-gold bg-gold text-ground hover:bg-gold-hover" : "border-rule-3 text-ink hover:border-ink"}`;
 
-function Act({ row, act, label, tone }: { row: NoticeRow; act: string; label: string; tone: "primary" | "ghost" }) {
-  return (
-    <form action="/api/notifications/act" method="post">
-      <input type="hidden" name="noticeId" value={row.id} />
-      <input type="hidden" name="act" value={act} />
-      <input type="hidden" name="back" value="/notifications" />
-      <button type="submit" className={btn(tone)}>{label}</button>
-    </form>
-  );
-}
-
 /**
  * Casting a no-confidence vote is public and irreversible, and a notice row
  * is a place a misclick is MORE likely than the clan page, not less — same
@@ -64,6 +53,21 @@ function InviteAct({ row, act, label, tone }: { row: NoticeRow; act: "accept" | 
   );
 }
 
+/**
+ * `rebindCandidatesFor` can return several poles, and `clan_notices_no_coordinates`
+ * forbids the notice payload from carrying a pole key, so nothing here can say which
+ * one this notice meant. A link to the picker on `/clan/settings` lets the leader
+ * choose, rather than a POST silently committing to `rebindCandidates[0]`.
+ */
+function RebindAct(): React.ReactNode {
+  return (
+    // ⚠️ A link, not a POST, so it never calls `markNoticeRead` — the notice stays
+    // unread until the leader marks it (or "Mark all read") rather than the instant
+    // they follow it, since following the link is not yet acting on it.
+    <a href="/clan/settings" className={btn("primary")}>Review it</a>
+  );
+}
+
 export function NoticeActions({ row }: { row: NoticeRow }): React.ReactNode {
   switch (row.kind) {
     case "invited":
@@ -71,7 +75,7 @@ export function NoticeActions({ row }: { row: NoticeRow }): React.ReactNode {
     case "vote_opened":
       return <VoteAct row={row} />;
     case "rebind_proposed":
-      return <Act row={row} act="rebind" label="Review it" tone="primary" />;
+      return <RebindAct />;
     default:
       return null;
   }
