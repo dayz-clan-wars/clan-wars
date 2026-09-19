@@ -1,0 +1,820 @@
+{
+  "mask": [
+    {
+      "className": "BalaclavaMask_BDU",
+      "label": "Balaclava (BDU)"
+    },
+    {
+      "className": "BalaclavaMask_Beige",
+      "label": "Balaclava (Beige)"
+    },
+    {
+      "className": "BalaclavaMask_Black",
+      "label": "Balaclava (Black)"
+    },
+    {
+      "className": "BalaclavaMask_Blackskull",
+      "label": "Balaclava (Blackskull)"
+    },
+    {
+      "className": "BalaclavaMask_Blue",
+      "label": "Balaclava (Blue)"
+    },
+    {
+      "className": "BalaclavaMask_Chain",
+      "label": "Balaclava (Chain)"
+    },
+    {
+      "className": "BalaclavaMask_Green",
+      "label": "Balaclava (Green)"
+    },
+    {
+      "className": "BalaclavaMask_Pig",
+      "label": "Balaclava (Pig)"
+    },
+    {
+      "className": "BalaclavaMask_Pink",
+      "label": "Balaclava (Pink)"
+    },
+    {
+      "className": "Balaclava3Holes_White",
+      "label": "Balaclava (White)"
+    },
+    {
+      "className": "BalaclavaMask_White",
+      "label": "Balaclava (White)"
+    },
+    {
+      "className": "Bandana_Blackpattern",
+      "label": "Bandana (Blackpattern)"
+    },
+    {
+      "className": "Bandana_Camopattern",
+      "label": "Bandana (Camopattern)"
+    },
+    {
+      "className": "Bandana_Greenpattern",
+      "label": "Bandana (Greenpattern)"
+    },
+    {
+      "className": "Bandana_Polkapattern",
+      "label": "Bandana (Polkapattern)"
+    },
+    {
+      "className": "Bandana_Redpattern",
+      "label": "Bandana (Redpattern)"
+    },
+    {
+      "className": "PaydayMask_Chains",
+      "label": "Chains's Mask (Chains)"
+    },
+    {
+      "className": "PaydayMask_Dallas",
+      "label": "Dallas Mask (Dallas)"
+    },
+    {
+      "className": "HockeyMask",
+      "label": "Hockey Mask"
+    },
+    {
+      "className": "PaydayMask_Hoxton",
+      "label": "Hoxton Mask (Hoxton)"
+    },
+    {
+      "className": "MimeMask_Female",
+      "label": "Mime Mask (Female)"
+    },
+    {
+      "className": "MimeMask_Male",
+      "label": "Mime Mask (Male)"
+    },
+    {
+      "className": "SantasBeard",
+      "label": "Santa Beard"
+    },
+    {
+      "className": "PaydayMask_Wolf",
+      "label": "Wolf Mask (Wolf)"
+    }
+  ],
+  "eyewear": [
+    {
+      "className": "SportGlasses_Black",
+      "label": "Athletic Sunglasses (Black)"
+    },
+    {
+      "className": "SportGlasses_Blue",
+      "label": "Athletic Sunglasses (Blue)"
+    },
+    {
+      "className": "SportGlasses_Green",
+      "label": "Athletic Sunglasses (Green)"
+    },
+    {
+      "className": "SportGlasses_Orange",
+      "label": "Athletic Sunglasses (Orange)"
+    },
+    {
+      "className": "AviatorGlasses",
+      "label": "Aviator Sunglasses"
+    },
+    {
+      "className": "EyeMask_Black",
+      "label": "Carnival Mask (Black)"
+    },
+    {
+      "className": "EyeMask_Blue",
+      "label": "Carnival Mask (Blue)"
+    },
+    {
+      "className": "EyeMask_Christmas",
+      "label": "Carnival Mask (Christmas)"
+    },
+    {
+      "className": "EyeMask_Dead",
+      "label": "Carnival Mask (Dead)"
+    },
+    {
+      "className": "EyeMask_NewYears",
+      "label": "Carnival Mask (New Years)"
+    },
+    {
+      "className": "EyeMask_Red",
+      "label": "Carnival Mask (Red)"
+    },
+    {
+      "className": "EyeMask_Valentines",
+      "label": "Carnival Mask (Valentines)"
+    },
+    {
+      "className": "EyeMask_Yellow",
+      "label": "Carnival Mask (Yellow)"
+    },
+    {
+      "className": "DesignerGlasses",
+      "label": "Casual Sunglasses"
+    },
+    {
+      "className": "ThickFramesGlasses",
+      "label": "Classic Glasses"
+    },
+    {
+      "className": "SkiGoggles_BlackYellow",
+      "label": "Ski Goggles (Black Yellow)"
+    },
+    {
+      "className": "SkiGoggles_WhiteClear",
+      "label": "Ski Goggles (White Clear)"
+    },
+    {
+      "className": "SkiGoggles_WhiteDark",
+      "label": "Ski Goggles (White Dark)"
+    },
+    {
+      "className": "ThinFramesGlasses",
+      "label": "Slim Glasses"
+    },
+    {
+      "className": "TacticalGoggles",
+      "label": "Tactical Goggles"
+    }
+  ],
+  "hat": [
+    {
+      "className": "ChristmasHeadband_Antlers",
+      "label": "Christmas Headband (Antlers)"
+    },
+    {
+      "className": "ChristmasHeadband_Gingerbread",
+      "label": "Christmas Headband (Gingerbread)"
+    },
+    {
+      "className": "ChristmasHeadband_Trees",
+      "label": "Christmas Headband (Trees)"
+    },
+    {
+      "className": "CowboyHat_black",
+      "label": "Cowboy Hat (Black)"
+    },
+    {
+      "className": "CowboyHat_Brown",
+      "label": "Cowboy Hat (Brown)"
+    },
+    {
+      "className": "CowboyHat_darkBrown",
+      "label": "Cowboy Hat (Dark Brown)"
+    },
+    {
+      "className": "CowboyHat_green",
+      "label": "Cowboy Hat (Green)"
+    },
+    {
+      "className": "Headdress_Bear",
+      "label": "Headdress (Bear)"
+    },
+    {
+      "className": "Headdress_Fox",
+      "label": "Headdress (Fox)"
+    },
+    {
+      "className": "Headdress_Wolf",
+      "label": "Headdress (Wolf)"
+    },
+    {
+      "className": "LeafCrown_Autumn",
+      "label": "Leaf Crown (Autumn)"
+    },
+    {
+      "className": "LeafCrown_Spring",
+      "label": "Leaf Crown (Spring)"
+    },
+    {
+      "className": "LeafCrown_Summer",
+      "label": "Leaf Crown (Summer)"
+    },
+    {
+      "className": "LeafCrown_Winter",
+      "label": "Leaf Crown (Winter)"
+    },
+    {
+      "className": "MilitaryCap_BDU",
+      "label": "Military Cap (BDU)"
+    },
+    {
+      "className": "MilitaryCap_Desert",
+      "label": "Military Cap (Desert)"
+    },
+    {
+      "className": "MilitaryCap_Woodland",
+      "label": "Military Cap (Woodland)"
+    },
+    {
+      "className": "MorozkoHat",
+      "label": "Morozko Hat"
+    },
+    {
+      "className": "SantasHat",
+      "label": "Santa Hat"
+    },
+    {
+      "className": "WitchHat",
+      "label": "Witch Hat"
+    },
+    {
+      "className": "WitchHood_Black",
+      "label": "Witch Hood (Black)"
+    },
+    {
+      "className": "WitchHood_Brown",
+      "label": "Witch Hood (Brown)"
+    },
+    {
+      "className": "WitchHood_Red",
+      "label": "Witch Hood (Red)"
+    }
+  ],
+  "jacket": [
+    {
+      "className": "BDUJacket",
+      "label": "BDU Jacket"
+    },
+    {
+      "className": "BomberJacket_Black",
+      "label": "Bomber Jacket (Black)"
+    },
+    {
+      "className": "BomberJacket_Blue",
+      "label": "Bomber Jacket (Blue)"
+    },
+    {
+      "className": "BomberJacket_Brown",
+      "label": "Bomber Jacket (Brown)"
+    },
+    {
+      "className": "BomberJacket_Grey",
+      "label": "Bomber Jacket (Grey)"
+    },
+    {
+      "className": "BomberJacket_Maroon",
+      "label": "Bomber Jacket (Maroon)"
+    },
+    {
+      "className": "BomberJacket_Olive",
+      "label": "Bomber Jacket (Olive)"
+    },
+    {
+      "className": "BomberJacket_SkyBlue",
+      "label": "Bomber Jacket (Sky Blue)"
+    },
+    {
+      "className": "BushlatPoliceJacket_Blue",
+      "label": "Bushlat Jacket (Blue)"
+    },
+    {
+      "className": "USMCJacket_Desert",
+      "label": "CUU Jacket (Desert)"
+    },
+    {
+      "className": "USMCJacket_Woodland",
+      "label": "CUU Jacket (Woodland)"
+    },
+    {
+      "className": "TTsKOJacket_Camo",
+      "label": "Combat Jacket (Camo)"
+    },
+    {
+      "className": "DownJacket_Blue",
+      "label": "Down Jacket (Blue)"
+    },
+    {
+      "className": "DownJacket_Green",
+      "label": "Down Jacket (Green)"
+    },
+    {
+      "className": "DownJacket_Orange",
+      "label": "Down Jacket (Orange)"
+    },
+    {
+      "className": "DownJacket_Red",
+      "label": "Down Jacket (Red)"
+    },
+    {
+      "className": "M65Jacket_Black",
+      "label": "Field Jacket (Black)"
+    },
+    {
+      "className": "M65Jacket_Khaki",
+      "label": "Field Jacket (Khaki)"
+    },
+    {
+      "className": "M65Jacket_Olive",
+      "label": "Field Jacket (Olive)"
+    },
+    {
+      "className": "M65Jacket_Tan",
+      "label": "Field Jacket (Tan)"
+    },
+    {
+      "className": "HikingJacket_Black",
+      "label": "Hiking Jacket (Black)"
+    },
+    {
+      "className": "HikingJacket_Blue",
+      "label": "Hiking Jacket (Blue)"
+    },
+    {
+      "className": "HikingJacket_Green",
+      "label": "Hiking Jacket (Green)"
+    },
+    {
+      "className": "HikingJacket_Red",
+      "label": "Hiking Jacket (Red)"
+    },
+    {
+      "className": "HuntingJacket_Autumn",
+      "label": "Hunter Jacket (Autumn)"
+    },
+    {
+      "className": "HuntingJacket_Brown",
+      "label": "Hunter Jacket (Brown)"
+    },
+    {
+      "className": "HuntingJacket_Spring",
+      "label": "Hunter Jacket (Spring)"
+    },
+    {
+      "className": "HuntingJacket_Summer",
+      "label": "Hunter Jacket (Summer)"
+    },
+    {
+      "className": "HuntingJacket_Winter",
+      "label": "Hunter Jacket (Winter)"
+    },
+    {
+      "className": "WinterMilitaryCoat_Brown",
+      "label": "Military Winter Coat (Brown)"
+    },
+    {
+      "className": "WinterMilitaryCoat_DarkGrey",
+      "label": "Military Winter Coat (Dark Grey)"
+    },
+    {
+      "className": "WinterMilitaryCoat_Grey",
+      "label": "Military Winter Coat (Grey)"
+    },
+    {
+      "className": "NavyUniformJacket",
+      "label": "Navy Uniform Jacket"
+    },
+    {
+      "className": "OMKJacket_Navy",
+      "label": "OMK Jacket (Navy)"
+    },
+    {
+      "className": "GorkaEJacket_Autumn",
+      "label": "Patrol Jacket (Autumn)"
+    },
+    {
+      "className": "GorkaEJacket_Flat",
+      "label": "Patrol Jacket (Flat)"
+    },
+    {
+      "className": "GorkaEJacket_PautRev",
+      "label": "Patrol Jacket (Paut Rev)"
+    },
+    {
+      "className": "GorkaEJacket_Summer",
+      "label": "Patrol Jacket (Summer)"
+    },
+    {
+      "className": "GorkaEJacket_Winter",
+      "label": "Patrol Jacket (Winter)"
+    },
+    {
+      "className": "PilotJacket_Black",
+      "label": "Pilot Jacket (Black)"
+    },
+    {
+      "className": "PilotJacket_Brown",
+      "label": "Pilot Jacket (Brown)"
+    },
+    {
+      "className": "PilotJacket_Yellow",
+      "label": "Pilot Jacket (Yellow)"
+    },
+    {
+      "className": "QuiltedJacket_Black",
+      "label": "Quilted Jacket (Black)"
+    },
+    {
+      "className": "QuiltedJacket_Blue",
+      "label": "Quilted Jacket (Blue)"
+    },
+    {
+      "className": "QuiltedJacket_Green",
+      "label": "Quilted Jacket (Green)"
+    },
+    {
+      "className": "QuiltedJacket_Grey",
+      "label": "Quilted Jacket (Grey)"
+    },
+    {
+      "className": "QuiltedJacket_Orange",
+      "label": "Quilted Jacket (Orange)"
+    },
+    {
+      "className": "QuiltedJacket_Red",
+      "label": "Quilted Jacket (Red)"
+    },
+    {
+      "className": "QuiltedJacket_Violet",
+      "label": "Quilted Jacket (Violet)"
+    },
+    {
+      "className": "QuiltedJacket_Yellow",
+      "label": "Quilted Jacket (Yellow)"
+    },
+    {
+      "className": "RidersJacket_Black",
+      "label": "Rider Jacket (Black)"
+    },
+    {
+      "className": "Sweater_ChristmasBlue",
+      "label": "Sweater (Christmas Blue)"
+    },
+    {
+      "className": "Sweater_ChristmasGreen",
+      "label": "Sweater (Christmas Green)"
+    },
+    {
+      "className": "Sweater_ChristmasRed",
+      "label": "Sweater (Christmas Red)"
+    },
+    {
+      "className": "TacticalShirt_Black",
+      "label": "Tactical Shirt (Black)"
+    },
+    {
+      "className": "TacticalShirt_Grey",
+      "label": "Tactical Shirt (Grey)"
+    },
+    {
+      "className": "TacticalShirt_Olive",
+      "label": "Tactical Shirt (Olive)"
+    },
+    {
+      "className": "TacticalShirt_Tan",
+      "label": "Tactical Shirt (Tan)"
+    }
+  ],
+  "pants": [
+    {
+      "className": "BDUPants",
+      "label": "BDU Pants"
+    },
+    {
+      "className": "USMCPants_Desert",
+      "label": "CUU Pants (Desert)"
+    },
+    {
+      "className": "USMCPants_Woodland",
+      "label": "CUU Pants (Woodland)"
+    },
+    {
+      "className": "CargoPants_Beige",
+      "label": "Cargo Pants (Beige)"
+    },
+    {
+      "className": "CargoPants_Black",
+      "label": "Cargo Pants (Black)"
+    },
+    {
+      "className": "CargoPants_Blue",
+      "label": "Cargo Pants (Blue)"
+    },
+    {
+      "className": "CargoPants_Green",
+      "label": "Cargo Pants (Green)"
+    },
+    {
+      "className": "CargoPants_Grey",
+      "label": "Cargo Pants (Grey)"
+    },
+    {
+      "className": "TTSKOPants",
+      "label": "Combat Pants"
+    },
+    {
+      "className": "HunterPants_Autumn",
+      "label": "Hunter Pants (Autumn)"
+    },
+    {
+      "className": "HunterPants_Brown",
+      "label": "Hunter Pants (Brown)"
+    },
+    {
+      "className": "HunterPants_Spring",
+      "label": "Hunter Pants (Spring)"
+    },
+    {
+      "className": "HunterPants_Summer",
+      "label": "Hunter Pants (Summer)"
+    },
+    {
+      "className": "HunterPants_Winter",
+      "label": "Hunter Pants (Winter)"
+    },
+    {
+      "className": "NavyUniformPants",
+      "label": "Navy Uniform Pants"
+    },
+    {
+      "className": "OMKPants_Navy",
+      "label": "OMK Pants (Navy)"
+    },
+    {
+      "className": "GorkaPants_Autumn",
+      "label": "Patrol Pants (Autumn)"
+    },
+    {
+      "className": "GorkaPants_Flat",
+      "label": "Patrol Pants (Flat)"
+    },
+    {
+      "className": "GorkaPants_PautRev",
+      "label": "Patrol Pants (Paut Rev)"
+    },
+    {
+      "className": "GorkaPants_Summer",
+      "label": "Patrol Pants (Summer)"
+    },
+    {
+      "className": "GorkaPants_Winter",
+      "label": "Patrol Pants (Winter)"
+    }
+  ],
+  "boots": [
+    {
+      "className": "MilitaryBoots_Beige",
+      "label": "Assault Boots (Beige)"
+    },
+    {
+      "className": "MilitaryBoots_Black",
+      "label": "Assault Boots (Black)"
+    },
+    {
+      "className": "MilitaryBoots_Bluerock",
+      "label": "Assault Boots (Bluerock)"
+    },
+    {
+      "className": "MilitaryBoots_Brown",
+      "label": "Assault Boots (Brown)"
+    },
+    {
+      "className": "MilitaryBoots_Redpunk",
+      "label": "Assault Boots (Redpunk)"
+    },
+    {
+      "className": "CombatBoots_Beige",
+      "label": "Combat Boots (Beige)"
+    },
+    {
+      "className": "CombatBoots_Black",
+      "label": "Combat Boots (Black)"
+    },
+    {
+      "className": "CombatBoots_Brown",
+      "label": "Combat Boots (Brown)"
+    },
+    {
+      "className": "CombatBoots_Green",
+      "label": "Combat Boots (Green)"
+    },
+    {
+      "className": "CombatBoots_Grey",
+      "label": "Combat Boots (Grey)"
+    },
+    {
+      "className": "JungleBoots_Beige",
+      "label": "Jungle Boots (Beige)"
+    },
+    {
+      "className": "JungleBoots_Black",
+      "label": "Jungle Boots (Black)"
+    },
+    {
+      "className": "JungleBoots_Brown",
+      "label": "Jungle Boots (Brown)"
+    },
+    {
+      "className": "JungleBoots_Green",
+      "label": "Jungle Boots (Green)"
+    },
+    {
+      "className": "JungleBoots_Olive",
+      "label": "Jungle Boots (Olive)"
+    },
+    {
+      "className": "ColdOperationBoots_Camo",
+      "label": "Military Winter Boots (Camo)"
+    },
+    {
+      "className": "ColdOperationBoots_Green",
+      "label": "Military Winter Boots (Green)"
+    },
+    {
+      "className": "ColdOperationBoots_Grey",
+      "label": "Military Winter Boots (Grey)"
+    },
+    {
+      "className": "TraditionalBoots_Beige",
+      "label": "Traditional Boots (Beige)"
+    },
+    {
+      "className": "TraditionalBoots_DarkBrown",
+      "label": "Traditional Boots (Dark Brown)"
+    }
+  ],
+  "gloves": [
+    {
+      "className": "OMNOGloves_Brown",
+      "label": "Combat Gloves (Brown)"
+    },
+    {
+      "className": "OMNOGloves_Gray",
+      "label": "Combat Gloves (Gray)"
+    },
+    {
+      "className": "PaddedGloves_Beige",
+      "label": "Padded Gloves (Beige)"
+    },
+    {
+      "className": "PaddedGloves_Brown",
+      "label": "Padded Gloves (Brown)"
+    },
+    {
+      "className": "PaddedGloves_Threat",
+      "label": "Padded Gloves (Threat)"
+    },
+    {
+      "className": "SkiGloves_90s",
+      "label": "Ski Gloves (90s)"
+    },
+    {
+      "className": "SkiGloves_Blue",
+      "label": "Ski Gloves (Blue)"
+    },
+    {
+      "className": "SkiGloves_Red",
+      "label": "Ski Gloves (Red)"
+    },
+    {
+      "className": "TacticalGloves_Beige",
+      "label": "Tactical Gloves (Beige)"
+    },
+    {
+      "className": "TacticalGloves_Black",
+      "label": "Tactical Gloves (Black)"
+    },
+    {
+      "className": "TacticalGloves_Green",
+      "label": "Tactical Gloves (Green)"
+    },
+    {
+      "className": "WorkingGloves_Beige",
+      "label": "Working Gloves (Beige)"
+    },
+    {
+      "className": "WorkingGloves_Black",
+      "label": "Working Gloves (Black)"
+    },
+    {
+      "className": "WorkingGloves_Brown",
+      "label": "Working Gloves (Brown)"
+    },
+    {
+      "className": "WorkingGloves_Yellow",
+      "label": "Working Gloves (Yellow)"
+    }
+  ],
+  "hipPack": [
+    {
+      "className": "HipPack_Black",
+      "label": "Hip Pack (Black)"
+    },
+    {
+      "className": "HipPack_Green",
+      "label": "Hip Pack (Green)"
+    },
+    {
+      "className": "HipPack_Medical",
+      "label": "Hip Pack (Medical)"
+    },
+    {
+      "className": "HipPack_Party",
+      "label": "Hip Pack (Party)"
+    }
+  ],
+  "backpack": [
+    {
+      "className": "TortillaBag",
+      "label": "Assault Backpack"
+    },
+    {
+      "className": "TortillaBag_Desert",
+      "label": "Assault Backpack (Desert)"
+    },
+    {
+      "className": "TortillaBag_Winter",
+      "label": "Assault Backpack (Winter)"
+    },
+    {
+      "className": "AliceBag_Black",
+      "label": "Field Backpack (Black)"
+    },
+    {
+      "className": "AliceBag_Camo",
+      "label": "Field Backpack (Camo)"
+    },
+    {
+      "className": "AliceBag_Green",
+      "label": "Field Backpack (Green)"
+    },
+    {
+      "className": "HuntingBag",
+      "label": "Hunter Backpack"
+    },
+    {
+      "className": "HuntingBag_Hannah",
+      "label": "Hunter Backpack (Hannah)"
+    },
+    {
+      "className": "Attack2Bag_Black",
+      "label": "Long Haul Backpack (Black)"
+    },
+    {
+      "className": "Attack2Bag_Green",
+      "label": "Long Haul Backpack (Green)"
+    },
+    {
+      "className": "Attack2Bag_Ttsko",
+      "label": "Long Haul Backpack (Ttsko)"
+    },
+    {
+      "className": "Attack2Bag_Yeger",
+      "label": "Long Haul Backpack (Yeger)"
+    },
+    {
+      "className": "CoyoteBag_Brown",
+      "label": "Tactical Backpack (Brown)"
+    },
+    {
+      "className": "CoyoteBag_Green",
+      "label": "Tactical Backpack (Green)"
+    },
+    {
+      "className": "CoyoteBag_Winter",
+      "label": "Tactical Backpack (Winter)"
+    }
+  ]
+}
