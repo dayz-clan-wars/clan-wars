@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import type { Session } from "@/lib/auth/session";
 import type { Owner } from "../app/components/owner";
 import { OwnerPanels } from "../app/components/owner";
@@ -39,5 +41,18 @@ describe("the kit entry point", () => {
     const html = render(baseOwner(false));
     expect(html).not.toContain('href="/kit"');
     expect(html).not.toContain("Booster kit");
+  });
+
+  /**
+   * ⚠️ A source check, deliberately, and the only one in this file. The render
+   * tests above cover the gate, but nothing reaches loadOwner: `boosting: false`
+   * or `boosting: !kit.boosting` would both typecheck and leave every test
+   * green while the feature is silently off or inverted. apps/web tests have no
+   * database and no mocking precedent, so this asserts the wiring line itself.
+   */
+  it("loadOwner reads boosting from the roster rather than a constant", () => {
+    const src = readFileSync(join(import.meta.dirname, "..", "app", "components", "owner.tsx"), "utf8");
+    expect(src).toContain("boosterKit(session.sub)");
+    expect(src).toContain("boosting: kit.boosting");
   });
 });
