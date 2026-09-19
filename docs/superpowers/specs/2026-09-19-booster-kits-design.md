@@ -13,7 +13,7 @@ the web app, `armbandFor()` in `packages/domain/src/flags.ts`
 ## 1. Purpose
 
 Boosting the Discord server currently earns nothing here. This design gives a
-booster a personal clothing kit: eight pieces of their own choosing, lying at a
+booster a personal clothing kit: ten pieces of their own choosing, lying at a
 spot on the map they picked themselves, restored whole at every server restart
 for as long as they keep boosting.
 
@@ -23,15 +23,19 @@ objects to place at mission start. No mod is involved, which matters because thi
 is a console server. We maintain one such file, upload it through the Nitrado
 API, and the kits appear at the next restart.
 
-### The eight pieces
+### The ten pieces
 
-Seven are chosen by the booster: mask, jacket, pants, boots, gloves, hip pack,
-backpack. The eighth is their clan's armband, derived rather than chosen.
+Nine are chosen by the booster: mask, eyewear, hat, jacket, pants, boots,
+gloves, hip pack, backpack. The tenth is their clan's armband, derived rather
+than chosen.
+
+Mask, eyewear and hat occupy three separate character slots in DayZ, so a
+booster can wear all three at once.
 
 ### In scope
 
 - A curated, committed catalogue of allowed class names per slot
-- A web picker for the seven chosen slots
+- A web picker for the nine chosen slots
 - An emote challenge that both proves identity and captures the spot
 - Generating and uploading `booster-kits.json` from current state
 - Dropping a kit when its owner stops boosting, unlinks, or loses eligibility
@@ -82,7 +86,7 @@ armband match. Storing the armband would mean a booster who changes clan, or a
 clan that rebinds its flag, keeps a stale armband until someone notices.
 
 Deriving it at generation time means a clan change fixes itself at the next
-restart with no extra code and no migration. A booster in no faction gets seven
+restart with no extra code and no migration. A booster in no faction gets nine
 pieces and no armband.
 
 ### 2.3 The final emote of the sequence sets the spot
@@ -152,6 +156,8 @@ One row per booster, keyed by Discord user id.
 | `discord_user_id` | text, PK | |
 | `pos_x`, `pos_y`, `pos_z` | double, nullable | null until the first emote lands |
 | `mask` | text, nullable | class name, validated against the catalogue |
+| `eyewear` | text, nullable | |
+| `hat` | text, nullable | |
 | `jacket` | text, nullable | |
 | `pants` | text, nullable | |
 | `boots` | text, nullable | |
@@ -161,7 +167,7 @@ One row per booster, keyed by Discord user id.
 | `placed_at` | timestamptz, nullable | when the current spot was set |
 | `updated_at` | timestamptz | |
 
-Seven columns rather than a JSON blob: the slots are a fixed, known set, and
+Nine columns rather than a JSON blob: the slots are a fixed, known set, and
 columns let the catalogue check live in one place with the database enforcing
 nothing it cannot.
 
@@ -207,7 +213,7 @@ leaving a phantom booster.
 1. The booster signs in on the site with Discord (existing login) and must
    already be linked to a character (existing `packages/verification` flow). Not
    linked means the picker explains that and links to the existing flow.
-2. They choose their seven pieces. This saves immediately, with no emote. A kit
+2. They choose their nine pieces. This saves immediately, with no emote. A kit
    with no position is configured but not placed, and generates nothing.
 3. To set or move the spot, the site issues a challenge: three distinct emotes
    from `safeVerificationEmotes()`, bound to their `dayz_id`, with an expiry.
@@ -224,7 +230,7 @@ kit is never destructive until the new spot is actually witnessed.
 
 ## 5. Generation
 
-For each eligible booster, emit eight objects, all at the stored position:
+For each eligible booster, emit up to ten objects, all at the stored position:
 
 ```json
 {
@@ -285,6 +291,10 @@ rule is easier to state than an expiry nobody can see.
 
 A committed data file, maintained by hand, listing allowed class names per slot
 with the display name the site shows.
+
+Hip packs have no wiki category of their own and come straight from
+`types.xml`: `HipPack_Black`, `HipPack_Green`, `HipPack_Medical`,
+`HipPack_Party`.
 
 Hand-maintained rather than derived from `types.xml`, because `types.xml` carries
 no slot metadata (so a classification pass is needed either way), includes

@@ -14,13 +14,13 @@
 
 - **Console server, no mods.** The only spawning mechanism is vanilla `cfggameplay.json` `WorldsData.objectSpawnersArr`. See `docs/direction/2026-09-13-console-init-c-findings.md`.
 - **Never write `cfggameplay.json` from code.** Adding `./custom/booster-kits.json` to `objectSpawnersArr` is a one-time manual deploy step (Task 9).
-- **All eight kit items spawn at the identical position.** No offsets, no arrangement, no template asset.
+- **All ten kit items spawn at the identical position.** No offsets, no arrangement, no template asset.
 - **Coordinate order, and the one place it is converted.** ADM logs `pos=<x, z, altitude>` (horizontals first). The spawner JSON and every coordinate column in this database use `[x, altitude, z]` — `declarations.y` is altitude, which is why `tooClose` compares `x` and `z`. Booster kit columns follow that same convention, so **the ADM-to-database conversion happens once, at capture, in Task 5**. The generator in Task 6 writes its columns straight out with no swap. Doing it anywhere else puts every kit underground or off the map.
 - **Drizzle numeric columns arrive as strings.** Every coordinate read from the database goes through `Number()` before arithmetic or serialisation, or coordinates silently concatenate.
 - **Deterministic bytes.** The generated file is hashed. Any ordering must be total and stable, or the tick re-uploads forever.
 - **The armband is derived, never stored.** `armbandFor(texture)` in `packages/domain/src/flags.ts`.
 - **No `dayz_id` column on `booster_kits`.** The character is joined from `identity_links` on `discord_id`.
-- **Kit contents are cosmetic only.** Seven clothing slots plus the armband. No weapons, no ammunition, containers spawn empty.
+- **Kit contents are cosmetic only.** Nine clothing slots plus the armband. No weapons, no ammunition, containers spawn empty.
 - **Player-facing copy:** plain voice, no em dashes, and nothing framing the kit as protected or off-limits.
 
 ---
@@ -172,7 +172,7 @@ import { KIT_SLOTS, loadCatalogue, isAllowed } from "../src/booster-kit.js";
 const GOOD = {
   mask: [{ className: "GasMask", label: "Gas Mask" }],
   jacket: [{ className: "GorkaEJacket_Summer", label: "Gorka Jacket" }],
-  pants: [], boots: [], gloves: [], hipPack: [], backpack: [],
+  eyewear: [], hat: [], pants: [], boots: [], gloves: [], hipPack: [], backpack: [],
 };
 
 describe("loadCatalogue", () => {
@@ -214,12 +214,12 @@ Expected: FAIL, module not found.
 // packages/domain/src/booster-kit.ts
 
 /**
- * The seven slots a booster chooses. The eighth item in a kit is the clan
+ * The nine slots a booster chooses. The tenth item in a kit is the clan
  * armband, which is DERIVED from the faction's texture (armbandFor) and is
  * deliberately not a slot: storing it would go stale the moment a clan
  * changes flag.
  */
-export const KIT_SLOTS = ["mask", "jacket", "pants", "boots", "gloves", "hipPack", "backpack"] as const;
+export const KIT_SLOTS = ["mask", "eyewear", "hat", "jacket", "pants", "boots", "gloves", "hipPack", "backpack"] as const;
 export type KitSlot = (typeof KIT_SLOTS)[number];
 
 export type CatalogueEntry = { className: string; label: string };
@@ -324,6 +324,8 @@ export const boosterKits = pgTable("booster_kits", {
   posY: doublePrecision("pos_y"),
   posZ: doublePrecision("pos_z"),
   mask: text("mask"),
+  eyewear: text("eyewear"),
+  hat: text("hat"),
   jacket: text("jacket"),
   pants: text("pants"),
   boots: text("boots"),
@@ -1108,7 +1110,7 @@ Expected: FAIL, module not found.
 
 - [ ] **Step 4: Implement**
 
-The query inner-joins `booster_kits` to `discord_boosters` and `identity_links` on `discord_id`, and left-joins the faction that the character belongs to for its texture. Order by `discord_id` for stable bytes. Convert every coordinate with `Number()`. Build `items` by reading the seven slot columns in `KIT_SLOTS` order, dropping nulls and anything `isAllowed` rejects.
+The query inner-joins `booster_kits` to `discord_boosters` and `identity_links` on `discord_id`, and left-joins the faction that the character belongs to for its texture. Order by `discord_id` for stable bytes. Convert every coordinate with `Number()`. Build `items` by reading the nine slot columns in `KIT_SLOTS` order, dropping nulls and anything `isAllowed` rejects.
 
 ```ts
 const list: BoosterKit[] = rows
@@ -1210,7 +1212,7 @@ Three states, following the existing pages' shape:
 
 1. Not boosting: explain the perk is for server boosters and how to boost. Do not gate the page behind boosting; someone deciding whether to boost should be able to see what they would get.
 2. Boosting, not linked: point at the existing link flow.
-3. Boosting and linked: seven dropdowns from the catalogue, the derived armband shown read-only with the clan's flag, the current spot if any, and a button that draws the placement emotes.
+3. Boosting and linked: nine dropdowns from the catalogue, the derived armband shown read-only with the clan's flag, the current spot if any, and a button that draws the placement emotes.
 
 Copy rules: plain voice, no em dashes, and nothing that frames the kit as protected. Say plainly that the kit is on the ground and anyone who finds it can take it, and that it comes back at the next restart.
 
