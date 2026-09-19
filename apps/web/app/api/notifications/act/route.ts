@@ -3,7 +3,7 @@ import {
   acceptInvite, declineInvite, castVote, confirmRebind,
   markNoticeRead, myInvites, clanFor,
 } from "@factions/roster";
-import { formAction, id, safeBack } from "@/lib/form";
+import { formAction, id, safeBack, confirmed } from "@/lib/form";
 import { code } from "@/lib/clan-copy";
 import { leadershipCode } from "@/lib/leadership-copy";
 import { gone } from "@/lib/notifications-copy";
@@ -38,7 +38,13 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
       return done(code("decline", ok ? "declined" : "gone"));
     }
 
-    if (act === "vote") return done(leadershipCode("cast-vote", await castVote(session.sub)));
+    // Same gate as /api/clan/cast-vote: casting a no-confidence vote is public and
+    // irreversible, so the confirm field (armed by the notice's own ConfirmButton)
+    // must be present, not just a click.
+    if (act === "vote") {
+      if (!confirmed(form)) return done(leadershipCode("cast-vote", "unconfirmed"));
+      return done(leadershipCode("cast-vote", await castVote(session.sub)));
+    }
 
     if (act === "rebind") {
       const clan = await clanFor(session.sub);

@@ -1,4 +1,5 @@
 import type { NoticeRow } from "@factions/roster";
+import { ConfirmButton } from "@/app/components/ui";
 
 /**
  * The buttons a notice offers.
@@ -23,12 +24,32 @@ function Act({ row, act, label, tone }: { row: NoticeRow; act: string; label: st
   );
 }
 
+/**
+ * Casting a no-confidence vote is public and irreversible, and a notice row
+ * is a place a misclick is MORE likely than the clan page, not less — same
+ * two-mechanism guard as `/clan`'s "Vote yes" (page.tsx): the hidden
+ * `confirm=yes` field satisfies the route's `confirmed(form)` check, and
+ * `ConfirmButton` is the actual guard (arm on first press, submit on the
+ * second within its window). Neither one alone is the point.
+ */
+function VoteAct({ row }: { row: NoticeRow }) {
+  return (
+    <form action="/api/notifications/act" method="post">
+      <input type="hidden" name="noticeId" value={row.id} />
+      <input type="hidden" name="act" value="vote" />
+      <input type="hidden" name="back" value="/notifications" />
+      <input type="hidden" name="confirm" value="yes" />
+      <ConfirmButton confirm="Cast it?" className={btn("primary")}>Cast your vote</ConfirmButton>
+    </form>
+  );
+}
+
 export function NoticeActions({ row }: { row: NoticeRow }): React.ReactNode {
   switch (row.kind) {
     case "invited":
       return <><Act row={row} act="accept" label="Accept" tone="primary" /><Act row={row} act="decline" label="Decline" tone="ghost" /></>;
     case "vote_opened":
-      return <Act row={row} act="vote" label="Cast your vote" tone="primary" />;
+      return <VoteAct row={row} />;
     case "rebind_proposed":
       return <Act row={row} act="rebind" label="Review it" tone="primary" />;
     default:
