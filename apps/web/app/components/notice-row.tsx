@@ -9,8 +9,17 @@ import { noticeCopy } from "@/lib/notice-copy";
  * reader or survives a colour-blind player.
  */
 
-/** Kinds that are bad news. They take the rust kicker so a long page can be skimmed for trouble. */
-const ALARM = new Set(["ban_applied", "zone_warning", "flag_down", "disband_warning", "solo_lapsed"]);
+/**
+ * Kinds that are an outstanding obligation — a challenge pending or expired,
+ * and nothing else (globals.css: `--color-rust` means exactly that, never a
+ * generic "bad news" colour). `ban_applied` and `zone_warning` are notable but
+ * nothing the player can discharge, so they stay off this set; ALARM_WEIGHT
+ * below gives them a cue that isn't rust.
+ */
+const ALARM = new Set(["flag_down", "disband_warning", "solo_lapsed"]);
+
+/** Kinds worth standing out even though they are not an obligation — weight, not colour. */
+const ALARM_WEIGHT = new Set(["ban_applied", "zone_warning"]);
 
 /** "12m", "3h", "Mon" — coarse, because a notice is not a countdown. */
 export function noticeAge(at: Date, now: Date): string {
@@ -26,9 +35,10 @@ export function noticeAge(at: Date, now: Date): string {
 export function NoticeArticle({ row, actions, now = new Date() }: {
   row: NoticeRow; actions?: React.ReactNode; now?: Date;
 }) {
-  const c = noticeCopy(row.kind, row.payload);
+  const c = noticeCopy(row.kind, row.payload, row.target);
   const alarm = ALARM.has(row.kind);
-  const kicker = alarm ? "text-rust-2" : row.unread ? "text-gold" : "text-dim";
+  const weighted = ALARM_WEIGHT.has(row.kind);
+  const kicker = alarm ? "text-rust-2" : row.unread ? "text-gold" : weighted ? "font-black text-ink" : "text-dim";
   return (
     <article className={`flex gap-3.5 border-b border-rule px-4 py-4 lg:px-[18px] ${row.unread ? "bg-surface" : ""}`}>
       <span aria-hidden="true" className={`mt-[7px] h-[7px] w-[7px] flex-none ${row.unread ? (alarm ? "bg-rust-2" : "bg-gold") : "bg-transparent"}`} />

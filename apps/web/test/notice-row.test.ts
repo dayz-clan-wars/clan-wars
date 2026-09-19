@@ -29,8 +29,26 @@ describe("a notification row", () => {
     expect(render(row({ unread: false }))).not.toContain("Unread");
   });
 
-  it("renders an alarm kind in the rust tone", () => {
-    expect(render(row({ kind: "ban_applied", payload: { reason: "zone" } }))).toContain("text-rust-2");
+  /**
+   * ⚠️ Rust means an outstanding obligation and nothing else (globals.css). Only
+   * a genuine one — a challenge pending or expired — takes it; `flag_down` is one.
+   */
+  it("renders an outstanding-obligation kind in the rust tone", () => {
+    expect(render(row({ kind: "flag_down", payload: { gamertag: "Ada" } }))).toContain("text-rust-2");
+  });
+
+  /**
+   * ⚠️ `ban_applied` and `zone_warning` are notable but discharge nothing, so
+   * they must never borrow rust — that would make it a generic "bad news"
+   * colour, which globals.css explicitly forbids.
+   */
+  it("never paints ban_applied or zone_warning rust, even though they stand out", () => {
+    const ban = render(row({ kind: "ban_applied", payload: { reason: "zone" } }));
+    const zone = render(row({ kind: "zone_warning", payload: { tag: "IW" } }));
+    expect(ban).not.toContain("text-rust-2");
+    expect(ban).not.toContain("bg-rust-2");
+    expect(zone).not.toContain("text-rust-2");
+    expect(zone).not.toContain("bg-rust-2");
   });
 
   it("renders actions when it is given them, and nothing when it is not", () => {

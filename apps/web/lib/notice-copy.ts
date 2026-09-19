@@ -1,4 +1,4 @@
-import { INTRUDER_PIN_TTL_MS, type ClanNoticeKind } from "@factions/domain";
+import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
 
 /**
@@ -51,6 +51,10 @@ const count = (v: NoticePayload[string] | undefined): string => {
  * that is exactly how the intruder copy said "24 hours" for a 60-minute TTL.
  */
 const MINUTES = (ms: number): string => `${Math.round(ms / 60_000)} minutes`;
+/** Same guarantee as `MINUTES`, in whole hours. */
+const HOURS = (ms: number): string => `${Math.round(ms / 3_600_000)} hours`;
+/** Same guarantee as `MINUTES`, in whole days. */
+const DAYS = (ms: number): string => `${Math.round(ms / 86_400_000)} days`;
 
 /** "3h 15m" from a count of seconds, matching the Discord renderer's `duration`. */
 const forSeconds = (v: NoticePayload[string] | undefined): string => {
@@ -73,7 +77,10 @@ const dateOf = (v: NoticePayload[string] | undefined): string | null => {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
-export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (p: NoticePayload) => NoticeCopy }> = {
+/** A renderer reads the payload and, where the fact differs by audience, the notice's own target. */
+type Render = (p: NoticePayload, target: NoticeTarget) => NoticeCopy;
+
+export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: Render }> = {
   // ---- Roster ----
   invited: { group: "Roster", render: (p) => ({
     kicker: "Roster", title: `${clanOf(p.clan)} invited you`,
@@ -86,9 +93,15 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: "Seen at the base, so they are on the roster now." }) },
   left: { group: "Roster", render: (p) => ({
     kicker: "Roster", title: `${who(p.gamertag)} left`, body: "They are off the roster." }) },
-  kicked: { group: "Roster", render: (p) => ({
-    kicker: "Roster", title: `You were removed from ${clanOf(p.clan)}`,
-    body: p.until ? `You can join a clan again on ${String(p.until).slice(0, 10)}.` : "You can join another clan once the cooldown ends." }) },
+  // ⚠️ `kicked` is written to TWO targets with two different payloads (roster-store.ts):
+  // the channel gets {gamertag, officer} and every member of the clan reads it, while the
+  // DM gets {clan, until} and only the removed player reads it. A single string here would
+  // tell the whole clan they were personally removed — branch on target, mirroring the
+  // bot's notice-text.ts.
+  kicked: { group: "Roster", render: (p, target) => target === "channel"
+    ? { kicker: "Roster", title: `${who(p.gamertag)} was removed`, body: `Removed by ${who(p.officer)}.` }
+    : { kicker: "Roster", title: `You were removed from ${clanOf(p.clan)}`,
+        body: p.until ? `You can join a clan again on ${dateOf(p.until) ?? "a later date"}.` : "You can join another clan once the cooldown ends." } },
   promoted: { group: "Roster", render: (p) => ({
     kicker: "Roster", title: `${who(p.gamertag)} is now an officer`,
     body: `${who(p.gamertag)} can review join requests, send invites and rotate the codes.` }) },
@@ -140,14 +153,20 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
       body: next ? `Leadership is unchanged. Another vote is possible on ${next}.` : "Leadership is unchanged.",
     };
   } },
-  codes_rotated: { group: "Leadership", render: () => ({
+  // ⚠️ `codes_rotated` is also written to two targets with different payloads
+  // (vault-store.ts): the channel gets {gamertag}, the DM gets {clan, link}.
+  // Both are true for both audiences ("the codes rotated, see the vault"), but
+  // only the channel payload names who did it, so branch to say that where we can.
+  codes_rotated: { group: "Leadership", render: (p, target) => ({
     kicker: "Codes", title: "Base codes rotated",
-    body: "The new codes are in the vault and your clan channel. They are never shown here." }) },
+    body: target === "channel"
+      ? `${who(p.gamertag)} rotated them. The new codes are in the vault. They are never shown here.`
+      : "The new codes are in the vault and your clan channel. They are never shown here." }) },
 
   // ---- Raid ----
   flag_down: { group: "Raid", render: (p) => ({
     kicker: "Raid", title: "Your flag is down",
-    body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within 24 hours or you go dormant. Supplies are paused until you do.` }) },
+    body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within ${HOURS(FLAG_DOWN_MS)} or you go dormant. Supplies are paused until you do.` }) },
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
     body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },
@@ -199,9 +218,16 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: "Supplies follow at the next restart. The old pole goes public after the grace period." }) },
 
   // ---- Achievement ----
-  achievement: { group: "Achievement", render: (p) => ({
-    kicker: "Achievement", title: `Unlocked: ${p.name ? String(p.name) : "an achievement"}`,
-    body: p.description ? String(p.description) : "It is on your wall now." }) },
+  // ⚠️ Also written to the clan channel (achievements/tick.ts), where the payload
+  // carries `ownerKind`/`ownerName` (or `gamertag`) for the actual unlocker — reading
+  // only name/description here tells every OTHER member the unlock was their own.
+  achievement: { group: "Achievement", render: (p) => {
+    const owner = p.ownerKind === "clan" ? clanOf(p.ownerName) : who(p.gamertag ?? p.ownerName);
+    return {
+      kicker: "Achievement", title: `Unlocked: ${p.name ? String(p.name) : "an achievement"}`,
+      body: `${owner} unlocked it.${p.description ? ` ${String(p.description)}` : ""}`,
+    };
+  } },
 
   // ---- Enforcement ----
   zone_warning: { group: "Enforcement", render: (p) => {
@@ -223,17 +249,17 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     kicker: "Ban",
     title: p.until ? "You were banned from the server" : "You were permanently banned",
     body: p.until
-      ? `Until ${String(p.until)}. Reason: ${p.reason ? String(p.reason) : "a zone violation"}. It lifts on its own.`
+      ? `Until ${dateOf(p.until) ?? "a later date"}. Reason: ${p.reason ? String(p.reason) : "a zone violation"}. It lifts on its own.`
       : `Reason: ${p.reason ? String(p.reason) : "repeated zone violations"}.`,
   }) },
 
   // ---- Dormancy ----
   dormant_raided: { group: "Dormancy", render: () => ({
     kicker: "Dormancy", title: "You went dormant",
-    body: "Twenty four hours passed with the flag down. Any member raising it brings you back." }) },
+    body: `${HOURS(FLAG_DOWN_MS)} passed with the flag down. Any member raising it brings you back.` }) },
   dormant_inactive: { group: "Dormancy", render: () => ({
     kicker: "Dormancy", title: "You went dormant",
-    body: "No member has raised the flag in seven days. Supplies stopped until someone does." }) },
+    body: `No member has raised the flag in ${DAYS(DORMANT_AFTER_MS)}. Supplies stopped until someone does.` }) },
   revived: { group: "Dormancy", render: (p) => ({
     kicker: "Dormancy", title: "You are active again",
     body: p.gamertag ? `${who(p.gamertag)} raised the flag.` : "The flag went back up." }) },
@@ -242,10 +268,24 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: "One session from any full member resets the clock. After that the flag returns to the pool." }) },
 };
 
-/** The rendered copy plus its group, for one notice. */
-export function noticeCopy(kind: ClanNoticeKind, payload: NoticePayload): NoticeCopy & { group: NoticeGroup } {
-  const entry = NOTICE_COPY[kind];
-  return { ...entry.render(payload), group: entry.group };
+/**
+ * The rendered copy plus its group, for one notice.
+ *
+ * ⚠️ `kind` is read from `clan_notices`, not derived from `CLAN_NOTICE_KINDS` —
+ * a kind retired from that list, an old row from before a retirement, or a bot
+ * deployed ahead of this app can all hand this an entry `NOTICE_COPY` never had.
+ * The stated goal here is that an unknown notice is never a reason to fail the
+ * page (the layouts' bell has no error boundary of its own), so an unrecognised
+ * kind gets an honest fallback instead of `entry.render` throwing a TypeError.
+ * This is NOT the general-purpose fallback the spec (§4) rejects: every kind in
+ * `CLAN_NOTICE_KINDS` still has to go through a real renderer, or
+ * notice-copy.test.ts's exhaustiveness check fails — this path is unreachable
+ * for any kind that test can see, by construction.
+ */
+export function noticeCopy(kind: ClanNoticeKind, payload: NoticePayload, target: NoticeTarget = "dm"): NoticeCopy & { group: NoticeGroup } {
+  const entry: { group: NoticeGroup; render: Render } | undefined = NOTICE_COPY[kind];
+  if (!entry) return { group: "Roster", kicker: "Notice", title: "Something happened", body: "This notice is from a version of the bot this page does not recognise yet." };
+  return { ...entry.render(payload, target), group: entry.group };
 }
 
-export const noticeGroup = (kind: ClanNoticeKind): NoticeGroup => NOTICE_COPY[kind].group;
+export const noticeGroup = (kind: ClanNoticeKind): NoticeGroup => NOTICE_COPY[kind]?.group ?? "Roster";
