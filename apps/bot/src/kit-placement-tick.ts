@@ -53,6 +53,14 @@ export type KitPlacementResult = {
   lockedOut: number;
   /** Challenges found past their expiry and closed. The spot is never touched. */
   expired: number;
+  /**
+   * Sequences completed for an account with no `booster_kits` row, so there
+   * was nothing to move. The challenge is closed anyway (an open one would be
+   * uncompletable and the player would repeat the sequence forever), but this
+   * must never be reported as a placement: the operator log would say the kit
+   * moved while the player watched nothing happen.
+   */
+  missingKit: number;
 };
 
 type EmotePayload = { dayzId: string; emote: string; pos: Vec3 | null };
@@ -98,7 +106,7 @@ export async function kitPlacementTick(
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   let cursor = await readCursor(db, KIT_PLACEMENT_CONSUMER);
-  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0 };
+  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0, missingKit: 0 };
 
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -193,35 +201,60 @@ export async function kitPlacementTick(
 
         if (complete) {
           const pos = payload.pos!;
-          // ⚠️ ONE transaction for the position and the close. A crash
+          // ⚠️ ONE transaction for the close and the position. A crash
           // between them would leave an open challenge that has ALREADY moved
           // the kit, and the player's next safe emote would move it again —
           // to wherever they walked in the meantime.
-          await db.transaction(async (tx) => {
-            await tx.update(boosterKits).set({
-              // ⚠️ Straight across. `pos` is a Vec3 whose `y` is altitude, and
-              // pos_y is the altitude column, exactly as `declarations.y` is.
-              // There is no ADM-order conversion anywhere in this path; adding
-              // one would bury every kit or throw it off the map.
-              posX: pos.x.toFixed(2), posY: pos.y.toFixed(2), posZ: pos.z.toFixed(2),
-              placedAt: now, updatedAt: now,
-            }).where(eq(boosterKits.discordId, challenge.discordId));
-            await tx.update(boosterKitChallenges).set({
+          //
+          // ⚠️ The CLOSE GOES FIRST, and its `.returning()` decides whether
+          // the kit is touched at all. The cached challenge list is read once
+          // per batch, so by the time this runs the booster may have reloaded
+          // the placement page and `issuePlacementChallenge` may have closed
+          // this row and opened a new one. Writing the kit first — the shape
+          // this had before review — moved the kit to the ABANDONED
+          // challenge's spot and then found nothing to close, while still
+          // reporting a placement. Ordering it this way is what actually makes
+          // a concurrent re-issue a no-op.
+          const outcome = await db.transaction(async (tx) => {
+            const closed = await tx.update(boosterKitChallenges).set({
               progressIndex: index,
               seenCount: challenge.seenCount + 1,
               lastMatchedEventId: ev.id,
               closedAt: now,
             }).where(and(
               eq(boosterKitChallenges.id, challenge.id),
-              // Guarded so a challenge re-issued or closed concurrently — the
-              // site can re-open the page at any moment — is a no-op here
-              // rather than a second placement.
               isNull(boosterKitChallenges.closedAt),
-            ));
+            )).returning({ id: boosterKitChallenges.id });
+            // Someone else closed or re-issued it between the batch read and
+            // now. Touch nothing: the kit stays where it was, and the new
+            // challenge gets to name its own spot.
+            if (closed.length === 0) return "stale" as const;
+
+            const moved = await tx.update(boosterKits).set({
+              // ⚠️ Straight across. `pos` is a Vec3 whose `y` is altitude, and
+              // pos_y is the altitude column, exactly as `declarations.y` is.
+              // There is no ADM-order conversion anywhere in this path; adding
+              // one would bury every kit or throw it off the map.
+              posX: pos.x.toFixed(2), posY: pos.y.toFixed(2), posZ: pos.z.toFixed(2),
+              placedAt: now, updatedAt: now,
+            }).where(eq(boosterKits.discordId, challenge.discordId))
+              .returning({ discordId: boosterKits.discordId });
+            // ⚠️ A challenge with no kit row to move is REPORTED, not
+            // counted as a placement. The challenge still closes — leaving it
+            // open would make it uncompletable, and the player would perform
+            // the sequence forever — but an operator log reading
+            // `placed: 1` while the kit never moved is the failure this
+            // counter exists to make visible.
+            return moved.length === 0 ? "missing-kit" as const : "placed" as const;
           });
           invalidate();
-          out.placed++;
-          out.advanced++;
+          if (outcome === "placed") {
+            out.placed++;
+            out.advanced++;
+          } else if (outcome === "missing-kit") {
+            out.missingKit++;
+            out.advanced++;
+          }
           continue;
         }
 

@@ -5,7 +5,7 @@ import {
   type Database,
 } from "@factions/db";
 import { appendEvent, readCursor } from "@factions/event-log";
-import { sql, isNull } from "drizzle-orm";
+import { sql, eq, isNull } from "drizzle-orm";
 import { kitPlacementTick, KIT_PLACEMENT_CONSUMER, MAX_POOL_EMOTES_PER_ATTEMPT } from "../src/kit-placement-tick.js";
 import { issuePlacementChallenge } from "../src/kit-placement-issue.js";
 import { CONSUMER } from "../src/tick.js";
@@ -200,6 +200,59 @@ describe("kitPlacementTick", () => {
     expect((await tick()).placed).toBe(0);
     const [kit] = await db.select().from(boosterKits);
     expect([Number(kit!.posX), Number(kit!.posY), Number(kit!.posZ)]).toEqual([1, 2, 3]);
+  });
+
+  it("reports missingKit, and never placed, when the account has no kit row", async () => {
+    // ⚠️ Reachable TODAY: nothing in the repo creates booster_kits rows yet.
+    // The challenge must still close — an open one would be uncompletable and
+    // the player would repeat the sequence forever — but an operator log that
+    // says "placed" while no kit moved is the failure this pins.
+    await seedChallenge({ sequence: ["EmoteSalute"] });
+    await seedEmote({ emote: "EmoteSalute" });
+
+    const r = await tick();
+
+    expect(r.placed).toBe(0);
+    expect(r.missingKit).toBe(1);
+    expect(await db.select().from(boosterKits)).toHaveLength(0);
+    const [ch] = await db.select().from(boosterKitChallenges);
+    expect(ch!.closedAt).not.toBeNull();
+  });
+
+  it("does not move the kit for a challenge closed since the batch was read", async () => {
+    // The open-challenge list is read once per batch. The booster reloads the
+    // placement page in that window, so `issuePlacementChallenge` closes this
+    // challenge and opens a new one — and the completing emote of the
+    // ABANDONED challenge must not move the kit to its spot.
+    //
+    // The proxy closes the row at exactly the moment the tick opens its
+    // completion transaction, which is the only window the guard covers.
+    await seedKit("1", { posX: "9", posY: "9", posZ: "9" });
+    const [ch] = await seedChallenge({ sequence: ["EmoteSalute"] });
+    await seedEmote({ emote: "EmoteSalute", pos: { x: 300, y: 6, z: 400 } });
+
+    const racing = new Proxy(db, {
+      get(target, prop, recv) {
+        if (prop === "transaction") {
+          return async (...args: unknown[]) => {
+            await db.update(boosterKitChallenges).set({ closedAt: now })
+              .where(eq(boosterKitChallenges.id, ch!.id));
+            return (target.transaction as (...a: unknown[]) => unknown)(...args);
+          };
+        }
+        const v = Reflect.get(target, prop, recv) as unknown;
+        return typeof v === "function" ? v.bind(target) : v;
+      },
+    }) as Database;
+
+    const r = await kitPlacementTick(racing, { batchSize: 100, now });
+
+    expect(r.placed).toBe(0);
+    expect(r.missingKit).toBe(0);
+    const [kit] = await db.select().from(boosterKits);
+    // Untouched: the abandoned challenge witnessed a spot nobody is waiting on.
+    expect(Number(kit!.posX)).toBe(9);
+    expect(kit!.placedAt).toBeNull();
   });
 
   it("keeps its own cursor, distinct from the identity verifier's", async () => {
