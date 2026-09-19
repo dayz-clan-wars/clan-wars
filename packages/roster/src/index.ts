@@ -42,16 +42,17 @@ export type { AchievementWall, AchievementTile, AchievementSubject } from "./api
 export type { ReportOutcome, ReportableIncident } from "./api";
 export type { NotificationsPage, NoticeRow } from "./api";
 export type { NoticePayload } from "./api";
+export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, cancelLink, castVote,
+  acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, boosterKit, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
   markAllNoticesRead, markNoticeRead,
   myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
-  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, scoreboard, searchGamertags, seasons,
-  setRecruitingPost, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
+  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
+  setRecruitingPost, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);
 
 export { SUGGEST_SCOPES, type SuggestScope } from "./api";

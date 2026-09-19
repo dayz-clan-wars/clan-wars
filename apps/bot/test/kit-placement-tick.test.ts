@@ -7,7 +7,7 @@ import {
 import { appendEvent, readCursor } from "@factions/event-log";
 import { sql, eq, isNull } from "drizzle-orm";
 import { kitPlacementTick, KIT_PLACEMENT_CONSUMER, MAX_POOL_EMOTES_PER_ATTEMPT } from "../src/kit-placement-tick.js";
-import { issuePlacementChallenge } from "../src/kit-placement-issue.js";
+import { issuePlacementChallenge } from "@factions/roster/internal";
 import { CONSUMER } from "../src/tick.js";
 
 const URL = requireTestDatabaseUrl();

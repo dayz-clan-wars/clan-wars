@@ -54,6 +54,10 @@ import {
   notificationsForDb, markAllNoticesReadDb, markNoticeReadDb, NOTIFICATIONS_PAGE_SIZE,
   type NotificationsPage, type NoticeRow,
 } from "./notifications";
+import {
+  boosterKitForDb, saveBoosterKitSlotDb, startKitPlacementDb,
+  type BoosterKitView, type KitStep, type KitSpot, type KitArmband, type KitChallenge,
+} from "./booster-kit";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -75,6 +79,7 @@ export type { LiveServer };
 export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
 export type { NotificationsPage, NoticeRow };
+export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge };
 export type { NoticePayload } from "./internal/notices";
 export { NOTIFICATIONS_PAGE_SIZE };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
@@ -270,6 +275,15 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
      */
     reportIncident: (discordId: string, incidentId: number, chargedDayzIds: string[]): Promise<ReportOutcome> =>
       reportIncidentDb(getDb(), getNow(), discordId, incidentId, chargedDayzIds),
+
+    /** The booster kit page's one read: boosting, linked, the nine picks, the spot, the armband, any open sequence. */
+    boosterKit: (discordId: string): Promise<BoosterKitView> => boosterKitForDb(getDb(), discordId, getNow()),
+    /** Save one of the nine slots, checked against the committed catalogue. Never writes the kit's position. */
+    saveBoosterKitSlot: (discordId: string, slot: string, className: string): Promise<void> =>
+      saveBoosterKitSlotDb(getDb(), { discordId, slot, className, now: getNow() }),
+    /** Draw the emote sequence that marks where the kit spawns; null for an account with no linked character. */
+    startKitPlacement: (discordId: string): Promise<KitChallenge | null> =>
+      startKitPlacementDb(getDb(), { discordId, now: getNow(), rng: Math.random }),
   };
 }
 

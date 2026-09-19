@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs";
 import type { Database } from "@factions/db";
 import { boosterKits, discordBoosters, factionMembers, factions, identityLinks } from "@factions/db";
-import { KIT_SLOTS, isAllowed, loadCatalogue, type KitSlot } from "@factions/domain";
+import { KIT_SLOTS, isAllowed, type KitSlot } from "@factions/domain";
+import { boosterCatalogue } from "@factions/domain/catalogue";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { generateBoosterKits, type BoosterKit } from "./booster-kits.js";
 import { syncProjection, BOOSTER_KIT_STORE, type ProjectionUploader, type ProjectionDrift } from "./projection-upload.js";
@@ -12,15 +12,16 @@ import { syncProjection, BOOSTER_KIT_STORE, type ProjectionUploader, type Projec
  * malformed catalogue must stop the worker here, loudly, rather than throwing
  * on every sweep forever.
  *
- * ⚠️ Read by path rather than imported from `@factions/domain`, whose
- * `exports` map publishes `.` alone and so cannot serve an asset subpath.
- * The path is relative to this file and holds in the image too — the
- * Dockerfile copies `packages/` and `apps/ingest-worker/` into the same
- * layout.
+ * ⚠️ The path to the asset lives in `@factions/domain`, beside the file it
+ * names, and is reached here through `boosterCatalogue()`. A cross-package
+ * relative path from this file would keep typechecking after the asset moved
+ * and crash the worker at startup instead.
+ *
+ * ⚠️ `boosterCatalogue()` is lazy and memoised; calling it HERE, at module
+ * scope, is what keeps the "loudly, at startup" promise above. Moving this
+ * call inside the tick would defer a malformed catalogue to the first sweep.
  */
-const CATALOGUE = loadCatalogue(JSON.parse(
-  readFileSync(new URL("../../../packages/domain/assets/booster-catalogue.json", import.meta.url), "utf8"),
-));
+const CATALOGUE = boosterCatalogue();
 
 export type BoosterKitTickResult = { kits: number; uploaded: boolean };
 

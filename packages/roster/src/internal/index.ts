@@ -23,6 +23,10 @@ export * from "./vault-store";
 export * from "./guest-store";
 export * from "./removal-store";
 export * from "./incidents";
+// The booster kit placement challenge. Lives here, not in apps/bot, because
+// the SITE issues it (the kit page) and the BOT consumes it (kitPlacementTick)
+// — two copies of a challenge rule is exactly what this package exists to stop.
+export * from "./kit-placement-issue";
 
 // The leaderboards themselves, for the bot's crown reconciler (apps/bot/src/crown-store.ts).
 // Read-only, and the same query the public /players boards run — the bot must

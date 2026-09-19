@@ -242,3 +242,13 @@ export const BOOST_ITEM_CLASSES = ["Fireplace", "FireplaceIndoor", "GardenPlot"]
  * Giving up is safe: the player is caught the next time they connect.
  */
 export const DEVICE_LOOKUP_LOOKBACK_MS = 30 * 60 * 1000;
+
+/**
+ * How long a booster's kit placement sequence stays open.
+ *
+ * ⚠️ Much shorter than `LINK_TTL_MS`: the player is standing in the spot they
+ * want the kit to land on while they perform it, so a day-long window buys
+ * nothing and leaves a stale sequence that moves the kit to wherever they
+ * happen to be when they next perform it by chance.
+ */
+export const KIT_PLACEMENT_TTL_MS = 1 * HOUR;

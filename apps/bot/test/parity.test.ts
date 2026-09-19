@@ -51,6 +51,17 @@ const PENDING: Record<string, string> = {
   // listed incidents by id WITHOUT the evidence would be a ban trigger with the
   // reasoning stripped out, which is worse than no command.
   reportIncident: "base report",
+
+  // 2026-09-19 booster kits. The picker is nine dropdowns over a catalogue of
+  // ~200 class names, and a slash command cannot show a list that size or let
+  // a player browse it — an autocomplete over 200 class names is a worse
+  // version of the page, not parity with it. `startKitPlacement` sits beside
+  // it deliberately: drawing a sequence is only useful next to the picks and
+  // the current spot, both of which are on the page. If a command is ever
+  // wanted, `/kit place` is the shape, and this plan
+  // (docs .superpowers/sdd/2026-09-19-booster-kits) owes it.
+  saveBoosterKitSlot: "kit pick",
+  startKitPlacement: "kit place",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
@@ -82,7 +93,7 @@ describe("Discord parity with the site", () => {
       "baseFor", "clanFor", "directory", "clanByTag", "claimContext", "myInvites", "myRequests",
       "scoreboard", "alphas", "seasons", "warLog", "mapState", "playerBoards", "playerProfile",
       "achievementsFor", "clanBoard", "clanBoardPage", "boardPage", "playerFeed", "vaultFor",
-      "makeRoster", "notificationsFor",
+      "makeRoster", "notificationsFor", "boosterKit",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
       "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
       "baseDamageWindow", "restartsScheduled",
