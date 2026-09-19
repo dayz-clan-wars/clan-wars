@@ -542,11 +542,25 @@ throwing: for an item, no art yet is a legitimate state."
 
 **Files:**
 - Create: `apps/web/app/(site)/kit/item-carousel.tsx`
+- Modify: `apps/web/vitest.config.ts` (the `test.include` glob)
 - Test: `apps/web/test/item-carousel.test.tsx`
 
 **Interfaces:**
 - Consumes: `CatalogueEntry` from `@factions/domain`.
 - Produces: `<ItemCarousel slot={KitSlot} options={CatalogueEntry[]} current={string | null} />`, rendering one radio input per option with `name="className"`, plus an empty option whose value is `""`.
+
+- [ ] **Step 0: Let vitest see `.tsx` tests at all**
+
+⚠️ `apps/web/vitest.config.ts` currently includes only `test/**/*.test.ts`.
+A `.tsx` test file is not picked up, does not run, and reports nothing — the
+task would look complete with a test that never executed. Widen it:
+
+```ts
+  test: { include: ["test/**/*.test.ts", "test/**/*.test.tsx"] },
+```
+
+The config already sets `esbuild: { jsx: "automatic" }` for exactly this kind
+of test, so nothing else is needed; this is the one line that was missing.
 
 - [ ] **Step 1: Write the failing test**
 
