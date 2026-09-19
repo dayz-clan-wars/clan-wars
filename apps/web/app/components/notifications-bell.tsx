@@ -38,8 +38,11 @@ export function NotificationsBell({ unread, recent, now = new Date() }: {
       <div className="absolute right-0 top-[54px] z-[1300] w-[340px] max-w-[calc(100vw-24px)] border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)] lg:w-[400px]">
         <div className="flex items-center justify-between gap-3 border-b-2 border-rule-2 px-3.5 py-3">
           <span className="font-display text-xs uppercase tracking-[0.06em] text-ink">Notifications</span>
+          {/* No `back` field: the route always lands on /notifications, and this panel
+              has no reliable way to know the page it's open on top of without new
+              plumbing (there's no pathname passed into SiteLayout today) — a hidden
+              field carrying a hardcoded value would be exactly as dead as this was. */}
           <form action="/api/notifications/read-all" method="post">
-            <input type="hidden" name="back" value="/notifications" />
             <button type="submit" className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Mark all read</button>
           </form>
         </div>
