@@ -252,10 +252,11 @@ clothing items on the ground are exactly the case that needs it.
 re-places the objects at mission start regardless of what happened to the
 previous ones, and they are not written to the persistence store.
 
-**The coordinate order is a trap and must be tested.** The ADM logs
-`pos=<x, z, altitude>`, horizontals first. The spawner JSON wants
-`[x, altitude, z]`. `supplies.ts` already crosses this boundary and the same
-helper is reused rather than rewritten.
+**No coordinate conversion is needed, and adding one is the bug.** The ADM
+line reads `pos=<x, z, altitude>`, but `parsePlayerPos` returns a `Vec3` —
+`{ x, y, z }` with `y` ALWAYS altitude — so the value is already normalised
+before it is stored. `declarations` uses the same convention and the spawner's
+middle slot is altitude, so all three agree and nothing is reordered anywhere.
 
 A slot holding a class name that is no longer in the catalogue is skipped, and
 the rest of the kit still spawns. A catalogue edit must never be able to stop a

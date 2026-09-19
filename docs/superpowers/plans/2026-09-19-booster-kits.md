@@ -15,7 +15,7 @@
 - **Console server, no mods.** The only spawning mechanism is vanilla `cfggameplay.json` `WorldsData.objectSpawnersArr`. See `docs/direction/2026-09-13-console-init-c-findings.md`.
 - **Never write `cfggameplay.json` from code.** Adding `./custom/booster-kits.json` to `objectSpawnersArr` is a one-time manual deploy step (Task 9).
 - **All ten kit items spawn at the identical position.** No offsets, no arrangement, no template asset.
-- **Coordinate order, and the one place it is converted.** ADM logs `pos=<x, z, altitude>` (horizontals first). The spawner JSON and every coordinate column in this database use `[x, altitude, z]` — `declarations.y` is altitude, which is why `tooClose` compares `x` and `z`. Booster kit columns follow that same convention, so **the ADM-to-database conversion happens once, at capture, in Task 5**. The generator in Task 6 writes its columns straight out with no swap. Doing it anywhere else puts every kit underground or off the map.
+- **Coordinates are ALREADY normalised — do not convert anything.** The ADM line reads `pos=<x, z, altitude>`, but `parsePlayerPos` does not return a tuple in that order: it returns `Vec3`, which is `{ x, y, z }` with **`y` ALWAYS altitude** (`packages/domain/src/vec3.ts`). So `payload.pos.y` is altitude, already matching `declarations.y` and the spawner JSON's middle slot. Task 5 writes `posX = pos.x, posY = pos.y, posZ = pos.z` with no reordering, and Task 6 writes `[k.x, k.y, k.z]` with no reordering. ⚠️ Any code that destructures `pos` as an array, or that swaps y and z "to convert ADM order", is WRONG and puts every kit underground.
 - **Drizzle numeric columns arrive as strings.** Every coordinate read from the database goes through `Number()` before arithmetic or serialisation, or coordinates silently concatenate.
 - **Deterministic bytes.** The generated file is hashed. Any ordering must be total and stable, or the tick re-uploads forever.
 - **The armband is derived, never stored.** `armbandFor(texture)` in `packages/domain/src/flags.ts`.
@@ -630,15 +630,15 @@ describe("kitPlacementTick", () => {
     const db = await testDb();
     await db.insert(boosterKits).values({ discordId: "1", mask: "GasMask" });
     await seedChallenge(db, { discordId: "1", dayzId: "A".repeat(40), sequence: ["EmoteSalute", "EmoteClap"] });
-    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: [100, 200, 5] });
-    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteClap", pos: [300, 400, 6] });
+    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: { x: 100, z: 200, y: 5 } });
+    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteClap", pos: { x: 300, z: 400, y: 6 } });
 
     const r = await kitPlacementTick(db, { now: new Date() });
 
     expect(r.placed).toBe(1);
     const [kit] = await db.select().from(boosterKits);
-    // The emote logged ADM order [300, 400, 6]: x=300, zHorizontal=400,
-    // altitude=6. The columns store [x, altitude, zHorizontal].
+    // parsePlayerPos already normalised the line's <300, 400, 6> into
+    // { x: 300, z: 400, y: 6 }. The columns take it as-is.
     expect([Number(kit!.posX), Number(kit!.posY), Number(kit!.posZ)]).toEqual([300, 6, 400]);
   });
 
@@ -646,7 +646,7 @@ describe("kitPlacementTick", () => {
     const db = await testDb();
     await db.insert(boosterKits).values({ discordId: "1", mask: "GasMask" });
     await seedChallenge(db, { discordId: "1", dayzId: "A".repeat(40), sequence: ["EmoteSalute"] });
-    await appendEmote(db, { dayzId: "B".repeat(40), emote: "EmoteSalute", pos: [300, 400, 6] });
+    await appendEmote(db, { dayzId: "B".repeat(40), emote: "EmoteSalute", pos: { x: 300, z: 400, y: 6 } });
 
     const r = await kitPlacementTick(db, { now: new Date() });
 
@@ -671,7 +671,7 @@ describe("kitPlacementTick", () => {
   it("ignores emotes performed before the challenge was issued", async () => {
     const db = await testDb();
     await db.insert(boosterKits).values({ discordId: "1", mask: "GasMask" });
-    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: [1, 2, 3], occurredAt: new Date("2026-09-01") });
+    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: { x: 1, z: 2, y: 3 }, occurredAt: new Date("2026-09-01") });
     await seedChallenge(db, { discordId: "1", dayzId: "A".repeat(40), sequence: ["EmoteSalute"], issuedAt: new Date("2026-09-19") });
 
     expect((await kitPlacementTick(db, { now: new Date() })).placed).toBe(0);
@@ -684,7 +684,7 @@ describe("kitPlacementTick", () => {
       discordId: "1", dayzId: "A".repeat(40), sequence: ["EmoteSalute"],
       expiresAt: new Date("2026-09-01"),
     });
-    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: [300, 400, 6] });
+    await appendEmote(db, { dayzId: "A".repeat(40), emote: "EmoteSalute", pos: { x: 300, z: 400, y: 6 } });
 
     await kitPlacementTick(db, { now: new Date("2026-09-19") });
 
@@ -734,14 +734,16 @@ The body walks the batch, and for each `emote.performed` event whose payload par
 4. Skip tokens outside `SAFE_TOKENS`, which neither advance nor spend budget.
 5. Skip and close the challenge when `isExpired(challenge, now)`.
 6. `advance(challenge.sequence, challenge.progressIndex, payload.emote)`.
-7. On `complete`: if `payload.pos` is null, leave the challenge open and count nothing, so the player can simply perform the last emote again where they are standing. Otherwise write the position and `placedAt` to the kit row, and set `closedAt`. **This is the one place ADM order becomes database order:**
+7. On `complete`: if `payload.pos` is null, leave the challenge open and count nothing, so the player can simply perform the last emote again where they are standing. Otherwise write the position and `placedAt` to the kit row, and set `closedAt`:
 
 ```ts
-// payload.pos is ADM order: [x, zHorizontal, altitude].
-// The columns, like declarations, are [x, altitude, zHorizontal].
-const [admX, admZ, altitude] = payload.pos;
+// `pos` is a Vec3: { x, y, z } with y ALWAYS altitude, already normalised by
+// parsePlayerPos. The columns use the same convention as `declarations`, so
+// nothing is reordered here. Swapping y and z "to convert ADM order" is the
+// bug this comment exists to prevent.
+const pos = payload.pos;
 await tx.update(boosterKits)
-  .set({ posX: admX, posY: altitude, posZ: admZ, placedAt: now })
+  .set({ posX: pos.x, posY: pos.y, posZ: pos.z, placedAt: now })
   .where(eq(boosterKits.discordId, challenge.discordId));
 ```
 8. Always persist the new `progressIndex`, `seenCount + 1` and `lastMatchedEventId`, and close the challenge when the budget is spent.
