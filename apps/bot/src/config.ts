@@ -115,6 +115,13 @@ export type BotConfig = {
    */
   crownTickIntervalMs: number;
   /**
+   * How often the booster tick re-fetches the guild's member list to mirror
+   * who is currently boosting into `discord_boosters`. Default 15 minutes,
+   * not every tick: `guild.members.fetch()` is a heavy full-cache call, and
+   * the effect of a stale read is bounded by the next server restart anyway.
+   */
+  boosterTickIntervalMs: number;
+  /**
    * The achievements wall: a channel notice with no clan behind it, posted
    * alongside the normal clan-channel/DM notice for every unlock. Optional,
    * for the same reason `feedChannelId` is — unset by default, nothing posts.
@@ -426,6 +433,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     leaderboardTickIntervalMs: positiveInt(env, "LEADERBOARD_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
     crownRoleIds: crownRoleIds(env),
     crownTickIntervalMs: positiveInt(env, "CROWN_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
+    boosterTickIntervalMs: positiveInt(env, "BOOSTER_TICK_INTERVAL_MS", 900_000, MAX_TIMER_MS),
     achievementsChannelId: optionalSnowflake(env, "ACHIEVEMENTS_CHANNEL_ID"),
     achievementsTick: ["1", "true"].includes((env.ACHIEVEMENTS_TICK ?? "").toLowerCase()),
     restartSchedule: ["1", "true"].includes((env.RESTART_SCHEDULE ?? "").toLowerCase()),

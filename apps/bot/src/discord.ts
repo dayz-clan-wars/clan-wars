@@ -54,6 +54,7 @@ import { PgStructureStore } from "./structure-store.js";
 import { structureTick } from "./structure-tick.js";
 import { crownTick } from "./crown-tick.js";
 import { PgCrownStore } from "./crown-store.js";
+import { boosterTick, guildBoosterSource } from "./booster-tick.js";
 import { membershipTick } from "./membership-tick.js";
 import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
@@ -811,6 +812,11 @@ export async function start(cfg: BotConfig): Promise<void> {
   const crownsConfigured = Object.keys(cfg.crownRoleIds).length > 0;
   let lastCrownAt = 0;
 
+  // The booster mirror. Throttled like the crowns, but on its own (longer)
+  // clock: `guild.members.fetch()` is a heavy full-cache call, and a stale
+  // read here is bounded by the next server restart anyway.
+  let lastBoosterAt = 0;
+
   let timer: NodeJS.Timeout | undefined;
 
   const runner = guardedRunner(async () => {
@@ -974,6 +980,27 @@ export async function start(cfg: BotConfig): Promise<void> {
         }
       } catch (err) {
         console.error("crown tick failed", err);
+      }
+    }
+
+    // ⚠️ Its own try/catch, on its own (longer) throttle: `guild.members.fetch()`
+    // is a heavy full-cache call, and the booster kit's effect is bounded by
+    // the next server restart anyway, so live-within-a-tick precision is not
+    // needed here the way it is for verification. Level-triggered like every
+    // other reconciler in this pass — a failed fetch throws before anything
+    // is written or deleted (see booster-tick.ts), so a bad pass here just
+    // leaves last tick's mirror in place instead of stripping every booster's
+    // kit off the server.
+    if (Date.now() - lastBoosterAt >= cfg.boosterTickIntervalMs) {
+      try {
+        const guild = await client.guilds.fetch(cfg.guildId);
+        const b = await boosterTick(db, { source: guildBoosterSource(guild), now: new Date() });
+        lastBoosterAt = Date.now();
+        if (b.added > 0 || b.removed > 0) {
+          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed`);
+        }
+      } catch (err) {
+        console.error("booster tick failed", err);
       }
     }
 
