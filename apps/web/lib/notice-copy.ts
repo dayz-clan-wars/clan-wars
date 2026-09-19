@@ -1,4 +1,4 @@
-import type { ClanNoticeKind } from "@factions/domain";
+import { INTRUDER_PIN_TTL_MS, type ClanNoticeKind } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
 
 /**
@@ -43,6 +43,34 @@ const clanOf = (v: NoticePayload[string] | undefined): string =>
 const count = (v: NoticePayload[string] | undefined): string => {
   const n = Number(v);
   return Number.isFinite(n) ? String(n) : "some";
+};
+
+/**
+ * "60 minutes" from the real constant, so this can never drift from rules.ts.
+ * ⚠️ Never hand-type a duration this reads from a payload-independent rule —
+ * that is exactly how the intruder copy said "24 hours" for a 60-minute TTL.
+ */
+const MINUTES = (ms: number): string => `${Math.round(ms / 60_000)} minutes`;
+
+/** "3h 15m" from a count of seconds, matching the Discord renderer's `duration`. */
+const forSeconds = (v: NoticePayload[string] | undefined): string => {
+  const s = Number(v);
+  if (!Number.isFinite(s) || s < 0) return "a while";
+  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+};
+
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/**
+ * `d MMM yyyy`, UTC, from a payload date/datetime string, matching the bot's
+ * `formatDate`. An empty, missing or unparseable value falls back to `null`
+ * rather than printing "Invalid Date" — callers give a plain sentence instead.
+ */
+const dateOf = (v: NoticePayload[string] | undefined): string | null => {
+  if (v === null || v === undefined || v === "") return null;
+  const d = new Date(String(v));
+  if (Number.isNaN(d.getTime())) return null;
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
 export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (p: NoticePayload) => NoticeCopy }> = {
@@ -95,14 +123,23 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: `${who(p.leader)} showed up in game, so ${who(p.claimant)}'s claim lapsed.` }) },
   succession_done: { group: "Leadership", render: (p) => ({
     kicker: "Leadership", title: `${who(p.gamertag)} is now leader`, body: "The succession went through." }) },
-  vote_opened: { group: "Leadership", render: (p) => ({
-    kicker: "Leadership", title: "A no-confidence vote opened",
-    body: `To replace ${who(p.leader)} with ${who(p.nominee)}. It closes when the window ends or everyone has voted.` }) },
+  vote_opened: { group: "Leadership", render: (p) => {
+    const closes = dateOf(p.closesAt);
+    return {
+      kicker: "Leadership", title: "A no-confidence vote opened",
+      body: `To replace ${who(p.leader)} with ${who(p.nominee)}. It closes ${closes ?? "when the window ends"} or once everyone has voted.`,
+    };
+  } },
   vote_passed: { group: "Leadership", render: (p) => ({
     kicker: "Leadership", title: `The vote passed, ${count(p.yes)} of ${count(p.n)}`,
     body: `${who(p.nominee)} is now leader. ${who(p.old)} stays on as an officer.` }) },
-  vote_failed: { group: "Leadership", render: (p) => ({
-    kicker: "Leadership", title: `The vote failed, ${count(p.yes)} of ${count(p.n)}`, body: "Leadership is unchanged." }) },
+  vote_failed: { group: "Leadership", render: (p) => {
+    const next = dateOf(p.date);
+    return {
+      kicker: "Leadership", title: `The vote failed, ${count(p.yes)} of ${count(p.n)}`,
+      body: next ? `Leadership is unchanged. Another vote is possible on ${next}.` : "Leadership is unchanged.",
+    };
+  } },
   codes_rotated: { group: "Leadership", render: () => ({
     kicker: "Codes", title: "Base codes rotated",
     body: "The new codes are in the vault and your clan channel. They are never shown here." }) },
@@ -113,15 +150,15 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within 24 hours or you go dormant. Supplies are paused until you do.` }) },
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
-    body: `${who(p.gamertag)} got the flag back up. The defense is on the war log and it scores this week.` }) },
+    body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },
 
   // ---- Base ----
   intruder: { group: "Base", render: (p) => ({
     kicker: "Base", title: "Someone was inside your perimeter",
-    body: `${who(p.gamertag)} is not on your roster and was logged ${count(p.distance)} m from your base. Their track is on the map for 24 hours.` }) },
+    body: `${who(p.gamertag)} is not on your roster and was logged ${count(p.distance)} m from your base. Their track is on the map for ${MINUTES(INTRUDER_PIN_TTL_MS)}.` }) },
   solo_intruder: { group: "Base", render: (p) => ({
     kicker: "Base", title: "Someone was inside your perimeter",
-    body: `${who(p.gamertag)} was logged ${count(p.distance)} m from your base. Their track is on the map for 24 hours.` }) },
+    body: `${who(p.gamertag)} was logged ${count(p.distance)} m from your base. Their track is on the map for ${MINUTES(INTRUDER_PIN_TTL_MS)}.` }) },
   dismantle: { group: "Base", render: (p) => ({
     kicker: "Base", title: "Something was dismantled at your base",
     body: `${who(p.gamertag)} took down ${p.part ? String(p.part) : "a part"} and is not on your roster.` }) },
@@ -148,7 +185,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: (
     body: `${who(p.gamertag)} raised the colours at your base.` }) },
   solo_lapsed: { group: "Base", render: () => ({
     kicker: "Base", title: "Your solo base lapsed",
-    body: "The declaration expired without a raise. The pole is released, and anyone can claim it after the grace period." }) },
+    body: "The declaration expired without a raise. The pole is released, and anyone can claim it after the grace period, but you can also raise the flag there and declare again first." }) },
   colors_elsewhere: { group: "Base", render: (p) => ({
     kicker: "Base", title: "Your flag is flying somewhere else",
     body: `${who(p.gamertag)} raised it at a pole that is not yours.` }) },
