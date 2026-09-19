@@ -44,10 +44,30 @@ function VoteAct({ row }: { row: NoticeRow }) {
   );
 }
 
+/**
+ * Accept/decline, plus the notice's own clan id so the route can pick the
+ * matching invite out of `myInvites` rather than an arbitrary one.
+ *
+ * ⚠️ A player can hold invites from more than one clan. Without this field the
+ * route has no way to tell which invite this button means, and guessing
+ * (`invites[0]`) risks joining the wrong clan — not cleanly reversible.
+ */
+function InviteAct({ row, act, label, tone }: { row: NoticeRow; act: "accept" | "decline"; label: string; tone: "primary" | "ghost" }) {
+  return (
+    <form action="/api/notifications/act" method="post">
+      <input type="hidden" name="noticeId" value={row.id} />
+      <input type="hidden" name="act" value={act} />
+      <input type="hidden" name="back" value="/notifications" />
+      {row.clanId !== null && <input type="hidden" name="clanId" value={row.clanId} />}
+      <button type="submit" className={btn(tone)}>{label}</button>
+    </form>
+  );
+}
+
 export function NoticeActions({ row }: { row: NoticeRow }): React.ReactNode {
   switch (row.kind) {
     case "invited":
-      return <><Act row={row} act="accept" label="Accept" tone="primary" /><Act row={row} act="decline" label="Decline" tone="ghost" /></>;
+      return <><InviteAct row={row} act="accept" label="Accept" tone="primary" /><InviteAct row={row} act="decline" label="Decline" tone="ghost" /></>;
     case "vote_opened":
       return <VoteAct row={row} />;
     case "rebind_proposed":

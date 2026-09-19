@@ -29,9 +29,14 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     };
 
     if (act === "accept" || act === "decline") {
+      const clanId = id(form, "clanId");
       const invites = await myInvites(session.sub);
-      const invite = invites[0];
-      // Gone since the page rendered: say so rather than fail.
+      // ⚠️ Matched to the notice's OWN clan, never invites[0]. A player can hold
+      // invites from more than one clan; picking the first blindly can accept an
+      // invite from a DIFFERENT clan than the one the button was pressed on —
+      // joining carries a cooldown and is not cleanly reversible.
+      const invite = clanId === null ? undefined : invites.find((i) => i.clanId === clanId);
+      // Gone since the page rendered (or the form carried no clan id at all): say so rather than guess.
       if (!invite) return { back, code: gone("invite") };
       if (act === "accept") return done(code("accept", await acceptInvite(session.sub, invite.id)));
       const ok = await declineInvite(session.sub, invite.id);
@@ -49,6 +54,11 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (act === "rebind") {
       const clan = await clanFor(session.sub);
       if (typeof clan === "string") return { back, code: gone("rebind") };
+      // ⚠️ Takes the first candidate rather than the one this notice named. Same
+      // hazard as the invite match above, at lower severity: `clan_notices_no_coordinates`
+      // forbids a pole key in the payload, so the notice cannot say which pole it
+      // means and there is nothing here to match against. Fix if a reliable
+      // correlation ever becomes possible; do not fake one that could be wrong.
       const candidate = clan.rebindCandidates[0];
       if (!candidate) return { back, code: gone("rebind") };
       return done(code("rebind", await confirmRebind(session.sub, candidate.poleKey)));

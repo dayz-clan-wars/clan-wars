@@ -6,7 +6,7 @@ import { NoticeArticle } from "../app/components/notice-row";
 
 const row = (o: Partial<NoticeRow> = {}): NoticeRow => ({
   id: 1, kind: "promoted", target: "channel", occurredAt: new Date("2026-09-18T10:00:00Z"),
-  payload: { gamertag: "Ada" }, factionId: 7, unread: true, ...o,
+  payload: { gamertag: "Ada" }, clanId: 7, unread: true, ...o,
 });
 const render = (r: NoticeRow, actions: React.ReactNode = null) =>
   renderToStaticMarkup(createElement(NoticeArticle, { row: r, actions }));

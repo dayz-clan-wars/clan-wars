@@ -6,7 +6,7 @@ import { NotificationsBell } from "../app/components/notifications-bell";
 
 const row = (id: number, unread = true): NoticeRow => ({
   id, kind: "promoted", target: "channel", occurredAt: new Date("2026-09-18T10:00:00Z"),
-  payload: { gamertag: "Ada" }, factionId: 7, unread,
+  payload: { gamertag: "Ada" }, clanId: 7, unread,
 });
 const render = (unread: number, recent: NoticeRow[] = []) =>
   renderToStaticMarkup(createElement(NotificationsBell, { unread, recent }));

@@ -12,7 +12,15 @@ export type NoticeRow = {
   target: NoticeTarget;
   occurredAt: Date;
   payload: NoticePayload;
-  factionId: number | null;
+  /**
+   * The clan this notice belongs to (null for a DM with none, e.g. an invite
+   * withdrawn before the clan is known). Named `clanId`, not `factionId`, at
+   * this boundary on purpose — `apps/web` never references an identifier
+   * containing "faction" (copy-vocabulary.test.ts), and this is the field a
+   * page reads to pick the RIGHT invite or clan out of live state rather than
+   * guessing the first one (spec §5).
+   */
+  clanId: number | null;
   /** False once the watermark covers it or an individual read row exists. */
   unread: boolean;
 };
@@ -59,13 +67,20 @@ type Raw = {
   occurred_at: string; payload: NoticePayload; faction_id: string | null; unread: boolean;
 };
 
-export async function notificationsForDb(db: Database, discordId: string, page: number): Promise<NotificationsPage> {
+/**
+ * `pageSize` defaults to `NOTIFICATIONS_PAGE_SIZE` (the page's own behaviour,
+ * unchanged) but the bell only ever shows its newest four and used to fetch
+ * a full 51-row page — payload JSONB and all — to throw away all but four of
+ * them. Passing a smaller size here means the query itself does less work,
+ * not just the slice after it.
+ */
+export async function notificationsForDb(db: Database, discordId: string, page: number, pageSize: number = NOTIFICATIONS_PAGE_SIZE): Promise<NotificationsPage> {
   const p = Math.max(1, Math.trunc(page));
   // ⚠️ One extra row, not a second COUNT query: "is there a next page" is the
   // only thing the pager needs, and counting an unbounded table to learn it is
   // the expensive way to answer a yes/no question.
-  const limit = NOTIFICATIONS_PAGE_SIZE + 1;
-  const offset = (p - 1) * NOTIFICATIONS_PAGE_SIZE;
+  const limit = pageSize + 1;
+  const offset = (p - 1) * pageSize;
 
   const raw = await db.execute<Raw>(sql`
     with v as (${VISIBLE(discordId)})
@@ -76,14 +91,14 @@ export async function notificationsForDb(db: Database, discordId: string, page: 
   `);
 
   const all = [...raw];
-  const hasNext = all.length > NOTIFICATIONS_PAGE_SIZE;
-  const rows = all.slice(0, NOTIFICATIONS_PAGE_SIZE).map((r) => ({
+  const hasNext = all.length > pageSize;
+  const rows = all.slice(0, pageSize).map((r) => ({
     id: Number(r.id),
     kind: r.kind,
     target: r.target,
     occurredAt: new Date(r.occurred_at),
     payload: r.payload,
-    factionId: r.faction_id === null ? null : Number(r.faction_id),
+    clanId: r.faction_id === null ? null : Number(r.faction_id),
     unread: r.unread,
   }));
   return { rows, page: p, hasNext };
