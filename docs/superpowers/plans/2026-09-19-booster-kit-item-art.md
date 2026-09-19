@@ -854,6 +854,9 @@ Expected: PASS.
 the page calls it at line 73. The roster already answers this: `boosterKit`
 returns a `BoosterKitView` whose `boosting` comes from `discord_boosters`.
 
+⚠️ `boosterKit` takes the discord id ALONE — the roster wrapper supplies the
+clock itself (`api.ts:280`). Passing a second argument is a typecheck failure.
+
 Add the import beside the other roster imports in `owner.tsx`:
 
 ```ts
@@ -867,7 +870,7 @@ return:
   const [invites, requests, claim, linkState, kit] = await Promise.all([
     myInvites(session.sub), myRequests(session.sub), claimContext(session.sub),
     viewer.link ? null : linkStatus(session.sub),
-    boosterKit(session.sub, new Date()),
+    boosterKit(session.sub),
   ]);
 ```
 
@@ -1063,14 +1066,24 @@ import { createClient, runMigrations, requireTestDatabaseUrl, discordBoosters,
 import { eq, sql } from "drizzle-orm";
 
 const now = at("2026-09-19T00:00:00Z");
+let serverId: number;
 
 // in beforeEach, replacing the existing truncate
-await db.execute(sql`truncate table discord_boosters, booster_kits, clan_notices restart identity cascade`);
+// ⚠️ clan_notices.server_id is NOT NULL and references servers.id, so the
+// prompt assertions need a real server row. Without one every one of them
+// fails on a foreign key violation, which reads as broken behaviour rather
+// than broken setup. Same seeding shape as apps/bot/test/ban-announce-tick.test.ts.
+await db.execute(sql`truncate table servers, discord_boosters, booster_kits, clan_notices restart identity cascade`);
+const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
+serverId = s!.id;
 ```
+
+⚠️ Add `servers` to the `@factions/db` import, and use `serverId` — not the
+literal `1` — in every `boosterTick` call below.
 
 ```ts
 it("prompts a booster who has never chosen a kit", async () => {
-  const res = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId: 1, kitUrl: "https://example.test/kit" });
+  const res = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId, kitUrl: "https://example.test/kit" });
   expect(res.prompted).toBe(1);
   const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "booster_kit_unchosen"));
   expect(n!.discordTargetId).toBe("a");
@@ -1079,7 +1092,7 @@ it("prompts a booster who has never chosen a kit", async () => {
 
 it("does not prompt a booster who already has a kit", async () => {
   await db.insert(boosterKits).values({ discordId: "a", serverId: 1 });
-  const res = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId: 1, kitUrl: "https://example.test/kit" });
+  const res = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId, kitUrl: "https://example.test/kit" });
   expect(res.prompted).toBe(0);
 });
 
@@ -1087,24 +1100,24 @@ it("does not prompt a booster who already has a kit", async () => {
 // the tick is level-triggered, so without the column every run re-DMs them.
 it("does not prompt the same booster twice across two runs", async () => {
   const source = source([{ discordId: "a", premiumSince: new Date() }]);
-  await boosterTick(db, { source, now, serverId: 1, kitUrl: "https://example.test/kit" });
-  const second = await boosterTick(db, { source, now, serverId: 1, kitUrl: "https://example.test/kit" });
+  await boosterTick(db, { source, now, serverId, kitUrl: "https://example.test/kit" });
+  const second = await boosterTick(db, { source, now, serverId, kitUrl: "https://example.test/kit" });
   expect(second.prompted).toBe(0);
   const rows = await db.select().from(clanNotices).where(eq(clanNotices.kind, "booster_kit_unchosen"));
   expect(rows).toHaveLength(1);
 });
 
 it("prompts again after someone stops boosting and starts again", async () => {
-  await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId: 1, kitUrl: "https://example.test/kit" });
-  await boosterTick(db, { source: source([]), now, serverId: 1, kitUrl: "https://example.test/kit" });
-  const back = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId: 1, kitUrl: "https://example.test/kit" });
+  await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId, kitUrl: "https://example.test/kit" });
+  await boosterTick(db, { source: source([]), now, serverId, kitUrl: "https://example.test/kit" });
+  const back = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId, kitUrl: "https://example.test/kit" });
   expect(back.prompted).toBe(1);
 });
 
 // ⚠️ The tick's existing warning about a Discord outage resolving to an empty
 // member list applies here one step worse: a prompt cannot be unsent.
 it("emits nothing when the booster fetch throws", async () => {
-  await expect(boosterTick(db, { source: failingSource, now, serverId: 1, kitUrl: "https://example.test/kit" })).rejects.toThrow(/gateway down/u);
+  await expect(boosterTick(db, { source: failingSource, now, serverId, kitUrl: "https://example.test/kit" })).rejects.toThrow(/gateway down/u);
   const rows = await db.select().from(clanNotices).where(eq(clanNotices.kind, "booster_kit_unchosen"));
   expect(rows).toEqual([]);
 });
