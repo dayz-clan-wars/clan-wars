@@ -205,17 +205,39 @@ describe("notificationsForDb", () => {
     });
 
     /**
-     * ⚠️ Mark-all must not mark a notice the viewer cannot see. The watermark
-     * is a bare id with no visibility of its own, so it is capped at the
-     * highest id THIS viewer can read — not at max(clan_notices.id), which
-     * would swallow the next notice addressed to them.
+     * ⚠️ The foreign notice is inserted AFTER the viewer's, so it holds the HIGHER
+     * id and global max(clan_notices.id) genuinely differs from this viewer's max.
+     * Inserted the other way round the two implementations agree and the test proves
+     * nothing — which is exactly how this test read before.
      */
     it("⚠️ caps the watermark at what this viewer can actually see", async () => {
-      await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
       await dm(AT("2026-09-18T09:00:00Z"));
+      const [mine] = await db.execute<{ id: string }>(sql`select max(id) as id from clan_notices where discord_target_id = ${YOU}`);
+      await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
+      const [everything] = await db.execute<{ id: string }>(sql`select max(id) as id from clan_notices`);
+      // The fixture itself must diverge, or the assertion below is vacuous.
+      expect(Number(everything!.id)).toBeGreaterThan(Number(mine!.id));
+
       await markAllNoticesReadDb(db, YOU);
+
+      const [mark] = await db.execute<{ through_id: string }>(sql`select through_id from notice_read_marks where discord_id = ${YOU}`);
+      expect(Number(mark!.through_id)).toBe(Number(mine!.id));
+
+      // And the behaviour that follows from it: a notice arriving later is still unread.
       await dm(AT("2026-09-18T11:00:00Z"));
       expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
+    });
+
+    /**
+     * ⚠️ A guessed id must write nothing and raise nothing. Silence is the point:
+     * an error would tell a prober the notice exists.
+     */
+    it("⚠️ marking a notice you cannot see writes nothing and does not throw", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
+      const [theirs] = await db.execute<{ id: string }>(sql`select max(id) as id from clan_notices`);
+      await markNoticeReadDb(db, YOU, Number(theirs!.id));
+      const rows = await db.execute<{ n: string }>(sql`select count(*) as n from notice_reads where discord_id = ${YOU}`);
+      expect(Number([...rows][0]!.n)).toBe(0);
     });
   });
 });
