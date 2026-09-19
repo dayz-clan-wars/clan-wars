@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.27.0] - 2026-09-19
+
 ### Added
 
 - Server boosters can now pick a nine piece outfit on the site at `/kit` and place it
