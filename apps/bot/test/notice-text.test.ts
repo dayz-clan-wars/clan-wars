@@ -13,9 +13,9 @@ describe("RENDERERS", () => {
 describe("noticeText", () => {
   it("renders the §9.3 lines verbatim", () => {
     expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Wolfie", raiderClan: "Wolves" } }, now))
-      .toBe("🚨 Your flag is down — lowered by Wolfie of Wolves. Re-raise within 24h or go dormant. Supplies paused.");
+      .toBe("🚨 Your flag is down — lowered by Wolfie of Wolves. Re-raise within 24h or go dormant. Crate paused, spare flag still at your pole.");
     expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Solo", raiderClan: null } }, now))
-      .toBe("🚨 Your flag is down — lowered by Solo. Re-raise within 24h or go dormant. Supplies paused.");
+      .toBe("🚨 Your flag is down — lowered by Solo. Re-raise within 24h or go dormant. Crate paused, spare flag still at your pole.");
     expect(noticeText({ kind: "defended", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", durationSeconds: 11700 } }, now))
       .toBe("🛡️ Bear1 raised the flag. Defended — 3h 15m under siege. Supplies resume at next restart.");
     expect(noticeText({ kind: "non_member_raise", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, now))
@@ -39,7 +39,7 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "dormant_raided", target: "channel", occurredAt: now, payload: {} }, now))
       .toBe("💤 24 hours passed. You're dormant. Any member raising the flag brings you back.");
     expect(noticeText({ kind: "dormant_inactive", target: "channel", occurredAt: now, payload: {} }, now))
-      .toBe("💤 No member has raised the flag in 7 days. You're dormant. Supplies stopped.");
+      .toBe("💤 No member has raised the flag in 7 days. You're dormant. Crate stopped, spare flag still at your pole.");
   });
 
   it("renders disband_warning from its payload's days", () => {

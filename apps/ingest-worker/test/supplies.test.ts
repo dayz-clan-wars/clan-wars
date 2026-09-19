@@ -5,7 +5,7 @@ import { loadTemplate, generateSupplies } from "../src/supplies.js";
 
 const RAW = JSON.parse(readFileSync(new URL("../assets/flag-supplies.template.json", import.meta.url), "utf8"));
 
-const COK = { tag: "COK", texture: "Flag_Rooster", x: 5551.69, y: 311.63, z: 8790.97 };
+const COK = { tag: "COK", texture: "Flag_Rooster", x: 5551.69, y: 311.63, z: 8790.97, supplied: true };
 
 describe("loadTemplate", () => {
   it("drops the anchor and keeps every other object", () => {
@@ -103,10 +103,43 @@ describe("generateSupplies", () => {
   });
 
   it("emits every faction's kit", () => {
-    const other = { tag: "WLF", texture: "Flag_Wolf", x: 100, y: 200, z: 300 };
+    const other = { tag: "WLF", texture: "Flag_Wolf", x: 100, y: 200, z: 300, supplied: true };
     const out = JSON.parse(generateSupplies(offsets, [COK, other]));
     expect(out.Objects).toHaveLength(206);
     expect(out.Objects.filter((o: any) => o.customString === "WLF")).toHaveLength(103);
+  });
+
+  it("⚠️ emits a clan's flags and nothing else when it is not supplied", async () => {
+    // THE deadlock fix. Flags have nominal 0 / min 0 in types.xml, so the kit
+    // is the only source of a clan's flag on the server. A raided clan that
+    // dropped out of the file entirely could never raise, so could never
+    // clear flag_down_since, so could never get its kit back — it just went
+    // dormant. Losing the crate is the cost of a raid; losing the flag was a
+    // dead end.
+    const raided = { ...COK, supplied: false };
+    const out = JSON.parse(generateSupplies(offsets, [raided]));
+    expect(out.Objects).toHaveLength(2);
+    expect(out.Objects.every((o: any) => o.name === "Flag_Rooster")).toBe(true);
+    expect(out.Objects.every((o: any) => o.customString === "COK")).toBe(true);
+  });
+
+  it("puts an unsupplied clan's flags at the same pole offset as a supplied one's", async () => {
+    // Same template entries, same offsets — only the rest of the kit is cut.
+    const kitFlags = JSON.parse(generateSupplies(offsets, [COK])).Objects.filter((o: any) => o.name === "Flag_Rooster");
+    const bare = JSON.parse(generateSupplies(offsets, [{ ...COK, supplied: false }])).Objects;
+    expect(bare.map((o: any) => o.pos)).toEqual(kitFlags.map((o: any) => o.pos));
+    expect(bare.map((o: any) => o.ypr)).toEqual(kitFlags.map((o: any) => o.ypr));
+  });
+
+  it("emits supplied kits and bare flags in one file, in the order given", async () => {
+    // The sweep hands over one tag-ordered list, so the file still diffs in
+    // faction order rather than splitting into two blocks.
+    const wolf = { tag: "WLF", texture: "Flag_Wolf", x: 100, y: 200, z: 300, supplied: false };
+    const out = JSON.parse(generateSupplies(offsets, [COK, wolf]));
+    expect(out.Objects).toHaveLength(105);
+    expect(out.Objects.filter((o: any) => o.customString === "COK")).toHaveLength(103);
+    expect(out.Objects.filter((o: any) => o.customString === "WLF")).toHaveLength(2);
+    expect(out.Objects[103].name).toBe("Flag_Wolf");
   });
 
   it("produces a valid empty file for no factions", () => {

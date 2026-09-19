@@ -75,11 +75,11 @@ type Renderer = (p: NoticePayload, ctx: RendererCtx) => string;
 export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   flag_down: (p) => {
     const of = p.raiderClan ? ` of ${p.raiderClan}` : "";
-    return `🚨 Your flag is down — lowered by ${person(p.gamertag)}${of}. Re-raise within 24h or go dormant. Supplies paused.`;
+    return `🚨 Your flag is down — lowered by ${person(p.gamertag)}${of}. Re-raise within 24h or go dormant. Crate paused, spare flag still at your pole.`;
   },
   defended: (p) => `🛡️ ${person(p.gamertag)} raised the flag. Defended — ${duration(Number(p.durationSeconds))} under siege. Supplies resume at next restart.`,
   dormant_raided: () => "💤 24 hours passed. You're dormant. Any member raising the flag brings you back.",
-  dormant_inactive: () => "💤 No member has raised the flag in 7 days. You're dormant. Supplies stopped.",
+  dormant_inactive: () => "💤 No member has raised the flag in 7 days. You're dormant. Crate stopped, spare flag still at your pole.",
   revived: (p) => (p.gamertag ? `☀️ ${person(p.gamertag)} raised the flag. You're active again.` : "☀️ The flag was raised. You're active again."),
   disband_warning: (p) => `⚠️ ${p.days} days until this clan is disbanded and the flag returns to the pool.`,
   non_member_raise: (p, ctx) => `⚑ ${person(p.gamertag)} (not a member) raised your flag at your base — ${ctx.age}`,

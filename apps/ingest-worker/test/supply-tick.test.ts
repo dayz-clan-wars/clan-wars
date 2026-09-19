@@ -54,7 +54,7 @@ describe("supplyTick", () => {
     const client = { statFile: async () => null, uploadFile: async (dir: string, name: string, body: string) => { uploads.push({ dir, name, body }); } };
 
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 1, uploaded: true });
+    expect(r).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
     expect(uploads).toHaveLength(1);
     expect(uploads[0]!.dir).toBe("/d");
     expect(uploads[0]!.name).toBe("f.json");
@@ -165,17 +165,20 @@ describe("supplyTick", () => {
     expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["COK"]);
   });
 
-  it("does not spawn supplies for a dormant faction", async () => {
-    // ⚠️ dormant is a HOLDING status but not a SUPPLIED status. The identity
-    // projection (indexes) includes it to preserve the flag; the supply
-    // projection excludes it. A stale flag yields an empty file and no supply kit.
+  it("gives a dormant faction its flags but no kit", async () => {
+    // ⚠️ dormant is a HOLDING status but not a SUPPLIED status. It loses the
+    // crate — that is what going quiet costs — but it keeps its flags, so a
+    // clan that comes back can raise on the spot instead of waiting for the
+    // wake path plus a restart.
     await seedFaction({ tag: "DOR", texture: "Flag_Wolf", x: "100.50", y: "20.25", z: "300.75", status: "dormant" });
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 0, uploaded: true });
+    expect(r).toEqual({ factions: 0, flagsOnly: 1, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toEqual([]);
+    expect(objects).toHaveLength(2);
+    expect(objects.every((o: any) => o.name === "Flag_Wolf")).toBe(true);
+    expect(objects.every((o: any) => o.customString === "DOR")).toBe(true);
   });
 
   it("⚠️ spawns the kit for a reserved faction — the kit is where its flag comes from", async () => {
@@ -188,24 +191,63 @@ describe("supplyTick", () => {
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 1, uploaded: true });
+    expect(r).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
     expect(objects.filter((o: any) => o.name === "Flag_Rooster")).toHaveLength(2);
     expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["RSV"]);
   });
 
-  it("⚠️ omits an active clan whose flag is down", async () => {
-    // Supplied is a predicate, not a status list: "status = 'active' and
-    // flag_down_since is null" (spec §4.3). A raided clan keeps `active` for
-    // its 24h clock but loses its kit the instant flag_down_since is set.
+  it("⚠️ leaves a raided clan its flags, and nothing but its flags", async () => {
+    // THE reason this file is not just SUPPLIED_PREDICATE. A raided clan
+    // keeps `active` for its 24 h clock and loses the crate the instant
+    // flag_down_since is set — that part is the cost of being raided. But
+    // flags are nominal 0 / min 0 in types.xml, so the kit is the only place
+    // a clan's flag comes from. Cutting the flags too meant a raided clan
+    // could not raise, could not clear flag_down_since, and could not earn
+    // the kit back: it ran out the clock and went dormant with no move
+    // available. Delete the flag half of this and that dead end is back.
     const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
     await db.update(factions).set({ flagDownSince: now }).where(eq(factions.id, f.id));
     const bodies: string[] = [];
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r).toEqual({ factions: 0, uploaded: true });
+    expect(r).toEqual({ factions: 0, flagsOnly: 1, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toEqual([]);
+    expect(objects).toHaveLength(2);
+    expect(objects.every((o: any) => o.name === "Flag_Rooster")).toBe(true);
+    // At their own pole, not the template's.
+    expect(objects[0].pos[0]).toBeCloseTo(5551.69 + 0.8984375, 6);
+  });
+
+  it("restores the full kit when a raided clan raises its flag again", async () => {
+    // The other half of the clock: raise-tick clears flag_down_since, the
+    // clan becomes supplied again, and the crate is back at the next restart.
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.update(factions).set({ flagDownSince: now }).where(eq(factions.id, f.id));
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    await db.update(factions).set({ flagDownSince: null }).where(eq(factions.id, f.id));
+    const back = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+
+    expect(back).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
+    expect(bodies).toHaveLength(2);
+    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(103);
+  });
+
+  it("⚠️ omits a clan whose flag is down and holds no declaration", async () => {
+    // The flag half joins declarations INNER for the same reason the kit half
+    // does: flags spawn AT THE POLE, and a clan with no pole has nowhere to
+    // put them. A LEFT join would drop two flags at (0, 0, 0) per such clan.
+    await db.insert(factions).values({
+      serverId, name: "Homeless", tag: "HML", texture: "Flag_Wolf",
+      status: "dormant", leaderDiscordId: "d3", createdAt: now,
+    });
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 0, flagsOnly: 0, uploaded: true });
+    expect(JSON.parse(bodies[0]!).Objects).toEqual([]);
   });
 
   it("emits factions in a stable tag order regardless of insertion order", async () => {
@@ -221,7 +263,7 @@ describe("supplyTick", () => {
     expect(tags[tags.length - 1]).toBe("ZZZ");
   });
 
-  it("⚠️ omits a dormant faction — this is how a stale flag stops the kit", async () => {
+  it("⚠️ cuts a dormant faction's kit down to its flags — this is how a stale flag stops the crate", async () => {
     // The bot sets the status; the worker only reads it. Nothing coordinates
     // the two, which is why this filter is the whole mechanism.
     await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "1", y: "2", z: "3", status: "active" });
@@ -230,9 +272,10 @@ describe("supplyTick", () => {
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
 
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
-    expect(r.factions).toBe(1);
-    const tags = new Set(JSON.parse(bodies[0]!).Objects.map((o: any) => o.customString));
-    expect([...tags]).toEqual(["COK"]);
+    expect(r).toEqual({ factions: 1, flagsOnly: 1, uploaded: true });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects.filter((o: any) => o.customString === "COK")).toHaveLength(103);
+    expect(objects.filter((o: any) => o.customString === "DRM")).toHaveLength(2);
   });
 
   it("changes the hash when a faction goes dormant, so the file is re-uploaded", async () => {
@@ -245,6 +288,7 @@ describe("supplyTick", () => {
     await db.update(factions).set({ status: "dormant" }).where(eq(factions.id, f.id));
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     expect(bodies).toHaveLength(2);
-    expect(JSON.parse(bodies[1]!)).toEqual({ Objects: [] });
+    // The crate stops respawning; the flags stay.
+    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(2);
   });
 });
