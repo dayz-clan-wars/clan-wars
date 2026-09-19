@@ -83,6 +83,24 @@ for (;;) {
         template: travelTemplate,
         fileName: "pra-teleport-hub.json",
       },
+      // ⚠️ The third projected file, and inert until an operator adds
+      // ./custom/booster-kits.json to cfggameplay.json's objectSpawnersArr —
+      // see docs/deploy/2026-09-19-booster-kits.md. Until then the worker
+      // uploads a file the server ignores, which is safe.
+      boosterKits: {
+        clientFor,
+        fileName: "booster-kits.json",
+      },
+      onBoosterKitError: (serverId, err) => console.error(`booster kit tick failed for server ${serverId}`, err),
+      onBoosterKitUploaded: (serverId, r) =>
+        console.log(`booster kit file uploaded for server ${serverId}: ${r.kits} kits (takes effect at the next server restart)`),
+      onBoosterKitDrift: (serverId, d) => {
+        const found = d.found ? `size ${d.found.size}, mtime ${new Date(d.found.modifiedAtMs).toISOString()}` : "no such file";
+        console.error(
+          `booster kit file on server ${serverId} was changed outside this worker — ` +
+          `expected size ${d.expected.size}, mtime ${new Date(d.expected.modifiedAtMs).toISOString()}; found ${found}. Re-uploading.`,
+        );
+      },
       // The in-game name for the site's server strip. A failure keeps the
       // last name stored and is only logged.
       hostnames: { clientFor },

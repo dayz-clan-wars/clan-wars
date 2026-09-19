@@ -5,6 +5,7 @@ import { ingestTick, type NitradoLike } from "./tick.js";
 import { supplyTick, type SupplyUploader, type SupplyTickResult, type SupplyDrift } from "./supply-tick.js";
 import type { SpawnObject } from "./supplies.js";
 import { travelTick, type TravelTickResult } from "./travel-tick.js";
+import { boosterKitTick, type BoosterKitTickResult } from "./booster-kit-tick.js";
 import type { TravelTemplate } from "./travel.js";
 import type { ProjectionDrift } from "./projection-upload.js";
 import { deviceTick, type DeviceClient } from "./device-tick.js";
@@ -70,6 +71,17 @@ export type SweepDeps = {
   onTravelError?: (serverId: number, err: unknown) => void;
   onTravelUploaded?: (serverId: number, result: TravelTickResult) => void;
   onTravelDrift?: (serverId: number, drift: ProjectionDrift) => void;
+  /**
+   * The third projected file: every boosting, linked, placed booster's kit.
+   * Absent in tests that only exercise ingestion.
+   */
+  boosterKits?: {
+    clientFor: (nitradoServiceId: number) => SupplyClient;
+    fileName: string;
+  };
+  onBoosterKitError?: (serverId: number, err: unknown) => void;
+  onBoosterKitUploaded?: (serverId: number, result: BoosterKitTickResult) => void;
+  onBoosterKitDrift?: (serverId: number, drift: ProjectionDrift) => void;
   /**
    * The in-game server name, read from Nitrado each sweep and stored on the
    * server row for the site to show. Absent in tests that only exercise
@@ -174,6 +186,27 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         if (result.uploaded) deps.onTravelUploaded?.(s.id, result);
       } catch (err) {
         deps.onTravelError?.(s.id, err);
+      }
+    }
+
+    // The booster kits, by the same rules again: its own try/catch, its own
+    // directory lookup (the path embeds this server's gameserver username),
+    // and never a reason to lose a log event or another server's projection.
+    if (deps.boosterKits) {
+      try {
+        const client = deps.boosterKits.clientFor(s.nitradoServiceId!);
+        const remoteDir = await client.missionCustomDir();
+        const result = await boosterKitTick(db, {
+          serverId: s.id,
+          client,
+          remoteDir,
+          fileName: deps.boosterKits.fileName,
+          now: new Date(),
+          onDrift: (d) => deps.onBoosterKitDrift?.(s.id, d),
+        });
+        if (result.uploaded) deps.onBoosterKitUploaded?.(s.id, result);
+      } catch (err) {
+        deps.onBoosterKitError?.(s.id, err);
       }
     }
 
