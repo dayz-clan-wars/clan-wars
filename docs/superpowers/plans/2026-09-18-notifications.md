@@ -4,7 +4,7 @@
 
 **Goal:** Put every notice the bot writes on the site — a `/notifications` page and a bell in the top bar — so a player who missed a Discord DM can still read it and act on it.
 
-**Architecture:** One migration adds two read-state tables (`notice_reads` for individual rows, `notice_read_marks` for an O(1) "mark all read" watermark). One new roster module reads `clan_notices` as a union of the viewer's DMs and their current clans' channel notices, floored at `joined_at`. A web-only copy table renders all 43 `ClanNoticeKind`s as `{kicker, title, body}`. Three actions resolve their targets from live state, never from the stored payload.
+**Architecture:** One migration adds two read-state tables (`notice_reads` for individual rows, `notice_read_marks` for an O(1) "mark all read" watermark). One new roster module reads `clan_notices` as a union of the viewer's DMs and their current clans' channel notices, floored at `joined_at`. A web-only copy table renders all 44 `ClanNoticeKind`s as `{kicker, title, body}`. Three actions resolve their targets from live state, never from the stored payload.
 
 **Tech Stack:** TypeScript, drizzle-orm over postgres.js, Next.js 16 (App Router, server components), vitest, Tailwind v4 with `@theme` tokens.
 
@@ -37,7 +37,7 @@
 | `packages/roster/src/notifications.ts` | The union read, the unread count, the two writes. One responsibility: notice read-state and retrieval |
 | `packages/roster/src/attention.ts` | Gains a third count for the bell |
 | `packages/roster/src/api.ts`, `index.ts` | Wire and export the three new reads/writes |
-| `apps/web/lib/notice-copy.ts` | 43 renderers + group per kind. Web-only copy, no Discord syntax |
+| `apps/web/lib/notice-copy.ts` | 44 renderers + group per kind. Web-only copy, no Discord syntax |
 | `apps/web/app/(site)/notifications/page.tsx` | The page: filters, day groups, rows |
 | `apps/web/app/components/notice-row.tsx` | One row, shared by the page and the bell panel |
 | `apps/web/app/components/notifications-bell.tsx` | Bell + `<details>` panel in the bar |
@@ -560,9 +560,21 @@ describe("marking read", () => {
    * max(clan_notices.id), which would swallow the next notice addressed to them.
    */
   it("⚠️ caps the watermark at what this viewer can actually see", async () => {
-    await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
     await dm(AT("2026-09-18T09:00:00Z"));
+    const [mine] = await db.execute<{ id: string }>(sql`select max(id) as id from clan_notices where discord_target_id = ${YOU}`);
+    // ⚠️ The foreign notice goes in AFTER the viewer's, so it holds the HIGHER id
+    // and global max(clan_notices.id) genuinely differs from this viewer's max.
+    // Inserted the other way round, a global-max implementation computes the same
+    // watermark and this test proves nothing.
+    await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
+    const [everything] = await db.execute<{ id: string }>(sql`select max(id) as id from clan_notices`);
+    expect(Number(everything!.id)).toBeGreaterThan(Number(mine!.id));
+
     await markAllNoticesReadDb(db, YOU);
+
+    const [mark] = await db.execute<{ through_id: string }>(sql`select through_id from notice_read_marks where discord_id = ${YOU}`);
+    expect(Number(mark!.through_id)).toBe(Number(mine!.id));
+
     await dm(AT("2026-09-18T11:00:00Z"));
     expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
   });
@@ -698,7 +710,7 @@ git commit -m "feat(roster): mark notices read, and count the unread for the bel
 
 ---
 
-### Task 4: The copy table — all 43 kinds
+### Task 4: The copy table — all 44 kinds
 
 **Files:**
 - Create: `apps/web/lib/notice-copy.ts`
@@ -1105,8 +1117,14 @@ describe("a notification row", () => {
     expect(render(row())).not.toContain("<button");
   });
 
+  /**
+   * ⚠️ Case-insensitive on the attribute NAME, exact on the value. React renders
+   * this as `dateTime`, and HTML attribute names are case-insensitive, so the
+   * browser reads it as `datetime` either way. Asserting the lowercase spelling
+   * pins a renderer detail rather than the behaviour under test.
+   */
   it("carries a machine-readable timestamp", () => {
-    expect(render(row())).toContain('datetime="2026-09-18T10:00:00.000Z"');
+    expect(render(row())).toMatch(/datetime="2026-09-18T10:00:00\.000Z"/iu);
   });
 });
 ```
@@ -1738,7 +1756,7 @@ Then use `keel:finish-work` to push and open the PR, `keel:review` for the revie
 
 ## Self-Review
 
-**Spec coverage:** §1 scope — Tasks 1-8 stay inside it, nothing changes what the bot writes. §2 read state — Task 1 (tables, with both ⚠️s as tests) and Task 3 (the watermark cap). §3 the union, `full`-only, `joined_at` floor, paging — Task 2, with the privacy rule as its own named test. §4 copy, 43 kinds, exhaustiveness, no Discord syntax — Task 4. §5 actions from live state, the `back` allowlist — Task 6. §6 bell from `attention()`, `<details>` panel, eight groups — Tasks 3, 5, 7. §7 surfaces — the file table matches. §8 testing — every listed test appears in a task. §9 risks — the four allowlists are Task 3 step 7; unbounded volume is answered by the pager in Task 2 and left as a stated limitation.
+**Spec coverage:** §1 scope — Tasks 1-8 stay inside it, nothing changes what the bot writes. §2 read state — Task 1 (tables, with both ⚠️s as tests) and Task 3 (the watermark cap). §3 the union, `full`-only, `joined_at` floor, paging — Task 2, with the privacy rule as its own named test. §4 copy, 44 kinds, exhaustiveness, no Discord syntax — Task 4. §5 actions from live state, the `back` allowlist — Task 6. §6 bell from `attention()`, `<details>` panel, eight groups — Tasks 3, 5, 7. §7 surfaces — the file table matches. §8 testing — every listed test appears in a task. §9 risks — the four allowlists are Task 3 step 7; unbounded volume is answered by the pager in Task 2 and left as a stated limitation.
 
 **Gap found and closed:** the spec does not mention the phone drawer, but the bell only exists in the desktop bar, so a phone would have had no route to the page at all. Task 8 step 1 adds the menu entry.
 

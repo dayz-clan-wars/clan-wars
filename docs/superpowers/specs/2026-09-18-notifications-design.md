@@ -91,7 +91,7 @@ the kinds that can actually be a DM are:
     solo_lapsed, solo_non_member_raise, solo_intruder, solo_dismantle,
     solo_gate, solo_built
 
-Sixteen of the forty-three. `vote_opened`, `defended`, `promoted`,
+Sixteen of the forty-four. `vote_opened`, `defended`, `promoted`,
 `disband_warning`, `rebind_proposed` and the clan (non-`solo_`) `intruder` are
 channel-only. `zone-tick.ts`'s `alertOwner` is the sharpest case: a clan-owned
 zone posts `intruder` to the channel, and only a solo owner is DMed
@@ -163,7 +163,7 @@ imports from `@factions/roster`.
 pole keys out, and the renderers are what keep the rest honest. A missing key
 renders as the bot's `person()` does — "someone", never `undefined`.
 
-All 43 are hand-written before this ships. A generic fallback was considered
+All 44 are hand-written before this ships. A generic fallback was considered
 and rejected: a fallback that renders means an unwritten kind reaches players
 as a dull row nobody notices is wrong, and the exhaustiveness test stops being
 the thing that forces the decision.
@@ -212,7 +212,7 @@ field and `Counts` in `lib/menu.ts` stays as it is — the bell is not a nav
 item and must not appear in the drawer's badge arithmetic.
 
 Filters map to the eight groups the canvas names (Roster, Raid, Base,
-Leadership, Achievement, Enforcement, Dormancy, Rebind), not to 43 kinds. "All"
+Leadership, Achievement, Enforcement, Dormancy, Rebind), not to 44 kinds. "All"
 is the default rather than a chip. The group of a kind is one more column in
 the `notice-copy.ts` table, so a kind cannot exist without a group.
 
@@ -243,7 +243,7 @@ the `notice-copy.ts` table, so a kind cannot exist without a group.
 
 ## 9. Risks
 
-- **43 renderers is most of the work**, and most of it is prose. It is also
+- **44 renderers is most of the work**, and most of it is prose. It is also
   the part most likely to be reviewed least carefully.
 - **Four export allowlists** must gain the new roster reads together
   (`packages/roster/test/{exports,api}`, `apps/bot/test/parity.test.ts`,
