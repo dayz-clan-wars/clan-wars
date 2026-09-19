@@ -44,6 +44,14 @@ describe("booster kit tables", () => {
     ).rejects.toThrow();
   });
 
+  it("a booster starts unprompted", async () => {
+    await db.insert(discordBoosters).values({
+      discordId: "1", premiumSince: new Date(), observedAt: new Date(),
+    });
+    const [row] = await db.select().from(discordBoosters).where(eq(discordBoosters.discordId, "1"));
+    expect(row!.kitPromptedAt).toBeNull();
+  });
+
   it("holds one upload row per server, matching supply_uploads' shape", async () => {
     const [s] = await db.insert(servers).values({
       name: "T", map: "livonia", clockOffsetMs: 0, active: true,

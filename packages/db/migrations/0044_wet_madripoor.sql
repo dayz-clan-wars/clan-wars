@@ -1,0 +1,1 @@
+ALTER TABLE "discord_boosters" ADD COLUMN "kit_prompted_at" timestamp with time zone;
