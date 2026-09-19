@@ -7,7 +7,7 @@ import { specOf, sourceOf, input, ctxWith } from "./command-fakes.js";
 
 const spec = (path: string) => specOf(meGroup, path);
 
-const NO_ATTENTION: Attention = { you: 0, clan: 0 };
+const NO_ATTENTION: Attention = { you: 0, clan: 0, notices: 0 };
 
 describe("/me accept", () => {
   it("passes the chosen invite id through as a number and renders the table's copy", async () => {

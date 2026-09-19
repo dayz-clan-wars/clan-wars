@@ -50,6 +50,10 @@ import { baseDamageWindowDb, type BaseDamageWindow } from "./base-damage-window"
 import { liveServersDb, type LiveServer } from "./servers";
 import { restartsScheduledDb } from "./restarts";
 import { reportIncidentDb, REPORT_REASONS, type ReportOutcome, type ReportableIncident } from "./internal/incidents";
+import {
+  notificationsForDb, markAllNoticesReadDb, markNoticeReadDb, NOTIFICATIONS_PAGE_SIZE,
+  type NotificationsPage, type NoticeRow,
+} from "./notifications";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -70,6 +74,8 @@ export type { BaseDamageWindow };
 export type { LiveServer };
 export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
+export type { NotificationsPage, NoticeRow };
+export { NOTIFICATIONS_PAGE_SIZE };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
 export { DECLARE_SOLO_REASONS } from "./base";
 export { ISSUE_OUTCOME_KINDS } from "@factions/verification";
@@ -174,6 +180,14 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     myInvites: (discordId: string) => myInvitesDb(getDb(), discordId, getNow()),
     /** Your own outstanding join requests. */
     myRequests: (discordId: string) => myRequestsDb(getDb(), discordId, getNow()),
+    /** /notifications: a page of everything this viewer may read, newest first. */
+    notificationsFor: (discordId: string, page: number): Promise<NotificationsPage> =>
+      notificationsForDb(getDb(), discordId, page),
+    /** The "Mark all read" button. One watermark row, whatever the backlog. */
+    markAllNoticesRead: (discordId: string): Promise<void> => markAllNoticesReadDb(getDb(), discordId),
+    /** One notice, marked read because an action resolved it. */
+    markNoticeRead: (discordId: string, noticeId: number): Promise<void> =>
+      markNoticeReadDb(getDb(), discordId, noticeId),
 
     /** The open season's table in §8.1 order: ranked clans first, then unranked, by name. */
     scoreboard: (): Promise<Scoreboard> => scoreboardDb(getDb()),

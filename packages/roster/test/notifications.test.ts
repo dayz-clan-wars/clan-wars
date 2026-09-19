@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, noticeReadMarks, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { notificationsForDb, unreadNoticeCountDb } from "../src/notifications";
+import { notificationsForDb, unreadNoticeCountDb, markAllNoticesReadDb, markNoticeReadDb } from "../src/notifications";
 
 const URL = requireTestDatabaseUrl();
 const YOU = "u-you";
@@ -158,5 +158,64 @@ describe("notificationsForDb", () => {
     expect(p.rows).toEqual([]);
     expect(p.hasNext).toBe(false);
     expect(await unreadNoticeCountDb(db, "u-nobody")).toBe(0);
+  });
+
+  // Nested (not a sibling describe) so `db`, `dm`, `channel`, `member` and
+  // `faction` — all closed over from the outer describe's beforeEach — stay
+  // in scope. A sibling describe cannot see consts declared inside another
+  // describe's callback.
+  describe("marking read", () => {
+    it("mark-all writes ONE row and covers everything present", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"));
+      await dm(AT("2026-09-18T11:00:00Z"));
+      await markAllNoticesReadDb(db, YOU);
+
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(0);
+      const marks = await db.execute<{ n: string }>(sql`select count(*) as n from notice_read_marks where discord_id = ${YOU}`);
+      expect(Number([...marks][0]!.n)).toBe(1);
+      const reads = await db.execute<{ n: string }>(sql`select count(*) as n from notice_reads where discord_id = ${YOU}`);
+      expect(Number([...reads][0]!.n)).toBe(0);
+    });
+
+    it("mark-all twice moves the watermark rather than adding a row", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"));
+      await markAllNoticesReadDb(db, YOU);
+      await dm(AT("2026-09-18T12:00:00Z"));
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
+      await markAllNoticesReadDb(db, YOU);
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(0);
+      const marks = await db.execute<{ n: string }>(sql`select count(*) as n from notice_read_marks where discord_id = ${YOU}`);
+      expect(Number([...marks][0]!.n)).toBe(1);
+    });
+
+    it("marks one notice read without touching the rest", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"));
+      await dm(AT("2026-09-18T11:00:00Z"));
+      const p = await notificationsForDb(db, YOU, 1);
+      await markNoticeReadDb(db, YOU, p.rows[0]!.id);
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
+    });
+
+    it("marking the same notice twice is harmless", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"));
+      const p = await notificationsForDb(db, YOU, 1);
+      await markNoticeReadDb(db, YOU, p.rows[0]!.id);
+      await markNoticeReadDb(db, YOU, p.rows[0]!.id);
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(0);
+    });
+
+    /**
+     * ⚠️ Mark-all must not mark a notice the viewer cannot see. The watermark
+     * is a bare id with no visibility of its own, so it is capped at the
+     * highest id THIS viewer can read — not at max(clan_notices.id), which
+     * would swallow the next notice addressed to them.
+     */
+    it("⚠️ caps the watermark at what this viewer can actually see", async () => {
+      await dm(AT("2026-09-18T10:00:00Z"), "u-someone-else");
+      await dm(AT("2026-09-18T09:00:00Z"));
+      await markAllNoticesReadDb(db, YOU);
+      await dm(AT("2026-09-18T11:00:00Z"));
+      expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
+    });
   });
 });

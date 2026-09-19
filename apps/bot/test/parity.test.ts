@@ -82,10 +82,15 @@ describe("Discord parity with the site", () => {
       "baseFor", "clanFor", "directory", "clanByTag", "claimContext", "myInvites", "myRequests",
       "scoreboard", "alphas", "seasons", "warLog", "mapState", "playerBoards", "playerProfile",
       "achievementsFor", "clanBoard", "clanBoardPage", "boardPage", "playerFeed", "vaultFor",
-      "makeRoster",
+      "makeRoster", "notificationsFor",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
-      "ISSUE_OUTCOME_KINDS", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
+      "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
       "baseDamageWindow", "restartsScheduled",
+      // markAllNoticesRead/markNoticeRead ARE writes, but they write read-state
+      // (a viewer's own watermark/read rows), not clan state, and have no
+      // Discord command — putting them here (rather than a phantom COMMANDS
+      // entry) is what "accounted for" means for this pair.
+      "markAllNoticesRead", "markNoticeRead",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

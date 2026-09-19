@@ -97,3 +97,39 @@ export async function unreadNoticeCountDb(db: Database, discordId: string): Prom
   `);
   return Number(row?.n ?? 0);
 }
+
+/**
+ * "Mark all read": move the watermark to the highest notice this viewer can
+ * currently see.
+ *
+ * ⚠️ Capped at the viewer's OWN maximum, never at `max(clan_notices.id)`. The
+ * watermark is a bare id with no visibility of its own, so a global maximum
+ * would mark the next notice addressed to this player read before it was
+ * written — silently, and only for the player who pressed the button.
+ */
+export async function markAllNoticesReadDb(db: Database, discordId: string): Promise<void> {
+  await db.execute(sql`
+    with v as (${VISIBLE(discordId)}),
+         top as (select coalesce(max(id), 0) as id from v)
+    insert into notice_read_marks (discord_id, through_id)
+    select ${discordId}, top.id from top where top.id > 0
+    on conflict (discord_id) do update
+      set through_id = greatest(notice_read_marks.through_id, excluded.through_id),
+          marked_at = now()
+  `);
+}
+
+/**
+ * Mark one notice read — what an action does once it has resolved.
+ *
+ * ⚠️ Constrained to what the viewer can see, so a guessed id cannot be used to
+ * probe whether a notice exists. Idempotent: pressing twice is one row.
+ */
+export async function markNoticeReadDb(db: Database, discordId: string, noticeId: number): Promise<void> {
+  await db.execute(sql`
+    with v as (${VISIBLE(discordId)})
+    insert into notice_reads (discord_id, notice_id)
+    select ${discordId}, v.id from v where v.id = ${noticeId}
+    on conflict (discord_id, notice_id) do nothing
+  `);
+}
