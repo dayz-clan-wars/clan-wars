@@ -153,6 +153,26 @@ describe("notificationsForDb", () => {
     expect(p2.hasNext).toBe(false);
   });
 
+  /**
+   * ⚠️ The bell panel asks for 4 rows directly rather than fetching a full
+   * page and slicing it (both layouts used to do the latter, fetching 51
+   * rows' worth of JSONB payload on every signed-in render to keep 4 of
+   * them). A caller-supplied page size must actually bound the query, not
+   * just the result the caller happens to look at.
+   */
+  it("honours a caller-supplied page size, for both the rows and hasNext", async () => {
+    for (let i = 0; i < 6; i++) await dm(new Date(Date.UTC(2026, 8, 18, 0, i)));
+    const p = await notificationsForDb(db, YOU, 1, 4);
+    expect(p.rows).toHaveLength(4);
+    expect(p.hasNext).toBe(true);
+  });
+
+  it("defaults the page size to the page's usual 50", async () => {
+    for (let i = 0; i < 51; i++) await dm(new Date(Date.UTC(2026, 8, 18, 0, i)));
+    const p = await notificationsForDb(db, YOU, 1);
+    expect(p.rows).toHaveLength(50);
+  });
+
   it("is empty, not an error, for a player with nothing", async () => {
     const p = await notificationsForDb(db, "u-nobody", 1);
     expect(p.rows).toEqual([]);

@@ -181,9 +181,13 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     myInvites: (discordId: string) => myInvitesDb(getDb(), discordId, getNow()),
     /** Your own outstanding join requests. */
     myRequests: (discordId: string) => myRequestsDb(getDb(), discordId, getNow()),
-    /** /notifications: a page of everything this viewer may read, newest first. */
-    notificationsFor: (discordId: string, page: number): Promise<NotificationsPage> =>
-      notificationsForDb(getDb(), discordId, page),
+    /**
+     * /notifications: a page of everything this viewer may read, newest first.
+     * `pageSize` lets a caller that only shows a handful (the bell panel) ask
+     * for exactly that many, rather than fetching a full page and slicing it.
+     */
+    notificationsFor: (discordId: string, page: number, pageSize?: number): Promise<NotificationsPage> =>
+      notificationsForDb(getDb(), discordId, page, pageSize),
     /** The "Mark all read" button. One watermark row, whatever the backlog. */
     markAllNoticesRead: (discordId: string): Promise<void> => markAllNoticesReadDb(getDb(), discordId),
     /** One notice, marked read because an action resolved it. */

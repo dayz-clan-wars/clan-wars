@@ -33,7 +33,7 @@ export default async function GuideLayout({ children }: { children: React.ReactN
   // ⚠️ One clock read for the bar's columns and both countdown seeds. See TimerBar.
   const now = new Date();
   // The bell's panel: the newest four, and never a reason to fail the page.
-  const recent = session ? await notificationsFor(session.sub, 1).then((p) => p.rows.slice(0, 4)).catch(() => []) : [];
+  const recent = session ? await notificationsFor(session.sub, 1, 4).then((p) => p.rows).catch(() => []) : [];
   return (
     <>
       <SkipLink />

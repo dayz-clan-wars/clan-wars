@@ -1,0 +1,2 @@
+CREATE INDEX IF NOT EXISTS "clan_notices_dm_idx" ON "clan_notices" USING btree ("target","discord_target_id","id");--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "clan_notices_channel_idx" ON "clan_notices" USING btree ("faction_id","occurred_at");

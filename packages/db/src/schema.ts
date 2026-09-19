@@ -1055,6 +1055,13 @@ export const clanNotices = pgTable("clan_notices", {
   dmHasTarget: check("clan_notices_dm_has_target", sql`${t.target} <> 'dm' OR ${t.discordTargetId} IS NOT NULL`),
   noCoordinates: check("clan_notices_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
   queue: index("clan_notices_queue_idx").on(t.discordTargetId, t.id).where(sql`${t.postedAt} IS NULL AND ${t.failedAt} IS NULL`),
+  // ⚠️ These two cover the notifications page's VISIBLE query (packages/roster/src/notifications.ts),
+  // one per branch of its UNION ALL. Without them every render of the bell or /notifications
+  // does two sequential scans of an unbounded, ever-growing table — and (site)/layout.tsx and
+  // guide/layout.tsx both hit that query on every signed-in page. Neither branch can use the
+  // partial `queue` index above: it excludes rows once they are posted, which is most of them.
+  dmLookup: index("clan_notices_dm_idx").on(t.target, t.discordTargetId, t.id),
+  channelLookup: index("clan_notices_channel_idx").on(t.factionId, t.occurredAt),
 }));
 
 /**
