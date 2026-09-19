@@ -29,10 +29,12 @@ function back(code: string): never {
 /**
  * Save one of the nine slots.
  *
- * ⚠️ The catalogue check lives in `@factions/roster`, not here, and it throws
- * on a class name that is not an option for that slot. This function turns
- * that throw into a result code; it must never fall back to writing something
- * else, because the value goes straight into the server's spawner file.
+ * ⚠️ The catalogue check lives in `@factions/roster`, not here, and a refused
+ * pick comes back as an OUTCOME. Nothing here may catch: a try/catch around
+ * the write would turn a dead database or an exhausted pool into "that item
+ * is not on the list", and the player would re-pick from the same list
+ * forever while the site blamed their choice for an outage. An unexpected
+ * failure has to surface as a real error.
  *
  * ⚠️ It writes gear only. The kit's position belongs to the placement
  * sequence, so editing a slot can never move a spot the player already marked.
@@ -45,11 +47,8 @@ export async function saveKit(formData: FormData): Promise<void> {
   const className = formData.get("className");
   if (typeof slot !== "string" || typeof className !== "string") back("bad-pick");
 
-  try {
-    await saveBoosterKitSlot(discordId, slot, className);
-  } catch {
-    back("bad-pick");
-  }
+  const out = await saveBoosterKitSlot(discordId, slot, className);
+  if (!out.ok) back(out.reason);
   back(className.trim() === "" ? "cleared" : "saved");
 }
 

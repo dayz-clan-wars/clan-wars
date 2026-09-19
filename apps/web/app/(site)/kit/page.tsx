@@ -16,9 +16,7 @@ import {
 import { saveKit, startPlacement } from "./actions";
 
 export const metadata: Metadata = {
-  // The other pages' titles use an em dash here. This one does not: the kit
-  // copy bans em dashes outright, and a tab title is copy a player reads.
-  title: "Clan Wars: your booster kit",
+  title: "Clan Wars — your booster kit",
   robots: { index: false, follow: false },
 };
 

@@ -29,8 +29,13 @@ export const RESULT_COPY: Record<string, string> = {
   saved: "Saved. The new pick is in your kit from the next restart.",
   cleared: "Cleared. That slot will be empty from the next restart.",
   "bad-pick": "That item is not on the list for that slot, so nothing was saved. Pick one of the listed options.",
+  "bad-slot": "That is not one of the nine slots, so nothing was saved.",
   "not-linked": "Link your character first. The spot is marked in game, so we need to know which character is yours.",
-  drawn: "Your sequence is below. Go to the spot you want and perform the three emotes in order.",
+  // ⚠️ No number in this sentence. The count is LINK_EMOTES, a guide number in
+  // rules.ts, and the page renders it from the sequence it was handed. A "three"
+  // typed here would go on reading "three" after the constant changed, with
+  // nothing failing: guide.test.ts scans guide chapters, not this file.
+  drawn: "Your sequence is below. Go to the spot you want and perform the emotes in order.",
   "not-boosting": "Your kit is for server boosters. Nothing was saved.",
 };
 

@@ -34,12 +34,35 @@ describe("the booster kit page's reads and writes", () => {
 
   describe("saveBoosterKitSlotDb", () => {
     it("rejects a class name outside the catalogue for that slot", async () => {
-      await expect(save("mask", "GorkaEJacket_Summer")).rejects.toThrow();
+      expect(await save("mask", "GorkaEJacket_Summer")).toEqual({ ok: false, reason: "bad-pick" });
       expect(await db.select().from(boosterKits)).toEqual([]);
     });
 
     it("rejects a slot that is not one of the nine", async () => {
-      await expect(save("armband", "Armband_Zenit")).rejects.toThrow();
+      expect(await save("armband", "Armband_Zenit")).toEqual({ ok: false, reason: "bad-slot" });
+      expect(await db.select().from(boosterKits)).toEqual([]);
+    });
+
+    it("accepting reports ok, so the page can tell a save from a refusal", async () => {
+      expect(await save("mask", "HockeyMask")).toEqual({ ok: true });
+    });
+
+    /**
+     * ⚠️ The distinction the page depends on. A refused pick is an answer for
+     * the player; a dead database is an outage. If a failed write came back as
+     * `ok: false` the site would tell a booster their perfectly valid jacket
+     * "is not on the list", they would re-pick from that same list forever,
+     * and nobody would ever report the outage.
+     */
+    it("lets an unexpected write failure propagate instead of reporting a bad pick", async () => {
+      const broken = new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop === "insert") return () => { throw new Error("connection terminated"); };
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as Database;
+      await expect(saveBoosterKitSlotDb(broken, { discordId: "1", slot: "mask", className: "HockeyMask", now }))
+        .rejects.toThrow("connection terminated");
     });
 
     it("accepts an allowed class name and leaves the position untouched", async () => {

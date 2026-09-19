@@ -11,6 +11,14 @@ export type KitSpot = { x: number; y: number; z: number; placedAt: Date | null }
 export type KitArmband = { className: string; texture: string; clanName: string; clanTag: string };
 export type KitChallenge = { steps: KitStep[]; expiresAt: Date };
 
+/**
+ * ⚠️ An OUTCOME, not a throw, and the distinction is load-bearing. A refused
+ * pick is an answer the page must give the player; a failed query is an
+ * outage the page must NOT dress up as their mistake. Only the first is a
+ * value here, so anything unexpected below propagates as a real error.
+ */
+export type SaveKitOutcome = { ok: true } | { ok: false; reason: "bad-slot" | "bad-pick" };
+
 export type BoosterKitView = {
   /** From `discord_boosters`, which the bot's booster tick keeps current. */
   boosting: boolean;
@@ -80,8 +88,9 @@ export async function boosterKitForDb(db: Database, discordId: string, now: Date
  *
  * ⚠️ `isAllowed` against the committed catalogue is the ONLY thing standing
  * between a form POST and an arbitrary class name reaching the server's
- * spawner file. It throws rather than ignoring the pick: a save that quietly
- * dropped the value would report success and spawn nothing.
+ * spawner file. A refused pick comes back as `ok: false` and is never
+ * written: a save that quietly dropped the value would report success and
+ * spawn nothing.
  *
  * ⚠️ Writes the slot column and `updated_at`, and NOTHING else. The position
  * columns belong to the placement challenge (spec §2.6) — editing gear must
@@ -90,16 +99,17 @@ export async function boosterKitForDb(db: Database, discordId: string, now: Date
  */
 export async function saveBoosterKitSlotDb(db: Database, a: {
   discordId: string; slot: string; className: string; now: Date;
-}): Promise<void> {
-  if (!isKitSlot(a.slot)) throw new Error(`booster kit: ${a.slot} is not one of the nine slots`);
+}): Promise<SaveKitOutcome> {
+  if (!isKitSlot(a.slot)) return { ok: false, reason: "bad-slot" };
   const className = a.className.trim();
   if (className !== "" && !isAllowed(boosterCatalogue(), a.slot, className)) {
-    throw new Error(`booster kit: ${className} is not an option for ${a.slot}`);
+    return { ok: false, reason: "bad-pick" };
   }
   const value = className === "" ? null : className;
   await db.insert(boosterKits)
     .values({ discordId: a.discordId, [a.slot]: value, updatedAt: a.now })
     .onConflictDoUpdate({ target: boosterKits.discordId, set: { [a.slot]: value, updatedAt: a.now } });
+  return { ok: true };
 }
 
 /**

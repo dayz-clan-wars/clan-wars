@@ -28,9 +28,35 @@ describe("the kit page's copy", () => {
     // ⚠️ The house comment style uses em dashes freely; this page does not,
     // in copy OR in comments, because the two are one keystroke apart in a
     // JSX file and a dash that leaks into copy is invisible in review.
-    for (const [name, text] of [["page.tsx", PAGE], ["actions.ts", ACTIONS], ["kit-copy.ts", COPY]] as const) {
+    //
+    // ⚠️ The ONE exception is `metadata.title`, by ruling: a <title> is chrome,
+    // and every other page on the site uses "Clan Wars — <thing>". One page
+    // diverging from that format is a more visible inconsistency than a dash
+    // nobody reads as a dash. Stripped by line, so the exemption cannot widen.
+    const withoutTitle = PAGE.split("\n").filter((l) => !l.trim().startsWith("title:")).join("\n");
+    for (const [name, text] of [["page.tsx", withoutTitle], ["actions.ts", ACTIONS], ["kit-copy.ts", COPY]] as const) {
       expect([name, text.includes("—")]).toEqual([name, false]);
     }
+  });
+
+  it("keeps the site's title format", () => {
+    expect(PAGE).toContain('title: "Clan Wars — your booster kit"');
+  });
+
+  /**
+   * ⚠️ The emote count is LINK_EMOTES, a guide number in rules.ts. page.tsx
+   * renders it from the sequence it was handed; this copy must not restate it.
+   * A "three" typed here would go on saying three after the constant changed,
+   * and nothing would fail: guide.test.ts scans guide chapters, not lib/.
+   */
+  it("states no emote count in copy, so LINK_EMOTES cannot drift out of it", () => {
+    // Counted emotes specifically: "Pick one of the listed options" is prose,
+    // "perform the three emotes" is a guide number restated by hand.
+    const counted = /\b(one|two|three|four|five|six|seven|eight|nine|ten|\d+)\s+emotes?\b/iu;
+    const offenders = Object.entries(RESULT_COPY).filter(([, c]) => counted.test(c));
+    expect(offenders).toEqual([]);
+    // And the page renders the count it was handed, never a literal.
+    expect(PAGE).toContain("{view.challenge.steps.length} emotes");
   });
 
   it("says plainly that the kit is on the ground, takeable, and back at the restart", () => {
@@ -101,5 +127,28 @@ describe("the kit actions", () => {
   it("never writes a position: saving gear calls the slot write alone", () => {
     expect(ACTIONS).toContain("saveBoosterKitSlot(discordId, slot, className)");
     expect(ACTIONS).not.toMatch(/pos[XYZ]/u);
+  });
+
+  /**
+   * ⚠️ A refused pick is an answer for the player; a dead database is an
+   * outage. A `catch` here would collapse the two and tell a booster their
+   * valid jacket "is not on the list" while Postgres was down, so they would
+   * re-pick from the same list forever and nobody would report the outage.
+   * The refusal is an outcome from `@factions/roster`; nothing is caught.
+   */
+  it("reads the refusal as an outcome and catches nothing", () => {
+    expect(ACTIONS).toContain("if (!out.ok) back(out.reason);");
+    // Matched as syntax, not as a word: the comment above the action says
+    // "try/catch" in prose, and banning the word would ban explaining the rule.
+    expect(ACTIONS).not.toMatch(/catch\s*[({]/u);
+    expect(ACTIONS).not.toMatch(/\btry\s*\{/u);
+  });
+
+  it("has copy for every refusal reason the roster write can return", () => {
+    // The reasons are a union in packages/roster/src/booster-kit.ts; a new one
+    // with no copy here would render a blank notice.
+    for (const reason of ["bad-slot", "bad-pick"]) {
+      expect([reason, Object.hasOwn(RESULT_COPY, reason)]).toEqual([reason, true]);
+    }
   });
 });

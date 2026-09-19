@@ -52,14 +52,14 @@ const PENDING: Record<string, string> = {
   // reasoning stripped out, which is worse than no command.
   reportIncident: "base report",
 
-  // 2026-09-19 booster kits. The picker is nine dropdowns over a catalogue of
-  // ~200 class names, and a slash command cannot show a list that size or let
-  // a player browse it — an autocomplete over 200 class names is a worse
-  // version of the page, not parity with it. `startKitPlacement` sits beside
-  // it deliberately: drawing a sequence is only useful next to the picks and
-  // the current spot, both of which are on the page. If a command is ever
-  // wanted, `/kit place` is the shape, and this plan
-  // (docs .superpowers/sdd/2026-09-19-booster-kits) owes it.
+  // 2026-09-19 booster kits. Deferred by the design itself:
+  // docs/superpowers/specs/2026-09-19-booster-kits-design.md, "Out of scope,
+  // deliberately" — "A Discord command for any of this. The site is the
+  // picker. If boosters ask for /kit later it is a small addition on top of
+  // the same table." The reason it is out of scope is the catalogue: nine
+  // dropdowns over ~200 class names is not a list a slash command can show,
+  // and an autocomplete over it is a worse version of the page. If it is ever
+  // wanted, `/kit pick` and `/kit place` are the shapes.
   saveBoosterKitSlot: "kit pick",
   startKitPlacement: "kit place",
 };
