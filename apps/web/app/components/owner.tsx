@@ -1,8 +1,8 @@
-import { viewerFor, myInvites, myRequests, claimContext, linkStatus, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
+import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
 import type { Session } from "@/lib/auth/session";
 import { nextStepFor, type NextStep } from "@/lib/next-step";
 import { when, ago } from "@/lib/format";
-import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm } from "./ui";
+import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm, link } from "./ui";
 import { NextStepStrip } from "./next-step";
 import { ClosestPanel } from "./achievement-wall";
 import { AchievementToast } from "./achievement-toast";
@@ -27,18 +27,24 @@ export type Owner = {
   next: NextStep | null;
   /** Invites are only actionable with no clan and no pending spot. */
   showInvites: boolean;
+  /** Whether the viewer is currently a Discord booster — the /kit entry point is gated on this, not on ownership alone. */
+  boosting: boolean;
 };
 
 export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owner> {
   viewer ??= await viewerFor(session.sub);
-  const [invites, requests, claim, linkState] = await Promise.all([myInvites(session.sub), myRequests(session.sub), claimContext(session.sub), viewer.link ? null : linkStatus(session.sub)]);
+  const [invites, requests, claim, linkState, kit] = await Promise.all([
+    myInvites(session.sub), myRequests(session.sub), claimContext(session.sub),
+    viewer.link ? null : linkStatus(session.sub),
+    boosterKit(session.sub),
+  ]);
   const showInvites = invites.length > 0 && viewer.clan === null && viewer.pending === null;
   const next = nextStepFor({
     linked: viewer.link !== null, challengeOpen: linkState?.challenge != null, inClan: viewer.clan !== null,
     pending: viewer.pending ? { name: viewer.pending.name } : null, ceremonyId: claim?.ceremony.id ?? null,
     invites: showInvites ? invites.map((i) => ({ id: i.id, clanName: i.clanName })) : [], requests: requests.map((r) => ({ clanName: r.clanName })),
   });
-  return { session, viewer, invites, requests, claim, next, showInvites };
+  return { session, viewer, invites, requests, claim, next, showInvites, boosting: kit.boosting };
 }
 
 /** The notices an action route left in the query, then the next-step strip. Renders nothing when there is nothing to say. */
@@ -110,6 +116,19 @@ export function OwnerPanels({ owner, wall, now = new Date() }: { owner: Owner; w
               </li>
             ))}
           </ul>
+        </Panel>
+      )}
+
+      {owner.boosting && (
+        // ⚠️ Gated on owner.boosting, not merely on ownership: a link to
+        // /kit that turns a non-booster away is worse than no link at all.
+        <Panel title="Booster kit">
+          <PanelBody>
+            <p className="text-sm leading-relaxed text-ink-2">
+              Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
+            </p>
+            <a href="/kit" className={link}>Open your kit</a>
+          </PanelBody>
         </Panel>
       )}
     </>
