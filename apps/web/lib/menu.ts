@@ -17,7 +17,7 @@ export type MenuItem = {
   href: string;
   /** Paths that light this item up besides its own prefix (Scoreboard owns /alphas and /seasons). */
   also?: readonly string[];
-  /** The bar draws this one quieter (the guide is a different kind of place) and, below xl, not at all: signed in, nine cells and Sign out already fill 1024px. It stays in the drawer and the footer. */
+  /** The bar draws this one quieter (the guide is a different kind of place) and, below xl, not at all: signed in, nine cells, the bell (site-bar.tsx, since the notifications feature), and Sign out already fill 1024px. It stays in the drawer and the footer. */
   quiet?: boolean;
   /** Which of the site's two attention counts sits on this item (App Review §01). */
   badge?: "you" | "clan";
@@ -27,6 +27,20 @@ export type MenuItem = {
 export type Counts = { you: number; clan: number };
 
 const MINE: readonly MenuItem[] = [
+  { label: "You", href: "/me", badge: "you" },
+  { label: "Map", href: "/map" },
+  { label: "Your clan", href: "/clan", badge: "clan" },
+];
+
+/**
+ * The drawer's version of MINE. The bar has the bell (site-bar.tsx) and no room
+ * for a tenth cell, so Notifications is a drawer item only.
+ *
+ * ⚠️ Same divergence as BOARDS vs BOARDS_LONG: the bar is short and always
+ * visible, the drawer is a full list. Adding this to MINE instead puts a
+ * redundant cell next to the bell and overflows the bar at 1024px.
+ */
+const MINE_LONG: readonly MenuItem[] = [
   { label: "You", href: "/me", badge: "you" },
   { label: "Map", href: "/map" },
   { label: "Your clan", href: "/clan", badge: "clan" },
@@ -54,7 +68,7 @@ const GUIDE_SHORT: readonly MenuItem[] = [{ label: "Guide", href: "/guide", quie
 
 /** The phone drawer, in groups. */
 export function menuFor(signedIn: boolean): readonly (readonly MenuItem[])[] {
-  return signedIn ? [MINE, BOARDS_LONG, GUIDE] : [BOARDS_LONG, GUIDE];
+  return signedIn ? [MINE_LONG, BOARDS_LONG, GUIDE] : [BOARDS_LONG, GUIDE];
 }
 
 /** The desktop bar, in groups (a gap between them). */

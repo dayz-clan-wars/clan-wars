@@ -19,6 +19,11 @@ describe("menuFor (the phone drawer)", () => {
     ]);
   });
 
+  it("has Notifications, unlike the bar — the bar already has the bell", () => {
+    const [mine] = menuFor(true);
+    expect(mine!.some((m) => m.href === "/notifications")).toBe(true);
+  });
+
   it("anonymous: the boards and the guide — nothing gated", () => {
     expect(menuFor(false)).toEqual(menuFor(true).slice(1));
   });
@@ -27,10 +32,15 @@ describe("menuFor (the phone drawer)", () => {
 describe("barFor (the desktop bar)", () => {
   it("is the short form: Alphas and Seasons live in the scoreboard's own nav", () => {
     expect(barFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan", "/notifications"],
+      ["/me", "/map", "/clan"],
       ["/clans", "/players", "/scoreboard", "/war-log", "/guide"],
     ]);
     expect(barFor(false)).toEqual(barFor(true).slice(1));
+  });
+
+  it("does NOT have Notifications — the bell (site-bar.tsx) already covers it, and there is no room for a tenth cell", () => {
+    const [mine] = barFor(true);
+    expect(mine!.some((m) => m.href === "/notifications")).toBe(false);
   });
 
   it("Scoreboard owns /alphas and /seasons; /clan does not own /clans", () => {
