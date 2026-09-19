@@ -4,8 +4,12 @@ import { redirect } from "next/navigation";
 import { NOTICE_GROUPS, noticeGroup, type NoticeGroup } from "@/lib/notice-copy";
 import { notificationsHref, noticeDay } from "@/lib/notifications-page";
 import { NoticeArticle } from "@/app/components/notice-row";
-import { Pager } from "@/app/components/ui";
+import { Pager, Notice } from "@/app/components/ui";
 import { NoticeActions } from "./actions";
+import { RESULT_COPY } from "@/lib/clan-copy";
+import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
+import { NOTIFICATIONS_RESULT_COPY } from "@/lib/notifications-copy";
+import { lookupCopy } from "@/lib/copy-lookup";
 
 /**
  * Everything the bot has told you, and everything it told your clan since you
@@ -16,13 +20,16 @@ import { NoticeActions } from "./actions";
  */
 export const dynamic = "force-dynamic";
 
-export default async function NotificationsPage({ searchParams }: { searchParams: Promise<{ page?: string; group?: string }> }) {
+export default async function NotificationsPage({ searchParams }: { searchParams: Promise<{ page?: string; group?: string; result?: string }> }) {
   const session = await currentSession();
   // The middleware admitted this request, so the cookie was valid a moment ago; sign in again rather than land nowhere.
   if (!session) redirect("/login?next=/notifications");
   const q = await searchParams;
   const page = Math.max(1, Number(q.page ?? "1") || 1);
   const group = NOTICE_GROUPS.find((g) => g === q.group);
+  const notice = q.result
+    ? (lookupCopy(RESULT_COPY, q.result) ?? lookupCopy(LEADERSHIP_RESULT_COPY, q.result) ?? lookupCopy(NOTIFICATIONS_RESULT_COPY, q.result))
+    : undefined;
 
   const feed = await notificationsFor(session.sub, page);
   const now = new Date();
@@ -52,6 +59,8 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       <p className="mt-2.5 max-w-[62ch] text-sm leading-relaxed text-muted text-pretty">
         Everything the bot sent you, and everything it posted to your clan since you joined.
       </p>
+
+      {notice && <Notice>{notice}</Notice>}
 
       <div role="group" aria-label="Filter" className="mt-6 flex flex-wrap gap-2">
         {chip("All", !group, href({ group: null, page: 1 }))}

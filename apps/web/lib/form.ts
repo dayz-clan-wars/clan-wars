@@ -65,3 +65,17 @@ export function optionalText(form: FormData, name: string, max: number): string 
   if (t.length > max) return "too-long";
   return t;
 }
+
+/**
+ * Where a form post may send the player back to.
+ *
+ * ⚠️ An allowlist, not a validation. `back` arrives in a form field, so it is
+ * attacker-controlled; used as given it is an open redirect — a link on our own
+ * domain that bounces to someone else's, wearing our styling. Anything not
+ * spelled here falls back to the route's own default.
+ */
+const BACKS = new Set(["/me", "/clan", "/clan/settings", "/clan/vault", "/notifications"]);
+
+export function safeBack(value: FormDataEntryValue | string | null, fallback: string): string {
+  return typeof value === "string" && BACKS.has(value) ? value : fallback;
+}
