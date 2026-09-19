@@ -13,10 +13,15 @@ import { barFor, isCurrent, menuFor, signInHref } from "../lib/menu";
 describe("menuFor (the phone drawer)", () => {
   it("signed in: your places first, then the boards, then the guide", () => {
     expect(menuFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan"],
+      ["/me", "/map", "/clan", "/notifications"],
       ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/war-log"],
       ["/guide"],
     ]);
+  });
+
+  it("has Notifications, unlike the bar — the bar already has the bell", () => {
+    const [mine] = menuFor(true);
+    expect(mine!.some((m) => m.href === "/notifications")).toBe(true);
   });
 
   it("anonymous: the boards and the guide — nothing gated", () => {
@@ -31,6 +36,11 @@ describe("barFor (the desktop bar)", () => {
       ["/clans", "/players", "/scoreboard", "/war-log", "/guide"],
     ]);
     expect(barFor(false)).toEqual(barFor(true).slice(1));
+  });
+
+  it("does NOT have Notifications — the bell (site-bar.tsx) already covers it, and there is no room for a tenth cell", () => {
+    const [mine] = barFor(true);
+    expect(mine!.some((m) => m.href === "/notifications")).toBe(false);
   });
 
   it("Scoreboard owns /alphas and /seasons; /clan does not own /clans", () => {

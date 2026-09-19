@@ -40,13 +40,16 @@ export type { BaseDamageWindow } from "./api";
 export type { LiveServer } from "./api";
 export type { AchievementWall, AchievementTile, AchievementSubject } from "./api";
 export type { ReportOutcome, ReportableIncident } from "./api";
+export type { NotificationsPage, NoticeRow } from "./api";
+export type { NoticePayload } from "./api";
 
 export const {
   acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
-  myInvites, myRequests, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
+  markAllNoticesRead, markNoticeRead,
+  myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
   reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, scoreboard, searchGamertags, seasons,
   setRecruitingPost, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);
@@ -57,3 +60,4 @@ export { ISSUE_OUTCOME_KINDS } from "./api";
 export { BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE } from "./api";
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX } from "./api";
 export { REPORT_REASONS } from "./api";
+export { NOTIFICATIONS_PAGE_SIZE } from "./api";

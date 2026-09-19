@@ -1,6 +1,6 @@
 import "./guide.css";
 import { currentSession } from "@/lib/viewer";
-import { attention, baseDamageWindow, liveServers, restartsScheduled } from "@factions/roster";
+import { attention, baseDamageWindow, liveServers, notificationsFor, restartsScheduled } from "@factions/roster";
 import { SiteBar } from "@/app/(site)/site-bar";
 import { buildIndex } from "./index";
 import { GuideSearch } from "./search";
@@ -32,10 +32,17 @@ export default async function GuideLayout({ children }: { children: React.ReactN
   const restarts = await restartsScheduled().catch(() => false);
   // ⚠️ One clock read for the bar's columns and both countdown seeds. See TimerBar.
   const now = new Date();
+  // The bell's panel: the newest four, and never a reason to fail the page.
+  const recent = session ? await notificationsFor(session.sub, 1, 4).then((p) => p.rows).catch(() => []) : [];
   return (
     <>
       <SkipLink />
-      <SiteBar signedIn={session !== null} crumb="Field guide" counts={counts} extra={
+      <SiteBar
+        signedIn={session !== null}
+        crumb="Field guide"
+        counts={counts}
+        notifications={session ? { unread: counts?.notices ?? 0, recent, now } : undefined}
+        extra={
         <details className="group relative">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-rule-3 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
           <div className="absolute right-0 top-[calc(100%+8px)] z-[1300] max-h-[75dvh] w-[min(86vw,320px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">

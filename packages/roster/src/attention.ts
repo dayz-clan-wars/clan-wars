@@ -4,6 +4,7 @@ import { HOLDING_STATUSES } from "@factions/domain";
 import { PgVerificationStore } from "@factions/verification";
 import { and, asc, eq, inArray } from "drizzle-orm";
 import { PgFactionStore, PgRosterStore, openRequestsFor, openVoteFor } from "./internal";
+import { unreadNoticeCountDb } from "./notifications";
 
 /**
  * What is waiting on the viewer, as two counts for the site bar (App Review
@@ -16,7 +17,7 @@ import { PgFactionStore, PgRosterStore, openRequestsFor, openVoteFor } from "./i
  * Read on EVERY page under the site layout, so it is five cheap lookups at
  * most and nothing joins the roster. Not linked: one query and out.
  */
-export type Attention = { you: number; clan: number };
+export type Attention = { you: number; clan: number; notices: number };
 
 export async function attentionDb(db: Database, discordId: string, now: Date): Promise<Attention> {
   const [link] = await db.select({ dayzId: identityLinks.dayzId }).from(identityLinks).where(eq(identityLinks.discordId, discordId));
@@ -27,7 +28,14 @@ export async function attentionDb(db: Database, discordId: string, now: Date): P
   ]);
   let you = (ceremony ? 1 : 0) + (challenge ? 1 : 0);
   let clan = 0;
-  if (!link) return { you, clan };
+
+  // ⚠️ Computed before the not-linked exit. Notices are keyed on discord_id, not
+  // dayz_id, so an unlinked player can already have some (an invite arrives
+  // before a link does) and returning 0 would hide the bell from exactly the
+  // player who most needs to read it.
+  const notices = await unreadNoticeCountDb(db, discordId);
+
+  if (!link) return { you, clan, notices };
 
   const [m] = await db.select({ factionId: factionMembers.factionId, role: factionMembers.role, status: factionMembers.status })
     .from(factionMembers).innerJoin(factions, eq(factions.id, factionMembers.factionId))
@@ -37,9 +45,9 @@ export async function attentionDb(db: Database, discordId: string, now: Date): P
   if (!m) {
     const invites = await new PgRosterStore(db).pendingInvitesFor(link.dayzId, now);
     you += invites.length;
-    return { you, clan };
+    return { you, clan, notices };
   }
-  if (m.status !== "full") return { you, clan };
+  if (m.status !== "full") return { you, clan, notices };
 
   const officerPlus = m.role === "leader" || m.role === "officer";
   const [requests, vote] = await Promise.all([
@@ -52,5 +60,5 @@ export async function attentionDb(db: Database, discordId: string, now: Date): P
       .where(and(eq(factionVoteBallots.voteId, vote.id), eq(factionVoteBallots.dayzId, link.dayzId))).limit(1);
     if (!ballot) clan += 1;
   }
-  return { you, clan };
+  return { you, clan, notices };
 }
