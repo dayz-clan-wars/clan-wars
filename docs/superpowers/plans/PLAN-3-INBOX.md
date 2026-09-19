@@ -1190,3 +1190,35 @@ does not resolve from the repo root under pnpm's strict layout — `pnpm rebuild
 and `pnpm rebuild:sessions` would have failed at startup with `ERR_MODULE_NOT_FOUND`.
 Fixed by adding `drizzle-orm` to the root `dependencies`. The capped-pass half above is
 still open.
+
+## 41. Booster kits: server scoping, and no CI cover for the web image
+
+Two follow-ups from the booster-kit branch (spec
+`docs/superpowers/specs/2026-09-19-booster-kits-design.md`, runbook
+`docs/deploy/2026-09-19-booster-kits.md`). Both were found by review, neither blocks the
+feature on today's single-server deployment.
+
+**`booster_kits` has no `server_id`.** `booster-kit-tick.ts`'s query is not scoped to a
+server, so the day a second `servers` row exists, every booster's kit spawns on **both**
+servers — including boosters who have never played the second — and `booster_kit_uploads`
+tracks two copies quite happily. Correct today, wrong the moment a server is added. The
+placement challenge knows which server witnessed the emote, so that is the natural source
+for the column. ⚠️ Fix this BEFORE registering a second server, not after.
+
+**Nothing in CI builds the web image or exercises a force-dynamic page against it.** The
+final review caught `/kit` reading `packages/domain/assets/booster-catalogue.json` at
+runtime via `readFileSync`, which a successful `next build` does not prove is traced into
+`.next/standalone` — and it was NOT: the asset was absent from the built image, so `/kit`
+would have thrown ENOENT on every request in production while every other page worked.
+Fixed by importing the JSON as a module (`packages/domain/src/booster-catalogue.ts`), and
+`packages/domain/test/booster-kit.test.ts` pins that this one module reads nothing from
+disk. That pin is module-specific: the next page that reads a workspace asset at runtime
+fails exactly the same way with nothing red. A CI step that builds the image and requests
+one dynamic page would close the class.
+
+Smaller, all noted in review and deliberately left: no close-reason column on
+`booster_kit_challenges`, so the site infers expiry/lockout from `seen_count` against a
+constant it does not own; `booster-kits.ts`'s object serialisation duplicates
+`supplies.ts`'s `objectLiteral` field order; the new sweep registration has no sweep-level
+test (travel has none either); `emoteLabel(token) ?? token` can render a raw class token as
+an instruction a player cannot perform.
