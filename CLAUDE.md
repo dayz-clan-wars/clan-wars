@@ -502,6 +502,11 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   placement challenge is issued), and `kit-placement-issue.ts`'s close-then-insert into
   `booster_kit_challenges`, both in `packages/roster`, the picker and emote-challenge
   writer reachable from the website's `/kit` page. Neither table is written by the bot.
+  ⚠️ Since the booster kit prompt, `discord_boosters` IS written by the bot inside a
+  transaction that also appends to `clan_notices` — `booster-tick.ts` marks
+  `kit_prompted_at` and queues the DM together, so a DM can never be queued without its
+  mark. That transaction touches those two tables only, and `clan_notices` is last, so
+  it stays inside the order. `booster_kits` is still only ever READ by the bot.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of
