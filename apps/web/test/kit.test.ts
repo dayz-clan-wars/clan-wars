@@ -115,6 +115,14 @@ describe("the kit page's three states", () => {
     expect(PAGE).toContain("action={startPlacement}");
   });
 
+  it("wraps the nine pickers in one form with one save, not nine", () => {
+    // ⚠️ Nine separate forms used to let every radio share name="className"
+    // safely. One shared form is what makes the per-slot radio names in
+    // item-carousel.tsx (className-<slot>) load-bearing, not decorative.
+    expect(PAGE).toContain("action={saveKit}");
+    expect(PAGE.match(/action=\{saveKit\}/gu) ?? []).toHaveLength(1);
+  });
+
   it("shows the armband read-only: no form, no select, no name it could be saved under", () => {
     // ⚠️ The armband is derived from the clan's flag, so a control for it
     // would offer a pick the write layer has no column to store.
@@ -149,9 +157,18 @@ describe("the kit actions", () => {
     expect(ACTIONS).toContain("view.boosting");
   });
 
-  it("never writes a position: saving gear calls the slot write alone", () => {
-    expect(ACTIONS).toContain("saveBoosterKitSlot(discordId, slot, className)");
+  it("never writes a position: saving gear calls the bulk kit write alone", () => {
+    expect(ACTIONS).toContain("saveBoosterKit(discordId, picks)");
     expect(ACTIONS).not.toMatch(/pos[XYZ]/u);
+  });
+
+  it("reads every slot by its own scoped name, never by iterating whatever the request posted", () => {
+    // ⚠️ Reading `formData.get("className-" + slot)` by the fixed KIT_SLOTS
+    // list is what keeps this paired with item-carousel.tsx's per-slot radio
+    // names. Iterating the posted keys instead would accept a form field
+    // under any name an attacker chose to send.
+    expect(ACTIONS).toContain("for (const slot of KIT_SLOTS)");
+    expect(ACTIONS).toContain('formData.get(`className-${slot}`)');
   });
 
   /**

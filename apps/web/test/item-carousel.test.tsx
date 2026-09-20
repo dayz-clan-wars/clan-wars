@@ -24,9 +24,20 @@ describe("ItemCarousel", () => {
     expect(html).toContain('value=""');
   });
 
-  it("submits under the name the server action reads", () => {
+  it("submits under a name scoped to its own slot", () => {
+    // ⚠️ A radio group is scoped per FORM, not per radiogroup element. All
+    // nine slots share one <form> now, so a bare "className" name on every
+    // slot would merge into one group: picking a jacket would silently clear
+    // the mask. This is what actions.ts reads each slot back by.
     const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current={null} />);
-    expect(html).toContain('name="className"');
+    expect(html).toContain('name="className-mask"');
+    expect(html).not.toContain('name="className"');
+  });
+
+  it("scopes a different slot's radios under its own name, not another slot's", () => {
+    const html = renderToStaticMarkup(<ItemCarousel slot="jacket" options={OPTIONS} current={null} />);
+    expect(html).toContain('name="className-jacket"');
+    expect(html).not.toContain('name="className-mask"');
   });
 
   it("marks the saved pick as checked, and nothing else", () => {

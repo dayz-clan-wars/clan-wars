@@ -26,8 +26,7 @@ export const SLOT_LABELS: Record<KitSlot, string> = {
 
 /** Looked up, never echoed: ?result= is attacker-supplied (lib/copy-lookup.ts). */
 export const RESULT_COPY: Record<string, string> = {
-  saved: "Saved. The new pick is in your kit from the next restart.",
-  cleared: "Cleared. That slot will be empty from the next restart.",
+  saved: "Saved. Your kit will use these picks from the next restart.",
   "bad-pick": "That item is not on the list for that slot, so nothing was saved. Pick one of the listed options.",
   "bad-slot": "That is not one of the nine slots, so nothing was saved.",
   "not-linked": "Link your character first. The spot is marked in game, so we need to know which character is yours.",
@@ -45,3 +44,19 @@ export const GROUND_RULES = [
   "Anyone who finds it can take it. It is loot like any other loot.",
   "It comes back at the next restart, in the same spot, for as long as you keep boosting.",
 ] as const;
+
+/**
+ * The sticky save bar's inline notice, shown as soon as any of the nine picks
+ * differs from what is saved. A client-side enhancement only: with JavaScript
+ * off this is never called, and the page still saves with the one Save
+ * button and no notice at all.
+ */
+export function unsavedKitNotice(count: number): string {
+  return count === 1 ? "You have 1 slot not saved yet." : `You have ${count} slots not saved yet.`;
+}
+
+/**
+ * The browser's own leave-page prompt. Most browsers show their fixed
+ * wording and ignore this string, but the standard still asks for one.
+ */
+export const UNSAVED_LEAVE_WARNING = "You have unsaved changes to your kit. Leave without saving?";

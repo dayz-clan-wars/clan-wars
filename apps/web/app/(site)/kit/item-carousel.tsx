@@ -3,11 +3,17 @@ import type { CatalogueEntry, KitSlot } from "@factions/domain";
 /**
  * One slot's options as a horizontally scrolling strip of image tiles.
  *
- * Radio inputs in a radiogroup, so the form posts `className` exactly as the
- * <select> it replaces did, and the slot save works with JavaScript off —
- * the same bar every other write on this site clears. `role="radiogroup"` plus
- * real radios gives arrow-key movement for free; styling them as tiles must
- * not cost that: the input stays in the DOM, visually hidden (sr-only), never
+ * ⚠️ Radio inputs in a radiogroup, NAMED `className-<slot>`, never the bare
+ * `className` the single-slot form used. A radio group is scoped per FORM,
+ * not per radiogroup element — the nine slots now share one `<form>`
+ * (page.tsx), so nine groups all named `className` would merge into ONE
+ * group: picking a jacket would uncheck the mask's radio too, silently
+ * corrupting a pick that had nothing to do with the jacket. The per-slot
+ * name is what keeps the nine groups independent; `actions.ts` reads each
+ * one back by the same `className-<slot>` key.
+ *
+ * `role="radiogroup"` plus real radios gives arrow-key movement for free;
+ * styling them as tiles must not cost that: the input stays in the DOM, visually hidden (sr-only), never
  * `display: none`. Native overflow scroll plus CSS scroll-snap does the
  * carousel; no library.
  *
@@ -63,7 +69,7 @@ function Tile({ slot, value, label, image, checked }: {
       <input
         type="radio"
         id={id}
-        name="className"
+        name={`className-${slot}`}
         value={value}
         defaultChecked={checked}
         className="sr-only"

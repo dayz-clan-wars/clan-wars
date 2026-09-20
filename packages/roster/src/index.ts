@@ -51,7 +51,7 @@ export const {
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
   markAllNoticesRead, markNoticeRead,
   myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
-  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
+  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
   setRecruitingPost, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);
 

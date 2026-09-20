@@ -11,10 +11,14 @@ import { nearestPlace } from "@/lib/map-places";
 import { ago } from "@/lib/format";
 import {
   Page, PageHead, Body, Panel, PanelBody, Notice, SessionLost,
-  btnPrimary, btnSecondary, field, fieldLabel, kicker, link,
+  btnPrimary, field, fieldLabel, kicker, link,
 } from "@/app/components/ui";
 import { ItemCarousel } from "./item-carousel";
+import { KitSaveBar } from "./save-bar";
 import { saveKit, startPlacement } from "./actions";
+
+/** The one form every slot's radios post into. save-bar.tsx finds it by this id. */
+const KIT_FORM_ID = "kit-form";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your booster kit",
@@ -37,23 +41,23 @@ function GroundRules() {
 }
 
 /**
- * One slot: a carousel of everything the catalogue allows there, and a Save.
+ * One slot: a carousel of everything the catalogue allows there.
  *
- * Nine separate forms rather than one, because a save is one slot (the write
- * behind it takes one slot too). Each form works with no JavaScript, which is
- * the same bar every other write on this site clears.
+ * No form and no Save button of its own: all nine slots share the one
+ * `<form id={KIT_FORM_ID}>` the page renders around them, saved by the one
+ * button in the sticky bar at the bottom (save-bar.tsx). That is only safe
+ * because item-carousel.tsx names each slot's radios `className-<slot>`.
+ * A radio group is scoped per FORM, not per radiogroup element, so nine
+ * groups sharing one form would merge into one group under a bare
+ * "className" name and picking a jacket would silently clear the mask.
  */
 function SlotPicker({ slot, current }: { slot: KitSlot; current: string | null }) {
   const options = boosterCatalogue()[slot];
   return (
-    <form action={saveKit} className="flex flex-col gap-2 border-t border-rule-2 px-4 py-4 first:border-t-0 lg:px-5">
-      <input type="hidden" name="slot" value={slot} />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <span className={fieldLabel} id={`slot-${slot}-label`}>{SLOT_LABELS[slot]}</span>
-        <button type="submit" className={btnSecondary}>Save</button>
-      </div>
+    <div className="flex flex-col gap-2 border-t border-rule-2 px-4 py-4 first:border-t-0 lg:px-5">
+      <span className={fieldLabel} id={`slot-${slot}-label`}>{SLOT_LABELS[slot]}</span>
       <ItemCarousel slot={slot} options={options} current={current} />
-    </form>
+    </div>
   );
 }
 
@@ -153,12 +157,15 @@ export default async function KitPage({ searchParams }: { searchParams: Promise<
         {view.boosting && view.linked && (
           <>
             <Panel num="02" title="The nine pieces" aside={<span className={kicker}>{view.linked.gamertag}</span>}>
-              <div className="flex flex-col">
-                {KIT_SLOTS.map((slot) => <SlotPicker key={slot} slot={slot} current={view.slots[slot]} />)}
-              </div>
-              <p className="border-t border-rule-2 px-4 py-3 text-xs text-ink-2 lg:px-5">
-                Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
-              </p>
+              <form action={saveKit} id={KIT_FORM_ID} className="flex flex-col">
+                <div className="flex flex-col">
+                  {KIT_SLOTS.map((slot) => <SlotPicker key={slot} slot={slot} current={view.slots[slot]} />)}
+                </div>
+                <p className="border-t border-rule-2 px-4 py-3 text-xs text-ink-2 lg:px-5">
+                  Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
+                </p>
+                <KitSaveBar formId={KIT_FORM_ID} slots={KIT_SLOTS} />
+              </form>
               <div className="border-t-2 border-rule-2 px-4 py-4 lg:px-5">
                 {view.armband ? (
                   <div className="flex items-center gap-3">
