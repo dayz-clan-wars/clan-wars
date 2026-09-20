@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.28.2] - 2026-09-19
+
 ### Fixed
 
 - Booster kits spawn just above the spot you marked instead of level with it.
