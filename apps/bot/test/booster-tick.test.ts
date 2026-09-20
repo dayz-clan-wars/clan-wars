@@ -38,7 +38,7 @@ describe("boosterTick", () => {
   it("inserts a row per current booster", async () => {
     const since = at("2026-09-18T00:00:00Z");
     const r = await boosterTick(db, { source: source([{ discordId: "1", premiumSince: since }]), now: at("2026-09-19T00:00:00Z"), serverId, kitUrl: "https://example.test/kit" });
-    expect(r).toMatchObject({ boosters: 1, added: 1, removed: 0 });
+    expect(r).toEqual({ boosters: 1, added: 1, removed: 0, prompted: 1 });
     const rows = await db.select().from(discordBoosters);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ discordId: "1", premiumSince: since });
@@ -48,7 +48,7 @@ describe("boosterTick", () => {
     const since = at("2026-09-18T00:00:00Z");
     await boosterTick(db, { source: source([{ discordId: "1", premiumSince: since }]), now: at("2026-09-19T00:00:00Z"), serverId, kitUrl: "https://example.test/kit" });
     const r = await boosterTick(db, { source: source([]), now: at("2026-09-19T00:05:00Z"), serverId, kitUrl: "https://example.test/kit" });
-    expect(r).toMatchObject({ boosters: 0, added: 0, removed: 1 });
+    expect(r).toEqual({ boosters: 0, added: 0, removed: 1, prompted: 0 });
     expect(await db.select().from(discordBoosters)).toEqual([]);
   });
 
@@ -57,7 +57,7 @@ describe("boosterTick", () => {
     const list = [{ discordId: "1", premiumSince: since }];
     await boosterTick(db, { source: source(list), now: at("2026-09-19T00:00:00Z"), serverId, kitUrl: "https://example.test/kit" });
     const r = await boosterTick(db, { source: source(list), now: at("2026-09-19T00:05:00Z"), serverId, kitUrl: "https://example.test/kit" });
-    expect(r).toMatchObject({ boosters: 1, added: 0, removed: 0 });
+    expect(r).toEqual({ boosters: 1, added: 0, removed: 0, prompted: 0 });
   });
 
   // ⚠️ The important one: a Discord outage that resolved to an empty list
@@ -102,6 +102,19 @@ describe("boosterTick", () => {
     await boosterTick(db, { source: source([]), now, serverId, kitUrl: "https://example.test/kit" });
     const back = await boosterTick(db, { source: source([{ discordId: "a", premiumSince: new Date() }]), now, serverId, kitUrl: "https://example.test/kit" });
     expect(back.prompted).toBe(1);
+  });
+
+  // ⚠️ Pins the emit BELOW the delete. With the emit moved above it, this is a
+  // DM to someone who stopped boosting on this very pass — and a DM cannot be
+  // unsent. Every other test in this file passes with the block reordered.
+  it("does not prompt someone who stopped boosting on this pass", async () => {
+    await db.insert(discordBoosters).values({
+      discordId: "gone", premiumSince: now, observedAt: now,
+    });
+    const res = await boosterTick(db, { source: source([]), now, serverId, kitUrl: "https://example.test/kit" });
+    expect(res.prompted).toBe(0);
+    const rows = await db.select().from(clanNotices).where(eq(clanNotices.kind, "booster_kit_unchosen"));
+    expect(rows).toEqual([]);
   });
 
   // ⚠️ The tick's existing warning about a Discord outage resolving to an empty

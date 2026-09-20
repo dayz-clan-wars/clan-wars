@@ -29,7 +29,15 @@ export type BoosterTickResult = { boosters: number; added: number; removed: numb
 export async function boosterTick(db: Database, deps: {
   source: BoosterSource;
   now: Date;
-  serverId: number;
+  // ⚠️ Nullable on purpose. `discord_boosters` is guild-wide state with a
+  // second reader that has nothing to do with any game server —
+  // `boosterKitForDb` (packages/roster/src/booster-kit.ts) reads it for the
+  // `boosting` flag `/kit` shows a real Nitro booster. Only the PROMPT needs
+  // a server id, because only `clan_notices.server_id` is NOT NULL. Gating
+  // the whole tick on a server row would freeze that mirror — and tell a
+  // boosting player, on the page that exists to sell them the perk, that
+  // they are not boosting — whenever no server happens to be active.
+  serverId: number | null;
   kitUrl: string;
 }): Promise<BoosterTickResult> {
   const current = await deps.source.fetchBoosters();
@@ -64,31 +72,39 @@ export async function boosterTick(db: Database, deps: {
   // ⚠️ The kit_prompted_at check is the whole defence against re-prompting.
   // "Boosting with no kit" stays true until they choose, and this tick is
   // level-triggered, so without it every run DMs every kitless booster again.
-  const unprompted = await db.select({ discordId: discordBoosters.discordId })
-    .from(discordBoosters)
-    .where(and(
-      isNull(discordBoosters.kitPromptedAt),
-      notExists(db.select({ one: sql`1` }).from(boosterKits)
-        .where(eq(boosterKits.discordId, discordBoosters.discordId))),
-    ));
-
+  //
+  // ⚠️ Only THIS block is gated on `serverId`, never the mirror above. See
+  // the comment on `serverId` in the deps type: the mirror has a consumer
+  // that has nothing to do with any server, and must keep running with no
+  // active server, missing only the DM until one exists.
   let prompted = 0;
-  for (const b of unprompted) {
-    await db.transaction(async (tx) => {
-      await tx.update(discordBoosters)
-        .set({ kitPromptedAt: deps.now })
-        .where(eq(discordBoosters.discordId, b.discordId));
-      await appendClanNoticeTx(tx, {
-        serverId: deps.serverId,
-        factionId: null,
-        target: "dm",
-        discordTargetId: b.discordId,
-        kind: "booster_kit_unchosen",
-        occurredAt: deps.now,
-        payload: { kitUrl: deps.kitUrl },
+  if (deps.serverId !== null) {
+    const serverId = deps.serverId;
+    const unprompted = await db.select({ discordId: discordBoosters.discordId })
+      .from(discordBoosters)
+      .where(and(
+        isNull(discordBoosters.kitPromptedAt),
+        notExists(db.select({ one: sql`1` }).from(boosterKits)
+          .where(eq(boosterKits.discordId, discordBoosters.discordId))),
+      ));
+
+    for (const b of unprompted) {
+      await db.transaction(async (tx) => {
+        await tx.update(discordBoosters)
+          .set({ kitPromptedAt: deps.now })
+          .where(eq(discordBoosters.discordId, b.discordId));
+        await appendClanNoticeTx(tx, {
+          serverId,
+          factionId: null,
+          target: "dm",
+          discordTargetId: b.discordId,
+          kind: "booster_kit_unchosen",
+          occurredAt: deps.now,
+          payload: { kitUrl: deps.kitUrl },
+        });
       });
-    });
-    prompted++;
+      prompted++;
+    }
   }
 
   return {

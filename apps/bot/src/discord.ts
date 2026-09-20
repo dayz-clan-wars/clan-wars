@@ -3,7 +3,7 @@ import {
   type MessageMentionOptions,
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
@@ -995,25 +995,26 @@ export async function start(cfg: BotConfig): Promise<void> {
     // kit off the server.
     if (Date.now() - lastBoosterAt >= cfg.boosterTickIntervalMs) {
       try {
-        // ⚠️ `discord_boosters`/`booster_kits` carry no server id — a single
-        // guild's boosters, not per-server state — but `clan_notices.server_id`
-        // is NOT NULL, so the prompt needs one to attribute to. The DM itself
-        // names no server, so any active server id is a correct FK target;
-        // with none active (or none registered yet) the prompt, like the rest
-        // of this tick, waits for the next pass rather than picking one.
-        const [srv] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
-        if (srv) {
-          const guild = await client.guilds.fetch(cfg.guildId);
-          const b = await boosterTick(db, {
-            source: guildBoosterSource(guild),
-            now: new Date(),
-            serverId: srv.id,
-            kitUrl: `${cfg.siteBaseUrl}/kit`,
-          });
-          lastBoosterAt = Date.now();
-          if (b.added > 0 || b.removed > 0 || b.prompted > 0) {
-            console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed, ${b.prompted} prompted`);
-          }
+        // ⚠️ The mirror runs unconditionally — `discord_boosters` has a
+        // reader unrelated to any game server (`boosterKitForDb`'s `boosting`
+        // flag on `/kit`), so it must never wait on a `servers` row. Only the
+        // prompt needs a server id, because only `clan_notices.server_id` is
+        // NOT NULL; the DM itself names no server, so any active server id is
+        // a correct FK target. `.orderBy(asc(servers.id))` makes that pick
+        // stable across ticks instead of whatever order Postgres feels like
+        // today — `.limit(1)` alone has no such guarantee.
+        const [srv] = await db.select({ id: servers.id }).from(servers)
+          .where(eq(servers.active, true)).orderBy(asc(servers.id)).limit(1);
+        const guild = await client.guilds.fetch(cfg.guildId);
+        const b = await boosterTick(db, {
+          source: guildBoosterSource(guild),
+          now: new Date(),
+          serverId: srv?.id ?? null,
+          kitUrl: `${cfg.siteBaseUrl}/kit`,
+        });
+        lastBoosterAt = Date.now();
+        if (b.added > 0 || b.removed > 0 || b.prompted > 0) {
+          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed, ${b.prompted} prompted`);
         }
       } catch (err) {
         console.error("booster tick failed", err);

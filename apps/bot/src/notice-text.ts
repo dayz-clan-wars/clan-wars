@@ -152,6 +152,14 @@ export function noticeText(n: { kind: ClanNoticeKind; target: NoticeTarget; occu
   return RENDERERS[n.kind](n.payload, { target: n.target, age: relativeAge(n.occurredAt, now) });
 }
 
+/** A Discord action row carrying link buttons. Concrete on purpose: `unknown[]`
+ *  does not satisfy discord.js's MessageCreateOptions, and a test that reads
+ *  `msg.components[0].components` cannot dereference it. */
+export type NoticeActionRow = {
+  type: 1;
+  components: { type: 2; style: 5; label: string; url: string }[];
+};
+
 /**
  * The components a notice carries, or undefined for the many that carry none.
  *
@@ -159,8 +167,7 @@ export function noticeText(n: { kind: ClanNoticeKind; target: NoticeTarget; occu
  * adds no state to the bot and nothing has to route it. A style 2 button would
  * need a custom_id and a handler for a message whose only job is a link.
  */
-export function noticeComponents(n: { kind: ClanNoticeKind; payload: NoticePayload }):
-  { type: 1; components: { type: 2; style: 5; label: string; url: string }[] }[] | undefined {
+export function noticeComponents(n: { kind: ClanNoticeKind; payload: NoticePayload }): NoticeActionRow[] | undefined {
   if (n.kind !== "booster_kit_unchosen") return undefined;
   const url = n.payload.kitUrl;
   if (typeof url !== "string" || !url) return undefined;

@@ -2,12 +2,12 @@ import type { NoticeStore } from "@factions/roster/internal";
 import { NOTICE_MAX_ATTEMPTS } from "@factions/roster/internal";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { APIEmbed } from "discord.js";
-import { noticeText, noticeComponents } from "./notice-text.js";
+import { noticeText, noticeComponents, type NoticeActionRow } from "./notice-text.js";
 import { achievementEmbed, achievementMention } from "./achievement-embed.js";
 
 /** What one queued row posts: a line, an embed, or both (an achievement in a clan channel is a mention plus the card). `mentionRoleId` is set only when the line opens with that role's ping. */
-export type NoticeMessage = { content: string; embeds?: APIEmbed[]; mentionRoleId?: string; components?: unknown[] };
-export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[], mentionRoleId?: string, components?: unknown[]) => Promise<void>;
+export type NoticeMessage = { content: string; embeds?: APIEmbed[]; mentionRoleId?: string; components?: NoticeActionRow[] };
+export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[], mentionRoleId?: string, components?: NoticeActionRow[]) => Promise<void>;
 
 /**
  * The channel kinds that open with `<@&role>` so every clanmate's phone
