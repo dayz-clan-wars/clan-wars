@@ -1222,3 +1222,14 @@ constant it does not own; `booster-kits.ts`'s object serialisation duplicates
 `supplies.ts`'s `objectLiteral` field order; the new sweep registration has no sweep-level
 test (travel has none either); `emoteLabel(token) ?? token` can render a raw class token as
 an instruction a player cannot perform.
+
+## 42. The booster kit prompt misses boosters who drew a placement sequence
+
+`boosterTick`'s prompt predicate treats "no `booster_kits` row" as "never chose a kit"
+(spec §2.10), but `startKitPlacementDb` (`packages/roster/src/booster-kit.ts:149-151`)
+inserts an all-null `booster_kits` row when a player draws a placement sequence, before any
+item is picked. So a booster who drew a sequence but picked nothing is permanently exempt
+from the prompt. It fails safe — it under-prompts, never over-prompts — and it is
+recoverable, because those boosters keep `kit_prompted_at` null, so a corrected predicate
+reaches them in a later release. The fix is to treat a row with all nine slots null as
+unchosen too. The spec's premise is what is wrong here, not the code.

@@ -142,7 +142,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     ? `⛔ You are banned from the server until ${p.until} — ${p.reason}.`
     : `⛔ You are permanently banned from the server — ${p.reason}.`,
   booster_kit_unchosen: () =>
-    "Thanks for boosting. You have a kit waiting: ten pieces of clothing that respawn "
+    "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
     + "at a spot you pick, every restart, for as long as you keep boosting. Nothing is "
     + "chosen yet, so nothing will spawn.",
 };

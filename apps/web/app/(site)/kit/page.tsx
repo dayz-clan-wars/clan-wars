@@ -157,7 +157,7 @@ export default async function KitPage({ searchParams }: { searchParams: Promise<
                 {KIT_SLOTS.map((slot) => <SlotPicker key={slot} slot={slot} current={view.slots[slot]} />)}
               </div>
               <p className="border-t border-rule-2 px-4 py-3 text-xs text-ink-2 lg:px-5">
-                Item pictures come from the DayZ community wikis, used under CC BY-SA until we make our own.
+                Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
               </p>
               <div className="border-t-2 border-rule-2 px-4 py-4 lg:px-5">
                 {view.armband ? (
