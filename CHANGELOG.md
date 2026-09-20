@@ -16,6 +16,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The placement sequence now shows which emotes the server has already seen,
   ticking down its own clock, the same card you met when you linked.
 - The kit page needs JavaScript now, in exchange for saving as you pick.
+- A pick that does not save now says so at the bottom of the screen, where the
+  saves are confirmed, instead of in a line at the top you would have to scroll
+  up to find.
 
 ### Added
 

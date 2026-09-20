@@ -33,19 +33,59 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
   const [query, setQuery] = useState("");
   const [toast, setToast] = useState<{ text: string; prev: { slot: KitSlot; value: string } } | null>(null);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [inFlight, setInFlight] = useState(0);
   const [help, setHelp] = useState(false);
   const dismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const busy = inFlight > 0;
+
+  /**
+   * The writes, counted rather than flagged.
+   *
+   * ⚠️ `started` is a ticket, and only the NEWEST ticket may apply its answer.
+   * Two picks made in the time one round trip takes can come back in either
+   * order, and the loser landing last would put the older server view on
+   * screen and leave it there until the next poll.
+   *
+   * ⚠️ `inFlight` is a count, not a boolean. A boolean cleared by whichever
+   * write finished first would report "All saved" over a write still running,
+   * and would let the poll below overwrite it.
+   */
+  const writes = useRef({ started: 0, inFlight: 0 });
+  /**
+   * ⚠️ The latest view, readable from a callback without being a dependency
+   * of it. `choose` needs the value a slot held a moment ago; taking that from
+   * its render closure records a value two picks stale when picks come faster
+   * than the network, and Undo then jumps back two steps.
+   */
+  const latest = useRef(view);
+
+  const applyView = useCallback((next: KitView) => { latest.current = next; setView(next); }, []);
 
   useEffect(() => () => { if (dismiss.current) clearTimeout(dismiss.current); }, []);
 
+  /**
+   * ⚠️ A poll answer is thrown away if any write started, or was still
+   * running, while it was in the air. The server re-reads the whole view on
+   * every write, so the poll has nothing to add in that window, and applying
+   * it would put the pre-write state back on screen for up to POLL_MS. The
+   * page must never patch a slot locally and hope; this is the other half of
+   * that promise.
+   */
   const refresh = useCallback(async () => {
+    const at = writes.current.started;
+    if (writes.current.inFlight > 0) return;
     const res = await fetch("/api/kit/status", { cache: "no-store" }).catch(() => null);
     if (!res) return;
     if (res.status === 401) { window.location.assign("/login?next=/kit"); return; }
     if (!res.ok) return;
-    setView((await res.json()) as KitView);
-  }, []);
+    // ⚠️ A session that lapsed mid-poll comes back as the login page's HTML
+    // with a 200, because fetch follows the middleware's redirect. Parsing is
+    // what fails, not the status, so the parse is what has to be guarded.
+    const next = (await res.json().catch(() => null)) as KitView | null;
+    if (!next) return;
+    if (writes.current.started !== at || writes.current.inFlight > 0) return;
+    applyView(next);
+  }, [applyView]);
 
   /**
    * ⚠️ Polls only while a sequence is open. Emotes reach the database in the
@@ -68,27 +108,31 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
    * `failed`, which says the pick did not save rather than blaming the pick.
    */
   const post = useCallback(async (path: string, body?: unknown): Promise<KitView | null> => {
-    setBusy(true);
+    const mine = ++writes.current.started;
+    writes.current.inFlight += 1;
+    setInFlight((n) => n + 1);
+    /** Only the newest write may speak. An overtaken one lands silently. */
+    const newest = () => mine === writes.current.started;
     try {
       const res = await fetch(path, {
         method: "POST",
         headers: body === undefined ? undefined : { "content-type": "application/json" },
         body: body === undefined ? undefined : JSON.stringify(body),
       }).catch(() => null);
-      if (!res) { setRefusal(RESULT_COPY.failed!); return null; }
+      if (!res) { if (newest()) setRefusal(RESULT_COPY.failed!); return null; }
       if (res.status === 401) { window.location.assign("/login?next=/kit"); return null; }
       const out = (await res.json().catch(() => null)) as { ok?: boolean; reason?: string; view?: KitView } | null;
       if (!out?.ok || !out.view) {
-        setRefusal((typeof out?.reason === "string" ? lookupCopy(RESULT_COPY, out.reason) : undefined) ?? RESULT_COPY.failed!);
+        if (newest()) setRefusal((typeof out?.reason === "string" ? lookupCopy(RESULT_COPY, out.reason) : undefined) ?? RESULT_COPY.failed!);
         return null;
       }
-      setRefusal(null);
-      setView(out.view);
+      if (newest()) { setRefusal(null); applyView(out.view); }
       return out.view;
     } finally {
-      setBusy(false);
+      writes.current.inFlight -= 1;
+      setInFlight((n) => n - 1);
     }
-  }, []);
+  }, [applyView]);
 
   const flash = useCallback((text: string, prev: { slot: KitSlot; value: string }) => {
     if (dismiss.current) clearTimeout(dismiss.current);
@@ -98,11 +142,11 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
 
   /** Save one slot. `label` is null for "Nothing", which clears it. */
   const choose = useCallback(async (slot: KitSlot, className: string, label: string | null) => {
-    const prev = { slot, value: view.slots[slot] ?? "" };
+    const prev = { slot, value: latest.current.slots[slot] ?? "" };
     setOpen(null);
     const next = await post("/api/kit/slot", { slot, className });
     if (next) flash(savedToast(slot, label), prev);
-  }, [post, flash, view.slots]);
+  }, [post, flash]);
 
   const undo = useCallback(async () => {
     const prev = toast?.prev;
@@ -112,7 +156,13 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
     await post("/api/kit/slot", { slot: prev.slot, className: prev.value });
   }, [toast, post]);
 
-  const chosen = KIT_GRID_ORDER.filter((s) => view.slots[s]).length;
+  /**
+   * ⚠️ Counted through `entryFor`, exactly as the tiles are drawn, not from
+   * the raw class names. A pick whose item has since left the catalogue draws
+   * as an empty tile; counting it as filled would read "5/9" over four
+   * pictures and send the player looking for a fifth that is not there.
+   */
+  const chosen = catalogue ? KIT_GRID_ORDER.filter((s) => entryFor(catalogue, s, view.slots[s])).length : 0;
 
   return (
     <>
@@ -121,12 +171,6 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
       )}
 
       <Page>
-        {refusal && (
-          <div role="alert" className="mx-4 mt-4 border border-rust bg-surface px-3.5 py-3 text-sm leading-relaxed text-ink lg:mx-8">
-            {refusal}
-          </div>
-        )}
-
         {!view.boosting && <NotBoosting />}
         {view.boosting && view.gamertag === null && <NotLinked />}
 
@@ -152,8 +196,8 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
                 <div className="font-display text-[22px] leading-none text-gold">
                   {chosen}<span className="text-dim">/{KIT_PIECES}</span>
                 </div>
-                <div className="mt-1 font-mono text-[10px] uppercase tracking-[0.14em] text-muted" role="status">
-                  {busy ? "Saving" : "All saved"}
+                <div className={`mt-1 font-mono text-[10px] uppercase tracking-[0.14em] ${refusal ? "text-rust-2" : "text-muted"}`} role="status">
+                  {busy ? "Saving" : refusal ? "Not saved" : "All saved"}
                 </div>
               </div>
             </div>
@@ -183,19 +227,43 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
           current={view.slots[open]}
           query={query}
           onQuery={setQuery}
+          busy={busy}
           onChoose={(className, label) => { void choose(open, className, label); }}
           onClose={() => setOpen(null)}
         />
       )}
 
-      {toast && (
-        <div className="cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border border-rule-3 bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:w-[420px] lg:right-8"
-          style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}>
-          <span className="min-w-0 text-sm leading-snug text-ink">{toast.text}</span>
-          <button type="button" onClick={() => { void undo(); }} disabled={busy}
-            className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
-            Undo
-          </button>
+      {/*
+        ⚠️ One bar, at the bottom, for BOTH outcomes. A pick is made from a
+        sheet that fills a phone screen and closes on the way out, so the
+        player's eyes are at the bottom of the page and nowhere near the top:
+        confirming a save down here and refusing one up there would make a
+        refusal read as "I tapped and nothing happened". A refusal wins the
+        slot, because it is the one the player has to act on.
+
+        ⚠️ `alert` for the refusal, `status` for the save. A save is a polite
+        confirmation of something the player just did; a refusal interrupts.
+      */}
+      {(refusal || toast) && (
+        <div
+          role={refusal ? "alert" : "status"}
+          className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${refusal ? "border-rust bg-surface" : "border-rule-3 bg-surface"}`}
+          style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+        >
+          <span className="min-w-0 text-sm leading-snug text-ink">{refusal ?? toast!.text}</span>
+          {refusal
+            ? (
+              <button type="button" onClick={() => setRefusal(null)}
+                className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+                Dismiss
+              </button>
+            )
+            : (
+              <button type="button" onClick={() => { void undo(); }} disabled={busy}
+                className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
+                Undo
+              </button>
+            )}
         </div>
       )}
     </>

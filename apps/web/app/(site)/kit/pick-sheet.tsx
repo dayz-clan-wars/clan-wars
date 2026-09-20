@@ -57,33 +57,73 @@ function grouped(options: CatalogueEntry[], query: string, current: string | nul
   return multi;
 }
 
-export function PickSheet({ slot, options, current, query, onQuery, onChoose, onClose }: {
+export function PickSheet({ slot, options, current, query, busy, onQuery, onChoose, onClose }: {
   slot: KitSlot;
   options: CatalogueEntry[];
   current: string | null;
   query: string;
+  /** True while a save is in the air. The tiles go quiet rather than queueing picks. */
+  busy: boolean;
   onQuery: (q: string) => void;
   /** An empty string clears the slot. */
   onChoose: (className: string, label: string | null) => void;
   onClose: () => void;
 }) {
+  const panel = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
   const groups = useMemo(() => grouped(options, query, current), [options, query, current]);
 
-  // ⚠️ Escape and the body lock are set up together and torn down together.
-  // A sheet that swallowed the page's scroll and then closed by a route change
-  // would leave the body locked with nothing on screen to unlock it.
+  /**
+   * ⚠️ `onClose` lives in a ref so the effect below can depend on NOTHING.
+   * The parent passes an inline arrow, so the prop is a new function on every
+   * render of the page, and an effect keyed on it re-ran on every poll tick:
+   * the sheet re-focused its search box every five seconds while a sequence
+   * was open, yanking the caret away from a player halfway down the jackets.
+   */
+  const close = useRef(onClose);
+  close.current = onClose;
+
+  /**
+   * Escape, the body lock, the focus trap and the focus return: one effect,
+   * set up and torn down together.
+   *
+   * ⚠️ A sheet that swallowed the page's scroll and then closed by a route
+   * change would leave the body locked with nothing on screen to unlock it,
+   * so the lock cannot live anywhere but here.
+   *
+   * ⚠️ `aria-modal` is a claim, not a mechanism. Without the Tab cycle below
+   * it the browser walks straight out of the dialog into the nine tiles
+   * underneath, which are covered on screen and unreachable by mouse.
+   */
   useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     const previous = document.body.style.overflow;
+    // ⚠️ Captured BEFORE the focus moves, so the tile that opened the sheet
+    // is what gets focus back. Without it a keyboard user is returned to the
+    // top of the document and has to walk down the grid again.
+    const opener = document.activeElement as HTMLElement | null;
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { close.current(); return; }
+      if (e.key !== "Tab" || !panel.current) return;
+      const focusable = panel.current.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), [href], [tabindex]:not([tabindex="-1"])',
+      );
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+
     document.body.style.overflow = "hidden";
     window.addEventListener("keydown", onKey);
     search.current?.focus();
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
+      opener?.focus?.();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div
@@ -93,6 +133,7 @@ export function PickSheet({ slot, options, current, query, onQuery, onChoose, on
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
       <div
+        ref={panel}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sheet-title"
@@ -122,7 +163,7 @@ export function PickSheet({ slot, options, current, query, onQuery, onChoose, on
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-6">
-          <button type="button" aria-pressed={current === null} onClick={() => onChoose("", null)}
+          <button type="button" aria-pressed={current === null} disabled={busy} onClick={() => onChoose("", null)}
             className={`mt-3.5 flex w-full items-center gap-3 bg-frame p-2.5 ${current === null ? "border-2 border-gold" : "border border-rule-2"}`}>
             <span className="flex h-11 w-11 flex-none items-center justify-center border border-dashed border-rule-3 text-base text-muted">&ndash;</span>
             <span className="text-left">
@@ -142,9 +183,9 @@ export function PickSheet({ slot, options, current, query, onQuery, onChoose, on
                 {g.items.map((o) => {
                   const on = current === o.className;
                   return (
-                    <button key={o.className} type="button" aria-pressed={on}
+                    <button key={o.className} type="button" aria-pressed={on} disabled={busy}
                       onClick={() => onChoose(o.className, o.label)}
-                      className={`flex cursor-pointer flex-col gap-1.5 bg-frame p-2 transition-colors ${on ? "border-2 border-gold" : "border border-rule-2 hover:border-rule-3"}`}>
+                      className={`flex cursor-pointer flex-col gap-1.5 bg-frame p-2 transition-colors ${on ? "border-2 border-gold" : "border border-rule-2 hover:border-rule-3"} disabled:opacity-50`}>
                       {o.image
                         ? <img src={`/${o.image}`} alt="" className="h-14 w-full object-contain" />
                         : <span className="flex h-14 w-full items-center justify-center border border-dashed border-rule-2 text-[10px] uppercase tracking-wide text-dim">No art</span>}

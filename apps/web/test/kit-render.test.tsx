@@ -15,9 +15,9 @@ const MASKS: CatalogueEntry[] = [
   { className: "NoArt", label: "Unpictured Mask" },
 ];
 
-const sheet = (current: string | null, query = "") =>
+const sheet = (current: string | null, query = "", busy = false) =>
   renderToStaticMarkup(
-    <PickSheet slot="mask" options={MASKS} current={current} query={query}
+    <PickSheet slot="mask" options={MASKS} current={current} query={query} busy={busy}
       onQuery={() => {}} onChoose={() => {}} onClose={() => {}} />,
   );
 
@@ -69,6 +69,20 @@ describe("the pick sheet", () => {
     const html = sheet(null);
     const nothing = html.match(/<button[^>]*>(?=[\s\S]{0,400}Leave this slot empty)/u)?.[0] ?? "";
     expect(nothing).toContain('aria-pressed="true"');
+  });
+
+  /**
+   * ⚠️ Every tile is a write. Left live through a save, a second tap queues a
+   * second write behind the first, and the two can answer in either order.
+   */
+  it("goes quiet while a save is in the air", () => {
+    const html = sheet(null, "", true);
+    const buttons = html.match(/<button[^>]*>/gu) ?? [];
+    const tiles = buttons.filter((b) => b.includes("aria-pressed"));
+    expect(tiles).not.toHaveLength(0);
+    for (const t of tiles) expect(t).toContain("disabled");
+    // Done is not a write, so it stays live: the sheet must always close.
+    expect(html).toMatch(/<button[^>]*>Done<\/button>/u);
   });
 
   it("filters on the search text, and says so when nothing is left", () => {

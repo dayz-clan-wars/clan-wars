@@ -499,8 +499,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `booster_kits` and `booster_kit_challenges` are outside the order too: each is written
   by its own transaction touching only that table — `booster-kit.ts`'s two upserts into
   `booster_kits` (one per slot save, one row-creating `onConflictDoNothing` before a
-  placement challenge is issued), and `kit-placement-issue.ts`'s close-then-insert into
-  `booster_kit_challenges`, both in `packages/roster`, the picker and emote-challenge
+  placement challenge is issued), `kit-placement-issue.ts`'s close-then-insert into
+  `booster_kit_challenges`, and `booster-kit.ts`'s `cancelKitPlacementDb`, a single
+  statement closing the caller's own open row in that same table (2026-09-19, the kit
+  redesign's Cancel button) — all in `packages/roster`, the picker and emote-challenge
   writer reachable from the website's `/kit` page. Neither table is written by the bot.
   ⚠️ Since the booster kit prompt, `discord_boosters` IS written by the bot inside a
   transaction that also appends to `clan_notices` — `booster-tick.ts` marks

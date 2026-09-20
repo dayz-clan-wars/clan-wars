@@ -260,6 +260,77 @@ describe("the kit writes", () => {
     for (const name of ["slot", "draw", "cancel"] as const) {
       expect([name, ROUTES[name].includes("await freshView(gate.discordId)")]).toEqual([name, true]);
     }
-    expect(FLOW).toContain("setView(out.view);");
+    expect(FLOW).toContain("applyView(out.view);");
+  });
+
+  /**
+   * ⚠️ Two picks made inside one round trip can answer in either order. Only
+   * the newest write may apply its answer, or the loser landing last puts the
+   * older server view on screen and leaves it there until the next poll.
+   */
+  it("lets only the newest write apply its answer", () => {
+    expect(FLOW).toContain("const mine = ++writes.current.started;");
+    expect(FLOW).toContain("const newest = () => mine === writes.current.started;");
+    /**
+     * ⚠️ Every line inside `post` that speaks to the player is checked, not
+     * just the happy one. `post` is sliced out first so the assertion cannot
+     * be satisfied by a `newest()` call somewhere else in the file.
+     */
+    const post = FLOW.slice(FLOW.indexOf("const post = useCallback"), FLOW.indexOf("const flash = useCallback"));
+    const speaks = post.split("\n").filter((l) => /applyView\(|setRefusal\(/u.test(l));
+    expect(speaks).toHaveLength(3);
+    for (const line of speaks) expect([line.trim(), line.includes("newest()")]).toEqual([line.trim(), true]);
+  });
+
+  /**
+   * ⚠️ A poll answered after a write committed, but asked before it, would
+   * put the pre-write state back on screen for up to POLL_MS. The page's own
+   * promise is that it never patches a slot locally and hopes; discarding a
+   * poll that raced a write is the other half of it.
+   */
+  it("throws away a poll answer that raced a write", () => {
+    expect(FLOW).toContain("const at = writes.current.started;");
+    expect(FLOW).toContain("if (writes.current.started !== at || writes.current.inFlight > 0) return;");
+    // ⚠️ A count, not a flag: a boolean cleared by whichever write finished
+    // first would reopen the window this closes.
+    expect(FLOW).toContain("writes.current.inFlight += 1;");
+    expect(FLOW).not.toMatch(/setBusy\(/u);
+  });
+
+  /**
+   * ⚠️ `choose` needs the value a slot held a moment ago. Read from its
+   * render closure, that is two picks stale when picks come faster than the
+   * network, and Undo then jumps back two steps instead of one.
+   */
+  it("reads the value Undo restores from the latest view, not from a closure", () => {
+    expect(FLOW).toContain("const prev = { slot, value: latest.current.slots[slot] ?? \"\" };");
+  });
+
+  /**
+   * ⚠️ A pick is made from a sheet that fills a phone screen and closes on
+   * the way out, so the player is looking at the bottom of the page. A
+   * refusal rendered at the top reads as "I tapped and nothing happened".
+   */
+  it("reports a refusal in the same place it confirms a save", () => {
+    expect(FLOW).toContain("{(refusal || toast) && (");
+    expect(FLOW).toContain('role={refusal ? "alert" : "status"}');
+    expect(FLOW).not.toMatch(/refusal && \(\s*\n\s*<div role="alert" className="mx-4 mt-4/u);
+  });
+
+  /**
+   * ⚠️ The sheet's effect must depend on nothing. The parent hands it an
+   * inline arrow, so an effect keyed on `onClose` re-ran on every render of
+   * the page, including every poll tick, and re-focused the search box every
+   * five seconds while a sequence was open.
+   */
+  it("sets the sheet up once, and hands focus back to the tile that opened it", () => {
+    expect(SHEET).toContain("const close = useRef(onClose);");
+    expect(SHEET).toContain("const opener = document.activeElement as HTMLElement | null;");
+    expect(SHEET).toContain("opener?.focus?.();");
+    // The one effect in the file takes an empty dependency list.
+    expect(SHEET.match(/\}, \[[^\]]*\]\);/gu) ?? []).toContain("}, []);");
+    // ⚠️ aria-modal is a claim, not a mechanism.
+    expect(SHEET).toContain('aria-modal="true"');
+    expect(SHEET).toContain('e.key !== "Tab"');
   });
 });
