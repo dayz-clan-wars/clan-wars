@@ -5,6 +5,25 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Booster kits show what you are choosing. Every item in the picker now has a
+  picture, and each slot is a strip of tiles instead of a dropdown.
+- A booster who has not chosen a kit gets one Discord message about it, with a
+  button that opens the picker.
+
+### Changed
+
+- The kit is reached from your own player page instead of the top menu.
+- 27 items were named wrong in the picker and are corrected. The Ski Masks were
+  labelled Balaclavas, the Hunter Boots were labelled Combat Boots, and the
+  Combat Backpack was labelled an Assault Backpack.
+
+### Fixed
+
+- Two different masks were both labelled "Balaclava (White)", so they could not
+  be told apart.
+
 ## [1.27.0] - 2026-09-19
 
 ### Added

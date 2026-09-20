@@ -13,7 +13,7 @@ import { barFor, isCurrent, menuFor, signInHref } from "../lib/menu";
 describe("menuFor (the phone drawer)", () => {
   it("signed in: your places first, then the boards, then the guide", () => {
     expect(menuFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan", "/kit", "/notifications"],
+      ["/me", "/map", "/clan", "/notifications"],
       ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/war-log"],
       ["/guide"],
     ]);
@@ -32,10 +32,20 @@ describe("menuFor (the phone drawer)", () => {
 describe("barFor (the desktop bar)", () => {
   it("is the short form: Alphas and Seasons live in the scoreboard's own nav", () => {
     expect(barFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan", "/kit"],
+      ["/me", "/map", "/clan"],
       ["/clans", "/players", "/scoreboard", "/war-log", "/guide"],
     ]);
     expect(barFor(false)).toEqual(barFor(true).slice(1));
+  });
+
+  it("⚠️ Kit is in neither nav list", () => {
+    // It means nothing to anyone who is not boosting, and the bar is already
+    // full at 1024px (see the `quiet` flag's own comment in menu.ts). The way
+    // in is the owner's player page instead.
+    for (const signedIn of [true, false]) {
+      const all = [...menuFor(signedIn).flat(), ...barFor(signedIn).flat()];
+      expect(all.filter((i) => i.href === "/kit")).toEqual([]);
+    }
   });
 
   it("does NOT have Notifications — the bell (site-bar.tsx) already covers it, and there is no room for a tenth cell", () => {

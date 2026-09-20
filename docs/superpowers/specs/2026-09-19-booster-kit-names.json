@@ -1,0 +1,1802 @@
+[
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_BDU",
+  "current": "Balaclava (BDU)",
+  "proposed": "Ski Mask (BDU)",
+  "base": "Ski Mask",
+  "src": "wiki",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Beige",
+  "current": "Balaclava (Beige)",
+  "proposed": "Ski Mask (Beige)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Black",
+  "current": "Balaclava (Black)",
+  "proposed": "Ski Mask (Black)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Blackskull",
+  "current": "Balaclava (Blackskull)",
+  "proposed": "Ski Mask (Blackskull)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Blue",
+  "current": "Balaclava (Blue)",
+  "proposed": "Ski Mask (Blue)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Chain",
+  "current": "Balaclava (Chain)",
+  "proposed": "Ski Mask (Chain)",
+  "base": "Ski Mask",
+  "src": "wiki",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Green",
+  "current": "Balaclava (Green)",
+  "proposed": "Ski Mask (Green)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Pig",
+  "current": "Balaclava (Pig)",
+  "proposed": "Ski Mask (Pig)",
+  "base": "Ski Mask",
+  "src": "wiki",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_Pink",
+  "current": "Balaclava (Pink)",
+  "proposed": "Ski Mask (Pink)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "Balaclava3Holes_White",
+  "current": "Balaclava (White)",
+  "proposed": "Balaclava (White)",
+  "base": "Balaclava",
+  "src": "wiki",
+  "page": "Balaclava"
+ },
+ {
+  "slot": "mask",
+  "className": "BalaclavaMask_White",
+  "current": "Balaclava (White)",
+  "proposed": "Ski Mask (White)",
+  "base": "Ski Mask",
+  "src": "both",
+  "page": "Ski Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "Bandana_Blackpattern",
+  "current": "Bandana (Blackpattern)",
+  "proposed": "Bandana (Blackpattern)",
+  "base": "Bandana",
+  "src": "family",
+  "page": null
+ },
+ {
+  "slot": "mask",
+  "className": "Bandana_Camopattern",
+  "current": "Bandana (Camopattern)",
+  "proposed": "Bandana (Camopattern)",
+  "base": "Bandana",
+  "src": "family",
+  "page": null
+ },
+ {
+  "slot": "mask",
+  "className": "Bandana_Greenpattern",
+  "current": "Bandana (Greenpattern)",
+  "proposed": "Bandana (Greenpattern)",
+  "base": "Bandana",
+  "src": "both",
+  "page": "Bandana"
+ },
+ {
+  "slot": "mask",
+  "className": "Bandana_Polkapattern",
+  "current": "Bandana (Polkapattern)",
+  "proposed": "Bandana (Polkapattern)",
+  "base": "Bandana",
+  "src": "family",
+  "page": null
+ },
+ {
+  "slot": "mask",
+  "className": "Bandana_Redpattern",
+  "current": "Bandana (Redpattern)",
+  "proposed": "Bandana (Redpattern)",
+  "base": "Bandana",
+  "src": "family",
+  "page": null
+ },
+ {
+  "slot": "mask",
+  "className": "PaydayMask_Chains",
+  "current": "Chains's Mask (Chains)",
+  "proposed": "Chains Mask",
+  "base": "Chains Mask",
+  "src": "wiki",
+  "page": "Chains Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "PaydayMask_Dallas",
+  "current": "Dallas Mask (Dallas)",
+  "proposed": "Dallas Mask",
+  "base": "Dallas Mask",
+  "src": "wiki",
+  "page": "Dallas Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "HockeyMask",
+  "current": "Hockey Mask",
+  "proposed": "Hockey Mask",
+  "base": "Hockey Mask",
+  "src": "both",
+  "page": "Hockey Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "PaydayMask_Hoxton",
+  "current": "Hoxton Mask (Hoxton)",
+  "proposed": "Hoxton Mask",
+  "base": "Hoxton Mask",
+  "src": "wiki",
+  "page": "Hoxton Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "MimeMask_Female",
+  "current": "Mime Mask (Female)",
+  "proposed": "Mime Mask (Female)",
+  "base": "Mime Mask",
+  "src": "wiki",
+  "page": "Mime Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "MimeMask_Male",
+  "current": "Mime Mask (Male)",
+  "proposed": "Mime Mask (Male)",
+  "base": "Mime Mask",
+  "src": "wiki",
+  "page": "Mime Mask"
+ },
+ {
+  "slot": "mask",
+  "className": "SantasBeard",
+  "current": "Santa Beard",
+  "proposed": "Santa Beard",
+  "base": "Santa Beard",
+  "src": "both",
+  "page": "Santa Beard"
+ },
+ {
+  "slot": "mask",
+  "className": "PaydayMask_Wolf",
+  "current": "Wolf Mask (Wolf)",
+  "proposed": "Wolf Mask",
+  "base": "Wolf Mask",
+  "src": "family-variant",
+  "page": null
+ },
+ {
+  "slot": "eyewear",
+  "className": "SportGlasses_Black",
+  "current": "Athletic Sunglasses (Black)",
+  "proposed": "Athletic Sunglasses (Black)",
+  "base": "Athletic Sunglasses",
+  "src": "both",
+  "page": "Athletic Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SportGlasses_Blue",
+  "current": "Athletic Sunglasses (Blue)",
+  "proposed": "Athletic Sunglasses (Blue)",
+  "base": "Athletic Sunglasses",
+  "src": "both",
+  "page": "Athletic Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SportGlasses_Green",
+  "current": "Athletic Sunglasses (Green)",
+  "proposed": "Athletic Sunglasses (Green)",
+  "base": "Athletic Sunglasses",
+  "src": "both",
+  "page": "Athletic Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SportGlasses_Orange",
+  "current": "Athletic Sunglasses (Orange)",
+  "proposed": "Athletic Sunglasses (Orange)",
+  "base": "Athletic Sunglasses",
+  "src": "both",
+  "page": "Athletic Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "AviatorGlasses",
+  "current": "Aviator Sunglasses",
+  "proposed": "Aviator Sunglasses",
+  "base": "Aviator Sunglasses",
+  "src": "both",
+  "page": "Aviator Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Black",
+  "current": "Carnival Mask (Black)",
+  "proposed": "Carnival Mask (Black)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Blue",
+  "current": "Carnival Mask (Blue)",
+  "proposed": "Carnival Mask (Blue)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Christmas",
+  "current": "Carnival Mask (Christmas)",
+  "proposed": "Carnival Mask (Christmas)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Dead",
+  "current": "Carnival Mask (Dead)",
+  "proposed": "Carnival Mask (Dead)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_NewYears",
+  "current": "Carnival Mask (New Years)",
+  "proposed": "Carnival Mask (New Years)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Red",
+  "current": "Carnival Mask (Red)",
+  "proposed": "Carnival Mask (Red)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Valentines",
+  "current": "Carnival Mask (Valentines)",
+  "proposed": "Carnival Mask (Valentines)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "EyeMask_Yellow",
+  "current": "Carnival Mask (Yellow)",
+  "proposed": "Carnival Mask (Yellow)",
+  "base": "Carnival Mask",
+  "src": "wiki",
+  "page": "Carnival Mask"
+ },
+ {
+  "slot": "eyewear",
+  "className": "DesignerGlasses",
+  "current": "Casual Sunglasses",
+  "proposed": "Casual Sunglasses",
+  "base": "Casual Sunglasses",
+  "src": "both",
+  "page": "Casual Sunglasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "ThickFramesGlasses",
+  "current": "Classic Glasses",
+  "proposed": "Classic Glasses",
+  "base": "Classic Glasses",
+  "src": "both",
+  "page": "Classic Glasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SkiGoggles_BlackYellow",
+  "current": "Ski Goggles (Black Yellow)",
+  "proposed": "Ski Goggles (Black Yellow)",
+  "base": "Ski Goggles",
+  "src": "wiki",
+  "page": "Ski Goggles"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SkiGoggles_WhiteClear",
+  "current": "Ski Goggles (White Clear)",
+  "proposed": "Ski Goggles (White Clear)",
+  "base": "Ski Goggles",
+  "src": "wiki",
+  "page": "Ski Goggles"
+ },
+ {
+  "slot": "eyewear",
+  "className": "SkiGoggles_WhiteDark",
+  "current": "Ski Goggles (White Dark)",
+  "proposed": "Ski Goggles (White Dark)",
+  "base": "Ski Goggles",
+  "src": "wiki",
+  "page": "Ski Goggles"
+ },
+ {
+  "slot": "eyewear",
+  "className": "ThinFramesGlasses",
+  "current": "Slim Glasses",
+  "proposed": "Slim Glasses",
+  "base": "Slim Glasses",
+  "src": "both",
+  "page": "Slim Glasses"
+ },
+ {
+  "slot": "eyewear",
+  "className": "TacticalGoggles",
+  "current": "Tactical Goggles",
+  "proposed": "Tactical Goggles",
+  "base": "Tactical Goggles",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "hat",
+  "className": "ChristmasHeadband_Antlers",
+  "current": "Christmas Headband (Antlers)",
+  "proposed": "Festive Headband (Antlers)",
+  "base": "Festive Headband",
+  "src": "wiki",
+  "page": "Festive Headband"
+ },
+ {
+  "slot": "hat",
+  "className": "ChristmasHeadband_Gingerbread",
+  "current": "Christmas Headband (Gingerbread)",
+  "proposed": "Festive Headband (Gingerbread)",
+  "base": "Festive Headband",
+  "src": "wiki",
+  "page": "Festive Headband"
+ },
+ {
+  "slot": "hat",
+  "className": "ChristmasHeadband_Trees",
+  "current": "Christmas Headband (Trees)",
+  "proposed": "Festive Headband (Trees)",
+  "base": "Festive Headband",
+  "src": "wiki",
+  "page": "Festive Headband"
+ },
+ {
+  "slot": "hat",
+  "className": "CowboyHat_black",
+  "current": "Cowboy Hat (Black)",
+  "proposed": "Cowboy Hat (Black)",
+  "base": "Cowboy Hat",
+  "src": "both",
+  "page": "Cowboy Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "CowboyHat_Brown",
+  "current": "Cowboy Hat (Brown)",
+  "proposed": "Cowboy Hat (Brown)",
+  "base": "Cowboy Hat",
+  "src": "both",
+  "page": "Cowboy Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "CowboyHat_darkBrown",
+  "current": "Cowboy Hat (Dark Brown)",
+  "proposed": "Cowboy Hat (Dark Brown)",
+  "base": "Cowboy Hat",
+  "src": "both",
+  "page": "Cowboy Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "CowboyHat_green",
+  "current": "Cowboy Hat (Green)",
+  "proposed": "Cowboy Hat (Green)",
+  "base": "Cowboy Hat",
+  "src": "both",
+  "page": "Cowboy Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "Headdress_Bear",
+  "current": "Headdress (Bear)",
+  "proposed": "Headdress (Bear)",
+  "base": "Headdress",
+  "src": "wiki",
+  "page": "Headdress"
+ },
+ {
+  "slot": "hat",
+  "className": "Headdress_Fox",
+  "current": "Headdress (Fox)",
+  "proposed": "Headdress (Fox)",
+  "base": "Headdress",
+  "src": "wiki",
+  "page": "Headdress"
+ },
+ {
+  "slot": "hat",
+  "className": "Headdress_Wolf",
+  "current": "Headdress (Wolf)",
+  "proposed": "Headdress (Wolf)",
+  "base": "Headdress",
+  "src": "wiki",
+  "page": "Headdress"
+ },
+ {
+  "slot": "hat",
+  "className": "LeafCrown_Autumn",
+  "current": "Leaf Crown (Autumn)",
+  "proposed": "Leaf Crown (Autumn)",
+  "base": "Leaf Crown",
+  "src": "wiki",
+  "page": "Leaf Crown"
+ },
+ {
+  "slot": "hat",
+  "className": "LeafCrown_Spring",
+  "current": "Leaf Crown (Spring)",
+  "proposed": "Leaf Crown (Spring)",
+  "base": "Leaf Crown",
+  "src": "wiki",
+  "page": "Leaf Crown"
+ },
+ {
+  "slot": "hat",
+  "className": "LeafCrown_Summer",
+  "current": "Leaf Crown (Summer)",
+  "proposed": "Leaf Crown (Summer)",
+  "base": "Leaf Crown",
+  "src": "wiki",
+  "page": "Leaf Crown"
+ },
+ {
+  "slot": "hat",
+  "className": "LeafCrown_Winter",
+  "current": "Leaf Crown (Winter)",
+  "proposed": "Leaf Crown (Winter)",
+  "base": "Leaf Crown",
+  "src": "wiki",
+  "page": "Leaf Crown"
+ },
+ {
+  "slot": "hat",
+  "className": "MilitaryCap_BDU",
+  "current": "Military Cap (BDU)",
+  "proposed": "Military Cap (BDU)",
+  "base": "Military Cap",
+  "src": "wiki",
+  "page": "Military Cap"
+ },
+ {
+  "slot": "hat",
+  "className": "MilitaryCap_Desert",
+  "current": "Military Cap (Desert)",
+  "proposed": "Military Cap (Desert)",
+  "base": "Military Cap",
+  "src": "wiki",
+  "page": "Military Cap"
+ },
+ {
+  "slot": "hat",
+  "className": "MilitaryCap_Woodland",
+  "current": "Military Cap (Woodland)",
+  "proposed": "Military Cap (Woodland)",
+  "base": "Military Cap",
+  "src": "wiki",
+  "page": "Military Cap"
+ },
+ {
+  "slot": "hat",
+  "className": "MorozkoHat",
+  "current": "Morozko Hat",
+  "proposed": "Morozko Hat",
+  "base": "Morozko Hat",
+  "src": "wiki",
+  "page": "Morozko Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "SantasHat",
+  "current": "Santa Hat",
+  "proposed": "Santa Hat",
+  "base": "Santa Hat",
+  "src": "both",
+  "page": "Santa Hat"
+ },
+ {
+  "slot": "hat",
+  "className": "WitchHat",
+  "current": "Witch Hat",
+  "proposed": "Witch Hat",
+  "base": "Witch Hat",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "hat",
+  "className": "WitchHood_Black",
+  "current": "Witch Hood (Black)",
+  "proposed": "Witch Hood (Black)",
+  "base": "Witch Hood",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "hat",
+  "className": "WitchHood_Brown",
+  "current": "Witch Hood (Brown)",
+  "proposed": "Witch Hood (Brown)",
+  "base": "Witch Hood",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "hat",
+  "className": "WitchHood_Red",
+  "current": "Witch Hood (Red)",
+  "proposed": "Witch Hood (Red)",
+  "base": "Witch Hood",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "BDUJacket",
+  "current": "BDU Jacket",
+  "proposed": "BDU Jacket",
+  "base": "BDU Jacket",
+  "src": "both",
+  "page": "BDU Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Black",
+  "current": "Bomber Jacket (Black)",
+  "proposed": "Bomber Jacket (Black)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Blue",
+  "current": "Bomber Jacket (Blue)",
+  "proposed": "Bomber Jacket (Blue)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Brown",
+  "current": "Bomber Jacket (Brown)",
+  "proposed": "Bomber Jacket (Brown)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Grey",
+  "current": "Bomber Jacket (Grey)",
+  "proposed": "Bomber Jacket (Grey)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Maroon",
+  "current": "Bomber Jacket (Maroon)",
+  "proposed": "Bomber Jacket (Maroon)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_Olive",
+  "current": "Bomber Jacket (Olive)",
+  "proposed": "Bomber Jacket (Olive)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BomberJacket_SkyBlue",
+  "current": "Bomber Jacket (Sky Blue)",
+  "proposed": "Bomber Jacket (Sky Blue)",
+  "base": "Bomber Jacket",
+  "src": "both",
+  "page": "Bomber Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "BushlatPoliceJacket_Blue",
+  "current": "Bushlat Jacket (Blue)",
+  "proposed": "Bushlat Jacket (Blue)",
+  "base": "Bushlat Jacket",
+  "src": "wiki",
+  "page": "Bushlat Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "USMCJacket_Desert",
+  "current": "CUU Jacket (Desert)",
+  "proposed": "CUU Jacket (Desert)",
+  "base": "CUU Jacket",
+  "src": "both",
+  "page": "CUU Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "USMCJacket_Woodland",
+  "current": "CUU Jacket (Woodland)",
+  "proposed": "CUU Jacket (Woodland)",
+  "base": "CUU Jacket",
+  "src": "both",
+  "page": "CUU Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "TTsKOJacket_Camo",
+  "current": "Combat Jacket (Camo)",
+  "proposed": "Combat Jacket (Camo)",
+  "base": "Combat Jacket",
+  "src": "both",
+  "page": "Combat Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "DownJacket_Blue",
+  "current": "Down Jacket (Blue)",
+  "proposed": "Down Jacket (Blue)",
+  "base": "Down Jacket",
+  "src": "wiki",
+  "page": "Down Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "DownJacket_Green",
+  "current": "Down Jacket (Green)",
+  "proposed": "Down Jacket (Green)",
+  "base": "Down Jacket",
+  "src": "wiki",
+  "page": "Down Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "DownJacket_Orange",
+  "current": "Down Jacket (Orange)",
+  "proposed": "Down Jacket (Orange)",
+  "base": "Down Jacket",
+  "src": "wiki",
+  "page": "Down Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "DownJacket_Red",
+  "current": "Down Jacket (Red)",
+  "proposed": "Down Jacket (Red)",
+  "base": "Down Jacket",
+  "src": "wiki",
+  "page": "Down Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "M65Jacket_Black",
+  "current": "Field Jacket (Black)",
+  "proposed": "Field Jacket (Black)",
+  "base": "Field Jacket",
+  "src": "both",
+  "page": "Field Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "M65Jacket_Khaki",
+  "current": "Field Jacket (Khaki)",
+  "proposed": "Field Jacket (Khaki)",
+  "base": "Field Jacket",
+  "src": "both",
+  "page": "Field Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "M65Jacket_Olive",
+  "current": "Field Jacket (Olive)",
+  "proposed": "Field Jacket (Olive)",
+  "base": "Field Jacket",
+  "src": "both",
+  "page": "Field Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "M65Jacket_Tan",
+  "current": "Field Jacket (Tan)",
+  "proposed": "Field Jacket (Tan)",
+  "base": "Field Jacket",
+  "src": "both",
+  "page": "Field Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HikingJacket_Black",
+  "current": "Hiking Jacket (Black)",
+  "proposed": "Hiking Jacket (Black)",
+  "base": "Hiking Jacket",
+  "src": "both",
+  "page": "Hiking Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HikingJacket_Blue",
+  "current": "Hiking Jacket (Blue)",
+  "proposed": "Hiking Jacket (Blue)",
+  "base": "Hiking Jacket",
+  "src": "both",
+  "page": "Hiking Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HikingJacket_Green",
+  "current": "Hiking Jacket (Green)",
+  "proposed": "Hiking Jacket (Green)",
+  "base": "Hiking Jacket",
+  "src": "both",
+  "page": "Hiking Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HikingJacket_Red",
+  "current": "Hiking Jacket (Red)",
+  "proposed": "Hiking Jacket (Red)",
+  "base": "Hiking Jacket",
+  "src": "both",
+  "page": "Hiking Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HuntingJacket_Autumn",
+  "current": "Hunter Jacket (Autumn)",
+  "proposed": "Hunter Jacket (Autumn)",
+  "base": "Hunter Jacket",
+  "src": "both",
+  "page": "Hunter Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HuntingJacket_Brown",
+  "current": "Hunter Jacket (Brown)",
+  "proposed": "Hunter Jacket (Brown)",
+  "base": "Hunter Jacket",
+  "src": "both",
+  "page": "Hunter Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HuntingJacket_Spring",
+  "current": "Hunter Jacket (Spring)",
+  "proposed": "Hunter Jacket (Spring)",
+  "base": "Hunter Jacket",
+  "src": "both",
+  "page": "Hunter Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HuntingJacket_Summer",
+  "current": "Hunter Jacket (Summer)",
+  "proposed": "Hunter Jacket (Summer)",
+  "base": "Hunter Jacket",
+  "src": "both",
+  "page": "Hunter Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "HuntingJacket_Winter",
+  "current": "Hunter Jacket (Winter)",
+  "proposed": "Hunter Jacket (Winter)",
+  "base": "Hunter Jacket",
+  "src": "both",
+  "page": "Hunter Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "WinterMilitaryCoat_Brown",
+  "current": "Military Winter Coat (Brown)",
+  "proposed": "Military Winter Coat (Brown)",
+  "base": "Military Winter Coat",
+  "src": "wiki",
+  "page": "Military Winter Coat"
+ },
+ {
+  "slot": "jacket",
+  "className": "WinterMilitaryCoat_DarkGrey",
+  "current": "Military Winter Coat (Dark Grey)",
+  "proposed": "Military Winter Coat (Dark Grey)",
+  "base": "Military Winter Coat",
+  "src": "wiki",
+  "page": "Military Winter Coat"
+ },
+ {
+  "slot": "jacket",
+  "className": "WinterMilitaryCoat_Grey",
+  "current": "Military Winter Coat (Grey)",
+  "proposed": "Military Winter Coat (Grey)",
+  "base": "Military Winter Coat",
+  "src": "wiki",
+  "page": "Military Winter Coat"
+ },
+ {
+  "slot": "jacket",
+  "className": "NavyUniformJacket",
+  "current": "Navy Uniform Jacket",
+  "proposed": "Navy Uniform Jacket",
+  "base": "Navy Uniform Jacket",
+  "src": "wiki",
+  "page": "Navy Uniform Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "OMKJacket_Navy",
+  "current": "OMK Jacket (Navy)",
+  "proposed": "OMK Jacket (Navy)",
+  "base": "OMK Jacket",
+  "src": "wiki",
+  "page": "OMK Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "GorkaEJacket_Autumn",
+  "current": "Patrol Jacket (Autumn)",
+  "proposed": "Patrol Jacket (Autumn)",
+  "base": "Patrol Jacket",
+  "src": "both",
+  "page": "Patrol Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "GorkaEJacket_Flat",
+  "current": "Patrol Jacket (Flat)",
+  "proposed": "Patrol Jacket (Flat)",
+  "base": "Patrol Jacket",
+  "src": "both",
+  "page": "Patrol Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "GorkaEJacket_PautRev",
+  "current": "Patrol Jacket (Paut Rev)",
+  "proposed": "Patrol Jacket (Paut Rev)",
+  "base": "Patrol Jacket",
+  "src": "both",
+  "page": "Patrol Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "GorkaEJacket_Summer",
+  "current": "Patrol Jacket (Summer)",
+  "proposed": "Patrol Jacket (Summer)",
+  "base": "Patrol Jacket",
+  "src": "both",
+  "page": "Patrol Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "GorkaEJacket_Winter",
+  "current": "Patrol Jacket (Winter)",
+  "proposed": "Patrol Jacket (Winter)",
+  "base": "Patrol Jacket",
+  "src": "wiki",
+  "page": "Patrol Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "PilotJacket_Black",
+  "current": "Pilot Jacket (Black)",
+  "proposed": "Pilot Jacket (Black)",
+  "base": "Pilot Jacket",
+  "src": "wiki",
+  "page": "Pilot Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "PilotJacket_Brown",
+  "current": "Pilot Jacket (Brown)",
+  "proposed": "Pilot Jacket (Brown)",
+  "base": "Pilot Jacket",
+  "src": "wiki",
+  "page": "Pilot Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "PilotJacket_Yellow",
+  "current": "Pilot Jacket (Yellow)",
+  "proposed": "Pilot Jacket (Yellow)",
+  "base": "Pilot Jacket",
+  "src": "wiki",
+  "page": "Pilot Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Black",
+  "current": "Quilted Jacket (Black)",
+  "proposed": "Quilted Jacket (Black)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Blue",
+  "current": "Quilted Jacket (Blue)",
+  "proposed": "Quilted Jacket (Blue)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Green",
+  "current": "Quilted Jacket (Green)",
+  "proposed": "Quilted Jacket (Green)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Grey",
+  "current": "Quilted Jacket (Grey)",
+  "proposed": "Quilted Jacket (Grey)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Orange",
+  "current": "Quilted Jacket (Orange)",
+  "proposed": "Quilted Jacket (Orange)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Red",
+  "current": "Quilted Jacket (Red)",
+  "proposed": "Quilted Jacket (Red)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Violet",
+  "current": "Quilted Jacket (Violet)",
+  "proposed": "Quilted Jacket (Violet)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "QuiltedJacket_Yellow",
+  "current": "Quilted Jacket (Yellow)",
+  "proposed": "Quilted Jacket (Yellow)",
+  "base": "Quilted Jacket",
+  "src": "both",
+  "page": "Quilted Jacket"
+ },
+ {
+  "slot": "jacket",
+  "className": "RidersJacket_Black",
+  "current": "Rider Jacket (Black)",
+  "proposed": "Rider Jacket (Black)",
+  "base": "Rider Jacket",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "Sweater_ChristmasBlue",
+  "current": "Sweater (Christmas Blue)",
+  "proposed": "Sweater (Christmas Blue)",
+  "base": "Sweater",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "Sweater_ChristmasGreen",
+  "current": "Sweater (Christmas Green)",
+  "proposed": "Sweater (Christmas Green)",
+  "base": "Sweater",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "Sweater_ChristmasRed",
+  "current": "Sweater (Christmas Red)",
+  "proposed": "Sweater (Christmas Red)",
+  "base": "Sweater",
+  "src": "unknown",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "TacticalShirt_Black",
+  "current": "Tactical Shirt (Black)",
+  "proposed": "Tactical Shirt (Black)",
+  "base": "Tactical Shirt",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "TacticalShirt_Grey",
+  "current": "Tactical Shirt (Grey)",
+  "proposed": "Tactical Shirt (Grey)",
+  "base": "Tactical Shirt",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "TacticalShirt_Olive",
+  "current": "Tactical Shirt (Olive)",
+  "proposed": "Tactical Shirt (Olive)",
+  "base": "Tactical Shirt",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "jacket",
+  "className": "TacticalShirt_Tan",
+  "current": "Tactical Shirt (Tan)",
+  "proposed": "Tactical Shirt (Tan)",
+  "base": "Tactical Shirt",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "pants",
+  "className": "BDUPants",
+  "current": "BDU Pants",
+  "proposed": "BDU Pants",
+  "base": "BDU Pants",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "pants",
+  "className": "USMCPants_Desert",
+  "current": "CUU Pants (Desert)",
+  "proposed": "CUU Pants (Desert)",
+  "base": "CUU Pants",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "pants",
+  "className": "USMCPants_Woodland",
+  "current": "CUU Pants (Woodland)",
+  "proposed": "CUU Pants (Woodland)",
+  "base": "CUU Pants",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "pants",
+  "className": "CargoPants_Beige",
+  "current": "Cargo Pants (Beige)",
+  "proposed": "Cargo Pants (Beige)",
+  "base": "Cargo Pants",
+  "src": "both",
+  "page": "Cargo Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "CargoPants_Black",
+  "current": "Cargo Pants (Black)",
+  "proposed": "Cargo Pants (Black)",
+  "base": "Cargo Pants",
+  "src": "both",
+  "page": "Cargo Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "CargoPants_Blue",
+  "current": "Cargo Pants (Blue)",
+  "proposed": "Cargo Pants (Blue)",
+  "base": "Cargo Pants",
+  "src": "both",
+  "page": "Cargo Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "CargoPants_Green",
+  "current": "Cargo Pants (Green)",
+  "proposed": "Cargo Pants (Green)",
+  "base": "Cargo Pants",
+  "src": "both",
+  "page": "Cargo Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "CargoPants_Grey",
+  "current": "Cargo Pants (Grey)",
+  "proposed": "Cargo Pants (Grey)",
+  "base": "Cargo Pants",
+  "src": "both",
+  "page": "Cargo Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "TTSKOPants",
+  "current": "Combat Pants",
+  "proposed": "Combat Pants",
+  "base": "Combat Pants",
+  "src": "both",
+  "page": "Combat Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "HunterPants_Autumn",
+  "current": "Hunter Pants (Autumn)",
+  "proposed": "Hunter Pants (Autumn)",
+  "base": "Hunter Pants",
+  "src": "both",
+  "page": "Hunter Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "HunterPants_Brown",
+  "current": "Hunter Pants (Brown)",
+  "proposed": "Hunter Pants (Brown)",
+  "base": "Hunter Pants",
+  "src": "both",
+  "page": "Hunter Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "HunterPants_Spring",
+  "current": "Hunter Pants (Spring)",
+  "proposed": "Hunter Pants (Spring)",
+  "base": "Hunter Pants",
+  "src": "both",
+  "page": "Hunter Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "HunterPants_Summer",
+  "current": "Hunter Pants (Summer)",
+  "proposed": "Hunter Pants (Summer)",
+  "base": "Hunter Pants",
+  "src": "both",
+  "page": "Hunter Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "HunterPants_Winter",
+  "current": "Hunter Pants (Winter)",
+  "proposed": "Hunter Pants (Winter)",
+  "base": "Hunter Pants",
+  "src": "both",
+  "page": "Hunter Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "NavyUniformPants",
+  "current": "Navy Uniform Pants",
+  "proposed": "Navy Uniform Pants",
+  "base": "Navy Uniform Pants",
+  "src": "wiki",
+  "page": "Navy Uniform Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "OMKPants_Navy",
+  "current": "OMK Pants (Navy)",
+  "proposed": "OMK Pants (Navy)",
+  "base": "OMK Pants",
+  "src": "wiki",
+  "page": "OMK Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "GorkaPants_Autumn",
+  "current": "Patrol Pants (Autumn)",
+  "proposed": "Patrol Pants (Autumn)",
+  "base": "Patrol Pants",
+  "src": "both",
+  "page": "Patrol Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "GorkaPants_Flat",
+  "current": "Patrol Pants (Flat)",
+  "proposed": "Patrol Pants (Flat)",
+  "base": "Patrol Pants",
+  "src": "both",
+  "page": "Patrol Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "GorkaPants_PautRev",
+  "current": "Patrol Pants (Paut Rev)",
+  "proposed": "Patrol Pants (Paut Rev)",
+  "base": "Patrol Pants",
+  "src": "both",
+  "page": "Patrol Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "GorkaPants_Summer",
+  "current": "Patrol Pants (Summer)",
+  "proposed": "Patrol Pants (Summer)",
+  "base": "Patrol Pants",
+  "src": "both",
+  "page": "Patrol Pants"
+ },
+ {
+  "slot": "pants",
+  "className": "GorkaPants_Winter",
+  "current": "Patrol Pants (Winter)",
+  "proposed": "Patrol Pants (Winter)",
+  "base": "Patrol Pants",
+  "src": "wiki",
+  "page": "Patrol Pants"
+ },
+ {
+  "slot": "boots",
+  "className": "MilitaryBoots_Beige",
+  "current": "Assault Boots (Beige)",
+  "proposed": "Assault Boots (Beige)",
+  "base": "Assault Boots",
+  "src": "both",
+  "page": "Assault Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "MilitaryBoots_Black",
+  "current": "Assault Boots (Black)",
+  "proposed": "Assault Boots (Black)",
+  "base": "Assault Boots",
+  "src": "both",
+  "page": "Assault Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "MilitaryBoots_Bluerock",
+  "current": "Assault Boots (Bluerock)",
+  "proposed": "Assault Boots (Bluerock)",
+  "base": "Assault Boots",
+  "src": "both",
+  "page": "Assault Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "MilitaryBoots_Brown",
+  "current": "Assault Boots (Brown)",
+  "proposed": "Assault Boots (Brown)",
+  "base": "Assault Boots",
+  "src": "both",
+  "page": "Assault Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "MilitaryBoots_Redpunk",
+  "current": "Assault Boots (Redpunk)",
+  "proposed": "Assault Boots (Redpunk)",
+  "base": "Assault Boots",
+  "src": "both",
+  "page": "Assault Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "CombatBoots_Beige",
+  "current": "Combat Boots (Beige)",
+  "proposed": "Hunter Boots (Beige)",
+  "base": "Hunter Boots",
+  "src": "both",
+  "page": "Hunter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "CombatBoots_Black",
+  "current": "Combat Boots (Black)",
+  "proposed": "Hunter Boots (Black)",
+  "base": "Hunter Boots",
+  "src": "both",
+  "page": "Hunter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "CombatBoots_Brown",
+  "current": "Combat Boots (Brown)",
+  "proposed": "Hunter Boots (Brown)",
+  "base": "Hunter Boots",
+  "src": "both",
+  "page": "Hunter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "CombatBoots_Green",
+  "current": "Combat Boots (Green)",
+  "proposed": "Hunter Boots (Green)",
+  "base": "Hunter Boots",
+  "src": "both",
+  "page": "Hunter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "CombatBoots_Grey",
+  "current": "Combat Boots (Grey)",
+  "proposed": "Hunter Boots (Grey)",
+  "base": "Hunter Boots",
+  "src": "both",
+  "page": "Hunter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "JungleBoots_Beige",
+  "current": "Jungle Boots (Beige)",
+  "proposed": "Jungle Boots (Beige)",
+  "base": "Jungle Boots",
+  "src": "both",
+  "page": "Jungle Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "JungleBoots_Black",
+  "current": "Jungle Boots (Black)",
+  "proposed": "Jungle Boots (Black)",
+  "base": "Jungle Boots",
+  "src": "both",
+  "page": "Jungle Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "JungleBoots_Brown",
+  "current": "Jungle Boots (Brown)",
+  "proposed": "Jungle Boots (Brown)",
+  "base": "Jungle Boots",
+  "src": "both",
+  "page": "Jungle Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "JungleBoots_Green",
+  "current": "Jungle Boots (Green)",
+  "proposed": "Jungle Boots (Green)",
+  "base": "Jungle Boots",
+  "src": "both",
+  "page": "Jungle Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "JungleBoots_Olive",
+  "current": "Jungle Boots (Olive)",
+  "proposed": "Jungle Boots (Olive)",
+  "base": "Jungle Boots",
+  "src": "both",
+  "page": "Jungle Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "ColdOperationBoots_Camo",
+  "current": "Military Winter Boots (Camo)",
+  "proposed": "Military Winter Boots (Camo)",
+  "base": "Military Winter Boots",
+  "src": "wiki",
+  "page": "Military Winter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "ColdOperationBoots_Green",
+  "current": "Military Winter Boots (Green)",
+  "proposed": "Military Winter Boots (Green)",
+  "base": "Military Winter Boots",
+  "src": "wiki",
+  "page": "Military Winter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "ColdOperationBoots_Grey",
+  "current": "Military Winter Boots (Grey)",
+  "proposed": "Military Winter Boots (Grey)",
+  "base": "Military Winter Boots",
+  "src": "wiki",
+  "page": "Military Winter Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "TraditionalBoots_Beige",
+  "current": "Traditional Boots (Beige)",
+  "proposed": "Fur Boots (Beige)",
+  "base": "Fur Boots",
+  "src": "wiki",
+  "page": "Fur Boots"
+ },
+ {
+  "slot": "boots",
+  "className": "TraditionalBoots_DarkBrown",
+  "current": "Traditional Boots (Dark Brown)",
+  "proposed": "Fur Boots (Dark Brown)",
+  "base": "Fur Boots",
+  "src": "wiki",
+  "page": "Fur Boots"
+ },
+ {
+  "slot": "gloves",
+  "className": "OMNOGloves_Brown",
+  "current": "Combat Gloves (Brown)",
+  "proposed": "Combat Gloves (Brown)",
+  "base": "Combat Gloves",
+  "src": "both",
+  "page": "Combat Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "OMNOGloves_Gray",
+  "current": "Combat Gloves (Gray)",
+  "proposed": "Combat Gloves (Gray)",
+  "base": "Combat Gloves",
+  "src": "both",
+  "page": "Combat Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "PaddedGloves_Beige",
+  "current": "Padded Gloves (Beige)",
+  "proposed": "Padded Gloves (Beige)",
+  "base": "Padded Gloves",
+  "src": "wiki",
+  "page": "Padded Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "PaddedGloves_Brown",
+  "current": "Padded Gloves (Brown)",
+  "proposed": "Padded Gloves (Brown)",
+  "base": "Padded Gloves",
+  "src": "wiki",
+  "page": "Padded Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "PaddedGloves_Threat",
+  "current": "Padded Gloves (Threat)",
+  "proposed": "Padded Gloves (Threat)",
+  "base": "Padded Gloves",
+  "src": "wiki",
+  "page": "Padded Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "SkiGloves_90s",
+  "current": "Ski Gloves (90s)",
+  "proposed": "Ski Gloves (90s)",
+  "base": "Ski Gloves",
+  "src": "wiki",
+  "page": "Ski Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "SkiGloves_Blue",
+  "current": "Ski Gloves (Blue)",
+  "proposed": "Ski Gloves (Blue)",
+  "base": "Ski Gloves",
+  "src": "wiki",
+  "page": "Ski Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "SkiGloves_Red",
+  "current": "Ski Gloves (Red)",
+  "proposed": "Ski Gloves (Red)",
+  "base": "Ski Gloves",
+  "src": "wiki",
+  "page": "Ski Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "TacticalGloves_Beige",
+  "current": "Tactical Gloves (Beige)",
+  "proposed": "Tactical Gloves (Beige)",
+  "base": "Tactical Gloves",
+  "src": "both",
+  "page": "Tactical Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "TacticalGloves_Black",
+  "current": "Tactical Gloves (Black)",
+  "proposed": "Tactical Gloves (Black)",
+  "base": "Tactical Gloves",
+  "src": "both",
+  "page": "Tactical Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "TacticalGloves_Green",
+  "current": "Tactical Gloves (Green)",
+  "proposed": "Tactical Gloves (Green)",
+  "base": "Tactical Gloves",
+  "src": "both",
+  "page": "Tactical Gloves"
+ },
+ {
+  "slot": "gloves",
+  "className": "WorkingGloves_Beige",
+  "current": "Working Gloves (Beige)",
+  "proposed": "Working Gloves (Beige)",
+  "base": "Working Gloves",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "gloves",
+  "className": "WorkingGloves_Black",
+  "current": "Working Gloves (Black)",
+  "proposed": "Working Gloves (Black)",
+  "base": "Working Gloves",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "gloves",
+  "className": "WorkingGloves_Brown",
+  "current": "Working Gloves (Brown)",
+  "proposed": "Working Gloves (Brown)",
+  "base": "Working Gloves",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "gloves",
+  "className": "WorkingGloves_Yellow",
+  "current": "Working Gloves (Yellow)",
+  "proposed": "Working Gloves (Yellow)",
+  "base": "Working Gloves",
+  "src": "list2020",
+  "page": null
+ },
+ {
+  "slot": "hipPack",
+  "className": "HipPack_Black",
+  "current": "Hip Pack (Black)",
+  "proposed": "Hip Pack (Black)",
+  "base": "Hip Pack",
+  "src": "wiki",
+  "page": "Hip Pack"
+ },
+ {
+  "slot": "hipPack",
+  "className": "HipPack_Green",
+  "current": "Hip Pack (Green)",
+  "proposed": "Hip Pack (Green)",
+  "base": "Hip Pack",
+  "src": "wiki",
+  "page": "Hip Pack"
+ },
+ {
+  "slot": "hipPack",
+  "className": "HipPack_Medical",
+  "current": "Hip Pack (Medical)",
+  "proposed": "Hip Pack (Medical)",
+  "base": "Hip Pack",
+  "src": "wiki",
+  "page": "Hip Pack"
+ },
+ {
+  "slot": "hipPack",
+  "className": "HipPack_Party",
+  "current": "Hip Pack (Party)",
+  "proposed": "Hip Pack (Party)",
+  "base": "Hip Pack",
+  "src": "wiki",
+  "page": "Hip Pack"
+ },
+ {
+  "slot": "backpack",
+  "className": "TortillaBag",
+  "current": "Assault Backpack",
+  "proposed": "Combat Backpack",
+  "base": "Combat Backpack",
+  "src": "both",
+  "page": "Combat Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "TortillaBag_Desert",
+  "current": "Assault Backpack (Desert)",
+  "proposed": "Combat Backpack (Desert)",
+  "base": "Combat Backpack",
+  "src": "family",
+  "page": null
+ },
+ {
+  "slot": "backpack",
+  "className": "TortillaBag_Winter",
+  "current": "Assault Backpack (Winter)",
+  "proposed": "Combat Backpack (Winter)",
+  "base": "Combat Backpack",
+  "src": "wiki",
+  "page": "Combat Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "AliceBag_Black",
+  "current": "Field Backpack (Black)",
+  "proposed": "Field Backpack (Black)",
+  "base": "Field Backpack",
+  "src": "both",
+  "page": "Field Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "AliceBag_Camo",
+  "current": "Field Backpack (Camo)",
+  "proposed": "Field Backpack (Camo)",
+  "base": "Field Backpack",
+  "src": "both",
+  "page": "Field Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "AliceBag_Green",
+  "current": "Field Backpack (Green)",
+  "proposed": "Field Backpack (Green)",
+  "base": "Field Backpack",
+  "src": "both",
+  "page": "Field Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "HuntingBag",
+  "current": "Hunter Backpack",
+  "proposed": "Hunter Backpack",
+  "base": "Hunter Backpack",
+  "src": "both",
+  "page": "Hunter Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "HuntingBag_Hannah",
+  "current": "Hunter Backpack (Hannah)",
+  "proposed": "Hunter Backpack (Hannah)",
+  "base": "Hunter Backpack",
+  "src": "wiki",
+  "page": "Hunter Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "Attack2Bag_Black",
+  "current": "Long Haul Backpack (Black)",
+  "proposed": "Long Haul Backpack (Black)",
+  "base": "Long Haul Backpack",
+  "src": "wiki",
+  "page": "Long Haul Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "Attack2Bag_Green",
+  "current": "Long Haul Backpack (Green)",
+  "proposed": "Long Haul Backpack (Green)",
+  "base": "Long Haul Backpack",
+  "src": "wiki",
+  "page": "Long Haul Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "Attack2Bag_Ttsko",
+  "current": "Long Haul Backpack (Ttsko)",
+  "proposed": "Long Haul Backpack (Ttsko)",
+  "base": "Long Haul Backpack",
+  "src": "wiki",
+  "page": "Long Haul Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "Attack2Bag_Yeger",
+  "current": "Long Haul Backpack (Yeger)",
+  "proposed": "Long Haul Backpack (Yeger)",
+  "base": "Long Haul Backpack",
+  "src": "wiki",
+  "page": "Long Haul Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "CoyoteBag_Brown",
+  "current": "Tactical Backpack (Brown)",
+  "proposed": "Tactical Backpack (Brown)",
+  "base": "Tactical Backpack",
+  "src": "both",
+  "page": "Tactical Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "CoyoteBag_Green",
+  "current": "Tactical Backpack (Green)",
+  "proposed": "Tactical Backpack (Green)",
+  "base": "Tactical Backpack",
+  "src": "both",
+  "page": "Tactical Backpack"
+ },
+ {
+  "slot": "backpack",
+  "className": "CoyoteBag_Winter",
+  "current": "Tactical Backpack (Winter)",
+  "proposed": "Tactical Backpack (Winter)",
+  "base": "Tactical Backpack",
+  "src": "wiki",
+  "page": "Tactical Backpack"
+ }
+]

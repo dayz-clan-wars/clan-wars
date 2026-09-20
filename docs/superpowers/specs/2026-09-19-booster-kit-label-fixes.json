@@ -1,0 +1,140 @@
+[
+ {
+  "className": "BalaclavaMask_BDU",
+  "slot": "mask",
+  "old": "Balaclava (BDU)",
+  "new": "Ski Mask (BDU)"
+ },
+ {
+  "className": "BalaclavaMask_Beige",
+  "slot": "mask",
+  "old": "Balaclava (Beige)",
+  "new": "Ski Mask (Beige)"
+ },
+ {
+  "className": "BalaclavaMask_Black",
+  "slot": "mask",
+  "old": "Balaclava (Black)",
+  "new": "Ski Mask (Black)"
+ },
+ {
+  "className": "BalaclavaMask_Blackskull",
+  "slot": "mask",
+  "old": "Balaclava (Blackskull)",
+  "new": "Ski Mask (Blackskull)"
+ },
+ {
+  "className": "BalaclavaMask_Blue",
+  "slot": "mask",
+  "old": "Balaclava (Blue)",
+  "new": "Ski Mask (Blue)"
+ },
+ {
+  "className": "BalaclavaMask_Chain",
+  "slot": "mask",
+  "old": "Balaclava (Chain)",
+  "new": "Ski Mask (Chain)"
+ },
+ {
+  "className": "BalaclavaMask_Green",
+  "slot": "mask",
+  "old": "Balaclava (Green)",
+  "new": "Ski Mask (Green)"
+ },
+ {
+  "className": "BalaclavaMask_Pig",
+  "slot": "mask",
+  "old": "Balaclava (Pig)",
+  "new": "Ski Mask (Pig)"
+ },
+ {
+  "className": "BalaclavaMask_Pink",
+  "slot": "mask",
+  "old": "Balaclava (Pink)",
+  "new": "Ski Mask (Pink)"
+ },
+ {
+  "className": "BalaclavaMask_White",
+  "slot": "mask",
+  "old": "Balaclava (White)",
+  "new": "Ski Mask (White)"
+ },
+ {
+  "className": "PaydayMask_Chains",
+  "slot": "mask",
+  "old": "Chains's Mask (Chains)",
+  "new": "Chains Mask (Chains)"
+ },
+ {
+  "className": "ChristmasHeadband_Antlers",
+  "slot": "hat",
+  "old": "Christmas Headband (Antlers)",
+  "new": "Festive Headband (Antlers)"
+ },
+ {
+  "className": "ChristmasHeadband_Gingerbread",
+  "slot": "hat",
+  "old": "Christmas Headband (Gingerbread)",
+  "new": "Festive Headband (Gingerbread)"
+ },
+ {
+  "className": "ChristmasHeadband_Trees",
+  "slot": "hat",
+  "old": "Christmas Headband (Trees)",
+  "new": "Festive Headband (Trees)"
+ },
+ {
+  "className": "CombatBoots_Beige",
+  "slot": "boots",
+  "old": "Combat Boots (Beige)",
+  "new": "Hunter Boots (Beige)"
+ },
+ {
+  "className": "CombatBoots_Black",
+  "slot": "boots",
+  "old": "Combat Boots (Black)",
+  "new": "Hunter Boots (Black)"
+ },
+ {
+  "className": "CombatBoots_Brown",
+  "slot": "boots",
+  "old": "Combat Boots (Brown)",
+  "new": "Hunter Boots (Brown)"
+ },
+ {
+  "className": "CombatBoots_Green",
+  "slot": "boots",
+  "old": "Combat Boots (Green)",
+  "new": "Hunter Boots (Green)"
+ },
+ {
+  "className": "CombatBoots_Grey",
+  "slot": "boots",
+  "old": "Combat Boots (Grey)",
+  "new": "Hunter Boots (Grey)"
+ },
+ {
+  "className": "TraditionalBoots_Beige",
+  "slot": "boots",
+  "old": "Traditional Boots (Beige)",
+  "new": "Fur Boots (Beige)"
+ },
+ {
+  "className": "TraditionalBoots_DarkBrown",
+  "slot": "boots",
+  "old": "Traditional Boots (Dark Brown)",
+  "new": "Fur Boots (Dark Brown)"
+ },
+ {
+  "className": "TortillaBag",
+  "slot": "backpack",
+  "old": "Assault Backpack",
+  "new": "Combat Backpack"
+ },
+ {
+  "className": "TortillaBag_Winter",
+  "slot": "backpack",
+  "old": "Assault Backpack (Winter)",
+  "new": "Combat Backpack (Winter)"
+ }
+]

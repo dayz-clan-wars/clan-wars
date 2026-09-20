@@ -1259,6 +1259,20 @@ export const discordBoosters = pgTable("discord_boosters", {
   discordId: text("discord_id").primaryKey(),
   premiumSince: timestamp("premium_since", { withTimezone: true }).notNull(),
   observedAt: timestamp("observed_at", { withTimezone: true }).notNull(),
+  /**
+   * When we prompted this booster to choose a kit, or null if we have not.
+   *
+   * ⚠️ The ONLY thing stopping the prompt going out on every tick. "A booster
+   * with no kit" stays true until they choose one, and boosterTick is
+   * level-triggered by design, so without this the bot DMs every kitless
+   * booster every run, forever.
+   *
+   * ⚠️ On this table rather than in one of its own so that it is deleted with
+   * the row when someone stops boosting. Boosting again later is a new
+   * relationship and earns a new prompt, which is correct — they may never
+   * have seen the first one.
+   */
+  kitPromptedAt: timestamp("kit_prompted_at", { withTimezone: true }),
 });
 
 /**

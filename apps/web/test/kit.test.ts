@@ -129,6 +129,17 @@ describe("the kit page's three states", () => {
   });
 });
 
+describe("the kit page's carousel", () => {
+  it("renders the picker as image tiles, not a select", async () => {
+    const mod = await import("../app/(site)/kit/page");
+    const src = await import("node:fs/promises").then((fs) =>
+      fs.readFile(new URL("../app/(site)/kit/page.tsx", import.meta.url), "utf8"));
+    expect(src).not.toContain("<select");
+    expect(src).toContain("ItemCarousel");
+    expect(mod).toBeDefined();
+  });
+});
+
 describe("the kit actions", () => {
   it("re-checks the session and the booster state inside the action, not just at render", () => {
     // ⚠️ A server action is a POST endpoint anyone can call. Rendering the

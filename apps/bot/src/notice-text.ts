@@ -141,9 +141,35 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   ban_applied: (p) => p.until
     ? `⛔ You are banned from the server until ${p.until} — ${p.reason}.`
     : `⛔ You are permanently banned from the server — ${p.reason}.`,
+  booster_kit_unchosen: () =>
+    "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
+    + "at a spot you pick, every restart, for as long as you keep boosting. Nothing is "
+    + "chosen yet, so nothing will spawn.",
 };
 
 /** `RENDERERS[n.kind]`, fed the age computed from `occurredAt` and `now`. */
 export function noticeText(n: { kind: ClanNoticeKind; target: NoticeTarget; occurredAt: Date; payload: NoticePayload }, now: Date): string {
   return RENDERERS[n.kind](n.payload, { target: n.target, age: relativeAge(n.occurredAt, now) });
+}
+
+/** A Discord action row carrying link buttons. Concrete on purpose: `unknown[]`
+ *  does not satisfy discord.js's MessageCreateOptions, and a test that reads
+ *  `msg.components[0].components` cannot dereference it. */
+export type NoticeActionRow = {
+  type: 1;
+  components: { type: 2; style: 5; label: string; url: string }[];
+};
+
+/**
+ * The components a notice carries, or undefined for the many that carry none.
+ *
+ * ⚠️ A URL button (style 5) on purpose: it needs no interaction handler, so it
+ * adds no state to the bot and nothing has to route it. A style 2 button would
+ * need a custom_id and a handler for a message whose only job is a link.
+ */
+export function noticeComponents(n: { kind: ClanNoticeKind; payload: NoticePayload }): NoticeActionRow[] | undefined {
+  if (n.kind !== "booster_kit_unchosen") return undefined;
+  const url = n.payload.kitUrl;
+  if (typeof url !== "string" || !url) return undefined;
+  return [{ type: 1, components: [{ type: 2, style: 5, label: "Choose your kit", url }] }];
 }

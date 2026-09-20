@@ -13,6 +13,7 @@ import {
   Page, PageHead, Body, Panel, PanelBody, Notice, SessionLost,
   btnPrimary, btnSecondary, field, fieldLabel, kicker, link,
 } from "@/app/components/ui";
+import { ItemCarousel } from "./item-carousel";
 import { saveKit, startPlacement } from "./actions";
 
 export const metadata: Metadata = {
@@ -36,7 +37,7 @@ function GroundRules() {
 }
 
 /**
- * One slot: a select of everything the catalogue allows there, and a Save.
+ * One slot: a carousel of everything the catalogue allows there, and a Save.
  *
  * Nine separate forms rather than one, because a save is one slot (the write
  * behind it takes one slot too). Each form works with no JavaScript, which is
@@ -47,14 +48,11 @@ function SlotPicker({ slot, current }: { slot: KitSlot; current: string | null }
   return (
     <form action={saveKit} className="flex flex-col gap-2 border-t border-rule-2 px-4 py-4 first:border-t-0 lg:px-5">
       <input type="hidden" name="slot" value={slot} />
-      <label className={fieldLabel} htmlFor={`slot-${slot}`}>{SLOT_LABELS[slot]}</label>
-      <div className="flex flex-wrap items-center gap-3">
-        <select id={`slot-${slot}`} name="className" defaultValue={current ?? ""} className={`${field.replace("mt-1 ", "")} max-w-[26rem] flex-1`}>
-          <option value="">Nothing in this slot</option>
-          {options.map((o) => <option key={o.className} value={o.className}>{o.label}</option>)}
-        </select>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <span className={fieldLabel} id={`slot-${slot}-label`}>{SLOT_LABELS[slot]}</span>
         <button type="submit" className={btnSecondary}>Save</button>
       </div>
+      <ItemCarousel slot={slot} options={options} current={current} />
     </form>
   );
 }
@@ -158,6 +156,9 @@ export default async function KitPage({ searchParams }: { searchParams: Promise<
               <div className="flex flex-col">
                 {KIT_SLOTS.map((slot) => <SlotPicker key={slot} slot={slot} current={view.slots[slot]} />)}
               </div>
+              <p className="border-t border-rule-2 px-4 py-3 text-xs text-ink-2 lg:px-5">
+                Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
+              </p>
               <div className="border-t-2 border-rule-2 px-4 py-4 lg:px-5">
                 {view.armband ? (
                   <div className="flex items-center gap-3">

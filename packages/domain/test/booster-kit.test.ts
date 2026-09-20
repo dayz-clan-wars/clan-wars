@@ -40,6 +40,50 @@ it("the committed catalogue is valid", () => {
   expect(() => loadCatalogue(catalogue)).not.toThrow();
 });
 
+it("accepts an entry carrying a well-formed image path", () => {
+  const withImage = { ...GOOD, mask: [{ className: "GasMask", label: "Gas Mask", image: "items/GasMask.webp" }] };
+  expect(loadCatalogue(withImage).mask[0]!.image).toBe("items/GasMask.webp");
+});
+
+it("accepts an entry with no image at all", () => {
+  expect(loadCatalogue(GOOD).mask[0]!.image).toBeUndefined();
+});
+
+it("throws on an image that is not a string", () => {
+  const bad = { ...GOOD, mask: [{ className: "GasMask", label: "Gas Mask", image: 7 }] };
+  expect(() => loadCatalogue(bad)).toThrow(/GasMask/);
+});
+
+it("throws on an image path that does not match its class name", () => {
+  const bad = { ...GOOD, mask: [{ className: "GasMask", label: "Gas Mask", image: "items/Other.webp" }] };
+  expect(() => loadCatalogue(bad)).toThrow(/GasMask/);
+});
+
+// ⚠️ The guard this closes: "Balaclava (White)" was the label of BOTH
+// Balaclava3Holes_White and BalaclavaMask_White in production. Unique class
+// names, identical text, and a booster cannot tell the options apart.
+it("throws on a duplicate label within a slot", () => {
+  const dup = { ...GOOD, mask: [
+    { className: "GasMask", label: "Gas Mask" },
+    { className: "OtherMask", label: "Gas Mask" },
+  ] };
+  expect(() => loadCatalogue(dup)).toThrow(/Gas Mask/);
+});
+
+it("the committed catalogue has no duplicate label in any slot", () => {
+  const c = loadCatalogue(catalogue);
+  for (const slot of KIT_SLOTS) {
+    const labels = c[slot].map((e) => e.label);
+    expect(new Set(labels).size, slot).toBe(labels.length);
+  }
+});
+
+it("every committed entry carries an image", () => {
+  const c = loadCatalogue(catalogue);
+  const missing = KIT_SLOTS.flatMap((s) => c[s].filter((e) => !e.image).map((e) => e.className));
+  expect(missing).toEqual([]);
+});
+
 describe("boosterCatalogue()", () => {
   it("uses the package's own asset and validates it", async () => {
     const { boosterCatalogue } = await import("../src/booster-catalogue");

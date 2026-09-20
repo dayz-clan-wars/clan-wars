@@ -3,7 +3,7 @@ import {
   type MessageMentionOptions,
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
-import { and, eq, isNotNull } from "drizzle-orm";
+import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore } from "@factions/verification";
@@ -511,7 +511,7 @@ export function createChannelPoster(
  * `PgNoticeStore.markAttempt` exists for.
  */
 export function createNoticeSender(client: Client): NoticeSender {
-  return async (target, discordTargetId, content, embeds, mentionRoleId) => {
+  return async (target, discordTargetId, content, embeds, mentionRoleId, components) => {
     // ⚠️ `content: ""` with embeds is a valid message; `content: ""` alone is
     // rejected by Discord — so the key is dropped when empty, never sent blank.
     //
@@ -524,6 +524,7 @@ export function createNoticeSender(client: Client): NoticeSender {
     const message = {
       ...(content ? { content } : {}),
       ...(embeds?.length ? { embeds } : {}),
+      ...(components?.length ? { components } : {}),
       ...(mentionRoleId ? { allowedMentions: { parse: ["users" as const], roles: [mentionRoleId] } } : {}),
     };
     if (target === "dm") {
@@ -994,11 +995,26 @@ export async function start(cfg: BotConfig): Promise<void> {
     // kit off the server.
     if (Date.now() - lastBoosterAt >= cfg.boosterTickIntervalMs) {
       try {
+        // ⚠️ The mirror runs unconditionally — `discord_boosters` has a
+        // reader unrelated to any game server (`boosterKitForDb`'s `boosting`
+        // flag on `/kit`), so it must never wait on a `servers` row. Only the
+        // prompt needs a server id, because only `clan_notices.server_id` is
+        // NOT NULL; the DM itself names no server, so any active server id is
+        // a correct FK target. `.orderBy(asc(servers.id))` makes that pick
+        // stable across ticks instead of whatever order Postgres feels like
+        // today — `.limit(1)` alone has no such guarantee.
+        const [srv] = await db.select({ id: servers.id }).from(servers)
+          .where(eq(servers.active, true)).orderBy(asc(servers.id)).limit(1);
         const guild = await client.guilds.fetch(cfg.guildId);
-        const b = await boosterTick(db, { source: guildBoosterSource(guild), now: new Date() });
+        const b = await boosterTick(db, {
+          source: guildBoosterSource(guild),
+          now: new Date(),
+          serverId: srv?.id ?? null,
+          kitUrl: `${cfg.siteBaseUrl}/kit`,
+        });
         lastBoosterAt = Date.now();
-        if (b.added > 0 || b.removed > 0) {
-          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed`);
+        if (b.added > 0 || b.removed > 0 || b.prompted > 0) {
+          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed, ${b.prompted} prompted`);
         }
       } catch (err) {
         console.error("booster tick failed", err);

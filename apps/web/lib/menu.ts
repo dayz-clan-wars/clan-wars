@@ -30,10 +30,6 @@ const MINE: readonly MenuItem[] = [
   { label: "You", href: "/me", badge: "you" },
   { label: "Map", href: "/map" },
   { label: "Your clan", href: "/clan", badge: "clan" },
-  // ⚠️ `quiet`, like the guide: the bar is full at 1024px (see the flag on
-  // MenuItem), and a fourth cell here pushes Sign out off the edge. It is a
-  // full item in the drawer, which is where a phone reaches it.
-  { label: "Kit", href: "/kit", quiet: true },
 ];
 
 /**
@@ -48,7 +44,6 @@ const MINE_LONG: readonly MenuItem[] = [
   { label: "You", href: "/me", badge: "you" },
   { label: "Map", href: "/map" },
   { label: "Your clan", href: "/clan", badge: "clan" },
-  { label: "Booster kit", href: "/kit" },
   { label: "Notifications", href: "/notifications" },
 ];
 

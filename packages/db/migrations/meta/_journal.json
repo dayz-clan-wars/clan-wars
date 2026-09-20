@@ -309,6 +309,13 @@
       "when": 1789841081805,
       "tag": "0043_easy_toro",
       "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1789862245153,
+      "tag": "0044_wet_madripoor",
+      "breakpoints": true
     }
   ]
 }
