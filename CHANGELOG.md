@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.29.0] - 2026-09-19
+
 ### Changed
 
 - The booster kit page is rebuilt. Your nine pieces are a grid you can see at a
