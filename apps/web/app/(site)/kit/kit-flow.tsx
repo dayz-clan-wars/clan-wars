@@ -126,7 +126,13 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
         if (newest()) setRefusal((typeof out?.reason === "string" ? lookupCopy(RESULT_COPY, out.reason) : undefined) ?? RESULT_COPY.failed!);
         return null;
       }
-      if (newest()) { setRefusal(null); applyView(out.view); }
+      // ⚠️ An overtaken write returns NULL, not its view. `choose` raises the
+      // "Saved" toast off this return value, and a toast for a write whose
+      // view was discarded would offer an Undo keyed to the wrong pick.
+      // Every arm of this function now falls silent together.
+      if (!newest()) return null;
+      setRefusal(null);
+      applyView(out.view);
       return out.view;
     } finally {
       writes.current.inFlight -= 1;
@@ -196,7 +202,13 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
                 <div className="font-display text-[22px] leading-none text-gold">
                   {chosen}<span className="text-dim">/{KIT_PIECES}</span>
                 </div>
-                <div className={`mt-1 font-mono text-[10px] uppercase tracking-[0.14em] ${refusal ? "text-rust-2" : "text-muted"}`} role="status">
+                {/*
+                  ⚠️ NOT a live region, deliberately. The bar at the bottom of
+                  the screen announces every save and every refusal already,
+                  and a second `role="status"` carrying a shorter version of
+                  the same news makes a screen reader say it twice.
+                */}
+                <div className={`mt-1 font-mono text-[10px] uppercase tracking-[0.14em] ${refusal ? "text-rust-2" : "text-muted"}`}>
                   {busy ? "Saving" : refusal ? "Not saved" : "All saved"}
                 </div>
               </div>
@@ -244,29 +256,47 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
         ⚠️ `alert` for the refusal, `status` for the save. A save is a polite
         confirmation of something the player just did; a refusal interrupts.
       */}
-      {(refusal || toast) && (
-        <div
-          role={refusal ? "alert" : "status"}
-          className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${refusal ? "border-rust bg-surface" : "border-rule-3 bg-surface"}`}
-          style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
-        >
-          <span className="min-w-0 text-sm leading-snug text-ink">{refusal ?? toast!.text}</span>
-          {refusal
-            ? (
-              <button type="button" onClick={() => setRefusal(null)}
-                className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
-                Dismiss
-              </button>
-            )
-            : (
-              <button type="button" onClick={() => { void undo(); }} disabled={busy}
-                className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
-                Undo
-              </button>
-            )}
-        </div>
+      {refusal !== null && (
+        <Bar role="alert" tone="rust">
+          <span className="min-w-0 text-sm leading-snug text-ink">{refusal}</span>
+          <button type="button" onClick={() => setRefusal(null)}
+            className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
+            Dismiss
+          </button>
+        </Bar>
+      )}
+      {refusal === null && toast !== null && (
+        <Bar role="status" tone="plain">
+          <span className="min-w-0 text-sm leading-snug text-ink">{toast.text}</span>
+          <button type="button" onClick={() => { void undo(); }} disabled={busy}
+            className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
+            Undo
+          </button>
+        </Bar>
       )}
     </>
+  );
+}
+
+/**
+ * The bar along the bottom of the screen, where this page says everything it
+ * has to say about a write.
+ *
+ * ⚠️ A refusal and a save render as SEPARATE elements, never as one element
+ * whose `role` flips. React would reuse the node, and a live region is
+ * registered by most screen readers when it is inserted: changing `role` on
+ * one already on screen is announced inconsistently or not at all, which
+ * would silence the refusal, the one message here that has to interrupt.
+ */
+function Bar({ role, tone, children }: { role: "alert" | "status"; tone: "rust" | "plain"; children: React.ReactNode }) {
+  return (
+    <div
+      role={role}
+      className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${tone === "rust" ? "border-rust" : "border-rule-3"}`}
+      style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
+    >
+      {children}
+    </div>
   );
 }
 

@@ -28,6 +28,21 @@ const ROUTES = {
   cancel: read("app", "api", "kit", "cancel", "route.ts"),
 };
 
+/**
+ * A source file with its comments dropped.
+ *
+ * ⚠️ For assertions that COUNT something. This file's comments quote the code
+ * they explain, so a grep over the raw text finds a `role="status"` written
+ * to explain why there is only one of them, and the count is off by the
+ * number of times the rule was documented.
+ */
+const code = (text: string): string =>
+  text
+    // Block comments, including the `{/* ... */}` form JSX uses. Spanning
+    // lines, so a filter over line starts does not see the body of one.
+    .replace(/\/\*[\s\S]*?\*\//gu, "")
+    .split("\n").filter((l) => !/^\s*\/\//u.test(l)).join("\n");
+
 /** Every file a player's words can come out of. */
 const SOURCES = { "page.tsx": PAGE, "kit-flow.tsx": FLOW, "pick-sheet.tsx": SHEET, "sequence-card.tsx": CARD, "kit-copy.ts": COPY, "kit-view.ts": VIEW } as const;
 /** Every string a player reads on this page, in one list. */
@@ -277,9 +292,19 @@ describe("the kit writes", () => {
      * be satisfied by a `newest()` call somewhere else in the file.
      */
     const post = FLOW.slice(FLOW.indexOf("const post = useCallback"), FLOW.indexOf("const flash = useCallback"));
-    const speaks = post.split("\n").filter((l) => /applyView\(|setRefusal\(/u.test(l));
-    expect(speaks).toHaveLength(3);
-    for (const line of speaks) expect([line.trim(), line.includes("newest()")]).toEqual([line.trim(), true]);
+    const speaks = post.split("\n").filter((l) => /applyView\(|setRefusal\(|flash\(/u.test(l));
+    expect(speaks.length).toBeGreaterThan(0);
+    /**
+     * ⚠️ Matched on the GUARD, not on the words `newest()` appearing on the
+     * line: `if (!newest()) setRefusal(...)` mentions it too and is the exact
+     * inversion this exists to catch. An early `if (!newest()) return null;`
+     * counts, because everything after it is gated by definition.
+     */
+    const gate = /if \(newest\(\)\)|if \(!newest\(\)\) return/u;
+    for (const line of speaks) {
+      const guarded = gate.test(line) || gate.test(post.slice(0, post.indexOf(line)).split("\n").slice(-6).join("\n"));
+      expect([line.trim(), guarded]).toEqual([line.trim(), true]);
+    }
   });
 
   /**
@@ -312,9 +337,25 @@ describe("the kit writes", () => {
    * refusal rendered at the top reads as "I tapped and nothing happened".
    */
   it("reports a refusal in the same place it confirms a save", () => {
-    expect(FLOW).toContain("{(refusal || toast) && (");
-    expect(FLOW).toContain('role={refusal ? "alert" : "status"}');
-    expect(FLOW).not.toMatch(/refusal && \(\s*\n\s*<div role="alert" className="mx-4 mt-4/u);
+    expect(FLOW).toContain("{refusal !== null && (");
+    expect(FLOW).toContain('<Bar role="alert" tone="rust">');
+    expect(FLOW).toContain('<Bar role="status" tone="plain">');
+    /**
+     * ⚠️ Every live region on this page is one of those two bars. A `role`
+     * anywhere else is either a second announcement of the same news or a
+     * refusal rendered somewhere the player is not looking, which is the bug
+     * this replaced.
+     */
+    expect(code(FLOW).match(/role="alert"/gu) ?? []).toHaveLength(1);
+    expect(code(FLOW).match(/role="status"/gu) ?? []).toHaveLength(1);
+    // The only computed role is the one `Bar` passes straight through.
+    expect(code(FLOW).match(/role=\{[^}]*\}/gu) ?? []).toEqual(["role={role}"]);
+    /**
+     * ⚠️ Two elements, never one element whose role flips: React reuses the
+     * node, and a live region whose role changes after insertion is
+     * announced inconsistently or not at all.
+     */
+    expect(FLOW).not.toMatch(/role=\{[^}]*\?/u);
   });
 
   /**
@@ -327,8 +368,10 @@ describe("the kit writes", () => {
     expect(SHEET).toContain("const close = useRef(onClose);");
     expect(SHEET).toContain("const opener = document.activeElement as HTMLElement | null;");
     expect(SHEET).toContain("opener?.focus?.();");
-    // The one effect in the file takes an empty dependency list.
-    expect(SHEET.match(/\}, \[[^\]]*\]\);/gu) ?? []).toContain("}, []);");
+    // ⚠️ Every dependency list in the file, not just "some empty one": the
+    // `[]` that matters could otherwise be a second effect added beside a
+    // first that had quietly gone back to depending on `onClose`.
+    expect(SHEET.match(/\}, \[[^\]]*\]\);/gu) ?? []).toEqual(["}, []);"]);
     // ⚠️ aria-modal is a claim, not a mechanism.
     expect(SHEET).toContain('aria-modal="true"');
     expect(SHEET).toContain('e.key !== "Tab"');

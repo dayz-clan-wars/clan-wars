@@ -79,10 +79,20 @@ describe("the pick sheet", () => {
     const html = sheet(null, "", true);
     const buttons = html.match(/<button[^>]*>/gu) ?? [];
     const tiles = buttons.filter((b) => b.includes("aria-pressed"));
-    expect(tiles).not.toHaveLength(0);
-    for (const t of tiles) expect(t).toContain("disabled");
+    expect(tiles).toHaveLength(MASKS.length + 1);
+    // ⚠️ The ATTRIBUTE, not the substring. Every tile's class list ends in
+    // `disabled:opacity-50`, so `toContain("disabled")` passed whether or not
+    // the tiles were actually disabled, which is the one thing this pins.
+    for (const t of tiles) expect(t).toMatch(/\sdisabled=""/u);
     // Done is not a write, so it stays live: the sheet must always close.
-    expect(html).toMatch(/<button[^>]*>Done<\/button>/u);
+    expect(html).toMatch(/<button(?![^>]*\sdisabled="")[^>]*>Done<\/button>/u);
+  });
+
+  /** ⚠️ The inverse, so the assertion above cannot pass by disabling nothing. */
+  it("leaves the tiles live when no save is running", () => {
+    const tiles = (sheet(null).match(/<button[^>]*>/gu) ?? []).filter((b) => b.includes("aria-pressed"));
+    expect(tiles).toHaveLength(MASKS.length + 1);
+    for (const t of tiles) expect(t).not.toMatch(/\sdisabled=""/u);
   });
 
   it("filters on the search text, and says so when nothing is left", () => {
@@ -182,6 +192,18 @@ describe("the kit page, rendered", () => {
     expect(html).toContain("items/GorkaEJacket_Summer.webp");
     expect(html).toContain("Patrol Jacket (Summer)");
     expect(html).toContain('>1<span class="text-dim">/9</span>');
+  });
+
+  /**
+   * ⚠️ The count is taken through the same lookup that draws the tiles. A
+   * pick whose item has since left the catalogue draws as an empty tile, and
+   * counting it as worn would read "1/9" over nine empty tiles and send the
+   * player looking for a piece that is not there.
+   */
+  it("does not count a pick whose item has left the catalogue", () => {
+    const html = flow({ slots: { ...EMPTY_SLOTS, jacket: "RetiredJacket_Gone" } });
+    expect(html).toContain('>0<span class="text-dim">/9</span>');
+    expect(html.match(/>Empty</gu) ?? []).toHaveLength(KIT_SLOTS.length);
   });
 
   /**

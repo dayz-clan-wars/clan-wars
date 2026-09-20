@@ -81,7 +81,10 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
    * was open, yanking the caret away from a player halfway down the jackets.
    */
   const close = useRef(onClose);
-  close.current = onClose;
+  // ⚠️ Written in an effect, not during render. A render React throws away
+  // still runs its body, so a render-phase ref write can publish a callback
+  // from a render that never committed.
+  useEffect(() => { close.current = onClose; });
 
   /**
    * Escape, the body lock, the focus trap and the focus return: one effect,
@@ -111,8 +114,15 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
       if (!first || !last) return;
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      const here = document.activeElement;
+      // ⚠️ The hole every naive trap has: focus sitting on <body> because the
+      // player clicked a gap in the panel, or because the tile they were on
+      // went `disabled` when a save started. Neither is `first` nor `last`, so
+      // a trap that only guards those two ends lets Tab walk into the nine
+      // tiles behind the sheet, which are covered on screen and unreachable.
+      if (!here || !panel.current.contains(here)) { e.preventDefault(); first.focus(); return; }
+      if (e.shiftKey && here === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && here === last) { e.preventDefault(); first.focus(); }
     };
 
     document.body.style.overflow = "hidden";
@@ -121,7 +131,11 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
     return () => {
       window.removeEventListener("keydown", onKey);
       document.body.style.overflow = previous;
-      opener?.focus?.();
+      // ⚠️ Only when focus is still ours to give back. If the player has
+      // already clicked something else on the way out, dragging them back to
+      // the tile is worse than leaving them where they put themselves.
+      const here = document.activeElement;
+      if (!here || here === document.body || panel.current?.contains(here)) opener?.focus?.();
     };
   }, []);
 
@@ -134,6 +148,7 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
     >
       <div
         ref={panel}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="sheet-title"
