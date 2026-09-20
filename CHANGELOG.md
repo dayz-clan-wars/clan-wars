@@ -15,7 +15,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Changed
 
 - The kit is reached from your own player page instead of the top menu.
-- 23 items were named wrong in the picker and are corrected. The Ski Masks were
+- 27 items were named wrong in the picker and are corrected. The Ski Masks were
   labelled Balaclavas, the Hunter Boots were labelled Combat Boots, and the
   Combat Backpack was labelled an Assault Backpack.
 
