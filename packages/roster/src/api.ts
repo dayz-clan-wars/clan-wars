@@ -55,9 +55,10 @@ import {
   type NotificationsPage, type NoticeRow,
 } from "./notifications";
 import {
-  boosterKitForDb, saveBoosterKitSlotDb, startKitPlacementDb,
+  boosterKitForDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb,
   type BoosterKitView, type KitStep, type KitSpot, type KitArmband, type KitChallenge, type SaveKitOutcome,
 } from "./booster-kit";
+import type { KitSlot } from "@factions/domain";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -281,6 +282,9 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /** Save one of the nine slots, checked against the committed catalogue. Refusals are an outcome; never writes the kit's position. */
     saveBoosterKitSlot: (discordId: string, slot: string, className: string): Promise<SaveKitOutcome> =>
       saveBoosterKitSlotDb(getDb(), { discordId, slot, className, now: getNow() }),
+    /** Save all nine slots in one write, for the kit page's single Save button. Same catalogue check; refuses the whole kit rather than write half of it. */
+    saveBoosterKit: (discordId: string, picks: Record<KitSlot, string>): Promise<SaveKitOutcome> =>
+      saveBoosterKitDb(getDb(), { discordId, picks, now: getNow() }),
     /** Draw the emote sequence that marks where the kit spawns; null for an account with no linked character. */
     startKitPlacement: (discordId: string): Promise<KitChallenge | null> =>
       startKitPlacementDb(getDb(), { discordId, now: getNow(), rng: Math.random }),

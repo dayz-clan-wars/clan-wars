@@ -60,6 +60,13 @@ const PENDING: Record<string, string> = {
   // dropdowns over ~200 class names is not a list a slash command can show,
   // and an autocomplete over it is a worse version of the page. If it is ever
   // wanted, `/kit pick` and `/kit place` are the shapes.
+  //
+  // ⚠️ TWO writers, both pending. `saveBoosterKit` takes all nine picks at
+  // once and is what the site's single Save button calls; `saveBoosterKitSlot`
+  // writes one slot and no longer has a caller, kept only because it is the
+  // shape `/kit pick` would want. Whichever a future command uses, neither is
+  // reachable from Discord today.
+  saveBoosterKit: "kit pick",
   saveBoosterKitSlot: "kit pick",
   startKitPlacement: "kit place",
 };

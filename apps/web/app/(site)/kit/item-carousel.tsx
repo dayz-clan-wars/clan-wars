@@ -3,13 +3,29 @@ import type { CatalogueEntry, KitSlot } from "@factions/domain";
 /**
  * One slot's options as a horizontally scrolling strip of image tiles.
  *
- * Radio inputs in a radiogroup, so the form posts `className` exactly as the
- * <select> it replaces did, and the slot save works with JavaScript off —
- * the same bar every other write on this site clears. `role="radiogroup"` plus
- * real radios gives arrow-key movement for free; styling them as tiles must
- * not cost that: the input stays in the DOM, visually hidden (sr-only), never
+ * ⚠️ Radio inputs in a radiogroup, NAMED `className-<slot>`, never the bare
+ * `className` the single-slot form used. A radio group is scoped per FORM,
+ * not per radiogroup element — the nine slots now share one `<form>`
+ * (page.tsx), so nine groups all named `className` would merge into ONE
+ * group: picking a jacket would uncheck the mask's radio too, silently
+ * corrupting a pick that had nothing to do with the jacket. The per-slot
+ * name is what keeps the nine groups independent; `actions.ts` reads each
+ * one back by the same `className-<slot>` key.
+ *
+ * `role="radiogroup"` plus real radios gives arrow-key movement for free;
+ * styling them as tiles must not cost that: the input stays in the DOM, visually hidden (sr-only), never
  * `display: none`. Native overflow scroll plus CSS scroll-snap does the
  * carousel; no library.
+ *
+ * ⚠️ Each tile MUST keep `relative`. `sr-only` is `position: absolute`, so on a
+ * static label every hidden radio resolves against the BODY instead of its own
+ * tile. Two hundred of them then stretch the page's own scroll width — measured
+ * at 4870px past the viewport on production — and clicking a tile focuses its
+ * input, so the browser scrolls the whole PAGE sideways to reach it. A tile near
+ * the start of a strip jumps a little and looks fine; the last tile in a strip
+ * scrolls the page into empty space. Nothing throws, no console error, and no
+ * test that only inspects rendered markup can see it: the symptom exists solely
+ * in layout. item-carousel.test.tsx pins the class for that reason.
  */
 export function ItemCarousel({ slot, options, current }: {
   slot: KitSlot;
@@ -48,12 +64,12 @@ function Tile({ slot, value, label, image, checked }: {
   return (
     <label
       htmlFor={id}
-      className="group flex w-24 flex-none snap-start cursor-pointer flex-col items-center gap-1 rounded-sm border border-rule-2 p-2 text-center has-[:checked]:border-ink has-[:checked]:bg-paper-2 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2"
+      className="group relative flex w-24 flex-none snap-start cursor-pointer flex-col items-center gap-1 rounded-sm border border-rule-2 p-2 text-center has-[:checked]:border-ink has-[:checked]:bg-paper-2 has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2"
     >
       <input
         type="radio"
         id={id}
-        name="className"
+        name={`className-${slot}`}
         value={value}
         defaultChecked={checked}
         className="sr-only"

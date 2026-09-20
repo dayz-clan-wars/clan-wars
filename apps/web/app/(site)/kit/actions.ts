@@ -2,7 +2,8 @@
 
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { boosterKit, saveBoosterKitSlot, startKitPlacement } from "@factions/roster";
+import { boosterKit, saveBoosterKit, startKitPlacement } from "@factions/roster";
+import { KIT_SLOTS, type KitSlot } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 
 const PAGE = "/kit";
@@ -27,7 +28,12 @@ function back(code: string): never {
 }
 
 /**
- * Save one of the nine slots.
+ * Save all nine slots in one write, behind the page's single Save button.
+ *
+ * ⚠️ Read by KIT_SLOTS, never by iterating the posted keys: each slot's
+ * radios are named `className-<slot>` (item-carousel.tsx) precisely so the
+ * nine radio groups stay independent inside one <form>, and reading them
+ * back by the same fixed names is what keeps that pairing exact.
  *
  * ⚠️ The catalogue check lives in `@factions/roster`, not here, and a refused
  * pick comes back as an OUTCOME. Nothing here may catch: a try/catch around
@@ -43,13 +49,16 @@ export async function saveKit(formData: FormData): Promise<void> {
   const discordId = await requireBooster();
   if (!discordId) back("not-boosting");
 
-  const slot = formData.get("slot");
-  const className = formData.get("className");
-  if (typeof slot !== "string" || typeof className !== "string") back("bad-pick");
+  const picks = {} as Record<KitSlot, string>;
+  for (const slot of KIT_SLOTS) {
+    const value = formData.get(`className-${slot}`);
+    if (typeof value !== "string") back("bad-pick");
+    picks[slot] = value;
+  }
 
-  const out = await saveBoosterKitSlot(discordId, slot, className);
+  const out = await saveBoosterKit(discordId, picks);
   if (!out.ok) back(out.reason);
-  back(className.trim() === "" ? "cleared" : "saved");
+  back("saved");
 }
 
 /** Draw the emote sequence that marks where the kit spawns. The page reads the open sequence back out of the database. */

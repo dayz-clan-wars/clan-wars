@@ -113,6 +113,38 @@ export async function saveBoosterKitSlotDb(db: Database, a: {
 }
 
 /**
+ * Write all nine slots in ONE upsert, for the single kit-wide Save.
+ *
+ * ⚠️ Every pick is checked against the committed catalogue BEFORE any write,
+ * same as `saveBoosterKitSlotDb` — the first bad one refuses the whole kit
+ * and nothing is written. Doing it slot-by-slot (nine calls to the single-
+ * slot save) would let an early slot land while a later one is refused,
+ * leaving the row half-updated with no way for the page to say which half.
+ *
+ * ⚠️ Writes the nine slot columns and `updated_at`, and NOTHING else — same
+ * reason as the single-slot save: the position columns belong to the
+ * placement challenge (spec §2.6), and spelling out the whole row would
+ * reset a spot the player already marked.
+ */
+export async function saveBoosterKitDb(db: Database, a: {
+  discordId: string; picks: Record<KitSlot, string>; now: Date;
+}): Promise<SaveKitOutcome> {
+  const catalogue = boosterCatalogue();
+  const values: Partial<Record<KitSlot, string | null>> = {};
+  for (const slot of KIT_SLOTS) {
+    const className = (a.picks[slot] ?? "").trim();
+    if (className !== "" && !isAllowed(catalogue, slot, className)) {
+      return { ok: false, reason: "bad-pick" };
+    }
+    values[slot] = className === "" ? null : className;
+  }
+  await db.insert(boosterKits)
+    .values({ discordId: a.discordId, ...values, updatedAt: a.now })
+    .onConflictDoUpdate({ target: boosterKits.discordId, set: { ...values, updatedAt: a.now } });
+  return { ok: true };
+}
+
+/**
  * Draw the emote sequence that marks where the kit spawns, or null when the
  * account has no linked character to perform it.
  *

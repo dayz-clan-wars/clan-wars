@@ -4,9 +4,9 @@ import {
   servers, factions, factionMembers, identityLinks, players, boosterKits, boosterKitChallenges, discordBoosters,
   type Database,
 } from "@factions/db";
-import { KIT_PLACEMENT_TTL_MS, LINK_EMOTES } from "@factions/domain";
+import { KIT_PLACEMENT_TTL_MS, LINK_EMOTES, KIT_SLOTS, type KitSlot } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { boosterKitForDb, saveBoosterKitSlotDb, startKitPlacementDb } from "../src/booster-kit";
+import { boosterKitForDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb } from "../src/booster-kit";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-19T12:00:00Z");
@@ -31,6 +31,16 @@ describe("the booster kit page's reads and writes", () => {
   const boost = () => db.insert(discordBoosters).values({ discordId: "1", premiumSince: now, observedAt: now });
   const save = (slot: string, className: string) =>
     saveBoosterKitSlotDb(db, { discordId: "1", slot, className, now });
+
+  // Every slot picked something real, so a test can flip exactly one slot to
+  // a refused value and still have every other slot be a valid pick.
+  const ALL_PICKS: Record<KitSlot, string> = {
+    mask: "BalaclavaMask_BDU", eyewear: "SportGlasses_Black", hat: "ChristmasHeadband_Antlers",
+    jacket: "BDUJacket", pants: "BDUPants", boots: "MilitaryBoots_Beige",
+    gloves: "OMNOGloves_Brown", hipPack: "HipPack_Black", backpack: "TortillaBag",
+  };
+  const saveAll = (picks: Record<KitSlot, string> = ALL_PICKS) =>
+    saveBoosterKitDb(db, { discordId: "1", picks, now });
 
   describe("saveBoosterKitSlotDb", () => {
     it("rejects a class name outside the catalogue for that slot", async () => {
@@ -94,6 +104,72 @@ describe("the booster kit page's reads and writes", () => {
       const [row] = await db.select().from(boosterKits);
       expect(row!.mask).toBeNull();
       expect(row!.jacket).toBe("BDUJacket");
+    });
+  });
+
+  describe("saveBoosterKitDb", () => {
+    it("writes all nine slots in one call", async () => {
+      expect(await saveAll()).toEqual({ ok: true });
+      const [row] = await db.select().from(boosterKits);
+      for (const slot of KIT_SLOTS) expect([slot, row![slot]]).toEqual([slot, ALL_PICKS[slot]]);
+    });
+
+    /**
+     * ⚠️ The whole point of validating every pick BEFORE writing any of them.
+     * Nine single-slot saves in a loop would let the first few land while a
+     * later one refused, leaving the row half updated with no way to say
+     * which half. One bad pick anywhere must leave the table exactly as it
+     * was, not partially saved.
+     */
+    it("refuses the whole kit on the first bad pick, and writes nothing", async () => {
+      const picks = { ...ALL_PICKS, jacket: "NotARealJacket" };
+      expect(await saveAll(picks)).toEqual({ ok: false, reason: "bad-pick" });
+      expect(await db.select().from(boosterKits)).toEqual([]);
+    });
+
+    it("refuses on a bad pick even when it already has a saved kit, and leaves the saved kit untouched", async () => {
+      await saveAll();
+      const picks = { ...ALL_PICKS, mask: "not-a-real-item" };
+      expect(await saveAll(picks)).toEqual({ ok: false, reason: "bad-pick" });
+      const [row] = await db.select().from(boosterKits);
+      expect(row!.mask).toBe(ALL_PICKS.mask);
+    });
+
+    it("clears every slot given empty class names, and touches no other column", async () => {
+      await saveAll();
+      const cleared = Object.fromEntries(KIT_SLOTS.map((s) => [s, ""])) as Record<KitSlot, string>;
+      expect(await saveAll(cleared)).toEqual({ ok: true });
+      const [row] = await db.select().from(boosterKits);
+      for (const slot of KIT_SLOTS) expect([slot, row![slot]]).toEqual([slot, null]);
+    });
+
+    it("leaves the placed position untouched, same as the single-slot save", async () => {
+      // ⚠️ Same reason as saveBoosterKitSlotDb: gear and position are
+      // separate concerns, and a bulk write that spelled out the whole row
+      // would reset a spot the player already marked in game.
+      await db.insert(boosterKits).values({
+        discordId: "1", posX: "1.00", posY: "2.00", posZ: "3.00", placedAt: now, updatedAt: now,
+      });
+      await saveAll();
+      const [row] = await db.select().from(boosterKits);
+      expect(Number(row!.posX)).toBe(1);
+      expect(Number(row!.posY)).toBe(2);
+      expect(Number(row!.posZ)).toBe(3);
+      expect(row!.placedAt).toEqual(now);
+      expect(row!.mask).toBe(ALL_PICKS.mask);
+    });
+
+    it("lets an unexpected write failure propagate instead of reporting a bad pick", async () => {
+      // Same distinction as the single-slot save: an outage must surface as
+      // a real error, never as "that item is not on the list".
+      const broken = new Proxy(db, {
+        get(target, prop, receiver) {
+          if (prop === "insert") return () => { throw new Error("connection terminated"); };
+          return Reflect.get(target, prop, receiver);
+        },
+      }) as Database;
+      await expect(saveBoosterKitDb(broken, { discordId: "1", picks: ALL_PICKS, now }))
+        .rejects.toThrow("connection terminated");
     });
   });
 

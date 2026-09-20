@@ -1233,3 +1233,15 @@ from the prompt. It fails safe — it under-prompts, never over-prompts — and 
 recoverable, because those boosters keep `kit_prompted_at` null, so a corrected predicate
 reaches them in a later release. The fix is to treat a row with all nine slots null as
 unchosen too. The spec's premise is what is wrong here, not the code.
+
+## 43. `saveBoosterKitSlot` is dead code the single-Save rework left behind
+
+The kit page now saves all nine picks through one form, so `saveBoosterKit` is the only
+writer the site calls; `saveBoosterKitSlot` kept its tests, its export, and its place in the
+roster API surface, but has no caller. It was left in the v1.28.1 hotfix on purpose: the
+hotfix fixes four user-visible defects, and deleting a tested write path from the roster's
+public surface is a wider diff than a hotfix should carry. `apps/bot/test/parity.test.ts`
+now lists both writers as pending, which documents the situation rather than hiding it.
+Removing it later means dropping the function, its tests, and its entries in
+`packages/roster/src/index.ts`, `api.ts`, `test/roster-exports.ts`, `apps/web/test/smoke.test.ts`,
+and the parity PENDING block. Nothing breaks if it stays.
