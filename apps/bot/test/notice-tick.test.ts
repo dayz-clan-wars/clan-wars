@@ -161,4 +161,16 @@ describe("noticeTick", () => {
     expect(r).toEqual({ posted: 0, failed: 0, blockedTargets: [] });
     expect(send).not.toHaveBeenCalled();
   });
+
+  it("renders the booster kit prompt with a link button and no custom_id", () => {
+    const msg = noticeMessage({
+      kind: "booster_kit_unchosen", target: "dm", occurredAt: new Date(),
+      payload: { kitUrl: "https://example.test/kit" },
+    }, new Date(), "https://example.test");
+    expect(msg.content).toMatch(/kit/iu);
+    expect(msg.components?.[0]?.components?.[0]).toMatchObject({ style: 5, url: "https://example.test/kit" });
+    // ⚠️ A URL button carries no custom_id and must never be routed. A style: 2
+    // button here would need an interaction handler and add state to the bot.
+    expect(JSON.stringify(msg.components)).not.toContain("custom_id");
+  });
 });

@@ -511,7 +511,7 @@ export function createChannelPoster(
  * `PgNoticeStore.markAttempt` exists for.
  */
 export function createNoticeSender(client: Client): NoticeSender {
-  return async (target, discordTargetId, content, embeds, mentionRoleId) => {
+  return async (target, discordTargetId, content, embeds, mentionRoleId, components) => {
     // ⚠️ `content: ""` with embeds is a valid message; `content: ""` alone is
     // rejected by Discord — so the key is dropped when empty, never sent blank.
     //
@@ -524,6 +524,7 @@ export function createNoticeSender(client: Client): NoticeSender {
     const message = {
       ...(content ? { content } : {}),
       ...(embeds?.length ? { embeds } : {}),
+      ...(components?.length ? { components } : {}),
       ...(mentionRoleId ? { allowedMentions: { parse: ["users" as const], roles: [mentionRoleId] } } : {}),
     };
     if (target === "dm") {
@@ -994,11 +995,25 @@ export async function start(cfg: BotConfig): Promise<void> {
     // kit off the server.
     if (Date.now() - lastBoosterAt >= cfg.boosterTickIntervalMs) {
       try {
-        const guild = await client.guilds.fetch(cfg.guildId);
-        const b = await boosterTick(db, { source: guildBoosterSource(guild), now: new Date() });
-        lastBoosterAt = Date.now();
-        if (b.added > 0 || b.removed > 0) {
-          console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed`);
+        // ⚠️ `discord_boosters`/`booster_kits` carry no server id — a single
+        // guild's boosters, not per-server state — but `clan_notices.server_id`
+        // is NOT NULL, so the prompt needs one to attribute to. The DM itself
+        // names no server, so any active server id is a correct FK target;
+        // with none active (or none registered yet) the prompt, like the rest
+        // of this tick, waits for the next pass rather than picking one.
+        const [srv] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
+        if (srv) {
+          const guild = await client.guilds.fetch(cfg.guildId);
+          const b = await boosterTick(db, {
+            source: guildBoosterSource(guild),
+            now: new Date(),
+            serverId: srv.id,
+            kitUrl: `${cfg.siteBaseUrl}/kit`,
+          });
+          lastBoosterAt = Date.now();
+          if (b.added > 0 || b.removed > 0 || b.prompted > 0) {
+            console.log(`boosters: ${b.boosters} current, ${b.added} added, ${b.removed} removed, ${b.prompted} prompted`);
+          }
         }
       } catch (err) {
         console.error("booster tick failed", err);

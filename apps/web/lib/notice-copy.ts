@@ -245,6 +245,9 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
       body: `The log recorded you ${acts || "acting"} inside ${p.tag ? String(p.tag) : "another clan"}'s zone. If they asked you to help, ignore this. If not, an officer can report it, and the penalty scales with the damage.`,
     };
   } },
+  booster_kit_unchosen: { group: "Roster", render: () => ({
+    kicker: "Booster kit", title: "You have a booster kit waiting",
+    body: "Nothing is chosen yet." }) },
   ban_applied: { group: "Enforcement", render: (p) => ({
     kicker: "Ban",
     title: p.until ? "You were banned from the server" : "You were permanently banned",

@@ -2,12 +2,12 @@ import type { NoticeStore } from "@factions/roster/internal";
 import { NOTICE_MAX_ATTEMPTS } from "@factions/roster/internal";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { APIEmbed } from "discord.js";
-import { noticeText } from "./notice-text.js";
+import { noticeText, noticeComponents } from "./notice-text.js";
 import { achievementEmbed, achievementMention } from "./achievement-embed.js";
 
 /** What one queued row posts: a line, an embed, or both (an achievement in a clan channel is a mention plus the card). `mentionRoleId` is set only when the line opens with that role's ping. */
-export type NoticeMessage = { content: string; embeds?: APIEmbed[]; mentionRoleId?: string };
-export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[], mentionRoleId?: string) => Promise<void>;
+export type NoticeMessage = { content: string; embeds?: APIEmbed[]; mentionRoleId?: string; components?: unknown[] };
+export type NoticeSender = (target: NoticeTarget, discordTargetId: string, content: string, embeds?: APIEmbed[], mentionRoleId?: string, components?: unknown[]) => Promise<void>;
 
 /**
  * The channel kinds that open with `<@&role>` so every clanmate's phone
@@ -40,7 +40,9 @@ export function noticeMessage(row: Parameters<typeof noticeText>[0] & { discordR
     // A clan with no role column yet (activation is mid-flight) still gets
     // the alert — unpinged beats undelivered.
     const roleId = row.target === "channel" && PING_KINDS.has(row.kind) ? row.discordRoleId ?? null : null;
-    return roleId === null ? { content: line } : { content: `<@&${roleId}> ${line}`, mentionRoleId: roleId };
+    const components = noticeComponents(row);
+    const base = roleId === null ? { content: line } : { content: `<@&${roleId}> ${line}`, mentionRoleId: roleId };
+    return components ? { ...base, components } : base;
   }
   const mention = row.target === "channel" && !row.payload.public ? achievementMention(row.payload) : "";
   return { content: mention, embeds: [achievementEmbed(row.payload, siteBaseUrl)] };
@@ -84,7 +86,7 @@ export async function noticeTick(
     if (blocked.has(target)) continue;
     try {
       const msg = noticeMessage(row, opts.now, opts.siteBaseUrl);
-      await send(row.target, target, msg.content, msg.embeds, msg.mentionRoleId);
+      await send(row.target, target, msg.content, msg.embeds, msg.mentionRoleId, msg.components);
       await store.markPosted(row.id, opts.now);
       out.posted++;
     } catch (err) {
