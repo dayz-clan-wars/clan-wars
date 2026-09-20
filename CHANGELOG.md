@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.28.1] - 2026-09-19
+
 ### Fixed
 
 - Picking an item near the end of a strip no longer throws the whole kit page
