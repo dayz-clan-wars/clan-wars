@@ -5,6 +5,23 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Picking an item near the end of a strip no longer throws the whole kit page
+  sideways into empty space.
+
+### Changed
+
+- The kit picker has one Save button at the bottom of the page instead of a
+  separate one on every row. Pick all nine, then save once.
+- Your booster kit now sits directly under "Your account" on your player page
+  instead of further down the page.
+
+### Added
+
+- The kit page warns you if you try to leave with picks you have not saved.
+- The site notice about choosing a kit now has a button that opens the picker.
+
 ## [1.28.0] - 2026-09-19
 
 ### Added
