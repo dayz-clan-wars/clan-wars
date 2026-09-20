@@ -118,19 +118,6 @@ export function OwnerPanels({ owner, wall, now = new Date() }: { owner: Owner; w
           </ul>
         </Panel>
       )}
-
-      {owner.boosting && (
-        // ⚠️ Gated on owner.boosting, not merely on ownership: a link to
-        // /kit that turns a non-booster away is worse than no link at all.
-        <Panel title="Booster kit">
-          <PanelBody>
-            <p className="text-sm leading-relaxed text-ink-2">
-              Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
-            </p>
-            <a href="/kit" className={link}>Open your kit</a>
-          </PanelBody>
-        </Panel>
-      )}
     </>
   );
 }
@@ -143,6 +130,31 @@ const cell = "flex min-h-[52px] items-center justify-between px-4 font-display t
  * the unlink control. Their clan is already in the hero; this is what the
  * public page cannot show. The foot links are the places a member goes.
  */
+/**
+ * The way in to the booster kit, for a booster looking at their own page.
+ *
+ * ⚠️ Its own export rather than part of OwnerPanels, so the page can put it
+ * directly under "Your account" in the left column. Inside OwnerPanels it
+ * rendered in the RIGHT column below invites and ceremonies, which buried the
+ * one control a booster comes to this page for.
+ *
+ * ⚠️ Gated on `boosting`, not merely on ownership: a link to /kit that turns
+ * a non-booster away is worse than no link at all.
+ */
+export function BoosterKitPanel({ owner }: { owner: Owner }) {
+  if (!owner.boosting) return null;
+  return (
+    <Panel title="Booster kit">
+      <PanelBody>
+        <p className="text-sm leading-relaxed text-ink-2">
+          Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
+        </p>
+        <a href="/kit" className={btnPrimary}>Open your kit</a>
+      </PanelBody>
+    </Panel>
+  );
+}
+
 export function AccountPanel({ owner }: { owner: Owner }) {
   const { session, viewer } = owner;
   return (

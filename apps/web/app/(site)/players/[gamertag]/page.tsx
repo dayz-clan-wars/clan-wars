@@ -7,7 +7,7 @@ import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, SignOut } from "@/app/components/owner";
+import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, BoosterKitPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
 import { AchievementWall } from "@/app/components/achievement-wall";
@@ -103,6 +103,10 @@ export default async function PlayerProfilePage({
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col gap-4 lg:gap-6">
             {owner && <AccountPanel owner={owner} />}
+            {/* ⚠️ Directly under the account panel on purpose. In OwnerPanels it
+                landed in the right column below invites and ceremonies, which
+                buried the one control a booster opens this page for. */}
+            {owner && <BoosterKitPanel owner={owner} />}
             <Panel title="Activity"><PanelBody>
               <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
             </PanelBody></Panel>

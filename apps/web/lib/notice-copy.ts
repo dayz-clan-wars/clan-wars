@@ -21,7 +21,21 @@ import type { NoticePayload } from "@factions/roster";
 export const NOTICE_GROUPS = ["Roster", "Raid", "Base", "Leadership", "Achievement", "Enforcement", "Dormancy", "Rebind"] as const;
 export type NoticeGroup = (typeof NOTICE_GROUPS)[number];
 
-export type NoticeCopy = { kicker: string; title: string; body: string };
+export type NoticeCopy = {
+  kicker: string;
+  title: string;
+  body: string;
+  /**
+   * Where this notice sends the reader, when there is somewhere to send them.
+   *
+   * ⚠️ Optional, and most kinds have none: a raid notice describes something
+   * that already happened and has nowhere to go. A kind that asks the reader to
+   * DO something needs one, or the notice is a dead end — the Discord DM for
+   * `booster_kit_unchosen` carries a button and the site's copy of the same
+   * notice carried nothing, which is how that one shipped.
+   */
+  cta?: { label: string; href: string };
+};
 
 /**
  * A payload's name slot, honestly. Missing renders as "someone" rather than a
@@ -247,7 +261,8 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   } },
   booster_kit_unchosen: { group: "Roster", render: () => ({
     kicker: "Booster kit", title: "You have a booster kit waiting",
-    body: "Nothing is chosen yet." }) },
+    body: "Pick the nine pieces you respawn with, and the spot they wait at. Nothing is chosen yet, so nothing will spawn.",
+    cta: { label: "Choose your kit", href: "/kit" } }) },
   ban_applied: { group: "Enforcement", render: (p) => ({
     kicker: "Ban",
     title: p.until ? "You were banned from the server" : "You were permanently banned",

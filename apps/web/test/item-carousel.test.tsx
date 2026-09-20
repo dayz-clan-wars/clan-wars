@@ -53,4 +53,19 @@ describe("ItemCarousel", () => {
     const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current={null} />);
     expect(html).toContain('role="radiogroup"');
   });
+
+  /**
+   * ⚠️ `sr-only` is `position: absolute`. On a static label the hidden radios
+   * resolve against the BODY instead of their own tile, which stretched the
+   * page's scroll width by 4870px on production and made a click near the end
+   * of a strip scroll the whole page sideways into empty space. Nothing threw
+   * and no rendered-markup assertion could see it, so this pins the one class
+   * that prevents it.
+   */
+  it("keeps every tile positioned, so the hidden radio cannot escape it", () => {
+    const html = renderToStaticMarkup(<ItemCarousel slot="mask" options={OPTIONS} current={null} />);
+    const labels = html.match(/<label[^>]*>/gu) ?? [];
+    expect(labels).not.toHaveLength(0);
+    for (const l of labels) expect(l).toMatch(/\brelative\b/u);
+  });
 });

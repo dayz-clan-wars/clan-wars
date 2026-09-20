@@ -1,5 +1,6 @@
 import type { NoticeRow } from "@factions/roster";
 import { noticeCopy } from "@/lib/notice-copy";
+import { btnSecondary } from "./ui";
 
 /**
  * One notification, on the page and in the bell panel.
@@ -53,7 +54,15 @@ export function NoticeArticle({ row, actions, now = new Date() }: {
         </div>
         <p className={`mt-1.5 font-display text-sm tracking-[0.01em] text-pretty ${row.unread ? "text-ink" : "text-ink-2"}`}>{c.title}</p>
         <p className="mt-1.5 max-w-[62ch] text-sm leading-relaxed text-ink-2 text-pretty">{c.body}</p>
-        {actions && <div className="mt-3 flex flex-wrap gap-2">{actions}</div>}
+        {(c.cta || actions) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* ⚠️ A notice that asks the reader to do something needs a way to
+                do it. The Discord twin of this notice carries a button; without
+                this the site's copy was a dead end. */}
+            {c.cta && <a href={c.cta.href} className={btnSecondary}>{c.cta.label}</a>}
+            {actions}
+          </div>
+        )}
       </div>
     </article>
   );

@@ -127,4 +127,14 @@ describe("notice copy", () => {
     expect(c.title.length).toBeGreaterThan(0);
     expect(c.body.length).toBeGreaterThan(0);
   });
+
+  /**
+   * ⚠️ The Discord DM for this kind carries a button to /kit. Without a cta the
+   * site's copy of the same notice told the reader to go somewhere and gave
+   * them no way to get there.
+   */
+  it("the booster kit notice carries a way to reach the kit", () => {
+    const c = noticeCopy("booster_kit_unchosen", {}, "dm");
+    expect(c.cta).toEqual({ label: "Choose your kit", href: "/kit" });
+  });
 });
