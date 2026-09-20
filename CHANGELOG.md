@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.28.0] - 2026-09-19
+
 ### Added
 
 - Booster kits show what you are choosing. Every item in the picker now has a
