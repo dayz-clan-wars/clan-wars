@@ -3,7 +3,7 @@ import { boosterKitChallenges, identityLinks } from "@factions/db";
 import { generateSequence } from "@factions/verification";
 import { and, eq, isNull } from "drizzle-orm";
 
-export type IssuedPlacementChallenge = { sequence: string[]; expiresAt: Date };
+export type IssuedPlacementChallenge = { id: number; sequence: string[]; expiresAt: Date };
 
 /**
  * Draw a placement challenge for this account, or null when the account is not
@@ -36,6 +36,11 @@ export async function issuePlacementChallenge(
   const sequence = generateSequence(deps.rng);
   const expiresAt = new Date(deps.now.getTime() + deps.ttlMs);
 
+  // ⚠️ Assigned inside the transaction and read after it, never widened to a
+  // second SELECT: the partial unique index permits one open row per account,
+  // so "the newest open row" would be right today and wrong the moment two
+  // draws race. The id the INSERT itself returned is the one that was issued.
+  let id = 0;
   await db.transaction(async (tx) => {
     // ⚠️ Closes any previous open challenge for this account FIRST, in the
     // same transaction as the insert. `booster_kit_challenges_open_uniq` is a
@@ -49,14 +54,15 @@ export async function issuePlacementChallenge(
         eq(boosterKitChallenges.discordId, deps.discordId),
         isNull(boosterKitChallenges.closedAt),
       ));
-    await tx.insert(boosterKitChallenges).values({
+    const [row] = await tx.insert(boosterKitChallenges).values({
       discordId: deps.discordId,
       targetDayzId: link.dayzId,
       sequence,
       issuedAt: deps.now,
       expiresAt,
-    });
+    }).returning({ id: boosterKitChallenges.id });
+    id = row!.id;
   });
 
-  return { sequence, expiresAt };
+  return { id, sequence, expiresAt };
 }
