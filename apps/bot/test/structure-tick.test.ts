@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { flagColor } from "@factions/domain";
 import {
   createClient,
   runMigrations,
@@ -23,6 +24,9 @@ import { FakeGuild } from "./fake-guild.js";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-06T12:00:00Z");
+
+/** BEAR's flag colour, whatever the palette currently says it is. */
+const BEAR_COLOR = flagColor("Flag_Bear")!;
 
 describe("structureTick", () => {
   let db: Database;
@@ -88,9 +92,14 @@ describe("structureTick", () => {
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ created: 1, errors: 0 });
     const [row] = await store.clansWithStructure();
-    // BEAR flies Flag_Bear, whose colour is #839E00.
-    expect(guild.roles.get(row!.roleId!)!.color).toBe(0x839e00);
-    expect(guild.calls).toContain("createRole Night Bears #839e00");
+    // ⚠️ Read from the palette, not typed in. What this test is for is the
+    // WIRING — that a new role is created in its flag's colour at all — and a
+    // hardcoded hex makes it fail every time a flag is recoloured, which is a
+    // palette edit this file has no opinion about. The palette itself is
+    // pinned in packages/domain/test/flag-colors.test.ts, including that no
+    // two flags share a colour, so deriving here is not circular.
+    expect(guild.roles.get(row!.roleId!)!.color).toBe(BEAR_COLOR);
+    expect(guild.calls).toContain(`createRole Night Bears #${BEAR_COLOR.toString(16).padStart(6, "0")}`);
   });
 
   it("⚠️ repaints a clan role whose colour drifted — every role made before colours existed is on the default", async () => {
@@ -103,7 +112,7 @@ describe("structureTick", () => {
 
     const r = await structureTick(store, guild, { linkedRoleId: "linked", alphaRoleId: "alpha" });
     expect(r).toMatchObject({ colorsFixed: 1, errors: 0 });
-    expect(guild.roles.get(row!.roleId!)!.color).toBe(0x839e00);
+    expect(guild.roles.get(row!.roleId!)!.color).toBe(BEAR_COLOR);
 
     // And it is a one-time repair, not a REST call every tick.
     guild.calls.length = 0;
