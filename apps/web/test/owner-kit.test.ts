@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Session } from "@/lib/auth/session";
 import type { Owner } from "../app/components/owner";
-import { OwnerPanels } from "../app/components/owner";
+import { OwnerPanels, BoosterKitPanel } from "../app/components/owner";
 
 const SESSION: Session = { sub: "1", name: "Test", avatar: null, guild: true, nextCheckAt: 0, authAt: 0 };
 
@@ -20,15 +20,23 @@ const baseOwner = (boosting: boolean): Owner => ({
   boosting,
 });
 
-const render = (owner: Owner) => renderToStaticMarkup(createElement(OwnerPanels, { owner }));
+const render = (owner: Owner) => renderToStaticMarkup(createElement(BoosterKitPanel, { owner }));
+
+/**
+ * ⚠️ The panel is its OWN component, not part of OwnerPanels, so the player
+ * page can place it directly under "Your account". Rendering OwnerPanels here
+ * would assert nothing about the kit, and would pass whether or not the panel
+ * exists at all.
+ */
+const renderOwnerPanels = (owner: Owner) => renderToStaticMarkup(createElement(OwnerPanels, { owner }));
 
 /**
  * ⚠️ The entry point must be gated on BOOSTING, not merely on owning the page.
  * /kit turns a non-booster away, and a link that leads somewhere that refuses
- * you is worse than no link. Rendered directly through OwnerPanels (a pure
- * function of an Owner object) rather than asserted against source text —
- * OwnerPanels needs no session or database of its own, only the loader that
- * feeds it does, so the real render is practical here.
+ * you is worse than no link. Rendered directly through BoosterKitPanel (a pure
+ * function of an Owner object) rather than asserted against source text: it
+ * needs no session or database of its own, only the loader that feeds it does,
+ * so the real render is practical here.
  */
 describe("the kit entry point", () => {
   it("renders for a boosting owner, and links to /kit", () => {
@@ -41,6 +49,17 @@ describe("the kit entry point", () => {
     const html = render(baseOwner(false));
     expect(html).not.toContain('href="/kit"');
     expect(html).not.toContain("Booster kit");
+  });
+
+  /**
+   * ⚠️ Pins the move. The panel used to live in OwnerPanels, which renders in
+   * the page's RIGHT column below invites and ceremonies, and that buried the
+   * one control a booster opens the page for. If it drifts back, the panel
+   * silently returns to the wrong column and nothing else notices.
+   */
+  it("is not inside OwnerPanels, which renders in the other column", () => {
+    const html = renderOwnerPanels(baseOwner(true));
+    expect(html).not.toContain('href="/kit"');
   });
 
   /**
