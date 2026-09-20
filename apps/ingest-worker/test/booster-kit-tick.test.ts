@@ -75,9 +75,11 @@ describe("boosterKitTick", () => {
     expect(client.uploaded).toHaveLength(1);
     const objects = JSON.parse(client.uploaded[0]!.content).Objects;
     expect(objects).toHaveLength(1);
-    // ⚠️ x, altitude, z straight through, as numbers — a string concatenation
-    // here is what a missing Number() looks like.
-    expect(objects[0].pos).toEqual([1, 2, 3]);
+    // ⚠️ x and z straight through, altitude lifted by KIT_SPAWN_LIFT_M so the
+    // gear does not spawn inside the floor (booster-kits.ts). Still the place
+    // a missing Number() shows up: a string altitude would concatenate before
+    // the lift ("2" + 0.25 = "20.25") and land here as 20.25, not 2.25.
+    expect(objects[0].pos).toEqual([1, 2.25, 3]);
     expect(objects[0].name).toBe("BalaclavaMask_Black");
     expect(objects[0].customString).toBe("Bob");
   });

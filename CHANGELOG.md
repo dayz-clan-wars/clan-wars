@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Booster kits spawn just above the spot you marked instead of level with it.
+  Some gear was ending up stuck in the floor where you could not pick it up.
+
 ## [1.28.1] - 2026-09-19
 
 ### Fixed

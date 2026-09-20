@@ -2,6 +2,36 @@ import { armbandFor } from "@factions/domain";
 import type { SpawnObject } from "./supplies.js";
 
 /**
+ * How much higher than the marked spot the gear spawns, in metres.
+ *
+ * ⚠️ The emote sequence is performed standing ON the ground, so the position
+ * the parser records is ground level, and an item spawned exactly there lands
+ * INSIDE the floor. Found in game: part of a kit was stuck in the surface and
+ * could not be picked up. A quarter metre clears the ground without the pile
+ * looking like it floats, and anything the surface does not catch falls the
+ * short distance and settles.
+ *
+ * ⚠️ Applied ONLY here, to the spawner file. `booster_kits.pos_y` keeps the
+ * ground altitude the player actually marked: that is what the map and the
+ * "where it lands" panel describe, and lifting the stored value would add a
+ * further quarter metre every time the kit was rewritten.
+ */
+export const KIT_SPAWN_LIFT_M = 0.25;
+
+/**
+ * The marked altitude plus the lift, rounded to the millimetre.
+ *
+ * ⚠️ The rounding is what keeps the file byte-stable AND readable. `312.8 +
+ * 0.25` is not exactly representable and serialises with a long tail of
+ * digits; the tick hashes these bytes to decide whether to re-upload, so the
+ * value has to be deterministic. Rounding gives a short decimal and costs
+ * nothing a player could stand on.
+ */
+function liftedAltitude(y: number): number {
+  return Math.round((y + KIT_SPAWN_LIFT_M) * 1000) / 1000;
+}
+
+/**
  * One booster's kit, already filtered for eligibility by the tick.
  *
  * `texture` is the clan's flag, or null for a booster in no faction, which is
@@ -46,7 +76,7 @@ export function generateBoosterKits(kits: BoosterKit[]): string {
         // ⚠️ Already in spawner order — x, altitude, z — see BoosterKit. Do
         // NOT reorder these; a swap silently puts every kit underground or
         // off the map.
-        pos: [k.x, k.y, k.z],
+        pos: [k.x, liftedAltitude(k.y), k.z],
         ypr: [0, 0, 0],
         scale: 1,
         // The whole mechanism for "comes back every reboot": the spawner
