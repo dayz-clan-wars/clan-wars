@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Bear flag's clan colour is now red, and the BrainZ flag takes the olive
+  green Bear had. Clan roles in Discord recolour themselves on the next tick.
+
 ## [1.29.0] - 2026-09-19
 
 ### Changed
