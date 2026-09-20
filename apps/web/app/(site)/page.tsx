@@ -7,7 +7,7 @@ import { WarLogLine, WarLogKicker } from "./war-log/entry";
 import { currentSession } from "@/lib/viewer";
 import { Page, Panel, Stat, Rank, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
 import { HeroMap } from "@/app/components/hero-map";
-import { SITE_NAME, SITE_DESCRIPTION } from "@/lib/site-meta";
+import { DISCORD_INVITE, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
   title: SITE_NAME,
@@ -124,7 +124,7 @@ export default async function Home() {
       <Footer>
         <a className="text-muted hover:text-ink" href="/alphas">Alphas</a>
         <a className="text-muted hover:text-ink" href="/seasons">Seasons</a>
-        <a className="text-muted hover:text-ink" href="https://discord.gg/TJu4XP25nr">Discord</a>
+        <a className="text-muted hover:text-ink" href={DISCORD_INVITE}>Discord</a>
       </Footer>
     </Page>
   );

@@ -6,10 +6,16 @@ import { and, desc, eq, isNull } from "drizzle-orm";
 import { viewerForDb } from "./viewer";
 import { issuePlacementChallenge } from "./internal/kit-placement-issue";
 
-export type KitStep = { token: string; label: string };
+export type KitStep = { token: string; label: string; confirmed: boolean };
 export type KitSpot = { x: number; y: number; z: number; placedAt: Date | null };
 export type KitArmband = { className: string; texture: string; clanName: string; clanTag: string };
-export type KitChallenge = { steps: KitStep[]; expiresAt: Date };
+/**
+ * ⚠️ `confirmed` is the SERVER's count, read straight off the challenge row's
+ * `progress_index`, because the page says "the server has confirmed N of 3"
+ * in as many words. The same rule /link's status read follows: a count the
+ * client inferred from anything else would be a claim the server never made.
+ */
+export type KitChallenge = { id: number; steps: KitStep[]; confirmed: number; expiresAt: Date };
 
 /**
  * ⚠️ An OUTCOME, not a throw, and the distinction is load-bearing. A refused
@@ -78,7 +84,14 @@ export async function boosterKitForDb(db: Database, discordId: string, now: Date
     // can sit open and stale; showing it would tell the player a sequence
     // still works when it does not.
     challenge: live && live.expiresAt > now
-      ? { steps: live.sequence.map((token) => ({ token, label: emoteLabel(token) ?? token })), expiresAt: live.expiresAt }
+      ? {
+          id: live.id,
+          confirmed: live.progressIndex,
+          steps: live.sequence.map((token, i) => ({
+            token, label: emoteLabel(token) ?? token, confirmed: i < live.progressIndex,
+          })),
+          expiresAt: live.expiresAt,
+        }
       : null,
   };
 }
@@ -187,7 +200,31 @@ export async function startKitPlacementDb(db: Database, a: {
   });
   if (!issued) return null;
   return {
-    steps: issued.sequence.map((token) => ({ token, label: emoteLabel(token) ?? token })),
+    id: issued.id,
+    // A sequence one statement old: nothing in game can have been witnessed
+    // against it yet, so every step is waiting and the count is zero.
+    confirmed: 0,
+    steps: issued.sequence.map((token) => ({ token, label: emoteLabel(token) ?? token, confirmed: false })),
     expiresAt: issued.expiresAt,
   };
+}
+
+/**
+ * Close the account's open placement sequence, leaving the kit alone.
+ *
+ * ⚠️ Scoped to `discordId` AND `closed_at IS NULL`, so it can only ever close
+ * the caller's own open row. The id is deliberately not a parameter: a page
+ * that passed one would be passing a number off the wire into a WHERE that
+ * decides whose challenge dies.
+ *
+ * ⚠️ Touches `booster_kit_challenges` and nothing else — no position, no
+ * slots. Cancelling a sequence must not disturb a spot already marked, which
+ * is the same rule `startKitPlacementDb` keeps when it draws a new one.
+ */
+export async function cancelKitPlacementDb(db: Database, a: { discordId: string; now: Date }): Promise<boolean> {
+  const closed = await db.update(boosterKitChallenges)
+    .set({ closedAt: a.now })
+    .where(and(eq(boosterKitChallenges.discordId, a.discordId), isNull(boosterKitChallenges.closedAt)))
+    .returning({ id: boosterKitChallenges.id });
+  return closed.length > 0;
 }

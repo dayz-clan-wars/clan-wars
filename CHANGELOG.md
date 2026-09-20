@@ -5,6 +5,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The booster kit page is rebuilt. Your nine pieces are a grid you can see at a
+  glance, and tapping one opens a searchable picker grouped by item family.
+- Picks save on their own. The Save button is gone, and a bar at the bottom of
+  the screen confirms each save with an Undo beside it.
+- A bar under the top bar always says where your kit lands: the grid square,
+  the nearest town and a link to the map, or that you have no spot yet.
+- The placement sequence now shows which emotes the server has already seen,
+  ticking down its own clock, the same card you met when you linked.
+- The kit page needs JavaScript now, in exchange for saving as you pick.
+- A pick that does not save now says so at the bottom of the screen, where the
+  saves are confirmed, instead of in a line at the top you would have to scroll
+  up to find.
+
+### Added
+
+- Cancel an open placement sequence without drawing another one. Your current
+  spot is left exactly where it is.
+
+### Removed
+
+- The kit page no longer mentions the clan armband. It is still added to your
+  kit as a tenth piece, derived from your clan's flag.
+
 ## [1.28.2] - 2026-09-19
 
 ### Fixed

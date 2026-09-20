@@ -6,7 +6,7 @@ import {
 } from "@factions/db";
 import { KIT_PLACEMENT_TTL_MS, LINK_EMOTES, KIT_SLOTS, type KitSlot } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { boosterKitForDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb } from "../src/booster-kit";
+import { boosterKitForDb, cancelKitPlacementDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb } from "../src/booster-kit";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-19T12:00:00Z");
@@ -216,6 +216,74 @@ describe("the booster kit page's reads and writes", () => {
       expect((await boosterKitForDb(db, "1", now)).challenge?.steps).toHaveLength(LINK_EMOTES);
       const later = new Date(now.getTime() + KIT_PLACEMENT_TTL_MS + 1);
       expect((await boosterKitForDb(db, "1", later)).challenge).toBeNull();
+    });
+
+    /**
+     * ⚠️ The count the page prints is the SERVER's, read straight off
+     * `progress_index`. The page says "the server has confirmed N of 3" in as
+     * many words, and a count derived from anything else would be a claim the
+     * server never made.
+     */
+    it("marks the steps the server has already witnessed, and counts them", async () => {
+      await link();
+      const issued = await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
+      expect(issued!.confirmed).toBe(0);
+      expect(issued!.steps.every((s) => !s.confirmed)).toBe(true);
+
+      await db.update(boosterKitChallenges).set({ progressIndex: 2 })
+        .where(eq(boosterKitChallenges.id, issued!.id));
+
+      const { challenge } = await boosterKitForDb(db, "1", now);
+      expect(challenge!.id).toBe(issued!.id);
+      expect(challenge!.confirmed).toBe(2);
+      expect(challenge!.steps.map((s) => s.confirmed)).toEqual([true, true, false]);
+    });
+  });
+
+  describe("cancelKitPlacementDb", () => {
+    it("closes the open sequence, and the page stops showing one", async () => {
+      await link();
+      await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
+      expect(await cancelKitPlacementDb(db, { discordId: "1", now })).toBe(true);
+      expect((await boosterKitForDb(db, "1", now)).challenge).toBeNull();
+      const rows = await db.select().from(boosterKitChallenges).where(eq(boosterKitChallenges.discordId, "1"));
+      expect(rows.filter((r) => r.closedAt === null)).toHaveLength(0);
+    });
+
+    /**
+     * ⚠️ The only way to reach this is the Cancel button on an open sequence,
+     * so "there was nothing open" only ever happens when the sequence ended
+     * between the render and the tap. It is not an error.
+     */
+    it("is safe to call with nothing open", async () => {
+      expect(await cancelKitPlacementDb(db, { discordId: "1", now })).toBe(false);
+    });
+
+    /**
+     * ⚠️ Cancelling a sequence must not clear a spot already marked. The
+     * challenge row and the kit row are separate writes for this reason.
+     */
+    it("leaves a spot already marked exactly where it is", async () => {
+      await link();
+      await db.insert(boosterKits).values({
+        discordId: "1", mask: "HockeyMask", posX: "1.00", posY: "2.00", posZ: "3.00", placedAt: now, updatedAt: now,
+      });
+      await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
+      await cancelKitPlacementDb(db, { discordId: "1", now });
+      const view = await boosterKitForDb(db, "1", now);
+      expect(view.spot).toEqual({ x: 1, y: 2, z: 3, placedAt: now });
+      expect(view.slots.mask).toBe("HockeyMask");
+    });
+
+    /** ⚠️ Scoped to the caller. Nobody else's sequence is reachable from here. */
+    it("closes nobody else's sequence", async () => {
+      await link();
+      await db.insert(identityLinks).values({ discordId: "2", dayzId: "B".repeat(40), gamertag: "Other", verifiedAt: now });
+      await db.insert(players).values({ dayzId: "B".repeat(40), gamertag: "Other", firstSeenAt: now, lastSeenAt: now });
+      await startKitPlacementDb(db, { discordId: "1", now, rng: Math.random });
+      await startKitPlacementDb(db, { discordId: "2", now, rng: Math.random });
+      await cancelKitPlacementDb(db, { discordId: "1", now });
+      expect((await boosterKitForDb(db, "2", now)).challenge).not.toBeNull();
     });
   });
 

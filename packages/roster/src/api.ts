@@ -55,7 +55,7 @@ import {
   type NotificationsPage, type NoticeRow,
 } from "./notifications";
 import {
-  boosterKitForDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb,
+  boosterKitForDb, saveBoosterKitSlotDb, saveBoosterKitDb, startKitPlacementDb, cancelKitPlacementDb,
   type BoosterKitView, type KitStep, type KitSpot, type KitArmband, type KitChallenge, type SaveKitOutcome,
 } from "./booster-kit";
 import type { KitSlot } from "@factions/domain";
@@ -288,6 +288,9 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /** Draw the emote sequence that marks where the kit spawns; null for an account with no linked character. */
     startKitPlacement: (discordId: string): Promise<KitChallenge | null> =>
       startKitPlacementDb(getDb(), { discordId, now: getNow(), rng: Math.random }),
+    /** Close the caller's own open placement sequence. True when there was one to close. */
+    cancelKitPlacement: (discordId: string): Promise<boolean> =>
+      cancelKitPlacementDb(getDb(), { discordId, now: getNow() }),
   };
 }
 

@@ -61,14 +61,21 @@ const PENDING: Record<string, string> = {
   // and an autocomplete over it is a worse version of the page. If it is ever
   // wanted, `/kit pick` and `/kit place` are the shapes.
   //
-  // ⚠️ TWO writers, both pending. `saveBoosterKit` takes all nine picks at
-  // once and is what the site's single Save button calls; `saveBoosterKitSlot`
-  // writes one slot and no longer has a caller, kept only because it is the
-  // shape `/kit pick` would want. Whichever a future command uses, neither is
-  // reachable from Discord today.
+  // ⚠️ TWO writers, both pending, and which one is live SWAPPED on
+  // 2026-09-19 with the kit page's redesign. The page saves as you pick now,
+  // so `saveBoosterKitSlot` is what every tap calls; `saveBoosterKit` takes
+  // all nine at once and is what the removed Save button called, so it is the
+  // one with no caller today. It is kept because it is the shape a `/kit
+  // pick` that set several slots in one command would want, and because
+  // refusing the whole kit rather than writing half of it is a rule worth not
+  // re-deriving. Neither is reachable from Discord.
   saveBoosterKit: "kit pick",
   saveBoosterKitSlot: "kit pick",
   startKitPlacement: "kit place",
+  // The redesign's Cancel button. Closes an open placement sequence without
+  // touching a spot already marked; `/kit cancel` is the shape, alongside
+  // `/kit place`, if the pair is ever wanted.
+  cancelKitPlacement: "kit cancel",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */

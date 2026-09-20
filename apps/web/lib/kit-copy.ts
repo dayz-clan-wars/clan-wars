@@ -1,4 +1,4 @@
-import type { KitSlot } from "@factions/domain";
+import { KIT_SLOTS, type KitSlot } from "@factions/domain";
 
 /**
  * The booster kit page's copy, in one place, the way base-copy.ts and
@@ -24,19 +24,22 @@ export const SLOT_LABELS: Record<KitSlot, string> = {
   backpack: "Backpack",
 };
 
-/** Looked up, never echoed: ?result= is attacker-supplied (lib/copy-lookup.ts). */
-export const RESULT_COPY: Record<string, string> = {
-  saved: "Saved. Your kit will use these picks from the next restart.",
-  "bad-pick": "That item is not on the list for that slot, so nothing was saved. Pick one of the listed options.",
-  "bad-slot": "That is not one of the nine slots, so nothing was saved.",
-  "not-linked": "Link your character first. The spot is marked in game, so we need to know which character is yours.",
-  // ⚠️ No number in this sentence. The count is LINK_EMOTES, a guide number in
-  // rules.ts, and the page renders it from the sequence it was handed. A "three"
-  // typed here would go on reading "three" after the constant changed, with
-  // nothing failing: guide.test.ts scans guide chapters, not this file.
-  drawn: "Your sequence is below. Go to the spot you want and perform the emotes in order.",
-  "not-boosting": "Your kit is for server boosters. Nothing was saved.",
-};
+/**
+ * The nine tiles' reading order, which is NOT `KIT_SLOTS`.
+ *
+ * ⚠️ A separate list on purpose. `KIT_SLOTS` is the write layer's order (the
+ * columns on `booster_kits`, the loop every save and every catalogue check
+ * runs) and reordering it to suit a grid would silently reorder them all.
+ * This is the 3x3 the design lays out: the pieces that decide whether a kit
+ * is worth walking to on the top row, the small ones last. kit.test.ts pins
+ * it as a permutation of KIT_SLOTS, so a slot can never be dropped from the
+ * page by editing only this line.
+ */
+export const KIT_GRID_ORDER = [
+  "jacket", "pants", "backpack",
+  "hipPack", "boots", "gloves",
+  "hat", "mask", "eyewear",
+] as const satisfies readonly KitSlot[];
 
 /** The three sentences the page must say plainly, wherever the kit is described. */
 export const GROUND_RULES = [
@@ -46,17 +49,36 @@ export const GROUND_RULES = [
 ] as const;
 
 /**
- * The sticky save bar's inline notice, shown as soon as any of the nine picks
- * differs from what is saved. A client-side enhancement only: with JavaScript
- * off this is never called, and the page still saves with the one Save
- * button and no notice at all.
+ * Why a write was refused, as a sentence.
+ *
+ * ⚠️ Looked up, never echoed (lib/copy-lookup.ts). These now arrive as a
+ * `reason` field in a JSON body rather than as `?result=`, which changes
+ * nothing about the rule: the value still comes off the wire, still reaches a
+ * property access, and a bare `RESULT_COPY[reason]` would still answer for
+ * `__proto__`.
  */
-export function unsavedKitNotice(count: number): string {
-  return count === 1 ? "You have 1 slot not saved yet." : `You have ${count} slots not saved yet.`;
-}
+export const RESULT_COPY: Record<string, string> = {
+  "bad-pick": "That item is not on the list for that slot, so nothing was saved. Pick one of the listed options.",
+  "bad-slot": "That is not one of the nine slots, so nothing was saved.",
+  "not-linked": "Link your character first. The spot is marked in game, so we need to know which character is yours.",
+  "not-boosting": "Your kit is for server boosters. Nothing was saved.",
+  // The page saves as you pick, so a failed save is the one thing a player
+  // cannot see for themselves. It says what is still true, not what broke.
+  failed: "That did not save. Your last pick is still whatever it was before. Try it again.",
+};
 
 /**
- * The browser's own leave-page prompt. Most browsers show their fixed
- * wording and ignore this string, but the standard still asks for one.
+ * The line under a pick, in the bar at the bottom of the screen.
+ *
+ * ⚠️ Says "Saved" because the write has already returned by the time it is
+ * shown. A toast raised before the response would be a promise the page
+ * cannot keep, and the Undo beside it would have nothing to undo yet.
  */
-export const UNSAVED_LEAVE_WARNING = "You have unsaved changes to your kit. Leave without saving?";
+export function savedToast(slot: KitSlot, itemLabel: string | null): string {
+  return itemLabel === null
+    ? `${SLOT_LABELS[slot]} cleared. Saved.`
+    : `${SLOT_LABELS[slot]} set to ${itemLabel}. Saved.`;
+}
+
+/** The count beside the grid: how many of the nine are filled. */
+export const KIT_PIECES = KIT_SLOTS.length;

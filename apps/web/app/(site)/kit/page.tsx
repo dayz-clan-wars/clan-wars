@@ -1,24 +1,10 @@
 import type { Metadata } from "next";
-import { boosterKit, type BoosterKitView } from "@factions/roster";
-import { KIT_SLOTS, type KitSlot } from "@factions/domain";
+import { boosterKit } from "@factions/roster";
 import { boosterCatalogue } from "@factions/domain/catalogue";
-import { flagImagePath } from "@/src/flag-images";
 import { currentSession } from "@/lib/viewer";
-import { lookupCopy } from "@/lib/copy-lookup";
-import { GROUND_RULES, RESULT_COPY, SLOT_LABELS } from "@/lib/kit-copy";
-import { gridRef, gridRefKey } from "@/lib/map-projection";
-import { nearestPlace } from "@/lib/map-places";
-import { ago } from "@/lib/format";
-import {
-  Page, PageHead, Body, Panel, PanelBody, Notice, SessionLost,
-  btnPrimary, field, fieldLabel, kicker, link,
-} from "@/app/components/ui";
-import { ItemCarousel } from "./item-carousel";
-import { KitSaveBar } from "./save-bar";
-import { saveKit, startPlacement } from "./actions";
-
-/** The one form every slot's radios post into. save-bar.tsx finds it by this id. */
-const KIT_FORM_ID = "kit-form";
+import { kitView } from "@/lib/kit-view";
+import { SessionLost } from "@/app/components/ui";
+import { KitFlow } from "./kit-flow";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your booster kit",
@@ -28,181 +14,25 @@ export const metadata: Metadata = {
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-/** Livonia, metres. The same constants /base uses to speak in grid squares. */
-const WORLD = { map: "enoch", size: 12800 };
-
-/** The three sentences the page owes the player, wherever the kit is described. */
-function GroundRules() {
-  return (
-    <ul className="flex flex-col gap-2 text-sm leading-relaxed text-ink-2">
-      {GROUND_RULES.map((line) => <li key={line}>{line}</li>)}
-    </ul>
-  );
-}
-
 /**
- * One slot: a carousel of everything the catalogue allows there.
+ * The booster kit page: nine picks, a spot marked in game, and the sequence
+ * that marks it. Everything a player touches lives in kit-flow.tsx, which is
+ * a client component; this is the one read that feeds it.
  *
- * No form and no Save button of its own: all nine slots share the one
- * `<form id={KIT_FORM_ID}>` the page renders around them, saved by the one
- * button in the sticky bar at the bottom (save-bar.tsx). That is only safe
- * because item-carousel.tsx names each slot's radios `className-<slot>`.
- * A radio group is scoped per FORM, not per radiogroup element, so nine
- * groups sharing one form would merge into one group under a bare
- * "className" name and picking a jacket would silently clear the mask.
+ * ⚠️ The catalogue is handed over ONLY to a booster with a linked character,
+ * which is the only state that renders a picker. It is 200 entries and it
+ * would otherwise ride the payload of a page that, for a visitor deciding
+ * whether to boost, is three item pictures and a link to Discord.
+ *
+ * ⚠️ Still reached through the `@factions/domain/catalogue` subpath, never
+ * re-exported from the package index. See boosterCatalogue's own comment: the
+ * index is in the browser graph, and the catalogue's weight lands in every
+ * visitor's download the moment it is exported from there.
  */
-function SlotPicker({ slot, current }: { slot: KitSlot; current: string | null }) {
-  const options = boosterCatalogue()[slot];
-  return (
-    <div className="flex flex-col gap-2 border-t border-rule-2 px-4 py-4 first:border-t-0 lg:px-5">
-      <span className={fieldLabel} id={`slot-${slot}-label`}>{SLOT_LABELS[slot]}</span>
-      <ItemCarousel slot={slot} options={options} current={current} />
-    </div>
-  );
-}
-
-/** The kit's spot, as a grid square. It is the viewer's own spot and nobody else's. */
-function Spot({ view }: { view: BoosterKitView }) {
-  if (!view.spot) {
-    return <p className="text-sm leading-relaxed text-ink-2">No spot yet. Draw the sequence below, stand where you want the kit, and perform the emotes.</p>;
-  }
-  const near = nearestPlace(WORLD.map, view.spot.x, view.spot.z, WORLD.size);
-  return (
-    <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-      <span className="font-mono text-ink">Grid {gridRef(view.spot.x, view.spot.z)}</span>
-      {near && <span className="text-xs text-muted">near {near.name}</span>}
-      {view.spot.placedAt && <span className="text-xs text-muted">marked {ago(view.spot.placedAt)}</span>}
-      <a className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold underline-offset-4 hover:underline" href={`/map?at=${gridRefKey(view.spot.x, view.spot.z)}`}>Map →</a>
-    </div>
-  );
-}
-
-/** The open sequence, in order. The order is the proof, so this is an ordered list. */
-function Sequence({ view }: { view: BoosterKitView }) {
-  if (!view.challenge) return null;
-  return (
-    <>
-      <p className="text-sm leading-relaxed text-ink-2">
-        Stand exactly where you want the kit. Perform these {view.challenge.steps.length} emotes in this order. Other emotes in between are fine. The spot is taken from where you stand for the last one.
-      </p>
-      <ol className="mt-3 flex flex-col gap-2">
-        {view.challenge.steps.map((s, i) => (
-          <li key={s.token} className="flex min-h-[48px] items-center gap-4 border-2 border-rule-2 px-4">
-            <span className="font-display text-xl text-dim">{i + 1}</span>
-            <span className="font-display text-lg text-ink">{s.label}</span>
-          </li>
-        ))}
-      </ol>
-      <p className="mt-3 font-mono text-[11px] leading-relaxed text-muted">
-        Emotes reach us from the server log in batches, so the spot can take a minute to appear here.
-      </p>
-    </>
-  );
-}
-
-export default async function KitPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+export default async function KitPage() {
   const session = await currentSession();
   if (!session) return <SessionLost next="/kit" />;
-  const params = await searchParams;
-  // ⚠️ Looked up, never echoed: ?result= is attacker-supplied, including
-  // prototype keys like `__proto__`, so the lookup must miss on those.
-  const result = typeof params.result === "string" ? lookupCopy(RESULT_COPY, params.result) : undefined;
-  const view = await boosterKit(session.sub);
-
-  return (
-    <Page>
-      <PageHead
-        kicker="Booster kit"
-        title="Your kit, your spot"
-        sub="Nine pieces of clothing, dropped where you marked them, every restart."
-      />
-      <Body className="flex max-w-[52rem] flex-col gap-4 lg:gap-6">
-        {result && <Notice>{result}</Notice>}
-
-        <Panel num="01" title="What this is">
-          <PanelBody className="flex flex-col gap-3">
-            <p className="text-sm leading-relaxed text-ink-2">
-              Boost the Discord and you get a kit. You pick nine pieces of clothing here, then mark a spot in game with a short emote sequence. The kit spawns there every restart for as long as you keep boosting.
-            </p>
-            <GroundRules />
-            <p className="text-sm leading-relaxed text-ink-2">
-              Pick your spot with that in mind. Somewhere quiet gets you your clothes back. Somewhere obvious hands them to whoever gets there first, which is a fine thing to do on purpose.
-            </p>
-          </PanelBody>
-        </Panel>
-
-        {!view.boosting && (
-          <Panel num="02" title="You are not boosting">
-            <PanelBody className="flex flex-col gap-3">
-              <p className="text-sm leading-relaxed text-ink-2">
-                To boost, open the Discord server, tap the server name at the top, and choose Boosts. Discord charges you, not us. Boosts also raise the whole server, so everyone gets the upload limits and the audio quality.
-              </p>
-              <p className="text-sm leading-relaxed text-ink-2">
-                We check Discord for new boosts on a timer, so your kit turns on at the next check rather than the instant you boost, and the pickers appear on this page then. Stop boosting and the kit stops spawning at the next restart. Your nine picks are kept, so it comes straight back if you boost again.
-              </p>
-            </PanelBody>
-          </Panel>
-        )}
-
-        {view.boosting && !view.linked && (
-          <Panel num="02" title="Link your character">
-            <PanelBody>
-              <p className="text-sm leading-relaxed text-ink-2">
-                Your boost is on. The spot is marked in game, so we need to know which character is yours first. <a className={link} href="/link">Link your character</a> and come back here.
-              </p>
-            </PanelBody>
-          </Panel>
-        )}
-
-        {view.boosting && view.linked && (
-          <>
-            <Panel num="02" title="The nine pieces" aside={<span className={kicker}>{view.linked.gamertag}</span>}>
-              <form action={saveKit} id={KIT_FORM_ID} className="flex flex-col">
-                <div className="flex flex-col">
-                  {KIT_SLOTS.map((slot) => <SlotPicker key={slot} slot={slot} current={view.slots[slot]} />)}
-                </div>
-                <p className="border-t border-rule-2 px-4 py-3 text-xs text-ink-2 lg:px-5">
-                  Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
-                </p>
-                <KitSaveBar formId={KIT_FORM_ID} slots={KIT_SLOTS} />
-              </form>
-              <div className="border-t-2 border-rule-2 px-4 py-4 lg:px-5">
-                {view.armband ? (
-                  <div className="flex items-center gap-3">
-                    <img src={`/${flagImagePath(view.armband.texture)}`} alt="" width={36} height={36} className="h-9 w-9 flex-none object-contain" />
-                    <div>
-                      <div className={fieldLabel}>Armband</div>
-                      <p className="mt-1 text-sm text-ink-2">
-                        {view.armband.clanName} [{view.armband.clanTag}]. A tenth piece, added for you. It follows your clan&rsquo;s flag, so it changes when the flag does.
-                      </p>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    <div className={fieldLabel}>Armband</div>
-                    <p className="mt-1 text-sm text-ink-2">Join a clan and its armband is added to your kit as a tenth piece.</p>
-                  </>
-                )}
-              </div>
-            </Panel>
-
-            <Panel num="03" title="Where it lands" tone={view.challenge ? "rust" : "plain"} aside={view.challenge ? <span className={kicker}>Sequence open</span> : undefined}>
-              <PanelBody className="flex flex-col gap-3">
-                <Spot view={view} />
-                <Sequence view={view} />
-                <form action={startPlacement} className="border-t border-rule-2 pt-4">
-                  <p className="text-sm leading-relaxed text-ink-2">
-                    {view.spot
-                      ? "Drawing a new sequence leaves the current spot alone until you finish the new one in game."
-                      : "Draw a sequence, then go and perform it where you want the kit."}
-                  </p>
-                  <button type="submit" className={`mt-3 ${btnPrimary}`}>{view.challenge ? "Draw a new sequence" : "Draw the sequence"}</button>
-                </form>
-              </PanelBody>
-            </Panel>
-          </>
-        )}
-      </Body>
-    </Page>
-  );
+  const view = kitView(await boosterKit(session.sub));
+  const catalogue = view.boosting && view.gamertag !== null ? boosterCatalogue() : null;
+  return <KitFlow initial={view} catalogue={catalogue} />;
 }

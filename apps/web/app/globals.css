@@ -105,3 +105,14 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline: non
       linear-gradient(90deg, rgba(5,5,5,.97) 0%, rgba(5,5,5,.88) 45%, rgba(5,5,5,.35) 72%, rgba(5,5,5,.2) 100%);
   }
 }
+
+/*
+ * The booster kit's two entrances (app/(site)/kit/): the pick sheet rising
+ * from the bottom of a phone screen, and the "Saved." bar under it. Both are
+ * short and both are decoration, so both are dropped entirely for a visitor
+ * who has asked for less motion.
+ */
+.cw-sheet { animation: cw-rise .18s ease-out; }
+.cw-toast { animation: cw-rise .16s ease-out; }
+@keyframes cw-rise { from { transform: translateY(14px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .cw-sheet, .cw-toast { animation: none; } }

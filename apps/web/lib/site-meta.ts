@@ -5,6 +5,8 @@
  * headline to "Your clan. Your war." and this line with it.
  */
 export const SITE_NAME = "Clan Wars";
+/** The server's Discord. Stated once: the landing page's footer and /kit's boost CTA both point at it. */
+export const DISCORD_INVITE = "https://discord.gg/TJu4XP25nr";
 export const SITE_TAGLINE = "Your clan. Your war.";
 export const SITE_DESCRIPTION =
   "A season-long scoreboard for a DayZ server. Found a clan at a flagpole, declare a base, raid the others and defend your own flag or lose it.";

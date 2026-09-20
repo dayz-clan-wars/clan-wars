@@ -45,7 +45,7 @@ export type { NoticePayload } from "./api";
 export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKitOutcome } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, boosterKit, cancelLink, castVote,
+  acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, boosterKit, cancelKitPlacement, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
