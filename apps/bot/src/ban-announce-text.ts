@@ -1,4 +1,5 @@
 import type { BanAnnouncementKind, BanReason } from "@factions/domain";
+import { at } from "@factions/copy";
 import { escapeMarkdown } from "./kill-feed-embed.js";
 
 export type BanAnnouncement = {
@@ -17,6 +18,10 @@ const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "
  * `notice-text.ts`'s private `formatDate` exactly (the house convention for
  * a player-facing date); that helper isn't exported, so this is a deliberate
  * duplicate of the same format, not a new one.
+ *
+ * ⚠️ Kept as `at()`'s fallback below, not replaced by it: `at()` degrades to
+ * null on an unrepresentable instant, and this is what keeps the line
+ * truthful instead of silently dropping the expiry date a player needs.
  */
 function formatDate(iso: string): string {
   const d = new Date(iso);
@@ -56,5 +61,5 @@ export function banAnnouncementText(a: BanAnnouncement): string {
   }
   return a.expiresAt === null
     ? `🔨 **${tag}** banned permanently — base-zone enforcement.`
-    : `🔨 **${tag}** banned until ${formatDate(a.expiresAt)} — base-zone enforcement.`;
+    : `🔨 **${tag}** banned until ${at(new Date(a.expiresAt)) ?? formatDate(a.expiresAt)} — base-zone enforcement.`;
 }
