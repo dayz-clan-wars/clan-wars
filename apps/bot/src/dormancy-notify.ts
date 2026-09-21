@@ -1,15 +1,19 @@
+import { rel } from "@factions/copy";
 import type { Sender } from "./notify.js";
 import type { DormancyNotice } from "./dormancy-tick.js";
+import { clanLink } from "./site-links.js";
 
 /**
  * ⚠️ No pole coordinates. The leader is entitled to them, but a DM is
  * screenshottable and this message does not need them — same rule as the
  * clan info page's members-only pole line.
  */
-export function formatDormancyDm(n: DormancyNotice): string {
+export function formatDormancyDm(n: DormancyNotice, siteBaseUrl: string): string {
+  const clan = clanLink(siteBaseUrl, n.tag, n.name);
+
   if (n.kind === "revive") {
     return [
-      `**${n.name}** [${n.tag}] is active again`,
+      `${clan} is active again`,
       "",
       "Your flag is flying, so the clock is reset. Supplies resume at the next server restart.",
     ].join("\n");
@@ -22,9 +26,17 @@ export function formatDormancyDm(n: DormancyNotice): string {
   // "0 days", which is worse than naming nothing, so sub-day windows are
   // reported in hours instead.
   const window = formatDuration(n.dormantAfterMs);
+  const deadline = rel(n.disbandAt);
+  // ⚠️ disbandAt is always set for a "dormant" notice — the discriminated
+  // union on DormancyNotice.kind makes that a compile-time guarantee — but
+  // rel() still degrades to null on an unrepresentable instant, and that
+  // must land on a sentence with no deadline clause, not a broken token.
+  const deadlineClause = deadline
+    ? `If nobody raises it, the flag, tag and pole return to the pool ${deadline}.`
+    : "If nobody raises it, the flag, tag and pole return to the pool.";
 
   return [
-    `**${n.name}** [${n.tag}] has gone dormant`,
+    `${clan} has gone dormant`,
     "",
     // The game says nothing when a flag expires, so this is the only warning
     // a leader ever gets.
@@ -32,9 +44,7 @@ export function formatDormancyDm(n: DormancyNotice): string {
     "and your supply kit has stopped.",
     "",
     "Raise your flag in game to start it again — supplies come back at the next server restart.",
-    // disbandAt is always set for a "dormant" notice — the discriminated
-    // union on DormancyNotice.kind makes that a compile-time guarantee.
-    `If nobody raises it, the flag, tag and pole return to the pool <t:${Math.floor(n.disbandAt.getTime() / 1000)}:R>.`,
+    deadlineClause,
   ].join("\n");
 }
 
@@ -66,12 +76,13 @@ function formatDuration(ms: number): string {
 export async function notifyDormancy(
   notices: DormancyNotice[],
   send: Sender,
+  siteBaseUrl: string,
   onError?: (n: DormancyNotice, err: unknown) => void,
 ): Promise<number> {
   let sent = 0;
   for (const n of notices) {
     try {
-      await send({ discordId: n.leaderDiscordId, channelId: "", content: formatDormancyDm(n) });
+      await send({ discordId: n.leaderDiscordId, channelId: "", content: formatDormancyDm(n, siteBaseUrl) });
       sent++;
     } catch (err) {
       onError?.(n, err);

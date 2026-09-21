@@ -1,7 +1,8 @@
 import type { APIEmbed } from "discord.js";
 import type { BoardKind, Boards, KdRow, LongestKillRow } from "@factions/roster";
 import { BOARD_LABELS, BOARD_SLUGS, EMPTY_BOARD, boardValue, scopeLabel } from "@factions/copy";
-import { escapeMarkdown, profileUrl } from "./kill-feed-embed.js";
+import { escapeMarkdown } from "./kill-feed-embed.js";
+import { clanLink, playerLink } from "./site-links.js";
 
 const GOLD = 0xc8a044;
 const GREY = 0x4f545c;
@@ -48,8 +49,8 @@ export function leaderboardKey(kind: BoardKind, boards: Boards): string {
 
 /** One row, numbered from 1, in the site's own shape: rank, name, clan, extra column, value. */
 function line(kind: BoardKind, row: Boards[BoardKind][number], n: number, clanTag: string | undefined, siteBaseUrl: string): string {
-  const name = `**[${escapeMarkdown(row.gamertag)}](${profileUrl(siteBaseUrl, row.gamertag)})**`;
-  const clan = clanTag ? ` [${escapeMarkdown(clanTag)}]` : "";
+  const name = `**${playerLink(siteBaseUrl, row.gamertag)}**`;
+  const clan = clanTag ? ` ${clanLink(siteBaseUrl, clanTag)}` : "";
   const kd = row as KdRow;
   const lk = row as LongestKillRow;
   const extra = "kills" in row ? ` · ${kd.kills} / ${kd.deaths}`

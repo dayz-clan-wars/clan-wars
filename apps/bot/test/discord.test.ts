@@ -69,7 +69,7 @@ describe("discord wiring", () => {
     // notices array plus a stub sender still exercises its parameter shape,
     // so a reordered (notices, send) signature fails here rather than only
     // at runtime.
-    const sent = await notifyDormancy([], async () => {});
+    const sent = await notifyDormancy([], async () => {}, "https://dayzclanwars.com");
     expect(sent).toBe(0);
   });
 

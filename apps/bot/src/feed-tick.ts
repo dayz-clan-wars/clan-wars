@@ -45,6 +45,7 @@ export async function feedTick(
     now: Date;
     batchSize?: number;
     flagImage?: FlagImageResolver;
+    siteBaseUrl?: string;
     onError?: (id: number, err: unknown) => void;
   },
 ): Promise<FeedTickResult> {
@@ -52,7 +53,7 @@ export async function feedTick(
 
   for (const row of await store.readUnposted(opts.batchSize ?? FEED_BATCH_SIZE)) {
     try {
-      await post(feedEmbed(row, opts.flagImage));
+      await post(feedEmbed(row, opts.flagImage, opts.siteBaseUrl));
       // ⚠️ Guard markPosted in the same block as post: if it fails, the row's
       // postedAt stays null and re-posts on the next tick. An unguarded failure
       // floods the channel with the same embed forever, which is worse than

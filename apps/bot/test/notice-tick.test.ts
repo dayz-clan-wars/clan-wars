@@ -50,7 +50,7 @@ describe("noticeTick", () => {
     expect(send.mock.calls[0]![1]).toBe("wall-1");
     // The public wall gets the card alone: no mention, no text line.
     expect(send.mock.calls[0]![2]).toBe("");
-    expect(send.mock.calls[0]![3]![0]!.description).toBe("**[BEAR]** unlocked **Sniper** · d");
+    expect(send.mock.calls[0]![3]![0]!.description).toBe(`**[BEAR](<${site}/clans/BEAR>)** unlocked **Sniper** · d`);
   });
 
   it("an achievement in a clan channel is a mention plus the card; in a DM the card alone; any other kind the text line", () => {

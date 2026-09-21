@@ -1204,7 +1204,7 @@ export async function start(cfg: BotConfig): Promise<void> {
           "Supplies stay cut while dormant, but nothing will be disbanded until events resume.",
         );
       }
-      await notifyDormancy(d.notices, send, (n, err) =>
+      await notifyDormancy(d.notices, send, cfg.siteBaseUrl, (n, err) =>
         console.error(`dormancy DM failed for faction ${n.factionId}`, err));
     } catch (err) {
       console.error("dormancy tick failed", err);
@@ -1338,6 +1338,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       try {
         const f = await feedTick(feedStore, feedPoster, {
           now: new Date(),
+          siteBaseUrl: cfg.siteBaseUrl,
           flagImage: flagImageResolver(cfg.flagImageBaseUrl),
           onError: (id, err) => {
             // ⚠️ Once per row per bot instance. A deleted channel or a

@@ -4,6 +4,15 @@ import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./do
 import { DEFAULT_KILLSTREAK_EVERY } from "./killstreak-feed-tick.js";
 import { DEFAULT_LONG_RANGE_MIN_M } from "./long-range-feed-tick.js";
 
+/**
+ * The site's own default origin, shared with feed-embed.ts's `feedEmbed`
+ * default param — one literal, not two, and it keeps that literal out of
+ * feed-embed.ts (a PLAYER_FACING file in vocabulary.test.ts, whose naive
+ * comment-stripper treats a bare `//` inside a hardcoded URL string as the
+ * start of a line comment and corrupts the rest of the string literal).
+ */
+export const DEFAULT_SITE_BASE_URL = "https://dayzclanwars.com";
+
 export type BotConfig = {
   token: string;
   applicationId: string;
@@ -437,7 +446,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // origin with a trailing slash (`optionalHttpUrl` accepts one — its
     // pathname is `"/"`, which passes) would otherwise produce a doubled
     // slash in every link built from it.
-    siteBaseUrl: (optionalHttpUrl(env, "SITE_BASE_URL") ?? "https://dayzclanwars.com").replace(/\/+$/u, ""),
+    siteBaseUrl: (optionalHttpUrl(env, "SITE_BASE_URL") ?? DEFAULT_SITE_BASE_URL).replace(/\/+$/u, ""),
     clanTextCategoryId: requiredSnowflake(env, "CLAN_TEXT_CATEGORY_ID", "the category clan text channels are created in"),
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
