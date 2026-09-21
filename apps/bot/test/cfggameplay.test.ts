@@ -1,9 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setBaseDamageDisabled } from "../src/cfggameplay.js";
+import { setBaseDamageDisabled, setAirdropSpawner } from "../src/cfggameplay.js";
 
 const REAL = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
+
+const DOLNIK = { location: "dolnik", colour: "blue" };
+const spawners = (json: string) => JSON.parse(json).WorldsData.objectSpawnersArr as string[];
 
 describe("setBaseDamageDisabled", () => {
   it("opens the window by flipping true -> false", () => {
@@ -84,5 +87,72 @@ describe("setBaseDamageDisabled", () => {
       '"disableBaseDamage": "true"',
     ).replace('"VehicleData": {', '"SomeModData": {\n\t\t"disableBaseDamage": false\n\t},\n\t"VehicleData": {');
     expect(() => setBaseDamageDisabled(wrongType, false)).toThrow(/GeneralData\.disableBaseDamage/);
+  });
+});
+
+describe("setAirdropSpawner", () => {
+  it("adds the spawner and leaves the other four alone", () => {
+    const { json, changed } = setAirdropSpawner(REAL, DOLNIK);
+    expect(changed).toBe(true);
+    expect(spawners(json)).toEqual([
+      "./custom/airdrop-dolnik-blue.json",
+      "./custom/admin-castle.json",
+      "./custom/bunker-enhancements.json",
+      "./custom/faction-supplies.json",
+      "./custom/teleports.json",
+    ]);
+  });
+
+  it("⚠️ changes NOTHING outside the array — every other byte is identical", () => {
+    const { json } = setAirdropSpawner(REAL, DOLNIK);
+    expect(json.replace('\t\t\t"./custom/airdrop-dolnik-blue.json",\n', "")).toBe(REAL);
+  });
+
+  it("round-trips: add then remove returns the original bytes", () => {
+    const on = setAirdropSpawner(REAL, DOLNIK).json;
+    expect(setAirdropSpawner(on, null).json).toBe(REAL);
+  });
+
+  it("swaps one drop for another without stacking them", () => {
+    const on = setAirdropSpawner(REAL, DOLNIK).json;
+    const { json } = setAirdropSpawner(on, { location: "nadbor", colour: "yellow" });
+    expect(spawners(json).filter((e) => e.includes("/airdrop-")))
+      .toEqual(["./custom/airdrop-nadbor-yellow.json"]);
+  });
+
+  // ⚠️ The only-element case is the one that breaks a naive line delete: removing
+  // the last entry leaves the previous line's comma in front of `]`, which is a
+  // file that does not parse — the exact failure that stops the server booting.
+  it("removes a drop that is the only element without stranding a comma", () => {
+    const empty = REAL.replace(/("objectSpawnersArr"\s*:\s*\[)[^\]]*(\])/, "$1\n$2");
+    const one = setAirdropSpawner(empty, DOLNIK).json;
+    expect(spawners(one)).toEqual(["./custom/airdrop-dolnik-blue.json"]);
+    const off = setAirdropSpawner(one, null);
+    expect(spawners(off.json)).toEqual([]);
+    expect(off.json).toBe(empty);
+  });
+
+  it("reports changed=false and returns the input untouched when already correct", () => {
+    expect(setAirdropSpawner(REAL, null)).toEqual({ json: REAL, changed: false });
+    const on = setAirdropSpawner(REAL, DOLNIK).json;
+    expect(setAirdropSpawner(on, DOLNIK)).toEqual({ json: on, changed: false });
+  });
+
+  it("throws on input that does not parse", () => {
+    expect(() => setAirdropSpawner("{ nope", DOLNIK)).toThrow(/did not parse/);
+  });
+
+  it("throws when objectSpawnersArr is missing or not an array of strings", () => {
+    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: {} }), DOLNIK)).toThrow(/objectSpawnersArr/);
+    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: { objectSpawnersArr: [1] } }), DOLNIK)).toThrow(/objectSpawnersArr/);
+  });
+
+  // ⚠️ Two live drops is a state the bot never creates, so reaching it means a hand
+  // edit or a half-applied write. Guessing which to remove could take away the one
+  // players were told about and leave the other standing.
+  it("throws on two airdrop entries rather than guessing which is live", () => {
+    const two = setAirdropSpawner(setAirdropSpawner(REAL, DOLNIK).json, DOLNIK).json
+      .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json"');
+    expect(() => setAirdropSpawner(two, null)).toThrow(/2×|two/i);
   });
 });
