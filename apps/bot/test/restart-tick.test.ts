@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
 import { restartTick, RESTART_MESSAGE, applyGameplay, type RestartTarget } from "../src/restart-tick.js";
 import { raidWindowTick } from "../src/raid-window-tick.js";
@@ -565,6 +565,49 @@ describe("restartTick", () => {
     rows = await raidRows();
     expect(rows).toHaveLength(1);
     expect(rows[0]!.appliedAt).toEqual(appliedAt);
+  });
+
+  // ⚠️ Fix round 2 (review of commits 6282bf3 / f1f9860, Important 1): pins the
+  // exact hazard the round-1 fix over-corrected into. If this ever goes red, the
+  // weekend's one-command rollback copy silently gets replaced by a file that
+  // ALREADY has the flip applied — so `previousContent` can no longer undo the
+  // flip — and the real flip's `applied_at` is lost, with nothing anywhere
+  // noticing: the row still reads `applied`, just with the wrong evidence.
+  it("⚠️ an airdrop-only upload later in the window must not touch the raid flip's applied_at or previousContent", async () => {
+    const h = fakeGameplayHost(GAMEPLAY);
+
+    // Friday: the raid window opens for real, uploads once, and records the row
+    // with the TRUE pre-flip file and a real applied_at.
+    await restartTick(db, () => h.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const friRows = await raidRows();
+    expect(friRows).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "applied" }]);
+    const friPreviousContent = friRows[0]!.previousContent;
+    const friAppliedAt = friRows[0]!.appliedAt;
+    expect(friPreviousContent).toBe(GAMEPLAY);
+    expect(friAppliedAt).not.toBeNull();
+
+    // Saturday, same window: an announced airdrop goes live. The raid splice
+    // makes NO change (the file already holds Friday's flip, so flip.changed is
+    // false) — but the airdrop splice DOES change the file, so the shared upload
+    // still fires (`gameplay.uploaded` is true).
+    const SAT = at("2026-09-19T12:00:00Z");
+    await db.insert(airdropEvents).values({
+      serverId, slotAt: SAT, location: "dolnik", colour: "blue",
+      decidedAt: at("2026-09-19T11:30:00Z"), popAtDecision: 6, threshold: "5",
+      state: "announced", announcedAt: at("2026-09-19T11:30:01Z"),
+    });
+    await restartTick(db, () => h.target, {
+      now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true }, airdrop: { enabled: true },
+    });
+    // Confirms the premise: the airdrop really did cause an upload this slot.
+    expect(JSON.parse(h.read()).WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+
+    const satRows = await raidRows();
+    expect(satRows).toHaveLength(1); // still the one row for this window
+    expect(satRows[0]!.outcome).toBe("applied");
+    // ⚠️ The assertions that matter: neither survives an airdrop-only upload.
+    expect(satRows[0]!.previousContent).toBe(friPreviousContent);
+    expect(satRows[0]!.appliedAt).toEqual(friAppliedAt);
   });
 
   it("a refused flip still restarts the server, and one server's refusal does not block another's", async () => {
