@@ -14,6 +14,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   week with no good moment in it.
 - `/airdrop place` for admins: put a drop at the next restart by hand. It announces
   and expires like any other, and does not count against the weekly cap.
+- A drop that could not be placed is now called off in the same channel it was
+  announced in, once, so nobody is left waiting at a location with their keys.
 
 ## [1.29.1] - 2026-09-20
 

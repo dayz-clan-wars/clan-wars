@@ -3,11 +3,69 @@ import {
   AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, isoWeekStart, nextRestartAt, p90,
   RESTART_PERIOD_MS, shouldFire,
 } from "@factions/domain";
-import { and, eq, gte, inArray, isNull, ne, sql } from "drizzle-orm";
-import { airdropText } from "./airdrop-text.js";
+import { and, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
+import { airdropText, scrubText } from "./airdrop-text.js";
 
 export type AirdropPoster = (content: string) => Promise<void>;
+/** ⚠️ `posted` counts scrub notices too, not only announcements — see `scrubStep`. */
 export type AirdropTickResult = { decided: number; posted: number; failed: number };
+
+/**
+ * How far back the scrub scan looks. Two weeks, the same bound and the same
+ * reasoning as `raid-window-tick.ts`'s `FAILURE_SCAN_MS`.
+ *
+ * ⚠️ A long-dead row is deliberately NOT resurrected. A `failed` row that was
+ * never notified (the feature switched on later, a channel that was broken for a
+ * fortnight) would otherwise post its first scrub notice now, about a drop from
+ * weeks ago — a message nobody can act on that reads like a live event. Unbounded,
+ * the scan also grows a row and a post per scrubbed drop forever, on every tick.
+ */
+const SCRUB_SCAN_MS = 14 * 24 * 60 * 60 * 1000;
+
+/**
+ * Tell players a drop they were promised is off (spec §9).
+ *
+ * ⚠️ Posted from HERE, never from `restart-tick.ts`, which is the tick that marks
+ * the row `failed`. That block sits immediately around the restart POST, and a
+ * Discord call inside it could delay a restart every player is counting on. This
+ * tick already holds the `SERVER_EVENTS_CHANNEL_ID` poster, and the scrub notice
+ * is not time-critical to the second.
+ *
+ * ⚠️ `announced_at is not null` is the audience test, not bookkeeping: a drop
+ * nobody was ever told about has nobody to tell it is off, and a scrub notice for
+ * a location that was never announced is the first a player hears of either.
+ *
+ * ⚠️ Post FIRST, mark second — the house rule from every other poster here. A mark
+ * written first silences a notice that never went out; the reverse costs at most a
+ * duplicate after a crash between the two.
+ */
+async function scrubStep(db: Database, serverId: number, post: AirdropPoster, now: Date): Promise<number> {
+  const scrubbed = await db.select().from(airdropEvents).where(and(
+    eq(airdropEvents.serverId, serverId),
+    eq(airdropEvents.state, "failed"),
+    isNotNull(airdropEvents.announcedAt),
+    gte(airdropEvents.endedAt, new Date(now.getTime() - SCRUB_SCAN_MS)),
+    sql`coalesce(${airdropEvents.detail}->>'scrubNotified', 'false') <> 'true'`,
+  ));
+  let posted = 0;
+  for (const row of scrubbed) {
+    try {
+      await post(scrubText(row.location));
+    } catch (err) {
+      // No mark: the next tick retries. Logged, because a permanently broken
+      // poster retrying in silence is indistinguishable from nothing to say.
+      console.warn(`airdrop: scrub notice for ${row.slotAt.toISOString()} failed to post — retrying next tick`, err);
+      continue;
+    }
+    // ⚠️ Merged into `detail`, never replacing it: the row already carries the
+    // refusal that scrubbed it (and, for a manual drop, who asked for it).
+    await db.update(airdropEvents)
+      .set({ detail: sql`${airdropEvents.detail} || '{"scrubNotified":true}'::jsonb` })
+      .where(and(eq(airdropEvents.serverId, serverId), eq(airdropEvents.slotAt, row.slotAt)));
+    posted += 1;
+  }
+  return posted;
+}
 
 /**
  * Players connected at `instant`, from the session spans (spec §2's
@@ -48,6 +106,10 @@ export async function airdropTick(
   for (const s of targets) {
     try {
       const slot = nextRestartAt(opts.now);
+
+      // 0. Anything scrubbed since the last tick: tell the players who were told
+      //    it was coming. Runs before the branches below, both of which `continue`.
+      out.posted += await scrubStep(db, s.id, post, opts.now);
 
       // 1. An earlier decision that has not been announced yet: retry the post
       //    while its slot is still ahead, and scrub it once the slot has passed.
@@ -117,13 +179,20 @@ export async function airdropTick(
         .where(eq(airdropEvents.serverId, s.id)).orderBy(sql`${airdropEvents.decidedAt} desc`).limit(5);
       const spec = chooseAirdrop(recent.map((r) => r.location), rng);
 
-      await db.insert(airdropEvents).values({
+      const inserted = await db.insert(airdropEvents).values({
         // ⚠️ `chooseAirdrop` returns a plain `string` (it draws from `AIRDROP_COLOURS`,
         // which the schema's CHECK constraint already restricts to the same three
         // values) — the cast doesn't widen what can land in the column.
         serverId: s.id, slotAt: slot, location: spec.location, colour: spec.colour as "blue" | "orange" | "yellow",
         decidedAt: opts.now, popAtDecision: pop ?? 0, threshold: String(threshold), state: "announced",
-      }).onConflictDoNothing();
+      }).onConflictDoNothing().returning({ slotAt: airdropEvents.slotAt });
+      // ⚠️ The insert is only "decided" when it actually wrote a row. On a conflict
+      // — a concurrent `/airdrop place` taking this same slot between the SELECT
+      // above and this insert — the row in the table is the MANUAL one, at a
+      // different location. Counting and posting regardless would announce THIS
+      // tick's location and then stamp `announced_at` on the manual row, telling
+      // players to go somewhere nothing will ever spawn.
+      if (inserted.length === 0) continue;
       out.decided += 1;
       console.log(`airdrop: server ${s.id} decided ${spec.location}/${spec.colour} for ${slot.toISOString()} (pop ${pop}, threshold ${threshold.toFixed(2)})`);
 

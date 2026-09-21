@@ -22,10 +22,18 @@ export function airdropText(location: string, slotAt: Date): string {
   ].join("\n");
 }
 
-/** Posted when a decided drop could not be placed and has been scrubbed (spec §9). */
+/**
+ * Posted when a decided drop could not be placed and has been scrubbed (spec §9).
+ * Posted by `airdrop-tick.ts`, which owns the channel; see `scrubStep` for why it
+ * is not posted by the tick that marks the row.
+ *
+ * ⚠️ Plain, and it does not talk anybody out of the next one. Players were told to
+ * bring their keys somewhere, so they are owed a straight answer, not an apology.
+ * No em dashes, and still no colour.
+ */
 export function scrubText(location: string): string {
   return [
     `**The ${place(location)} drop is off.**`,
-    "We could not get it placed this session. The next one still counts against nothing, so it can come any day now.",
+    "We could not get it placed this session. Nothing was spent on it, so the next one can come any day.",
   ].join("\n");
 }

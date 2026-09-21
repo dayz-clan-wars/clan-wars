@@ -2020,6 +2020,7 @@ git commit -m "docs(airdrops): runbook, working notes and changelog"
 
 ## Not in this plan, on purpose
 
-- **A `#server-events` failure alert to ops.** Spec §9 asks for one after a second failed *disable*. The enable path scrubs itself after two attempts and says so in the channel; the disable path retries forever and logs at error level. Add the ops alert in a follow-up, keyed `(server_id, slot_at)` so it fires once per event and not once per slot — the burial `raid_window_announcements` already guards against.
+- **A `#server-events` failure alert to ops.** Spec §9 asks for one after a second failed *disable*. The enable path scrubs itself after two attempts and posts spec §9's plain scrub notice from `airdrop-tick.ts` (never from `restart-tick.ts` — a Discord call in that block could delay a restart), marking the row `scrubNotified` so it posts once; the disable path retries forever and logs at error level, with no ops alert. Add the ops alert in a follow-up, keyed `(server_id, slot_at)` so it fires once per event and not once per slot — the burial `raid_window_announcements` already guards against.
+- **Spec §9's other notice: the short follow-up when an enable merely SLIPS to a later slot.** Deliberately deferred. That drop still arrives, just one slot late, and the in-game restart warning for the slot it does land on already names the location. Only the scrub notice — the drop is off entirely — is implemented.
 - **A site surface.** No page, timer or map pin. The drop is a Discord and in-game event for now.
 - **Choosing the colour by what keys are in circulation.** Spec §3.4 is explicit that the gamble is the point.
