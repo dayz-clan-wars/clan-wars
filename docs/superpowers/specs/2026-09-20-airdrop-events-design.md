@@ -1,12 +1,11 @@
 # Airdrop events — design
 
-**Status:** proposed 2026-09-20, not implemented.
+**Status:** proposed 2026-09-20, amended 2026-09-21, not implemented.
 
 Sixteen locations on Livonia have a staged locked-container spawner, in three
-colours each (`livonia/custom/<location>-airdrop-<colour>.json`, 48 files).
-Today exactly one of them is live, hand-enabled in `cfggameplay.json` and
-`mapgrouppos.xml`, and it survives every restart until someone edits it back
-out.
+colours each (`livonia/custom/airdrop-<location>-<colour>.json`, 48 files).
+Today exactly one of them is live, hand-enabled in `cfggameplay.json`, and it
+survives every restart until someone edits it back out.
 
 This makes the drop an event: the bot picks a location and a colour, announces
 it before a restart, enables it for exactly one two-hour session, and takes it
@@ -17,15 +16,18 @@ genuinely busy.
 
 ## 1. Scope
 
-In scope: one new tick, one new table, two file splices, one Discord message,
+In scope: one new tick, one new table, one file splice, one Discord message,
 one addition to the in-game restart warning.
 
 Out of scope, deliberately:
 
 - **The key economy.** The four `ShippingContainerKeys_*` types stay exactly as
   they are (§3.4). This feature does not get a vote on how keys circulate.
-- **The loot tables.** What is inside a container is `cfgspawnabletypes.xml`'s
-  business. This feature decides *where* and *when*, never *what*.
+- **What is in the container.** Since `959f556` the three
+  `Land_ContainerLocked_*_DE` groups are gone from `mapgroupproto.xml`, so the
+  containers draw no central-economy loot at all: a drop is furnished entirely
+  by its own `custom/airdrop-*.json`. Editing those 48 files is somebody else's
+  job. This feature decides *where* and *when*, never *what*.
 - **New locations or colours.** The 48 staged files are the menu.
 - **Forecasting beyond one session.** The horizon is deliberately short; §3.2
   is why that is enough.
@@ -43,7 +45,9 @@ rule written against an absolute constant today will be wrong in a quarter.
 
 **The day has a hard shape.** 18:00–04:00 UTC averages about 3.3 concurrent;
 09:00–13:00 UTC averages about 0.3. The quietest slot on the server is 12:00
-UTC at 0.52, which is why §6 reconciles there.
+UTC at 0.52. The trigger in §3.1 never fires near it, and nothing else needs
+that fact any more: an earlier draft scheduled a daily file reconciliation
+there, which §6 has replaced with per-slot recomputation costing nothing.
 
 **The obvious trigger does not work.** "Current pop exceeds the trailing 24h
 mean" fires at 72 of 167 restart slots, about five times a day. It also fires
@@ -73,9 +77,10 @@ therefore a good forecast of next session's population, and no model is needed.
 
 ### 3.1 The rule
 
-At roughly T-30min before a restart slot, fire when **all** hold:
+On the first tick at or after T-30min before a restart slot, fire when **all**
+hold:
 
-    pop >= max(5, p90 of slot pops over the trailing 7 days)
+    pop >= max(AIRDROP_MIN_POP, p90 of slot pops over the trailing 14 days)
     drops already this ISO week < AIRDROP_WEEKLY_CAP
     at least 24h since the last drop
     nothing currently announced or live
@@ -90,7 +95,7 @@ at a real peak:
 | Mon 09-14 02:00 | 7 | 4 |
 | Tue 09-15 02:00 | 11 | 7 |
 
-The `max(5, p90)` shape is doing two jobs. The floor stops the event firing on
+The `max(floor, p90)` shape is doing two jobs. The floor stops the event firing on
 a week that has no good moment in it. The percentile raises the bar by itself
 as the server grows, so the constant does not need re-tuning.
 
@@ -145,69 +150,63 @@ Four states, keyed on the restart slot the drop goes live at.
     disable  at the next slot, two hours later. Row -> `ended`.
 
 The drop is live for exactly one session. `airdrop-tick.ts` owns *decide*;
-`restart-tick.ts` owns *enable* and *disable*, calling `applyAirdrop` in the
-same position and with the same discipline as the existing `applyTruckWipe`
-and `applyRaidWindow`.
+`restart-tick.ts` owns *enable* and *disable*, in the same position and with
+the same discipline as the existing `applyTruckWipe` and `applyRaidWindow` —
+and, per §5, sharing the latter's single read-modify-write of the file.
 
-## 5. The two file edits
+## 5. The file edit
 
-### 5.1 cfggameplay.json
-
-`WorldsData.objectSpawnersArr` gains or loses one element,
-`./custom/<location>-airdrop-<colour>.json`.
+`WorldsData.objectSpawnersArr` in `cfggameplay.json` gains or loses one
+element, `./custom/airdrop-<location>-<colour>.json`.
 
 A targeted splice, never a parse-and-reserialize, and with the same
 refuse-rather-than-guess guards `setBaseDamageDisabled` already carries: parse
-first to prove the input is valid, then match elements containing
-`-airdrop-`, and throw unless exactly zero or one matches. This is the file
-whose corruption stops the server *booting*, for every player. Refusing to
-write costs one event; writing a broken file costs the server.
+first to prove the input is valid, then match elements whose path contains
+`/airdrop-`, and throw unless exactly zero or one matches. Parse the result
+back and confirm the array holds what was intended — the second guard
+`setBaseDamageDisabled` documents, for the same reason: parsing proves the file
+is loadable, and only reading the value back proves the edit did what it meant
+to. This is the file whose corruption stops the server *booting*, for every
+player. Refusing to write costs one event; writing a broken file costs the
+server.
 
-### 5.2 mapgrouppos.xml
+⚠️ **One read-modify-write per slot, shared with the raid flip.** The airdrop
+and the raid window edit the same file on the same slot, and two independent
+download/upload pairs mean whichever uploads second silently discards the
+other's edit — a weekend that never opens, or a drop that never lands, with
+every guard above passing and nothing logged. `applyRaidWindow` already
+downloads `cfggameplay.json` every slot, so `restart-tick.ts` downloads it
+once, applies `setBaseDamageDisabled` and then `setAirdropSpawner` to that one
+string, and uploads once if either changed. The two features keep their own
+rows, their own alerts and their own failure semantics; they share exactly one
+HTTP round trip.
 
-⚠️ Pre-registering all 16 locations permanently and leaving them there does
-not work, and it is worth writing down why, because it is the obvious
-shortcut. `mapgroupproto.xml:155` gives `Land_ContainerLocked_Blue_DE`
-`lootmax="9"` with its loot points at y = -1.087. A `mapgrouppos` entry spawns
-those nine weapons whether or not the physical container from the object
-spawner is there. Sixteen permanent entries means fifteen caches of free
-military loot spawning under the terrain across the map.
+⚠️ There is no `mapgrouppos.xml` edit, and adding one would be a regression.
+An earlier draft of this design had the bot rewriting a marked region of that
+705,058-byte file to place the container's nine CE loot points. `959f556`
+removed the `Land_ContainerLocked_*_DE` groups from `mapgroupproto.xml`
+altogether, so a `mapgrouppos` entry at those coordinates now builds no group,
+dispatches no proxies and spawns no loot — it would be 705KB of risk for no
+effect.
 
-So the file is edited per event. It is 705,058 bytes across 5,291 lines and it
-drives loot for the entire map, so the bot never writes it freehand. A marker
-pair is added **by hand, once**, immediately after `<map>`:
-
-    <!-- AIRDROP BEGIN (bot-owned, do not hand-edit) -->
-    <!-- AIRDROP END -->
-
-The bot rewrites only the bytes between them, and refuses to write at all
-unless it finds exactly one BEGIN and exactly one END, in that order.
-Everything outside comes back byte-identical. The bot never creates the
-markers: a missing marker pair is a misconfiguration to be reported, not a
-condition to be repaired by a process that is holding a 705KB file it did not
-write.
-
-## 6. Why mapgrouppos is not level-triggered on file content
+## 6. Level-triggered, and it costs nothing
 
 `applyTruckWipe` and `applyRaidWindow` are level-triggered on file *content*:
-they download every slot and recompute the wanted state, so a lost or
-hand-reverted write is corrected within two hours. That property is worth
-keeping and the reasoning behind it is sound.
+every slot downloads the file and recomputes the wanted state, so a lost or
+hand-reverted write is corrected within two hours. The airdrop inherits that
+property for free, because §5 has it riding on a download the raid flip was
+making anyway: the wanted spawner state is recomputed from the database's
+intent every slot, and any drift is corrected at the next one.
 
-Applied literally to mapgrouppos it means pulling 705KB twelve times a day,
-8.5MB/day, to learn that nothing changed on eleven of them.
-
-This design level-triggers on **database intent** instead. The file is touched
-only on the enable and disable transitions, and the transition is retried every
-slot until the upload is confirmed — so a failed disable keeps trying rather
-than leaving a container standing. Full reconciliation, downloading both files
-and comparing against intent, runs once a day at the 12:00 UTC slot, the
-quietest on the server (§2).
-
-The property that is given up: a hand-edit to the marker region is corrected
-within a day rather than within two hours. That is an acceptable trade for a
-region the bot owns and no human is expected to touch.
-
+That matters more here than it looks, because of a clobber this design does not
+otherwise control. The `livonia` repo *is* the mission tree, and publishing a
+GitHub Release FTPs the whole tree — `cfggameplay.json` included — over
+whatever the bot has written (`livonia/CLAUDE.md`). The repo's baseline carries
+no airdrop spawner, so a Release published during a live drop removes it early.
+The next slot puts it back if the event is still running, and never strands one
+on after it has ended, because both directions are recomputed from the row. A
+drop cut short by a deploy is the accepted cost, not a bug to engineer around;
+the same hazard already applies to the raid window's `disableBaseDamage`.
 ## 7. The state table
 
 Per-server keyed, following `server_restarts` rather than
@@ -260,18 +259,18 @@ worse than no airdrop, because it spends a week's budget on nothing. The row
 goes `failed` and the budget is refunded.
 
 - **Enable fails at the slot.** The row stays `announced` and the next slot
-  retries; players were told "after the restart" and it slipped, so a short
-  follow-up goes out. After two failures it scrubs: row `failed`, budget
-  refunded, one plain notice.
+  retries — §6's recomputation is the retry, not a separate mechanism. Players
+  were told "after the restart" and it slipped, so a short follow-up goes out.
+  After two failures it scrubs: row `failed`, budget refunded, one plain notice.
 - **Disable fails.** Retried every slot until confirmed, with no give-up, and
   an ops alert after the second failure. The asymmetry with enable is the
-  point: a failed enable costs one event, while a failed disable leaves
-  high-tier loot respawning at a grid square every player knows.
+  point: a failed enable costs one event, while a failed disable leaves a
+  locked container standing at a grid square every player knows, for as long as
+  it takes someone to notice.
 - **Nothing here ever blocks the restart.** The whole block sits in the same
   outer try/catch as the truck wipe and the raid flip. Players rely on the
   two-hour cadence far more than they rely on any of this, and the next slot
   recomputes the wanted state anyway.
-
 ## 10. Config
 
     AIRDROP_TICK=on
@@ -287,28 +286,34 @@ a drop that cannot be announced is a drop that does not happen.
 
 ## 11. Testing
 
-Four pure functions carry every decision, each testable against fixtures cut
+Three pure functions carry every decision, each testable against fixtures cut
 from the real files:
 
     setAirdropSpawner(json, spec | null)   -> { json, changed }
-    setAirdropGroup(xml, spec | null)      -> { xml, changed }
     chooseAirdrop(recentLocations, rng)    -> spec
     shouldFire(pop, history, weekCount, lastFire, now) -> boolean
 
-The guard cases matter more than the happy paths: absent markers, duplicate
-markers, markers out of order, a `cfggameplay.json` that does not parse, two
-`-airdrop-` entries where there should be one. Every one of them must throw
-rather than write.
+The guard cases matter more than the happy paths: a `cfggameplay.json` that
+does not parse, one whose `objectSpawnersArr` is missing or is not an array,
+two `/airdrop-` entries where there should be one, and an edit that parses but
+leaves the array holding something other than what was asked for. Every one of
+them must throw rather than write.
+
+One composition test belongs beside them, because §5's shared round trip is the
+part that is easy to get wrong later: a single slot that both flips the raid
+window and enables a drop must produce one upload carrying both edits.
 
 The tick itself uses the existing fake-Nitrado pattern from
 `restart-tick.test.ts`.
 
 ## 12. Rollout
 
-1. Let the current restart run with `dolnik-airdrop-blue` hand-enabled.
-   Confirm the container spawns and the nine loot points actually dispatch.
-   Nothing below is worth building if the mechanic does not work.
-2. Revert `cfggameplay.json` and `mapgrouppos.xml` to the empty baseline and
-   add the marker pair (§5.2), so the bot owns the state rather than
-   inheriting a hand-set one.
+1. Confirm the mechanic on the live server with `airdrop-dolnik-blue`
+   hand-enabled, as it is today: the container and its 29 props spawn, and the
+   container opens to the matching key. Nothing below is worth building if the
+   mechanic does not work.
+2. Revert `cfggameplay.json` in the `livonia` repo to the baseline with no
+   `airdrop-*` spawner registered, so the bot owns the state rather than
+   inheriting a hand-set one — and so a Release never re-enables a drop the
+   bot has ended (§6).
 3. Ship with `AIRDROP_WEEKLY_CAP=1` for the first fortnight, then raise to 2.
