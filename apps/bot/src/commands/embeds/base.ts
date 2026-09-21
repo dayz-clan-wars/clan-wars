@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { BaseView } from "@factions/roster";
-import { DECLARE_COPY, lapsedCopy } from "@factions/copy";
+import { DECLARE_COPY, lapsedCopy, rel, when } from "@factions/copy";
 
 const GOLD = 0xc8a34a;
 
@@ -29,7 +29,7 @@ export function baseEmbed(view: BaseView, siteBaseUrl: string): EmbedBuilder {
     embed.setDescription("No declared base. Raise your flag at a pole, then run `/base declare`.");
   }
 
-  if (view.lapsed) embed.addFields({ name: "Lapsed", value: lapsedCopy(view.lapsed.at), inline: false });
+  if (view.lapsed) embed.addFields({ name: "Lapsed", value: lapsedCopy(rel(view.lapsed.at) ?? when(view.lapsed.at)), inline: false });
 
   if (view.candidates.length > 0) {
     embed.addFields({

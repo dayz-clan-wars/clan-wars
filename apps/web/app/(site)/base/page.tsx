@@ -6,7 +6,7 @@ import { nearestPlace } from "@/lib/map-places";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { ago, days } from "@/lib/format";
+import { ago, days, when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
 import { ReportButton } from "./report-button";
@@ -105,7 +105,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
 
         {view.linked && !view.inClan && (
           <>
-            {view.lapsed && <Notice tone="gold" focus={false}>{lapsedCopy(view.lapsed.at)}</Notice>}
+            {view.lapsed && <Notice tone="gold" focus={false}>{lapsedCopy(when(view.lapsed.at))}</Notice>}
 
             <Panel num="01" title="Declared" aside={view.declaration ? `${WATCH_ZONE_RADIUS_M} m watch zone` : undefined}>
               <PanelBody>

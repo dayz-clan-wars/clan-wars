@@ -2,7 +2,7 @@ import type { IssueOutcome, IssueOutcomeKind, LinkStatus } from "@factions/roste
 import { LINK_EMOTES } from "@factions/domain";
 
 /** What /link says for each refusal. "issued" and "live" render the challenge card instead of a line. */
-export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome) => string> = {
+export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome, endsWhen?: string) => string> = {
   "already-linked": (o) => `You are already linked to ${name(o)}. Unlink on your page first if you need to bind a different character.`,
   "just-linked": (o) => `You just finished linking to ${name(o)}. Unlink on your page first if you need to bind a different character.`,
   "unknown-character": () => "The server has not seen that character. Pick one from the list — only characters the event log has seen can be linked.",
@@ -10,7 +10,9 @@ export const ISSUE_COPY: Record<IssueOutcomeKind, (o: IssueOutcome) => string> =
   "live": (o) => `You already have a challenge open for ${name(o)}.`,
   "too-many-draws": (o) => `You have asked for too many sequences for ${name(o)} today. Try again tomorrow — or, if there is an emote you cannot find on the wheel, say so in the Discord rather than working around it.`,
   "issued": (o) => `Challenge issued for ${name(o)}.`,
-  "held-by-other": (o) => `Someone else is verifying ${name(o)} right now, so a challenge cannot be issued for that character yet. Their attempt ends ${o.kind === "held-by-other" ? at(o.expiresAt) : ""}. If that character is yours, ask an admin.`,
+  // ⚠️ Second argument is the FORMATTED instant — same reason as lapsedCopy
+  // in base.ts. The bot passes rel(), the site passes its own formatter.
+  "held-by-other": (o, endsWhen = "") => `Someone else is verifying ${name(o)} right now, so a challenge cannot be issued for that character yet. Their attempt ends ${endsWhen}. If that character is yours, ask an admin.`,
   "unavailable": () => "Could not issue a challenge right now. Try again in a moment.",
 };
 
@@ -52,9 +54,6 @@ export function unlinkCopy(code: string): string | undefined {
 
 function name(o: IssueOutcome): string {
   return "gamertag" in o ? o.gamertag : "that character";
-}
-function at(d: Date | string): string {
-  return new Date(d).toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit", timeZone: "UTC" }) + " UTC";
 }
 
 /**

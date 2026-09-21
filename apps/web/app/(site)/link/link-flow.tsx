@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { LINK_EMOTES } from "@factions/domain";
 import type { IssueOutcome, LinkStatus } from "@factions/roster";
 import { ENDED_COPY, ISSUE_COPY, formatRemaining } from "@/lib/link-copy";
+import { when } from "@/lib/format";
 import { btnCta, btnPrimary, btnQuiet, field } from "@/app/components/ui";
 
 /** `LinkStatus` after a trip through JSON: every Date is an ISO string. */
@@ -60,7 +61,8 @@ export function LinkFlow({ initial }: { initial: Status }) {
           : null);
         await refresh();
       } else {
-        setNotice(ISSUE_COPY[outcome.kind](outcome as unknown as IssueOutcome));
+        const endsWhen = outcome.kind === "held-by-other" ? when(new Date(outcome.expiresAt)) : undefined;
+        setNotice(ISSUE_COPY[outcome.kind](outcome as unknown as IssueOutcome, endsWhen));
       }
     } finally { setBusy(false); }
   };

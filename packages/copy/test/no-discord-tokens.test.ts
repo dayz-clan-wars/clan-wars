@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as copy from "../src/index";
+import { lapsedCopy } from "../src/index";
 
 /**
  * ⚠️ @factions/copy is read by apps/web AND apps/bot. A Discord timestamp
@@ -43,5 +44,12 @@ describe("no Discord tokens in shared copy", () => {
   it.each(Object.keys(SURFACES))("%s contains no <t: token", (name) => {
     const offenders = strings(SURFACES[name]).filter((s) => s.includes("<t:"));
     expect(offenders).toEqual([]);
+  });
+});
+
+describe("time-bearing shared copy takes a pre-formatted string", () => {
+  it("lapsedCopy interpolates whatever the surface formatted", () => {
+    expect(lapsedCopy("<t:1790001000:R>")).toContain("<t:1790001000:R>");
+    expect(lapsedCopy("21 Sep, 14:30 UTC")).toContain("21 Sep, 14:30 UTC");
   });
 });
