@@ -1,9 +1,5 @@
 import type { RaidWindowState } from "@factions/domain";
-
-/** Discord's <t:…:F> renders in each reader's own timezone — never hard-code one. */
-function stamp(d: Date): string {
-  return `<t:${Math.floor(d.getTime() / 1000)}:F>`;
-}
+import { at, atRel, rel } from "@factions/copy";
 
 export function advanceText(state: RaidWindowState): string {
   if (state.phase === "skipped") {
@@ -15,7 +11,8 @@ export function advanceText(state: RaidWindowState): string {
   }
   return [
     "**Raid weekend opens tomorrow.**",
-    `Base damage comes on at ${stamp(state.opensAt)} and goes off at ${stamp(state.closesAt)}.`,
+    `Base damage comes on at ${atRel(state.opensAt) ?? "the next restart"} and goes off at `
+      + `${at(state.closesAt) ?? "the restart after"}.`,
     "Lowering flags scores all week; the window only decides whether walls take damage.",
   ].join("\n");
 }
@@ -23,14 +20,14 @@ export function advanceText(state: RaidWindowState): string {
 export function openText(state: RaidWindowState): string {
   return [
     "**Raid weekend is live.** Base damage is on.",
-    `It closes at ${stamp(state.closesAt)}.`,
+    `It closes ${rel(state.closesAt) ?? "at the scheduled restart"}.`,
   ].join("\n");
 }
 
 export function closeText(state: RaidWindowState): string {
   return [
     "**Raid weekend is over.** Base damage is off.",
-    `The next one opens at ${stamp(state.opensAt)}.`,
+    `The next one opens at ${atRel(state.opensAt) ?? "the next scheduled window"}.`,
   ].join("\n");
 }
 
