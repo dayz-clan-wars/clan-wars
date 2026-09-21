@@ -197,5 +197,21 @@ export function setAirdropSpawner(json: string, spec: AirdropSpec | null): { jso
     );
   }
 
+  // ⚠️ The airdrop subset above is only half of "the array holds what was
+  // intended" (spec §5). The splice works on LINES, so two array elements sharing
+  // one line — which a reformat by Nitrado's web editor, a prettifier or a
+  // `livonia` Release can produce at any time — make removing the drop take its
+  // line-mate with it. The result parses, the airdrop check passes, and
+  // `teleports.json`, `faction-supplies.json` or `admin-castle.json` is silently
+  // gone, with nothing level-triggering it back.
+  const othersBefore = (current as string[]).filter((e) => !e.includes(AIRDROP_MARK));
+  const othersAfter = got.filter((e) => !e.includes(AIRDROP_MARK));
+  if (othersBefore.length !== othersAfter.length || othersBefore.some((e, i) => e !== othersAfter[i])) {
+    throw new Error(
+      `cfggameplay.json: after the edit objectSpawnersArr's other entries are ${JSON.stringify(othersAfter)}, ` +
+        `not ${JSON.stringify(othersBefore)} — the edit changed a spawner it does not own`,
+    );
+  }
+
   return { json: nextJson, changed: true };
 }

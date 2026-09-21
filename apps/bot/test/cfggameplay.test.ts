@@ -155,4 +155,19 @@ describe("setAirdropSpawner", () => {
       .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json"');
     expect(() => setAirdropSpawner(two, null)).toThrow(/2×|two/i);
   });
+
+  // ⚠️ The splice works on LINES. A reformat that puts two elements on one line
+  // (Nitrado's web editor, a prettifier, a `livonia` Release) makes removing the
+  // drop delete its line-mate too: the file still parses, the airdrop subset is
+  // still empty, `changed` is still true, and `admin-castle.json` is silently
+  // gone with nothing level-triggering it back. Without the non-airdrop identity
+  // check this returns [] instead of throwing.
+  it("⚠️ throws rather than taking an unrelated spawner with it when two elements share a line", () => {
+    const shared = REAL.replace(
+      /("objectSpawnersArr"\s*:\s*\[)[^\]]*(\])/,
+      '$1\n\t\t\t"./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"\n\t\t$2',
+    );
+    expect(spawners(shared)).toEqual(["./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"]);
+    expect(() => setAirdropSpawner(shared, null)).toThrow(/does not own/);
+  });
 });
