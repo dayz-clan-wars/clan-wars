@@ -1,8 +1,8 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
-import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow } from "@factions/domain";
+import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
-import { setBaseDamageDisabled } from "./cfggameplay.js";
+import { setAirdropSpawner, setBaseDamageDisabled } from "./cfggameplay.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -70,45 +70,79 @@ export type RaidFlip = {
   previousContent: string;
 };
 
+export type GameplayEdits = {
+  /** Present when RAID_WINDOW_TICK is on. */
+  raidWindow?: { skips: SkippedWindow[] };
+  /** Present when AIRDROP_TICK is on. `wanted` is the drop this slot should register, or null for none. */
+  airdrop?: { wanted: AirdropSpec | null };
+};
+
+export type GameplayResult = {
+  flip?: RaidFlip;
+  flipError?: Error;
+  airdrop?: { wanted: AirdropSpec | null; changed: boolean };
+  airdropError?: Error;
+};
+
 /**
- * Bring one server's cfggameplay.json to the state `slot` wants, immediately
- * before its restart.
+ * Bring one server's cfggameplay.json to the state `slot` wants — both the raid
+ * window's `GeneralData.disableBaseDamage` and the airdrop's entry in
+ * `WorldsData.objectSpawnersArr` — immediately before its restart.
  *
- * ⚠️ Level-triggered, exactly like applyTruckWipe. Every slot recomputes the
- * wanted value, so a bot down across Friday 00:00 opens the window LATE rather
- * than not at all, and a lost or hand-reverted write is corrected within two
- * hours. An edge-triggered version ("on the Friday slot, set false") loses a
- * whole weekend to one missed tick and nothing anywhere notices.
+ * ⚠️ ONE download and ONE upload, for BOTH features (spec §5). They edit the same
+ * file on the same slot; two independent download/upload pairs mean whichever
+ * uploads second silently discards the other's edit, with every guard passing and
+ * nothing logged. That is the entire reason this function exists rather than two.
  *
- * ⚠️ The returned boundaryAt is the WINDOW boundary, never the slot: a Saturday
- * repair belongs to that Friday's row.
+ * ⚠️ Level-triggered, exactly like applyTruckWipe. Every slot recomputes both
+ * wanted values, so a bot down across Friday 00:00 opens the window LATE rather
+ * than not at all, and a lost, hand-reverted or FTP-deploy-clobbered write is
+ * corrected within two hours (spec §6).
  *
- * ⚠️ Throws rather than uploading whenever a guard in setBaseDamageDisabled
- * rejects the edit. Refusing costs a window that opens two hours late; writing a
- * cfggameplay.json that does not parse costs every player the server itself.
+ * ⚠️ Each splice is attempted in its OWN try/catch and its refusal is RETURNED,
+ * never thrown. A guard rejecting the airdrop must not cost the raid weekend, and
+ * vice versa; the caller records each outcome against its own feature's rows.
  */
-export async function applyRaidWindow(
-  nitrado: RestartTarget,
-  slot: Date,
-  skips: SkippedWindow[],
-): Promise<RaidFlip> {
-  const state = raidWindowAt(slot, skips);
+export async function applyGameplay(
+  nitrado: RestartTarget, slot: Date, edits: GameplayEdits,
+): Promise<GameplayResult> {
+  if (!edits.raidWindow && !edits.airdrop) return {};
+
   const dir = await nitrado.missionRootDir();
   const original = await nitrado.downloadFile(`${dir}/${GAMEPLAY_FILE}`);
+  const out: GameplayResult = {};
+  let json = original;
 
-  const { json, changed } = setBaseDamageDisabled(original, state.baseDamageDisabled);
+  if (edits.raidWindow) {
+    const state = raidWindowAt(slot, edits.raidWindow.skips);
+    try {
+      const r = setBaseDamageDisabled(json, state.baseDamageDisabled);
+      json = r.json;
+      // ⚠️ state.boundaryAt, never a local derivation. The announcer and the
+      // website key their confirmation lookups on the same field; deriving it here
+      // independently is how the writer and the readers ended up disagreeing about
+      // midweek instants.
+      out.flip = {
+        boundaryAt: state.boundaryAt, wantedDisabled: state.baseDamageDisabled,
+        changed: r.changed, previousContent: original,
+      };
+    } catch (err) {
+      out.flipError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
 
-  if (changed) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
+  if (edits.airdrop) {
+    try {
+      const r = setAirdropSpawner(json, edits.airdrop.wanted);
+      json = r.json;
+      out.airdrop = { wanted: edits.airdrop.wanted, changed: r.changed };
+    } catch (err) {
+      out.airdropError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
 
-  // ⚠️ state.boundaryAt, never a local derivation. The announcer and the website
-  // key their confirmation lookups on the same field; deriving it here independently
-  // is how the writer and the readers ended up disagreeing about midweek instants.
-  return {
-    boundaryAt: state.boundaryAt,
-    wantedDisabled: state.baseDamageDisabled,
-    changed,
-    previousContent: original,
-  };
+  if (json !== original) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
+  return out;
 }
 
 export const RESTART_MESSAGE = "Scheduled restart";
@@ -235,7 +269,9 @@ export async function restartTick(
           raidBoundaryAt = boundaryAt;
 
           try {
-            flip = await applyRaidWindow(nitrado, slot.start, skips);
+            const gameplay = await applyGameplay(nitrado, slot.start, { raidWindow: { skips } });
+            if (gameplay.flipError) throw gameplay.flipError;
+            flip = gameplay.flip;
           } catch (err) {
             const detail = { error: err instanceof Error ? err.message : String(err) };
             console.error(`raid window: server ${s.id} REFUSED the flip for slot ${slot.start.toISOString()} — restarting anyway`, err);

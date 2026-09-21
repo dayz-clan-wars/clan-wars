@@ -1,8 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
-import { restartTick, RESTART_MESSAGE, type RestartTarget } from "../src/restart-tick.js";
+import { restartTick, RESTART_MESSAGE, applyGameplay, type RestartTarget } from "../src/restart-tick.js";
 import { raidWindowTick } from "../src/raid-window-tick.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const GAMEPLAY = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
+
+/** A Nitrado that serves one cfggameplay.json and records what is written back. */
+function fakeGameplayHost(content = GAMEPLAY) {
+  let stored = content;
+  const uploadFile = vi.fn(async (_dir: string, _name: string, body: string) => { stored = body; });
+  const downloadFile = vi.fn(async () => stored);
+  const target = {
+    status: vi.fn(async () => "started"), restart: vi.fn(async () => {}),
+    missionDbDir: vi.fn(async () => "/db"), missionRootDir: vi.fn(async () => "/mission"),
+    downloadFile, uploadFile,
+  } as unknown as RestartTarget;
+  return { target, downloadFile, uploadFile, read: () => stored };
+}
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -564,6 +581,55 @@ describe("restartTick", () => {
     expect(badRows).toMatchObject([{ outcome: "refused" }]);
     const goodRows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, s2!.id));
     expect(goodRows).toMatchObject([{ outcome: "applied" }]);
+  });
+});
+
+describe("applyGameplay", () => {
+  // ⚠️ THE test for this task. Two independent download/upload pairs on the same
+  // file in the same slot means the second upload silently discards the first's
+  // edit: a raid weekend that never opens, or a drop that never lands, with every
+  // guard passing and nothing logged.
+  it("carries both edits in ONE download and ONE upload", async () => {
+    const host = fakeGameplayHost();
+    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+      raidWindow: { skips: [] },
+      airdrop: { wanted: { location: "dolnik", colour: "blue" } },
+    });
+    expect(host.downloadFile).toHaveBeenCalledTimes(1);
+    expect(host.uploadFile).toHaveBeenCalledTimes(1);
+    const after = JSON.parse(host.read());
+    expect(after.GeneralData.disableBaseDamage).toBe(out.flip!.wantedDisabled);
+    expect(after.WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+  });
+
+  it("uploads nothing when neither edit changes anything", async () => {
+    const host = fakeGameplayHost();
+    await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), { airdrop: { wanted: null } });
+    expect(host.uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("downloads nothing when neither feature is configured", async () => {
+    const host = fakeGameplayHost();
+    const out = await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), {});
+    expect(host.downloadFile).not.toHaveBeenCalled();
+    expect(out).toEqual({});
+  });
+
+  // ⚠️ One refusal must not take the other feature down with it. A raid weekend is
+  // worth more than a drop, and a drop is worth more than nothing.
+  it("still applies and uploads the raid flip when the airdrop splice refuses", async () => {
+    const twoDrops = GAMEPLAY.replace(
+      '"./custom/admin-castle.json"',
+      '"./custom/airdrop-lukow-blue.json",\n\t\t\t"./custom/airdrop-nadbor-blue.json"',
+    );
+    const host = fakeGameplayHost(twoDrops);
+    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+      raidWindow: { skips: [] }, airdrop: { wanted: null },
+    });
+    expect(out.airdropError).toBeInstanceOf(Error);
+    expect(out.flip!.changed).toBe(true);
+    expect(host.uploadFile).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(host.read()).GeneralData.disableBaseDamage).toBe(false);
   });
 });
 
