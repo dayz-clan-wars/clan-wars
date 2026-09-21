@@ -34,9 +34,9 @@ export const PING_KINDS: ReadonlySet<ClanNoticeKind> = new Set<ClanNoticeKind>([
  * pinged the way the text line pinged them — a DM needs no ping, and the
  * public wall never pinged anyone.
  */
-export function noticeMessage(row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null }, now: Date, siteBaseUrl: string): NoticeMessage {
+export function noticeMessage(row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null }, siteBaseUrl: string): NoticeMessage {
   if (row.kind !== "achievement") {
-    const line = noticeText(row, now);
+    const line = noticeText(row);
     // A clan with no role column yet (activation is mid-flight) still gets
     // the alert — unpinged beats undelivered.
     const roleId = row.target === "channel" && PING_KINDS.has(row.kind) ? row.discordRoleId ?? null : null;
@@ -85,7 +85,7 @@ export async function noticeTick(
     const target = row.discordTargetId!;
     if (blocked.has(target)) continue;
     try {
-      const msg = noticeMessage(row, opts.now, opts.siteBaseUrl);
+      const msg = noticeMessage(row, opts.siteBaseUrl);
       await send(row.target, target, msg.content, msg.embeds, msg.mentionRoleId, msg.components);
       await store.markPosted(row.id, opts.now);
       out.posted++;

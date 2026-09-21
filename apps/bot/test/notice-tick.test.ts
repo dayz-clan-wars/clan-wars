@@ -55,26 +55,26 @@ describe("noticeTick", () => {
 
   it("an achievement in a clan channel is a mention plus the card; in a DM the card alone; any other kind the text line", () => {
     const payload = { key: "sniper", name: "Sniper", description: "d", ownerKind: "player", ownerName: "111111111111111111", gamertag: "Racer", clanTag: "BEAR" };
-    const channel = noticeMessage(row(1, "chan", { kind: "achievement", payload }), now, site);
+    const channel = noticeMessage(row(1, "chan", { kind: "achievement", payload }), site);
     expect(channel.content).toBe("<@111111111111111111>");
     expect(channel.embeds![0]!.thumbnail!.url).toBe("https://dayzclanwars.com/achievements/unlocked/sniper.png");
-    const dm = noticeMessage(row(2, "user", { kind: "achievement", target: "dm", payload }), now, site);
+    const dm = noticeMessage(row(2, "user", { kind: "achievement", target: "dm", payload }), site);
     expect(dm.content).toBe("");
     expect(dm.embeds).toHaveLength(1);
-    const left = noticeMessage(row(3, "chan"), now, site);
+    const left = noticeMessage(row(3, "chan"), site);
     expect(left.content).toContain("X");
     expect(left.embeds).toBeUndefined();
   });
 
   it("opens an alert kind with the clan role ping, and leaves every other kind alone", async () => {
     const roleId = "role-1";
-    const alert = noticeMessage(row(1, "chan", { discordRoleId: roleId, kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), now, site);
-    expect(alert.content).toBe(`<@&${roleId}> 👁 Sasha (not a member) was seen 42 m from your base — 0 min ago`);
+    const alert = noticeMessage(row(1, "chan", { discordRoleId: roleId, kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), site);
+    expect(alert.content).toBe(`<@&${roleId}> 👁 Sasha (not a member) was seen 42 m from your base — <t:1788696000:R>`);
     expect(alert.mentionRoleId).toBe(roleId);
 
     // A membership line is not an emergency: same channel, same role on the
     // row, no ping.
-    const quiet = noticeMessage(row(2, "chan", { discordRoleId: roleId }), now, site);
+    const quiet = noticeMessage(row(2, "chan", { discordRoleId: roleId }), site);
     expect(quiet.content).toBe("➖ X left");
     expect(quiet.mentionRoleId).toBeUndefined();
   });
@@ -83,12 +83,12 @@ describe("noticeTick", () => {
     // The solo twin of an intruder alert: a DM is already a notification, and
     // a solo player has no role. The leftJoin in readUnposted still hands the
     // row a role id when the player happens to be in a clan.
-    const dm = noticeMessage(row(1, "user", { target: "dm", discordRoleId: "role-1", kind: "solo_intruder", payload: { gamertag: "Sasha", distance: 14 } }), now, site);
-    expect(dm.content).toBe("👁 Sasha (not a member) was seen 14 m from your base — 0 min ago");
+    const dm = noticeMessage(row(1, "user", { target: "dm", discordRoleId: "role-1", kind: "solo_intruder", payload: { gamertag: "Sasha", distance: 14 } }), site);
+    expect(dm.content).toBe("👁 Sasha (not a member) was seen 14 m from your base — <t:1788696000:R>");
     expect(dm.mentionRoleId).toBeUndefined();
 
-    const noRole = noticeMessage(row(2, "chan", { kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), now, site);
-    expect(noRole.content).toBe("👁 Sasha (not a member) was seen 42 m from your base — 0 min ago");
+    const noRole = noticeMessage(row(2, "chan", { kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), site);
+    expect(noRole.content).toBe("👁 Sasha (not a member) was seen 42 m from your base — <t:1788696000:R>");
     expect(noRole.mentionRoleId).toBeUndefined();
   });
 
@@ -166,7 +166,7 @@ describe("noticeTick", () => {
     const msg = noticeMessage({
       kind: "booster_kit_unchosen", target: "dm", occurredAt: new Date(),
       payload: { kitUrl: "https://example.test/kit" },
-    }, new Date(), "https://example.test");
+    }, "https://example.test");
     expect(msg.content).toMatch(/kit/iu);
     expect(msg.components?.[0]?.components?.[0]).toMatchObject({ style: 5, url: "https://example.test/kit" });
     // ⚠️ A URL button carries no custom_id and must never be routed. A style: 2
