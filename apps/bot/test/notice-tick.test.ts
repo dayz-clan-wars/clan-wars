@@ -69,13 +69,13 @@ describe("noticeTick", () => {
   it("opens an alert kind with the clan role ping, and leaves every other kind alone", async () => {
     const roleId = "role-1";
     const alert = noticeMessage(row(1, "chan", { discordRoleId: roleId, kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), site);
-    expect(alert.content).toBe(`<@&${roleId}> 👁 Sasha (not a member) was seen 42 m from your base — <t:1788696000:R>`);
+    expect(alert.content).toBe(`<@&${roleId}> 👁 [Sasha](<${site}/players/Sasha>) (not a member) was seen 42 m from your base — <t:1788696000:R>`);
     expect(alert.mentionRoleId).toBe(roleId);
 
     // A membership line is not an emergency: same channel, same role on the
     // row, no ping.
     const quiet = noticeMessage(row(2, "chan", { discordRoleId: roleId }), site);
-    expect(quiet.content).toBe("➖ X left");
+    expect(quiet.content).toBe(`➖ [X](<${site}/players/X>) left`);
     expect(quiet.mentionRoleId).toBeUndefined();
   });
 
@@ -84,11 +84,11 @@ describe("noticeTick", () => {
     // a solo player has no role. The leftJoin in readUnposted still hands the
     // row a role id when the player happens to be in a clan.
     const dm = noticeMessage(row(1, "user", { target: "dm", discordRoleId: "role-1", kind: "solo_intruder", payload: { gamertag: "Sasha", distance: 14 } }), site);
-    expect(dm.content).toBe("👁 Sasha (not a member) was seen 14 m from your base — <t:1788696000:R>");
+    expect(dm.content).toBe(`👁 [Sasha](<${site}/players/Sasha>) (not a member) was seen 14 m from your base — <t:1788696000:R>`);
     expect(dm.mentionRoleId).toBeUndefined();
 
     const noRole = noticeMessage(row(2, "chan", { kind: "intruder", payload: { gamertag: "Sasha", distance: 42 } }), site);
-    expect(noRole.content).toBe("👁 Sasha (not a member) was seen 42 m from your base — <t:1788696000:R>");
+    expect(noRole.content).toBe(`👁 [Sasha](<${site}/players/Sasha>) (not a member) was seen 42 m from your base — <t:1788696000:R>`);
     expect(noRole.mentionRoleId).toBeUndefined();
   });
 

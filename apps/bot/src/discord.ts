@@ -1539,6 +1539,10 @@ export async function start(cfg: BotConfig): Promise<void> {
       const n = await noticeTick(noticeStore, noticeSender, {
         now: new Date(),
         siteBaseUrl: cfg.siteBaseUrl,
+        // ⚠️ NOT @factions/domain's DORMANT_AFTER_MS — this is the value the
+        // bot actually runs (BOT_DORMANT_AFTER_MS, config.ts), which staging
+        // can set under a day. See the task-9 report.
+        dormantAfterMs: cfg.dormantAfterMs,
         onError: (id, attempts, err) => {
           // Logged once per attempt, capped at NOTICE_MAX_ATTEMPTS: a row
           // failing for the third time is worth a distinct line from the
