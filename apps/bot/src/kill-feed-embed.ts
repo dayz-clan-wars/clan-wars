@@ -2,6 +2,11 @@ import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
 
+// Moved to site-links.ts. Re-exported so the five modules that import them
+// from here keep working; prefer importing from site-links.ts in new code.
+export { escapeMarkdown, profileUrl, who } from "./site-links.js";
+import { escapeMarkdown, profileUrl, who } from "./site-links.js";
+
 /** One side of a kill: the name the log used, and the clan they were in at that instant, if any. */
 export type KillFeedSide = { gamertag: string; tag: string | null; texture: string | null };
 
@@ -38,21 +43,6 @@ export type KillFeedItem = {
 
 const RUST = 0xb0482a;
 const AMBER = 0xe67e22;
-
-/** Discord markdown in a gamertag would restyle the line; a name is text, never markup. */
-export function escapeMarkdown(s: string): string {
-  return s.replace(/[\\*_~`|[\]()>]/gu, (c) => `\\${c}`);
-}
-
-export function profileUrl(siteBaseUrl: string, gamertag: string): string {
-  return `${siteBaseUrl}/players/${encodeURIComponent(gamertag)}`;
-}
-
-/** `**[Name](profile)** [TAG]` — the name links to the profile; the tag is plain. */
-export function who(side: KillFeedSide, siteBaseUrl: string): string {
-  const name = `**[${escapeMarkdown(side.gamertag)}](${profileUrl(siteBaseUrl, side.gamertag)})**`;
-  return side.tag ? `${name} [${escapeMarkdown(side.tag)}]` : name;
-}
 
 function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? "" : "s"}`;

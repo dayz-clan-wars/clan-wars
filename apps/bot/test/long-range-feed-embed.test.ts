@@ -18,7 +18,7 @@ describe("longRangeFeedEmbed", () => {
 
   it("names the victim and the weapon", () => {
     const e = longRangeFeedEmbed(base, site);
-    expect(e.description).toContain("killed **[Dave](https://dayzclanwars.com/players/Dave)** [BEAR]");
+    expect(e.description).toContain("killed **[Dave](<https://dayzclanwars.com/players/Dave>)** [[BEAR](<https://dayzclanwars.com/clans/BEAR>)]");
     expect(e.description).toContain("Mosin");
   });
 

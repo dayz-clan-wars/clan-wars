@@ -23,7 +23,7 @@ describe("hitFeedEmbed", () => {
 
   it("names the victim, the count and the weapon", () => {
     const e = hitFeedEmbed(base, site);
-    expect(e.description).toContain("hit **[Dave](https://dayzclanwars.com/players/Dave)** [BEAR] 2 times");
+    expect(e.description).toContain("hit **[Dave](<https://dayzclanwars.com/players/Dave>)** [[BEAR](<https://dayzclanwars.com/clans/BEAR>)] 2 times");
     expect(e.description).toContain("KA-74");
   });
 

@@ -22,7 +22,7 @@ describe("killFeedEmbed", () => {
 
   it("says who was killed, with what, from how far, and the running tally", () => {
     const d = killFeedEmbed(kill(), site).description!;
-    expect(d).toContain("killed **[RonaldRaygun552](https://dayzclanwars.com/players/RonaldRaygun552)** [WOLF]");
+    expect(d).toContain("killed **[RonaldRaygun552](<https://dayzclanwars.com/players/RonaldRaygun552>)** [[WOLF](<https://dayzclanwars.com/clans/WOLF>)]");
     expect(d).toContain("KA-74 · 41 m");
     expect(d).toContain("13 kills for IGC slide · 4 deaths for RonaldRaygun552 this season");
     expect(killFeedEmbed(kill(), site).footer?.text).toBe("Season 1");
