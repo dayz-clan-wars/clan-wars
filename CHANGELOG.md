@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Airdrop events: when the server is genuinely busy, the bot picks one of 16 Livonia
+  locations and one of three container colours, announces the location before a
+  restart, places the drop for exactly one session, and takes it away again. At most
+  `AIRDROP_WEEKLY_CAP` a week, never within 24 hours of the last one, and never on a
+  week with no good moment in it.
+- `/airdrop place` for admins: put a drop at the next restart by hand. It announces
+  and expires like any other, and does not count against the weekly cap.
+
 ## [1.29.1] - 2026-09-20
 
 ### Changed
