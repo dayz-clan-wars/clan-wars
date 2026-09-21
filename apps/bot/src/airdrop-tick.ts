@@ -1,4 +1,4 @@
-import { airdropEvents, playerSessions, servers, type Database } from "@factions/db";
+import { airdropEvents, servers, type Database } from "@factions/db";
 import {
   AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, isoWeekStart, nextRestartAt, p90,
   RESTART_PERIOD_MS, shouldFire,

@@ -119,16 +119,42 @@ describe("airdropTick", () => {
     expect(r.decided).toBe(0);
   });
 
-  // ⚠️ The whole point of the manual command: an admin drop must not eat the week.
+  // ⚠️ Dated INSIDE the current ISO week (isoWeekStart(NOW) is Monday 2026-09-21,
+  // since NOW itself falls on a Monday) and more than 24h before the `now` this test
+  // uses, so neither the `gte(decidedAt, isoWeekStart(...))` term nor the 24h gap
+  // masks the result on its own — only `manual: false` in the week query can be doing
+  // the excluding here. A manual row dated in the PREVIOUS week would pass this test
+  // even with that term deleted, which pins nothing.
+  // ⚠️ Runs at Wednesday 19:30 of the SAME ISO week, not the file's default NOW
+  // (Monday 19:30): the week starts at Monday 00:00, only 19.5h before the default
+  // NOW, which leaves no room for a decidedAt that is both inside the current week
+  // and more than 24h in the past. Wednesday gives that room without leaving the week.
   it("does not count a manual drop against the week's cap", async () => {
+    const now = at("2026-09-23T19:30:00Z");
+    await online(6, "2026-09-23T18:00:00Z", null);
+    await db.insert(airdropEvents).values({
+      serverId, slotAt: at("2026-09-21T02:00:00Z"), location: "lukow", colour: "blue",
+      decidedAt: at("2026-09-21T01:30:00Z"), popAtDecision: 4, threshold: "0",
+      state: "ended", manual: true, announcedAt: at("2026-09-21T01:30:01Z"),
+    });
+    const r = await run(vi.fn(async () => {}), { now, weeklyCap: 1 });
+    expect(r.decided).toBe(1);
+  });
+
+  // ⚠️ The asymmetry that matters: manual is excluded from the CAP count only. It
+  // still holds the 24h gap and the one-open-drop-at-a-time guard shut, because those
+  // two are about the players' experience of the event, not the budget (spec §9's
+  // comment on `airdropEvents.manual`). Without this test, a later "simplification"
+  // could exclude manual from the gap/open checks too and nothing would catch it.
+  it("still holds a manual drop's 24h gap shut against a new automatic decision", async () => {
     await online(6, "2026-09-21T18:00:00Z", null);
     await db.insert(airdropEvents).values({
-      serverId, slotAt: at("2026-09-19T20:00:00Z"), location: "lukow", colour: "blue",
-      decidedAt: at("2026-09-19T19:30:00Z"), popAtDecision: 4, threshold: "0",
-      state: "ended", manual: true, announcedAt: at("2026-09-19T19:30:01Z"),
+      serverId, slotAt: at("2026-09-21T14:00:00Z"), location: "lukow", colour: "blue",
+      decidedAt: at("2026-09-21T13:30:00Z"), popAtDecision: 4, threshold: "0",
+      state: "ended", manual: true, announcedAt: at("2026-09-21T13:30:01Z"),
     });
-    const r = await run(vi.fn(async () => {}), { weeklyCap: 1 });
-    expect(r.decided).toBe(1);
+    const r = await run(vi.fn(async () => {}));
+    expect(r.decided).toBe(0);
   });
 
   it("refuses once the week's cap is spent", async () => {
@@ -141,11 +167,17 @@ describe("airdropTick", () => {
 
   // ⚠️ §3.1's percentile: a peak is relative to the server's own recent peaks, and
   // the floor alone must not let a routine evening spend the week's budget.
+  // ⚠️ A live population AT the decision instant is required here — without it `pop`
+  // is 0 and `shouldFire` refuses on the FLOOR, not the percentile, and this test
+  // would still pass with `popsAt`/`p90` deleted entirely. It is the one test standing
+  // between "a routine evening" and "spends the week's budget", so it has to fail for
+  // the percentile reason specifically.
   it("holds the percentile once the server has grown past the floor", async () => {
     // 14 days where every decision instant had 9 on: p90 is 9, and 6 is not a peak.
     for (let d = 0; d < 14; d++) {
       await online(9, `2026-09-${String(7 + d).padStart(2, "0")}T00:00:00Z`, `2026-09-${String(8 + d).padStart(2, "0")}T00:00:00Z`);
     }
+    await online(6, "2026-09-21T18:00:00Z", null);
     const r = await run(vi.fn(async () => {}));
     expect(r.decided).toBe(0);
   });
