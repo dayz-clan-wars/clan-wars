@@ -252,3 +252,31 @@ export const DEVICE_LOOKUP_LOOKBACK_MS = 30 * 60 * 1000;
  * happen to be when they next perform it by chance.
  */
 export const KIT_PLACEMENT_TTL_MS = 1 * HOUR;
+
+/**
+ * The 16 Livonia locations with a staged locked-container spawner, and the three
+ * colours each is staged in (spec §1).
+ *
+ * ⚠️ A literal list, deliberately, not a directory read: the bot runs nowhere near
+ * the mission tree, and a location named here that has no staged file registers a
+ * spawner the server silently ignores. Adding a location means staging three files
+ * in the `livonia` repo FIRST.
+ */
+export const AIRDROP_LOCATIONS = [
+  "airfield", "bielawa", "brena", "dolnik", "gieraltow", "gliniska", "grabin", "lukow",
+  "nadbor", "polana", "sarnowek", "sitnik", "sobotka", "tarnow", "topolin", "zalesie",
+] as const;
+
+export const AIRDROP_COLOURS = ["blue", "orange", "yellow"] as const;
+
+/** How many recent locations are excluded from the draw (spec §3.3). */
+export const AIRDROP_NO_REPEAT = 5;
+
+/** How long before a restart slot the decision is taken (spec §3.1). */
+export const AIRDROP_DECIDE_LEAD_MS = 30 * 60 * 1000;
+
+/** Minimum gap between two drops (spec §3.1). */
+export const AIRDROP_MIN_GAP_MS = 24 * 60 * 60 * 1000;
+
+/** How far back the trailing percentile looks (spec §3.1). */
+export const AIRDROP_HISTORY_MS = 14 * 24 * 60 * 60 * 1000;

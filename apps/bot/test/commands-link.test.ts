@@ -11,7 +11,7 @@ const D = "discord-ada";
 const UID = "A".repeat(40);
 
 const noOptions: Omit<CommandInput, "actorDiscordId"> = {
-  string: () => null, integer: () => null, boolean: () => null, user: () => null,
+  string: () => null, integer: () => null, boolean: () => null, user: () => null, isAdmin: false,
 };
 const input = (actorDiscordId: string, over: Partial<CommandInput> = {}): CommandInput =>
   ({ actorDiscordId, ...noOptions, ...over });
@@ -25,7 +25,7 @@ describe("/link status", () => {
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test" };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null };
   });
 
   const run = (i: CommandInput) => SPECS.get("link status")!.handler(ctx, i);
@@ -61,7 +61,7 @@ describe("/link start", () => {
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
     await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test" };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null };
   });
 
   const spec = () => SPECS.get("link start")!;
@@ -100,7 +100,7 @@ describe("/link cancel and /link unlink", () => {
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, declarations, poles, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test" };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null };
   });
 
   it("says so when there was nothing to cancel", async () => {

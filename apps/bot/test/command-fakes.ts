@@ -51,6 +51,7 @@ export function input(opts: Record<string, string | number | boolean | null | un
     integer: (n: string) => (opts[n] as number) ?? null,
     boolean: (n: string) => (opts[n] as boolean) ?? null,
     user: (n: string) => (opts[n] as string) ?? null,
+    isAdmin: (opts.isAdmin as boolean) ?? false,
   };
 }
 

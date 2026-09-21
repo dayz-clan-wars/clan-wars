@@ -15,7 +15,7 @@ const D = "discord-ada";
 const UID = "A".repeat(40);
 
 const input = (actorDiscordId: string, over: Partial<CommandInput> = {}): CommandInput => ({
-  actorDiscordId, string: () => null, integer: () => null, boolean: () => null, user: () => null, ...over,
+  actorDiscordId, string: () => null, integer: () => null, boolean: () => null, user: () => null, isAdmin: false, ...over,
 });
 
 describe("/base", () => {
@@ -34,7 +34,7 @@ describe("/base", () => {
     const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: NOW, linesIngested: 0, complete: true }).returning();
     admFileId = a!.id;
     line = 0;
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test" };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null };
   });
 
   const pole = (poleKey: string, x: number, z: number) => db.insert(poles).values({

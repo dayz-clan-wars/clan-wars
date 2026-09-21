@@ -1,8 +1,8 @@
-import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
-import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow } from "@factions/domain";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, type Database } from "@factions/db";
+import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
-import { setBaseDamageDisabled } from "./cfggameplay.js";
+import { setAirdropSpawner, setBaseDamageDisabled } from "./cfggameplay.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -70,48 +70,167 @@ export type RaidFlip = {
   previousContent: string;
 };
 
+export type GameplayEdits = {
+  /** Present when RAID_WINDOW_TICK is on. */
+  raidWindow?: { skips: SkippedWindow[] };
+  /** Present when AIRDROP_TICK is on. `wanted` is the drop this slot should register, or null for none. */
+  airdrop?: { wanted: AirdropSpec | null };
+};
+
+export type GameplayResult = {
+  flip?: RaidFlip;
+  flipError?: Error;
+  airdrop?: { wanted: AirdropSpec | null; changed: boolean };
+  airdropError?: Error;
+  /**
+   * Whether the upload actually happened — `json !== original` after both
+   * splices, regardless of which edit (or edits) caused it.
+   *
+   * ⚠️ This is the fact the raid-window bookkeeping's `previousContent`
+   * recording must key on, NOT `flip.changed` alone. Once the airdrop can also
+   * write this file, a slot where the airdrop edit changes it and the raid
+   * splice does not will overwrite the file while `flip.changed` is false —
+   * `flip.changed` and "the file was overwritten" stopped being the same fact
+   * the moment a second feature started sharing the upload gate.
+   */
+  uploaded?: boolean;
+};
+
 /**
- * Bring one server's cfggameplay.json to the state `slot` wants, immediately
- * before its restart.
+ * Bring one server's cfggameplay.json to the state `slot` wants — both the raid
+ * window's `GeneralData.disableBaseDamage` and the airdrop's entry in
+ * `WorldsData.objectSpawnersArr` — immediately before its restart.
  *
- * ⚠️ Level-triggered, exactly like applyTruckWipe. Every slot recomputes the
- * wanted value, so a bot down across Friday 00:00 opens the window LATE rather
- * than not at all, and a lost or hand-reverted write is corrected within two
- * hours. An edge-triggered version ("on the Friday slot, set false") loses a
- * whole weekend to one missed tick and nothing anywhere notices.
+ * ⚠️ ONE download and ONE upload, for BOTH features (spec §5). They edit the same
+ * file on the same slot; two independent download/upload pairs mean whichever
+ * uploads second silently discards the other's edit, with every guard passing and
+ * nothing logged. That is the entire reason this function exists rather than two.
  *
- * ⚠️ The returned boundaryAt is the WINDOW boundary, never the slot: a Saturday
- * repair belongs to that Friday's row.
+ * ⚠️ Level-triggered, exactly like applyTruckWipe. Every slot recomputes both
+ * wanted values, so a bot down across Friday 00:00 opens the window LATE rather
+ * than not at all, and a lost, hand-reverted or FTP-deploy-clobbered write is
+ * corrected within two hours (spec §6).
  *
- * ⚠️ Throws rather than uploading whenever a guard in setBaseDamageDisabled
- * rejects the edit. Refusing costs a window that opens two hours late; writing a
- * cfggameplay.json that does not parse costs every player the server itself.
+ * ⚠️ Each splice is attempted in its OWN try/catch and its refusal is RETURNED,
+ * never thrown. A guard rejecting the airdrop must not cost the raid weekend, and
+ * vice versa; the caller records each outcome against its own feature's rows.
+ *
+ * ⚠️ The returned `boundaryAt` (on `flip`) is the WINDOW boundary, never the
+ * slot — a Saturday repair belongs to that Friday's row, not to Saturday's.
+ *
+ * ⚠️ An edge-triggered version of this — one that only acted on a transition,
+ * rather than recomputing the wanted state every slot — would lose a whole
+ * weekend to one missed tick, with nothing anywhere noticing.
  */
-export async function applyRaidWindow(
-  nitrado: RestartTarget,
-  slot: Date,
-  skips: SkippedWindow[],
-): Promise<RaidFlip> {
-  const state = raidWindowAt(slot, skips);
+export async function applyGameplay(
+  nitrado: RestartTarget, slot: Date, edits: GameplayEdits,
+): Promise<GameplayResult> {
+  if (!edits.raidWindow && !edits.airdrop) return {};
+
   const dir = await nitrado.missionRootDir();
   const original = await nitrado.downloadFile(`${dir}/${GAMEPLAY_FILE}`);
+  const out: Omit<GameplayResult, "uploaded"> = {};
+  let json = original;
 
-  const { json, changed } = setBaseDamageDisabled(original, state.baseDamageDisabled);
+  if (edits.raidWindow) {
+    const state = raidWindowAt(slot, edits.raidWindow.skips);
+    try {
+      const r = setBaseDamageDisabled(json, state.baseDamageDisabled);
+      json = r.json;
+      // ⚠️ state.boundaryAt, never a local derivation. The announcer and the
+      // website key their confirmation lookups on the same field; deriving it here
+      // independently is how the writer and the readers ended up disagreeing about
+      // midweek instants.
+      out.flip = {
+        boundaryAt: state.boundaryAt, wantedDisabled: state.baseDamageDisabled,
+        changed: r.changed, previousContent: original,
+      };
+    } catch (err) {
+      out.flipError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
 
-  if (changed) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
+  if (edits.airdrop) {
+    try {
+      const r = setAirdropSpawner(json, edits.airdrop.wanted);
+      json = r.json;
+      out.airdrop = { wanted: edits.airdrop.wanted, changed: r.changed };
+    } catch (err) {
+      out.airdropError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
 
-  // ⚠️ state.boundaryAt, never a local derivation. The announcer and the website
-  // key their confirmation lookups on the same field; deriving it here independently
-  // is how the writer and the readers ended up disagreeing about midweek instants.
-  return {
-    boundaryAt: state.boundaryAt,
-    wantedDisabled: state.baseDamageDisabled,
-    changed,
-    previousContent: original,
-  };
+  const uploaded = json !== original;
+  if (uploaded) await nitrado.uploadFile(dir, GAMEPLAY_FILE, json);
+  return { ...out, uploaded };
 }
 
 export const RESTART_MESSAGE = "Scheduled restart";
+
+/**
+ * The in-game restart warning. When a drop goes live in the session this restart
+ * opens, it says where (spec §8) — that is the half of the announcement that
+ * reaches everyone who is not in Discord.
+ *
+ * ⚠️ Never the colour. Players are told where, never which key opens it (spec §3.4).
+ */
+export function restartMessage(location: string | null): string {
+  if (!location) return RESTART_MESSAGE;
+  const name = location.charAt(0).toUpperCase() + location.slice(1);
+  return `${RESTART_MESSAGE}. Airdrop at ${name} next session.`;
+}
+
+/** How many enable attempts a drop gets before it is scrubbed (spec §9). */
+const AIRDROP_MAX_ENABLE_ATTEMPTS = 2;
+
+export type AirdropIntent = {
+  /** What this slot should register, or null for none. */
+  wanted: AirdropSpec | null;
+  /** The row to move to `live` once the upload succeeds, if any. */
+  enabling?: { slotAt: Date; location: string; attempts: number };
+  /** Rows to move to `ended` once the upload succeeds. */
+  ending: Date[];
+};
+
+/**
+ * What the airdrop wants from this slot, read from the rows alone (spec §6:
+ * level-triggered on database intent).
+ *
+ * ⚠️ `announced_at is not null` is part of the enable query, not a check after it.
+ * A decided-but-unannounced drop must never go live — spec §9.
+ */
+async function airdropIntent(db: Database, serverId: number, slot: Date): Promise<AirdropIntent> {
+  // ⚠️ Ordered by slotAt: with two eligible `announced` rows (both with
+  // slotAt <= this slot, which happens after downtime), an unordered select
+  // leaves it to Postgres's row order which drop goes live. Oldest first,
+  // deterministically.
+  const open = await db.select().from(airdropEvents).where(and(
+    eq(airdropEvents.serverId, serverId),
+    inArray(airdropEvents.state, ["announced", "live"]),
+  )).orderBy(asc(airdropEvents.slotAt));
+
+  // ⚠️ `announcedAt !== null` on `live` too, not just `enabling`: a `live` row
+  // is only ever supposed to be reachable through the announced-first gate,
+  // but spelling the term here as well makes that invariant locally true
+  // rather than true only by luck of how the rest of the call chain happens
+  // to behave.
+  const live = open.find((r) => r.state === "live" && r.announcedAt !== null && r.slotAt.getTime() === slot.getTime());
+  const enabling = open.find((r) =>
+    r.state === "announced" && r.announcedAt !== null && r.slotAt.getTime() <= slot.getTime());
+  // Anything live from an earlier slot has had its session and is over.
+  const ending = open.filter((r) => r.state === "live" && r.slotAt.getTime() < slot.getTime()).map((r) => r.slotAt);
+
+  // ⚠️ `live` wins over `enabling`: a drop already live for THIS slot is being
+  // re-converged (the FTP-clobber repair), not enabled a second time.
+  const holder = live ?? enabling ?? null;
+  return {
+    wanted: holder ? { location: holder.location, colour: holder.colour } : null,
+    enabling: enabling && !live
+      ? { slotAt: enabling.slotAt, location: enabling.location, attempts: Number(enabling.detail.enableAttempts ?? 0) }
+      : undefined,
+    ending,
+  };
+}
 
 type Outcome = "restarted" | "skipped" | "missed";
 
@@ -152,7 +271,7 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
 export async function restartTick(
   db: Database,
   nitradoFor: (serviceId: number) => RestartTarget,
-  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow },
+  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow; airdrop?: { enabled: boolean } },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
   const lastError = opts.lastError ?? moduleLastError;
@@ -220,29 +339,55 @@ export async function restartTick(
       // that succeeds now is evidence for whatever the file currently contains,
       // not only for a flip this exact slot made.
       let raidBoundaryAt: Date | undefined;
-      if (opts.raidWindow?.enabled) {
-        try {
-          // ⚠️ The boundary is computed BEFORE the attempt, so a refusal below can
-          // key its row on the same boundary a success would have used. Keying a
-          // refusal on the SLOT instead would write a fresh row every two hours —
-          // up to 12 a day — and the failure alert, which fires once per
-          // (boundary, kind), would fire once per slot with it. That is the exact
-          // alert-burial this design refuses.
+      let intent: AirdropIntent | undefined;
+      // ⚠️ The message is settled BEFORE the upload, and names the drop this
+      // slot is bringing up. A drop being taken away must not be advertised.
+      let airdropLocation: string | null = null;
+      // ⚠️ The row this slot's upload is enabling, moved to `live` only AFTER the
+      // restart POST succeeds. Flipping it before the POST records a drop as live
+      // that the server never loaded: if the POST then throws and the retries
+      // exhaust the grace window, the slot is `missed`, the row stays `live`, and
+      // `airdropIntent`'s `ending` arm removes the spawner at the very restart
+      // that would first have loaded it. The container never exists in-world and
+      // the week's budget is spent, with nothing reporting it. Same shape, and the
+      // same reason, as the raid window's `restartConfirmedAt`.
+      let enabled: { slotAt: Date; location: string; colour: string } | undefined;
+      try {
+        const edits: GameplayEdits = {};
+        // ⚠️ The boundary is computed BEFORE the attempt, so a refusal below can
+        // key its row on the same boundary a success would have used. Keying a
+        // refusal on the SLOT instead would write a fresh row every two hours —
+        // up to 12 a day — and the failure alert, which fires once per
+        // (boundary, kind), would fire once per slot with it. That is the exact
+        // alert-burial this design refuses.
+        let state: ReturnType<typeof raidWindowAt> | undefined;
+        if (opts.raidWindow?.enabled) {
           const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason })
             .from(raidWindowSkips);
-          const state = raidWindowAt(slot.start, skips);
-          const boundaryAt = state.boundaryAt;
-          raidBoundaryAt = boundaryAt;
+          state = raidWindowAt(slot.start, skips);
+          raidBoundaryAt = state.boundaryAt;
+          edits.raidWindow = { skips };
+        }
+        if (opts.airdrop?.enabled) {
+          intent = await airdropIntent(db, s.id, slot.start);
+          edits.airdrop = { wanted: intent.wanted };
+          airdropLocation = intent.enabling?.location ?? intent.wanted?.location ?? null;
+        }
 
+        const gameplay = await applyGameplay(nitrado, slot.start, edits);
+
+        if (opts.raidWindow?.enabled) {
+          const boundaryAt = raidBoundaryAt!;
           try {
-            flip = await applyRaidWindow(nitrado, slot.start, skips);
+            if (gameplay.flipError) throw gameplay.flipError;
+            flip = gameplay.flip;
           } catch (err) {
             const detail = { error: err instanceof Error ? err.message : String(err) };
             console.error(`raid window: server ${s.id} REFUSED the flip for slot ${slot.start.toISOString()} — restarting anyway`, err);
             await db.insert(raidWindowFlips).values({
               serverId: s.id,
               boundaryAt,
-              wantedDisabled: state.baseDamageDisabled,
+              wantedDisabled: state!.baseDamageDisabled,
               outcome: "refused",
               detail,
             }).onConflictDoUpdate({
@@ -287,10 +432,15 @@ export async function restartTick(
                 wantedDisabled: flip.wantedDisabled,
                 outcome: "applied",
                 appliedAt: opts.now,
-                // ⚠️ Only a write that actually overwrote the file has something to
-                // recover; a no-change slot must not clobber a real pre-edit copy
-                // with the identical current contents.
-                ...(flip.changed ? { previousContent: flip.previousContent } : {}),
+                // ⚠️ Keyed on `gameplay.uploaded`, NOT `flip.changed`. Only a write
+                // that actually overwrote the file has something to recover; a
+                // no-change slot must not clobber a real pre-edit copy with the
+                // identical current contents. Since the airdrop can now also cause
+                // this upload, `flip.changed` alone is no longer "the file was
+                // overwritten" — a slot where the airdrop changes the file and the
+                // raid splice does not still overwrites it, and `previousContent`
+                // must still be recorded for that write.
+                ...(gameplay.uploaded ? { previousContent: flip.previousContent } : {}),
               }).onConflictDoUpdate({
                 target: [raidWindowFlips.serverId, raidWindowFlips.boundaryAt],
                 // ⚠️ Also clears any earlier refusal's `detail` and writes this
@@ -304,6 +454,25 @@ export async function restartTick(
                 // timestamp). It DOES clear a stale `refused` row once the file is
                 // observed correct again — today such a row can only be cleared by a
                 // slot that happens to rewrite the file.
+                //
+                // ⚠️ The `setWhere` guard is keyed on `flip.changed`, NOT on
+                // `gameplay.uploaded`. `flip.changed` is "did THIS boundary's raid
+                // splice need an edit" — the fact that decides whether this is a
+                // genuinely new flip for this boundary (safe to overwrite an
+                // existing applied row unconditionally) or a mere re-verification
+                // (must not clobber an already-applied row's `applied_at`/
+                // `previousContent`). `gameplay.uploaded` answers a DIFFERENT
+                // question — "did the upload happen at all, for either feature" —
+                // and using it here was the bug: an airdrop-only upload on an
+                // ALREADY-applied boundary (Saturday's enable, after Friday already
+                // recorded the true pre-flip copy) made `gameplay.uploaded` true
+                // with `flip.changed` still false, and the unconditional branch it
+                // selected clobbered Friday's real rollback copy and `applied_at`
+                // with Saturday's post-flip file. `previousContent` is still
+                // recorded in the no-change arm's `set` when `gameplay.uploaded` is
+                // true, but only inside the arm the `setWhere` guard protects — so
+                // it lands only on a row not already `applied` (e.g. converting a
+                // stale `refused` row once the file is observed correct).
                 ...(flip.changed
                   ? {
                     set: {
@@ -321,6 +490,7 @@ export async function restartTick(
                       appliedAt: opts.now,
                       wantedDisabled: flip.wantedDisabled,
                       detail: {},
+                      ...(gameplay.uploaded ? { previousContent: flip.previousContent } : {}),
                     },
                   }),
               });
@@ -332,12 +502,66 @@ export async function restartTick(
               console.error(`raid window: server ${s.id} ${what} disableBaseDamage=${flip.wantedDisabled} but failed to record it for ${flip.boundaryAt.toISOString()}`, err);
             }
           }
-        } catch (err) {
-          console.error(`raid window: server ${s.id} could not evaluate the raid window for slot ${slot.start.toISOString()} — restarting anyway`, err);
         }
+
+        if (opts.airdrop?.enabled && intent) {
+          // ⚠️ Its own try/catch: airdrop bookkeeping must never cost the raid
+          // window's, nor the restart below.
+          try {
+            if (gameplay.airdropError) {
+              const attempts = (intent.enabling?.attempts ?? 0) + 1;
+              const detail = { enableAttempts: attempts, error: gameplay.airdropError.message };
+              console.error(`airdrop: server ${s.id} REFUSED the splice for slot ${slot.start.toISOString()} — restarting anyway`, gameplay.airdropError);
+              if (intent.enabling) {
+                await db.update(airdropEvents).set({
+                  // ⚠️ Two attempts and it scrubs (spec §9): a failed enable costs one
+                  // event, and a row left `announced` forever would hold the "nothing
+                  // announced or live" guard shut and stop the feature dead.
+                  ...(attempts >= AIRDROP_MAX_ENABLE_ATTEMPTS ? { state: "failed" as const, endedAt: opts.now } : {}),
+                  // ⚠️ MERGED into whatever the row already carries, never replacing
+                  // it. A manual drop's `{ by: <admin id> }` — the only record of who
+                  // asked for it — would otherwise be erased by the first refusal,
+                  // and `scrubNotified` (airdrop-tick.ts) by any later one, which
+                  // would re-post the scrub notice.
+                  detail: sql`${airdropEvents.detail} || ${JSON.stringify(detail)}::jsonb`,
+                }).where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, intent.enabling.slotAt)));
+              }
+              airdropLocation = null;
+            } else {
+              if (intent.enabling) {
+                // ⚠️ NOT moved to `live` here — only after the restart POST, below.
+                enabled = {
+                  slotAt: intent.enabling.slotAt,
+                  location: intent.wanted!.location, colour: intent.wanted!.colour,
+                };
+              }
+              for (const slotAt of intent.ending) {
+                await db.update(airdropEvents).set({ state: "ended", endedAt: opts.now })
+                  .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slotAt)));
+                console.log(`airdrop: server ${s.id} ended the drop from ${slotAt.toISOString()}`);
+              }
+            }
+          } catch (err) {
+            // ⚠️ Swallowed, like the raid window's: the upload already happened, and a
+            // throw here would abort the slot's server_restarts row and make the next
+            // pass restart the server a second time. A `live` row that failed to become
+            // `ended` is retried at the next slot, which is why the disable never gives up.
+            console.error(`airdrop: server ${s.id} could not record the slot ${slot.start.toISOString()}`, err);
+          }
+        }
+      } catch (err) {
+        // ⚠️ Scrub `airdropLocation` here too, not only on `gameplay.airdropError`.
+        // A THROW out of this block (missionRootDir, downloadFile, the skips
+        // SELECT, airdropIntent's own query) means nothing was uploaded and the
+        // row never left `announced` — the same "nothing to advertise" fact as a
+        // refused splice, just from a different failure point. Without this the
+        // in-game restart warning would tell every player the drop is live for a
+        // session where the file was never touched.
+        airdropLocation = null;
+        console.error(`restart: server ${s.id} could not evaluate cfggameplay.json for slot ${slot.start.toISOString()} — restarting anyway`, err);
       }
 
-      await nitrado.restart(RESTART_MESSAGE);
+      await nitrado.restart(restartMessage(airdropLocation));
       // ⚠️ An upload whose restart did not happen is NOT in effect. Confirmation is
       // what the website and the open/close announcements read; recording it before
       // the restart would make them assert a flip the server has not loaded.
@@ -363,6 +587,25 @@ export async function restartTick(
           // website reads "not yet confirmed" and no open/close message posts, until
           // a later slot's restart succeeds and this same lookup confirms it.
           .catch(() => undefined);
+      }
+      if (enabled) {
+        // ⚠️ `state = 'announced'` is part of the WHERE, so a row some other pass
+        // has already moved on (to `failed`, say) is never dragged back to `live`.
+        await db.update(airdropEvents).set({ state: "live" })
+          .where(and(
+            eq(airdropEvents.serverId, s.id),
+            eq(airdropEvents.slotAt, enabled.slotAt),
+            eq(airdropEvents.state, "announced"),
+          ))
+          // ⚠️ Swallowed on purpose, exactly like the raid window's confirm above:
+          // the restart POST has already gone out, and a throw here would abort the
+          // slot's `server_restarts` row and make the next pass restart the server a
+          // second time. What is lost is SILENT — the row stays `announced` and the
+          // next slot re-converges: the file already holds the spawner, so
+          // `setAirdropSpawner` returns `changed: false`, nothing is uploaded a
+          // second time, and the row goes `live` then.
+          .catch(() => undefined);
+        console.log(`airdrop: server ${s.id} enabled ${enabled.location}/${enabled.colour} for ${slot.start.toISOString()}`);
       }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;

@@ -1,5 +1,6 @@
 import {
   MessageFlags,
+  PermissionFlagsBits,
   type AutocompleteInteraction,
   type ChatInputCommandInteraction,
   type Interaction,
@@ -48,6 +49,7 @@ function inputFor(i: ChatInputCommandInteraction): CommandInput {
     integer: (n) => i.options.getInteger(n),
     boolean: (n) => i.options.getBoolean(n),
     user: (n) => i.options.getUser(n)?.id ?? null,
+    isAdmin: i.memberPermissions?.has(PermissionFlagsBits.ManageGuild) ?? false,
   };
 }
 

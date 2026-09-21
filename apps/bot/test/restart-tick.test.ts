@@ -1,8 +1,25 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
-import { restartTick, RESTART_MESSAGE, type RestartTarget } from "../src/restart-tick.js";
+import { restartTick, RESTART_MESSAGE, applyGameplay, type RestartTarget } from "../src/restart-tick.js";
 import { raidWindowTick } from "../src/raid-window-tick.js";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+
+const GAMEPLAY = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
+
+/** A Nitrado that serves one cfggameplay.json and records what is written back. */
+function fakeGameplayHost(content = GAMEPLAY) {
+  let stored = content;
+  const uploadFile = vi.fn(async (_dir: string, _name: string, body: string) => { stored = body; });
+  const downloadFile = vi.fn(async () => stored);
+  const target = {
+    status: vi.fn(async () => "started"), restart: vi.fn(async () => {}),
+    missionDbDir: vi.fn(async () => "/db"), missionRootDir: vi.fn(async () => "/mission"),
+    downloadFile, uploadFile,
+  } as unknown as RestartTarget;
+  return { target, downloadFile, uploadFile, read: () => stored };
+}
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -550,6 +567,49 @@ describe("restartTick", () => {
     expect(rows[0]!.appliedAt).toEqual(appliedAt);
   });
 
+  // ⚠️ Fix round 2 (review of commits 6282bf3 / f1f9860, Important 1): pins the
+  // exact hazard the round-1 fix over-corrected into. If this ever goes red, the
+  // weekend's one-command rollback copy silently gets replaced by a file that
+  // ALREADY has the flip applied — so `previousContent` can no longer undo the
+  // flip — and the real flip's `applied_at` is lost, with nothing anywhere
+  // noticing: the row still reads `applied`, just with the wrong evidence.
+  it("⚠️ an airdrop-only upload later in the window must not touch the raid flip's applied_at or previousContent", async () => {
+    const h = fakeGameplayHost(GAMEPLAY);
+
+    // Friday: the raid window opens for real, uploads once, and records the row
+    // with the TRUE pre-flip file and a real applied_at.
+    await restartTick(db, () => h.target, { now: at("2026-09-18T00:00:03Z"), lastError, raidWindow: { enabled: true } });
+    const friRows = await raidRows();
+    expect(friRows).toMatchObject([{ boundaryAt: FRI_OPEN, outcome: "applied" }]);
+    const friPreviousContent = friRows[0]!.previousContent;
+    const friAppliedAt = friRows[0]!.appliedAt;
+    expect(friPreviousContent).toBe(GAMEPLAY);
+    expect(friAppliedAt).not.toBeNull();
+
+    // Saturday, same window: an announced airdrop goes live. The raid splice
+    // makes NO change (the file already holds Friday's flip, so flip.changed is
+    // false) — but the airdrop splice DOES change the file, so the shared upload
+    // still fires (`gameplay.uploaded` is true).
+    const SAT = at("2026-09-19T12:00:00Z");
+    await db.insert(airdropEvents).values({
+      serverId, slotAt: SAT, location: "dolnik", colour: "blue",
+      decidedAt: at("2026-09-19T11:30:00Z"), popAtDecision: 6, threshold: "5",
+      state: "announced", announcedAt: at("2026-09-19T11:30:01Z"),
+    });
+    await restartTick(db, () => h.target, {
+      now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true }, airdrop: { enabled: true },
+    });
+    // Confirms the premise: the airdrop really did cause an upload this slot.
+    expect(JSON.parse(h.read()).WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+
+    const satRows = await raidRows();
+    expect(satRows).toHaveLength(1); // still the one row for this window
+    expect(satRows[0]!.outcome).toBe("applied");
+    // ⚠️ The assertions that matter: neither survives an airdrop-only upload.
+    expect(satRows[0]!.previousContent).toBe(friPreviousContent);
+    expect(satRows[0]!.appliedAt).toEqual(friAppliedAt);
+  });
+
   it("a refused flip still restarts the server, and one server's refusal does not block another's", async () => {
     const bad = fakeRaid(BROKEN_CFG); // the guard rejects from the very first pass
     const good = fakeRaid(cfg(true));
@@ -564,6 +624,55 @@ describe("restartTick", () => {
     expect(badRows).toMatchObject([{ outcome: "refused" }]);
     const goodRows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, s2!.id));
     expect(goodRows).toMatchObject([{ outcome: "applied" }]);
+  });
+});
+
+describe("applyGameplay", () => {
+  // ⚠️ THE test for this task. Two independent download/upload pairs on the same
+  // file in the same slot means the second upload silently discards the first's
+  // edit: a raid weekend that never opens, or a drop that never lands, with every
+  // guard passing and nothing logged.
+  it("carries both edits in ONE download and ONE upload", async () => {
+    const host = fakeGameplayHost();
+    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+      raidWindow: { skips: [] },
+      airdrop: { wanted: { location: "dolnik", colour: "blue" } },
+    });
+    expect(host.downloadFile).toHaveBeenCalledTimes(1);
+    expect(host.uploadFile).toHaveBeenCalledTimes(1);
+    const after = JSON.parse(host.read());
+    expect(after.GeneralData.disableBaseDamage).toBe(out.flip!.wantedDisabled);
+    expect(after.WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+  });
+
+  it("uploads nothing when neither edit changes anything", async () => {
+    const host = fakeGameplayHost();
+    await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), { airdrop: { wanted: null } });
+    expect(host.uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("downloads nothing when neither feature is configured", async () => {
+    const host = fakeGameplayHost();
+    const out = await applyGameplay(host.target, at("2026-09-16T02:00:00Z"), {});
+    expect(host.downloadFile).not.toHaveBeenCalled();
+    expect(out).toEqual({});
+  });
+
+  // ⚠️ One refusal must not take the other feature down with it. A raid weekend is
+  // worth more than a drop, and a drop is worth more than nothing.
+  it("still applies and uploads the raid flip when the airdrop splice refuses", async () => {
+    const twoDrops = GAMEPLAY.replace(
+      '"./custom/admin-castle.json"',
+      '"./custom/airdrop-lukow-blue.json",\n\t\t\t"./custom/airdrop-nadbor-blue.json"',
+    );
+    const host = fakeGameplayHost(twoDrops);
+    const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
+      raidWindow: { skips: [] }, airdrop: { wanted: null },
+    });
+    expect(out.airdropError).toBeInstanceOf(Error);
+    expect(out.flip!.changed).toBe(true);
+    expect(host.uploadFile).toHaveBeenCalledTimes(1);
+    expect(JSON.parse(host.read()).GeneralData.disableBaseDamage).toBe(false);
   });
 });
 
