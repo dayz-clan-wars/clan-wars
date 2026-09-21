@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import type { ClanView } from "@factions/roster";
-import { when } from "@factions/copy";
+import { atRel, when } from "@factions/copy";
+import { playerLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 
@@ -14,6 +15,7 @@ const GOLD = 0xc8a34a;
  * to full members only — see the check below.
  */
 export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
+  const player = (gamertag: string | null, fallback: string) => gamertag ? playerLink(siteBaseUrl, gamertag) : fallback;
   const embed = new EmbedBuilder()
     .setColor(GOLD)
     .setTitle(`${view.clan.name} [${view.clan.tag}]`)
@@ -36,7 +38,7 @@ export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
   if (view.roster.length > 0) {
     embed.addFields({
       name: `Roster (${view.roster.length})`,
-      value: view.roster.map((r) => `• ${r.gamertag ?? r.discordId} — ${r.role}${r.status === "full" ? "" : ` (${r.status})`}`)
+      value: view.roster.map((r) => `• ${player(r.gamertag, r.discordId)} — ${r.role}${r.status === "full" ? "" : ` (${r.status})`}`)
         .join("\n").slice(0, 1024),
       inline: false,
     });
@@ -50,18 +52,18 @@ export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
   if (view.rebindCandidates.length > 0) {
     embed.addFields({
       name: "Poles your flag was raised at",
-      value: view.rebindCandidates.map((c) => `• by ${c.by}, ${when(c.raisedAt)} — \`/clan rebind\``).join("\n").slice(0, 1024),
+      value: view.rebindCandidates.map((c) => `• by ${c.by}, ${atRel(c.raisedAt) ?? when(c.raisedAt)} — \`/clan rebind\``).join("\n").slice(0, 1024),
       inline: false,
     });
   }
   const lead = view.leadership;
   if (lead.openClaim) {
-    embed.addFields({ name: "Succession claim open", value: `${lead.openClaim.claimantGamertag} claimed the seat.`, inline: false });
+    embed.addFields({ name: "Succession claim open", value: `${playerLink(siteBaseUrl, lead.openClaim.claimantGamertag)} claimed the seat.`, inline: false });
   }
   if (lead.openVote) {
     embed.addFields({
       name: "No-confidence vote open",
-      value: `${lead.openVote.ballots} of ${lead.openVote.threshold} needed, nominating ${lead.openVote.nomineeGamertag}.`
+      value: `${lead.openVote.ballots} of ${lead.openVote.threshold} needed, nominating ${playerLink(siteBaseUrl, lead.openVote.nomineeGamertag)}.`
         + (lead.openVote.inElectorate && !lead.openVote.myBallot ? " — `/lead ballot`" : ""),
       inline: false,
     });

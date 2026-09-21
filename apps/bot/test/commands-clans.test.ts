@@ -110,6 +110,14 @@ describe("clanPageEmbed", () => {
 });
 
 describe("directoryEmbed", () => {
+  it("links each clan in the directory", () => {
+    const embed = directoryEmbed(
+      [{ name: "Nomads", tag: "NOMAD", memberCount: 4, alpha: false, recruiting: true } as DirectoryEntry],
+      "https://dayzclanwars.com",
+    ).toJSON();
+    expect(embed.fields?.[0]?.value).toContain("[Nomads](<https://dayzclanwars.com/clans/NOMAD>)");
+  });
+
   it("marks recruiting clans and never carries a base", () => {
     const json = JSON.stringify(directoryEmbed([entry({ recruiting: true }), entry({ tag: "OTH", recruiting: false })], "https://x"));
     expect(json).toContain("Recruiting");

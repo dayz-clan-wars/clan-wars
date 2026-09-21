@@ -1,7 +1,8 @@
 import { EmbedBuilder } from "discord.js";
 import type { MapState } from "@factions/roster";
-import { PIN_ICON_LABELS, when } from "@factions/copy";
+import { PIN_ICON_LABELS, rel, when } from "@factions/copy";
 import { budget } from "./budget.js";
+import { playerLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 const TITLE = "Pins";
@@ -27,7 +28,7 @@ export function pinsEmbed(state: MapState, siteBaseUrl: string): EmbedBuilder {
 
   const line = (p: MapState["pins"][number]) =>
     `• **#${p.id}** ${PIN_ICON_LABELS[p.icon]} — ${Math.round(p.x)}, ${Math.round(p.z)}`
-    + (p.note ? ` · ${p.note}` : "") + ` · by ${p.by} · expires ${when(p.expiresAt)}`;
+    + (p.note ? ` · ${p.note}` : "") + ` · by ${playerLink(siteBaseUrl, p.by)} · expires ${rel(p.expiresAt) ?? when(p.expiresAt)}`;
 
   budget(TITLE.length + FOOTER_TEXT.length).list(
     embed, `${state.pins.length} pin${state.pins.length === 1 ? "" : "s"}`,
