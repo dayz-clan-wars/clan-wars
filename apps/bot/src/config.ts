@@ -145,6 +145,19 @@ export type BotConfig = {
    */
   raidWindow: { enabled: boolean };
   /**
+   * Gates the airdrop decision tick. Off by default, same reasoning as
+   * `raidWindow`: a drop is only ever placed at a restart, so it rides on
+   * `restartSchedule` and is refused without it. `weeklyCap` is a ceiling on
+   * how many drops can be decided in a rolling week, never a quota to hit;
+   * `minPop` is the floor under the trailing p90 population a drop requires.
+   */
+  airdrop: { enabled: boolean; weeklyCap: number; minPop: number };
+  /**
+   * Where the airdrop tick announces a drop's location. Fatal when the tick
+   * is on and this is unset — see the load-time check below.
+   */
+  serverEventsChannelId: string | undefined;
+  /**
    * Where the raid-window tick posts its failure alert. Optional, gated like
    * `warLogChannelId` — unset means the alert falls back to an error-level
    * log line and nothing else, not a regression.
@@ -445,6 +458,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
     raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
+    airdrop: {
+      enabled: ["1", "true"].includes((env.AIRDROP_TICK ?? "").toLowerCase()),
+      weeklyCap: positiveInt(env, "AIRDROP_WEEKLY_CAP", 2),
+      minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
+    },
+    serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     announcementsChannelId: optionalSnowflake(env, "ANNOUNCEMENTS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -510,6 +529,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // order write an announcements row claiming the message went out when it did not.
   if (config.raidWindow.enabled && !config.announcementsChannelId) {
     throw new Error("RAID_WINDOW_TICK is on but ANNOUNCEMENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
+  }
+  // ⚠️ Same failure shape as RAID_WINDOW_TICK's check: the spawner only takes
+  // effect when the server restarts, and restarts come from the restart slots. On
+  // without RESTART_SCHEDULE would decide events nothing ever places.
+  if (config.airdrop.enabled && !config.restartSchedule) {
+    throw new Error("AIRDROP_TICK is on but RESTART_SCHEDULE is off — a drop is only ever placed at a restart, so nothing would ever apply it.");
+  }
+  // ⚠️ Fatal, following RAID_WINDOW_TICK/ANNOUNCEMENTS_CHANNEL_ID, and spec §9
+  // makes it doubly so: only the location is announced and there is no in-world
+  // marker, so a drop nobody was told about is one nobody ever finds. With no
+  // channel this feature cannot work at all, rather than working less well.
+  if (config.airdrop.enabled && !config.serverEventsChannelId) {
+    throw new Error("AIRDROP_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the location announcement is the only way a drop is ever found, so with no channel to post it this is misconfigured, not merely degraded.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

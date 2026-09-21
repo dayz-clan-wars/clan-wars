@@ -29,6 +29,7 @@ import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
+import { airdropTick } from "./airdrop-tick.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -602,6 +603,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   const releaseStore = pgReleaseStore(db);
   const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
+  const serverEventsPoster = cfg.serverEventsChannelId ? createChannelPoster(client, cfg.serverEventsChannelId) : null;
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
   // text (a gamertag) to a public channel.
@@ -1555,7 +1557,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, airdrop: cfg.airdrop });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1581,6 +1583,21 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
       } catch (err) {
         console.error("raid window tick failed", err);
+      }
+    }
+
+    // ⚠️ AFTER the restart tick, like the raid window and for the same reason: a
+    // slow Discord call must never delay a due restart. Its own try/catch.
+    // ⚠️ Gated on the flag alone — config load refuses AIRDROP_TICK without
+    // SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is non-null here.
+    if (cfg.airdrop.enabled) {
+      try {
+        const a = await airdropTick(db, serverEventsPoster!, {
+          now: new Date(), weeklyCap: cfg.airdrop.weeklyCap, minPop: cfg.airdrop.minPop,
+        });
+        if (a.decided + a.posted + a.failed > 0) console.log(`airdrop: ${a.decided} decided, ${a.posted} posted, ${a.failed} failed`);
+      } catch (err) {
+        console.error("airdrop tick failed", err);
       }
     }
 
@@ -1634,6 +1651,9 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
+
+    if (!cfg.airdrop.enabled) console.warn("AIRDROP_TICK is off: airdrops are not being placed automatically.");
+    else console.log(`airdrop automation on (cap ${cfg.airdrop.weeklyCap}/week, floor ${cfg.airdrop.minPop})`);
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)
