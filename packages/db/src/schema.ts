@@ -1670,6 +1670,52 @@ export const raidWindowAnnouncements = pgTable("raid_window_announcements", {
 }));
 
 /**
+ * One airdrop event per restart slot (spec §7).
+ *
+ * ⚠️ Per-server keyed, following `server_restarts` rather than
+ * `vehicle_wipe_announcements`: a drop is a file on one mission, and two servers
+ * would each need their own.
+ *
+ * ⚠️ `threshold` is STORED, never recomputed. The row records what was decided at
+ * the time; recomputing it later against a grown population would make the record
+ * lie about why the event fired.
+ *
+ * ⚠️ `announced_at` is the enable gate, not `state`. Spec §9: with only the
+ * location announced and no in-world marker, an unannounced drop is one nobody
+ * ever finds — strictly worse than no drop, because it spends a week's budget on
+ * nothing. A row that is `announced` with a null `announced_at` has been decided
+ * and not yet posted, and must never be enabled.
+ */
+export const airdropEvents = pgTable("airdrop_events", {
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  /** The restart slot the drop goes live at. */
+  slotAt: timestamp("slot_at", { withTimezone: true }).notNull(),
+  location: text("location").notNull(),
+  colour: text("colour").$type<"blue" | "orange" | "yellow">().notNull(),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
+  popAtDecision: integer("pop_at_decision").notNull(),
+  threshold: numeric("threshold").notNull(),
+  state: text("state").$type<"announced" | "live" | "ended" | "failed">().notNull(),
+  /**
+   * Placed by an admin with `/airdrop place`, not by the trigger.
+   *
+   * ⚠️ A manual drop is excluded from the WEEKLY CAP only (§3.1's second
+   * condition). It still holds the 24h gap and the nothing-announced-or-live
+   * guard shut, because those two are about the players' experience of the
+   * event, not about the budget: two drops in an evening reads as noise
+   * whoever asked for them, and two at once is a state the file cannot hold.
+   */
+  manual: boolean("manual").notNull().default(false),
+  announcedAt: timestamp("announced_at", { withTimezone: true }),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.serverId, t.slotAt] }),
+  stateValid: check("airdrop_events_state_valid", sql`${t.state} IN ('announced','live','ended','failed')`),
+  colourValid: check("airdrop_events_colour_valid", sql`${t.colour} IN ('blue','orange','yellow')`),
+}));
+
+/**
  * Every boost-item placement inside a declared zone by a non-member.
  *
  * ⚠️ A LONE placement is recorded here and is NOT a violation: a player may
