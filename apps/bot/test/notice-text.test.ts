@@ -19,31 +19,31 @@ describe("RENDERERS", () => {
 
 describe("noticeText", () => {
   it("renders the §9.3 lines verbatim", () => {
-    expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Wolfie", raiderClan: "Wolves" } }, site))
+    expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Wolfie", raiderClan: "Wolves" } }, site, dormantAfterMs))
       .toBe(`🚨 Your flag is down — lowered by [Wolfie](<${site}/players/Wolfie>) of Wolves. Re-raise within ${RAID_DEDUP_MS / 3_600_000}h or go dormant. Crate paused, spare flag still at your pole.`);
-    expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Solo", raiderClan: null } }, site))
+    expect(noticeText({ kind: "flag_down", target: "channel", occurredAt: now, payload: { gamertag: "Solo", raiderClan: null } }, site, dormantAfterMs))
       .toBe(`🚨 Your flag is down — lowered by [Solo](<${site}/players/Solo>). Re-raise within ${RAID_DEDUP_MS / 3_600_000}h or go dormant. Crate paused, spare flag still at your pole.`);
-    expect(noticeText({ kind: "defended", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", durationSeconds: 11700 } }, site))
+    expect(noticeText({ kind: "defended", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", durationSeconds: 11700 } }, site, dormantAfterMs))
       .toBe(`🛡️ [Bear1](<${site}/players/Bear1>) raised the flag. Defended — 3h 15m under siege. Supplies resume at next restart.`);
-    expect(noticeText({ kind: "non_member_raise", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "non_member_raise", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`⚑ [X](<${site}/players/X>) (not a member) raised your flag at your base — <t:1788695640:R>`);
-    expect(noticeText({ kind: "kicked", target: "dm", occurredAt: now, payload: { clan: "Bears", until: "2026-09-08T00:00:00.000Z" } }, site))
+    expect(noticeText({ kind: "kicked", target: "dm", occurredAt: now, payload: { clan: "Bears", until: "2026-09-08T00:00:00.000Z" } }, site, dormantAfterMs))
       .toBe("You were removed from **Bears**. You can join a clan again on 8 Sep 2026.");
-    expect(noticeText({ kind: "revived", target: "channel", occurredAt: now, payload: {} }, site)).toBe("☀️ The flag was raised. You're active again.");
+    expect(noticeText({ kind: "revived", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs)).toBe("☀️ The flag was raised. You're active again.");
   });
 
   it("never contains a coordinate even if a payload smuggled one past the type", () => {
-    const text = noticeText({ kind: "joined", target: "channel", occurredAt: now, payload: { gamertag: "A", x: 12 } as never }, site);
+    const text = noticeText({ kind: "joined", target: "channel", occurredAt: now, payload: { gamertag: "A", x: 12 } as never }, site, dormantAfterMs);
     expect(text).not.toMatch(/12/u);
   });
 
   it("renders revived with a gamertag", () => {
-    expect(noticeText({ kind: "revived", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site))
+    expect(noticeText({ kind: "revived", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, dormantAfterMs))
       .toBe(`☀️ [Bear1](<${site}/players/Bear1>) raised the flag. You're active again.`);
   });
 
   it("renders dormant_raided from RAID_DEDUP_MS and dormant_inactive from the threaded config window, not a typed literal", () => {
-    expect(noticeText({ kind: "dormant_raided", target: "channel", occurredAt: now, payload: {} }, site))
+    expect(noticeText({ kind: "dormant_raided", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs))
       .toBe(`💤 ${RAID_DEDUP_MS / 3_600_000} hours passed. You're dormant. Any member raising the flag brings you back.`);
     expect(noticeText({ kind: "dormant_inactive", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs))
       .toBe(`💤 No member has raised the flag in ${dormantAfterMs / 86_400_000} days. You're dormant. Crate stopped, spare flag still at your pole.`);
@@ -56,70 +56,70 @@ describe("noticeText", () => {
   });
 
   it("renders disband_warning from its payload's days", () => {
-    expect(noticeText({ kind: "disband_warning", target: "channel", occurredAt: now, payload: { days: 4 } }, site))
+    expect(noticeText({ kind: "disband_warning", target: "channel", occurredAt: now, payload: { days: 4 } }, site, dormantAfterMs))
       .toBe("⚠️ 4 days until this clan is disbanded and the flag returns to the pool.");
   });
 
   it("renders colors_elsewhere and rebind_proposed", () => {
-    expect(noticeText({ kind: "colors_elsewhere", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "colors_elsewhere", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`🏴 Your flag is flying at a pole that isn't yours — raised by [X](<${site}/players/X>)`);
-    expect(noticeText({ kind: "rebind_proposed", target: "channel", occurredAt: now, payload: { gamertag: "X", link: "https://dayzclanwars.com/clan/settings" } }, site))
+    expect(noticeText({ kind: "rebind_proposed", target: "channel", occurredAt: now, payload: { gamertag: "X", link: "https://dayzclanwars.com/clan/settings" } }, site, dormantAfterMs))
       .toBe(`📦 [X](<${site}/players/X>) raised our flag at a new pole. Leader: confirm the move within ${REBIND_CONFIRM_MS / 3_600_000}h: [open it](<https://dayzclanwars.com/clan/settings>)`);
   });
 
   it("renders rebind_confirmed with the 3-day grace period", () => {
-    expect(noticeText({ kind: "rebind_confirmed", target: "channel", occurredAt: now, payload: {} }, site))
+    expect(noticeText({ kind: "rebind_confirmed", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs))
       .toBe("📦 Moved. Supplies follow at the next restart. The old base goes public in 3 days.");
   });
 
   it("renders roster lines", () => {
-    expect(noticeText({ kind: "joined", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "joined", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`➕ [X](<${site}/players/X>) joined — pending until seen at the base`);
-    expect(noticeText({ kind: "became_full", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "became_full", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`✅ [X](<${site}/players/X>) is now a full member (seen at the base)`);
-    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`➖ [X](<${site}/players/X>) left`);
-    expect(noticeText({ kind: "kicked", target: "channel", occurredAt: now, payload: { gamertag: "X", officer: "Y" } }, site))
+    expect(noticeText({ kind: "kicked", target: "channel", occurredAt: now, payload: { gamertag: "X", officer: "Y" } }, site, dormantAfterMs))
       .toBe(`🥾 [X](<${site}/players/X>) was kicked by [Y](<${site}/players/Y>)`);
-    expect(noticeText({ kind: "promoted", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "promoted", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`⬆️ [X](<${site}/players/X>) promoted to officer`);
-    expect(noticeText({ kind: "demoted", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "demoted", target: "channel", occurredAt: now, payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`⬇️ [X](<${site}/players/X>) demoted to member`);
-    expect(noticeText({ kind: "transferred", target: "channel", occurredAt: now, payload: { gamertag: "X", old: "Y" } }, site))
+    expect(noticeText({ kind: "transferred", target: "channel", occurredAt: now, payload: { gamertag: "X", old: "Y" } }, site, dormantAfterMs))
       .toBe(`👑 [X](<${site}/players/X>) is now leader (transferred by [Y](<${site}/players/Y>))`);
-    expect(noticeText({ kind: "renamed", target: "channel", occurredAt: now, payload: { name: "Bears", tag: "BRS" } }, site))
+    expect(noticeText({ kind: "renamed", target: "channel", occurredAt: now, payload: { name: "Bears", tag: "BRS" } }, site, dormantAfterMs))
       .toBe(`✏️ We are now **[Bears](<${site}/clans/BRS>)** [BRS].`);
   });
 
   it("renders invite/request DMs", () => {
-    expect(noticeText({ kind: "invited", target: "dm", occurredAt: now, payload: { clan: "Bears", tag: "BRS", link: "https://x/me" } }, site))
+    expect(noticeText({ kind: "invited", target: "dm", occurredAt: now, payload: { clan: "Bears", tag: "BRS", link: "https://x/me" } }, site, dormantAfterMs))
       .toBe(`**[Bears](<${site}/clans/BRS>)** [BRS] invited you. Accept or decline: [open it](<https://x/me>)`);
-    expect(noticeText({ kind: "request_accepted", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site))
+    expect(noticeText({ kind: "request_accepted", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site, dormantAfterMs))
       .toBe("**Bears** accepted your request. Go stand at the base to become a full member.");
-    expect(noticeText({ kind: "request_declined", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site))
+    expect(noticeText({ kind: "request_declined", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site, dormantAfterMs))
       .toBe("**Bears** declined your request.");
-    expect(noticeText({ kind: "pending_expired", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site))
+    expect(noticeText({ kind: "pending_expired", target: "dm", occurredAt: now, payload: { clan: "Bears" } }, site, dormantAfterMs))
       .toBe("Your spot in **Bears** expired — you were never seen at the base.");
   });
 
   it("renders solo lines", () => {
-    expect(noticeText({ kind: "solo_non_member_raise", target: "dm", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site))
+    expect(noticeText({ kind: "solo_non_member_raise", target: "dm", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`⚑ [X](<${site}/players/X>) (not a member) raised your flag at your base — <t:1788695640:R>`);
-    expect(noticeText({ kind: "solo_lapsed", target: "dm", occurredAt: now, payload: { link: "https://x/base" } }, site))
+    expect(noticeText({ kind: "solo_lapsed", target: "dm", occurredAt: now, payload: { link: "https://x/base" } }, site, dormantAfterMs))
       .toBe("Your base declaration lapsed — no raise in 7 days. The pole goes public in 3 days unless you raise there and declare again: [open it](<https://x/base>)");
   });
 
   it("renders a missing gamertag as someone", () => {
-    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: {} }, site)).toBe("➖ someone left");
+    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs)).toBe("➖ someone left");
   });
 
   it("renders an all-digit gamertag as a mention, never a link", () => {
-    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: { gamertag: "123456789012345678" } }, site))
+    expect(noticeText({ kind: "left", target: "channel", occurredAt: now, payload: { gamertag: "123456789012345678" } }, site, dormantAfterMs))
       .toBe("➖ <@123456789012345678> left");
   });
 
   it("renders the intruder line with distance and a live age token", () => {
-    expect(noticeText({ kind: "intruder", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "Sasha", distance: 42 } }, site))
+    expect(noticeText({ kind: "intruder", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "Sasha", distance: 42 } }, site, dormantAfterMs))
       .toBe(`👁 [Sasha](<${site}/players/Sasha>) (not a member) was seen 42 m from your base — <t:1788695640:R>`);
   });
   it("renders an intruder sighting with a live token, not a baked age", () => {
@@ -129,7 +129,7 @@ describe("noticeText", () => {
       target: "channel",
       occurredAt,
       payload: { gamertag: "SomePlayer", distance: 60 },
-    }, site);
+    }, site, dormantAfterMs);
     expect(line).toContain("<t:1790001000:R>");
     expect(line).not.toContain("min ago");
   });
@@ -137,41 +137,41 @@ describe("noticeText", () => {
     const line = noticeText({
       kind: "joined", target: "channel",
       occurredAt: new Date("2026-09-21T14:30:00.000Z"), payload: { gamertag: "SomePlayer" },
-    }, site);
+    }, site, dormantAfterMs);
     expect(line).toContain(`[SomePlayer](<${site}/players/SomePlayer>)`);
   });
   it("renders dismantle with the part, and the gate line without one", () => {
-    expect(noticeText({ kind: "dismantle", target: "channel", occurredAt: now, payload: { gamertag: "Sasha", part: "wall_base_down" } }, site)).toContain("dismantled wall_base_down at your base");
-    expect(noticeText({ kind: "solo_gate", target: "dm", occurredAt: now, payload: { gamertag: "Sasha" } }, site)).toBe(`🔧 [Sasha](<${site}/players/Sasha>) (not a member) built a gate at your base — <t:1788696000:R>`);
+    expect(noticeText({ kind: "dismantle", target: "channel", occurredAt: now, payload: { gamertag: "Sasha", part: "wall_base_down" } }, site, dormantAfterMs)).toContain("dismantled wall_base_down at your base");
+    expect(noticeText({ kind: "solo_gate", target: "dm", occurredAt: now, payload: { gamertag: "Sasha" } }, site, dormantAfterMs)).toBe(`🔧 [Sasha](<${site}/players/Sasha>) (not a member) built a gate at your base — <t:1788696000:R>`);
   });
 
   it("renders the nine leadership and vault lines (spec §9.3, §9.4)", () => {
-    expect(noticeText({ kind: "leader_removed", target: "channel", occurredAt: now, payload: { old: "Wolfie", new: "Bear1" } }, site))
+    expect(noticeText({ kind: "leader_removed", target: "channel", occurredAt: now, payload: { old: "Wolfie", new: "Bear1" } }, site, dormantAfterMs))
       .toBe(`👑 [Wolfie](<${site}/players/Wolfie>) is no longer in the Discord. [Bear1](<${site}/players/Bear1>) is now leader.`);
-    expect(noticeText({ kind: "succession_claimed", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", leader: "Wolfie" } }, site))
+    expect(noticeText({ kind: "succession_claimed", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", leader: "Wolfie" } }, site, dormantAfterMs))
       .toBe(`⏳ [Bear1](<${site}/players/Bear1>) has claimed leadership — [Wolfie](<${site}/players/Wolfie>) has 48h to show up in game`);
-    expect(noticeText({ kind: "succession_voided", target: "channel", occurredAt: now, payload: { leader: "Wolfie", claimant: "Bear1" } }, site))
+    expect(noticeText({ kind: "succession_voided", target: "channel", occurredAt: now, payload: { leader: "Wolfie", claimant: "Bear1" } }, site, dormantAfterMs))
       .toBe(`⏳ [Wolfie](<${site}/players/Wolfie>) showed up in game. The claim by [Bear1](<${site}/players/Bear1>) is void.`);
-    expect(noticeText({ kind: "succession_done", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site))
+    expect(noticeText({ kind: "succession_done", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, dormantAfterMs))
       .toBe(`👑 [Bear1](<${site}/players/Bear1>) is now leader (succession)`);
-    expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://dayzclanwars.com/clan/vote" } }, site))
+    expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://dayzclanwars.com/clan/vote" } }, site, dormantAfterMs))
       .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Closes 8 Sep 2026 14:00 UTC. Vote on the site: [open it](<https://dayzclanwars.com/clan/vote>)`);
-    expect(noticeText({ kind: "vote_passed", target: "channel", occurredAt: now, payload: { yes: 6, n: 9, nominee: "Bear1", old: "Wolfie" } }, site))
+    expect(noticeText({ kind: "vote_passed", target: "channel", occurredAt: now, payload: { yes: 6, n: 9, nominee: "Bear1", old: "Wolfie" } }, site, dormantAfterMs))
       .toBe(`🗳️ Vote passed (6/9). [Bear1](<${site}/players/Bear1>) is now leader; [Wolfie](<${site}/players/Wolfie>) stays as officer.`);
-    expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "2026-09-22T00:00:00.000Z" } }, site))
+    expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "2026-09-22T00:00:00.000Z" } }, site, dormantAfterMs))
       .toBe("🗳️ Vote failed (3/9). Next vote possible 22 Sep 2026.");
-    expect(noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site))
+    expect(noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, dormantAfterMs))
       .toBe(`🔐 Codes rotated by [Bear1](<${site}/players/Bear1>) — see the vault.`);
-    expect(noticeText({ kind: "codes_rotated", target: "dm", occurredAt: now, payload: { clan: "Bears", link: "https://dayzclanwars.com/clan/vault" } }, site))
+    expect(noticeText({ kind: "codes_rotated", target: "dm", occurredAt: now, payload: { clan: "Bears", link: "https://dayzclanwars.com/clan/vault" } }, site, dormantAfterMs))
       .toBe("**Bears** rotated its codes. See the vault: [open it](<https://dayzclanwars.com/clan/vault>)");
-    expect(noticeText({ kind: "guest", target: "channel", occurredAt: now, payload: { officer: "Wolfie", user: "123456789012345678" } }, site))
+    expect(noticeText({ kind: "guest", target: "channel", occurredAt: now, payload: { officer: "Wolfie", user: "123456789012345678" } }, site, dormantAfterMs))
       .toBe("🎟️ [Wolfie](<https://dayzclanwars.com/players/Wolfie>) gave <@123456789012345678> a 24h voice guest pass.");
   });
 
   it("never renders a smuggled 4-digit vault code, even though the type forbids it", () => {
-    const opened = noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://x/vote", code: "1234" } as never }, site);
+    const opened = noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://x/vote", code: "1234" } as never }, site, dormantAfterMs);
     expect(opened).not.toContain("1234");
-    const rotated = noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", code: "1234" } as never }, site);
+    const rotated = noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", code: "1234" } as never }, site, dormantAfterMs);
     expect(rotated).not.toContain("1234");
   });
 });
@@ -188,11 +188,11 @@ describe("achievement", () => {
   const base = { kind: "achievement" as const, occurredAt: at, target: "channel" as const };
   it("names the player as a mention in their clan channel, and with their tag in the public channel", () => {
     const payload = { key: "sniper", name: "Sniper", description: "A kill from 300 m or more", ownerKind: "player", ownerName: "111111111111111111", clanTag: "BEAR" };
-    expect(noticeText({ ...base, payload }, site)).toBe("🏆 <@111111111111111111> earned **Sniper** — A kill from 300 m or more.");
-    expect(noticeText({ ...base, payload: { ...payload, public: true } }, site)).toBe("🏆 <@111111111111111111> [BEAR] earned **Sniper** — A kill from 300 m or more.");
+    expect(noticeText({ ...base, payload }, site, dormantAfterMs)).toBe("🏆 <@111111111111111111> earned **Sniper** — A kill from 300 m or more.");
+    expect(noticeText({ ...base, payload: { ...payload, public: true } }, site, dormantAfterMs)).toBe("🏆 <@111111111111111111> [BEAR] earned **Sniper** — A kill from 300 m or more.");
   });
   it("links the clan when a clan earns an achievement, since the payload carries its tag", () => {
     const payload = { key: "fortress", name: "Fortress", description: "10 defenses", ownerKind: "clan", ownerName: "Bear Company", clanTag: "BEAR", public: true };
-    expect(noticeText({ ...base, payload }, site)).toBe(`🏆 **[Bear Company](<${site}/clans/BEAR>)** [BEAR] earned **Fortress** — 10 defenses.`);
+    expect(noticeText({ ...base, payload }, site, dormantAfterMs)).toBe(`🏆 **[Bear Company](<${site}/clans/BEAR>)** [BEAR] earned **Fortress** — 10 defenses.`);
   });
 });

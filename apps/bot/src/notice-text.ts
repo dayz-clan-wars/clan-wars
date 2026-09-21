@@ -3,7 +3,6 @@ import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
 import { rel } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
-import { DEFAULT_DORMANT_AFTER_MS } from "./dormancy.js";
 
 const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
@@ -193,11 +192,12 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
 export function noticeText(
   n: { kind: ClanNoticeKind; target: NoticeTarget; occurredAt: Date; payload: NoticePayload },
   siteBaseUrl: string,
-  // Defaults to the bot's own configured default (config.ts mirrors this
-  // same DEFAULT_DORMANT_AFTER_MS) so a caller that hasn't threaded the live
-  // config value yet still renders a number consistent with it; the real
-  // tick always passes `cfg.dormantAfterMs` explicitly — see noticeMessage.
-  dormantAfterMs: number = DEFAULT_DORMANT_AFTER_MS,
+  // ⚠️ Required, no default. A default here would be exactly the trap this
+  // task removed: dormancy.ts's own DEFAULT_DORMANT_AFTER_MS IS the domain
+  // constant, so a caller that forgot to pass this would silently render
+  // "7 days" on a staging box where BOT_DORMANT_AFTER_MS is under a day —
+  // the compiler must refuse that caller instead. See noticeMessage/noticeTick.
+  dormantAfterMs: number,
 ): string {
   // ⚠️ `?? ""` is the degrade for an unrepresentable occurredAt: the line
   // loses its "when" rather than posting a literal <t:NaN:R> that nothing

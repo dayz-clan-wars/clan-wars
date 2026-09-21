@@ -37,12 +37,10 @@ export const PING_KINDS: ReadonlySet<ClanNoticeKind> = new Set<ClanNoticeKind>([
 export function noticeMessage(
   row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null },
   siteBaseUrl: string,
-  // ⚠️ Optional so every existing caller in this file's own tests keeps
-  // compiling; `noticeTick` below always threads the real `cfg.dormantAfterMs`
-  // through from `discord.ts`, the same way it already threads `siteBaseUrl`.
-  // See the task-9 report for why this must never default to the domain
-  // constant instead.
-  dormantAfterMs?: number,
+  // ⚠️ Required, not defaulted — see noticeText's own comment. Every caller
+  // must thread the live `cfg.dormantAfterMs` (as `noticeTick` below and
+  // `discord.ts` do), the same way `siteBaseUrl` is required, not defaulted.
+  dormantAfterMs: number,
 ): NoticeMessage {
   if (row.kind !== "achievement") {
     const line = noticeText(row, siteBaseUrl, dormantAfterMs);
@@ -84,7 +82,7 @@ export type NoticeTickResult = { posted: number; failed: number; blockedTargets:
 export async function noticeTick(
   store: NoticeStore,
   send: NoticeSender,
-  opts: { now: Date; batchSize?: number; siteBaseUrl: string; dormantAfterMs?: number; onError?: (id: number, attempts: number, err: unknown) => void },
+  opts: { now: Date; batchSize?: number; siteBaseUrl: string; dormantAfterMs: number; onError?: (id: number, attempts: number, err: unknown) => void },
 ): Promise<NoticeTickResult> {
   const rows = await store.readUnposted(opts.batchSize ?? 50);
   const blocked = new Set<string>();
