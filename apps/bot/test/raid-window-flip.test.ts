@@ -65,6 +65,7 @@ describe("applyGameplay (raid window only)", () => {
     const out = await applyGameplay(t as never, FRI, { raidWindow: { skips: [] } });
     expect(out.flipError).toBeInstanceOf(Error);
     expect(out.flipError!.message).toMatch(/no "disableBaseDamage"/);
+    expect(out.flip).toBeUndefined();
     expect(t.uploadFile).not.toHaveBeenCalled();
   });
 
