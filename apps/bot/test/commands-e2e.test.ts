@@ -56,7 +56,7 @@ describe("a slash command, end to end", () => {
   });
 
   it("writes the lock /vault add's modal described, and /vault list reads it back", async () => {
-    const ctx = { roster: makeRoster(() => db, () => now), now, siteBaseUrl: "https://x" };
+    const ctx = { roster: makeRoster(() => db, () => now), now, siteBaseUrl: "https://x", db, serverEvents: null };
 
     const added = await vaultGroup.modals!["vault-add"]!(ctx, {
       actorDiscordId: LEADER_DISCORD, arg: "officer",
@@ -70,7 +70,7 @@ describe("a slash command, end to end", () => {
     expect(rows[0]!.minRole).toBe("officer");
 
     const listed = await specOf(vaultGroup, "vault list").handler(ctx, {
-      actorDiscordId: LEADER_DISCORD, string: () => null, integer: () => null, boolean: () => null, user: () => null,
+      actorDiscordId: LEADER_DISCORD, string: () => null, integer: () => null, boolean: () => null, user: () => null, isAdmin: false,
     });
     expect(JSON.stringify(listed.embeds![0]!.toJSON())).toContain("Front gate");
     // ⚠️ And the code is nowhere in the card.

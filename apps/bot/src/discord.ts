@@ -574,7 +574,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   // ⚠️ `now` on a long-lived Ctx would freeze at boot — build the context
   // fresh per interaction instead.
   const roster = makeRoster(() => db);
-  const ctxNow = (): Ctx => ({ roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
 
   try {
     await new REST().setToken(cfg.token).put(
@@ -604,6 +603,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
   const serverEventsPoster = cfg.serverEventsChannelId ? createChannelPoster(client, cfg.serverEventsChannelId) : null;
+  const ctxNow = (): Ctx => ({
+    roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
+    db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
+  });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
   // text (a gamertag) to a public channel.

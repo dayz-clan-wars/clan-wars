@@ -9,6 +9,7 @@ import type {
   StringSelectMenuBuilder,
 } from "discord.js";
 import type { Roster } from "@factions/roster";
+import type { Database } from "@factions/db";
 
 /** A row a `Reply` can carry: buttons or a single select menu, never mixed in one row. */
 export type ReplyRow = ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>;
@@ -46,6 +47,14 @@ export type CommandInput = {
   boolean: (name: string) => boolean | null;
   /** A resolved user option's id, or null. */
   user: (name: string) => string | null;
+  /**
+   * Whether the caller holds Manage Server in this guild.
+   *
+   * ⚠️ Read from the interaction's OWN member permissions, never from a role id
+   * in config: a role can be renamed, deleted or handed out, and the permission
+   * is the thing Discord actually enforces.
+   */
+  isAdmin: boolean;
 };
 
 export type Ctx = {
@@ -53,6 +62,16 @@ export type Ctx = {
   /** For formatting only. Domain time comes from the roster instance's own clock. */
   now: Date;
   siteBaseUrl: string;
+  /**
+   * ⚠️ The only command that touches this is `/airdrop place`, which has no
+   * roster call to make: an airdrop is server state, not clan state, so there is
+   * nothing for `@factions/roster` to export. Do not reach for it from a clan
+   * command — those go through `roster`, which is what keeps the site and the
+   * commands one set of rules rather than two.
+   */
+  db: Database;
+  /** The `SERVER_EVENTS_CHANNEL_ID` poster, or null when `AIRDROP_TICK` is off. */
+  serverEvents: ((content: string) => Promise<void>) | null;
 };
 
 export type Handler = (ctx: Ctx, input: CommandInput) => Promise<Reply>;
