@@ -72,14 +72,32 @@ describe("airdropTick", () => {
     expect((await run(vi.fn(async () => {}))).decided).toBe(0);
   });
 
-  // ⚠️ Spec §9: an unannounced drop is never enabled, and its budget comes back.
-  it("marks the row failed and refunds the budget when the post fails", async () => {
+  // ⚠️ Spec §9's refund is real, but not on the same tick as a transient post failure
+  // (spec §9, ruling: the tick runs ~every 10s and the decision fires 30min ahead of
+  // the slot, so a rate-limited or blipped post gets on the order of 180 more chances
+  // before the window closes). Failing fast here would spend the week's cap on a
+  // hiccup a later retry would have cleared, on this same day of a quiet week besides.
+  it("does not write off a freshly-decided drop when the post fails once, the window still open", async () => {
     await online(6, "2026-09-21T18:00:00Z", null);
     const r = await run(vi.fn(async () => { throw new Error("channel gone"); }));
-    expect(r).toEqual({ decided: 1, posted: 0, failed: 1 });
+    expect(r).toEqual({ decided: 1, posted: 0, failed: 0 });
+    const [row] = await rows();
+    expect(row!.state).toBe("announced");
+    expect(row!.announcedAt).toBeNull();
+  });
+
+  // ⚠️ This is where spec §9's refund actually happens: not at the failed post above,
+  // but once the slot itself has come and gone with nobody ever told. Only past this
+  // point is the budget back and the week's count free of the row.
+  it("fails and refunds a decided row once its slot arrives with the post never landed", async () => {
+    await online(6, "2026-09-21T18:00:00Z", null);
+    await run(vi.fn(async () => { throw new Error("channel gone"); }));
+    const r = await run(vi.fn(async () => { throw new Error("still gone"); }), { now: at("2026-09-21T20:00:00Z") });
+    expect(r.failed).toBe(1);
     const [row] = await rows();
     expect(row!.state).toBe("failed");
     expect(row!.announcedAt).toBeNull();
+    expect(row!.endedAt).not.toBeNull();
   });
 
   it("retries the post for a decided-but-unannounced row while the slot is still ahead", async () => {

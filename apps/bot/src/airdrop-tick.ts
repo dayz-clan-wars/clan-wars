@@ -133,17 +133,18 @@ export async function airdropTick(
           .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slot)));
         out.posted += 1;
       } catch (err) {
-        // ⚠️ A failure on the SAME tick as the decision is written off right away,
-        // refunding the week's budget (spec §9) — a row left `announced` with a
-        // null `announced_at` here would only ever be picked up by the retry loop
-        // above on a LATER tick, and this is the same tick, so nothing would ever
-        // retry it before the next scheduled run. (A crash between the insert above
-        // and this post — the process dying before the catch even runs — is the one
-        // way a row legitimately reaches next tick's retry loop still `announced`.)
-        console.warn(`airdrop: announcement for ${slot.toISOString()} failed to post`, err);
-        await db.update(airdropEvents).set({ state: "failed", endedAt: opts.now, detail: { reason: "post failed" } })
-          .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slot)));
-        out.failed += 1;
+        // ⚠️ Left `announced` with a null announced_at, NOT failed outright: the
+        // slot is still up to 30 minutes away, and the tick runs roughly every 10
+        // seconds, so the retry loop above (branch 1) gets on the order of 180 more
+        // attempts inside the window before this drop is written off. A transient
+        // Discord failure (rate limit, blip) is exactly what that budget is for.
+        // "Fixing" this to fail fast here would make branch 1 nearly dead code —
+        // reachable only by a process crash between the insert above and this post —
+        // and would spend a whole week's cap on a hiccup that a retry ten seconds
+        // later would have cleared. The refund still happens: once the slot itself
+        // arrives with `announced_at` still null, branch 1's other arm marks the row
+        // `failed` and it drops out of the weekly count from then on.
+        console.warn(`airdrop: announcement for ${slot.toISOString()} failed to post — retrying next tick`, err);
       }
     } catch (err) {
       console.error(`airdrop: server ${s.id} decision failed`, err);
