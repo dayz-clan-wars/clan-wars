@@ -84,7 +84,9 @@ describe("the airdrop at the slot", () => {
 
   // ⚠️ Spec §9: nothing here may cost the restart.
   it("restarts anyway when the splice refuses, and records the refusal", async () => {
-    await decide();
+    // ⚠️ `{ by }` is the manual command's only record of who asked for the drop.
+    // The refusal MERGES into `detail`; replacing it wholesale forgot that.
+    await decide({ manual: true, detail: { by: "42" } });
     const twoDrops = GAMEPLAY.replace(
       '"./custom/admin-castle.json"',
       '"./custom/airdrop-lukow-blue.json",\n\t\t\t"./custom/airdrop-nadbor-blue.json"',
@@ -95,11 +97,15 @@ describe("the airdrop at the slot", () => {
     const row = (await state())!;
     expect(row.state).toBe("announced");
     expect(row.detail.enableAttempts).toBe(1);
+    expect(row.detail.by).toBe("42");
   });
 
-  // Renamed from "scrubs the drop after two failed enables and refunds the
-  // budget": nothing in this commit implements a budget refund, so the title
-  // now says only what the assertions below actually prove.
+  // ⚠️ The budget refund IS implemented at branch level — the decision tick's
+  // weekly count and last-fire lookup both carry `ne(state, 'failed')`, so a
+  // scrubbed drop stops counting the moment it is marked. That is asserted in
+  // airdrop-tick.test.ts, where the queries live; this test owns the transition.
+  // The scrub NOTICE is posted by airdrop-tick.ts, not from here (spec §9): a
+  // Discord call in this block could delay a restart.
   it("marks the row failed after two failed enables, and still restarts", async () => {
     await decide({ detail: { enableAttempts: 1 } });
     const twoDrops = GAMEPLAY.replace(
@@ -113,6 +119,29 @@ describe("the airdrop at the slot", () => {
     expect(row.detail.enableAttempts).toBe(2);
     expect(row.endedAt).not.toBeNull();
     expect(h.restart).toHaveBeenCalled();
+  });
+
+  // ⚠️ Fix round 2, Important 3: `live` is recorded only AFTER the restart POST.
+  // Recorded before it, a POST that then fails through the slot's grace window
+  // leaves the row `live` for a session the server never loaded, and the NEXT
+  // slot's `ending` arm removes the spawner at exactly the restart that would
+  // first have brought it up: the container never exists in-world, the week's
+  // budget is spent, and nothing reports it.
+  it("does not mark the row live when the restart POST fails, and does not end it at the next slot", async () => {
+    await decide();
+    const h = host();
+    h.restart.mockRejectedValueOnce(new Error("nitrado refused"));
+    await restartTick(db, () => h.target, { now: at("2026-09-21T20:00:03Z"), airdrop: { enabled: true } });
+    expect((await state())!.state).toBe("announced");
+    // The upload itself went out before the POST, so the file does hold it.
+    expect(h.spawners()).toContain("./custom/airdrop-dolnik-blue.json");
+
+    // The next slot re-converges: the file already matches, so nothing is
+    // uploaded a second time, and the row goes live rather than being ended.
+    await restartTick(db, () => h.target, { now: at("2026-09-21T22:00:03Z"), airdrop: { enabled: true } });
+    expect((await state())!.state).toBe("live");
+    expect((await state())!.endedAt).toBeNull();
+    expect(h.spawners()).toContain("./custom/airdrop-dolnik-blue.json");
   });
 
   it("does nothing at all when the flag is off", async () => {

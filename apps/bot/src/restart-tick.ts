@@ -343,6 +343,15 @@ export async function restartTick(
       // ⚠️ The message is settled BEFORE the upload, and names the drop this
       // slot is bringing up. A drop being taken away must not be advertised.
       let airdropLocation: string | null = null;
+      // ⚠️ The row this slot's upload is enabling, moved to `live` only AFTER the
+      // restart POST succeeds. Flipping it before the POST records a drop as live
+      // that the server never loaded: if the POST then throws and the retries
+      // exhaust the grace window, the slot is `missed`, the row stays `live`, and
+      // `airdropIntent`'s `ending` arm removes the spawner at the very restart
+      // that would first have loaded it. The container never exists in-world and
+      // the week's budget is spent, with nothing reporting it. Same shape, and the
+      // same reason, as the raid window's `restartConfirmedAt`.
+      let enabled: { slotAt: Date; location: string; colour: string } | undefined;
       try {
         const edits: GameplayEdits = {};
         // ⚠️ The boundary is computed BEFORE the attempt, so a refusal below can
@@ -509,15 +518,22 @@ export async function restartTick(
                   // event, and a row left `announced` forever would hold the "nothing
                   // announced or live" guard shut and stop the feature dead.
                   ...(attempts >= AIRDROP_MAX_ENABLE_ATTEMPTS ? { state: "failed" as const, endedAt: opts.now } : {}),
-                  detail,
+                  // ⚠️ MERGED into whatever the row already carries, never replacing
+                  // it. A manual drop's `{ by: <admin id> }` — the only record of who
+                  // asked for it — would otherwise be erased by the first refusal,
+                  // and `scrubNotified` (airdrop-tick.ts) by any later one, which
+                  // would re-post the scrub notice.
+                  detail: sql`${airdropEvents.detail} || ${JSON.stringify(detail)}::jsonb`,
                 }).where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, intent.enabling.slotAt)));
               }
               airdropLocation = null;
             } else {
               if (intent.enabling) {
-                await db.update(airdropEvents).set({ state: "live" })
-                  .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, intent.enabling.slotAt)));
-                console.log(`airdrop: server ${s.id} enabled ${intent.wanted!.location}/${intent.wanted!.colour} for ${slot.start.toISOString()}`);
+                // ⚠️ NOT moved to `live` here — only after the restart POST, below.
+                enabled = {
+                  slotAt: intent.enabling.slotAt,
+                  location: intent.wanted!.location, colour: intent.wanted!.colour,
+                };
               }
               for (const slotAt of intent.ending) {
                 await db.update(airdropEvents).set({ state: "ended", endedAt: opts.now })
@@ -571,6 +587,25 @@ export async function restartTick(
           // website reads "not yet confirmed" and no open/close message posts, until
           // a later slot's restart succeeds and this same lookup confirms it.
           .catch(() => undefined);
+      }
+      if (enabled) {
+        // ⚠️ `state = 'announced'` is part of the WHERE, so a row some other pass
+        // has already moved on (to `failed`, say) is never dragged back to `live`.
+        await db.update(airdropEvents).set({ state: "live" })
+          .where(and(
+            eq(airdropEvents.serverId, s.id),
+            eq(airdropEvents.slotAt, enabled.slotAt),
+            eq(airdropEvents.state, "announced"),
+          ))
+          // ⚠️ Swallowed on purpose, exactly like the raid window's confirm above:
+          // the restart POST has already gone out, and a throw here would abort the
+          // slot's `server_restarts` row and make the next pass restart the server a
+          // second time. What is lost is SILENT — the row stays `announced` and the
+          // next slot re-converges: the file already holds the spawner, so
+          // `setAirdropSpawner` returns `changed: false`, nothing is uploaded a
+          // second time, and the row goes `live` then.
+          .catch(() => undefined);
+        console.log(`airdrop: server ${s.id} enabled ${enabled.location}/${enabled.colour} for ${slot.start.toISOString()}`);
       }
       if (await record(db, s.id, slot.start, opts.now, "restarted")) {
         result.restarted += 1;
