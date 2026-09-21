@@ -15,7 +15,7 @@ describe("airdrop_events", () => {
   });
 
   const row = (over: Record<string, unknown> = {}) => ({
-    serverId, slotAt: new Date("2026-09-21T20:00:00Z"), location: "dolnik", colour: "blue",
+    serverId, slotAt: new Date("2026-09-21T20:00:00Z"), location: "dolnik", colour: "blue" as const,
     decidedAt: new Date("2026-09-21T19:30:00Z"), popAtDecision: 6, threshold: "5", state: "announced" as const, ...over,
   });
 
