@@ -1,13 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  TABLES, VAULT_TABLES, LEADERSHIP_TABLES,
-  DISCORD_OVERRIDES, DISCORD_VAULT_OVERRIDES, DISCORD_LEADERSHIP_OVERRIDES,
-  REFUSAL, DECLARE_COPY, RELEASE_COPY, DECLARED_OK, DISBAND_WARNING,
-  ISSUE_COPY, ENDED_COPY, UNLINK_COPY, PIN_RESULT_COPY,
-  EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE,
-  BOARD_LABELS, EMPTY_BOARD, ACHIEVEMENT_CLOSEST, ACHIEVEMENT_NONE, NO_PROFILE,
-  VAULT_INTRO, CLAIM_REFUSAL, PIN_ICON_LABELS,
-} from "../src/index";
+import * as copy from "../src/index";
 
 /**
  * ⚠️ @factions/copy is read by apps/web AND apps/bot. A Discord timestamp
@@ -19,7 +11,18 @@ import {
  * would be false. The invariant is narrower and is the one that matters:
  * nothing reachable from the COPY TABLES may contain one. A time-bearing
  * shared string takes a pre-formatted argument instead — see `lapsedCopy`.
+ *
+ * ⚠️ A NAMESPACE import, not a list of names. An enumerated list silently
+ * stops covering anything added to the package later — and this guard's
+ * entire job is catching a mistake nobody has made yet, so the surface it
+ * checks has to grow by itself.
+ *
+ * `at`/`rel`/`atRel` are excluded BY NAME because they are the token
+ * builders: their source necessarily contains `<t:`. That is the one
+ * legitimate exception, and naming it here is what keeps it the only one.
  */
+const TOKEN_BUILDERS = new Set(["at", "rel", "atRel"]);
+
 function strings(v: unknown, out: string[] = []): string[] {
   if (typeof v === "string") out.push(v);
   else if (typeof v === "function") {
@@ -32,15 +35,9 @@ function strings(v: unknown, out: string[] = []): string[] {
   return out;
 }
 
-const SURFACES: Record<string, unknown> = {
-  TABLES, VAULT_TABLES, LEADERSHIP_TABLES,
-  DISCORD_OVERRIDES, DISCORD_VAULT_OVERRIDES, DISCORD_LEADERSHIP_OVERRIDES,
-  REFUSAL, DECLARE_COPY, RELEASE_COPY, DECLARED_OK, DISBAND_WARNING,
-  ISSUE_COPY, ENDED_COPY, UNLINK_COPY, PIN_RESULT_COPY,
-  EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE,
-  BOARD_LABELS, EMPTY_BOARD, ACHIEVEMENT_CLOSEST, ACHIEVEMENT_NONE, NO_PROFILE,
-  VAULT_INTRO, CLAIM_REFUSAL, PIN_ICON_LABELS,
-};
+const SURFACES: Record<string, unknown> = Object.fromEntries(
+  Object.entries(copy).filter(([name]) => !TOKEN_BUILDERS.has(name))
+);
 
 describe("no Discord tokens in shared copy", () => {
   it.each(Object.keys(SURFACES))("%s contains no <t: token", (name) => {
