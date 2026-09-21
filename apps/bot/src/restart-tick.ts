@@ -1,6 +1,6 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, type Database } from "@factions/db";
 import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
-import { and, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 import { setAirdropSpawner, setBaseDamageDisabled } from "./cfggameplay.js";
 
@@ -200,12 +200,21 @@ export type AirdropIntent = {
  * A decided-but-unannounced drop must never go live — spec §9.
  */
 async function airdropIntent(db: Database, serverId: number, slot: Date): Promise<AirdropIntent> {
+  // ⚠️ Ordered by slotAt: with two eligible `announced` rows (both with
+  // slotAt <= this slot, which happens after downtime), an unordered select
+  // leaves it to Postgres's row order which drop goes live. Oldest first,
+  // deterministically.
   const open = await db.select().from(airdropEvents).where(and(
     eq(airdropEvents.serverId, serverId),
     inArray(airdropEvents.state, ["announced", "live"]),
-  ));
+  )).orderBy(asc(airdropEvents.slotAt));
 
-  const live = open.find((r) => r.state === "live" && r.slotAt.getTime() === slot.getTime());
+  // ⚠️ `announcedAt !== null` on `live` too, not just `enabling`: a `live` row
+  // is only ever supposed to be reachable through the announced-first gate,
+  // but spelling the term here as well makes that invariant locally true
+  // rather than true only by luck of how the rest of the call chain happens
+  // to behave.
+  const live = open.find((r) => r.state === "live" && r.announcedAt !== null && r.slotAt.getTime() === slot.getTime());
   const enabling = open.find((r) =>
     r.state === "announced" && r.announcedAt !== null && r.slotAt.getTime() <= slot.getTime());
   // Anything live from an earlier slot has had its session and is over.
@@ -436,7 +445,26 @@ export async function restartTick(
                 // timestamp). It DOES clear a stale `refused` row once the file is
                 // observed correct again — today such a row can only be cleared by a
                 // slot that happens to rewrite the file.
-                ...(gameplay.uploaded
+                //
+                // ⚠️ The `setWhere` guard is keyed on `flip.changed`, NOT on
+                // `gameplay.uploaded`. `flip.changed` is "did THIS boundary's raid
+                // splice need an edit" — the fact that decides whether this is a
+                // genuinely new flip for this boundary (safe to overwrite an
+                // existing applied row unconditionally) or a mere re-verification
+                // (must not clobber an already-applied row's `applied_at`/
+                // `previousContent`). `gameplay.uploaded` answers a DIFFERENT
+                // question — "did the upload happen at all, for either feature" —
+                // and using it here was the bug: an airdrop-only upload on an
+                // ALREADY-applied boundary (Saturday's enable, after Friday already
+                // recorded the true pre-flip copy) made `gameplay.uploaded` true
+                // with `flip.changed` still false, and the unconditional branch it
+                // selected clobbered Friday's real rollback copy and `applied_at`
+                // with Saturday's post-flip file. `previousContent` is still
+                // recorded in the no-change arm's `set` when `gameplay.uploaded` is
+                // true, but only inside the arm the `setWhere` guard protects — so
+                // it lands only on a row not already `applied` (e.g. converting a
+                // stale `refused` row once the file is observed correct).
+                ...(flip.changed
                   ? {
                     set: {
                       outcome: "applied" as const,
@@ -453,6 +481,7 @@ export async function restartTick(
                       appliedAt: opts.now,
                       wantedDisabled: flip.wantedDisabled,
                       detail: {},
+                      ...(gameplay.uploaded ? { previousContent: flip.previousContent } : {}),
                     },
                   }),
               });
@@ -505,6 +534,14 @@ export async function restartTick(
           }
         }
       } catch (err) {
+        // ⚠️ Scrub `airdropLocation` here too, not only on `gameplay.airdropError`.
+        // A THROW out of this block (missionRootDir, downloadFile, the skips
+        // SELECT, airdropIntent's own query) means nothing was uploaded and the
+        // row never left `announced` — the same "nothing to advertise" fact as a
+        // refused splice, just from a different failure point. Without this the
+        // in-game restart warning would tell every player the drop is live for a
+        // session where the file was never touched.
+        airdropLocation = null;
         console.error(`restart: server ${s.id} could not evaluate cfggameplay.json for slot ${slot.start.toISOString()} — restarting anyway`, err);
       }
 

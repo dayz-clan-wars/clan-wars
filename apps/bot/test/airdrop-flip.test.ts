@@ -97,7 +97,10 @@ describe("the airdrop at the slot", () => {
     expect(row.detail.enableAttempts).toBe(1);
   });
 
-  it("scrubs the drop after two failed enables and refunds the budget", async () => {
+  // Renamed from "scrubs the drop after two failed enables and refunds the
+  // budget": nothing in this commit implements a budget refund, so the title
+  // now says only what the assertions below actually prove.
+  it("marks the row failed after two failed enables, and still restarts", async () => {
     await decide({ detail: { enableAttempts: 1 } });
     const twoDrops = GAMEPLAY.replace(
       '"./custom/admin-castle.json"',
@@ -105,7 +108,11 @@ describe("the airdrop at the slot", () => {
     );
     const h = host(twoDrops);
     await restartTick(db, () => h.target, { now: at("2026-09-21T20:00:03Z"), airdrop: { enabled: true } });
-    expect((await state())!.state).toBe("failed");
+    const row = (await state())!;
+    expect(row.state).toBe("failed");
+    expect(row.detail.enableAttempts).toBe(2);
+    expect(row.endedAt).not.toBeNull();
+    expect(h.restart).toHaveBeenCalled();
   });
 
   it("does nothing at all when the flag is off", async () => {
@@ -113,6 +120,20 @@ describe("the airdrop at the slot", () => {
     const h = host();
     await restartTick(db, () => h.target, { now: at("2026-09-21T20:00:03Z") });
     expect(h.spawners().filter((e) => e.includes("/airdrop-"))).toEqual([]);
+    expect((await state())!.state).toBe("announced");
+  });
+
+  // ⚠️ Fix round 1, Important 2: a THROW out of the shared evaluate-and-upload
+  // block (not a splice refusal) must scrub the location too, or the in-game
+  // restart warning advertises a drop the file never actually got.
+  it("does not advertise the drop in the restart warning when cfggameplay.json evaluation throws", async () => {
+    await decide();
+    const h = host();
+    h.target.missionRootDir = vi.fn(async () => {
+      throw new Error("nitrado: mission root lookup failed");
+    });
+    await restartTick(db, () => h.target, { now: at("2026-09-21T20:00:03Z"), airdrop: { enabled: true } });
+    expect(h.restart).toHaveBeenCalledWith(restartMessage(null));
     expect((await state())!.state).toBe("announced");
   });
 });
