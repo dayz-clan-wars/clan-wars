@@ -59,6 +59,21 @@ describe("/vault list", () => {
     const reply = await specOf(vaultGroup, "vault list").handler(ctx, input());
     expect(JSON.stringify(reply.embeds![0]!.toJSON().fields ?? [])).toMatch(/no locks/iu);
   });
+
+  /**
+   * ⚠️ `by: null` — a real, reachable state (no `players` row for the
+   * actor's dayzId) — must render as bold plain text, never a link.
+   * `playerLink` on a null gamertag would produce a clickable link to a
+   * player page that can never resolve.
+   */
+  it("renders a history actor with no players row as bold text, not a dead link", async () => {
+    const withHistory = state({ history: [{ at: new Date("2026-09-02T00:00:00Z"), action: "rotated", lockName: "Front gate", by: null }] });
+    const ctx = ctxWith({ vaultFor: async () => withHistory });
+    const reply = await specOf(vaultGroup, "vault list").handler(ctx, input());
+    const rendered = JSON.stringify(reply.embeds![0]!.toJSON().fields ?? []);
+    expect(rendered).toContain("**a member**");
+    expect(rendered).not.toContain("](<");
+  });
 });
 
 describe("/vault lock autocomplete", () => {

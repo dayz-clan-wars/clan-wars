@@ -77,6 +77,20 @@ describe("/map pins", () => {
     const reply = await specOf(mapGroup, "map pins").handler(ctx, input());
     expect(reply.embeds![0]!.toJSON().description).toMatch(/No pins/u);
   });
+
+  /**
+   * ⚠️ `by: null` — a real, reachable state (the author `/unlink`ed or left
+   * while the pin was still inside its TTL) — must render as bold plain
+   * text, never a link. `playerLink` on a null gamertag would produce a
+   * clickable link to a player page that can never resolve.
+   */
+  it("renders a pin author gone from the roster as bold text, not a dead link", async () => {
+    const ctx = ctxWith({ mapState: async () => mapFixture({ pins: [pin({ by: null })] }) });
+    const reply = await specOf(mapGroup, "map pins").handler(ctx, input());
+    const value = reply.embeds![0]!.toJSON().fields?.[0]?.value ?? "";
+    expect(value).toContain("**a member**");
+    expect(value).not.toContain("](<");
+  });
 });
 
 describe("/map pin", () => {

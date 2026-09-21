@@ -28,7 +28,10 @@ export function pinsEmbed(state: MapState, siteBaseUrl: string): EmbedBuilder {
 
   const line = (p: MapState["pins"][number]) =>
     `• **#${p.id}** ${PIN_ICON_LABELS[p.icon]} — ${Math.round(p.x)}, ${Math.round(p.z)}`
-    + (p.note ? ` · ${p.note}` : "") + ` · by ${playerLink(siteBaseUrl, p.by)} · expires ${rel(p.expiresAt) ?? when(p.expiresAt)}`;
+    // ⚠️ `p.by` is null when the author has since /unlinked — bold text, never
+    // a link: `playerLink` on a null gamertag would render a clickable dead
+    // link to a player page that cannot resolve.
+    + (p.note ? ` · ${p.note}` : "") + ` · by ${p.by ? playerLink(siteBaseUrl, p.by) : "**a member**"} · expires ${rel(p.expiresAt) ?? when(p.expiresAt)}`;
 
   budget(TITLE.length + FOOTER_TEXT.length).list(
     embed, `${state.pins.length} pin${state.pins.length === 1 ? "" : "s"}`,

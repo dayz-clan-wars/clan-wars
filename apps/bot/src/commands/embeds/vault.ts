@@ -44,8 +44,11 @@ export function vaultEmbed(state: VaultState, siteBaseUrl: string): EmbedBuilder
   }
 
   if (state.history && state.history.length > 0) {
+    // ⚠️ `h.by` is null when no `players` row exists for that dayzId — bold
+    // text, never a link: `playerLink` on it would render a clickable dead
+    // link to a player page that cannot resolve.
     b.list(embed, "Recent changes",
-      state.history.map((h) => `• ${rel(h.at) ?? when(h.at)} — ${h.lockName} ${h.action} by ${playerLink(siteBaseUrl, h.by)}`),
+      state.history.map((h) => `• ${rel(h.at) ?? when(h.at)} — ${h.lockName} ${h.action} by ${h.by ? playerLink(siteBaseUrl, h.by) : "**a member**"}`),
       (n) => `+${n} more — see the site.`);
   }
   return embed;
