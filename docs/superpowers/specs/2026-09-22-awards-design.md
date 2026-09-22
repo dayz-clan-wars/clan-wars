@@ -200,7 +200,8 @@ and `server_id` the active server's — `clan_notices.server_id` is NOT NULL, an
 `/airdrop place` picks its server the same way).
 
 A grant does not require the winner to be linked; placing does. An unknown award
-key, or a winner who is not in the guild, is refused.
+key, an empty reason, or no active server is refused. (Discord's user option offers
+only guild members, so there is no separate membership check.)
 
 ### 4.2 The DM
 
@@ -339,7 +340,8 @@ after the slot, so the file is already gone by then.
   or page. The page shows the grid square, the nearest town and a map link, built
   on the server exactly as `/kit`'s `kitView` builds them.
 - API routes `/api/awards/{pick,place,cancel,status}` mirror `/api/kit/*`.
-- `@factions/roster` gains four root exports (award reads, pick, place, cancel);
+- `@factions/roster` gains five root exports (`awards`, `award`, `saveAwardPick`,
+  `startAwardPlacement`, `cancelAwardPlacement`);
   `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts` pin
   them. `parity.test.ts` classifies them the same way it classifies the kit's.
 - All copy in `apps/web/lib/award-copy.ts`; `copy-vocabulary.test.ts` applies.
