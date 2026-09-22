@@ -6,6 +6,7 @@ import { supplyTick, type SupplyUploader, type SupplyTickResult, type SupplyDrif
 import type { SpawnObject } from "./supplies.js";
 import { travelTick, type TravelTickResult } from "./travel-tick.js";
 import { boosterKitTick, type BoosterKitTickResult } from "./booster-kit-tick.js";
+import { awardTick, type AwardTickResult } from "./award-tick.js";
 import type { TravelTemplate } from "./travel.js";
 import type { ProjectionDrift } from "./projection-upload.js";
 import { deviceTick, type DeviceClient } from "./device-tick.js";
@@ -82,6 +83,18 @@ export type SweepDeps = {
   onBoosterKitError?: (serverId: number, err: unknown) => void;
   onBoosterKitUploaded?: (serverId: number, result: BoosterKitTickResult) => void;
   onBoosterKitDrift?: (serverId: number, drift: ProjectionDrift) => void;
+  /**
+   * The fourth projected file: every live event award (awards spec §5).
+   * Inert until `./custom/awards.json` is in objectSpawnersArr — see
+   * docs/deploy/2026-09-22-awards.md.
+   */
+  awards?: {
+    clientFor: (nitradoServiceId: number) => SupplyClient;
+    fileName: string;
+  };
+  onAwardError?: (serverId: number, err: unknown) => void;
+  onAwardUploaded?: (serverId: number, result: AwardTickResult) => void;
+  onAwardDrift?: (serverId: number, drift: ProjectionDrift) => void;
   /**
    * The in-game server name, read from Nitrado each sweep and stored on the
    * server row for the site to show. Absent in tests that only exercise
@@ -207,6 +220,22 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         if (result.uploaded) deps.onBoosterKitUploaded?.(s.id, result);
       } catch (err) {
         deps.onBoosterKitError?.(s.id, err);
+      }
+    }
+
+    // The award file, by the same rules again: its own try/catch, so a failure
+    // here never loses a log event or another projection.
+    if (deps.awards) {
+      try {
+        const client = deps.awards.clientFor(s.nitradoServiceId!);
+        const remoteDir = await client.missionCustomDir();
+        const result = await awardTick(db, {
+          serverId: s.id, client, remoteDir, fileName: deps.awards.fileName, now: new Date(),
+          onDrift: (d) => deps.onAwardDrift?.(s.id, d),
+        });
+        if (result.uploaded || result.stamped > 0) deps.onAwardUploaded?.(s.id, result);
+      } catch (err) {
+        deps.onAwardError?.(s.id, err);
       }
     }
 

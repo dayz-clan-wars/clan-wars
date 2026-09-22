@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import type { Database } from "@factions/db";
-import { supplyUploads, travelUploads, boosterKitUploads } from "@factions/db";
+import { supplyUploads, travelUploads, boosterKitUploads, awardUploads } from "@factions/db";
 import { eq } from "drizzle-orm";
 
 /** What the game server reports about a file it holds. */
@@ -19,13 +19,14 @@ export type ProjectionDrift = {
   expected: RemoteFileStat;
 };
 
-type UploadRow = { contentHash: string; remoteSize: number | null; remoteModifiedAt: Date | null };
+type UploadRow = { contentHash: string; uploadedAt: Date; remoteSize: number | null; remoteModifiedAt: Date | null };
 
 /**
  * Where one projected file remembers what it last sent: `supply_uploads`
  * for the kit, `travel_uploads` for the fast-travel config, and
- * `booster_kit_uploads` for the booster kits. Same columns, one table each,
- * so the three files' hashes and baselines cannot cross.
+ * `booster_kit_uploads` for the booster kits, and `award_uploads` for the
+ * event awards. Same columns, one table each, so the four files' hashes and
+ * baselines cannot cross.
  */
 export type UploadStore = {
   read(db: Database, serverId: number): Promise<UploadRow | undefined>;
@@ -33,7 +34,7 @@ export type UploadStore = {
   observe(db: Database, serverId: number, found: RemoteFileStat): Promise<void>;
 };
 
-const storeFor = (table: typeof supplyUploads | typeof travelUploads | typeof boosterKitUploads): UploadStore => ({
+const storeFor = (table: typeof supplyUploads | typeof travelUploads | typeof boosterKitUploads | typeof awardUploads): UploadStore => ({
   async read(db, serverId) {
     const [row] = await db.select().from(table).where(eq(table.serverId, serverId));
     return row;
@@ -48,6 +49,19 @@ const storeFor = (table: typeof supplyUploads | typeof travelUploads | typeof bo
 export const SUPPLY_STORE: UploadStore = storeFor(supplyUploads);
 export const TRAVEL_STORE: UploadStore = storeFor(travelUploads);
 export const BOOSTER_KIT_STORE: UploadStore = storeFor(boosterKitUploads);
+export const AWARD_STORE: UploadStore = storeFor(awardUploads);
+
+/**
+ * The hash `syncProjection` stores for a file's bytes.
+ *
+ * ⚠️ Exported because the award tick compares it with the stored hash to
+ * decide whether the file on the server is the one that carries a grant.
+ * Two spellings of this hash would be two statements of one fact; a drift
+ * between them would stamp clocks off an upload that never happened.
+ */
+export function projectionHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 /**
  * Put one projected file on the game server, if it is not already there.
@@ -72,7 +86,7 @@ export async function syncProjection(db: Database, deps: {
   /** Called when the file on the server is not the one we last uploaded. */
   onDrift?: (drift: ProjectionDrift) => void;
 }): Promise<boolean> {
-  const hash = createHash("sha256").update(deps.content).digest("hex");
+  const hash = projectionHash(deps.content);
   const existing = await deps.store.read(db, deps.serverId);
 
   if (existing?.contentHash === hash) {
