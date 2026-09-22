@@ -18,6 +18,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   sessions. Replayed against three weeks of real history the new rule fires about as
   often but only at genuine peaks. Expect longer, lumpier gaps between drops: one busy
   night sets the bar for the next five days, and a quiet week correctly gets nothing.
+- Friendly fire no longer counts anywhere except the friendly-fire board. Shooting a
+  clanmate earns no kill, no killstreak, no K/D and no place on the killers board, and
+  it costs the victim nothing either: it is not a death, so it cannot dent their deaths
+  board or their ratio. Previously a teamkill counted as a kill for the shooter on the
+  killers board and as a death against the victim everywhere.
+  ⚠️ This recomputes from existing records, so published numbers move the moment it
+  ships. Anyone who has teamkilled will see their kills fall; anyone who has been
+  teamkilled will see their deaths fall and their K/D rise.
+- A friendly-fire death no longer breaks the victim's killstreak. The streak on a player
+  profile and the streak posted to #killstreaks used different rules for this and could
+  disagree for the same player; they now agree.
 
 ## [1.31.0] - 2026-09-22
 

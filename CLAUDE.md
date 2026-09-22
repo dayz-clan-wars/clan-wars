@@ -594,6 +594,22 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   Since increment 4, `clockQuery`'s coalesce also takes the `GREATEST` against the
   server's open season's `started_at` (spec §5.1) — a wipe opens a fresh season, and a
   clan's dormancy clock restarts with it even if its last raise was long before.
+- **Friendly fire scores NOWHERE but the friendly-fire board** (2026-09-21). One
+  predicate, `scoringKill` in `packages/roster/src/stats.ts`, carries the rule for every
+  board, the profile and the streak pass: a teamkill is not a kill, not a death, not a
+  streak term and not a K/D term, on EITHER side — the killer gains nothing and the
+  victim loses nothing. It is recorded only on the `friendlyFire` board and the
+  profile's `friendlyFireKills`/`friendlyFireDeaths`.
+  ⚠️ Route new reads through `scoringKill` rather than respelling the predicate. It
+  already drifted once: `bestStreaks` broke the victim's run on a friendly death while
+  `killstreak-feed-tick.ts` did not, so a player's best streak on their profile
+  disagreed with the one #killstreaks had posted for them.
+  ⚠️ The profile's `kd` must NOT subtract `friendlyFireKills` any more. That term existed
+  to compensate for a `pvpKills` that counted friendly fire; with the predicate at the
+  source it would deduct every teamkill twice.
+  ⚠️ This is a read-time rule over `kills.friendly_fire`, so it applies retroactively the
+  moment it deploys — existing numbers move. `encountersOf`, the timeline and the kill
+  feed are RECORDS, not stats, and still show friendly-fire kills.
 - **`season_standings` is a projection; the drift test in `standings.test.ts` is what
   keeps it honest** — edit it only through the consumers (the raid/raise ticks, the week
   and season close) or `scripts/rebuild-standings.ts`, never by hand.
