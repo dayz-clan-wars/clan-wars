@@ -515,9 +515,13 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   it stays inside the order. `booster_kits` is still only ever READ by the bot.
   `award_grants` (event awards) sits just before `faction_events`: written by
   `grantAwardDb` (`award_grants` → `clan_notices`), `revokeAwardDb`, `removeFromGuildDb`
-  (right after `guest_passes`), and `kitPlacementTick` (`booster_kit_challenges`, outside
-  the order, then the grant `FOR UPDATE`); the page's pick write touches `award_grants`
-  alone. `award_uploads` is outside the order: the worker's single upsert.
+  (right after `guest_passes`), and `kitPlacementTick`; the page's pick write touches
+  `award_grants` alone. ⚠️ Every transaction that touches BOTH an award grant and a
+  placement challenge takes them `award_grants` → `booster_kit_challenges` — revoke, guild
+  removal and the tick's completion alike. The tick once closed the challenge first and
+  deadlocked against a revoke (caught in review, pinned in `kit-placement-tick.test.ts`);
+  `booster_kit_challenges` is "outside the order" only for the kit's own single-table
+  writes. `award_uploads` is outside the order: the worker's single upsert.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

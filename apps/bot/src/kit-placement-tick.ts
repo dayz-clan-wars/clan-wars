@@ -226,6 +226,17 @@ export async function kitPlacementTick(
           // reporting a placement. Ordering it this way is what actually makes
           // a concurrent re-issue a no-op.
           const outcome = await db.transaction(async (tx) => {
+            // ⚠️ The GRANT first, before the challenge close below, for an
+            // award. `revokeAwardDb` and `removeFromGuildDb` lock the grant
+            // and then close its challenge; taking them here in the other
+            // order deadlocked a completion racing a revoke (40P01), and a
+            // lost removal has no catch-up sweep. One order everywhere:
+            // award_grants → booster_kit_challenges.
+            const [grant] = challenge.awardGrantId === null
+              ? []
+              : await tx.select().from(awardGrants)
+                .where(eq(awardGrants.id, challenge.awardGrantId)).for("update");
+
             const closed = await tx.update(boosterKitChallenges).set({
               progressIndex: index,
               seenCount: challenge.seenCount + 1,
@@ -241,13 +252,16 @@ export async function kitPlacementTick(
             if (closed.length === 0) return "stale" as const;
 
             if (challenge.awardGrantId !== null) {
-              // ⚠️ Re-read the grant UNDER A LOCK, in this transaction. The
-              // challenge list was read once per batch, and an admin's revoke
-              // or the grant's own clock may have ended it since. Placing an
-              // ended award would put it back in the spawner file.
-              const [grant] = await tx.select().from(awardGrants)
-                .where(eq(awardGrants.id, challenge.awardGrantId)).for("update");
-              if (!grant || !isOpenAward(awardState(grant, now))) return "award-ended" as const;
+              // ⚠️ The grant as read UNDER THE LOCK above. The challenge list
+              // was read once per batch, and an admin's revoke or the grant's
+              // own clock may have ended it since; placing an ended award
+              // would put it back in the spawner file.
+              //
+              // ⚠️ Judged at the EMOTE's time, not the tick's: a winner who
+              // finished the sequence before `place_by` made the deadline,
+              // however late the tick got round to it. A revoke wins whenever
+              // it landed — `awardState` checks it before any time.
+              if (!grant || !isOpenAward(awardState(grant, ev.occurredAt))) return "award-ended" as const;
               // ⚠️ Position and placed_at ONLY. `live_from`/`expires_at`
               // belong to the worker; a move never resets the clock (awards
               // spec §4.4).

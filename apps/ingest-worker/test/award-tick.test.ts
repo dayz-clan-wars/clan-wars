@@ -128,6 +128,13 @@ describe("awardTick", () => {
     expect(await tick()).toMatchObject({ awards: 0 });
   });
 
+  it("⚠️ reports the grants it dropped for a bad pick or an unknown award, rather than drop them silently", async () => {
+    const [a] = await seed({ picks: { ...FULL, holster: "PlateCarrierHolster_Pink" } });
+    const [b] = await seed({ awardKey: "golden-shovel" });
+    await seed();
+    expect((await tick()).dropped).toEqual([a!.id, b!.id]);
+  });
+
   it("orders grants by id so the bytes are stable", async () => {
     await db.insert(identityLinks).values({ discordId: "2", dayzId: "B".repeat(40), gamertag: "Ann", verifiedAt: now });
     await seed({ discordId: "2" });

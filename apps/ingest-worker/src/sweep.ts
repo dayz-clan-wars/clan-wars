@@ -95,6 +95,7 @@ export type SweepDeps = {
   onAwardError?: (serverId: number, err: unknown) => void;
   onAwardUploaded?: (serverId: number, result: AwardTickResult) => void;
   onAwardDrift?: (serverId: number, drift: ProjectionDrift) => void;
+  onAwardDropped?: (serverId: number, grantIds: number[]) => void;
   /**
    * The in-game server name, read from Nitrado each sweep and stored on the
    * server row for the site to show. Absent in tests that only exercise
@@ -234,6 +235,9 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
           onDrift: (d) => deps.onAwardDrift?.(s.id, d),
         });
         if (result.uploaded || result.stamped > 0) deps.onAwardUploaded?.(s.id, result);
+        // ⚠️ Every sweep, not only on upload: a grant whose pick was retired
+        // before it ever reached the file never changes the file either.
+        if (result.dropped.length > 0) deps.onAwardDropped?.(s.id, result.dropped);
       } catch (err) {
         deps.onAwardError?.(s.id, err);
       }

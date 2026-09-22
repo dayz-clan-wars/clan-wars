@@ -12,7 +12,15 @@ import { syncProjection, projectionHash, AWARD_STORE, type ProjectionUploader, t
  */
 const AWARDS = awardsCatalogue();
 
-export type AwardTickResult = { awards: number; uploaded: boolean; stamped: number };
+export type AwardTickResult = {
+  awards: number; uploaded: boolean; stamped: number;
+  /**
+   * Grants that are placed and in date but left out of the file because a
+   * pick is no longer in the catalogue, a slot is empty, or the award key is
+   * unknown (spec §5.1: "dropped from the file with a warning").
+   */
+  dropped: number[];
+};
 
 /**
  * Mirror every live award into its own spawner file, then start the clock of
@@ -48,14 +56,18 @@ export async function awardTick(db: Database, deps: {
     // Stable order, or the bytes differ between sweeps and we upload forever.
     .orderBy(asc(awardGrants.id));
 
-  const included = rows.filter((r) => {
+  const inDate = rows.filter((r) => inAwardFile(r, deps.now));
+  // ⚠️ Whole award or nothing. A grant whose picks are no longer complete —
+  // a slot cleared after placing, or a class name retired from the catalogue
+  // — leaves the file entirely rather than spawning part of a prize the
+  // winner would read as a bug. It is REPORTED, never dropped silently: its
+  // clock keeps running while nothing spawns.
+  const complete = (r: (typeof rows)[number]) => {
     const def = AWARDS[r.awardKey];
-    // ⚠️ Whole award or nothing. A grant whose picks are no longer complete —
-    // a slot cleared after placing, or a class name retired from the
-    // catalogue — leaves the file entirely rather than spawning part of a
-    // prize the winner would read as a bug.
-    return def !== undefined && picksComplete(def, r.picks) && inAwardFile(r, deps.now);
-  });
+    return def !== undefined && picksComplete(def, r.picks);
+  };
+  const included = inDate.filter(complete);
+  const dropped = inDate.filter((r) => !complete(r)).map((r) => r.id);
 
   // ⚠️ `generateBoosterKits` with `texture: null`: an award is the kit's shape
   // with no armband — same lift off the ground, same byte-stable rounding,
@@ -90,5 +102,5 @@ export async function awardTick(db: Database, deps: {
       stamped += done.length;
     }
   }
-  return { awards: included.length, uploaded, stamped };
+  return { awards: included.length, uploaded, stamped, dropped };
 }

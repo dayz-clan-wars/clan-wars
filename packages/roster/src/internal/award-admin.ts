@@ -60,10 +60,10 @@ export type RevokeAwardOutcome = { ok: true } | { ok: false; reason: "not-found"
 /**
  * Revoke one grant, and close any sequence open for it.
  *
- * ⚠️ `award_grants` FOR UPDATE first, then the challenge — the placement tick
- * takes the challenge first and then the grant, but it closes the challenge
- * with a conditional UPDATE on `closed_at IS NULL`, so whichever lands second
- * finds nothing to do rather than waiting on the other.
+ * ⚠️ `award_grants` FOR UPDATE first, then the challenge — the SAME order
+ * `kitPlacementTick` takes them in. Postgres makes an UPDATE wait for a row
+ * another transaction holds, never skip it, so the opposite order in either
+ * place is a deadlock between a revoke and a winner's last emote.
  */
 export async function revokeAwardDb(db: Database, a: { grantId: number; now: Date }): Promise<RevokeAwardOutcome> {
   return db.transaction(async (tx) => {
