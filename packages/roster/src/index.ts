@@ -43,16 +43,17 @@ export type { ReportOutcome, ReportableIncident } from "./api";
 export type { NotificationsPage, NoticeRow } from "./api";
 export type { NoticePayload } from "./api";
 export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKitOutcome } from "./api";
+export type { AwardSummary, AwardView, AwardWriteOutcome } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, alphas, attention, baseDamageWindow, baseFor, boardPage, boosterKit, cancelKitPlacement, cancelLink, castVote,
+  acceptInvite, achievementsFor, addLock, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
   markAllNoticesRead, markNoticeRead,
   myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
-  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
-  setRecruitingPost, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
+  reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveAwardPick, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
+  setRecruitingPost, startAwardPlacement, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);
 
 export { SUGGEST_SCOPES, type SuggestScope } from "./api";

@@ -59,6 +59,10 @@ import {
   type BoosterKitView, type KitStep, type KitSpot, type KitArmband, type KitChallenge, type SaveKitOutcome,
 } from "./booster-kit";
 import type { KitSlot } from "@factions/domain";
+import {
+  awardsForDb, awardForDb, saveAwardPickDb, startAwardPlacementDb, cancelAwardPlacementDb,
+  type AwardSummary, type AwardView, type AwardWriteOutcome,
+} from "./awards";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -81,6 +85,7 @@ export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
 export type { NotificationsPage, NoticeRow };
 export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKitOutcome };
+export type { AwardSummary, AwardView, AwardWriteOutcome };
 export type { NoticePayload } from "./internal/notices";
 export { NOTIFICATIONS_PAGE_SIZE };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
@@ -291,6 +296,20 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /** Close the caller's own open placement sequence. True when there was one to close. */
     cancelKitPlacement: (discordId: string): Promise<boolean> =>
       cancelKitPlacementDb(getDb(), { discordId, now: getNow() }),
+
+    /** Every grant the viewer holds, with its derived state. */
+    awards: (discordId: string): Promise<AwardSummary[]> => awardsForDb(getDb(), discordId, getNow()),
+    /** One grant's page, or null when it is not the viewer's — indistinguishable from missing. */
+    award: (discordId: string, grantId: number): Promise<AwardView | null> => awardForDb(getDb(), discordId, grantId, getNow()),
+    /** Set or clear one of a grant's slots, checked against the award catalogue. Refusals are an outcome. */
+    saveAwardPick: (discordId: string, grantId: number, slot: string, className: string): Promise<AwardWriteOutcome> =>
+      saveAwardPickDb(getDb(), { discordId, grantId, slot, className, now: getNow() }),
+    /** Draw the emote sequence that marks where a grant spawns. Needs every slot picked and a linked character. */
+    startAwardPlacement: (discordId: string, grantId: number): Promise<AwardWriteOutcome> =>
+      startAwardPlacementDb(getDb(), { discordId, grantId, now: getNow(), rng: Math.random }),
+    /** Close the caller's open sequence for this grant. True when there was one. */
+    cancelAwardPlacement: (discordId: string, grantId: number): Promise<boolean> =>
+      cancelAwardPlacementDb(getDb(), { discordId, grantId, now: getNow() }),
   };
 }
 
