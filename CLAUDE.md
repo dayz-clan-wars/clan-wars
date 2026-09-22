@@ -353,7 +353,7 @@ anything.
   and plan 3 (`docs/deploy/2026-09-13-discord-commands-3.md`) lands the vault and the
   map plus the read-only groups, so the live command list is `/link /base /me /roster
   /clan /clans /lead /found /guest /vault /map /scoreboard /alphas /seasons /warlog
-  /player /board /achievements`. `apps/bot/test/parity.test.ts` lists every write and
+  /player /board /achievements`, plus the admin-only (ManageGuild) `/airdrop` and `/award`. `apps/bot/test/parity.test.ts` lists every write and
   its command; its `PENDING` map holds exactly one entry — `reportIncident: "base
   report"`, deliberately site-only because the evidence an officer needs to press
   charges (part names, distances, coordinates) may never appear in Discord, and a
@@ -407,6 +407,7 @@ anything.
 | The nine leaderboard crowns (a role per board, held by its #1) | The reconciler `apps/bot/src/crown-tick.ts` and its read `apps/bot/src/crown-store.ts`, run in `discord.ts` right after `structureTick` on its own `CROWN_TICK_INTERVAL_MS` throttle (default 5 min). Role ids come from nine optional `CROWN_*_ROLE_ID` env vars; a board with no id is never touched, so the last holder keeps that role forever. Scope is `{ kind: "current" }`, so a season rollover strips all nine at once. ⚠️ The store reads `playerBoardsDb` through `@factions/roster/internal` — the SAME query the public `/players` boards render, deliberately, so the crown and the board cannot drift. ⚠️ A failed board read returns early with NO writes; treating it as "nobody is #1" would strip every crown on one bad query. ⚠️ Ties are read `TIE_LIMIT` = 10 deep. Runbook `docs/deploy/2026-09-18-leaderboard-crowns.md` |
 | Banning unlinked PC players | Device read from the server's `.RPT` by `parseDevices` (`packages/adm-parser/src/device.ts`), learned on demand by `apps/ingest-worker/src/device-tick.ts` into `player_devices`; the rule is `pcGateAction` (`packages/domain/src/pc-gate.ts`), the tick is `apps/bot/src/pc-ban-tick.ts`, gated on `UNLINKED_PC_BAN` (which refuses to run without `ENFORCEMENT_TICK`). ⚠️ `player_devices` must NEVER be backfilled from retained RPTs — its emptiness is what makes the feature forward-only. ⚠️ One lift per account ever, derived from ban history. Runbook `docs/deploy/2026-09-18-unlinked-pc-ban.md` |
 | The wipe, the launch grace stamp, and a standings rebuild | `pnpm wipe --server <id> --at <ISO>` (`scripts/wipe.ts`; `--at` is required — no default, usage error exits 2 — and the wipe is a no-op when the server's open season is younger than a week, i.e. one a wipe just opened), `pnpm launch --server <id> --at <ISO>` (`scripts/launch.ts`; stamps every pole on the server to `--at` + 7 days, spec §4.2; same `--at`-is-required rule, idempotent for the same instant), `pnpm rebuild:standings --season <id>` (`scripts/rebuild-standings.ts`) — all three refuse a `DATABASE_URL` that doesn't end in `/factions_live` unless `--allow-test-db` is also passed. Root `package.json` carries `@factions/db` as a dependency (since increment 4) so these resolve from the repo root without `cd`ing into a package. |
+| Event awards (an admin grants an event winner a spawnable prize for a set time) | Catalogue `packages/domain/assets/awards.json` (validated by `loadAwards`; derived state `awardState` and the clock `awardClock` in `packages/domain/src/awards.ts`, reached through `@factions/domain/awards`); `award_grants` (migration 0046); `/award grant|revoke|list` in `apps/bot/src/commands/award.ts`; placement shares `booster_kit_challenges` (`award_grant_id`, one open challenge per account across kit AND awards) and `kit-placement-tick.ts`; the spawner file `awards.json` from `apps/ingest-worker/src/award-tick.ts`; pages `/awards` and `/awards/<id>`. ⚠️ Respawning every restart for the whole duration IS the prize, chosen deliberately (spec §2.1) — do not "fix" it into a one-time spawn. ⚠️ `live_from`/`expires_at` are stamped by the worker from the first upload that carries the grant, never at placement, and a move never resets them. ⚠️ `./custom/awards.json` must be added to `objectSpawnersArr` by hand, in the `livonia` repo too. Spec `docs/superpowers/specs/2026-09-22-awards-design.md`, runbook `docs/deploy/2026-09-22-awards.md` |
 | Notifications on the site (the bell and /notifications) | Read `notificationsForDb`/`unreadNoticeCountDb` in `packages/roster/src/notifications.ts` — a union of the viewer's DMs and their clans' channel notices, floored at `faction_members.joined_at` and `status = 'full'`; read state in `notice_reads` + `notice_read_marks` (migration 0041). Web copy `apps/web/lib/notice-copy.ts` — ⚠️ a SECOND renderer beside `apps/bot/src/notice-text.ts`; `notice-copy.test.ts` pins the kind list but nothing pins the wording, so read both when you change either. Actions resolve their target from LIVE state, never the payload (spec §5). Spec `docs/superpowers/specs/2026-09-18-notifications-design.md` |
 
 `PLAN-3-INBOX.md` is the backlog. Items are numbered, struck through when done with a
@@ -477,7 +478,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
-  `achievement_counters` → `faction_events` → `war_log_events` → `clan_notices` →
+  `achievement_counters` → `award_grants` → `faction_events` → `war_log_events` → `clan_notices` →
   `zone_incidents` → `zone_incident_participants` → `bans`.**
   The zone-enforcement report write (`reportIncidentDb`, `packages/roster/src/internal/incidents.ts`)
   locks `zone_incidents` FIRST (`FOR UPDATE`, by incident id — that row is already known from the
@@ -512,6 +513,11 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `kit_prompted_at` and queues the DM together, so a DM can never be queued without its
   mark. That transaction touches those two tables only, and `clan_notices` is last, so
   it stays inside the order. `booster_kits` is still only ever READ by the bot.
+  `award_grants` (event awards) sits just before `faction_events`: written by
+  `grantAwardDb` (`award_grants` → `clan_notices`), `revokeAwardDb`, `removeFromGuildDb`
+  (right after `guest_passes`), and `kitPlacementTick` (`booster_kit_challenges`, outside
+  the order, then the grant `FOR UPDATE`); the page's pick write touches `award_grants`
+  alone. `award_uploads` is outside the order: the worker's single upsert.
   `poles` sits right after `declarations` because `releaseTx` takes both, in that
   order: it deletes the declaration and then stamps the released pole's grace.
   A deadlock was already built once from two separately-correct changes taking two of

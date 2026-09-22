@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Event awards. An admin hands an event winner an award with `/award grant`. The winner
+  gets a DM linking to `/awards/<id>`, chooses their gear there, and marks a spot in game
+  with an emote sequence. The award respawns at that spot every restart for its
+  duration. The first award is a plate carrier (vest, pouches and holster, each in any of
+  six colours) for one week. `/award revoke` and `/award list` manage open awards.
+
 ## [1.32.0] - 2026-09-22
 
 ### Changed
