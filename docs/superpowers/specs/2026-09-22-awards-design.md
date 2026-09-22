@@ -158,13 +158,18 @@ Index on `discord_id`.
 Checked in that order. A stored status would be one more thing to fall out of step
 with the timestamps it summarises.
 
-### 3.3 `placement_challenges` (renamed from `booster_kit_challenges`)
+### 3.3 `booster_kit_challenges` gains `award_grant_id`
 
-Migration renames the table and its index, and adds
+The migration adds
 `award_grant_id bigint references award_grants(id) on delete cascade` — null means
 the booster kit. The one-open-challenge-per-account partial unique index is
-unchanged apart from its name. ⚠️ It is the only guard against a booster challenge
-and an award challenge counting the same emotes (§2.6).
+unchanged. ⚠️ It is the only guard against a booster challenge and an award
+challenge counting the same emotes (§2.6).
+
+The table keeps its name, though it now places two subjects. Renaming it makes
+`drizzle-kit generate` stop at an interactive "renamed or created?" prompt, and no
+migration in this repo has ever renamed a table; the name is a smaller cost than a
+hand-written rename. The schema comment says what the table now holds.
 
 ### 3.4 `award_uploads`
 
@@ -177,7 +182,7 @@ file's.
 `award_grants` joins the order immediately before `faction_events`. Every writer
 takes it after any roster tables and before `clan_notices`: grant (`award_grants →
 clan_notices`), revoke, `removeFromGuildDb`, and the placement tick
-(`placement_challenges`, outside the order as today, then `award_grants`).
+(`booster_kit_challenges`, outside the order as today, then `award_grants`).
 `award_uploads` is outside the order: written by the worker's single upsert alone.
 
 ---
@@ -190,7 +195,9 @@ clan_notices`), revoke, `removeFromGuildDb`, and the placement tick
 ManageGuild exactly as `/airdrop place` is, ephemeral reply like every command.
 It calls `grantAwardDb` from `@factions/roster/internal`, which in one transaction
 inserts the `award_grants` row and appends an `award_granted` DM to `clan_notices`
-(`target: "dm"`, `payload: {awardKey, label, reason, placeBy, awardUrl}`).
+(`target: "dm"`, `payload: {grantId, awardKey, label, reason, placeBy, awardUrl}`,
+and `server_id` the active server's — `clan_notices.server_id` is NOT NULL, and
+`/airdrop place` picks its server the same way).
 
 A grant does not require the winner to be linked; placing does. An unknown award
 key, or a winner who is not in the guild, is refused.
@@ -315,8 +322,9 @@ after the slot, so the file is already gone by then.
 
 ### 6.1 Site
 
-- An **Awards** entry in the signed-in menu beside Kit, shown only when the viewer
-  has at least one grant.
+- An **Awards** panel on the owner's own player page, directly under the booster
+  kit panel (the kit's way in lives there too), shown only when the viewer has at
+  least one open grant.
 - `/awards/<id>`, by derived state:
 
   | state | shows |
@@ -327,8 +335,9 @@ after the slot, so the file is already gone by then.
   | `expired` / `lapsed` / `revoked` | read-only, with the reason |
 
 - The emote sequence card and its 5 s status poll are the `/kit` ones.
-- ⚠️ The spot's coordinates appear nowhere — no DM, feed row, URL or page. The page
-  says placed / not placed, as `/kit` does.
+- ⚠️ The spot's raw coordinates appear nowhere — no DM, feed row, URL, JSON body
+  or page. The page shows the grid square, the nearest town and a map link, built
+  on the server exactly as `/kit`'s `kitView` builds them.
 - API routes `/api/awards/{pick,place,cancel,status}` mirror `/api/kit/*`.
 - `@factions/roster` gains four root exports (award reads, pick, place, cancel);
   `packages/roster/test/exports.test.ts` and `apps/web/test/smoke.test.ts` pin
@@ -370,13 +379,13 @@ missing art, so the award cannot ship with blank tiles.
   404; `removeFromGuildDb` revokes; export allowlists.
 - **bot** — placement tick writes to `award_grants` when `award_grant_id` is set and
   to `booster_kits` otherwise, and refuses an ended grant; existing kit placement
-  tests pass unchanged after the rename; `/award` subcommands, admin gate, and
+  tests pass unchanged after the new column; `/award` subcommands, admin gate, and
   ephemeral replies (`command-registration.test.ts`).
 - **ingest-worker** — file shape; inclusion rule including the exact
   `expires_at − lead` boundary; stamp derived from `uploaded_at`, retried after a
   failed stamp, never from a failed upload, and never changing the file hash; empty
   file with no grants.
 - **web** — page states render; notice kind present in both renderers; vocabulary.
-- **migration** — read the generated SQL (rename, index rename, new FK) before it
+- **migration** — read the generated SQL (two tables, one column, one FK) before it
   goes near `factions_live`. Applied by `deploy-release.sh`, which stops every
   writer first.
