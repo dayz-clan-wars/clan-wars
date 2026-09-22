@@ -27,7 +27,7 @@ export type WireState = {
   clanmates: { dayzId: string; gamertag: string; fix: WireFix }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: string; distanceM: number }[];
   publicBases: { x: number; z: number }[];
-  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string; at: string; expiresAt: string }[];
+  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: string; expiresAt: string }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
@@ -38,7 +38,7 @@ export type MapData = Omit<WireState, "you" | "clanmates" | "intruders" | "pins"
   you: { gamertag: string; fix: { x: number; z: number; at: Date } | null };
   clanmates: { dayzId: string; gamertag: string; fix: { x: number; z: number; at: Date } }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: Date; distanceM: number }[];
-  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string; at: Date; expiresAt: Date }[];
+  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: Date; expiresAt: Date }[];
 };
 
 /** JSON never carries a Date. Every `at` comes back as an ISO string; put them back. */
@@ -309,7 +309,7 @@ export function drawPins({ L, group, pt, data, now, ages, p }: Ctx): void {
         `<div class="flex items-center gap-2.5 border-b border-rule-2 px-3.5 py-3">${pinGlyph(p, pin.icon, 20)}` +
           `<span class="font-display text-[13px] uppercase tracking-[0.06em] text-ink">${escapeHtml(label)}</span>` +
           `<span class="ml-auto font-mono text-[11px] text-muted">Grid ${gridRef(pin.x, pin.z)}</span></div>${note}` +
-        `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by)} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +
+        `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by ?? "a member")} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +
         `<form method="post" action="/api/map/pin/delete" class="m-0">` +
           `<input type="hidden" name="id" value="${pin.id}" />` +
           `<button type="submit" data-arm="Delete it? Tap again" class="flex min-h-[44px] w-full items-center justify-center border-t border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink shadow-[inset_0_2px_0_var(--color-rust)] hover:bg-rust/15">Delete pin</button>` +

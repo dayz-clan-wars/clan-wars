@@ -1,7 +1,4 @@
-/** Discord's <t:…:R> counts down by itself, in each reader's own timezone. */
-function countdown(d: Date): string {
-  return `<t:${Math.floor(d.getTime() / 1000)}:R>`;
-}
+import { rel } from "@factions/copy";
 
 const place = (location: string) => location.charAt(0).toUpperCase() + location.slice(1);
 
@@ -16,7 +13,8 @@ const place = (location: string) => location.charAt(0).toUpperCase() + location.
 export function airdropText(location: string, slotAt: Date): string {
   return [
     `**Airdrop inbound: ${place(location)}**`,
-    `A locked container drops at ${place(location)} when the server comes back up, ${countdown(slotAt)}.`,
+    `A locked container drops at ${place(location)} when the server comes back up, `
+      + `${rel(slotAt) ?? "at the next restart"}.`,
     "We are not saying which colour. Bring your keys.",
     "It is gone at the restart after that.",
   ].join("\n");

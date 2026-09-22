@@ -1,5 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { Attention, MyInvite, MyRequest, Viewer } from "@factions/roster";
+import { clanLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 
@@ -16,21 +17,21 @@ export function meEmbed(v: Viewer, a: Attention, invites: MyInvite[], requests: 
   }
   embed.setDescription(`Playing as **${v.link.gamertag}**.`);
 
-  if (v.clan) embed.addFields({ name: "Clan", value: `**${v.clan.name}** [${v.clan.tag}] — ${v.clan.role}`, inline: false });
-  else if (v.pending) embed.addFields({ name: "Clan", value: `Pending at **${v.pending.name}** [${v.pending.tag}] — stand near their base in game.`, inline: false });
+  if (v.clan) embed.addFields({ name: "Clan", value: `${clanLink(siteBaseUrl, v.clan.tag, v.clan.name)} — ${v.clan.role}`, inline: false });
+  else if (v.pending) embed.addFields({ name: "Clan", value: `Pending at ${clanLink(siteBaseUrl, v.pending.tag, v.pending.name)} — stand near their base in game.`, inline: false });
   else embed.addFields({ name: "Clan", value: "None. Browse with `/clans list`.", inline: false });
 
   if (invites.length > 0) {
     embed.addFields({
       name: `Invites (${invites.length})`,
-      value: invites.map((i) => `• **${i.clanName}** [${i.tag}] — \`/me accept\` or \`/me decline\``).join("\n").slice(0, 1024),
+      value: invites.map((i) => `• ${clanLink(siteBaseUrl, i.tag, i.clanName)} — \`/me accept\` or \`/me decline\``).join("\n").slice(0, 1024),
       inline: false,
     });
   }
   if (requests.length > 0) {
     embed.addFields({
       name: `Your requests (${requests.length})`,
-      value: requests.map((r) => `• **${r.clanName}** [${r.tag}] — \`/me withdraw\``).join("\n").slice(0, 1024),
+      value: requests.map((r) => `• ${clanLink(siteBaseUrl, r.tag, r.clanName)} — \`/me withdraw\``).join("\n").slice(0, 1024),
       inline: false,
     });
   }

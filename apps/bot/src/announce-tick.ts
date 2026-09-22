@@ -41,7 +41,7 @@ export async function announceTick(
   }
 
   try {
-    await post(weeklyWipeAnnouncement(vehicle, wipeAt, opts.now));
+    await post(weeklyWipeAnnouncement(vehicle, wipeAt));
   } catch (err) {
     // No row: the next tick retries until the cutoff closes the window.
     opts.onError?.(err, wipeAt);

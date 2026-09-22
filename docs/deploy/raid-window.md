@@ -12,8 +12,10 @@ holds this document against `rules.ts`; if the window ever changes, change the g
 `rules.ts` first, then this.
 
 `RAID_WINDOW_TICK` requires `RESTART_SCHEDULE` (config load refuses to start otherwise —
-the flip only ever takes effect at a restart) and `ANNOUNCEMENTS_CHANNEL_ID` (the
-advance/open/close notices have nowhere else to go). `OPS_CHANNEL_ID` is optional and
+the flip only ever takes effect at a restart) and `SERVER_EVENTS_CHANNEL_ID` (the
+advance/open/close notices post to `#server-events`, alongside airdrops and the weekly
+vehicle wipe, and have nowhere else to go — see
+`docs/deploy/2026-09-21-server-events-channel.md`). `OPS_CHANNEL_ID` is optional and
 degrades to an error-level log line, the same way `WAR_LOG_CHANNEL_ID` does when unset.
 
 Non-destructive raids (lowering a flag) score all week. **The window only decides

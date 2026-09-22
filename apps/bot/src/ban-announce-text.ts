@@ -1,4 +1,5 @@
 import type { BanAnnouncementKind, BanReason } from "@factions/domain";
+import { at } from "@factions/copy";
 import { escapeMarkdown } from "./kill-feed-embed.js";
 
 export type BanAnnouncement = {
@@ -9,19 +10,6 @@ export type BanAnnouncement = {
   /** ISO string, or null for a permanent ban. */
   expiresAt: string | null;
 };
-
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/**
- * `d MMM yyyy`, UTC, from an ISO 8601 string — e.g. "8 Sep 2026". Matches
- * `notice-text.ts`'s private `formatDate` exactly (the house convention for
- * a player-facing date); that helper isn't exported, so this is a deliberate
- * duplicate of the same format, not a new one.
- */
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
 
 /**
  * Turns one queued `ban_announcements` row into the exact line posted to the
@@ -54,7 +42,16 @@ export function banAnnouncementText(a: BanAnnouncement): string {
   if (a.reason === "unlinked_pc") {
     return `🔨 **${tag}** banned — playing on PC without a linked account. Link your account to lift it.`;
   }
-  return a.expiresAt === null
-    ? `🔨 **${tag}** banned permanently — base-zone enforcement.`
-    : `🔨 **${tag}** banned until ${formatDate(a.expiresAt)} — base-zone enforcement.`;
+  if (a.expiresAt === null) return `🔨 **${tag}** banned permanently — base-zone enforcement.`;
+  // ⚠️ `at()` degrades to null on an unrepresentable instant (copy's
+  // contract) — same null-degrade pattern as `war-log-text.ts`'s
+  // `season_closed`, chosen over a hand-formatted fallback: that fallback
+  // (`formatDate`, removed here) rendered "NaN undefined NaN" on an
+  // unparseable `expiresAt`, the opposite of the "keeps the line truthful"
+  // this comment used to claim. Dropping the clause instead of a garbled
+  // date is what actually stays truthful.
+  const when = at(new Date(a.expiresAt));
+  return when
+    ? `🔨 **${tag}** banned until ${when} — base-zone enforcement.`
+    : `🔨 **${tag}** banned — base-zone enforcement.`;
 }

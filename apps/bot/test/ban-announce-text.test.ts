@@ -19,9 +19,32 @@ describe("banAnnouncementText", () => {
     expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned permanently — base-zone enforcement.");
   });
 
-  it("applied / zone / expires — renders the formatDate convention (d MMM yyyy, UTC)", () => {
+  it("applied / zone / expires — renders a live Discord timestamp token, not a static date", () => {
     const a: BanAnnouncement = { kind: "applied", gamertag: "Bear1", reason: "zone", expiresAt: "2026-09-20T14:00:00.000Z" };
-    expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned until 20 Sep 2026 — base-zone enforcement.");
+    expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned until <t:1789912800:F> — base-zone enforcement.");
+  });
+
+  /**
+   * ⚠️ Not `formatDate` (removed) — that fallback rendered "NaN undefined
+   * NaN" on an unparseable expiry, which is not a truthful line. Same
+   * null-degrade pattern as `war-log-text.ts`'s `season_closed`: drop the
+   * clause rather than post a garbled date.
+   */
+  it("applied / zone / an unrepresentable expiry drops the clause rather than posting a garbled date", () => {
+    const a: BanAnnouncement = { kind: "applied", gamertag: "Bear1", reason: "zone", expiresAt: "not-a-real-date" };
+    expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned — base-zone enforcement.");
+  });
+
+  // ⚠️ Deliberate, not a formality: this is the arm a future pass might
+  // "finish the job" on by linking the gamertag to a player page. It stays
+  // unlinked — frozen player-controlled text that may not resolve to a page
+  // at all — per the two warnings above `banAnnouncementText`.
+  it("never links the gamertag, even one shaped like an existing player's", () => {
+    const a: BanAnnouncement = { kind: "applied", gamertag: "SomePlayer", reason: "zone", expiresAt: null };
+    const line = banAnnouncementText(a);
+    expect(line).toContain("**SomePlayer**");
+    expect(line).not.toContain("[SomePlayer]");
+    expect(line).not.toMatch(/\]\(</);
   });
 
   it("lifted / unlinked_pc: account linked", () => {

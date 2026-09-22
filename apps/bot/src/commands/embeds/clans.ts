@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import type { ClanPage, DirectoryEntry } from "@factions/roster";
 import { budget } from "./budget.js";
+import { clanLink, playerLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 
@@ -19,7 +20,7 @@ export function directoryEmbed(entries: DirectoryEntry[], siteBaseUrl: string): 
   if (entries.length === 0) return embed.setDescription("No clans yet.");
 
   const line = (e: DirectoryEntry) =>
-    `• **${e.name}** [${e.tag}] — ${e.memberCount} member${e.memberCount === 1 ? "" : "s"}`
+    `• ${clanLink(siteBaseUrl, e.tag, e.name)} — ${e.memberCount} member${e.memberCount === 1 ? "" : "s"}`
     + (e.alpha ? " · Alpha" : "") + (e.recruiting ? " · Recruiting" : "");
 
   budget(TITLE.length + FOOTER_TEXT.length).list(
@@ -50,7 +51,7 @@ export function clanPageEmbed(page: ClanPage, siteBaseUrl: string): EmbedBuilder
   if (page.roster.length > 0) {
     embed.addFields({
       name: "Roster",
-      value: page.roster.map((r) => `• ${r.gamertag ?? "—"} — ${r.role}`).join("\n").slice(0, 1024),
+      value: page.roster.map((r) => `• ${r.gamertag ? playerLink(siteBaseUrl, r.gamertag) : "—"} — ${r.role}`).join("\n").slice(0, 1024),
       inline: false,
     });
   }

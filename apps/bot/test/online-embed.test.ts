@@ -3,7 +3,8 @@ import { onlineEmbed, onlineKey, type OnlinePlayer } from "../src/online-embed.j
 
 const now = new Date("2026-09-08T18:00:00Z");
 const site = "https://dayzclanwars.com";
-const link = (name: string) => `**[${name}](${site}/players/${encodeURIComponent(name)})**`;
+const link = (name: string) => `**[${name}](<${site}/players/${encodeURIComponent(name)}>)**`;
+const tagLink = (tag: string) => `[[${tag}](<${site}/clans/${encodeURIComponent(tag)}>)]`;
 const at = (h: number) => new Date(now.getTime() - h * 3600_000);
 const p = (gamertag: string, hoursAgo: number, tag: string | null = null): OnlinePlayer =>
   ({ dayzId: gamertag.toUpperCase().padEnd(40, "0"), gamertag, tag, connectedAt: at(hoursAgo) });
@@ -14,8 +15,8 @@ describe("onlineEmbed", () => {
     expect(e.title).toBe("Players online · 3");
     expect(e.description!.split("\n")).toEqual([
       `${link("Marrow")} · on since <t:${at(3).getTime() / 1000}:R>`,
-      `${link("Brine")} [WOLF] · on since <t:${at(2).getTime() / 1000}:R>`,
-      `${link("Sable")} [BEAR] · on since <t:${at(1).getTime() / 1000}:R>`,
+      `${link("Brine")} ${tagLink("WOLF")} · on since <t:${at(2).getTime() / 1000}:R>`,
+      `${link("Sable")} ${tagLink("BEAR")} · on since <t:${at(1).getTime() / 1000}:R>`,
     ]);
     expect(e.timestamp).toBe(now.toISOString());
   });
@@ -28,7 +29,7 @@ describe("onlineEmbed", () => {
   });
 
   it("escapes a gamertag that is markdown", () => {
-    expect(onlineEmbed([p("_x_", 1)], now, site).description).toContain("**[\\_x\\_](https://dayzclanwars.com/players/_x_)**");
+    expect(onlineEmbed([p("_x_", 1)], now, site).description).toContain("**[\\_x\\_](<https://dayzclanwars.com/players/_x_>)**");
   });
 });
 

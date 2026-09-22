@@ -2,6 +2,7 @@ import { EmbedBuilder } from "discord.js";
 import type { AchievementWall, BoardPage, PlayerProfile } from "@factions/roster";
 import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, playTime, scopeLabel } from "@factions/copy";
 import { budget } from "./budget.js";
+import { clanLink, playerLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 
@@ -36,7 +37,7 @@ export function playerEmbed(p: PlayerProfile, siteBaseUrl: string): EmbedBuilder
     p.longestKill ? `${p.longestKill.distanceM} m${p.longestKill.weapon ? ` (${p.longestKill.weapon})` : ""}` : "None yet",
     true,
   );
-  if (p.clan) b.field(embed, "Clan", `${p.clan.name} [${p.clan.tag}]`, true);
+  if (p.clan) b.field(embed, "Clan", clanLink(siteBaseUrl, p.clan.tag, p.clan.name), true);
   return embed;
 }
 
@@ -62,7 +63,7 @@ export function boardEmbed(page: BoardPage, siteBaseUrl: string): EmbedBuilder {
   const start = (page.page - 1) * page.perPage + 1;
   const lines = page.rows.map((r, i) => {
     const clan = page.clans[r.dayzId];
-    return `• ${start + i}. ${r.gamertag}${clan ? ` [${clan.tag}]` : ""} — ${r.value}`;
+    return `• ${start + i}. ${playerLink(siteBaseUrl, r.gamertag)}${clan ? ` [${clanLink(siteBaseUrl, clan.tag)}]` : ""} — ${r.value}`;
   });
   const b = budget(title.length + description.length + footerText.length);
   b.list(embed, BOARD_LABELS[page.kind], lines, (n) => `+${n} more — see the site.`);

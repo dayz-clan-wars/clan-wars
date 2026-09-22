@@ -77,6 +77,20 @@ describe("/map pins", () => {
     const reply = await specOf(mapGroup, "map pins").handler(ctx, input());
     expect(reply.embeds![0]!.toJSON().description).toMatch(/No pins/u);
   });
+
+  /**
+   * ⚠️ `by: null` — a real, reachable state (the author `/unlink`ed or left
+   * while the pin was still inside its TTL) — must render as bold plain
+   * text, never a link. `playerLink` on a null gamertag would produce a
+   * clickable link to a player page that can never resolve.
+   */
+  it("renders a pin author gone from the roster as bold text, not a dead link", async () => {
+    const ctx = ctxWith({ mapState: async () => mapFixture({ pins: [pin({ by: null })] }) });
+    const reply = await specOf(mapGroup, "map pins").handler(ctx, input());
+    const value = reply.embeds![0]!.toJSON().fields?.[0]?.value ?? "";
+    expect(value).toContain("**a member**");
+    expect(value).not.toContain("](<");
+  });
 });
 
 describe("/map pin", () => {
@@ -161,5 +175,11 @@ describe("/map view", () => {
     const reply = await specOf(mapGroup, "map view").handler(ctxWith({}), input());
     expect(reply.content).toContain("https://x/map");
     expect(reply.embeds).toBeUndefined();
+  });
+
+  /** ⚠️ A bare URL in plain content unfurls a preview card — mask it in the house form. */
+  it("masks the map link so Discord never unfurls a preview card beneath it", async () => {
+    const reply = await specOf(mapGroup, "map view").handler(ctxWith({}), input());
+    expect(reply.content).toBe("The map is a picture — [open it here](<https://x/map>)");
   });
 });

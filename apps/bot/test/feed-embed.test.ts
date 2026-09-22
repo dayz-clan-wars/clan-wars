@@ -94,4 +94,14 @@ describe("feedEmbed", () => {
     expect(d).not.toContain("<t:");
     expect(d).not.toContain("NaN");
   });
+
+  it("titles a clan with a link to its page", () => {
+    const embed = feedEmbed({
+      kind: "founded",
+      occurredAt: new Date("2026-09-21T14:30:00.000Z"),
+      payload: { name: "Nomads", tag: "NOMAD", texture: "Flag_Wolf", actor: "SomePlayer" },
+    } as never);
+    expect(embed.url).toBe("https://dayzclanwars.com/clans/NOMAD");
+    expect(embed.url).not.toContain("<");
+  });
 });

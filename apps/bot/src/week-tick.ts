@@ -72,6 +72,10 @@ export async function closeWeeksTx(tx: Tx, season: OpenSeasonRow, now: Date): Pr
         payload: {
           weekStart: thisWeek.toISOString(),
           first: top[0]?.name ?? null, second: top[1]?.name ?? null, third: top[2]?.name ?? null,
+          // ⚠️ Frozen at write time, like the names beside it — the war-log
+          // renderer needs the TAG to link a clan (clanUrl), and re-reading
+          // `factions` at post time would print today's name on a late post.
+          t1: top[0]?.tag ?? null, t2: top[1]?.tag ?? null, t3: top[2]?.tag ?? null,
           p1: top[0]?.points ?? null, p2: top[1]?.points ?? null, p3: top[2]?.points ?? null,
         },
       });

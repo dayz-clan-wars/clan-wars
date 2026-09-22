@@ -34,9 +34,16 @@ export const PING_KINDS: ReadonlySet<ClanNoticeKind> = new Set<ClanNoticeKind>([
  * pinged the way the text line pinged them — a DM needs no ping, and the
  * public wall never pinged anyone.
  */
-export function noticeMessage(row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null }, now: Date, siteBaseUrl: string): NoticeMessage {
+export function noticeMessage(
+  row: Parameters<typeof noticeText>[0] & { discordRoleId?: string | null },
+  siteBaseUrl: string,
+  // ⚠️ Required, not defaulted — see noticeText's own comment. Every caller
+  // must thread the live `cfg.dormantAfterMs` (as `noticeTick` below and
+  // `discord.ts` do), the same way `siteBaseUrl` is required, not defaulted.
+  dormantAfterMs: number,
+): NoticeMessage {
   if (row.kind !== "achievement") {
-    const line = noticeText(row, now);
+    const line = noticeText(row, siteBaseUrl, dormantAfterMs);
     // A clan with no role column yet (activation is mid-flight) still gets
     // the alert — unpinged beats undelivered.
     const roleId = row.target === "channel" && PING_KINDS.has(row.kind) ? row.discordRoleId ?? null : null;
@@ -75,7 +82,7 @@ export type NoticeTickResult = { posted: number; failed: number; blockedTargets:
 export async function noticeTick(
   store: NoticeStore,
   send: NoticeSender,
-  opts: { now: Date; batchSize?: number; siteBaseUrl: string; onError?: (id: number, attempts: number, err: unknown) => void },
+  opts: { now: Date; batchSize?: number; siteBaseUrl: string; dormantAfterMs: number; onError?: (id: number, attempts: number, err: unknown) => void },
 ): Promise<NoticeTickResult> {
   const rows = await store.readUnposted(opts.batchSize ?? 50);
   const blocked = new Set<string>();
@@ -85,7 +92,7 @@ export async function noticeTick(
     const target = row.discordTargetId!;
     if (blocked.has(target)) continue;
     try {
-      const msg = noticeMessage(row, opts.now, opts.siteBaseUrl);
+      const msg = noticeMessage(row, opts.siteBaseUrl, opts.dormantAfterMs);
       await send(row.target, target, msg.content, msg.embeds, msg.mentionRoleId, msg.components);
       await store.markPosted(row.id, opts.now);
       out.posted++;

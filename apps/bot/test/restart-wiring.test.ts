@@ -39,15 +39,13 @@ describe("restart tick wiring", () => {
     expect(src).toMatch(/import \{ announceTick[^}]*\} from "\.\/announce-tick\.js"/u);
     // RULING (2026-09-12, task 6): the brief's original regex assumed the call fit on
     // one line; the brief's own Step 5 code spans several. This still pins both facts
-    // the test exists to protect — announcePoster is passed, and offHour is shared
+    // the test exists to protect — serverEventsPoster is passed, and offHour is shared
     // with the wipe window — without pinning whitespace.
-    expect(src).toMatch(/await announceTick\(db, announcePoster, \{[\s\S]{0,160}?offHour: cfg\.truckWipe\.offHour/u);
+    expect(src).toMatch(/await announceTick\(db, serverEventsPoster!, \{[\s\S]{0,160}?offHour: cfg\.truckWipe\.offHour/u);
   });
 
-  // ⚠️ Same reason the wipe logs its own state: an unannounced wipe and a broken
-  // announcer are indistinguishable from the journal otherwise.
-  it("says at startup whether the rotation and the announcements channel are on", () => {
+  // ⚠️ Same reason the wipe logs its own state: an off rotation must not look broken.
+  it("says at startup whether the rotation is on", () => {
     expect(src).toMatch(/WEEKLY_VEHICLE_WIPE is off/u);
-    expect(src).toMatch(/ANNOUNCEMENTS_CHANNEL_ID is unset/u);
   });
 });

@@ -16,9 +16,11 @@ describe("achievementEmbed", () => {
     expect(achievementEmbed(player, site).thumbnail).toEqual({ url: "https://dayzclanwars.com/achievements/unlocked/sniper.png" });
     expect(badgeUrl(site, "champions")).toBe("https://dayzclanwars.com/achievements/unlocked/champions.png");
   });
-  it("names a player by gamertag and a clan by tag", () => {
-    expect(achievementEmbed(player, site).description).toBe("**SubatomicRacer** unlocked **Sniper** · A kill from 300 m or more");
-    expect(achievementEmbed(clan, site).description).toBe("**[BEAR]** unlocked **Fortress** · Complete 10 defenses");
+  it("names a player by gamertag and a clan by tag, each linked to their page", () => {
+    expect(achievementEmbed(player, site).description)
+      .toBe("**[SubatomicRacer](<https://dayzclanwars.com/players/SubatomicRacer>)** unlocked **Sniper** · A kill from 300 m or more");
+    expect(achievementEmbed(clan, site).description)
+      .toBe("**[BEAR](<https://dayzclanwars.com/clans/BEAR>)** unlocked **Fortress** · Complete 10 defenses");
   });
   it("never prints a raw Discord id as a name when the gamertag is missing", () => {
     const d = achievementEmbed({ ...player, gamertag: null }, site).description!;

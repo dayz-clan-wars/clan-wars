@@ -9,7 +9,7 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type SeasonCloseResult = {
   seasonId: number;
   number: number;
-  champion: { factionId: number; name: string; points: number } | null;
+  champion: { factionId: number; name: string; tag: string; points: number } | null;
 };
 
 /**
@@ -52,7 +52,7 @@ export async function closeSeasonTx(tx: Tx, serverId: number, at: Date): Promise
   }
 
   const top = table[0];
-  const champion = top && top.points > 0 ? { factionId: top.factionId, name: top.name, points: top.points } : null;
+  const champion = top && top.points > 0 ? { factionId: top.factionId, name: top.name, tag: top.tag, points: top.points } : null;
 
   await tx.update(seasons)
     .set({ endedAt: at, championFactionId: champion?.factionId ?? null })
@@ -60,7 +60,9 @@ export async function closeSeasonTx(tx: Tx, serverId: number, at: Date): Promise
 
   await appendWarLogTx(tx, {
     serverId, kind: "season_closed", occurredAt: at,
-    payload: { number: season.number, clan: champion?.name ?? null, points: champion?.points ?? null },
+    // ⚠️ Frozen at write time — clanUrl needs the TAG, and re-reading
+    // `factions` at post time would print today's name on a late post.
+    payload: { number: season.number, clan: champion?.name ?? null, tag: champion?.tag ?? null, points: champion?.points ?? null },
   });
 
   return { seasonId: season.id, number: season.number, champion };

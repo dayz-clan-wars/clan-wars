@@ -164,7 +164,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                     {history.map((h, i) => (
                       <tr key={i} className="border-t border-rule-2">
                         <td className="px-4 py-2.5 lg:px-5">{when(h.at)}</td>
-                        <td className="py-2.5 pr-3">{h.by}</td>
+                        <td className="py-2.5 pr-3">{h.by ?? "a member"}</td>
                         <td className="py-2.5 pr-3">{h.action}</td>
                         <td className="py-2.5 pr-4">{h.lockName}</td>
                       </tr>

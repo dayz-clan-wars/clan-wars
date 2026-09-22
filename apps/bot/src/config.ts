@@ -4,6 +4,15 @@ import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./do
 import { DEFAULT_KILLSTREAK_EVERY } from "./killstreak-feed-tick.js";
 import { DEFAULT_LONG_RANGE_MIN_M } from "./long-range-feed-tick.js";
 
+/**
+ * The site's own default origin, shared with feed-embed.ts's `feedEmbed`
+ * default param — one literal, not two, and it keeps that literal out of
+ * feed-embed.ts (a PLAYER_FACING file in vocabulary.test.ts, whose naive
+ * comment-stripper treats a bare `//` inside a hardcoded URL string as the
+ * start of a line comment and corrupts the rest of the string literal).
+ */
+export const DEFAULT_SITE_BASE_URL = "https://dayzclanwars.com";
+
 export type BotConfig = {
   token: string;
   applicationId: string;
@@ -165,8 +174,6 @@ export type BotConfig = {
   opsChannelId?: string;
   /** Required when `restartSchedule` is on; the same token the ingest worker uses. */
   nitradoToken: string | undefined;
-  /** Where the weekly wipe notice posts. Unset = the wipe still happens, silently. */
-  announcementsChannelId?: string;
   /**
    * ⚠️ Defaults TRUE. Real bans require explicitly setting `BAN_DRY_RUN`
    * to `"false"`. A ban row is always written and always transitions status;
@@ -437,7 +444,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // origin with a trailing slash (`optionalHttpUrl` accepts one — its
     // pathname is `"/"`, which passes) would otherwise produce a doubled
     // slash in every link built from it.
-    siteBaseUrl: (optionalHttpUrl(env, "SITE_BASE_URL") ?? "https://dayzclanwars.com").replace(/\/+$/u, ""),
+    siteBaseUrl: (optionalHttpUrl(env, "SITE_BASE_URL") ?? DEFAULT_SITE_BASE_URL).replace(/\/+$/u, ""),
     clanTextCategoryId: requiredSnowflake(env, "CLAN_TEXT_CATEGORY_ID", "the category clan text channels are created in"),
     clanVoiceCategoryId: requiredSnowflake(env, "CLAN_VOICE_CATEGORY_ID", "the category clan voice channels are created in"),
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
@@ -465,7 +472,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
-    announcementsChannelId: optionalSnowflake(env, "ANNOUNCEMENTS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
     // typing `FALSE` or ` false ` (either a reasonable thing to type) leaves the
     // raw string unequal to `"false"`, so `banDryRun` stays true — the SAFE
@@ -522,13 +528,19 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // error-level log line, same as WAR_LOG_CHANNEL_ID unset), but the advance/open/
   // close notices are the player-facing point of this feature — with no channel to
   // post them to, this is misconfigured, not merely degraded. It also closes a
-  // write-order hazard: gating the tick on `announcePoster` being present instead
+  // write-order hazard: gating the tick on `serverEventsPoster` being present instead
   // would either skip the tick silently (so a refused flip raises no alert either,
   // since that check also guards the ops path) or, if the gate were dropped, let a
   // no-op "post" return successfully and have postOnce's post-first-row-second
   // order write an announcements row claiming the message went out when it did not.
-  if (config.raidWindow.enabled && !config.announcementsChannelId) {
-    throw new Error("RAID_WINDOW_TICK is on but ANNOUNCEMENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
+  if (config.raidWindow.enabled && !config.serverEventsChannelId) {
+    throw new Error("RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the feature posts player-facing advance/open/close notices, and with no channel to post them to it is misconfigured, not merely degraded.");
+  }
+  // ⚠️ Same failure shape: the Sunday vehicle-wipe notice is the only warning a
+  // player gets before their vehicle is cleared, so with no channel to post it
+  // this is misconfigured, not merely degraded.
+  if (config.truckWipe.rotation && !config.serverEventsChannelId) {
+    throw new Error("WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID is unset — the Sunday notice is the only warning a player gets before their vehicle is cleared.");
   }
   // ⚠️ Same failure shape as RAID_WINDOW_TICK's check: the spawner only takes
   // effect when the server restarts, and restarts come from the restart slots. On
@@ -536,7 +548,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.airdrop.enabled && !config.restartSchedule) {
     throw new Error("AIRDROP_TICK is on but RESTART_SCHEDULE is off — a drop is only ever placed at a restart, so nothing would ever apply it.");
   }
-  // ⚠️ Fatal, following RAID_WINDOW_TICK/ANNOUNCEMENTS_CHANNEL_ID, and spec §9
+  // ⚠️ Fatal, following RAID_WINDOW_TICK/SERVER_EVENTS_CHANNEL_ID, and spec §9
   // makes it doubly so: only the location is announced and there is no in-world
   // marker, so a drop nobody was told about is one nobody ever finds. With no
   // channel this feature cannot work at all, rather than working less well.

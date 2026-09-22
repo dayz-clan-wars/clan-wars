@@ -36,6 +36,18 @@ async function gamertagByDayzIdTx(tx: Tx, dayzId: string): Promise<string> {
   return p?.gamertag ?? dayzId;
 }
 
+/**
+ * Same lookup as `gamertagByDayzIdTx`, but `null` instead of the dayzId
+ * fallback — for `VaultHistoryRow.by`, which the bot renders through
+ * `playerLink`. A dayzId isn't a gamertag the site can resolve, so falling
+ * back to it there would turn a harmless text fallback into a dead link;
+ * `null` pushes the display fallback down to each renderer instead.
+ */
+async function gamertagOrNullByDayzIdTx(tx: Tx, dayzId: string): Promise<string | null> {
+  const [p] = await tx.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, dayzId));
+  return p?.gamertag ?? null;
+}
+
 // ⚠️ The caller's `VaultActor` is trusted for nothing but `factionId` and
 // `discordId` — `role` and `dayzId` are re-derived on every write, inside
 // the transaction, right after `lockFactionTx`, via the shared
@@ -65,7 +77,7 @@ export type VaultLockView = {
   exposed: boolean;
 };
 
-export type VaultHistoryRow = { at: Date; action: VaultAction; lockName: string; by: string };
+export type VaultHistoryRow = { at: Date; action: VaultAction; lockName: string; by: string | null };
 
 export type VaultState = { locks: VaultLockView[]; history: VaultHistoryRow[] | null };
 
@@ -309,7 +321,7 @@ export async function vaultStateDb(db: Database, actor: VaultActor): Promise<Vau
         .limit(100);
       history = [];
       for (const h of hrows) {
-        history.push({ at: h.at, action: h.action as VaultAction, lockName: h.lockName, by: await gamertagByDayzIdTx(tx, h.dayzId) });
+        history.push({ at: h.at, action: h.action as VaultAction, lockName: h.lockName, by: await gamertagOrNullByDayzIdTx(tx, h.dayzId) });
       }
     }
 

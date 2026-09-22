@@ -1,5 +1,6 @@
 import type { APIEmbed } from "discord.js";
-import { escapeMarkdown, profileUrl } from "./kill-feed-embed.js";
+import { rel } from "@factions/copy";
+import { clanLink, playerLink } from "./site-links.js";
 
 /** One player the log currently has on the server. */
 export type OnlinePlayer = { dayzId: string; gamertag: string; tag: string | null; connectedAt: Date };
@@ -26,8 +27,12 @@ export function onlineKey(players: OnlinePlayer[]): string {
 export function onlineEmbed(players: OnlinePlayer[], now: Date, siteBaseUrl: string): APIEmbed {
   const sorted = [...players].sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime() || a.gamertag.localeCompare(b.gamertag));
   const lines = sorted.map((p) => {
-    const tag = p.tag ? ` [${escapeMarkdown(p.tag)}]` : "";
-    return `**[${escapeMarkdown(p.gamertag)}](${profileUrl(siteBaseUrl, p.gamertag)})**${tag} · on since <t:${Math.floor(p.connectedAt.getTime() / 1000)}:R>`;
+    const tag = p.tag ? ` [${clanLink(siteBaseUrl, p.tag)}]` : "";
+    // ⚠️ connectedAt is a DB timestamp and should always be valid, but rel()
+    // still guards it — degrade rather than print "on since " with nothing
+    // after it.
+    const since = rel(p.connectedAt) ?? "an unknown time";
+    return `**${playerLink(siteBaseUrl, p.gamertag)}**${tag} · on since ${since}`;
   });
   return {
     title: `Players online · ${players.length}`,

@@ -24,7 +24,14 @@ export type MapState = {
   clanmates: { dayzId: string; gamertag: string; fix: MapFix }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: Date; distanceM: number }[];
   publicBases: { x: number; z: number }[];
-  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string; at: Date; expiresAt: Date }[];
+  /**
+   * ⚠️ Null when the pin author has `/unlink`ed or left while the pin is
+   * still inside its TTL — real and reachable, not a defensive type. The
+   * collapse into a display fallback ("a member") belongs to each
+   * RENDERER, not here: the bot links a gamertag (`playerLink`), and a null
+   * would turn into a dead link if collapsed before it got there.
+   */
+  pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: Date; expiresAt: Date }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
@@ -88,7 +95,7 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
     clanmates: mates.flatMap((m) => { const f = fixes.get(m.dayzId); return f ? [{ dayzId: m.dayzId, gamertag: m.gamertag, fix: f }] : []; }),
     intruders: intruders.map((i) => ({ gamertag: i.gamertag ?? "someone", x: n(i.x), z: n(i.z), lastSeenAt: i.lastSeenAt, distanceM: i.distanceM })),
     publicBases,
-    pins: pins.map((p) => ({ id: p.id, x: n(p.x), z: n(p.z), icon: p.icon as PinIcon, note: p.note, by: p.by ?? "a member", at: p.at, expiresAt: p.expiresAt })),
+    pins: pins.map((p) => ({ id: p.id, x: n(p.x), z: n(p.z), icon: p.icon as PinIcon, note: p.note, by: p.by, at: p.at, expiresAt: p.expiresAt })),
     travelPoints: FAST_TRAVEL_POINTS,
     hub: HUB_POSITION,
     layers: { base: decl !== undefined, clanmates: clan !== undefined, intruders: decl !== undefined, pins: clan !== undefined },

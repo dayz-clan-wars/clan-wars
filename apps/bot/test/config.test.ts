@@ -248,9 +248,13 @@ describe("loadConfig", () => {
       expect(loadConfig({ ...ON }).truckWipe.rotation).toBe(false);
     });
 
+    // ⚠️ The rotation posts its Sunday notice to #server-events; with no channel to
+    // post it to, the feature is misconfigured, not merely degraded.
+    const WIPE_ON = { ...ON, SERVER_EVENTS_CHANNEL_ID: "123456789012345678" };
+
     it("turns the rotation on with WEEKLY_VEHICLE_WIPE", () => {
-      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" }).truckWipe.rotation).toBe(true);
-      expect(loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "true" }).truckWipe.rotation).toBe(true);
+      expect(loadConfig({ ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1" }).truckWipe.rotation).toBe(true);
+      expect(loadConfig({ ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "true" }).truckWipe.rotation).toBe(true);
     });
 
     // ⚠️ The rotation rides on the restart slots. Configured without them nothing would
@@ -259,23 +263,22 @@ describe("loadConfig", () => {
       expect(() => loadConfig({ ...OK, WEEKLY_VEHICLE_WIPE: "1" })).toThrow(/RESTART_SCHEDULE/u);
     });
 
+    it("refuses WEEKLY_VEHICLE_WIPE without SERVER_EVENTS_CHANNEL_ID", () => {
+      expect(() => loadConfig({ ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1", SERVER_EVENTS_CHANNEL_ID: undefined }))
+        .toThrow(/WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID/u);
+    });
+
     // ⚠️ Independently switchable: the daily truck wipe and the weekly rotation must
     // each be able to run with the other off.
     it("runs the rotation with no daily truck events", () => {
-      const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1" });
+      const c = loadConfig({ ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1" });
       expect(c.truckWipe.events).toEqual([]);
       expect(c.truckWipe.rotation).toBe(true);
     });
 
-    it("reads the announcements channel, and leaves it undefined when unset", () => {
-      expect(loadConfig({ ...ON }).announcementsChannelId).toBeUndefined();
-      expect(loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "123456789012345678" })
-        .announcementsChannelId).toBe("123456789012345678");
-    });
-
-    it("rejects a malformed announcements channel id", () => {
-      expect(() => loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "not-an-id" }))
-        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
+    it("no longer reads ANNOUNCEMENTS_CHANNEL_ID", () => {
+      const cfg = loadConfig({ ...ON, ANNOUNCEMENTS_CHANNEL_ID: "123456789012345678" });
+      expect("announcementsChannelId" in cfg).toBe(false);
     });
 
     // ⚠️ If an operator puts a rotation vehicle in TRUCK_WIPE_EVENTS too, the rotation
@@ -284,13 +287,13 @@ describe("loadConfig", () => {
     describe("overlap between TRUCK_WIPE_EVENTS and the rotation", () => {
       it("refuses an event that is in both lists when the rotation is on", () => {
         expect(() => loadConfig({
-          ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleCivilianSedan",
+          ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleCivilianSedan",
         })).toThrow(/VehicleCivilianSedan/u);
       });
 
       it("names every offending event", () => {
         expect(() => loadConfig({
-          ...ON, WEEKLY_VEHICLE_WIPE: "1",
+          ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1",
           TRUCK_WIPE_EVENTS: "VehicleCivilianSedan,VehicleHatchback02,VehicleTruck01",
         })).toThrow(/VehicleCivilianSedan.*VehicleHatchback02|VehicleHatchback02.*VehicleCivilianSedan/su);
       });
@@ -301,7 +304,7 @@ describe("loadConfig", () => {
       });
 
       it("allows disjoint lists", () => {
-        const c = loadConfig({ ...ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleTruck01" });
+        const c = loadConfig({ ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleTruck01" });
         expect(c.truckWipe.events).toEqual(["VehicleTruck01"]);
         expect(c.truckWipe.rotation).toBe(true);
       });
@@ -322,7 +325,7 @@ describe("loadConfig", () => {
     it("accepts RAID_WINDOW_TICK with RESTART_SCHEDULE on", () => {
       const c = loadConfig({
         ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
       });
       expect(c.raidWindow.enabled).toBe(true);
     });
@@ -330,18 +333,19 @@ describe("loadConfig", () => {
     it("accepts the 'true' spelling, matching every other boolean flag", () => {
       const c = loadConfig({
         ...OK, RAID_WINDOW_TICK: "true", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt",
-        ANNOUNCEMENTS_CHANNEL_ID: "12345678901234567",
+        SERVER_EVENTS_CHANNEL_ID: "12345678901234567",
       });
       expect(c.raidWindow.enabled).toBe(true);
     });
 
-    it("⚠️ refuses RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID", () => {
+    it("refuses RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
       // The advance/open/close notices are the player-facing point of this
       // feature; with no channel to post them to it is misconfigured, not
       // merely degraded — unlike OPS_CHANNEL_ID, which has a real fallback
       // (an error-level log line).
-      expect(() => loadConfig({ ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt" }))
-        .toThrow(/ANNOUNCEMENTS_CHANNEL_ID/u);
+      expect(() => loadConfig({
+        ...OK, RAID_WINDOW_TICK: "1", RESTART_SCHEDULE: "1", NITRADO_TOKEN: "nt", SERVER_EVENTS_CHANNEL_ID: undefined,
+      })).toThrow(/RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
     });
   });
 
@@ -353,7 +357,7 @@ describe("loadConfig", () => {
         .toThrow(/AIRDROP_TICK is on but RESTART_SCHEDULE is off/u);
     });
 
-    // ⚠️ Fatal, exactly like RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID, and
+    // ⚠️ Fatal, exactly like RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID, and
     // doubly so: spec §9 makes a drop that cannot be announced a drop that does not
     // happen, so nowhere to post is misconfigured, not degraded.
     it("⚠️ refuses AIRDROP_TICK without SERVER_EVENTS_CHANNEL_ID", () => {

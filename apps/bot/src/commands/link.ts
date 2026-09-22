@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
-import { ISSUE_COPY, UNLINK_COPY } from "@factions/copy";
+import { ISSUE_COPY, UNLINK_COPY, rel, when } from "@factions/copy";
 import { linkStatusEmbed } from "./embeds/link.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
@@ -24,7 +24,8 @@ const start: Handler = async (ctx, input) => {
   if (outcome.kind === "issued" || outcome.kind === "live") {
     return { embeds: [linkStatusEmbed(await ctx.roster.linkStatus(input.actorDiscordId), ctx.now, ctx.siteBaseUrl)], ephemeral: true };
   }
-  return { content: ISSUE_COPY[outcome.kind](outcome), ephemeral: true };
+  const endsWhen = outcome.kind === "held-by-other" ? (rel(outcome.expiresAt) ?? when(outcome.expiresAt)) : undefined;
+  return { content: ISSUE_COPY[outcome.kind](outcome, endsWhen), ephemeral: true };
 };
 
 const cancel: Handler = async (ctx, input) => {

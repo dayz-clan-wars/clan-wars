@@ -33,9 +33,9 @@ describe("leaderboardEmbed", () => {
     // rows start at index 2.
     const lines = leaderboardEmbed("killers", boards, SITE).description!.split("\n");
     expect(lines[2]).toContain("1.");
-    expect(lines[2]).toContain("[BEAR]");
+    expect(lines[2]).toContain(`[[BEAR](<${SITE}/clans/BEAR>)]`);
     expect(lines[3]).toContain("2.");
-    expect(lines[3]).not.toContain("[BEAR]");
+    expect(lines[3]).not.toContain("BEAR");
   });
 
   it("formats play time as hours and minutes, not raw seconds", () => {

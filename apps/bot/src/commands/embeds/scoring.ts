@@ -1,7 +1,8 @@
 import { EmbedBuilder } from "discord.js";
 import type { AlphaWeek, Scoreboard, SeasonSummary, WarLogEntry } from "@factions/roster";
-import { when, EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "@factions/copy";
+import { at, rel, when, EMPTY_SCOREBOARD, NO_ALPHAS_WEEK, NO_SEASONS, EMPTY_WAR_LOG, ALPHA_BADGE } from "@factions/copy";
 import { budget, MAX_FIELDS } from "./budget.js";
+import { clanLink } from "../../site-links.js";
 
 const GOLD = 0xc8a34a;
 
@@ -15,7 +16,7 @@ export function scoreboardEmbed(board: Scoreboard, siteBaseUrl: string): EmbedBu
   embed.setFooter({ text: footer });
   const b = budget(title.length + footer.length);
   const line = (r: Scoreboard["rows"][number]) =>
-    `• **${r.rank ?? "—"}. ${r.name}** [${r.tag}] — ${r.points} pts · ${r.raids}/${r.timesRaided}/${r.defenses}`
+    `• ${r.rank ?? "—"}. ${clanLink(siteBaseUrl, r.tag, r.name)} — ${r.points} pts · ${r.raids}/${r.timesRaided}/${r.defenses}`
     + (r.alpha ? ` · ${ALPHA_BADGE}` : "");
   b.list(embed, `Season ${board.season.number}`, board.rows.map(line), (n) => `+${n} more — see the site.`);
   return embed;
@@ -55,6 +56,9 @@ export function alphasEmbed(a: { season: { number: number } | null; weeks: Alpha
   let shown = 0;
   for (const w of a.weeks.slice(0, cap)) {
     const lines = w.entries.map((e) => `• ${e.rank}. ${e.name} [${e.tag}] — ${e.points} pts`);
+    // ⚠️ `when(w.weekStart)`, not a `<t:…>` token: this lands in a field NAME,
+    // and Discord does not render tokens there — it would print a literal
+    // `<t:…:F>` on the card. `/found` (a field VALUE) is the different case.
     const added = b.field(embed, when(w.weekStart), lines.length > 0 ? lines.join("\n") : NO_ALPHAS_WEEK);
     if (!added) break;
     shown += 1;
@@ -71,7 +75,7 @@ export function seasonsEmbed(list: SeasonSummary[], siteBaseUrl: string): EmbedB
 
   const b = budget(title.length);
   const line = (s: SeasonSummary) =>
-    `• **Season ${s.number}** — ${s.champion ? `${s.champion.name} [${s.champion.tag}], ${s.champion.points} pts` : "no champion"} · ended ${when(s.endedAt)}`;
+    `• **Season ${s.number}** — ${s.champion ? `${clanLink(siteBaseUrl, s.champion.tag, s.champion.name)}, ${s.champion.points} pts` : "no champion"} · ended ${at(s.endedAt) ?? when(s.endedAt)}`;
   b.list(embed, title, list.map(line), (n) => `+${n} more — see the site.`);
   return embed;
 }
@@ -85,8 +89,8 @@ export function warLogEmbed(entries: WarLogEntry[], siteBaseUrl: string): EmbedB
   const b = budget(title.length);
   const line = (e: WarLogEntry) =>
     e.kind === "raid"
-      ? `• ⚔️ ${when(e.at)} — **${e.raider?.name ?? "no clan"}** raided **${e.victim.name}** (${e.points} pts)`
-      : `• 🛡️ ${when(e.at)} — **${e.victim.name}** held, ${Math.round(e.durationSeconds / 60)} min under siege`;
+      ? `• ⚔️ ${rel(e.at) ?? when(e.at)} — ${e.raider ? clanLink(siteBaseUrl, e.raider.tag, e.raider.name) : "**no clan**"} raided ${clanLink(siteBaseUrl, e.victim.tag, e.victim.name)} (${e.points} pts)`
+      : `• 🛡️ ${rel(e.at) ?? when(e.at)} — ${clanLink(siteBaseUrl, e.victim.tag, e.victim.name)} held, ${Math.round(e.durationSeconds / 60)} min under siege`;
   b.list(embed, title, entries.map(line), (n) => `+${n} more — see the site.`);
   return embed;
 }

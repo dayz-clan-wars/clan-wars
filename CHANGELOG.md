@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Every Discord message states time with live `<t:…>` timestamps instead of a baked
+  clock, so a posted notice stays correct without an edit.
+- Clan names and gamertags across Discord link to their pages on the site.
+- The raid window and weekly vehicle wipe notices post to `#server-events` beside the
+  airdrops; `#announcements` is now human-only.
+
 ## [1.30.0] - 2026-09-21
 
 ### Added

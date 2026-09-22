@@ -1,7 +1,9 @@
 import type { Database } from "@factions/db";
 import { ceremonies, ceremonyParticipants } from "@factions/db";
 import { and, asc, eq, isNull } from "drizzle-orm";
+import { rel } from "@factions/copy";
 import { createNotifyFailureLog, type NotifyFailureLog, type Sender } from "./notify.js";
+import { playerLink } from "./site-links.js";
 
 export function formatCeremonyDm(c: {
   id: number;
@@ -9,7 +11,11 @@ export function formatCeremonyDm(c: {
   participants: { gamertag: string }[];
   expiresAt: Date;
 }, siteBaseUrl: string): string {
-  const names = c.participants.map((p) => `**${p.gamertag}**`).join(", ");
+  const names = c.participants.map((p) => `**${playerLink(siteBaseUrl, p.gamertag)}**`).join(", ");
+  // ⚠️ expiresAt comes off the ceremony row and should always be valid, but
+  // rel() still guards it — degrade to a sentence with no countdown rather
+  // than a broken token in a DM nothing reposts.
+  const expires = rel(c.expiresAt);
   return [
     "**A ceremony was witnessed**",
     "",
@@ -21,8 +27,8 @@ export function formatCeremonyDm(c: {
     // came up short can work out who still needs to run /link.
     "If someone is missing from that list, they had not linked on the site when the ceremony was read.",
     "",
-    `Any one of you can found the clan on the site: ${siteBaseUrl}/claim/${c.id}`,
-    `This expires <t:${Math.floor(c.expiresAt.getTime() / 1000)}:R>.`,
+    `Any one of you can [found the clan](<${siteBaseUrl}/claim/${c.id}>).`,
+    expires ? `This expires ${expires}.` : "This expires soon.",
   ].join("\n");
 }
 

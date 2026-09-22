@@ -1,6 +1,13 @@
 import type { APIEmbed } from "discord.js";
 import type { FactionEventKind } from "@factions/domain";
 import type { QueuedFactionEvent, FeedPayload } from "@factions/roster/internal";
+import { rel } from "@factions/copy";
+import { clanUrl } from "./site-links.js";
+// ⚠️ Imported, not a second literal here — this file is scanned by
+// vocabulary.test.ts's PLAYER_FACING walk, whose comment-stripper treats a
+// bare `//` inside a hardcoded "https://…" string as a line comment and
+// corrupts the rest of the file's string literals. See config.ts.
+import { DEFAULT_SITE_BASE_URL } from "./config.js";
 
 /**
  * Where a flag's artwork lives, if it lives anywhere.
@@ -63,8 +70,14 @@ function describe(kind: FactionEventKind, p: FeedPayload): string {
       // garbage in a public channel, permanently, since nothing reposts.
       const ms = Date.parse(p.disbandAt);
       if (!Number.isFinite(ms)) return DORMANT_SENTENCE;
+      const token = rel(new Date(ms));
+      // ⚠️ rel() null-guards the same instant Number.isFinite just checked —
+      // this can't currently fire, but it must land on the identical degrade
+      // if `rel`'s guard ever diverges from the check above, never a
+      // different message.
+      if (token === null) return DORMANT_SENTENCE;
       return `${DORMANT_SENTENCE} ` +
-        `The flag, tag and pole return to the pool <t:${Math.floor(ms / 1000)}:R>.`;
+        `The flag, tag and pole return to the pool ${token}.`;
     }
     case "revived":
       // No actor: the dormancy clock sees a raise through a max(occurred_at)
@@ -84,12 +97,18 @@ function describe(kind: FactionEventKind, p: FeedPayload): string {
  * with `faction_events_no_coordinates`, that is two independent reasons a
  * coordinate cannot reach a channel.
  */
-export function feedEmbed(e: QueuedFactionEvent, flagImage: FlagImageResolver = NO_IMAGE): APIEmbed {
+export function feedEmbed(
+  e: QueuedFactionEvent,
+  flagImage: FlagImageResolver = NO_IMAGE,
+  siteBaseUrl: string = DEFAULT_SITE_BASE_URL,
+): APIEmbed {
   const p = e.payload;
   const image = flagImage(p.texture);
 
   return {
     title: `${p.name} [${p.tag}]`,
+    // ⚠️ BARE url — this is embed.url, which throws on `<https://…>`.
+    url: clanUrl(siteBaseUrl, p.tag),
     description: describe(e.kind, p),
     color: COLOR[e.kind],
     fields: [{ name: "Flag", value: flagLabel(p.texture), inline: true }],
