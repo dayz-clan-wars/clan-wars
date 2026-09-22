@@ -254,6 +254,28 @@ export const DEVICE_LOOKUP_LOOKBACK_MS = 30 * 60 * 1000;
 export const KIT_PLACEMENT_TTL_MS = 1 * HOUR;
 
 /**
+ * How long an event winner has to mark their award's spot before the grant
+ * lapses (awards spec §2.5).
+ *
+ * ⚠️ The award's own clock starts at the first restart that SPAWNS it, not at
+ * the grant, so without this a grant nobody places would hold the award open
+ * forever.
+ */
+export const AWARD_PLACE_BY_MS = 7 * DAY;
+
+/**
+ * How far ahead of an award's expiry restart the spawner file must already
+ * have dropped it (awards spec §5.3).
+ *
+ * ⚠️ `expires_at` falls ON a restart slot, and the restart tick fires up to
+ * `RESTART_GRACE_MS` after the slot starts. The worker sweeps every minute and
+ * an upload can take a while, so leaving the award in until `expires_at` itself
+ * would race the restart and hand the winner one extra session a coin flip at
+ * a time. Fifteen minutes clears both.
+ */
+export const AWARD_REMOVAL_LEAD_MS = 15 * MIN;
+
+/**
  * The 16 Livonia locations with a staged locked-container spawner, and the three
  * colours each is staged in (spec §1).
  *

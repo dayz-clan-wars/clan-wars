@@ -1,0 +1,41 @@
+{
+  "plate-carrier": {
+    "label": "Plate Carrier",
+    "durationDays": 7,
+    "slots": {
+      "vest": {
+        "label": "Vest",
+        "items": [
+          { "className": "PlateCarrierVest", "label": "Plate Carrier (Standard)", "image": "items/PlateCarrierVest.webp" },
+          { "className": "PlateCarrierVest_Black", "label": "Plate Carrier (Black)", "image": "items/PlateCarrierVest_Black.webp" },
+          { "className": "PlateCarrierVest_Camo", "label": "Plate Carrier (Camo)", "image": "items/PlateCarrierVest_Camo.webp" },
+          { "className": "PlateCarrierVest_Desert", "label": "Plate Carrier (Desert)", "image": "items/PlateCarrierVest_Desert.webp" },
+          { "className": "PlateCarrierVest_Green", "label": "Plate Carrier (Green)", "image": "items/PlateCarrierVest_Green.webp" },
+          { "className": "PlateCarrierVest_Winter", "label": "Plate Carrier (Winter)", "image": "items/PlateCarrierVest_Winter.webp" }
+        ]
+      },
+      "pouches": {
+        "label": "Pouches",
+        "items": [
+          { "className": "PlateCarrierPouches", "label": "Plate Carrier Pouches (Standard)", "image": "items/PlateCarrierPouches.webp" },
+          { "className": "PlateCarrierPouches_Black", "label": "Plate Carrier Pouches (Black)", "image": "items/PlateCarrierPouches_Black.webp" },
+          { "className": "PlateCarrierPouches_Camo", "label": "Plate Carrier Pouches (Camo)", "image": "items/PlateCarrierPouches_Camo.webp" },
+          { "className": "PlateCarrierPouches_Desert", "label": "Plate Carrier Pouches (Desert)", "image": "items/PlateCarrierPouches_Desert.webp" },
+          { "className": "PlateCarrierPouches_Green", "label": "Plate Carrier Pouches (Green)", "image": "items/PlateCarrierPouches_Green.webp" },
+          { "className": "PlateCarrierPouches_Winter", "label": "Plate Carrier Pouches (Winter)", "image": "items/PlateCarrierPouches_Winter.webp" }
+        ]
+      },
+      "holster": {
+        "label": "Holster",
+        "items": [
+          { "className": "PlateCarrierHolster", "label": "Plate Carrier Holster (Standard)", "image": "items/PlateCarrierHolster.webp" },
+          { "className": "PlateCarrierHolster_Black", "label": "Plate Carrier Holster (Black)", "image": "items/PlateCarrierHolster_Black.webp" },
+          { "className": "PlateCarrierHolster_Camo", "label": "Plate Carrier Holster (Camo)", "image": "items/PlateCarrierHolster_Camo.webp" },
+          { "className": "PlateCarrierHolster_Desert", "label": "Plate Carrier Holster (Desert)", "image": "items/PlateCarrierHolster_Desert.webp" },
+          { "className": "PlateCarrierHolster_Green", "label": "Plate Carrier Holster (Green)", "image": "items/PlateCarrierHolster_Green.webp" },
+          { "className": "PlateCarrierHolster_Winter", "label": "Plate Carrier Holster (Winter)", "image": "items/PlateCarrierHolster_Winter.webp" }
+        ]
+      }
+    }
+  }
+}
