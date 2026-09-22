@@ -263,6 +263,14 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
     kicker: "Booster kit", title: "You have a booster kit waiting",
     body: "Pick the nine pieces you respawn with, and the spot they wait at. Nothing is chosen yet, so nothing will spawn.",
     cta: { label: "Choose your kit", href: "/kit" } }) },
+  award_granted: { group: "Roster", render: (p) => ({
+    kicker: "Award",
+    title: `You won ${p.label ? String(p.label) : "an award"}`,
+    body: `${p.reason ? `${String(p.reason)}. ` : ""}Choose your gear and mark where it spawns${dateOf(p.placeBy) ? ` by ${dateOf(p.placeBy)}` : ""}. It respawns there every restart until the award runs out.`,
+    // ⚠️ The grant id, never the payload's absolute URL: the page renders its
+    // own links, and a bare URL in notice copy is banned (notice-copy.test).
+    cta: { label: "Configure your award", href: typeof p.grantId === "number" ? `/awards/${p.grantId}` : "/awards" },
+  }) },
   ban_applied: { group: "Enforcement", render: (p) => ({
     kicker: "Ban",
     title: p.until ? "You were banned from the server" : "You were permanently banned",

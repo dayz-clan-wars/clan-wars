@@ -215,6 +215,15 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
     + "at a spot you pick, every restart, for as long as you keep boosting. Nothing is "
     + "chosen yet, so nothing will spawn.",
+  award_granted: (p) => {
+    // ⚠️ The deadline clause is DROPPED on an unparseable date rather than
+    // printed: a DM is permanent, and "by <t:NaN:F>" would sit in it forever.
+    const by = atToken(p.placeBy);
+    const reason = typeof p.reason === "string" && p.reason ? ` (${p.reason})` : "";
+    return `🏆 You won **${p.label ? String(p.label) : "an award"}**${reason}. `
+      + `Choose your gear and mark where it spawns${by ? ` by ${by}` : ""}. `
+      + "It respawns there every restart until the award runs out.";
+  },
 };
 
 export function noticeText(
@@ -249,8 +258,15 @@ export type NoticeActionRow = {
  * need a custom_id and a handler for a message whose only job is a link.
  */
 export function noticeComponents(n: { kind: ClanNoticeKind; payload: NoticePayload }): NoticeActionRow[] | undefined {
-  if (n.kind !== "booster_kit_unchosen") return undefined;
-  const url = n.payload.kitUrl;
+  const button = LINK_BUTTONS[n.kind];
+  if (!button) return undefined;
+  const url = n.payload[button.field];
   if (typeof url !== "string" || !url) return undefined;
-  return [{ type: 1, components: [{ type: 2, style: 5, label: "Choose your kit", url }] }];
+  return [{ type: 1, components: [{ type: 2, style: 5, label: button.label, url }] }];
 }
+
+/** The kinds whose DM carries one link button, and the payload field that holds its URL. */
+const LINK_BUTTONS: Partial<Record<ClanNoticeKind, { label: string; field: string }>> = {
+  booster_kit_unchosen: { label: "Choose your kit", field: "kitUrl" },
+  award_granted: { label: "Configure your award", field: "awardUrl" },
+};
