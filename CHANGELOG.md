@@ -26,9 +26,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   ⚠️ This recomputes from existing records, so published numbers move the moment it
   ships. Anyone who has teamkilled will see their kills fall; anyone who has been
   teamkilled will see their deaths fall and their K/D rise.
-- A friendly-fire death no longer breaks the victim's killstreak. The streak on a player
-  profile and the streak posted to #killstreaks used different rules for this and could
-  disagree for the same player; they now agree.
+- A friendly-fire death no longer breaks the victim's killstreak, so a clanmate can no
+  longer end your run by shooting you. Your profile, the #killstreaks channel and the
+  streak achievements each used a different rule for this and could report three
+  different numbers for the same run; they now agree.
+- The recommended `AIRDROP_MIN_POP` in the airdrop runbook moves from 5 to 6, on the
+  evidence of the same replay. The code default is unchanged.
 
 ## [1.31.0] - 2026-09-22
 

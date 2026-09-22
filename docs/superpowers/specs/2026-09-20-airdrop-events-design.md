@@ -272,10 +272,30 @@ itself, in each viewer's own timezone, with no message editing and no repost.
 
 One message, at decision time, to `SERVER_EVENTS_CHANNEL_ID`:
 
-> **Airdrop inbound: Dolnik**
-> A locked container drops at Dolnik when the server comes back up, <t:X:R>.
-> We are not saying which colour. Bring your keys.
-> It is gone at the restart after that.
+> **AIRDROP INBOUND: DOLNIK**
+> ETA <t:X:R>. Bring keys.
+
+⚠️ **Amended 2026-09-21.** The message as originally shipped is struck through
+below. Three things changed and each was a defect, not a preference:
+
+1. It said the container drops "when the server comes back up". This posts 30
+   minutes BEFORE the restart, while the server is up and people are playing, so
+   it read as though the server were down at that moment.
+2. It named the omission of the colour ("We are not saying which colour"). Not
+   saying the colour and announcing that you are not saying it are different
+   things; the second is still talking about it. Neither the colour nor the
+   withholding of it may appear.
+3. It was four lines where two carry the same facts.
+
+The copy is US English and in a military-comms register: an all-caps headline
+naming the place, then one line. See `apps/bot/src/airdrop-text.ts`.
+
+~~The message as originally shipped:~~
+
+> ~~**Airdrop inbound: Dolnik**~~
+> ~~A locked container drops at Dolnik when the server comes back up, <t:X:R>.~~
+> ~~We are not saying which colour. Bring your keys.~~
+> ~~It is gone at the restart after that.~~
 
 The in-game restart warning carries it too, since that reaches everyone who is
 not in Discord. `RESTART_MESSAGE` is currently the constant

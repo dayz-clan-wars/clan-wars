@@ -600,10 +600,14 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   streak term and not a K/D term, on EITHER side — the killer gains nothing and the
   victim loses nothing. It is recorded only on the `friendlyFire` board and the
   profile's `friendlyFireKills`/`friendlyFireDeaths`.
-  ⚠️ Route new reads through `scoringKill` rather than respelling the predicate. It
-  already drifted once: `bestStreaks` broke the victim's run on a friendly death while
-  `killstreak-feed-tick.ts` did not, so a player's best streak on their profile
-  disagreed with the one #killstreaks had posted for them.
+  ⚠️ Route new reads through `scoringKill` rather than respelling the predicate. It had
+  already drifted THREE ways before this: `bestStreaks` reset a run on a friendly death,
+  `packages/domain/src/streaks.ts` (the achievements' streak) did the same, and
+  `killstreak-feed-tick.ts` skipped a friendly KILL but counted a friendly DEATH — so
+  the same player's streak could differ between their profile, #killstreaks and an
+  achievement. The streak rule now has three call sites that cannot be collapsed (two
+  SQL, one pure); each carries a comment pointing at the others, and each has a test
+  pinning BOTH halves (a friendly death does not break a run, a real one does).
   ⚠️ The profile's `kd` must NOT subtract `friendlyFireKills` any more. That term existed
   to compensate for a `pvpKills` that counted friendly fire; with the predicate at the
   source it would deduct every teamkill twice.

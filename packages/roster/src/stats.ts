@@ -240,9 +240,11 @@ const byAnotherPlayer = sql`${kills.killerDayzId} is not null and ${kills.killer
  *
  * ⚠️ ONE statement of the rule, deliberately. Every board, the profile and the streak
  * pass route through this constant. The previous shape — the same predicate spelled
- * out at each call site — had already drifted: `bestStreaks` broke a run on a friendly
- * death while `killstreak-feed-tick.ts` did not, so a player's best streak on their
- * profile disagreed with the one #killstreaks had posted for them.
+ * out at each call site — had already drifted three ways: this file's `bestStreaks`
+ * reset a run on a friendly death, `packages/domain/src/streaks.ts` (the achievements'
+ * streak) did the same, and `killstreak-feed-tick.ts` skipped a friendly KILL but
+ * counted a friendly DEATH. All three are fixed together; the rule now lives in this
+ * constant here, and in a comment pointing back at it in the other two.
  *
  * ⚠️ The friendly-fire BOARD must not use this (it counts exactly what this excludes),
  * and neither must the feeds — `encountersOf` and the timeline are records of what
@@ -290,10 +292,11 @@ const sessionOverlaps = (w: Window, now: Date): SQL => sql`
  * victim's. Returns each player's best run; a player with no run has no row.
  *
  * ⚠️ A friendly-fire kill neither advances a streak nor breaks one — it is skipped
- * entirely, both as a kill and as a death. This is `killstreak-feed-tick.ts`'s rule,
- * which this function used to contradict by breaking the victim's run. Without the
- * skip-as-death half, a clan can end a rival's run on demand from inside its own
- * roster, and the cheapest counter to a long streak is a teamkill.
+ * entirely, both as a kill and as a death. The same rule now lives in
+ * `killstreak-feed-tick.ts`'s `runUpTo` and in `packages/domain/src/streaks.ts`;
+ * before 2026-09-21 all three disagreed about the death half. Without it, a clan can
+ * end a rival's run on demand from inside its own roster, and the cheapest counter to
+ * a long streak is a teamkill.
  */
 async function bestStreaks(db: Database, serverId: number, w: Window): Promise<Map<string, number>> {
   const rows = await db.select({ killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire })
@@ -325,8 +328,8 @@ async function streakBoard(db: Database, serverId: number, w: Window, roster: st
     .slice(offset, offset + limit);
 }
 
-/** ⚠️ A non-friendly PvP kill with a distance the log recorded — the only kill that counts for range. */
-const rangedKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), isNotNull(kills.distanceM))!;
+/** ⚠️ A scoring kill with a distance the log recorded — the only kill that counts for range. */
+const rangedKill = and(scoringKill, isNotNull(kills.distanceM))!;
 
 /** Each killer's farthest kill (`distinct on`), then the farthest killers first. */
 async function longestKillBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<LongestKillRow[]> {

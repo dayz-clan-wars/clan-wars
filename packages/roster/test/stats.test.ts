@@ -336,6 +336,12 @@ describe("roster player stats", () => {
         { dayzId: R, gamertag: "Romeo", value: 12 },
         { dayzId: A, gamertag: "Alpha", value: 3 },
       ]);
+      // ⚠️ The K/D DENOMINATOR specifically. This is the only assertion in the suite
+      // that fails if `kdBoard`'s deaths query is reverted from `scoringKill` to
+      // `byAnotherPlayer` — without it that line is untested, because no other
+      // K/D-eligible player in the fixture has a friendly-fire death. A's teamkill
+      // death must not appear here: 12 / 3, not 12 / 4.
+      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
       expect(boards.friendlyFire).toEqual([
         { dayzId: A, gamertag: "Alpha", value: 1 },
         { dayzId: B, gamertag: "Bravo", value: 1 },

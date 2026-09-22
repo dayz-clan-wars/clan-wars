@@ -60,6 +60,22 @@ describe("PgKillstreakFeedStore", () => {
     expect(items.filter((i) => i.eventId === items[items.length - 1]!.eventId)[0]!.streak).toBe(1);
   });
 
+  /**
+   * ⚠️ The half of the rule this store was missing until 2026-09-21. It already
+   * declined a friendly KILL (`streakable` on the kill read) but its DEATH read used
+   * `pvp`, which counts friendly fire — so a clanmate could end anyone's run on
+   * demand, and the streak posted here disagreed with the one on that player's
+   * profile. Without the fix the last kill below posts streak 1, not 3.
+   */
+  it("⚠️ a friendly-fire death does NOT reset it", async () => {
+    await mkKill({ at: s(0), killer: A, victim: B });
+    await mkKill({ at: s(10), killer: A, victim: R });
+    await mkKill({ at: s(20), killer: B, victim: A, ff: true });
+    await mkKill({ at: s(30), killer: A, victim: R });
+    const items = await store.readAfter(0, 50);
+    expect(items[items.length - 1]!.streak).toBe(3);
+  });
+
   it("⚠️ a death to the environment does NOT reset it — only a player ends a streak", async () => {
     await mkKill({ at: s(0), killer: A, victim: B });
     await mkKill({ at: s(10), killer: null, victim: A });
