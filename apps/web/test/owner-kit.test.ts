@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Session } from "@/lib/auth/session";
 import type { Owner } from "../app/components/owner";
-import { OwnerPanels, BoosterKitPanel } from "../app/components/owner";
+import { OwnerPanels, BoosterKitPanel, AwardsPanel } from "../app/components/owner";
 
 const SESSION: Session = { sub: "1", name: "Test", avatar: null, guild: true, nextCheckAt: 0, authAt: 0 };
 
@@ -18,6 +18,7 @@ const baseOwner = (boosting: boolean): Owner => ({
   next: null,
   showInvites: false,
   boosting,
+  openAwards: 0,
 });
 
 const render = (owner: Owner) => renderToStaticMarkup(createElement(BoosterKitPanel, { owner }));
@@ -74,4 +75,11 @@ describe("the kit entry point", () => {
     expect(src).toContain("boosterKit(session.sub)");
     expect(src).toContain("boosting: kit.boosting");
   });
+});
+
+describe("AwardsPanel", () => {
+  const renderAwards = (openAwards: number) =>
+    renderToStaticMarkup(createElement(AwardsPanel, { owner: { ...baseOwner(false), openAwards } }));
+  it("renders nothing with no open awards", () => expect(renderAwards(0)).toBe(""));
+  it("links to /awards when the owner holds one", () => expect(renderAwards(1)).toContain('href="/awards"'));
 });

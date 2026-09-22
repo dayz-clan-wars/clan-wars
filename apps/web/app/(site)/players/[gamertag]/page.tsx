@@ -7,7 +7,7 @@ import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, BoosterKitPanel, SignOut } from "@/app/components/owner";
+import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, BoosterKitPanel, AwardsPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
 import { AchievementWall } from "@/app/components/achievement-wall";
@@ -107,6 +107,7 @@ export default async function PlayerProfilePage({
                 landed in the right column below invites and ceremonies, which
                 buried the one control a booster opens this page for. */}
             {owner && <BoosterKitPanel owner={owner} />}
+            {owner && <AwardsPanel owner={owner} />}
             <Panel title="Activity"><PanelBody>
               <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
             </PanelBody></Panel>

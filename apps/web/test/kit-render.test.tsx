@@ -17,7 +17,7 @@ const MASKS: CatalogueEntry[] = [
 
 const sheet = (current: string | null, query = "", busy = false) =>
   renderToStaticMarkup(
-    <PickSheet slot="mask" options={MASKS} current={current} query={query} busy={busy}
+    <PickSheet label="Mask" options={MASKS} current={current} query={query} busy={busy}
       onQuery={() => {}} onChoose={() => {}} onClose={() => {}} />,
   );
 

@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef } from "react";
-import type { CatalogueEntry, KitSlot } from "@factions/domain";
-import { SLOT_LABELS } from "@/lib/kit-copy";
+import type { CatalogueEntry } from "@factions/domain";
 
 /**
  * One slot's options, over the page.
@@ -57,8 +56,9 @@ function grouped(options: CatalogueEntry[], query: string, current: string | nul
   return multi;
 }
 
-export function PickSheet({ slot, options, current, query, busy, onQuery, onChoose, onClose }: {
-  slot: KitSlot;
+export function PickSheet({ label, options, current, query, busy, onQuery, onChoose, onClose, allowEmpty = true }: {
+  /** What the slot is called: "Mask", or an award slot's own label. */
+  label: string;
   options: CatalogueEntry[];
   current: string | null;
   query: string;
@@ -68,6 +68,11 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
   /** An empty string clears the slot. */
   onChoose: (className: string, label: string | null) => void;
   onClose: () => void;
+  /**
+   * ⚠️ An award slot cannot be empty and still place, so the award page turns
+   * this off rather than offering a choice that blocks the Place button.
+   */
+  allowEmpty?: boolean;
 }) {
   const panel = useRef<HTMLDivElement>(null);
   const search = useRef<HTMLInputElement>(null);
@@ -156,7 +161,7 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
       >
         <div className="flex-none border-b-2 border-rule-2 bg-frame">
           <div className="flex h-bar items-center justify-between gap-3 pl-4 pr-2">
-            <h2 id="sheet-title" className="m-0 font-display text-[15px] uppercase tracking-[0.02em] text-ink">{SLOT_LABELS[slot]}</h2>
+            <h2 id="sheet-title" className="m-0 font-display text-[15px] uppercase tracking-[0.02em] text-ink">{label}</h2>
             <button type="button" onClick={onClose}
               className="min-h-[44px] min-w-[44px] font-mono text-[11px] uppercase tracking-[0.14em] text-gold">
               Done
@@ -168,8 +173,8 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
               type="search"
               value={query}
               onChange={(e) => onQuery(e.target.value)}
-              placeholder={`Search ${SLOT_LABELS[slot].toLowerCase()}`}
-              aria-label={`Search ${SLOT_LABELS[slot].toLowerCase()}`}
+              placeholder={`Search ${label.toLowerCase()}`}
+              aria-label={`Search ${label.toLowerCase()}`}
               autoComplete="off"
               spellCheck={false}
               className="block min-h-[46px] w-full border-2 border-rule-3 bg-ground px-3.5 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none"
@@ -178,14 +183,16 @@ export function PickSheet({ slot, options, current, query, busy, onQuery, onChoo
         </div>
 
         <div className="flex-1 overflow-y-auto px-4 pb-6">
-          <button type="button" aria-pressed={current === null} disabled={busy} onClick={() => onChoose("", null)}
-            className={`mt-3.5 flex w-full items-center gap-3 bg-frame p-2.5 ${current === null ? "border-2 border-gold" : "border border-rule-2"}`}>
-            <span className="flex h-11 w-11 flex-none items-center justify-center border border-dashed border-rule-3 text-base text-muted">&ndash;</span>
-            <span className="text-left">
-              <span className="block text-sm text-ink">Nothing</span>
-              <span className="mt-0.5 block text-xs text-dim">Leave this slot empty</span>
-            </span>
-          </button>
+          {allowEmpty && (
+            <button type="button" aria-pressed={current === null} disabled={busy} onClick={() => onChoose("", null)}
+              className={`mt-3.5 flex w-full items-center gap-3 bg-frame p-2.5 ${current === null ? "border-2 border-gold" : "border border-rule-2"}`}>
+              <span className="flex h-11 w-11 flex-none items-center justify-center border border-dashed border-rule-3 text-base text-muted">&ndash;</span>
+              <span className="text-left">
+                <span className="block text-sm text-ink">Nothing</span>
+                <span className="mt-0.5 block text-xs text-dim">Leave this slot empty</span>
+              </span>
+            </button>
+          )}
 
           {groups.map((g) => (
             <div key={g.name} className="mt-5">
