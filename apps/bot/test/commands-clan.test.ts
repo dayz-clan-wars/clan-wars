@@ -53,6 +53,44 @@ describe("clanEmbed", () => {
     expect(json).not.toContain("3021");
     expect(json).not.toContain("9944");
   });
+
+  /**
+   * `gamertagOrId` (packages/roster/src/internal/leadership-store.ts) falls
+   * back to the raw Discord snowflake when a claimant has no `players` row
+   * yet — the arm that actually fires in production, since a brand-new
+   * account is exactly the case with no gamertag on file. Rendering it
+   * through `playerLink` would print a clickable dead link showing a raw
+   * Discord id at a player.
+   */
+  it("does not render an all-digit succession claimant as a dead player link", () => {
+    const view = viewFixture({
+      leadership: {
+        openClaim: { id: 1, claimantGamertag: "123456789012345678", leaderGamertag: "Vasily", openedAt: new Date("2026-09-12T00:00:00Z"), resolvesAt: new Date("2026-09-14T00:00:00Z") },
+        openVote: null, canClaim: "not-eligible", nextVoteAllowedAt: null, leaderLastSeenAt: null,
+      },
+    });
+    const json = JSON.stringify(clanEmbed(view, "https://x"));
+    expect(json).toContain("123456789012345678");
+    expect(json).not.toContain("/players/123456789012345678");
+  });
+
+  it("does not render an all-digit no-confidence nominee as a dead player link", () => {
+    const view = viewFixture({
+      leadership: {
+        openClaim: null,
+        openVote: {
+          id: 1, nomineeDayzId: "d1", nomineeGamertag: "987654321098765432", leaderGamertag: "Vasily",
+          openedAt: new Date("2026-09-12T00:00:00Z"), closesAt: new Date("2026-09-14T00:00:00Z"),
+          electorateSize: 4, ballots: 1, threshold: 3, electorateDayzIds: [],
+          myBallot: false, inElectorate: false,
+        },
+        canClaim: "not-eligible", nextVoteAllowedAt: null, leaderLastSeenAt: null,
+      },
+    });
+    const json = JSON.stringify(clanEmbed(view, "https://x"));
+    expect(json).toContain("987654321098765432");
+    expect(json).not.toContain("/players/987654321098765432");
+  });
 });
 
 describe("/clan disband", () => {

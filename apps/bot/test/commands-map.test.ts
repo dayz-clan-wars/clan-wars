@@ -176,4 +176,10 @@ describe("/map view", () => {
     expect(reply.content).toContain("https://x/map");
     expect(reply.embeds).toBeUndefined();
   });
+
+  /** ⚠️ A bare URL in plain content unfurls a preview card — mask it in the house form. */
+  it("masks the map link so Discord never unfurls a preview card beneath it", async () => {
+    const reply = await specOf(mapGroup, "map view").handler(ctxWith({}), input());
+    expect(reply.content).toBe("The map is a picture — [open it here](<https://x/map>)");
+  });
 });

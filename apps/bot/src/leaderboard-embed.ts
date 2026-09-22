@@ -50,7 +50,7 @@ export function leaderboardKey(kind: BoardKind, boards: Boards): string {
 /** One row, numbered from 1, in the site's own shape: rank, name, clan, extra column, value. */
 function line(kind: BoardKind, row: Boards[BoardKind][number], n: number, clanTag: string | undefined, siteBaseUrl: string): string {
   const name = `**${playerLink(siteBaseUrl, row.gamertag)}**`;
-  const clan = clanTag ? ` ${clanLink(siteBaseUrl, clanTag)}` : "";
+  const clan = clanTag ? ` [${clanLink(siteBaseUrl, clanTag)}]` : "";
   const kd = row as KdRow;
   const lk = row as LongestKillRow;
   const extra = "kills" in row ? ` · ${kd.kills} / ${kd.deaths}`

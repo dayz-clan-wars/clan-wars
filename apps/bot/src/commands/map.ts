@@ -59,7 +59,7 @@ const unpin: Handler = async (ctx, input) => {
  * signpost, the same category as `route.ts`'s `UNKNOWN`.
  */
 const view: Handler = async (ctx) =>
-  ({ content: `The map is a picture — open it here: ${ctx.siteBaseUrl}/map`, ephemeral: true });
+  ({ content: `The map is a picture — [open it here](<${ctx.siteBaseUrl}/map>)`, ephemeral: true });
 
 /** ⚠️ R6: no coordinate in a label. Icon, note and age are enough to pick the right pin. */
 const pinChoices: AutocompleteSource = async (ctx, a) => {

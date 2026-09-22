@@ -28,7 +28,7 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "non_member_raise", target: "channel", occurredAt: new Date(now.getTime() - 6 * 60_000), payload: { gamertag: "X" } }, site, dormantAfterMs))
       .toBe(`⚑ [X](<${site}/players/X>) (not a member) raised your flag at your base — <t:1788695640:R>`);
     expect(noticeText({ kind: "kicked", target: "dm", occurredAt: now, payload: { clan: "Bears", until: "2026-09-08T00:00:00.000Z" } }, site, dormantAfterMs))
-      .toBe("You were removed from **Bears**. You can join a clan again on 8 Sep 2026.");
+      .toBe(`You were removed from **Bears**. You can join a clan again on <t:1788825600:F>.`);
     expect(noticeText({ kind: "revived", target: "channel", occurredAt: now, payload: {} }, site, dormantAfterMs)).toBe("☀️ The flag was raised. You're active again.");
   });
 
@@ -155,17 +155,35 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "succession_done", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, dormantAfterMs))
       .toBe(`👑 [Bear1](<${site}/players/Bear1>) is now leader (succession)`);
     expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "2026-09-08T14:00:00.000Z", link: "https://dayzclanwars.com/clan/vote" } }, site, dormantAfterMs))
-      .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Closes 8 Sep 2026 14:00 UTC. Vote on the site: [open it](<https://dayzclanwars.com/clan/vote>)`);
+      .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Closes <t:1788876000:F> (<t:1788876000:R>). Vote on the site: [open it](<https://dayzclanwars.com/clan/vote>)`);
     expect(noticeText({ kind: "vote_passed", target: "channel", occurredAt: now, payload: { yes: 6, n: 9, nominee: "Bear1", old: "Wolfie" } }, site, dormantAfterMs))
       .toBe(`🗳️ Vote passed (6/9). [Bear1](<${site}/players/Bear1>) is now leader; [Wolfie](<${site}/players/Wolfie>) stays as officer.`);
     expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "2026-09-22T00:00:00.000Z" } }, site, dormantAfterMs))
-      .toBe("🗳️ Vote failed (3/9). Next vote possible 22 Sep 2026.");
+      .toBe(`🗳️ Vote failed (3/9). Next vote possible <t:1790035200:F>.`);
     expect(noticeText({ kind: "codes_rotated", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, dormantAfterMs))
       .toBe(`🔐 Codes rotated by [Bear1](<${site}/players/Bear1>) — see the vault.`);
     expect(noticeText({ kind: "codes_rotated", target: "dm", occurredAt: now, payload: { clan: "Bears", link: "https://dayzclanwars.com/clan/vault" } }, site, dormantAfterMs))
       .toBe("**Bears** rotated its codes. See the vault: [open it](<https://dayzclanwars.com/clan/vault>)");
     expect(noticeText({ kind: "guest", target: "channel", occurredAt: now, payload: { officer: "Wolfie", user: "123456789012345678" } }, site, dormantAfterMs))
       .toBe("🎟️ [Wolfie](<https://dayzclanwars.com/players/Wolfie>) gave <@123456789012345678> a 24h voice guest pass.");
+  });
+
+  it("renders ban_applied's until as a live token, never the raw ISO string ban-tick.ts writes", () => {
+    expect(noticeText({ kind: "ban_applied", target: "dm", occurredAt: now, payload: { until: "2026-09-28T14:00:00.000Z", reason: "boost stack" } }, site, dormantAfterMs))
+      .toBe("⛔ You are banned from the server until <t:1790604000:F> — boost stack.");
+    expect(noticeText({ kind: "ban_applied", target: "dm", occurredAt: now, payload: { until: null, reason: "boost stack" } }, site, dormantAfterMs))
+      .toBe("⛔ You are permanently banned from the server — boost stack.");
+  });
+
+  it("degrades an unparseable date to the hand-formatted fallback rather than an empty gap or \"null\", for each of the four tokenised dates", () => {
+    expect(noticeText({ kind: "ban_applied", target: "dm", occurredAt: now, payload: { until: "not-a-date", reason: "x" } }, site, dormantAfterMs))
+      .toBe("⛔ You are banned from the server until NaN undefined NaN — x.");
+    expect(noticeText({ kind: "kicked", target: "dm", occurredAt: now, payload: { clan: "Bears", until: "not-a-date" } }, site, dormantAfterMs))
+      .toBe("You were removed from **Bears**. You can join a clan again on NaN undefined NaN.");
+    expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "not-a-date", link: "https://x/vote" } }, site, dormantAfterMs))
+      .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Closes NaN undefined NaN NaN:NaN UTC. Vote on the site: [open it](<https://x/vote>)`);
+    expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "not-a-date" } }, site, dormantAfterMs))
+      .toBe("🗳️ Vote failed (3/9). Next vote possible NaN undefined NaN.");
   });
 
   it("never renders a smuggled 4-digit vault code, even though the type forbids it", () => {

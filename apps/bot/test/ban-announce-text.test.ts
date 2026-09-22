@@ -24,9 +24,15 @@ describe("banAnnouncementText", () => {
     expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned until <t:1789912800:F> — base-zone enforcement.");
   });
 
-  it("applied / zone / an unrepresentable expiry falls back to the formatDate convention", () => {
+  /**
+   * ⚠️ Not `formatDate` (removed) — that fallback rendered "NaN undefined
+   * NaN" on an unparseable expiry, which is not a truthful line. Same
+   * null-degrade pattern as `war-log-text.ts`'s `season_closed`: drop the
+   * clause rather than post a garbled date.
+   */
+  it("applied / zone / an unrepresentable expiry drops the clause rather than posting a garbled date", () => {
     const a: BanAnnouncement = { kind: "applied", gamertag: "Bear1", reason: "zone", expiresAt: "not-a-real-date" };
-    expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned until NaN undefined NaN — base-zone enforcement.");
+    expect(banAnnouncementText(a)).toBe("🔨 **Bear1** banned — base-zone enforcement.");
   });
 
   // ⚠️ Deliberate, not a formality: this is the arm a future pass might

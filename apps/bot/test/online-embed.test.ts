@@ -4,7 +4,7 @@ import { onlineEmbed, onlineKey, type OnlinePlayer } from "../src/online-embed.j
 const now = new Date("2026-09-08T18:00:00Z");
 const site = "https://dayzclanwars.com";
 const link = (name: string) => `**[${name}](<${site}/players/${encodeURIComponent(name)}>)**`;
-const tagLink = (tag: string) => `[${tag}](<${site}/clans/${encodeURIComponent(tag)}>)`;
+const tagLink = (tag: string) => `[[${tag}](<${site}/clans/${encodeURIComponent(tag)}>)]`;
 const at = (h: number) => new Date(now.getTime() - h * 3600_000);
 const p = (gamertag: string, hoursAgo: number, tag: string | null = null): OnlinePlayer =>
   ({ dayzId: gamertag.toUpperCase().padEnd(40, "0"), gamertag, tag, connectedAt: at(hoursAgo) });

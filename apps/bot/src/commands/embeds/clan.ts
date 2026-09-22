@@ -15,7 +15,13 @@ const GOLD = 0xc8a34a;
  * to full members only — see the check below.
  */
 export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
-  const player = (gamertag: string | null, fallback: string) => gamertag ? playerLink(siteBaseUrl, gamertag) : fallback;
+  // ⚠️ `gamertagOrId` (packages/roster/src/internal/leadership-store.ts) falls
+  // back to the raw Discord snowflake when a claimant/nominee has no
+  // `players` row yet, so a plain null-check here would still hand
+  // `playerLink` an all-digit string and render a dead link that prints a
+  // Discord id at a player. Same guard as `notice-text.ts`'s `person()`.
+  const player = (gamertag: string | null, fallback: string) =>
+    gamertag && !/^\d+$/u.test(gamertag) ? playerLink(siteBaseUrl, gamertag) : fallback;
   const embed = new EmbedBuilder()
     .setColor(GOLD)
     .setTitle(`${view.clan.name} [${view.clan.tag}]`)
@@ -58,12 +64,12 @@ export function clanEmbed(view: ClanView, siteBaseUrl: string): EmbedBuilder {
   }
   const lead = view.leadership;
   if (lead.openClaim) {
-    embed.addFields({ name: "Succession claim open", value: `${playerLink(siteBaseUrl, lead.openClaim.claimantGamertag)} claimed the seat.`, inline: false });
+    embed.addFields({ name: "Succession claim open", value: `${player(lead.openClaim.claimantGamertag, lead.openClaim.claimantGamertag)} claimed the seat.`, inline: false });
   }
   if (lead.openVote) {
     embed.addFields({
       name: "No-confidence vote open",
-      value: `${lead.openVote.ballots} of ${lead.openVote.threshold} needed, nominating ${playerLink(siteBaseUrl, lead.openVote.nomineeGamertag)}.`
+      value: `${lead.openVote.ballots} of ${lead.openVote.threshold} needed, nominating ${player(lead.openVote.nomineeGamertag, lead.openVote.nomineeGamertag)}.`
         + (lead.openVote.inElectorate && !lead.openVote.myBallot ? " — `/lead ballot`" : ""),
       inline: false,
     });

@@ -27,7 +27,7 @@ export function onlineKey(players: OnlinePlayer[]): string {
 export function onlineEmbed(players: OnlinePlayer[], now: Date, siteBaseUrl: string): APIEmbed {
   const sorted = [...players].sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime() || a.gamertag.localeCompare(b.gamertag));
   const lines = sorted.map((p) => {
-    const tag = p.tag ? ` ${clanLink(siteBaseUrl, p.tag)}` : "";
+    const tag = p.tag ? ` [${clanLink(siteBaseUrl, p.tag)}]` : "";
     // ⚠️ connectedAt is a DB timestamp and should always be valid, but rel()
     // still guards it — degrade rather than print "on since " with nothing
     // after it.

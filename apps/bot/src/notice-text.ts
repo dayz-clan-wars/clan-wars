@@ -1,7 +1,7 @@
 import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
-import { rel } from "@factions/copy";
+import { rel, at, atRel } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
 
 const DAY_MS = 86_400_000;
@@ -52,6 +52,24 @@ function formatDateTime(iso: string): string {
   const hh = String(d.getUTCHours()).padStart(2, "0");
   const mm = String(d.getUTCMinutes()).padStart(2, "0");
   return `${formatDate(iso)} ${hh}:${mm} UTC`;
+}
+
+/**
+ * A payload's ISO-string instant, as a `<t:…:F>` token. `at`/`atRel` return
+ * `null` for an unparseable `Date` (a jsonb payload is not validated at
+ * write time), so an unrepresentable value degrades to the hand-formatted
+ * date rather than an empty gap or a literal "null".
+ */
+function atToken(v: NoticePayload[string] | undefined): string {
+  const s = String(v);
+  return at(new Date(s)) ?? formatDate(s);
+}
+
+/** Same degrade as `atToken`, but `<t:…:F> (<t:…:R>)` for a deadline whose
+ * distance also matters — see `atRel`. */
+function atRelToken(v: NoticePayload[string] | undefined): string {
+  const s = String(v);
+  return atRel(new Date(s)) ?? formatDateTime(s);
 }
 
 /**
@@ -122,7 +140,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   kicked: (p, ctx) =>
     ctx.target === "channel"
       ? `🥾 ${person(p.gamertag, ctx.site)} was kicked by ${person(p.officer, ctx.site)}`
-      : `You were removed from **${p.clan}**. You can join a clan again on ${formatDate(String(p.until))}.`,
+      : `You were removed from **${p.clan}**. You can join a clan again on ${atToken(p.until)}.`,
   promoted: (p, ctx) => `⬆️ ${person(p.gamertag, ctx.site)} promoted to officer`,
   demoted: (p, ctx) => `⬇️ ${person(p.gamertag, ctx.site)} demoted to member`,
   transferred: (p, ctx) => `👑 ${person(p.gamertag, ctx.site)} is now leader (transferred by ${person(p.old, ctx.site)})`,
@@ -153,9 +171,9 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   succession_claimed: (p, ctx) => `⏳ ${person(p.gamertag, ctx.site)} has claimed leadership — ${person(p.leader, ctx.site)} has ${hours(SUCCESSION_WINDOW_MS)}h to show up in game`,
   succession_voided: (p, ctx) => `⏳ ${person(p.leader, ctx.site)} showed up in game. The claim by ${person(p.claimant, ctx.site)} is void.`,
   succession_done: (p, ctx) => `👑 ${person(p.gamertag, ctx.site)} is now leader (succession)`,
-  vote_opened: (p, ctx) => `🗳️ Vote opened: replace ${person(p.leader, ctx.site)} with ${person(p.nominee, ctx.site)}. Closes ${formatDateTime(String(p.closesAt))}. Vote on the site: [open it](<${p.link}>)`,
+  vote_opened: (p, ctx) => `🗳️ Vote opened: replace ${person(p.leader, ctx.site)} with ${person(p.nominee, ctx.site)}. Closes ${atRelToken(p.closesAt)}. Vote on the site: [open it](<${p.link}>)`,
   vote_passed: (p, ctx) => `🗳️ Vote passed (${p.yes}/${p.n}). ${person(p.nominee, ctx.site)} is now leader; ${person(p.old, ctx.site)} stays as officer.`,
-  vote_failed: (p) => `🗳️ Vote failed (${p.yes}/${p.n}). Next vote possible ${formatDate(String(p.date))}.`,
+  vote_failed: (p) => `🗳️ Vote failed (${p.yes}/${p.n}). Next vote possible ${atToken(p.date)}.`,
   // codes_rotated's DM arm carries a clan NAME only, no tag (vault-store.ts)
   // — bold and unlinked, same rule as kicked/invited above.
   codes_rotated: (p, ctx) =>
@@ -181,7 +199,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     return `⚠️ The log recorded you ${acts} inside ${clanLink(ctx.site, String(p.tag))}'s declared base zone. **If they asked you to help, ignore this.** If not, an officer of that clan can report it, and the penalty scales with the damage.`;
   },
   ban_applied: (p) => p.until
-    ? `⛔ You are banned from the server until ${p.until} — ${p.reason}.`
+    ? `⛔ You are banned from the server until ${atToken(p.until)} — ${p.reason}.`
     : `⛔ You are permanently banned from the server — ${p.reason}.`,
   booster_kit_unchosen: () =>
     "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
