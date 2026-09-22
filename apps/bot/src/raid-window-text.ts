@@ -1,33 +1,31 @@
 import type { RaidWindowState } from "@factions/domain";
-import { at, atRel, rel } from "@factions/copy";
+import { rel } from "@factions/copy";
 
 export function advanceText(state: RaidWindowState): string {
   if (state.phase === "skipped") {
     return [
-      "**No raid weekend this week.**",
-      `Base damage stays off. Reason: ${state.skipReason}`,
-      "Lowering flags still scores, as always.",
+      "**RAID WINDOW SCRUBBED**",
+      `Base damage stays off this week. Reason: ${state.skipReason}`,
     ].join("\n");
   }
   return [
-    "**Raid weekend opens tomorrow.**",
-    `Base damage comes on at ${atRel(state.opensAt) ?? "the next restart"} and goes off at `
-      + `${at(state.closesAt) ?? "the restart after"}.`,
-    "Lowering flags scores all week; the window only decides whether walls take damage.",
+    "**RAID WINDOW INBOUND**",
+    `Base damage on ${rel(state.opensAt) ?? "at the next restart"}, `
+      + `off ${rel(state.closesAt) ?? "at the restart after"}.`,
   ].join("\n");
 }
 
 export function openText(state: RaidWindowState): string {
   return [
-    "**Raid weekend is live.** Base damage is on.",
-    `It closes ${rel(state.closesAt) ?? "at the scheduled restart"}.`,
+    "**RAID WINDOW OPEN**",
+    `Base damage is on. Closes ${rel(state.closesAt) ?? "at the scheduled restart"}.`,
   ].join("\n");
 }
 
 export function closeText(state: RaidWindowState): string {
   return [
-    "**Raid weekend is over.** Base damage is off.",
-    `The next one opens at ${atRel(state.opensAt) ?? "the next scheduled window"}.`,
+    "**RAID WINDOW CLOSED**",
+    `Base damage is off. Next window ${rel(state.opensAt) ?? "at the next scheduled window"}.`,
   ].join("\n");
 }
 

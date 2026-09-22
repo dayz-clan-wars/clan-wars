@@ -158,7 +158,7 @@ export type BotConfig = {
    * `raidWindow`: a drop is only ever placed at a restart, so it rides on
    * `restartSchedule` and is refused without it. `weeklyCap` is a ceiling on
    * how many drops can be decided in a rolling week, never a quota to hit;
-   * `minPop` is the floor under the trailing p90 population a drop requires.
+   * `minPop` is the floor under the trailing high-water population a drop requires.
    */
   airdrop: { enabled: boolean; weeklyCap: number; minPop: number };
   /**

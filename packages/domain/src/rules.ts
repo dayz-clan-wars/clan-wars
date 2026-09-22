@@ -278,5 +278,19 @@ export const AIRDROP_DECIDE_LEAD_MS = 30 * 60 * 1000;
 /** Minimum gap between two drops (spec §3.1). */
 export const AIRDROP_MIN_GAP_MS = 24 * 60 * 60 * 1000;
 
-/** How far back the trailing percentile looks (spec §3.1). */
-export const AIRDROP_HISTORY_MS = 14 * 24 * 60 * 60 * 1000;
+/**
+ * How far back the trailing high-water mark looks (spec §3.1, amended 2026-09-21).
+ *
+ * The window changed job when the percentile became a max. Under a p90 a longer
+ * window was simply steadier; under a MAX it is also the lockout length, because a
+ * record blocks every later slot until it ages out.
+ *
+ * ⚠️ In practice, on this server, that matters far less than it sounds. Replayed
+ * against the real session history (253 decision instants, 2026-09-01 to 09-22) the
+ * window length is nearly inert: 3d and 5d both fire 5 times, 7d/10d/14d fire 4.
+ * The peaks recur often enough that a stale record rarely blocks anything. Do not
+ * reach for this constant to change how often drops happen — `AIRDROP_MIN_POP` is
+ * the lever that actually moves it (floor 5 → 5 drops, 6 → 3, 7 → 2 over the same
+ * three weeks), and it is an env var rather than a code change.
+ */
+export const AIRDROP_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;

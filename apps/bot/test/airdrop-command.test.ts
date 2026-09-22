@@ -38,7 +38,7 @@ describe("/airdrop place", () => {
     const [row] = await rows();
     expect(row).toMatchObject({ slotAt: SLOT, location: "dolnik", state: "announced", manual: true });
     expect(row!.announcedAt).not.toBeNull();
-    expect(post).toHaveBeenCalledWith(expect.stringContaining("Dolnik"));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining("DOLNIK"));
   });
 
   it("takes the colour when given one and rolls it when not", async () => {

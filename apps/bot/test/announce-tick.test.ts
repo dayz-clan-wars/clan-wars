@@ -20,7 +20,7 @@ describe("announceTick", () => {
     const r = await announceTick(db, post, { now: at("2026-09-13T08:00:01Z"), offHour: 8 });
     expect(r).toEqual({ posted: 1, missed: 0, failed: 0 });
     expect(post).toHaveBeenCalledTimes(1);
-    expect(post.mock.calls[0]![0]).toContain("Olga");
+    expect(post.mock.calls[0]![0]).toContain("OLGA");
     expect(await rows()).toMatchObject([
       { wipeAt: at("2026-09-14T08:00:00Z"), eventName: "VehicleCivilianSedan", outcome: "posted" },
     ]);
@@ -110,7 +110,7 @@ describe("announceTick", () => {
     await announceTick(db, post, { now: at("2026-09-13T08:00:01Z"), offHour: 8 });
     await announceTick(db, post, { now: at("2026-09-20T08:00:01Z"), offHour: 8 });
     expect(post).toHaveBeenCalledTimes(2);
-    expect(post.mock.calls[1]![0]).toContain("Gunter");
+    expect(post.mock.calls[1]![0]).toContain("GUNTER");
     expect(await rows()).toHaveLength(2);
   });
 });

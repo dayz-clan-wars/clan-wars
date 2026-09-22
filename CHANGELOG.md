@@ -5,6 +5,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The airdrop, raid-window and vehicle-wipe notices in #server-events are rewritten
+  short, in a military-comms register: an all-caps headline naming the place, then one
+  line of facts. The airdrop notice no longer explains the restart (it posts while the
+  server is up, and the old wording read as though it were down) and no longer mentions
+  the container's color at all.
+- An airdrop now needs the server to be at or above its own five-day high point, rather
+  than above a fourteen-day 90th percentile. The old bar sat below the server's recent
+  peaks by construction, so a merely-average evening cleared it and drops landed on dead
+  sessions. Replayed against three weeks of real history the new rule fires about as
+  often but only at genuine peaks. Expect longer, lumpier gaps between drops: one busy
+  night sets the bar for the next five days, and a quiet week correctly gets nothing.
+
 ## [1.31.0] - 2026-09-22
 
 ### Changed

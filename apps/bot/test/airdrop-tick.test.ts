@@ -55,7 +55,7 @@ describe("airdropTick", () => {
     const [row] = await rows();
     expect(row).toMatchObject({ slotAt: at("2026-09-21T20:00:00Z"), state: "announced", popAtDecision: 6 });
     expect(row!.announcedAt).not.toBeNull();
-    expect(post).toHaveBeenCalledWith(expect.stringContaining(row!.location.charAt(0).toUpperCase() + row!.location.slice(1)));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining(row!.location.toUpperCase()));
     // ⚠️ The colour is the gamble (spec §3.4) — it must not be in the message.
     expect(post.mock.calls[0]![0]).not.toContain(row!.colour);
   });
@@ -165,21 +165,40 @@ describe("airdropTick", () => {
     expect(r.decided).toBe(0);
   });
 
-  // ⚠️ §3.1's percentile: a peak is relative to the server's own recent peaks, and
-  // the floor alone must not let a routine evening spend the week's budget.
+  // ⚠️ §3.1's high-water mark: a peak is relative to the server's own recent peaks,
+  // and the floor alone must not let a routine evening spend the week's budget.
   // ⚠️ A live population AT the decision instant is required here — without it `pop`
-  // is 0 and `shouldFire` refuses on the FLOOR, not the percentile, and this test
-  // would still pass with `popsAt`/`p90` deleted entirely. It is the one test standing
-  // between "a routine evening" and "spends the week's budget", so it has to fail for
-  // the percentile reason specifically.
-  it("holds the percentile once the server has grown past the floor", async () => {
-    // 14 days where every decision instant had 9 on: p90 is 9, and 6 is not a peak.
-    for (let d = 0; d < 14; d++) {
-      await online(9, `2026-09-${String(7 + d).padStart(2, "0")}T00:00:00Z`, `2026-09-${String(8 + d).padStart(2, "0")}T00:00:00Z`);
+  // is 0 and `shouldFire` refuses on the FLOOR, not the high-water mark, and this test
+  // would still pass with `popsAt`/`highWater` deleted entirely. It is the one test
+  // standing between "a routine evening" and "spends the week's budget", so it has to
+  // fail for the high-water reason specifically.
+  it("holds the high-water mark once the server has grown past the floor", async () => {
+    // 5 days where every decision instant had 9 on: the high-water mark is 9, and
+    // 6 is not a peak.
+    for (let d = 0; d < 5; d++) {
+      await online(9, `2026-09-${String(16 + d).padStart(2, "0")}T00:00:00Z`, `2026-09-${String(17 + d).padStart(2, "0")}T00:00:00Z`);
     }
     await online(6, "2026-09-21T18:00:00Z", null);
     const r = await run(vi.fn(async () => {}));
     expect(r.decided).toBe(0);
+  });
+
+  // ⚠️ The other half of the rule, and the reason the test above cannot stand alone:
+  // a test that only proves a refusal is equally satisfied by a rule that never fires.
+  // Same five days at 9, but the server has now matched its own record.
+  it("fires when the server ties its five-day high-water mark", async () => {
+    for (let d = 0; d < 5; d++) {
+      await online(9, `2026-09-${String(16 + d).padStart(2, "0")}T00:00:00Z`, `2026-09-${String(17 + d).padStart(2, "0")}T00:00:00Z`);
+    }
+    await online(9, "2026-09-21T18:00:00Z", null);
+    const r = await run(vi.fn(async () => {}));
+    expect(r.decided).toBe(1);
+    // ⚠️ Pinned so this cannot pass for the wrong reason. Without it the test is
+    // also satisfied by a threshold that came out BELOW 9 (an empty sample window,
+    // a mis-built instant grid), which would prove nothing about a tie.
+    const [row] = await rows();
+    expect(Number(row!.threshold)).toBe(9);
+    expect(row!.popAtDecision).toBe(9);
   });
 
   /**
@@ -202,7 +221,7 @@ describe("airdropTick", () => {
     const post = vi.fn(async (_content: string) => {});
     const r = await run(post, { now: at("2026-09-21T18:00:10Z") });
     expect(r.posted).toBe(1);
-    expect(post).toHaveBeenCalledWith(expect.stringContaining("Dolnik"));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining("DOLNIK"));
     // ⚠️ The colour is still never named, scrubbed or not (spec §3.4).
     expect(post.mock.calls[0]![0]).not.toMatch(/blue|orange|yellow/i);
     const [row] = await rows();
@@ -303,7 +322,7 @@ describe("airdropTick", () => {
 describe("airdropText", () => {
   it("names the place, counts down by itself, and says nothing about the colour", () => {
     const body = airdropText("dolnik", at("2026-09-21T20:00:00Z"));
-    expect(body).toContain("Dolnik");
+    expect(body).toContain("DOLNIK");
     expect(body).toContain(`<t:${1790020800}:R>`);
     expect(body).not.toMatch(/blue|orange|yellow/i);
     // House rule: no em dashes in player-facing copy.
@@ -314,7 +333,7 @@ describe("airdropText", () => {
 describe("scrubText", () => {
   it("names the place, says nothing about the colour, and does not talk anybody off the next one", () => {
     const body = scrubText("dolnik");
-    expect(body).toContain("Dolnik");
+    expect(body).toContain("DOLNIK");
     expect(body).not.toMatch(/blue|orange|yellow/i);
     // House rule: no em dashes in player-facing copy.
     expect(body).not.toContain("\u2014");
