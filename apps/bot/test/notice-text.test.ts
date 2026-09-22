@@ -175,15 +175,18 @@ describe("noticeText", () => {
       .toBe("⛔ You are permanently banned from the server — boost stack.");
   });
 
-  it("degrades an unparseable date to the hand-formatted fallback rather than an empty gap or \"null\", for each of the four tokenised dates", () => {
+  it("degrades an unparseable date by dropping the clause rather than rendering \"NaN undefined NaN\", for each of the four tokenised dates", () => {
+    // ban_applied cannot simply drop the clause — that would read as the
+    // permanent-ban sentence, which is false for a temporary ban — so it
+    // names the term without a date instead.
     expect(noticeText({ kind: "ban_applied", target: "dm", occurredAt: now, payload: { until: "not-a-date", reason: "x" } }, site, dormantAfterMs))
-      .toBe("⛔ You are banned from the server until NaN undefined NaN — x.");
+      .toBe("⛔ You are banned from the server for a limited time — x.");
     expect(noticeText({ kind: "kicked", target: "dm", occurredAt: now, payload: { clan: "Bears", until: "not-a-date" } }, site, dormantAfterMs))
-      .toBe("You were removed from **Bears**. You can join a clan again on NaN undefined NaN.");
+      .toBe("You were removed from **Bears**.");
     expect(noticeText({ kind: "vote_opened", target: "channel", occurredAt: now, payload: { leader: "Wolfie", nominee: "Bear1", closesAt: "not-a-date", link: "https://x/vote" } }, site, dormantAfterMs))
-      .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Closes NaN undefined NaN NaN:NaN UTC. Vote on the site: [open it](<https://x/vote>)`);
+      .toBe(`🗳️ Vote opened: replace [Wolfie](<${site}/players/Wolfie>) with [Bear1](<${site}/players/Bear1>). Vote on the site: [open it](<https://x/vote>)`);
     expect(noticeText({ kind: "vote_failed", target: "channel", occurredAt: now, payload: { yes: 3, n: 9, date: "not-a-date" } }, site, dormantAfterMs))
-      .toBe("🗳️ Vote failed (3/9). Next vote possible NaN undefined NaN.");
+      .toBe("🗳️ Vote failed (3/9).");
   });
 
   it("never renders a smuggled 4-digit vault code, even though the type forbids it", () => {

@@ -38,38 +38,21 @@ export function duration(seconds: number): string {
   return `${hours}h ${minutes}m`;
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-/** `d MMM yyyy`, UTC, from an ISO 8601 string — e.g. "8 Sep 2026". */
-function formatDate(iso: string): string {
-  const d = new Date(iso);
-  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
-}
-
-/** `formatDate` extended with the hour, UTC — e.g. "8 Sep 2026 14:00 UTC". */
-function formatDateTime(iso: string): string {
-  const d = new Date(iso);
-  const hh = String(d.getUTCHours()).padStart(2, "0");
-  const mm = String(d.getUTCMinutes()).padStart(2, "0");
-  return `${formatDate(iso)} ${hh}:${mm} UTC`;
-}
-
 /**
- * A payload's ISO-string instant, as a `<t:…:F>` token. `at`/`atRel` return
- * `null` for an unparseable `Date` (a jsonb payload is not validated at
- * write time), so an unrepresentable value degrades to the hand-formatted
- * date rather than an empty gap or a literal "null".
+ * A payload's ISO-string instant, as a `<t:…:F>` token, or `null` if it is
+ * unrepresentable. `at` returns `null` for an unparseable `Date` (a jsonb
+ * payload is not validated at write time); the caller — never this
+ * function — owns the degrade, matching `war-log-text.ts`'s rule: drop the
+ * clause rather than post a literal "NaN undefined NaN" that a permanent DM
+ * would carry forever (see `notice-text.test.ts`).
  */
-function atToken(v: NoticePayload[string] | undefined): string {
-  const s = String(v);
-  return at(new Date(s)) ?? formatDate(s);
+function atToken(v: NoticePayload[string] | undefined): string | null {
+  return at(new Date(String(v)));
 }
 
-/** Same degrade as `atToken`, but `<t:…:F> (<t:…:R>)` for a deadline whose
- * distance also matters — see `atRel`. */
-function atRelToken(v: NoticePayload[string] | undefined): string {
-  const s = String(v);
-  return atRel(new Date(s)) ?? formatDateTime(s);
+/** Same as `atToken`, but for `atRel`'s `<t:…:F> (<t:…:R>)` pair. */
+function atRelToken(v: NoticePayload[string] | undefined): string | null {
+  return atRel(new Date(String(v)));
 }
 
 /**
@@ -137,10 +120,16 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   left: (p, ctx) => `➖ ${person(p.gamertag, ctx.site)} left`,
   // p.clan carries no tag on this payload (see roster-store.ts), so it stays
   // bold and unlinked rather than guessing at a page.
-  kicked: (p, ctx) =>
-    ctx.target === "channel"
-      ? `🥾 ${person(p.gamertag, ctx.site)} was kicked by ${person(p.officer, ctx.site)}`
-      : `You were removed from **${p.clan}**. You can join a clan again on ${atToken(p.until)}.`,
+  kicked: (p, ctx) => {
+    if (ctx.target === "channel") return `🥾 ${person(p.gamertag, ctx.site)} was kicked by ${person(p.officer, ctx.site)}`;
+    // ⚠️ An unrepresentable `until` drops the whole "you can join again" clause
+    // rather than naming a garbage date — the sentence without it states
+    // nothing false, unlike ban_applied below (see its comment).
+    const until = atToken(p.until);
+    return until
+      ? `You were removed from **${p.clan}**. You can join a clan again on ${until}.`
+      : `You were removed from **${p.clan}**.`;
+  },
   promoted: (p, ctx) => `⬆️ ${person(p.gamertag, ctx.site)} promoted to officer`,
   demoted: (p, ctx) => `⬇️ ${person(p.gamertag, ctx.site)} demoted to member`,
   transferred: (p, ctx) => `👑 ${person(p.gamertag, ctx.site)} is now leader (transferred by ${person(p.old, ctx.site)})`,
@@ -171,9 +160,22 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   succession_claimed: (p, ctx) => `⏳ ${person(p.gamertag, ctx.site)} has claimed leadership — ${person(p.leader, ctx.site)} has ${hours(SUCCESSION_WINDOW_MS)}h to show up in game`,
   succession_voided: (p, ctx) => `⏳ ${person(p.leader, ctx.site)} showed up in game. The claim by ${person(p.claimant, ctx.site)} is void.`,
   succession_done: (p, ctx) => `👑 ${person(p.gamertag, ctx.site)} is now leader (succession)`,
-  vote_opened: (p, ctx) => `🗳️ Vote opened: replace ${person(p.leader, ctx.site)} with ${person(p.nominee, ctx.site)}. Closes ${atRelToken(p.closesAt)}. Vote on the site: [open it](<${p.link}>)`,
+  vote_opened: (p, ctx) => {
+    // ⚠️ An unrepresentable closesAt drops the "Closes …" clause entirely —
+    // the vote is still open and still linked, so the sentence without it
+    // states nothing false.
+    const closes = atRelToken(p.closesAt);
+    const closesClause = closes ? ` Closes ${closes}.` : "";
+    return `🗳️ Vote opened: replace ${person(p.leader, ctx.site)} with ${person(p.nominee, ctx.site)}.${closesClause} Vote on the site: [open it](<${p.link}>)`;
+  },
   vote_passed: (p, ctx) => `🗳️ Vote passed (${p.yes}/${p.n}). ${person(p.nominee, ctx.site)} is now leader; ${person(p.old, ctx.site)} stays as officer.`,
-  vote_failed: (p) => `🗳️ Vote failed (${p.yes}/${p.n}). Next vote possible ${atToken(p.date)}.`,
+  vote_failed: (p) => {
+    // ⚠️ An unrepresentable date drops the whole "Next vote possible …"
+    // sentence — omitting it states nothing false, unlike naming a garbage
+    // date that looks like a real (wrong) rule.
+    const next = atToken(p.date);
+    return next ? `🗳️ Vote failed (${p.yes}/${p.n}). Next vote possible ${next}.` : `🗳️ Vote failed (${p.yes}/${p.n}).`;
+  },
   // codes_rotated's DM arm carries a clan NAME only, no tag (vault-store.ts)
   // — bold and unlinked, same rule as kicked/invited above.
   codes_rotated: (p, ctx) =>
@@ -198,9 +200,17 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     ].filter(Boolean).join(" and ");
     return `⚠️ The log recorded you ${acts} inside ${clanLink(ctx.site, String(p.tag))}'s declared base zone. **If they asked you to help, ignore this.** If not, an officer of that clan can report it, and the penalty scales with the damage.`;
   },
-  ban_applied: (p) => p.until
-    ? `⛔ You are banned from the server until ${atToken(p.until)} — ${p.reason}.`
-    : `⛔ You are permanently banned from the server — ${p.reason}.`,
+  ban_applied: (p) => {
+    if (!p.until) return `⛔ You are permanently banned from the server — ${p.reason}.`;
+    // ⚠️ Unlike the other three sites, simply dropping the clause here would
+    // read as "You are banned from the server — reason." — indistinguishable
+    // from the permanent-ban sentence above, which is a lie for a temporary
+    // ban. Naming the term without a garbage date keeps this arm honest.
+    const until = atToken(p.until);
+    return until
+      ? `⛔ You are banned from the server until ${until} — ${p.reason}.`
+      : `⛔ You are banned from the server for a limited time — ${p.reason}.`;
+  },
   booster_kit_unchosen: () =>
     "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
     + "at a spot you pick, every restart, for as long as you keep boosting. Nothing is "
