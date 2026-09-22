@@ -1289,10 +1289,62 @@ export const boosterKitUploads = pgTable("booster_kit_uploads", {
 });
 
 /**
- * A live placement challenge. Separate from the link challenge tables because
- * it proves something different: link binds an account to a character, this
- * binds a LOCATION to an existing kit. Reusing the link challenge would make
- * "already-linked" and "taken" outcomes meaningful here, which they are not.
+ * One event award, one row per win (awards spec §3.2). Granted by an admin's
+ * `/award grant`, configured and placed by the winner on `/awards/<id>`.
+ *
+ * ⚠️ NO status column. Unplaced / waiting / live / lapsed / expired / revoked
+ * are derived by `awardState()` in `@factions/domain` from the timestamps
+ * below; a stored status would be one more thing to drift from them.
+ *
+ * ⚠️ `live_from` and `expires_at` are written by the ingest worker ONLY, from
+ * the upload that first carried the grant (spec §5.2). Moving the award or
+ * changing its picks never touches them.
+ *
+ * Position columns: same meaning and type as `booster_kits` — y is altitude.
+ */
+export const awardGrants = pgTable("award_grants", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  /** A key in `packages/domain/assets/awards.json`; validated in code, not an FK. */
+  awardKey: text("award_key").notNull(),
+  discordId: text("discord_id").notNull(),
+  grantedByDiscordId: text("granted_by_discord_id").notNull(),
+  reason: text("reason").notNull(),
+  /** `{slotKey: className}` — jsonb because slots differ per award. */
+  picks: jsonb("picks").$type<Record<string, string>>().notNull().default({}),
+  posX: numeric("pos_x", { precision: 12, scale: 2 }),
+  posY: numeric("pos_y", { precision: 12, scale: 2 }),
+  posZ: numeric("pos_z", { precision: 12, scale: 2 }),
+  placedAt: timestamp("placed_at", { withTimezone: true }),
+  grantedAt: timestamp("granted_at", { withTimezone: true }).notNull(),
+  placeBy: timestamp("place_by", { withTimezone: true }).notNull(),
+  liveFrom: timestamp("live_from", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  revokedAt: timestamp("revoked_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byOwner: index("award_grants_discord_idx").on(t.discordId),
+}));
+
+/** Same columns as supply_uploads, so storeFor() serves it. Its own table so the award file's hash and baseline cannot cross the booster file's. */
+export const awardUploads = pgTable("award_uploads", {
+  serverId: integer("server_id").primaryKey().references(() => servers.id),
+  contentHash: text("content_hash").notNull(),
+  uploadedAt: timestamp("uploaded_at", { withTimezone: true }).notNull(),
+  remoteSize: integer("remote_size"),
+  remoteModifiedAt: timestamp("remote_modified_at", { withTimezone: true }),
+});
+
+/**
+ * A live placement challenge — for a booster kit, or, since awards, for one
+ * award grant (`award_grant_id` set). Separate from the link challenge tables
+ * because it proves something different: link binds an account to a
+ * character, this binds a LOCATION to something the account already owns.
+ * Reusing the link challenge would make "already-linked" and "taken"
+ * outcomes meaningful here, which they are not.
+ *
+ * ⚠️ Still named for the kit. Renaming it stops `drizzle-kit generate` at an
+ * interactive prompt, and the name is a smaller cost than a hand-written
+ * rename (awards spec §3.3).
  */
 export const boosterKitChallenges = pgTable("booster_kit_challenges", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
@@ -1305,8 +1357,18 @@ export const boosterKitChallenges = pgTable("booster_kit_challenges", {
   issuedAt: timestamp("issued_at", { withTimezone: true }).notNull(),
   expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
   closedAt: timestamp("closed_at", { withTimezone: true }),
+  /**
+   * Null for the booster kit; the grant being placed otherwise.
+   *
+   * ⚠️ CASCADE: a deleted grant must not leave an open challenge holding the
+   * account's one open-challenge slot.
+   */
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id, { onDelete: "cascade" }),
 }, (t) => ({
-  // One open challenge per account. Partial, so closed rows do not collide.
+  // ⚠️ One open challenge per ACCOUNT, across the kit and every award. Both
+  // read the same emote stream; two open rows would each count the same
+  // emotes. This index is the only thing that says so. Partial, so closed
+  // rows do not collide.
   openPerAccount: uniqueIndex("booster_kit_challenges_open_uniq")
     .on(t.discordId).where(sql`${t.closedAt} IS NULL`),
 }));
