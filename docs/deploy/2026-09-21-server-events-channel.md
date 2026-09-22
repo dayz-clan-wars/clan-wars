@@ -9,13 +9,29 @@ advance/open/close notices and the weekly vehicle-wipe notice there too, so ever
 scheduled server event shares one channel, and removes the bot's read of
 `ANNOUNCEMENTS_CHANNEL_ID` entirely. `cfg.announcementsChannelId` no longer exists.
 
-## 1. The `.env` change — there isn't one, before the restart
+## 1. Check `SERVER_EVENTS_CHANNEL_ID` before restarting
 
-`SERVER_EVENTS_CHANNEL_ID` is **already set in production** — it has been, since the
-airdrop feature shipped. `RAID_WINDOW_TICK` and `WEEKLY_VEHICLE_WIPE` already ride on
-the same restart-schedule requirement the airdrop tick does, so if the bot is running
-today with those features on, it already has the one variable this change needs. No
-`.env` edit is required before restarting the bot for this deploy.
+⚠️ **This is the one real hazard in this deploy.** Before this change, only
+`AIRDROP_TICK` required `SERVER_EVENTS_CHANNEL_ID` — `RESTART_SCHEDULE` alone does not
+imply `AIRDROP_TICK` is on, so a host running `RAID_WINDOW_TICK` or
+`WEEKLY_VEHICLE_WIPE` with airdrops off could legitimately have no
+`SERVER_EVENTS_CHANNEL_ID` set. After this change, both of those features require it
+too, and **the bot will refuse to boot without it**:
+
+    RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — …
+    WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID is unset — …
+
+Check before restarting:
+
+    grep SERVER_EVENTS_CHANNEL_ID /opt/clan-wars/.env
+
+If it is absent, **set it before restarting**, or the bot will not start. If it is
+present, nothing further is needed for this variable.
+
+**Verified present on 2026-09-21**: `/opt/clan-wars/.env` already carries
+`SERVER_EVENTS_CHANNEL_ID`, checked directly against the production host, not inferred
+from which features are on. This particular deploy is safe on that basis. Do not
+extend that conclusion to any other host or to a future deploy without checking again.
 
 ## 2. ⚠️ `ANNOUNCEMENTS_CHANNEL_ID` STAYS in `/opt/clan-wars/.env`
 
@@ -45,18 +61,28 @@ growing.
   already true for airdrops; it is now true for the other two as well.
 - **`#announcements` is human-only.** The bot posts nothing there anymore. Anything
   appearing in `#announcements` from here on was posted by a person, not the bot.
-- If `RAID_WINDOW_TICK` or `WEEKLY_VEHICLE_WIPE` is on and `SERVER_EVENTS_CHANNEL_ID` is
-  somehow unset, config load now refuses to start with a feature-specific error:
+- Two boot-refusal combinations exist now that did not before this deploy — config load
+  refuses to start with a feature-specific error in either case:
 
-      RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the feature posts
-      player-facing advance/open/close notices, and with no channel to post them to it
-      is misconfigured, not merely degraded.
+  - `WEEKLY_VEHICLE_WIPE=1` with `SERVER_EVENTS_CHANNEL_ID` unset:
 
-      WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID is unset — the Sunday
-      notice is the only warning a player gets before their vehicle is cleared.
+        WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID is unset — the Sunday
+        notice is the only warning a player gets before their vehicle is cleared.
 
-  Given step 1, this should not happen on this deploy — it is the failure mode to
-  recognize if it somehow does.
+  - `RAID_WINDOW_TICK=1` with `ANNOUNCEMENTS_CHANNEL_ID` set but `SERVER_EVENTS_CHANNEL_ID`
+    unset (having the old variable set does **not** satisfy the new gate):
+
+        RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the feature posts
+        player-facing advance/open/close notices, and with no channel to post them to it
+        is misconfigured, not merely degraded.
+
+  Step 1's check (`grep SERVER_EVENTS_CHANNEL_ID /opt/clan-wars/.env`, verified present
+  on this host on 2026-09-21) is what rules these out for *this* deploy — that
+  verification, not an inference from which features are on, is why they are not
+  expected to fire here. There is no new "boots but posts nothing" case — the fatal
+  gate replaces the old silent no-op (an unannounced wipe, or a raid window with no
+  advance notice), which is a real improvement even though the boot-time failure mode
+  above is new.
 
 ## 5. Verifying
 
