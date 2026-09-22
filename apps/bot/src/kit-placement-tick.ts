@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { boosterKits, boosterKitChallenges } from "@factions/db";
+import { awardGrants, boosterKits, boosterKitChallenges } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { advance, isExpired } from "@factions/verification";
-import { safeVerificationEmotes, type Vec3 } from "@factions/domain";
+import { awardState, isOpenAward, safeVerificationEmotes, type Vec3 } from "@factions/domain";
 import { and, eq, isNull } from "drizzle-orm";
 
 const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
@@ -61,6 +61,11 @@ export type KitPlacementResult = {
    * moved while the player watched nothing happen.
    */
   missingKit: number;
+  /**
+   * Award sequences completed for a grant that had ended (revoked, lapsed or
+   * expired) by the time the last emote landed. Closed, nothing written.
+   */
+  awardEnded: number;
 };
 
 type EmotePayload = { dayzId: string; emote: string; pos: Vec3 | null };
@@ -98,7 +103,12 @@ function openChallenges(db: Database): Promise<OpenChallenge[]> {
   return db.select().from(boosterKitChallenges).where(isNull(boosterKitChallenges.closedAt));
 }
 
-/** One pass: advance every open placement challenge against the unread emote events. */
+/**
+ * One pass: advance every open placement challenge against the unread emote
+ * events. A challenge places the booster kit when `award_grant_id` is null,
+ * and the named award grant otherwise — one consumer, because both read the
+ * same emotes and the open-challenge index lets an account hold only one.
+ */
 export async function kitPlacementTick(
   db: Database,
   opts: KitPlacementOpts = {},
@@ -106,7 +116,7 @@ export async function kitPlacementTick(
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   let cursor = await readCursor(db, KIT_PLACEMENT_CONSUMER);
-  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0, missingKit: 0 };
+  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0, missingKit: 0, awardEnded: 0 };
 
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -230,6 +240,24 @@ export async function kitPlacementTick(
             // challenge gets to name its own spot.
             if (closed.length === 0) return "stale" as const;
 
+            if (challenge.awardGrantId !== null) {
+              // ⚠️ Re-read the grant UNDER A LOCK, in this transaction. The
+              // challenge list was read once per batch, and an admin's revoke
+              // or the grant's own clock may have ended it since. Placing an
+              // ended award would put it back in the spawner file.
+              const [grant] = await tx.select().from(awardGrants)
+                .where(eq(awardGrants.id, challenge.awardGrantId)).for("update");
+              if (!grant || !isOpenAward(awardState(grant, now))) return "award-ended" as const;
+              // ⚠️ Position and placed_at ONLY. `live_from`/`expires_at`
+              // belong to the worker; a move never resets the clock (awards
+              // spec §4.4).
+              await tx.update(awardGrants).set({
+                posX: pos.x.toFixed(2), posY: pos.y.toFixed(2), posZ: pos.z.toFixed(2),
+                placedAt: now, updatedAt: now,
+              }).where(eq(awardGrants.id, grant.id));
+              return "placed" as const;
+            }
+
             const moved = await tx.update(boosterKits).set({
               // ⚠️ Straight across. `pos` is a Vec3 whose `y` is altitude, and
               // pos_y is the altitude column, exactly as `declarations.y` is.
@@ -254,6 +282,8 @@ export async function kitPlacementTick(
           } else if (outcome === "missing-kit") {
             out.missingKit++;
             out.advanced++;
+          } else if (outcome === "award-ended") {
+            out.awardEnded++;
           }
           continue;
         }

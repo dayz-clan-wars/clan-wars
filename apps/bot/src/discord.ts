@@ -1117,8 +1117,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     // every other: a failure here must not stop the ceremony DMs below.
     await step("kit placement", async () => {
       const kp = await kitPlacementTick(db, { now: new Date() });
-      if (kp.placed > 0 || kp.lockedOut > 0 || kp.expired > 0) {
-        console.log(`kit placement: ${kp.placed} placed, ${kp.lockedOut} out of emotes, ${kp.expired} expired`);
+      if (kp.placed > 0 || kp.lockedOut > 0 || kp.expired > 0 || kp.awardEnded > 0) {
+        console.log(`kit placement: ${kp.placed} placed, ${kp.lockedOut} out of emotes, ${kp.expired} expired, ${kp.awardEnded} award(s) ended before placing`);
       }
     });
 
