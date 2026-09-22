@@ -101,6 +101,21 @@ for (;;) {
           `expected size ${d.expected.size}, mtime ${new Date(d.expected.modifiedAtMs).toISOString()}; found ${found}. Re-uploading.`,
         );
       },
+      // ⚠️ Inert until an operator adds ./custom/awards.json to
+      // cfggameplay.json's objectSpawnersArr (docs/deploy/2026-09-22-awards.md).
+      awards: { clientFor, fileName: "awards.json" },
+      onAwardError: (serverId, err) => console.error(`award tick failed for server ${serverId}`, err),
+      onAwardUploaded: (serverId, r) =>
+        console.log(`award file for server ${serverId}: ${r.awards} award(s)${r.uploaded ? ", uploaded (takes effect at the next restart)" : ""}${r.stamped ? `, ${r.stamped} clock(s) started` : ""}`),
+      onAwardDropped: (serverId, ids) =>
+        console.warn(`award file for server ${serverId}: grant(s) ${ids.map((i) => `#${i}`).join(", ")} left out — a pick is no longer in awards.json, or the award key is unknown. Their clocks keep running.`),
+      onAwardDrift: (serverId, d) => {
+        const found = d.found ? `size ${d.found.size}, mtime ${new Date(d.found.modifiedAtMs).toISOString()}` : "no such file";
+        console.error(
+          `award file on server ${serverId} was changed outside this worker — ` +
+          `expected size ${d.expected.size}, mtime ${new Date(d.expected.modifiedAtMs).toISOString()}; found ${found}. Re-uploading.`,
+        );
+      },
       // The in-game name for the site's server strip. A failure keeps the
       // last name stored and is only logged.
       hostnames: { clientFor },

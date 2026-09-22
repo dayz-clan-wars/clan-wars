@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { KIT_SLOTS } from "@factions/domain";
 import { boosterCatalogue } from "@factions/domain/catalogue";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { WIKI_FILENAME, wikiFileFor, itemImagePath } from "../src/item-images";
 
 describe("itemImagePath", () => {
@@ -26,7 +27,12 @@ describe("wikiFileFor", () => {
 
 describe("the mapping table", () => {
   it("covers every catalogue entry that has an image", () => {
-    const entries = KIT_SLOTS.flatMap((s) => boosterCatalogue()[s]);
+    const entries = [
+    ...KIT_SLOTS.flatMap((s) => boosterCatalogue()[s]),
+    // ⚠️ Award items share public/items/ with the kit, so both catalogues are
+    // one statement of what that directory must hold.
+    ...Object.values(awardsCatalogue()).flatMap((a) => Object.values(a.slots).flatMap((s) => s.items)),
+  ];
     const missing = entries.filter((e) => e.image && !WIKI_FILENAME[e.className]).map((e) => e.className);
     expect(missing).toEqual([]);
   });

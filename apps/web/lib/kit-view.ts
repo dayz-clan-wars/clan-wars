@@ -36,19 +36,18 @@ export type KitView = {
   challenge: KitChallengeView | null;
 };
 
+/** A marked spot as the page shows it: grid ref, nearest town, map link. Never metres. */
+export function kitSpotView(spot: { x: number; z: number }): KitSpotView {
+  const near = nearestPlace(WORLD.map, spot.x, spot.z, WORLD.size);
+  return { grid: gridRef(spot.x, spot.z), near: near?.name ?? null, href: `/map?at=${gridRefKey(spot.x, spot.z)}` };
+}
+
 export function kitView(view: BoosterKitView): KitView {
-  const near = view.spot ? nearestPlace(WORLD.map, view.spot.x, view.spot.z, WORLD.size) : null;
   return {
     boosting: view.boosting,
     gamertag: view.linked?.gamertag ?? null,
     slots: view.slots,
-    spot: view.spot
-      ? {
-          grid: gridRef(view.spot.x, view.spot.z),
-          near: near?.name ?? null,
-          href: `/map?at=${gridRefKey(view.spot.x, view.spot.z)}`,
-        }
-      : null,
+    spot: view.spot ? kitSpotView(view.spot) : null,
     challenge: view.challenge
       ? {
           id: view.challenge.id,

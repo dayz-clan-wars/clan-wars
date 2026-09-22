@@ -76,6 +76,14 @@ const PENDING: Record<string, string> = {
   // touching a spot already marked; `/kit cancel` is the shape, alongside
   // `/kit place`, if the pair is ever wanted.
   cancelKitPlacement: "kit cancel",
+
+  // 2026-09-22 event awards. Site-only for the booster kit's reason: the picker
+  // is a catalogue of pictures, and the page watches the server confirm emotes
+  // live. The ADMIN side (grant, revoke, list) is `/award`, which is not a
+  // roster export and so is not in this table at all.
+  saveAwardPick: "award pick",
+  startAwardPlacement: "award place",
+  cancelAwardPlacement: "award cancel",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
@@ -107,7 +115,7 @@ describe("Discord parity with the site", () => {
       "baseFor", "clanFor", "directory", "clanByTag", "claimContext", "myInvites", "myRequests",
       "scoreboard", "alphas", "seasons", "warLog", "mapState", "playerBoards", "playerProfile",
       "achievementsFor", "clanBoard", "clanBoardPage", "boardPage", "playerFeed", "vaultFor",
-      "makeRoster", "notificationsFor", "boosterKit",
+      "makeRoster", "notificationsFor", "boosterKit", "award", "awards",
       "BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE",
       "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX",
       "baseDamageWindow", "restartsScheduled",

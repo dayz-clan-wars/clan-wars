@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, identityLinks, players, boosterKits, boosterKitChallenges, discordBoosters,
+  servers, factions, factionMembers, identityLinks, players, boosterKits, boosterKitChallenges, discordBoosters, awardGrants,
   type Database,
 } from "@factions/db";
 import { KIT_PLACEMENT_TTL_MS, LINK_EMOTES, KIT_SLOTS, type KitSlot } from "@factions/domain";
@@ -20,7 +20,7 @@ describe("the booster kit page's reads and writes", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table booster_kit_challenges, booster_kits, discord_boosters, declarations, poles, faction_members, factions, identity_links, players, events, raw_lines, adm_files, servers restart identity cascade`);
+      await tx.execute(sql`truncate table award_grants, booster_kit_challenges, booster_kits, discord_boosters, declarations, poles, faction_members, factions, identity_links, players, events, raw_lines, adm_files, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
@@ -41,6 +41,20 @@ describe("the booster kit page's reads and writes", () => {
   };
   const saveAll = (picks: Record<KitSlot, string> = ALL_PICKS) =>
     saveBoosterKitDb(db, { discordId: "1", picks, now });
+
+  it("⚠️ ignores an open AWARD sequence on the same account", async () => {
+    await link(); await boost();
+    const [g] = await db.insert(awardGrants).values({
+      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+      grantedAt: now, placeBy: new Date(now.getTime() + 86_400_000),
+    }).returning();
+    await db.insert(boosterKitChallenges).values({
+      discordId: "1", targetDayzId: UID, sequence: ["EmoteSalute"], issuedAt: now,
+      expiresAt: new Date(now.getTime() + 3_600_000), awardGrantId: g!.id,
+    });
+    expect((await boosterKitForDb(db, "1", now)).challenge).toBeNull();
+    expect(await cancelKitPlacementDb(db, { discordId: "1", now })).toBe(false);
+  });
 
   describe("saveBoosterKitSlotDb", () => {
     it("rejects a class name outside the catalogue for that slot", async () => {

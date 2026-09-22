@@ -137,4 +137,14 @@ describe("notice copy", () => {
     const c = noticeCopy("booster_kit_unchosen", {}, "dm");
     expect(c.cta).toEqual({ label: "Choose your kit", href: "/kit" });
   });
+
+  it("points an award notice at that grant's page", () => {
+    const c = noticeCopy("award_granted", { grantId: 12, label: "Plate Carrier", reason: "Won the thing" }, "dm");
+    expect(c.title).toContain("Plate Carrier");
+    expect(c.cta).toEqual({ label: "Configure your award", href: "/awards/12" });
+  });
+
+  it("falls back to the awards list when the payload has no grant id", () => {
+    expect(noticeCopy("award_granted", {}, "dm").cta).toEqual({ label: "Configure your award", href: "/awards" });
+  });
 });

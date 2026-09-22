@@ -234,7 +234,7 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
 
       {open && catalogue && (
         <PickSheet
-          slot={open}
+          label={SLOT_LABELS[open]}
           options={catalogue[open]}
           current={view.slots[open]}
           query={query}

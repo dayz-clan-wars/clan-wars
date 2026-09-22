@@ -8,6 +8,7 @@ import { disbandFactionTx } from "./roster-store";
 import { exposeLocksTx } from "./vault-store";
 import { gamertagOrId } from "./feed-actor";
 import { noticeClanTx } from "./notices";
+import { revokeAwardsForTx } from "./award-admin";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -19,16 +20,18 @@ const HOLDING: string[] = [...HOLDING_STATUSES];
 export type RemovalRoster = "none" | "member-left" | "leader-succeeded" | "leader-disbanded";
 
 export type RemovalResult = {
-  /** False when the id had no `identity_links` row — nothing was written. */
+  /** False when the id had no `identity_links` row — nothing roster-side was written. Award grants are still revoked. */
   linked: boolean;
   roster: RemovalRoster;
   /** The new leader's Discord id on `leader-succeeded`; null otherwise. */
   successorDiscordId: string | null;
   /** Whether the user's OWN solo declaration was released (never the clan's). */
   releasedSoloBase: boolean;
+  /** Open award grants revoked (awards spec §4.5). Counted even when `linked` is false. */
+  revokedAwards: number;
 };
 
-const NOTHING: RemovalResult = { linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false };
+const NOTHING: RemovalResult = { linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0 };
 
 /**
  * `guildMemberRemove` — the one roster write that starts at a Discord
@@ -60,7 +63,7 @@ const NOTHING: RemovalResult = { linked: false, roster: "none", successorDiscord
  * link row (`for update`, as `unlinkDb` does, so an `unlink` racing this
  * cannot leave a declaration with no link behind it) → `factions` →
  * declarations → `faction_members` → `faction_votes`/ballots →
- * `succession_claims` → `vault_locks` → `guest_passes` → `faction_events`
+ * `succession_claims` → `vault_locks` → `guest_passes` → `award_grants` → `faction_events`
  * → `clan_notices`.
  *
  * ⚠️ Nothing branches on an unlocked read. The clan is CHOSEN before the
@@ -76,7 +79,11 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
   return db.transaction(async (tx) => {
     const [link] = await tx.select({ id: identityLinks.id, dayzId: identityLinks.dayzId })
       .from(identityLinks).where(eq(identityLinks.discordId, a.discordId)).for("update");
-    if (!link) return NOTHING;
+    // ⚠️ Awards are revoked even for an UNLINKED member: a grant does not
+    // need a link (awards spec §4.1), so a winner who never linked still
+    // holds one. Nothing else is locked on this path, so taking award_grants
+    // here cannot invert the lock order.
+    if (!link) return { ...NOTHING, revokedAwards: await revokeAwardsForTx(tx, a.discordId, a.at) };
 
     // Which clan's row to lock. This read is UNLOCKED and decides nothing
     // but that: every fact about the membership — role and status above all
@@ -92,6 +99,7 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
       .orderBy(asc(factions.id)).limit(1);
 
     let roster: RemovalRoster = "none";
+    let revokedAwards = 0;
     let successorDiscordId: string | null = null;
 
     // ⚠️ FIRST write-order statement once a clan is involved: `factions`
@@ -168,6 +176,9 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           await exposeLocksTx(tx, { factionId: candidate!.factionId, leaverRole: "leader", at: a.at });
 
           await revokePassesTx(tx, a.discordId, a.at);
+          // award_grants sits after guest_passes and before faction_events and
+          // clan_notices in the lock order (awards spec §3.5).
+          revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
           await noticeClanTx(tx, {
             serverId: gone.serverId, factionId: candidate!.factionId, kind: "leader_removed", occurredAt: a.at,
             payload: { old: await gamertagOrId(tx, a.discordId), new: await gamertagOrId(tx, successor.discordId) },
@@ -182,6 +193,9 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
           // — the decision was made above.
           await disbandFactionTx(tx, candidate!.factionId, sql`true`);
           await revokePassesTx(tx, a.discordId, a.at);
+          // award_grants sits after guest_passes and before faction_events and
+          // clan_notices in the lock order (awards spec §3.5).
+          revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
           roster = "leader-disbanded";
         }
       } else if (gone) {
@@ -209,6 +223,9 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
         }
 
         await revokePassesTx(tx, a.discordId, a.at);
+        // award_grants sits after guest_passes and before faction_events and
+        // clan_notices in the lock order (awards spec §3.5).
+        revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
         await noticeClanTx(tx, {
           serverId: gone.serverId, factionId: candidate!.factionId, kind: "left", occurredAt: a.at,
           payload: { gamertag: await gamertagOrId(tx, a.discordId) },
@@ -218,11 +235,14 @@ export async function removeFromGuildDb(db: Database, a: { discordId: string; at
       }
     } else {
       await revokePassesTx(tx, a.discordId, a.at);
+      // award_grants sits after guest_passes and before faction_events and
+      // clan_notices in the lock order (awards spec §3.5).
+      revokedAwards = await revokeAwardsForTx(tx, a.discordId, a.at);
     }
 
     await tx.delete(identityLinks).where(eq(identityLinks.id, link.id));
 
-    return { linked: true, roster, successorDiscordId, releasedSoloBase };
+    return { linked: true, roster, successorDiscordId, releasedSoloBase, revokedAwards };
   });
 }
 

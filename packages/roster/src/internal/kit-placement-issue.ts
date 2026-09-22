@@ -27,7 +27,7 @@ export type IssuedPlacementChallenge = { id: number; sequence: string[]; expires
  */
 export async function issuePlacementChallenge(
   db: Database,
-  deps: { discordId: string; now: Date; ttlMs: number; rng: () => number },
+  deps: { discordId: string; now: Date; ttlMs: number; rng: () => number; awardGrantId?: number | null },
 ): Promise<IssuedPlacementChallenge | null> {
   const [link] = await db.select({ dayzId: identityLinks.dayzId })
     .from(identityLinks).where(eq(identityLinks.discordId, deps.discordId));
@@ -49,6 +49,11 @@ export async function issuePlacementChallenge(
     // constraint violation instead of a fresh sequence. Doing it in one
     // transaction is what stops a crash between the two leaving the account
     // with no challenge at all.
+    //
+    // ⚠️ It closes EVERY open row for the account, kit or award: the kit and
+    // every award read the same emote stream, and the index permits one open
+    // row per account precisely so they never both count the same emotes
+    // (awards spec §2.6).
     await tx.update(boosterKitChallenges).set({ closedAt: deps.now })
       .where(and(
         eq(boosterKitChallenges.discordId, deps.discordId),
@@ -60,6 +65,7 @@ export async function issuePlacementChallenge(
       sequence,
       issuedAt: deps.now,
       expiresAt,
+      awardGrantId: deps.awardGrantId ?? null,
     }).returning({ id: boosterKitChallenges.id });
     id = row!.id;
   });

@@ -56,7 +56,14 @@ export async function boosterKitForDb(db: Database, discordId: string, now: Date
     db.select().from(discordBoosters).where(eq(discordBoosters.discordId, discordId)),
     db.select().from(boosterKits).where(eq(boosterKits.discordId, discordId)),
     db.select().from(boosterKitChallenges)
-      .where(and(eq(boosterKitChallenges.discordId, discordId), isNull(boosterKitChallenges.closedAt)))
+      // ⚠️ Kit rows only. An open AWARD sequence on the same account is the
+      // award page's to show; rendering it here would tell a booster to
+      // perform emotes that move their award, not their kit.
+      .where(and(
+        eq(boosterKitChallenges.discordId, discordId),
+        isNull(boosterKitChallenges.closedAt),
+        isNull(boosterKitChallenges.awardGrantId),
+      ))
       .orderBy(desc(boosterKitChallenges.id)).limit(1),
   ]);
 
@@ -217,6 +224,10 @@ export async function startKitPlacementDb(db: Database, a: {
  * that passed one would be passing a number off the wire into a WHERE that
  * decides whose challenge dies.
  *
+ * ⚠️ Kit rows only. The award page has its own Cancel; this one closing an
+ * award's sequence would kill a placement the player is standing in a field
+ * performing.
+ *
  * ⚠️ Touches `booster_kit_challenges` and nothing else — no position, no
  * slots. Cancelling a sequence must not disturb a spot already marked, which
  * is the same rule `startKitPlacementDb` keeps when it draws a new one.
@@ -224,7 +235,11 @@ export async function startKitPlacementDb(db: Database, a: {
 export async function cancelKitPlacementDb(db: Database, a: { discordId: string; now: Date }): Promise<boolean> {
   const closed = await db.update(boosterKitChallenges)
     .set({ closedAt: a.now })
-    .where(and(eq(boosterKitChallenges.discordId, a.discordId), isNull(boosterKitChallenges.closedAt)))
+    .where(and(
+      eq(boosterKitChallenges.discordId, a.discordId),
+      isNull(boosterKitChallenges.closedAt),
+      isNull(boosterKitChallenges.awardGrantId),
+    ))
     .returning({ id: boosterKitChallenges.id });
   return closed.length > 0;
 }

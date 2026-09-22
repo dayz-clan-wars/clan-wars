@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, admFiles, identityLinks, boosterKits, boosterKitChallenges,
+  servers, admFiles, identityLinks, boosterKits, boosterKitChallenges, awardGrants,
   type Database,
 } from "@factions/db";
 import { appendEvent, readCursor } from "@factions/event-log";
-import { sql, eq, isNull } from "drizzle-orm";
+import { sql, eq, isNull, and } from "drizzle-orm";
 import { kitPlacementTick, KIT_PLACEMENT_CONSUMER, MAX_POOL_EMOTES_PER_ATTEMPT } from "../src/kit-placement-tick.js";
 import { issuePlacementChallenge } from "@factions/roster/internal";
 import { CONSUMER } from "../src/tick.js";
@@ -28,7 +28,7 @@ describe("kitPlacementTick", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table booster_kit_challenges, booster_kits, identity_links, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade`);
+      await tx.execute(sql`truncate table award_grants, booster_kit_challenges, booster_kits, identity_links, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
@@ -42,7 +42,7 @@ describe("kitPlacementTick", () => {
 
   const seedChallenge = (opts: {
     discordId?: string; targetDayzId?: string; sequence?: string[];
-    issuedAt?: Date; expiresAt?: Date; progressIndex?: number; seenCount?: number;
+    issuedAt?: Date; expiresAt?: Date; progressIndex?: number; seenCount?: number; awardGrantId?: number;
   } = {}) => db.insert(boosterKitChallenges).values({
     discordId: opts.discordId ?? "1",
     targetDayzId: opts.targetDayzId ?? TARGET,
@@ -51,6 +51,7 @@ describe("kitPlacementTick", () => {
     expiresAt: opts.expiresAt ?? expiresAt,
     progressIndex: opts.progressIndex ?? 0,
     seenCount: opts.seenCount ?? 0,
+    awardGrantId: opts.awardGrantId ?? null,
   }).returning();
 
   // ⚠️ `pos` is the Vec3 the parser produces: y is ALWAYS altitude. The
@@ -287,6 +288,95 @@ describe("kitPlacementTick", () => {
     // other's events, and the symptom is silent: placement stops working.
     expect(await readCursor(db, KIT_PLACEMENT_CONSUMER)).toBeGreaterThan(0);
     expect(await readCursor(db, CONSUMER)).toBe(0);
+  });
+  describe("an award grant", () => {
+    const seedGrant = (over: Record<string, unknown> = {}) => db.insert(awardGrants).values({
+      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+      grantedAt: issuedAt, placeBy: new Date("2026-09-26T12:00:00Z"),
+      picks: { vest: "PlateCarrierVest_Black", pouches: "PlateCarrierPouches_Black", holster: "PlateCarrierHolster_Black" },
+      ...over,
+    }).returning();
+
+    it("writes the final emote's position into the grant, not the kit", async () => {
+      await seedKit();
+      const [g] = await seedGrant();
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap", pos: { x: 300, y: 6, z: 400 } });
+      expect(await tick()).toMatchObject({ placed: 1, awardEnded: 0 });
+      const [after] = await db.select().from(awardGrants);
+      expect(after).toMatchObject({ posX: "300.00", posY: "6.00", posZ: "400.00", placedAt: now });
+      const [kit] = await db.select().from(boosterKits);
+      expect(kit!.posX).toBeNull();
+    });
+
+    it("⚠️ closes the challenge and writes nothing when the grant was revoked meanwhile", async () => {
+      const [g] = await seedGrant({ revokedAt: issuedAt });
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap" });
+      expect(await tick()).toMatchObject({ placed: 0, awardEnded: 1 });
+      expect((await db.select().from(awardGrants))[0]!.posX).toBeNull();
+      expect((await db.select().from(boosterKitChallenges))[0]!.closedAt).toEqual(now);
+    });
+
+    it("⚠️ refuses a grant that expired before the last emote", async () => {
+      const [g] = await seedGrant({ placedAt: issuedAt, liveFrom: issuedAt, expiresAt: new Date("2026-09-19T12:04:00Z") });
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute", occurredAt: new Date("2026-09-19T12:04:30Z") });
+      await seedEmote({ emote: "EmoteClap", occurredAt: new Date("2026-09-19T12:04:30Z") });
+      expect(await tick()).toMatchObject({ placed: 0, awardEnded: 1 });
+    });
+
+    it("⚠️ judges the deadline by when the emote happened, not when the tick ran", async () => {
+      // Emote at 12:01, deadline 12:02, tick at 12:05: the winner made it.
+      const [g] = await seedGrant({ placeBy: new Date("2026-09-19T12:02:00Z") });
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap" });
+      expect(await tick()).toMatchObject({ placed: 1, awardEnded: 0 });
+    });
+
+    it("⚠️ takes the grant before the challenge — revoke's order — so the two cannot deadlock", async () => {
+      const [g] = await seedGrant();
+      const [c] = await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap" });
+      const other = createClient(URL);
+      let release!: () => void;
+      const held = new Promise<void>((r) => { release = r; });
+      let locked!: () => void;
+      const isLocked = new Promise<void>((r) => { locked = r; });
+      // revokeAwardDb's shape: the grant FOR UPDATE, then the challenge.
+      const revoke = other.transaction(async (tx) => {
+        await tx.select().from(awardGrants).where(eq(awardGrants.id, g!.id)).for("update");
+        locked();
+        await held;
+        await tx.update(awardGrants).set({ revokedAt: now }).where(eq(awardGrants.id, g!.id));
+        await tx.update(boosterKitChallenges).set({ closedAt: now })
+          .where(and(eq(boosterKitChallenges.id, c!.id), isNull(boosterKitChallenges.closedAt)));
+      });
+      await isLocked;
+      const ticking = tick();
+      await new Promise((r) => setTimeout(r, 1000));
+      release();
+      await revoke;
+      // The revoke closed the challenge first, so the tick finds it stale.
+      expect(await ticking).toMatchObject({ placed: 0 });
+      expect((await db.select().from(awardGrants))[0]!.posX).toBeNull();
+    });
+
+    it("moving a live award never touches its clock", async () => {
+      const liveFrom = new Date("2026-09-19T10:00:00Z");
+      const expiresAt = new Date("2026-09-26T10:00:00Z");
+      const [g] = await seedGrant({ placedAt: issuedAt, liveFrom, expiresAt, posX: "1.00", posY: "1.00", posZ: "1.00" });
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap", pos: { x: 300, y: 6, z: 400 } });
+      await tick();
+      const [after] = await db.select().from(awardGrants);
+      expect(after).toMatchObject({ posX: "300.00", liveFrom, expiresAt });
+    });
   });
 });
 

@@ -126,7 +126,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
 
   it("the leader goes: the longest-tenured officer takes the seat, with no cooldown for anyone", async () => {
     expect(await remove("L")).toEqual({
-      linked: true, roster: "leader-succeeded", successorDiscordId: D.O2, releasedSoloBase: false,
+      linked: true, roster: "leader-succeeded", successorDiscordId: D.O2, releasedSoloBase: false, revokedAwards: 0,
     });
 
     expect(await memberRow("L")).toBeNull();
@@ -168,7 +168,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     await db.delete(factionMembers).where(and(eq(factionMembers.factionId, factionId), sql`${factionMembers.dayzId} <> ${UID.L}`));
 
     expect(await remove("L")).toEqual({
-      linked: true, roster: "leader-disbanded", successorDiscordId: null, releasedSoloBase: false,
+      linked: true, roster: "leader-disbanded", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
 
     expect((await factionRow()).status).toBe("disbanded");
@@ -190,7 +190,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     const [v] = await db.select().from(factionVotes);
 
     expect(await remove("O1")).toEqual({
-      linked: true, roster: "member-left", successorDiscordId: null, releasedSoloBase: false,
+      linked: true, roster: "member-left", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
 
     expect(await memberRow("O1")).toBeNull();
@@ -217,7 +217,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     const [v] = await db.select().from(factionVotes);
 
     expect(await remove("P")).toEqual({
-      linked: true, roster: "member-left", successorDiscordId: null, releasedSoloBase: false,
+      linked: true, roster: "member-left", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
 
     expect(await memberRow("P")).toBeNull();
@@ -262,7 +262,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
   it("a solo declarant loses the base and the link, and was never on a roster", async () => {
     await seedSolo("S");
     expect(await remove("S")).toEqual({
-      linked: true, roster: "none", successorDiscordId: null, releasedSoloBase: true,
+      linked: true, roster: "none", successorDiscordId: null, releasedSoloBase: true, revokedAwards: 0,
     });
     expect(await db.select().from(declarations).where(eq(declarations.ownerDayzId, UID.S))).toEqual([]);
     const [p] = await db.select({ graceUntil: poles.graceUntil }).from(poles).where(eq(poles.poleKey, SOLO_POLE));
@@ -273,7 +273,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
   it("an unlinked id writes nothing at all", async () => {
     const before = await db.select().from(identityLinks);
     expect(await removeFromGuildDb(db, { discordId: "d-nobody", at: now })).toEqual({
-      linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false,
+      linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
     expect(await db.select().from(identityLinks)).toEqual(before);
     expect(await db.select().from(clanNotices)).toEqual([]);
@@ -282,7 +282,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
 
   it("a linked user in no clan loses only the link", async () => {
     expect(await remove("U")).toEqual({
-      linked: true, roster: "none", successorDiscordId: null, releasedSoloBase: false,
+      linked: true, roster: "none", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
     expect(await linkRow("U")).toBeNull();
     expect(await db.select().from(clanNotices)).toEqual([]);
@@ -399,7 +399,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     expect(await remove("O1")).toMatchObject({ linked: true, roster: "member-left" });
     const notices = await db.select().from(clanNotices);
     expect(await remove("O1")).toEqual({
-      linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false,
+      linked: false, roster: "none", successorDiscordId: null, releasedSoloBase: false, revokedAwards: 0,
     });
     expect(await db.select().from(clanNotices)).toEqual(notices);
   });

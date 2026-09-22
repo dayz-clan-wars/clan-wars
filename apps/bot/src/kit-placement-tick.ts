@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { boosterKits, boosterKitChallenges } from "@factions/db";
+import { awardGrants, boosterKits, boosterKitChallenges } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { advance, isExpired } from "@factions/verification";
-import { safeVerificationEmotes, type Vec3 } from "@factions/domain";
+import { awardState, isOpenAward, safeVerificationEmotes, type Vec3 } from "@factions/domain";
 import { and, eq, isNull } from "drizzle-orm";
 
 const SAFE_TOKENS = new Set(safeVerificationEmotes().map((e) => e.token));
@@ -61,6 +61,11 @@ export type KitPlacementResult = {
    * moved while the player watched nothing happen.
    */
   missingKit: number;
+  /**
+   * Award sequences completed for a grant that had ended (revoked, lapsed or
+   * expired) by the time the last emote landed. Closed, nothing written.
+   */
+  awardEnded: number;
 };
 
 type EmotePayload = { dayzId: string; emote: string; pos: Vec3 | null };
@@ -98,7 +103,12 @@ function openChallenges(db: Database): Promise<OpenChallenge[]> {
   return db.select().from(boosterKitChallenges).where(isNull(boosterKitChallenges.closedAt));
 }
 
-/** One pass: advance every open placement challenge against the unread emote events. */
+/**
+ * One pass: advance every open placement challenge against the unread emote
+ * events. A challenge places the booster kit when `award_grant_id` is null,
+ * and the named award grant otherwise — one consumer, because both read the
+ * same emotes and the open-challenge index lets an account hold only one.
+ */
 export async function kitPlacementTick(
   db: Database,
   opts: KitPlacementOpts = {},
@@ -106,7 +116,7 @@ export async function kitPlacementTick(
   const batchSize = opts.batchSize ?? 500;
   const now = opts.now ?? new Date();
   let cursor = await readCursor(db, KIT_PLACEMENT_CONSUMER);
-  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0, missingKit: 0 };
+  const out: KitPlacementResult = { scanned: 0, advanced: 0, placed: 0, lockedOut: 0, expired: 0, missingKit: 0, awardEnded: 0 };
 
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -216,6 +226,17 @@ export async function kitPlacementTick(
           // reporting a placement. Ordering it this way is what actually makes
           // a concurrent re-issue a no-op.
           const outcome = await db.transaction(async (tx) => {
+            // ⚠️ The GRANT first, before the challenge close below, for an
+            // award. `revokeAwardDb` and `removeFromGuildDb` lock the grant
+            // and then close its challenge; taking them here in the other
+            // order deadlocked a completion racing a revoke (40P01), and a
+            // lost removal has no catch-up sweep. One order everywhere:
+            // award_grants → booster_kit_challenges.
+            const [grant] = challenge.awardGrantId === null
+              ? []
+              : await tx.select().from(awardGrants)
+                .where(eq(awardGrants.id, challenge.awardGrantId)).for("update");
+
             const closed = await tx.update(boosterKitChallenges).set({
               progressIndex: index,
               seenCount: challenge.seenCount + 1,
@@ -229,6 +250,27 @@ export async function kitPlacementTick(
             // now. Touch nothing: the kit stays where it was, and the new
             // challenge gets to name its own spot.
             if (closed.length === 0) return "stale" as const;
+
+            if (challenge.awardGrantId !== null) {
+              // ⚠️ The grant as read UNDER THE LOCK above. The challenge list
+              // was read once per batch, and an admin's revoke or the grant's
+              // own clock may have ended it since; placing an ended award
+              // would put it back in the spawner file.
+              //
+              // ⚠️ Judged at the EMOTE's time, not the tick's: a winner who
+              // finished the sequence before `place_by` made the deadline,
+              // however late the tick got round to it. A revoke wins whenever
+              // it landed — `awardState` checks it before any time.
+              if (!grant || !isOpenAward(awardState(grant, ev.occurredAt))) return "award-ended" as const;
+              // ⚠️ Position and placed_at ONLY. `live_from`/`expires_at`
+              // belong to the worker; a move never resets the clock (awards
+              // spec §4.4).
+              await tx.update(awardGrants).set({
+                posX: pos.x.toFixed(2), posY: pos.y.toFixed(2), posZ: pos.z.toFixed(2),
+                placedAt: now, updatedAt: now,
+              }).where(eq(awardGrants.id, grant.id));
+              return "placed" as const;
+            }
 
             const moved = await tx.update(boosterKits).set({
               // ⚠️ Straight across. `pos` is a Vec3 whose `y` is altitude, and
@@ -254,6 +296,8 @@ export async function kitPlacementTick(
           } else if (outcome === "missing-kit") {
             out.missingKit++;
             out.advanced++;
+          } else if (outcome === "award-ended") {
+            out.awardEnded++;
           }
           continue;
         }

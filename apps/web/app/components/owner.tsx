@@ -1,4 +1,4 @@
-import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
+import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, awards, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
 import type { Session } from "@/lib/auth/session";
 import { nextStepFor, type NextStep } from "@/lib/next-step";
 import { when, ago } from "@/lib/format";
@@ -29,14 +29,17 @@ export type Owner = {
   showInvites: boolean;
   /** Whether the viewer is currently a Discord booster — the /kit entry point is gated on this, not on ownership alone. */
   boosting: boolean;
+  /** Open award grants — the /awards entry point shows only when there is one. */
+  openAwards: number;
 };
 
 export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owner> {
   viewer ??= await viewerFor(session.sub);
-  const [invites, requests, claim, linkState, kit] = await Promise.all([
+  const [invites, requests, claim, linkState, kit, won] = await Promise.all([
     myInvites(session.sub), myRequests(session.sub), claimContext(session.sub),
     viewer.link ? null : linkStatus(session.sub),
     boosterKit(session.sub),
+    awards(session.sub),
   ]);
   const showInvites = invites.length > 0 && viewer.clan === null && viewer.pending === null;
   const next = nextStepFor({
@@ -44,7 +47,10 @@ export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owne
     pending: viewer.pending ? { name: viewer.pending.name } : null, ceremonyId: claim?.ceremony.id ?? null,
     invites: showInvites ? invites.map((i) => ({ id: i.id, clanName: i.clanName })) : [], requests: requests.map((r) => ({ clanName: r.clanName })),
   });
-  return { session, viewer, invites, requests, claim, next, showInvites, boosting: kit.boosting };
+  return {
+    session, viewer, invites, requests, claim, next, showInvites, boosting: kit.boosting,
+    openAwards: won.filter((a) => a.state === "unplaced" || a.state === "waiting" || a.state === "live").length,
+  };
 }
 
 /** The notices an action route left in the query, then the next-step strip. Renders nothing when there is nothing to say. */
@@ -150,6 +156,26 @@ export function BoosterKitPanel({ owner }: { owner: Owner }) {
           Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
         </p>
         <a href="/kit" className={btnPrimary}>Open your kit</a>
+      </PanelBody>
+    </Panel>
+  );
+}
+
+/**
+ * The way in to /awards for an owner holding an open award.
+ *
+ * ⚠️ Its own export for BoosterKitPanel's reason: the page places it directly
+ * under the kit panel, where a winner who followed the DM is already looking.
+ */
+export function AwardsPanel({ owner }: { owner: Owner }) {
+  if (owner.openAwards === 0) return null;
+  return (
+    <Panel title="Awards">
+      <PanelBody>
+        <p className="text-sm leading-relaxed text-ink-2">
+          You have {owner.openAwards === 1 ? "an award" : `${owner.openAwards} awards`} to set up or keep an eye on.
+        </p>
+        <a href="/awards" className={btnPrimary}>Open your awards</a>
       </PanelBody>
     </Panel>
   );

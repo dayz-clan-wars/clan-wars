@@ -4,6 +4,7 @@ import { join } from "node:path";
 import sharp from "sharp";
 import { KIT_SLOTS } from "@factions/domain";
 import { boosterCatalogue } from "@factions/domain/catalogue";
+import { awardsCatalogue } from "@factions/domain/awards";
 
 // ⚠️ Must match EDGE in apps/web/scripts/fetch-item-images.ts — two statements
 // of one fact, held together only by this test.
@@ -22,7 +23,12 @@ const ITEMS_DIR = join(import.meta.dirname, "..", "public", "items");
  */
 describe("item images match the catalogue", () => {
   const files = readdirSync(ITEMS_DIR).filter((f) => f.endsWith(".webp"));
-  const entries = KIT_SLOTS.flatMap((s) => boosterCatalogue()[s]);
+  const entries = [
+    ...KIT_SLOTS.flatMap((s) => boosterCatalogue()[s]),
+    // ⚠️ Award items share public/items/ with the kit, so both catalogues are
+    // one statement of what that directory must hold.
+    ...Object.values(awardsCatalogue()).flatMap((a) => Object.values(a.slots).flatMap((s) => s.items)),
+  ];
 
   it("every catalogue image resolves to a file", () => {
     const missing = entries
