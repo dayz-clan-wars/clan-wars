@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.33.0] - 2026-09-22
+
 ### Added
 
 - Event awards. An admin hands an event winner an award with `/award grant`. The winner
