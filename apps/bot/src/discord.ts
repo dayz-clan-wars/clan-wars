@@ -476,7 +476,7 @@ export function createLeaderboardChannel(client: Client, channelId: string, site
  * an option here — a sibling factory — rather than a fork, because the fetch
  * + isSendable + throw-on-unreachable shape below is exactly what every
  * caller needs; only the mention policy differs. Every existing caller
- * (warLogPoster, announcePoster, opsChannelPoster) omits it and keeps
+ * (warLogPoster, serverEventsPoster, opsChannelPoster) omits it and keeps
  * today's behaviour — Discord's default, "parse everything in the text" —
  * unchanged, because none of them post player-controlled text: war-log and
  * announcement copy is bot-authored, and the ops channel is staff-only
@@ -600,7 +600,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   // An embed poster, not a plain-content one: releaseTick takes a FeedPoster.
   const releasePoster = cfg.releaseChannelId ? createFeedPoster(client, cfg.releaseChannelId) : null;
   const releaseStore = pgReleaseStore(db);
-  const announcePoster = cfg.announcementsChannelId ? createChannelPoster(client, cfg.announcementsChannelId) : null;
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
   const serverEventsPoster = cfg.serverEventsChannelId ? createChannelPoster(client, cfg.serverEventsChannelId) : null;
   const ctxNow = (): Ctx => ({
@@ -1574,10 +1573,10 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     // ⚠️ After the restart tick, same reason the announce tick is: a slow Discord
     // call must not delay a due restart. Its own try/catch, like every step.
-    // ⚠️ Gated on the flag alone, not `&& announcePoster` — config load refuses
-    // RAID_WINDOW_TICK without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster is
+    // ⚠️ Gated on the flag alone, not `&& serverEventsPoster` — config load refuses
+    // RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is
     // guaranteed non-null here. Gating on it too would make a refused flip's
-    // alert disappear along with the tick whenever announce is unset — exactly
+    // alert disappear along with the tick whenever the channel is unset — exactly
     // the silent-alert-loss this feature must not have.
     if (cfg.raidWindow.enabled) {
       try {
@@ -1586,8 +1585,8 @@ export async function start(cfg: BotConfig): Promise<void> {
         // the rest of this codebase degrades, not a regression.
         const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
         // ⚠️ Non-null by construction: config load throws if RAID_WINDOW_TICK is on
-        // without ANNOUNCEMENTS_CHANNEL_ID, so announcePoster was built above.
-        const r = await raidWindowTick(db, { announce: announcePoster!, ops: opsPoster }, { now: new Date() });
+        // without SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster was built above.
+        const r = await raidWindowTick(db, { announce: serverEventsPoster!, ops: opsPoster }, { now: new Date() });
         if (r.posted > 0) console.log(`raid window: ${r.posted} posted`);
       } catch (err) {
         console.error("raid window tick failed", err);
@@ -1611,9 +1610,11 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     // ⚠️ After the restart tick, for the same reason the restart tick runs last: a slow
     // Discord call must not delay a due restart. Its own try/catch, like every step.
-    if (cfg.truckWipe.rotation && announcePoster) {
+    // ⚠️ Gated on the flag alone — config load refuses WEEKLY_VEHICLE_WIPE without
+    // SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is non-null here.
+    if (cfg.truckWipe.rotation) {
       try {
-        const a = await announceTick(db, announcePoster, {
+        const a = await announceTick(db, serverEventsPoster!, {
           now: new Date(), offHour: cfg.truckWipe.offHour,
           onError: (err, wipeAt) => {
             const key = wipeAt.getTime();
@@ -1655,7 +1656,6 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
     else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}`);
-    if (!cfg.announcementsChannelId) console.warn("ANNOUNCEMENTS_CHANNEL_ID is unset: wipes happen without notice.");
 
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));

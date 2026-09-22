@@ -33,9 +33,9 @@ date.
 
        grep -oE '<event name="Vehicle[^"]*"' events.xml
 
-2. Confirm the bot can post in the announcements channel: it needs **View Channel** and
-   **Send Messages** there. A missing permission makes every Sunday tick fail and retry
-   until the cutoff, then record `missed`.
+2. Confirm the bot can post in `#server-events` (`SERVER_EVENTS_CHANNEL_ID`): it needs
+   **View Channel** and **Send Messages** there. A missing permission makes every Sunday
+   tick fail and retry until the cutoff, then record `missed`.
 
 ## Steps
 
@@ -50,12 +50,14 @@ date.
 
        cd /opt/clan-wars && git pull --ff-only && sudo systemctl restart clan-wars-bot
 
-   The journal shows `WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.` and
-   `ANNOUNCEMENTS_CHANNEL_ID is unset: wipes happen without notice.`
+   The journal shows `WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.`
 
-3. **Set the channel first, the wipe second.** In `.env`:
+3. **Set the channel first, the wipe second.** ⚠️ Since
+   `docs/deploy/2026-09-21-server-events-channel.md`, `SERVER_EVENTS_CHANNEL_ID` is a
+   hard requirement — config load refuses to start `WEEKLY_VEHICLE_WIPE` without it. In
+   `.env`:
 
-       ANNOUNCEMENTS_CHANNEL_ID=<channel id>
+       SERVER_EVENTS_CHANNEL_ID=<channel id>
        WEEKLY_VEHICLE_WIPE=1
 
    Then `sudo systemctl restart clan-wars-bot`. The journal must show BOTH:
@@ -65,7 +67,7 @@ date.
 
 ## Verifying
 
-- **The Sunday message** lands in the channel at 08:00 UTC naming the right vehicle for
+- **The Sunday message** lands in `#server-events` at 08:00 UTC naming the right vehicle for
   the table above. It posts exactly once; a bot restart does not repeat it.
 - **The Monday file diff**: download `<mission>/db/events.xml` before 08:00 and after, and
   confirm exactly TWO `<active>` digits changed — `VehicleTruck01` and that week's
@@ -82,5 +84,7 @@ rotation events immediately, leaving them as they are.
 ⚠️ Rolling back between 08:00 and 10:00 on a Monday leaves that week's vehicle at
 `<active>0</active>` and nothing will restore it — set it back to `1` by hand.
 
-Removing only `ANNOUNCEMENTS_CHANNEL_ID` stops the notices and leaves the wipe running,
-which is a legitimate state; startup says so every restart.
+⚠️ `SERVER_EVENTS_CHANNEL_ID` cannot be removed on its own while `WEEKLY_VEHICLE_WIPE`
+stays on — config load now refuses to start that way: the Sunday notice is the only
+warning a player gets before their vehicle is cleared, so this is a hard requirement,
+not a degrade. Turn `WEEKLY_VEHICLE_WIPE` off too if the channel is going away.

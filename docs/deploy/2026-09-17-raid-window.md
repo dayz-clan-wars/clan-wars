@@ -22,7 +22,7 @@ with a half-working feature:
 | Already set? | If not | The refusal |
 |---|---|---|
 | `RESTART_SCHEDULE` | must be on | `RAID_WINDOW_TICK is on but RESTART_SCHEDULE is off` — the flip only takes effect at a restart, so nothing would ever apply it |
-| `ANNOUNCEMENTS_CHANNEL_ID` | must be a channel id | `RAID_WINDOW_TICK is on but ANNOUNCEMENTS_CHANNEL_ID is unset` — the advance/open/close notices are player-facing and have nowhere to go |
+| `SERVER_EVENTS_CHANNEL_ID` | must be a channel id | `RAID_WINDOW_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset` — the advance/open/close notices are player-facing and have nowhere to go |
 
 `OPS_CHANNEL_ID` is **optional** and is the one that degrades rather than refusing: with
 it unset, a refused or failed flip logs at error level instead of posting. Set it if you
@@ -88,8 +88,10 @@ The first Friday 00:00 UTC or Monday 00:00 UTC after the deploy. Check, in order
    Wanted: one row for that boundary, `outcome = applied`, `restart_confirmed_at` set.
    `wanted_disabled` is **false on a Friday** (raiding on) and **true on a Monday**.
 
-2. **The Discord message.** `#announcements` carries the advance notice (a day ahead) and
-   then the open or close. One each, never repeated.
+2. **The Discord message.** `#server-events` carries the advance notice (a day ahead) and
+   then the open or close. One each, never repeated. (Since
+   `docs/deploy/2026-09-21-server-events-channel.md`, this posts to `#server-events`
+   alongside airdrops and the weekly vehicle wipe, not `#announcements`.)
 
 3. **The site.** The top-bar strip reads `LIVE` (with a countdown to the close) or
    `CLOSED` (counting down to the open).
