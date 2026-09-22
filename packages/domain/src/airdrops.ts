@@ -39,26 +39,32 @@ export function chooseAirdrop(recentLocations: string[], rng: () => number): Air
 }
 
 /**
- * Linear-interpolated 90th percentile.
+ * The highest of the trailing samples — the bar a drop has to match (spec §3.1,
+ * amended 2026-09-21; this replaced a linear-interpolated p90).
  *
- * ⚠️ Computed here rather than with Postgres `percentile_cont` so the threshold the
- * row records and the threshold the rule applies are one statement, and so this can
- * be tested without a database. No history returns 0, which leaves
- * `max(AIRDROP_MIN_POP, p90)` at the floor — the correct behaviour on day one.
+ * ⚠️ Computed here rather than with Postgres `max` so the threshold the row records
+ * and the threshold the rule applies are one statement, and so this can be tested
+ * without a database.
+ *
+ * ⚠️ `Math.max()` of an empty list is -Infinity, which is why this is not written as
+ * the one-liner. No history must return 0, so that `max(AIRDROP_MIN_POP, highWater)`
+ * sits at the floor — the correct bar on day one and through the first five days.
+ * -Infinity would leave the floor governing too, but it is also written into
+ * `airdrop_events.threshold`, and a numeric column does not take it.
  */
-export function p90(values: number[]): number {
+export function highWater(values: number[]): number {
   if (values.length === 0) return 0;
-  const s = [...values].sort((a, b) => a - b);
-  const idx = 0.9 * (s.length - 1);
-  const lo = Math.floor(idx);
-  const hi = Math.ceil(idx);
-  return s[lo]! + (s[hi]! - s[lo]!) * (idx - lo);
+  return Math.max(...values);
 }
 
 export type FireInput = {
   /** Players online at the decision instant. */
   pop: number;
-  /** p90 of the trailing 14 days of decision-instant pops. */
+  /**
+   * The highest decision-instant pop over the trailing `AIRDROP_HISTORY_MS`,
+   * EXCLUDING the current instant — `airdrop-tick.ts` builds the sample list with a
+   * strict `<`, so `pop` can never be compared against a window containing itself.
+   */
   threshold: number;
   minPop: number;
   /** Drops decided this ISO week, `failed` rows excluded — the budget is refunded. */

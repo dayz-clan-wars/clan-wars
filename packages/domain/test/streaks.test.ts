@@ -12,8 +12,18 @@ describe("streakOf", () => {
     expect(s.reachedAt(3)).toEqual(t(6));
     expect(s.reachedAt(4)).toBeNull();
   });
-  it("friendly fire neither extends the killer's run nor spares the victim's", () => {
+  // ⚠️ Inverted on 2026-09-21. Friendly fire is skipped on BOTH sides: it does not
+  // extend the killer's run AND it does not reset the victim's. A's run here is
+  // x(1), y(3), x(5) = 3 unbroken — the friendly kill at 2 adds nothing and the
+  // friendly death at 4 takes nothing. Before this it read 2.
+  it("friendly fire neither extends the killer's run nor breaks the victim's", () => {
     const rows = [K("A", "x", 1), K("A", "m", 2, true), K("A", "y", 3), K("m", "A", 4, true), K("A", "x", 5)];
+    expect(streakOf(rows, "A").best).toBe(3);
+  });
+  // ⚠️ The counterweight: a REAL death still resets, so the test above cannot pass
+  // against a streakOf that has simply stopped resetting.
+  it("a non-friendly death still breaks the run", () => {
+    const rows = [K("A", "x", 1), K("A", "y", 2), K("z", "A", 3), K("A", "x", 4)];
     expect(streakOf(rows, "A").best).toBe(2);
   });
   it("a non-player death (no killer) does not reset", () => {

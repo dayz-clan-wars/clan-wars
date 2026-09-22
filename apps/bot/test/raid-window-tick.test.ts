@@ -41,7 +41,7 @@ describe("raidWindowTick", () => {
     const post = vi.fn(async (_content: string) => undefined);
     const first = await raidWindowTick(db, { announce: post, ops: post }, { now: FRI });
     expect(first.posted).toBe(1);
-    expect(post.mock.calls[0]![0]).toMatch(/Raid weekend is live/);
+    expect(post.mock.calls[0]![0]).toMatch(/RAID WINDOW OPEN/);
 
     const second = await raidWindowTick(db, { announce: post, ops: post }, { now: FRI });
     expect(second.posted).toBe(0);
@@ -76,7 +76,7 @@ describe("raidWindowTick", () => {
     const thu = new Date("2026-09-17T12:00:00.000Z");
     const r = await raidWindowTick(db, { announce: post, ops: post }, { now: thu });
     expect(r.posted).toBe(1);
-    expect(post.mock.calls[0]![0]).toMatch(/opens tomorrow/);
+    expect(post.mock.calls[0]![0]).toMatch(/RAID WINDOW INBOUND/);
   });
 
   it("⚠️ alerts ops once per boundary on a refused flip, not once per slot", async () => {

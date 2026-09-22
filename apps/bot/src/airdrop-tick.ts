@@ -1,7 +1,7 @@
 import { airdropEvents, servers, type Database } from "@factions/db";
 import {
-  AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, isoWeekStart, nextRestartAt, p90,
-  RESTART_PERIOD_MS, shouldFire,
+  AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
+  nextRestartAt, RESTART_PERIOD_MS, shouldFire,
 } from "@factions/domain";
 import { and, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { airdropText, scrubText } from "./airdrop-text.js";
@@ -160,14 +160,19 @@ export async function airdropTick(
         .where(and(eq(airdropEvents.serverId, s.id), ne(airdropEvents.state, "failed")))
         .orderBy(sql`${airdropEvents.decidedAt} desc`).limit(1);
 
-      // The trailing history: every decision instant on the slot grid, 14 days back.
+      // The trailing history: every decision instant on the slot grid, five days back.
+      // ⚠️ The loop stops STRICTLY BEFORE this slot's own decision instant. With a max
+      // rather than a percentile that guard stops being a nicety: a window including
+      // the current sample would make `pop >= max` true of every pop that is its own
+      // maximum, and the population test would fire on any new record including a
+      // record of 1.
       const instants: Date[] = [];
       for (let t = decisionInstantFor(slot).getTime() - AIRDROP_HISTORY_MS;
            t < decisionInstantFor(slot).getTime(); t += RESTART_PERIOD_MS) {
         instants.push(new Date(t));
       }
       const [pop] = await popsAt(db, s.id, [opts.now]);
-      const threshold = p90(await popsAt(db, s.id, instants));
+      const threshold = highWater(await popsAt(db, s.id, instants));
 
       if (!shouldFire({
         pop: pop ?? 0, threshold, minPop: opts.minPop, weekCount: week.length,

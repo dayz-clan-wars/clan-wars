@@ -5,6 +5,34 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The airdrop, raid-window and vehicle-wipe notices in #server-events are rewritten
+  short, in a military-comms register: an all-caps headline naming the place, then one
+  line of facts. The airdrop notice no longer explains the restart (it posts while the
+  server is up, and the old wording read as though it were down) and no longer mentions
+  the container's color at all.
+- An airdrop now needs the server to be at or above its own five-day high point, rather
+  than above a fourteen-day 90th percentile. The old bar sat below the server's recent
+  peaks by construction, so a merely-average evening cleared it and drops landed on dead
+  sessions. Replayed against three weeks of real history the new rule fires about as
+  often but only at genuine peaks. Expect longer, lumpier gaps between drops: one busy
+  night sets the bar for the next five days, and a quiet week correctly gets nothing.
+- Friendly fire no longer counts anywhere except the friendly-fire board. Shooting a
+  clanmate earns no kill, no killstreak, no K/D and no place on the killers board, and
+  it costs the victim nothing either: it is not a death, so it cannot dent their deaths
+  board or their ratio. Previously a teamkill counted as a kill for the shooter on the
+  killers board and as a death against the victim everywhere.
+  ⚠️ This recomputes from existing records, so published numbers move the moment it
+  ships. Anyone who has teamkilled will see their kills fall; anyone who has been
+  teamkilled will see their deaths fall and their K/D rise.
+- A friendly-fire death no longer breaks the victim's killstreak, so a clanmate can no
+  longer end your run by shooting you. Your profile, the #killstreaks channel and the
+  streak achievements each used a different rule for this and could report three
+  different numbers for the same run; they now agree.
+- The recommended `AIRDROP_MIN_POP` in the airdrop runbook moves from 5 to 6, on the
+  evidence of the same replay. The code default is unchanged.
+
 ## [1.31.0] - 2026-09-22
 
 ### Changed

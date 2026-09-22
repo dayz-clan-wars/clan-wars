@@ -77,16 +77,48 @@ therefore a good forecast of next session's population, and no model is needed.
 
 ### 3.1 The rule
 
+⚠️ **Amended 2026-09-21: the percentile is now a high-water mark.** The rule as
+originally shipped is struck through below, and the simulation table that follows
+it was produced under that rule — it is kept as the record of why the floor and
+the cap exist, and is NOT evidence for the rule now in force. Reason for the
+change: too many of the sessions it fired on were dead. A p90 over fourteen days
+sits *below* the server's recent peaks by construction, so a merely-above-average
+evening cleared it.
+
 On the first tick at or after T-30min before a restart slot, fire when **all**
 hold:
 
-    pop >= max(AIRDROP_MIN_POP, p90 of slot pops over the trailing 14 days)
+    pop >= max(AIRDROP_MIN_POP, highest slot pop over the trailing 5 days)
     drops already this ISO week < AIRDROP_WEEKLY_CAP
     at least 24h since the last drop
     nothing currently announced or live
 
-Simulated over the last 14 days this fires four times in two weeks, every one
-at a real peak:
+The population test is "this restart is the busiest restart in five days, or ties
+it". Sampling is unchanged: the bar is built from the pop at each decision instant
+on the restart grid (~60 samples), the same way `pop` itself is measured, and the
+window stops strictly before the current instant so a pop can never be compared
+against a window containing itself. A tie fires — with a strict `>` a server
+sitting at a stable ceiling could never drop again.
+
+⚠️ **Droughts are the expected behaviour, and they are lumpier than the old rule's.**
+One busy night sets the bar for the next five days. If the record is 11 and the
+server normally peaks at 7, nothing fires until 11 is reached again or that sample
+ages out. "The airdrop has not fired in a week" is not by itself evidence of a
+fault; check `airdrop_events` and the trailing peak before treating it as one.
+
+⚠️ This also inverts the self-tuning argument below. A percentile rises gently as
+the server grows; a high-water mark rises to every new record immediately and holds
+it for five days. That is self-limiting in the right direction on a growing server
+and self-correcting on a shrinking one, but it is a much sharper instrument, and
+`AIRDROP_HISTORY_MS` is now the lockout length rather than a smoothing window —
+see the constant's comment in `rules.ts` before changing it.
+
+~~The rule as originally shipped:~~
+
+    ~~pop >= max(AIRDROP_MIN_POP, p90 of slot pops over the trailing 14 days)~~
+
+Simulated over the last 14 days **under the superseded p90 rule**, this fired
+four times in two weeks:
 
 | fired | pop at decision | pop 30m after restart |
 |---|---|---|
@@ -95,9 +127,9 @@ at a real peak:
 | Mon 09-14 02:00 | 7 | 4 |
 | Tue 09-15 02:00 | 11 | 7 |
 
-The `max(floor, p90)` shape is doing two jobs. The floor stops the event firing on
-a week that has no good moment in it. The percentile raises the bar by itself
-as the server grows, so the constant does not need re-tuning.
+The `max(floor, bar)` shape is doing two jobs, and both survive the amendment. The
+floor stops the event firing on a week that has no good moment in it. The trailing
+bar raises itself as the server grows, so the constant does not need re-tuning.
 
 ### 3.2 The budget is a cap, never a quota
 
@@ -240,10 +272,30 @@ itself, in each viewer's own timezone, with no message editing and no repost.
 
 One message, at decision time, to `SERVER_EVENTS_CHANNEL_ID`:
 
-> **Airdrop inbound: Dolnik**
-> A locked container drops at Dolnik when the server comes back up, <t:X:R>.
-> We are not saying which colour. Bring your keys.
-> It is gone at the restart after that.
+> **AIRDROP INBOUND: DOLNIK**
+> ETA <t:X:R>. Bring keys.
+
+⚠️ **Amended 2026-09-21.** The message as originally shipped is struck through
+below. Three things changed and each was a defect, not a preference:
+
+1. It said the container drops "when the server comes back up". This posts 30
+   minutes BEFORE the restart, while the server is up and people are playing, so
+   it read as though the server were down at that moment.
+2. It named the omission of the colour ("We are not saying which colour"). Not
+   saying the colour and announcing that you are not saying it are different
+   things; the second is still talking about it. Neither the colour nor the
+   withholding of it may appear.
+3. It was four lines where two carry the same facts.
+
+The copy is US English and in a military-comms register: an all-caps headline
+naming the place, then one line. See `apps/bot/src/airdrop-text.ts`.
+
+~~The message as originally shipped:~~
+
+> ~~**Airdrop inbound: Dolnik**~~
+> ~~A locked container drops at Dolnik when the server comes back up, <t:X:R>.~~
+> ~~We are not saying which colour. Bring your keys.~~
+> ~~It is gone at the restart after that.~~
 
 The in-game restart warning carries it too, since that reaches everyone who is
 not in Discord. `RESTART_MESSAGE` is currently the constant

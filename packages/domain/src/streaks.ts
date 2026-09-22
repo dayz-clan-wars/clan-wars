@@ -2,9 +2,16 @@ export type StreakRow = { killer: string | null; victim: string; friendlyFire: b
 
 /**
  * One player's PvP streak from their own kill rows, ascending. Same rule as
- * packages/roster/src/stats.ts bestStreaks: a non-friendly-fire kill of
- * another player extends the run; any death to another player (friendly fire
- * included) resets it; a non-player death does not. `reachedAt(n)` is when the
+ * packages/roster/src/stats.ts bestStreaks and killstreak-feed-tick.ts's
+ * `runUpTo`: a non-friendly-fire kill of another player extends the run; a
+ * non-friendly death to another player resets it; a non-player death does not.
+ *
+ * ⚠️ Friendly fire is skipped on BOTH sides (2026-09-21). Until then this reset
+ * the run on a friendly death, which meant a clanmate could end a teammate's
+ * `killing_spree`/`unstoppable` run on demand — the victim paying for someone
+ * else's teamkill, on an achievement. Three implementations of this rule existed
+ * and all three disagreed about the death half; they now agree.
+ * `reachedAt(n)` is when the
  * run FIRST equalled n — the achievement's earned_at. `reachedIndex(n)` is the
  * index into `rows` of that same crossing kill: `reachedAt` alone is not a safe
  * key back into `rows` when two of the caller's own kills share one timestamp
@@ -20,7 +27,7 @@ export function streakOf(rows: readonly StreakRow[], dayzId: string): { best: nu
       run += 1;
       if (!firstAt.has(run)) { firstAt.set(run, r.occurredAt); firstIndex.set(run, i); }
       if (run > best) best = run;
-    } else if (r.victim === dayzId && r.killer !== null && r.killer !== dayzId) {
+    } else if (r.victim === dayzId && r.killer !== null && r.killer !== dayzId && !r.friendlyFire) {
       run = 0;
     }
   });

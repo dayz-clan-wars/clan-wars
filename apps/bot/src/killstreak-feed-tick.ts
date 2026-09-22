@@ -103,8 +103,14 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
    * would silently reset live streaks at the rollover.
    */
   private async runUpTo(serverId: number, killer: string, at: Date) {
+    // ⚠️ `streakable`, NOT `pvp`: a friendly-fire death must not end a run, exactly
+    // as a friendly-fire kill does not extend one. This read used `pvp` until
+    // 2026-09-21, so the half of the rule that skips a teamkill as a KILL was in
+    // place while the half that skips it as a DEATH was not — a clanmate could end
+    // anyone's streak on demand, and the number posted here disagreed with the one
+    // on the same player's profile.
     const [death] = await this.db.select({ at: kills.occurredAt }).from(kills).where(and(
-      eq(kills.serverId, serverId), eq(kills.victimDayzId, killer), pvp, lte(kills.occurredAt, at),
+      eq(kills.serverId, serverId), eq(kills.victimDayzId, killer), streakable, lte(kills.occurredAt, at),
     )).orderBy(desc(kills.occurredAt)).limit(1);
 
     // ⚠️ `gt`, not a raw `sql` template: interpolating a Date directly into

@@ -10,10 +10,12 @@ const OLGA = { event: "VehicleCivilianSedan", name: "Olga" };
 const WIPE_AT = new Date("2026-09-14T08:00:00Z");
 
 describe("weeklyWipeAnnouncement", () => {
-  it("names the vehicle in game and its events.xml event", () => {
+  // ⚠️ The in-game name only. The events.xml class is an operator's detail and was
+  // deliberately dropped from this player-facing channel on 2026-09-21.
+  it("names the vehicle in game, and not its events.xml class", () => {
     const t = weeklyWipeAnnouncement(OLGA, WIPE_AT);
-    expect(t).toContain("Olga");
-    expect(t).toContain("VehicleCivilianSedan");
+    expect(t).toContain("OLGA");
+    expect(t).not.toContain("VehicleCivilianSedan");
   });
 
   // ⚠️ The one instruction a player can act on. Losing it makes the notice decorative.
@@ -27,8 +29,9 @@ describe("weeklyWipeAnnouncement", () => {
 
   it("states the wipe as a token, with no 'tomorrow' arithmetic", () => {
     const wipeAt = new Date("2026-09-21T10:00:00.000Z");
-    const text = weeklyWipeAnnouncement({ name: "Olga 24", event: "VehicleOlga24" }, wipeAt);
-    expect(text).toContain("<t:1789984800:F>");
+    const text = weeklyWipeAnnouncement({ name: "Olga", event: "VehicleCivilianSedan" }, wipeAt);
+    // ⚠️ The relative token alone since 2026-09-21: the notice is two lines, and the
+    // absolute date is what pushed it to three.
     expect(text).toContain("<t:1789984800:R>");
     expect(text).not.toContain("tomorrow");
     expect(text).not.toContain("UTC");

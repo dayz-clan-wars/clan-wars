@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   AIRDROP_COLOURS, AIRDROP_LOCATIONS, AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT,
-  airdropSpawnerPath, chooseAirdrop, decisionInstantFor, isoWeekStart, p90, shouldFire,
+  airdropSpawnerPath, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart, shouldFire,
 } from "../src/airdrops";
 
 const at = (iso: string) => new Date(iso);
@@ -43,20 +43,34 @@ describe("chooseAirdrop", () => {
   });
 });
 
-describe("p90", () => {
-  it("interpolates, and is 0 on no history", () => {
-    expect(p90([])).toBe(0);
-    expect(p90([1, 1, 1, 1, 1, 1, 1, 1, 1, 10])).toBeCloseTo(1.9, 5);
-    expect(p90([5])).toBe(5);
+describe("highWater", () => {
+  it("is the peak, and is 0 on no history", () => {
+    // ⚠️ 0 on no history is load-bearing, not a convenience: it leaves
+    // `max(AIRDROP_MIN_POP, 0)` at the floor, which is the right bar on day one
+    // and through the first five days. Returning -Infinity (the naive Math.max
+    // of an empty list) would leave the floor governing too, but any later
+    // arithmetic on the recorded threshold would be poisoned by it.
+    expect(highWater([])).toBe(0);
+    expect(highWater([1, 1, 1, 1, 1, 1, 1, 1, 1, 10])).toBe(10);
+    expect(highWater([5])).toBe(5);
+    // ⚠️ One outlier sets the bar for the whole window. This is the accepted
+    // cost of the high-water rule (2026-09-21) — see the design's §3.1.
+    expect(highWater([2, 2, 11, 3, 2])).toBe(11);
   });
 });
 
 describe("shouldFire", () => {
   it("fires at a real peak", () => expect(fire()).toBe(true));
-  it("holds the floor when the percentile has collapsed", () =>
+  it("holds the floor when the high-water mark has collapsed", () =>
     expect(fire({ pop: 3, threshold: 2 })).toBe(false));
-  it("holds the percentile once the server has grown past the floor", () =>
+  it("holds the high-water mark once the server has grown past the floor", () =>
     expect(fire({ pop: 6, threshold: 8 })).toBe(false));
+  // ⚠️ A TIE fires. The rule is "at or above the high point", so equalling the
+  // five-day record is a peak — if this flipped to a strict `>`, the record could
+  // only ever be beaten, and a server sitting at a stable ceiling would never
+  // drop again.
+  it("fires on a tie with the high-water mark", () =>
+    expect(fire({ pop: 9, threshold: 9 })).toBe(true));
   // ⚠️ §3.2: a cap, never a quota. A quiet week gets zero drops, on purpose.
   it("refuses once the week's cap is spent", () =>
     expect(fire({ weekCount: 2 })).toBe(false));

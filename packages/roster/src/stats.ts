@@ -229,6 +229,29 @@ const inRoster = (col: PgColumn, roster: string[] | null): SQL | undefined =>
 /** ⚠️ A kill BY another player: the self-kill exclusion every PvP read shares. */
 const byAnotherPlayer = sql`${kills.killerDayzId} is not null and ${kills.killerDayzId} <> ${kills.victimDayzId}`;
 
+/**
+ * A kill that SCORES: by another player, and not a clanmate.
+ *
+ * ⚠️ Since 2026-09-21 friendly fire earns and costs nothing anywhere but the
+ * friendly-fire board. Not a kill, not a death, not a streak, not a K/D term on
+ * EITHER side of the ratio — the killer gains nothing and the victim loses nothing.
+ * Before this the rule was "dead is dead": a teamkill cost the victim a death and a
+ * point of K/D, which made a clan able to tank a rival's ratio from inside the roster.
+ *
+ * ⚠️ ONE statement of the rule, deliberately. Every board, the profile and the streak
+ * pass route through this constant. The previous shape — the same predicate spelled
+ * out at each call site — had already drifted three ways: this file's `bestStreaks`
+ * reset a run on a friendly death, `packages/domain/src/streaks.ts` (the achievements'
+ * streak) did the same, and `killstreak-feed-tick.ts` skipped a friendly KILL but
+ * counted a friendly DEATH. All three are fixed together; the rule now lives in this
+ * constant here, and in a comment pointing back at it in the other two.
+ *
+ * ⚠️ The friendly-fire BOARD must not use this (it counts exactly what this excludes),
+ * and neither must the feeds — `encountersOf` and the timeline are records of what
+ * happened, and carry `friendlyFire` per row so the surface can mark it.
+ */
+const scoringKill = and(byAnotherPlayer, eq(kills.friendlyFire, false))!;
+
 const gamertagOf = (col: PgColumn) => sql<string>`coalesce(${players.gamertag}, ${col})`;
 
 const round2 = (v: number) => Math.round(v * 100) / 100;
@@ -265,9 +288,15 @@ const sessionOverlaps = (w: Window, now: Date): SQL => sql`
 
 /**
  * Streaks, in time order over every PvP kill in the window. One pass: a
- * non-friendly kill extends the killer's run, and every PvP death — friendly
- * fire included, the deaths board's rule — ends the victim's. Returns each
- * player's best run; a player with no run has no row.
+ * non-friendly kill extends the killer's run, and a non-friendly death ends the
+ * victim's. Returns each player's best run; a player with no run has no row.
+ *
+ * ⚠️ A friendly-fire kill neither advances a streak nor breaks one — it is skipped
+ * entirely, both as a kill and as a death. The same rule now lives in
+ * `killstreak-feed-tick.ts`'s `runUpTo` and in `packages/domain/src/streaks.ts`;
+ * before 2026-09-21 all three disagreed about the death half. Without it, a clan can
+ * end a rival's run on demand from inside its own roster, and the cheapest counter to
+ * a long streak is a teamkill.
  */
 async function bestStreaks(db: Database, serverId: number, w: Window): Promise<Map<string, number>> {
   const rows = await db.select({ killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire })
@@ -277,11 +306,12 @@ async function bestStreaks(db: Database, serverId: number, w: Window): Promise<M
   const run = new Map<string, number>();
   const best = new Map<string, number>();
   for (const r of rows) {
-    if (!r.friendlyFire) {
-      const n = (run.get(r.killer!) ?? 0) + 1;
-      run.set(r.killer!, n);
-      if (n > (best.get(r.killer!) ?? 0)) best.set(r.killer!, n);
-    }
+    // ⚠️ `continue`, not an else-branch on the death: a friendly kill must fall
+    // through BOTH halves of this loop.
+    if (r.friendlyFire) continue;
+    const n = (run.get(r.killer!) ?? 0) + 1;
+    run.set(r.killer!, n);
+    if (n > (best.get(r.killer!) ?? 0)) best.set(r.killer!, n);
     run.set(r.victim, 0);
   }
   return best;
@@ -298,8 +328,8 @@ async function streakBoard(db: Database, serverId: number, w: Window, roster: st
     .slice(offset, offset + limit);
 }
 
-/** ⚠️ A non-friendly PvP kill with a distance the log recorded — the only kill that counts for range. */
-const rangedKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), isNotNull(kills.distanceM))!;
+/** ⚠️ A scoring kill with a distance the log recorded — the only kill that counts for range. */
+const rangedKill = and(scoringKill, isNotNull(kills.distanceM))!;
 
 /** Each killer's farthest kill (`distinct on`), then the farthest killers first. */
 async function longestKillBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<LongestKillRow[]> {
@@ -357,19 +387,16 @@ async function playTimeBoard(db: Database, serverId: number, w: Window, now: Dat
  * rounded to 2 dp. The gate is a board rule only — a profile always shows
  * its own ratio.
  *
- * ⚠️ Friendly fire is NOT a K/D kill. Shooting a clanmate still counts on
- * the killers board and the friendly-fire board, but it earns nothing here,
- * on the row's `kills` or towards the gate — a K/D padded on your own roster
- * is not one. A friendly-fire DEATH is still a death: dead is dead. The
- * profile's `kd` follows the same rule.
+ * ⚠️ Friendly fire is absent from BOTH terms — see `scoringKill`. A teamkill earns
+ * the killer nothing and costs the victim nothing, so the ratio cannot be padded from
+ * inside a roster in either direction. The profile's `kd` follows the same rule.
  */
-const kdKill = and(byAnotherPlayer, eq(kills.friendlyFire, false))!;
 async function kdBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<KdRow[]> {
   const killCount = sql<number>`count(*)::int`;
   const killerRows = await db.select({ dayzId: sql<string>`${kills.killerDayzId}`, gamertag: gamertagOf(kills.killerDayzId), kills: killCount })
     .from(kills)
     .leftJoin(players, eq(players.dayzId, kills.killerDayzId))
-    .where(and(eq(kills.serverId, serverId), kdKill, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster)))
+    .where(and(eq(kills.serverId, serverId), scoringKill, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster)))
     .groupBy(kills.killerDayzId, players.gamertag)
     .having(sql`count(*) >= ${KD_MIN_KILLS}`);
   if (killerRows.length === 0) return [];
@@ -381,7 +408,7 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
   const ids = killerRows.map((r) => r.dayzId);
   const deathRows = await db.select({ dayzId: kills.victimDayzId, deaths: sql<number>`count(*)::int` })
     .from(kills)
-    .where(and(eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inArray(kills.victimDayzId, ids)))
+    .where(and(eq(kills.serverId, serverId), scoringKill, inWindow(kills.occurredAt, w), inArray(kills.victimDayzId, ids)))
     .groupBy(kills.victimDayzId);
   const deathsOf = new Map(deathRows.map((r) => [r.dayzId, Number(r.deaths)]));
 
@@ -404,12 +431,12 @@ function boardRows(
       eq(raids.serverId, serverId), raidsInScope(w), inRoster(raids.raiderDayzId, roster),
     )!, limit, offset);
     case "killers": return countBoard(db, kills.killerDayzId, kills, and(
-      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
+      eq(kills.serverId, serverId), scoringKill, inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
     )!, limit, offset);
     // ⚠️ The ROSTER predicate is on the victim: a member's deaths count
     // whoever killed them, the same rule the K/D board's denominator uses.
     case "deaths": return countBoard(db, kills.victimDayzId, kills, and(
-      eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w), inRoster(kills.victimDayzId, roster),
+      eq(kills.serverId, serverId), scoringKill, inWindow(kills.occurredAt, w), inRoster(kills.victimDayzId, roster),
     )!, limit, offset);
     case "kd": return kdBoard(db, serverId, w, roster, limit, offset);
     case "playTime": return playTimeBoard(db, serverId, w, now, roster, limit, offset);
@@ -613,12 +640,14 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
       sessions: sql<number>`count(*)::int`,
     }).from(playerSessions)
       .where(and(eq(playerSessions.serverId, serverId), eq(playerSessions.dayzId, dayzId), sessionOverlaps(w, now))),
-    killCount(db, and(mine, inW, eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
-    killCount(db, and(mine, inW, eq(kills.victimDayzId, dayzId), isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
-    opponents(db, kills.victimDayzId,
-      and(mine, inW, eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
-    opponents(db, kills.killerDayzId,
-      and(mine, inW, eq(kills.victimDayzId, dayzId), isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
+    // ⚠️ All four carry `scoringKill`, so friendly fire is absent from the profile's
+    // kills, deaths and both opponent lists — the boards' rule, on the one surface a
+    // player reads about themselves. The friendly-fire counters below are where a
+    // teamkill shows up, and they are the ONLY place it does.
+    killCount(db, and(mine, inW, scoringKill, eq(kills.killerDayzId, dayzId))!),
+    killCount(db, and(mine, inW, scoringKill, eq(kills.victimDayzId, dayzId))!),
+    opponents(db, kills.victimDayzId, and(mine, inW, scoringKill, eq(kills.killerDayzId, dayzId))!),
+    opponents(db, kills.killerDayzId, and(mine, inW, scoringKill, eq(kills.victimDayzId, dayzId))!),
     killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
     killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.victimDayzId, dayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
     db.select({ n: sql<number>`count(*)::int` }).from(raids)
@@ -647,8 +676,11 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     sessions: Number(session[0]?.sessions ?? 0),
     lastSeenAt: lastSeen[0]?.lastSeenAt ?? null,
     pvpKills, pvpDeaths,
-    // The board's rule: friendly fire earns nothing towards K/D (see kdBoard).
-    kd: pvpKills === 0 && pvpDeaths === 0 ? null : round2((pvpKills - friendlyFireKills) / Math.max(pvpDeaths, 1)),
+    // ⚠️ NO `- friendlyFireKills` here. It used to compensate for a `pvpKills` that
+    // counted friendly fire; `pvpKills` now carries `scoringKill` and excludes it at
+    // the source, so subtracting again would deduct every teamkill TWICE and drive a
+    // player who has teamkilled below their true ratio, or negative.
+    kd: pvpKills === 0 && pvpDeaths === 0 ? null : round2(pvpKills / Math.max(pvpDeaths, 1)),
     killedBy, killed,
     friendlyFireKills, friendlyFireDeaths,
     raidCredits: Number(raidCredits[0]?.n ?? 0),

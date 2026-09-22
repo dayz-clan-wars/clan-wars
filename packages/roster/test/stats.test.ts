@@ -232,28 +232,34 @@ describe("roster player stats", () => {
       expect(boards.scope).toEqual(ALL);
       expect(boards.seasons).toEqual([2, 1]);
       expect(boards.raiders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 2 }]);
-      // 12 in season 1 + the friendly kill before it; the self-kill is not one.
+      // ⚠️ 12, not 13: the friendly kill before season 1 is NOT on the killers board
+      // (2026-09-21 — friendly fire scores nowhere but its own board). The self-kill
+      // is not one either.
       expect(boards.killers).toEqual([
-        { dayzId: A, gamertag: "Alpha", value: 13 },
+        { dayzId: A, gamertag: "Alpha", value: 12 },
         { dayzId: R, gamertag: "Romeo", value: 3 },
       ]);
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
-      // R died to A twelve times, A to R three, B to A's friendly kill once.
-      // R's self-kill and the two killer-less deaths are not PvP deaths.
+      // R died to A twelve times and A to R three. R's self-kill and the two
+      // killer-less deaths are not PvP deaths.
+      // ⚠️ B is ABSENT. B died only to A's friendly kill, and a friendly-fire death
+      // no longer counts against the victim — the killer gains nothing and the victim
+      // loses nothing. Before 2026-09-21 B was here with a value of 1.
       expect(boards.deaths).toEqual([
         { dayzId: R, gamertag: "Romeo", value: 12 },
         { dayzId: A, gamertag: "Alpha", value: 3 },
-        { dayzId: B, gamertag: "Bravo", value: 1 },
       ]);
     });
 
     it("the K/D board holds only players at or above KD_MIN_KILLS, and friendly fire earns nothing on it", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
       expect(KD_MIN_KILLS).toBe(10);
-      // A has 13 PvP kills but one is friendly: 12 / 3. The killers board still says 13.
+      // A's friendly kill scores on neither board: 12 / 3 here, and 12 on killers too.
+      // ⚠️ The two numbers agreeing is the point — before 2026-09-21 the killers board
+      // said 13 while K/D said 12, and that gap was the rule this change removed.
       expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
-      expect(boards.killers[0]).toEqual({ dayzId: A, gamertag: "Alpha", value: 13 });
+      expect(boards.killers[0]).toEqual({ dayzId: A, gamertag: "Alpha", value: 12 });
       // R has 3 kills — under the gate, so no K/D row at all.
       expect(boards.kd.map((r) => r.dayzId)).not.toContain(R);
     });
@@ -300,7 +306,59 @@ describe("roster player stats", () => {
 
     it("honours the limit", async () => {
       const boards = await playerBoardsDb(db, ALL, 1, now);
-      expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 13 }]);
+      expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
+    });
+
+    /**
+     * ⚠️ The half of the friendly-fire rule that is easy to implement only halfway.
+     * Skipping a friendly kill as a KILL is obvious; skipping it as a DEATH is not, and
+     * `bestStreaks` used to break the victim's run on one while `killstreak-feed-tick.ts`
+     * did not — so a player's best streak on their profile disagreed with the streak
+     * #killstreaks had already posted for them.
+     *
+     * Without the fix A's twelve splits into 6 and 6 and this reads 6. It also makes the
+     * cheapest counter to a long streak a teamkill by your own clan.
+     */
+    it("a friendly-fire death does not break the victim's streak", async () => {
+      await mkKill({
+        at: h(t0, 6.5), victim: A, killer: B,
+        victimFactionId: bearId, killerFactionId: bearId, friendlyFire: true,
+      });
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(boards.streaks).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 12 },
+        { dayzId: R, gamertag: "Romeo", value: 3 },
+      ]);
+      // And it earned B nothing but a friendly-fire row, and cost A nothing: the
+      // deaths board still reads exactly as it does without this kill in the table.
+      expect(boards.killers.map((r) => r.dayzId)).not.toContain(B);
+      expect(boards.deaths).toEqual([
+        { dayzId: R, gamertag: "Romeo", value: 12 },
+        { dayzId: A, gamertag: "Alpha", value: 3 },
+      ]);
+      // ⚠️ The K/D DENOMINATOR specifically. This is the only assertion in the suite
+      // that fails if `kdBoard`'s deaths query is reverted from `scoringKill` to
+      // `byAnotherPlayer` — without it that line is untested, because no other
+      // K/D-eligible player in the fixture has a friendly-fire death. A's teamkill
+      // death must not appear here: 12 / 3, not 12 / 4.
+      expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
+      expect(boards.friendlyFire).toEqual([
+        { dayzId: A, gamertag: "Alpha", value: 1 },
+        { dayzId: B, gamertag: "Bravo", value: 1 },
+      ]);
+    });
+
+    /**
+     * ⚠️ A REAL death still breaks the run, which is what stops the test above from
+     * passing against a `bestStreaks` that has simply stopped breaking streaks at all.
+     */
+    it("a non-friendly death still breaks the victim's streak", async () => {
+      await mkKill({
+        at: h(t0, 6.5), victim: A, killer: R,
+        victimFactionId: bearId, killerFactionId: wolfId,
+      });
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(boards.streaks[0]).toEqual({ dayzId: A, gamertag: "Alpha", value: 6 });
     });
   });
 
@@ -316,12 +374,18 @@ describe("roster player stats", () => {
       expect(p.playTimeSeconds).toBe(PLAY_ALL);
       expect(p.sessions).toBe(4);
       expect(p.lastSeenAt).toEqual(aLastSeen);
-      expect(p.pvpKills).toBe(13);
+      // ⚠️ 12, not 13: the friendly kill is excluded at the source now, so `pvpKills`
+      // and the killers board agree.
+      expect(p.pvpKills).toBe(12);
       expect(p.pvpDeaths).toBe(3);
-      // 13 PvP kills less the friendly one, over 3 deaths — the board's rule.
+      // 12 over 3. ⚠️ This is the value that catches the double-subtraction: if the
+      // old `- friendlyFireKills` term survived alongside the new predicate it would
+      // read (12 - 1) / 3 = 3.67, not 4.
       expect(p.kd).toBe(4);
       expect(p.killedBy).toEqual([{ gamertag: "Romeo", count: 3 }]);
-      expect(p.killed).toEqual([{ gamertag: "Romeo", count: 12 }, { gamertag: "Bravo", count: 1 }]);
+      // ⚠️ Bravo is absent: A killed Bravo only by friendly fire, and the opponent
+      // lists carry the boards' rule too.
+      expect(p.killed).toEqual([{ gamertag: "Romeo", count: 12 }]);
       expect(p.friendlyFireKills).toBe(1);
       expect(p.friendlyFireDeaths).toBe(0);
       expect(p.raidCredits).toBe(2);
@@ -365,11 +429,19 @@ describe("roster player stats", () => {
       expect(p.killedBy).toEqual([{ gamertag: "Alpha", count: 12 }]);
     });
 
-    it("a friendly-fire death is counted on the victim", async () => {
+    // ⚠️ Renamed and inverted on 2026-09-21. A friendly-fire death is recorded ONLY
+    // on the friendly-fire counters; it is not a PvP death, so it cannot drag the
+    // victim's K/D down or put them on the deaths board. Bravo's whole history here is
+    // one teamkill by a clanmate, which is exactly the case that used to cost them.
+    it("a friendly-fire death lands on the friendly-fire counter and nowhere else", async () => {
       const p = (await playerProfileDb(db, "Bravo", ALL, now))!;
       expect(p.friendlyFireDeaths).toBe(1);
       expect(p.friendlyFireKills).toBe(0);
-      expect(p.pvpDeaths).toBe(1);
+      expect(p.pvpDeaths).toBe(0);
+      expect(p.pvpKills).toBe(0);
+      expect(p.killedBy).toEqual([]);
+      // Nothing to divide, so no ratio at all rather than a 0 that reads as a record.
+      expect(p.kd).toBeNull();
     });
 
     it("a raise before the player's membership span opens is not an upkeep raise", async () => {
@@ -409,19 +481,30 @@ describe("roster player stats", () => {
   describe("row clans", () => {
     it("names each row's current full clan, and no clan for the clanless", async () => {
       const boards = await playerBoardsDb(db, ALL, undefined, now);
-      // A and B are BEAR, R is WOLF; N is in no clan and P is only pending, so neither has an entry.
+      // A is BEAR, R is WOLF; N is in no clan and P is only pending, so neither has an
+      // entry. ⚠️ B is absent because B has no row on ANY board: their whole history is
+      // one friendly-fire death, which since 2026-09-21 scores nowhere. `clans` is keyed
+      // off the rows that exist, so this is the rule showing through, not a lookup bug.
       expect(boards.clans).toEqual({
         [A]: { tag: "BEAR", texture: "Flag_Bear" },
-        [B]: { tag: "BEAR", texture: "Flag_Bear" },
         [R]: { tag: "WOLF", texture: "Flag_Wolf" },
       });
       expect(boards.builders.map((r) => r.dayzId)).toContain(N);
     });
 
+    // ⚠️ On `builders`, not `deaths`: the deaths board is two rows deep now that a
+    // friendly-fire death is not a death, and a one-page board cannot show that a page
+    // carries only its OWN rows' clans. Builders is A, R, N — two clans and a clanless
+    // player across two pages.
     it("a page carries the clans of its own rows only", async () => {
-      const page = await boardPageDb(db, "deaths", ALL, 2, now, 2);
-      expect(page.clans).toEqual({ [B]: { tag: "BEAR", texture: "Flag_Bear" } });
-      expect((await boardPageDb(db, "deaths", ALL, 3, now, 2)).clans).toEqual({});
+      const first = await boardPageDb(db, "builders", ALL, 1, now, 2);
+      expect(first.clans).toEqual({
+        [A]: { tag: "BEAR", texture: "Flag_Bear" },
+        [R]: { tag: "WOLF", texture: "Flag_Wolf" },
+      });
+      // N is on this page and in no clan, so the map is empty rather than absent.
+      expect((await boardPageDb(db, "builders", ALL, 2, now, 2)).clans).toEqual({});
+      expect((await boardPageDb(db, "builders", ALL, 3, now, 2)).clans).toEqual({});
     });
   });
 
@@ -518,14 +601,17 @@ describe("roster player stats", () => {
       }
     });
 
+    // ⚠️ On `builders` for the same reason as the clans page test above: this needs a
+    // board deeper than one page, and deaths is two rows since friendly fire stopped
+    // counting. A=4, R=2, N=1.
     it("pages a SQL board by offset, and knows whether a next page exists without a count", async () => {
-      const first = await boardPageDb(db, "deaths", ALL, 1, now, 2);
-      expect(first.rows).toEqual([{ dayzId: R, gamertag: "Romeo", value: 12 }, { dayzId: A, gamertag: "Alpha", value: 3 }]);
+      const first = await boardPageDb(db, "builders", ALL, 1, now, 2);
+      expect(first.rows).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4 }, { dayzId: R, gamertag: "Romeo", value: 2 }]);
       expect(first.hasNext).toBe(true);
-      const second = await boardPageDb(db, "deaths", ALL, 2, now, 2);
-      expect(second.rows).toEqual([{ dayzId: B, gamertag: "Bravo", value: 1 }]);
+      const second = await boardPageDb(db, "builders", ALL, 2, now, 2);
+      expect(second.rows).toEqual([{ dayzId: N, gamertag: "November", value: 1 }]);
       expect(second.hasNext).toBe(false);
-      const third = await boardPageDb(db, "deaths", ALL, 3, now, 2);
+      const third = await boardPageDb(db, "builders", ALL, 3, now, 2);
       expect(third.rows).toEqual([]);
       expect(third.hasNext).toBe(false);
     });
@@ -548,7 +634,9 @@ describe("roster player stats", () => {
     it("the clan page is narrowed to the roster, with the clan board's refusals", async () => {
       const page = await clanBoardPageDb(db, "dB", "deaths", ALL, 1, now);
       if (typeof page === "string") throw new Error(page);
-      expect(page.rows).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }, { dayzId: B, gamertag: "Bravo", value: 1 }]);
+      // ⚠️ A alone: R is another clan (the narrowing this test is for), and B's only
+      // death was friendly fire, which is no longer a death.
+      expect(page.rows).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
       expect(await clanBoardPageDb(db, "dP", "deaths", ALL, 1, now)).toBe("pending");
       expect(await clanBoardPageDb(db, "dN", "deaths", ALL, 1, now)).toBe("not-in-clan");
       expect(await clanBoardPageDb(db, "dZ", "deaths", ALL, 1, now)).toBe("not-linked");
@@ -561,16 +649,17 @@ describe("roster player stats", () => {
       expect(boards).not.toBe("not-linked");
       if (typeof boards === "string") throw new Error(boards);
       // A and B only: R is WOLF, P is pending, N is in no clan.
-      expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 13 }]);
+      expect(boards.killers).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
       expect(boards.raiders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 2 }]);
       expect(boards.playTime).toEqual([{ dayzId: A, gamertag: "Alpha", value: PLAY_ALL }]);
       expect(boards.friendlyFire).toEqual([{ dayzId: A, gamertag: "Alpha", value: 1 }]);
       expect(boards.kd).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4, kills: 12, deaths: 3 }]);
-      // Roster on the VICTIM: A's deaths to R (WOLF) still count; R's own deaths do not appear.
-      expect(boards.deaths).toEqual([
-        { dayzId: A, gamertag: "Alpha", value: 3 },
-        { dayzId: B, gamertag: "Bravo", value: 1 },
-      ]);
+      // Roster on the VICTIM: A's deaths to R (WOLF) still count; R's own deaths do not
+      // appear. ⚠️ B is gone from this board — a clanmate's teamkill of B is the one
+      // death B had, and it stopped counting on 2026-09-21. This is also the case the
+      // rule most exists for: a clan could otherwise pad or tank its own deaths board
+      // from inside the roster.
+      expect(boards.deaths).toEqual([{ dayzId: A, gamertag: "Alpha", value: 3 }]);
       // A and B only, again: R's and N's build steps are not on BEAR's board.
       expect(boards.builders).toEqual([{ dayzId: A, gamertag: "Alpha", value: 4 }]);
       expect(boards.streaks).toEqual([{ dayzId: A, gamertag: "Alpha", value: 12 }]);
@@ -609,13 +698,13 @@ describe("roster player stats", () => {
       expect(boards.scope).toEqual(ALL);
       expect(boards.seasons).toEqual([]);
       expect(boards.killers).toEqual([
-        { dayzId: A, gamertag: "Alpha", value: 13 },
+        { dayzId: A, gamertag: "Alpha", value: 12 },
         { dayzId: R, gamertag: "Romeo", value: 3 },
       ]);
 
       const p = (await playerProfileDb(db, "Alpha", { kind: "current" }, now))!;
       expect(p.scope).toEqual(ALL);
-      expect(p.pvpKills).toBe(13);
+      expect(p.pvpKills).toBe(12);
     });
   });
 

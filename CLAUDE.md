@@ -390,7 +390,7 @@ anything.
 | Long-term direction (not designs) | `docs/direction/` |
 | Deploy runbooks | `docs/deploy/` |
 | The raid window, opened and closed by the bot on the restart slots | `packages/domain/src/raid-window.ts` (`raidWindowAt`, level-triggered against `RAID_WINDOW`), the surgical edit in `apps/bot/src/cfggameplay.ts`, the tick in `apps/bot/src/raid-window-tick.ts` (gated on `RAID_WINDOW_TICK`; requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`, degrades on missing `OPS_CHANNEL_ID`), `raid_window_flips`/`raid_window_skips`/`raid_window_announcements` (migration `0037_fresh_moira_mactaggert.sql`), `pnpm raid:skip` (`scripts/raid-skip.ts`) to record a deliberately skipped weekend. `docs/deploy/raid-window.md` — held against `RAID_WINDOW` by `packages/domain/test/raid-window-runbook.test.ts` |
-| Airdrop events (a locked container at one of 16 Livonia locations, for one session) | Decisions in `packages/domain/src/airdrops.ts` (`chooseAirdrop`, `shouldFire`, `p90`; the menu and windows in `rules.ts`), the splice in `apps/bot/src/cfggameplay.ts` (`setAirdropSpawner`), the decision tick `apps/bot/src/airdrop-tick.ts` + `airdrop-text.ts`, enable/disable inside `apps/bot/src/restart-tick.ts` (`applyGameplay`), state in `airdrop_events`, the manual `/airdrop place` in `apps/bot/src/commands/airdrop.ts`. Gated on `AIRDROP_TICK`; requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`. ⚠️ **`applyGameplay` is the ONLY place `cfggameplay.json` is downloaded and uploaded** — the raid flip and the airdrop share one round trip per slot, and splitting them back into two silently loses whichever edit uploads first. ⚠️ A drop is never enabled without `announced_at` set: only the location is announced and there is no in-world marker, so an unannounced drop is one nobody finds. ⚠️ The `livonia` repo FTPs `cfggameplay.json` on every published Release, over whatever the bot wrote; per-slot recomputation is what repairs it. ⚠️ `airdrop_events.manual` is excluded from the weekly cap and from NOTHING else — a hand-placed drop still holds the 24h gap and the one-at-a-time guard shut. Spec `docs/superpowers/specs/2026-09-20-airdrop-events-design.md`, runbook `docs/deploy/2026-09-21-airdrops.md` |
+| Airdrop events (a locked container at one of 16 Livonia locations, for one session) | Decisions in `packages/domain/src/airdrops.ts` (`chooseAirdrop`, `shouldFire`, `highWater`; the menu and windows in `rules.ts`), the splice in `apps/bot/src/cfggameplay.ts` (`setAirdropSpawner`), the decision tick `apps/bot/src/airdrop-tick.ts` + `airdrop-text.ts`, enable/disable inside `apps/bot/src/restart-tick.ts` (`applyGameplay`), state in `airdrop_events`, the manual `/airdrop place` in `apps/bot/src/commands/airdrop.ts`. Gated on `AIRDROP_TICK`; requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`. ⚠️ **`applyGameplay` is the ONLY place `cfggameplay.json` is downloaded and uploaded** — the raid flip and the airdrop share one round trip per slot, and splitting them back into two silently loses whichever edit uploads first. ⚠️ A drop is never enabled without `announced_at` set: only the location is announced and there is no in-world marker, so an unannounced drop is one nobody finds. ⚠️ The `livonia` repo FTPs `cfggameplay.json` on every published Release, over whatever the bot wrote; per-slot recomputation is what repairs it. ⚠️ The population test is a five-day HIGH-WATER MARK since 2026-09-21, not the p90 the spec was written around (spec §3.1 carries the amendment): `pop >= max(AIRDROP_MIN_POP, highest decision-instant pop in the last 5 days)`, ties included. Long droughts are expected — one busy night sets the bar for five days — and `AIRDROP_HISTORY_MS` is now the lockout length, not a smoothing window. ⚠️ `airdrop_events.manual` is excluded from the weekly cap and from NOTHING else — a hand-placed drop still holds the 24h gap and the one-at-a-time guard shut. Spec `docs/superpowers/specs/2026-09-20-airdrop-events-design.md`, runbook `docs/deploy/2026-09-21-airdrops.md` |
 | Acceptance records | `docs/acceptance/` |
 | Bot operational notes | `apps/bot/README.md` |
 | Repo tooling config (lifecycle, CI, ignore, scanning, dependencies) | `.keel.json`, `.rigging.json`, `.stow.json`, `.hull.json`, `.bosun.json` — each owned by its shipyard plugin and **regenerated, not hand-edited**: change the config and re-run that plugin's `init`. ⚠️ `.gitignore` is a *managed merge* — entries inside the `# >>> stow:... >>>` markers are overwritten every run, so hand-written ones must sit outside them |
@@ -594,6 +594,26 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   Since increment 4, `clockQuery`'s coalesce also takes the `GREATEST` against the
   server's open season's `started_at` (spec §5.1) — a wipe opens a fresh season, and a
   clan's dormancy clock restarts with it even if its last raise was long before.
+- **Friendly fire scores NOWHERE but the friendly-fire board** (2026-09-21). One
+  predicate, `scoringKill` in `packages/roster/src/stats.ts`, carries the rule for every
+  board, the profile and the streak pass: a teamkill is not a kill, not a death, not a
+  streak term and not a K/D term, on EITHER side — the killer gains nothing and the
+  victim loses nothing. It is recorded only on the `friendlyFire` board and the
+  profile's `friendlyFireKills`/`friendlyFireDeaths`.
+  ⚠️ Route new reads through `scoringKill` rather than respelling the predicate. It had
+  already drifted THREE ways before this: `bestStreaks` reset a run on a friendly death,
+  `packages/domain/src/streaks.ts` (the achievements' streak) did the same, and
+  `killstreak-feed-tick.ts` skipped a friendly KILL but counted a friendly DEATH — so
+  the same player's streak could differ between their profile, #killstreaks and an
+  achievement. The streak rule now has three call sites that cannot be collapsed (two
+  SQL, one pure); each carries a comment pointing at the others, and each has a test
+  pinning BOTH halves (a friendly death does not break a run, a real one does).
+  ⚠️ The profile's `kd` must NOT subtract `friendlyFireKills` any more. That term existed
+  to compensate for a `pvpKills` that counted friendly fire; with the predicate at the
+  source it would deduct every teamkill twice.
+  ⚠️ This is a read-time rule over `kills.friendly_fire`, so it applies retroactively the
+  moment it deploys — existing numbers move. `encountersOf`, the timeline and the kill
+  feed are RECORDS, not stats, and still show friendly-fire kills.
 - **`season_standings` is a projection; the drift test in `standings.test.ts` is what
   keeps it honest** — edit it only through the consumers (the raid/raise ticks, the week
   and season close) or `scripts/rebuild-standings.ts`, never by hand.

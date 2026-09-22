@@ -1,22 +1,22 @@
 import { rel } from "@factions/copy";
 
-const place = (location: string) => location.charAt(0).toUpperCase() + location.slice(1);
-
 /**
  * The one player-facing message, posted at decision time (spec §8).
  *
  * ⚠️ The location, never the colour. The colour is the gamble (spec §3.4), and a
- * clan holding the wrong key opening nothing is the intent, not a bug.
+ * clan holding the wrong key opening nothing is the intent, not a bug. The message
+ * does not mention the colour AND does not mention that it is being withheld:
+ * naming the omission is still talking about it.
  *
- * ⚠️ No em dashes, and nothing that talks anybody out of going for it.
+ * ⚠️ Military-comms register, two lines, no more. Earlier drafts explained the
+ * restart ("a locked container drops when the server comes back up") and read as
+ * if the server were down at posting time — it is not, this posts 30 minutes
+ * BEFORE the restart. The countdown token carries the timing on its own.
  */
 export function airdropText(location: string, slotAt: Date): string {
   return [
-    `**Airdrop inbound: ${place(location)}**`,
-    `A locked container drops at ${place(location)} when the server comes back up, `
-      + `${rel(slotAt) ?? "at the next restart"}.`,
-    "We are not saying which colour. Bring your keys.",
-    "It is gone at the restart after that.",
+    `**AIRDROP INBOUND: ${location.toUpperCase()}**`,
+    `ETA ${rel(slotAt) ?? "the next restart"}. Bring keys.`,
   ].join("\n");
 }
 
@@ -27,11 +27,11 @@ export function airdropText(location: string, slotAt: Date): string {
  *
  * ⚠️ Plain, and it does not talk anybody out of the next one. Players were told to
  * bring their keys somewhere, so they are owed a straight answer, not an apology.
- * No em dashes, and still no colour.
+ * Still no colour.
  */
 export function scrubText(location: string): string {
   return [
-    `**The ${place(location)} drop is off.**`,
-    "We could not get it placed this session. Nothing was spent on it, so the next one can come any day.",
+    `**AIRDROP SCRUBBED: ${location.toUpperCase()}**`,
+    "Cargo did not deploy. Next one can come any day.",
   ].join("\n");
 }
