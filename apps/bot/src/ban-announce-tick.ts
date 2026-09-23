@@ -43,7 +43,11 @@ export async function banAnnounceTick(
 
   for (const row of rows) {
     try {
-      await post(banAnnouncementText(row.payload as BanAnnouncement));
+      // ⚠️ `kind` lives in its own column, NOT in the payload (see `announceTx`,
+      // ban-tick.ts). Casting the payload alone to `BanAnnouncement` read kind
+      // as undefined, and every unban posted as a second "banned until" line.
+      const frozen = row.payload as Omit<BanAnnouncement, "kind">;
+      await post(banAnnouncementText({ ...frozen, kind: row.kind }));
       await db.update(banAnnouncements).set({ postedAt: opts.now }).where(eq(banAnnouncements.id, row.id));
     } catch (err) {
       opts.onError?.(row.id, err);

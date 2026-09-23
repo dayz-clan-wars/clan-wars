@@ -15,6 +15,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   data. It had been passing only because its table was empty, so a slowdown could have
   shipped unnoticed. Production was checked at the same time and is using the fast path.
 
+### Fixed
+
+- When a timed ban ends, `#bans` now says the player was unbanned. It used to repost
+  the original "banned until" line, so a served ban looked like a second ban.
+
 ## [1.36.0] - 2026-09-23
 
 ### Added
