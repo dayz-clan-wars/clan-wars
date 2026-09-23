@@ -5,6 +5,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Pitching a tent inside a watch zone that isn't yours is now caught like building
+  there. The base's owner is told, the player who pitched it is warned, and if the
+  owner presses charges it is sentenced as a breach. One tent is enough, because a
+  tent is tall enough to climb a wall on its own.
+
 ## [1.35.1] - 2026-09-23
 
 ### Fixed

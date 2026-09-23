@@ -262,6 +262,26 @@ export const BAN_APPLY_LOOKBACK_MS = 24 * HOUR;
 export const BOOST_ITEM_CLASSES = ["Fireplace", "FireplaceIndoor", "GardenPlot"] as const;
 
 /**
+ * DayZ tent classnames. ONE tent placed by a non-member inside a watch zone
+ * is a build — a breach — with no stack test at all.
+ *
+ * ⚠️ Not a boost-stack item, and adding these to `BOOST_ITEM_CLASSES` would
+ * catch nothing. The raid that prompted this (SNA's base, 2026-09-22 02:13–
+ * 02:47 UTC) placed five tents each from the ground, 3–30 m apart at the
+ * same altitude, and climbed them one at a time; `boostStackFor` wants
+ * placements within 1.5 m AND a rise between them, and saw neither. A tent is
+ * tall enough to be the whole boost on its own.
+ *
+ * The first five are observed in `factions_live`'s `item.placed` events
+ * (2026-09-23); the Party Tents are vanilla and not yet seen. The match is
+ * exact, so a colour variant missing here is a tent boost nobody sees.
+ */
+export const TENT_ITEM_CLASSES = [
+  "LargeTent", "CarTent", "MediumTent", "MediumTent_Green", "MediumTent_Orange",
+  "PartyTent", "PartyTent_Blue", "PartyTent_Brown", "PartyTent_Lunapark",
+] as const;
+
+/**
  * How far back the device lookup looks for connections from accounts whose
  * platform we do not know yet.
  *
