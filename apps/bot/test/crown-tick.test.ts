@@ -10,6 +10,7 @@ const ALL_ROLES = {
   kd: "r-kd",
   streaks: "r-streaks",
   longestKills: "r-longestKills",
+  bountyKills: "r-bountyKills",
   builders: "r-builders",
   playTime: "r-playTime",
   deaths: "r-deaths",

@@ -5,7 +5,7 @@ import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE
 
 describe("board order", () => {
   it("is raiding, offensive PvP, building, play time, then the shameful two", () => {
-    expect([...BOARD_KINDS]).toEqual(["raiders", "killers", "kd", "streaks", "longestKills", "builders", "playTime", "deaths", "friendlyFire"]);
+    expect([...BOARD_KINDS]).toEqual(["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire"]);
   });
   it("BOARD_LABELS is written in the same order", () => {
     expect(Object.keys(BOARD_LABELS)).toEqual([...BOARD_KINDS]);
@@ -13,13 +13,14 @@ describe("board order", () => {
 });
 
 describe("BOARD_LABELS", () => {
-  it("names all nine boards", () => {
+  it("names all ten boards", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
       kd: "Best K/D",
       streaks: "Best killstreak",
       longestKills: "Longest kill",
+      bountyKills: "Most bounty kills",
       builders: "Top builders",
       playTime: "Most play time",
       deaths: "Most PvP deaths",

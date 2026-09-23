@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import {
-  events, factionMembers, factions, identityLinks, kills, membershipHistory, playerSessions, players, raids, seasons,
+  bounties, events, factionMembers, factions, identityLinks, kills, membershipHistory, playerSessions, players, raids, seasons,
 } from "@factions/db";
 import { KD_MIN_KILLS } from "@factions/domain";
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
@@ -50,7 +50,7 @@ export type RowClan = { tag: string; texture: string };
 export type RowClans = Record<string, RowClan>;
 
 export type Boards = {
-  /** The clan behind each row's `dayzId`, across all nine boards. */
+  /** The clan behind each row's `dayzId`, across all ten boards. */
   clans: RowClans;
   /** ⚠️ The RESOLVED scope: a `"current"` request comes back as the season (or all-time) it named. */
   scope: ResolvedScope;
@@ -80,14 +80,20 @@ export type Boards = {
   streaks: BoardRow[];
   /** Longest kill: each player's single farthest PvP kill, with its weapon. Friendly fire is not one. */
   longestKills: LongestKillRow[];
+  /**
+   * Bounty kills: bounties this player collected (spec 2026-09-23-bounties). A claim is
+   * already a `scoringKill` — no friendly fire, no Hub — decided and frozen when the
+   * bounty closed, so this counts claims and nothing else. Windowed on the kill's time.
+   */
+  bountyKills: BoardRow[];
 };
 /**
- * The nine board names, in display order: raiding first, then offensive PvP
- * (kills, K/D, streak, range), building, play time, and last the two
- * shameful boards (deaths, friendly fire). The URL segment of a full-board
- * page is one of these.
+ * The ten board names, in display order: raiding first, then offensive PvP
+ * (kills, K/D, streak, range), building, play time, bounty kills, and last
+ * the two shameful boards (deaths, friendly fire). The URL segment of a
+ * full-board page is one of these.
  */
-export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "builders", "playTime", "deaths", "friendlyFire"] as const;
+export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire"] as const;
 export type BoardKind = (typeof BOARD_KINDS)[number];
 /** Rows per page on a full-board page. */
 export const BOARD_PAGE_SIZE = 50;
@@ -457,6 +463,10 @@ function boardRows(
     case "builders": return buildersBoard(db, serverId, w, roster, limit, offset);
     case "streaks": return streakBoard(db, serverId, w, roster, limit, offset);
     case "longestKills": return longestKillBoard(db, serverId, w, roster, limit, offset);
+    case "bountyKills": return countBoard(db, bounties.claimedByDayzId, bounties, and(
+      eq(bounties.serverId, serverId), eq(bounties.status, "claimed"),
+      inWindow(bounties.claimedAt, w), inRoster(bounties.claimedByDayzId, roster),
+    )!, limit, offset);
   }
 }
 
@@ -482,17 +492,17 @@ async function scopeWindow(db: Database, scope: StatScope, now: Date) {
   return { serverId, seasonList, resolved, w };
 }
 
-/** The nine boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+/** The ten boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const { serverId, seasonList, resolved, w } = await scopeWindow(db, scope, now);
   const rows = (kind: BoardKind) => boardRows(db, kind, serverId, w, now, roster, limit);
-  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills] = await Promise.all([
+  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills] = await Promise.all([
     rows("raiders"), rows("killers"), rows("deaths"), kdBoard(db, serverId, w, roster, limit), rows("playTime"),
-    rows("friendlyFire"), rows("builders"), rows("streaks"), longestKillBoard(db, serverId, w, roster, limit),
+    rows("friendlyFire"), rows("builders"), rows("streaks"), longestKillBoard(db, serverId, w, roster, limit), rows("bountyKills"),
   ]);
-  const all = [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills];
+  const all = [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills];
   const clans = await clansOf(db, all.flatMap((rows) => rows.map((r) => r.dayzId)));
-  return { scope: resolved, seasons: seasonList, clans, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills };
+  return { scope: resolved, seasons: seasonList, clans, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills };
 }
 
 /**

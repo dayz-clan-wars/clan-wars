@@ -17,6 +17,7 @@ export const BOARD_LABELS: Record<BoardKind, string> = {
   kd: "Best K/D",
   streaks: "Best killstreak",
   longestKills: "Longest kill",
+  bountyKills: "Most bounty kills",
   builders: "Top builders",
   playTime: "Most play time",
   deaths: "Most PvP deaths",
@@ -41,7 +42,7 @@ export const BOARD_TOP = 10;
  * ⚠️ The bot's leaderboard embeds set their URL from this AND identify their
  * own standing message by reading the slug back off it — a message whose slug
  * does not resolve is not recognised as that board's, so the channel is
- * rebuilt. Changing a slug therefore rewrites nine links and orphans nine
+ * rebuilt. Changing a slug therefore rewrites ten links and orphans ten
  * messages once; that is survivable (the rebuild handles it) but it is not a
  * cosmetic edit.
  */
@@ -55,6 +56,7 @@ export const BOARD_SLUGS: Record<BoardKind, string> = {
   builders: "builders",
   streaks: "streaks",
   longestKills: "longest-kills",
+  bountyKills: "bounty-kills",
 };
 
 /**
@@ -62,7 +64,7 @@ export const BOARD_SLUGS: Record<BoardKind, string> = {
  *
  * ⚠️ Walks `BOARD_SLUGS`' own keys rather than importing `BOARD_KINDS`. This
  * package must import no RUNTIME value from `@factions/roster` — see
- * `test/leaf.test.ts` — and the keys here are the nine kinds anyway.
+ * `test/leaf.test.ts` — and the keys here are the ten kinds anyway.
  */
 export function boardKindFromSlug(raw: string): BoardKind | null {
   return (Object.keys(BOARD_SLUGS) as BoardKind[]).find((k) => BOARD_SLUGS[k] === raw) ?? null;

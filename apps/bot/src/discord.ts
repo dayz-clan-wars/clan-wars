@@ -415,11 +415,11 @@ export function createOnlineBoard(client: Client, channelId: string): OnlineBoar
 }
 
 /**
- * The nine standing messages in the leaderboards channel.
+ * The ten standing messages in the leaderboards channel.
  *
  * ⚠️ `findMine` identifies a message by the board link in its embed, not by a
- * stored id — that is what lets a restart adopt the nine already there. It
- * reads a bounded slice of recent history (the channel holds nine messages;
+ * stored id — that is what lets a restart adopt the ten already there. It
+ * reads a bounded slice of recent history (the channel holds ten messages;
  * fifty is room for a few stray ones without an unbounded walk).
  *
  * ⚠️ Throws on every unreachable path, like the posters: `leaderboardTick`
@@ -812,8 +812,8 @@ export async function start(cfg: BotConfig): Promise<void> {
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
 
-  // The leaderboards channel's nine standing messages, on the same clock as
-  // the crowns below — both read the same nine boards.
+  // The leaderboards channel's ten standing messages, on the same clock as
+  // the crowns below — both read the same ten boards.
   const leaderboardStore = new PgLeaderboardStore(db);
   const leaderboardChannel = cfg.leaderboardsChannelId
     ? createLeaderboardChannel(client, cfg.leaderboardsChannelId, cfg.siteBaseUrl)
@@ -821,9 +821,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   const leaderboardState: LeaderboardState = { messageIds: null, keys: new Map() };
   let lastLeaderboardAt = 0;
 
-  // The nine leaderboard crowns. Throttled the same way the reaper is, and for
+  // The ten leaderboard crowns. Throttled the same way the reaper is, and for
   // the same reason — one interval in this process — but on its own clock,
-  // because a pass is nine leaderboard queries rather than four deletes.
+  // because a pass is ten leaderboard queries rather than four deletes.
   const crownStore = new PgCrownStore(db);
   const crownsConfigured = Object.keys(cfg.crownRoleIds).length > 0;
   let lastCrownAt = 0;
@@ -1058,7 +1058,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
 
     // ⚠️ Its own try/catch, beside the crowns and on its own throttle: the
-    // nine board messages read the same leaderboards the crowns do, so they
+    // ten board messages read the same leaderboards the crowns do, so they
     // belong after the kills and sessions consumers have projected this
     // tick's events.
     if (leaderboardChannel && Date.now() - lastLeaderboardAt >= cfg.leaderboardTickIntervalMs) {

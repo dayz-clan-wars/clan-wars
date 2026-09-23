@@ -24,14 +24,14 @@ export type CrownTickOpts = {
 };
 
 /**
- * The crown reconciler: each of the nine leaderboards has one role, and the
+ * The crown reconciler: each of the ten leaderboards has one role, and the
  * players at #1 hold it. Shaped like `structureTick` — diffs desired against
  * actual and issues only the writes that close a difference, never throws,
  * and counts a failed write as one error so the other eight boards still
  * reconcile.
  *
  * ⚠️ A failed board read returns early with NO writes. Treating a failed read
- * as "nobody is #1" would strip all nine crowns off everyone on one bad
+ * as "nobody is #1" would strip all ten crowns off everyone on one bad
  * query, and hand them all back on the next tick.
  *
  * A cold member cache only ever under-acts, the same as `structureTick`:

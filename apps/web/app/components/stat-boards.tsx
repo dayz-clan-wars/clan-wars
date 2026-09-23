@@ -65,10 +65,10 @@ function BoardPanel({ kind, rows, clans, seeAll }: { kind: Kind; rows: BoardRow[
 }
 
 /**
- * The nine boards (spec §11, plus deaths, builders, streaks and range), in the
- * order `BOARD_LABELS` names them, in a three-column grid on desktop. Each
- * panel links to its full page under `boardsPath` (`/players/boards`,
- * `/clan/board`), keeping the resolved scope.
+ * The ten boards (spec §11, plus deaths, builders, streaks, range and bounty
+ * kills), in the order `BOARD_LABELS` names them, in a three-column grid on
+ * desktop. Each panel links to its full page under `boardsPath`
+ * (`/players/boards`, `/clan/board`), keeping the resolved scope.
  */
 export function StatBoards({ boards, boardsPath, extra }: { boards: Boards; boardsPath: string; extra?: React.ReactNode }) {
   const seeAll = (kind: Kind) => `${boardsPath}/${BOARD_SLUGS[kind]}?${seasonQuery(boards.scope)}`;

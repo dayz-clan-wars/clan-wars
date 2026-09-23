@@ -36,17 +36,17 @@ export type LeaderboardTickResult = {
 };
 
 /**
- * Keep the leaderboards channel's nine standing messages current: one per
+ * Keep the leaderboards channel's ten standing messages current: one per
  * board, in `BOARD_KINDS` order (the site's own display order), edited in
  * place rather than reposted.
  *
  * ⚠️ A failed board read writes NOTHING. Rendering "no rows" from a failed
- * query would blank all nine messages at once and then fill them again on the
+ * query would blank all ten messages at once and then fill them again on the
  * next pass.
  *
- * ⚠️ There is no stored message id. The nine are rediscovered from the channel
+ * ⚠️ There is no stored message id. The ten are rediscovered from the channel
  * itself by the board link in each embed, so a restart adopts the messages
- * already there instead of posting nine more. If any of the nine is missing,
+ * already there instead of posting ten more. If any of the ten is missing,
  * the channel is REBUILT — purged and re-posted in order — because sending
  * just the missing one would put it at the bottom, out of the site's order,
  * and nothing could ever put it back.
@@ -85,7 +85,7 @@ export async function leaderboardTick(
   }
 
   // Rebuild: either the channel had none of ours, or it was missing some. Both
-  // end the same way — nine fresh messages in order — because order is only
+  // end the same way — ten fresh messages in order — because order is only
   // ever established at post time.
   if (state.messageIds === null) {
     try {
@@ -129,7 +129,7 @@ export async function leaderboardTick(
 }
 
 /**
- * The nine boards at the same depth and scope the site's `/players` panels
+ * The ten boards at the same depth and scope the site's `/players` panels
  * use — `BOARD_TOP` rows of the current season — so the channel and the page
  * cannot show different numbers.
  */

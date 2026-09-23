@@ -95,31 +95,31 @@ export type BotConfig = {
    */
   alphaRoleId: string;
   /**
-   * The leaderboards channel: nine standing messages, one per board, edited
+   * The leaderboards channel: ten standing messages, one per board, edited
    * in place. Optional — unset and nothing is posted or edited anywhere.
    */
   leaderboardsChannelId: string | undefined;
   /**
-   * How often the nine board messages reconcile. Default 5 minutes, the same
-   * clock the crowns run on: both read the same nine leaderboards, and a
+   * How often the ten board messages reconcile. Default 5 minutes, the same
+   * clock the crowns run on: both read the same ten leaderboards, and a
    * board that moved should move its crown and its message together.
    */
   leaderboardTickIntervalMs: number;
   /**
-   * The nine leaderboard crowns: one role per board, held by whoever is #1 on
+   * The ten leaderboard crowns: one role per board, held by whoever is #1 on
    * it in the current season (`crown-tick.ts`).
    *
    * Created by hand once, like `@Linked` and `@Alpha` — the bot only adds and
    * removes members, so the name, colour, icon and position stay yours.
    *
    * ⚠️ Every one is OPTIONAL and a board with no id here is never touched, so
-   * the crowns can be rolled out a few at a time. All nine unset means the
+   * the crowns can be rolled out a few at a time. All ten unset means the
    * tick does not run at all.
    */
   crownRoleIds: Partial<Record<BoardKind, string>>;
   /**
    * How often the crowns reconcile. Default 5 minutes, not every tick: each
-   * pass is nine leaderboard queries, and a crown that moves within five
+   * pass is ten leaderboard queries, and a crown that moves within five
    * minutes of the kill that moved it is as live as anyone can tell.
    */
   crownTickIntervalMs: number;
@@ -305,6 +305,7 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
   kd: "CROWN_KD_ROLE_ID",
   streaks: "CROWN_STREAKS_ROLE_ID",
   longestKills: "CROWN_LONGEST_KILL_ROLE_ID",
+  bountyKills: "CROWN_BOUNTY_KILLS_ROLE_ID",
   builders: "CROWN_BUILDERS_ROLE_ID",
   playTime: "CROWN_PLAYTIME_ROLE_ID",
   deaths: "CROWN_DEATHS_ROLE_ID",
@@ -320,7 +321,7 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
  * Discord writes a time. It prints as a steady `crowns: 1 added, 1 removed`,
  * which reads exactly like normal churn — the silent kind of wrong this file's
  * other validators exist to catch, and an easy copy-paste to make when pasting
- * nine ids in a row.
+ * ten ids in a row.
  */
 function crownRoleIds(env: NodeJS.ProcessEnv): Partial<Record<BoardKind, string>> {
   const out: Partial<Record<BoardKind, string>> = {};
