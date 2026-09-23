@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { consumerCursors, events, factions, kills, players } from "@factions/db";
 import { readCursor, writeCursor } from "@factions/event-log";
-import { DEFAULT_HIT_BURST_WINDOW_S, RECENT_HIT_WINDOW_S, groupHitBursts, type HitEngagement, type HitInput } from "@factions/domain";
+import { DEFAULT_HIT_BURST_WINDOW_S, RECENT_HIT_WINDOW_S, atHub, groupHitBursts, readVec3, type HitEngagement, type HitInput } from "@factions/domain";
 import { and, asc, eq, gt, gte, lte, max, min, sql } from "drizzle-orm";
 import { cursorFeedTick, type CursorFeedPoster, type CursorFeedResult, type CursorFeedStore } from "./cursor-feed.js";
 import type { FlagImageResolver } from "./feed-embed.js";
@@ -147,6 +147,7 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
     const effective = truncated ? new Date(rows[rows.length - 1]!.occurredAt.getTime() - 1) : frontier;
 
     const inputs: HitInput[] = [];
+    const hub = new Set<number>();
     for (const r of rows) {
       const p = r.payload as Record<string, unknown>;
       const type = p.attackerType;
@@ -154,6 +155,10 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
       // A hit with no victim id is unusable — grouping it under "" would
       // merge every such hit from one attacker into a single fake engagement.
       if (victimDayzId === null) continue;
+      // ⚠️ Marked here, suppressed below — NOT dropped from `inputs`. A batch of
+      // nothing but Hub hits would otherwise form no engagement, move no cursor,
+      // and be re-read every tick forever.
+      if (atHub(readVec3(p.victimPos)) || atHub(readVec3(p.attackerPos))) hub.add(Number(r.id));
       inputs.push({
         eventId: Number(r.id), serverId: r.serverId, occurredAt: r.occurredAt,
         attackerType: type === "player" || type === "infected" ? type : "environment",
@@ -287,7 +292,9 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
       const damages = e.hits.map((h) => h.damage).filter((d): d is number => d !== null);
       // Suppression is checked FIRST and cheaply: a suppressed engagement
       // never renders, so the ~6 name/tag/flag lookups below would be wasted.
-      const suppressed = await this.claimedByAKill(e.serverId, e.attackerDayzId, e.victimDayzId, e.startedAt, e.endedAt);
+      // Two reasons to suppress: a kill claimed the engagement (it belongs to
+      // #kill-feed), or it happened at the Hub (spec 2026-09-22-hub-combat).
+      const suppressed = e.hits.some((h) => hub.has(h.eventId)) || await this.claimedByAKill(e.serverId, e.attackerDayzId, e.victimDayzId, e.startedAt, e.endedAt);
       const blank = { factionId: null, side: UNKNOWN_SIDE };
       const [attacker, victim] = suppressed
         ? [blank, blank]

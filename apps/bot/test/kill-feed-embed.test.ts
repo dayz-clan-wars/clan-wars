@@ -7,7 +7,7 @@ const kill = (over: Partial<KillFeedItem> = {}): KillFeedItem => ({
   eventId: 4000, occurredAt: at,
   killer: { gamertag: "IGC slide", tag: "BEAR", texture: "Flag_Bear" },
   victim: { gamertag: "RonaldRaygun552", tag: "WOLF", texture: "Flag_Wolf" },
-  weapon: "KA-74", distanceM: 40.714, friendlyFire: false, cause: "pvp",
+  weapon: "KA-74", distanceM: 40.714, friendlyFire: false, atHub: false, cause: "pvp",
   tally: { killerKills: 13, victimDeaths: 4, season: 1 },
   hits: [],
   ...over,
@@ -85,7 +85,7 @@ describe("hit detail lines", () => {
     eventId: 1, occurredAt: new Date("2026-09-12T01:00:00Z"),
     killer: { gamertag: "Steve", tag: "WOLF", texture: null },
     victim: { gamertag: "Dave", tag: "BEAR", texture: null },
-    weapon: "KA-74", distanceM: 41, friendlyFire: false, cause: "pvp",
+    weapon: "KA-74", distanceM: 41, friendlyFire: false, atHub: false, cause: "pvp",
     tally: { killerKills: 12, victimDeaths: 3, season: 2 },
   };
   const site = "https://dayzclanwars.com";
@@ -118,5 +118,11 @@ describe("hit detail lines", () => {
     expect(withNone.description).not.toContain("dmg");
     expect(withNone.description!.endsWith(" ")).toBe(false);
     expect(withNone.description).not.toMatch(/\n\n$/u);
+  });
+
+  it("a Hub kill is posted, marked, in amber — a record, not a score", () => {
+    const e = killFeedEmbed(kill({ atHub: true }), site);
+    expect(e.title).toMatch(/^At the Hub — /u);
+    expect(e.color).toBe(0xe67e22);
   });
 });

@@ -33,6 +33,8 @@ export type KillFeedItem = {
   weapon: string | null;
   distanceM: number | null;
   friendlyFire: boolean;
+  /** At the Fast Travel Hub: posted as a record, scores nowhere (spec 2026-09-22-hub-combat). */
+  atHub: boolean;
   /** `finished` for a credited kill (kills-tick: shot to near-zero and left to die); anything else reads as a plain kill. */
   cause: string;
   /** The running tally, counted up to and including this kill. */
@@ -119,10 +121,10 @@ export function killFeedEmbed(k: KillFeedItem, siteBaseUrl: string, flagImage: F
   if (detail.length > 0) lines.push("", ...detail);
 
   return {
-    title: `${k.friendlyFire ? "Friendly fire — " : ""}${k.killer.gamertag}${killerTag}`,
+    title: `${k.atHub ? "At the Hub — " : k.friendlyFire ? "Friendly fire — " : ""}${k.killer.gamertag}${killerTag}`,
     url: profileUrl(siteBaseUrl, k.killer.gamertag),
     description: lines.join("\n"),
-    color: k.friendlyFire ? AMBER : RUST,
+    color: k.atHub || k.friendlyFire ? AMBER : RUST,
     footer: { text: k.tally.season === null ? "All-time" : `Season ${k.tally.season}` },
     // ⚠️ The kill's time, not the post's: a delayed post still reads as when it happened.
     timestamp: k.occurredAt.toISOString(),

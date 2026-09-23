@@ -33,8 +33,8 @@ export function killstreakFeedTick(
 
 /** ⚠️ A kill BY another player — the same rule as every PvP read in the roster. */
 const pvp = and(isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${kills.victimDayzId}`)!;
-/** A kill that counts toward a streak: PvP, and not a clanmate. */
-const streakable = and(pvp, eq(kills.friendlyFire, false))!;
+/** A kill that counts toward a streak: PvP, not a clanmate, and not at the Hub (spec 2026-09-22-hub-combat). */
+const streakable = and(pvp, eq(kills.friendlyFire, false), eq(kills.atHub, false))!;
 
 export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem> {
   constructor(private readonly db: Database) {}
@@ -61,7 +61,7 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
   async readAfter(cursor: number, limit: number): Promise<KillstreakFeedItem[]> {
     const rows = await this.db.select({
       eventId: kills.eventId, serverId: kills.serverId, occurredAt: kills.occurredAt,
-      killerDayzId: kills.killerDayzId, friendlyFire: kills.friendlyFire,
+      killerDayzId: kills.killerDayzId, friendlyFire: kills.friendlyFire, atHub: kills.atHub,
     }).from(kills)
       .where(and(gt(kills.eventId, cursor), pvp))
       .orderBy(asc(kills.eventId))
@@ -70,8 +70,8 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
     const out: KillstreakFeedItem[] = [];
     for (const r of rows) {
       const killer = r.killerDayzId!;
-      if (r.friendlyFire) {
-        // ⚠️ Null, not 0: friendly fire neither advances the streak nor breaks
+      if (r.friendlyFire || r.atHub) {
+        // ⚠️ Null, not 0: friendly fire — or a Hub kill — neither advances the streak nor breaks
         // it. Without that rule the cheapest 9-streak on the server is three
         // clanmates standing still. This item is always declined, so the
         // killer's name, tag and flag are never rendered — skip the lookup.
