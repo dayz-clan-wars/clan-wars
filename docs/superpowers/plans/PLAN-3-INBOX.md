@@ -1245,3 +1245,35 @@ now lists both writers as pending, which documents the situation rather than hid
 Removing it later means dropping the function, its tests, and its entries in
 `packages/roster/src/index.ts`, `api.ts`, `test/roster-exports.ts`, `apps/web/test/smoke.test.ts`,
 and the parity PENDING block. Nothing breaks if it stays.
+
+## 44. The two index-drift tests run against the shared database, and one only passes because it is empty
+
+`apps/bot/test/dormancy-index-drift.test.ts` and `hit-feed-index-drift.test.ts` connect to the
+raw `TEST_DATABASE_URL` (`process.env`, not `requireTestDatabaseUrl()`), so both escape item
+21's per-package isolation and run `runMigrations` against the shared `factions` database on
+every run — locally the one on 5434, beside `factions_live`. Neither deletes anything; they
+migrate and `explain`. They are also the source of the last 4 Postgres NOTICEs in a test run,
+because `client_min_messages` is set only on the `factions_test_*` databases (2026-09-23, PR #81).
+
+Pointing them at `factions_test_bot` is a one-line change each, and the hit-feed test passes
+there. **The dormancy test fails there**: on a database with rows and statistics left by the
+other bot suites, the planner answers `clockQuery`'s LAST_RAISE subquery with
+`events_raise_by_player_idx` (the stats package's `(payload->>'dayzId') where type =
+'flag.raised'` index, added after this test) and leaves `poleKey` and `texture` in a `Filter` —
+exactly the drift signature the test exists to catch. It only passes today because the shared
+database's `events` table is empty, so the planner has nothing to prefer. Found 2026-09-23 while
+silencing CI notices; reverted to keep that PR about CI.
+
+Two questions, the second more important than the first:
+
+1. **Make the test deterministic.** It should pin the plan on a controlled `events` population
+   (seed a known distribution, `analyze`, then `explain`) in its own database, not on whatever
+   the planner happens to see. `enable_seqscan`/`enable_bitmapscan = off` do not help here —
+   the competitor is another index scan.
+2. **Check whether production has the same plan.** If `factions_live`'s statistics also make
+   `events_raise_by_player_idx` look cheaper for the correlated subquery (the `dayzId` join
+   against the roster makes it plausible), the dormancy clock may already be filtering every
+   raise by one player instead of walking one pole and texture — the 352 ms-vs-0.4 ms case the
+   index was built for, but slowed only by a player's raise count, so it may be fine in
+   practice. `explain` the query read-only on `factions_live` before choosing a fix: steer the
+   planner, widen `events_raise_lookup_idx`, or accept it.
