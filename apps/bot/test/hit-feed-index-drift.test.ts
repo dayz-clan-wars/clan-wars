@@ -1,9 +1,10 @@
 import { describe, it, expect, beforeAll } from "vitest";
-import { createClient, runMigrations, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
 import { hitEventsQuery, maxOccurredAtQuery } from "../src/hit-feed-tick.js";
 
-const URL = process.env.TEST_DATABASE_URL;
-if (!URL) throw new Error("TEST_DATABASE_URL is required");
+// ⚠️ The derived factions_test_bot, never the raw base URL: this suite runs
+// migrations, and the base names the shared `factions` database.
+const URL = requireTestDatabaseUrl();
 
 /**
  * ⚠️ `events_hit_id_idx` and `hitEventsQuery`'s predicate are two statements

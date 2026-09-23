@@ -1246,7 +1246,7 @@ Removing it later means dropping the function, its tests, and its entries in
 `packages/roster/src/index.ts`, `api.ts`, `test/roster-exports.ts`, `apps/web/test/smoke.test.ts`,
 and the parity PENDING block. Nothing breaks if it stays.
 
-## 44. The two index-drift tests run against the shared database, and one only passes because it is empty
+## 44. ~~The two index-drift tests run against the shared database, and one only passes because it is empty~~ — DONE 2026-09-23
 
 `apps/bot/test/dormancy-index-drift.test.ts` and `hit-feed-index-drift.test.ts` connect to the
 raw `TEST_DATABASE_URL` (`process.env`, not `requireTestDatabaseUrl()`), so both escape item
@@ -1277,3 +1277,21 @@ Two questions, the second more important than the first:
    index was built for, but slowed only by a player's raise count, so it may be fine in
    practice. `explain` the query read-only on `factions_live` before choosing a fix: steer the
    planner, widen `events_raise_lookup_idx`, or accept it.
+
+**Resolution (2026-09-23).** Question 2 first: a read-only `explain (analyze, buffers)` of
+`clockQuery` on `factions_live` (33,702 events, 58 raises, 5 clans; autoanalyzed that morning)
+chose `events_raise_lookup_idx` with both `poleKey` and `texture` in `Index Cond`, at 1.3 ms.
+Production was not affected. That answer holds at this size only, which is why question 1
+mattered: the test is the only thing that would catch a plan change as the table grows.
+
+The failing plan was noise, not a real preference. The test switched off `enable_seqscan`
+and `enable_bitmapscan` on a near-empty table. Every candidate cost the same there, and on
+the dirtied database the tie broke to a full scan of `events_raise_by_player_idx` with no
+`Index Cond`. The dormancy test now runs on `factions_test_bot`. It truncates, seeds a
+production-shaped table (30 clans × 5 members, 24k raises each at the clan's own pole, 176k
+other events), ANALYZEs, and explains with the planner's defaults. It passes 5/5 runs, and it
+fails when a payload key is renamed in the query (the planner falls back to
+`events_type_idx`, which filters every raise). The hit-feed test moved to `factions_test_bot`
+too, but keeps its overrides. Its partial index is on `type = 'player.hit'`, so no other
+index can answer its predicate at any size, and the mutation check (changing the type)
+fails it correctly.
