@@ -230,7 +230,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       + `Until someone kills you, or you have played ${hours} online, your last known position is on everyone's map. `
       + "Logging off does not run the clock.";
   },
-  bounty_expired: () => "⌛ You served your time. The bounty on you has expired and you are off the map.",
+  bounty_expired: () => "⌛ The bounty on you has expired and you are off the map.",
   bounty_revoked: () => "The bounty on you was lifted by an admin. You are off the map.",
 };
 

@@ -25,7 +25,7 @@ const mapFixture = (over: Partial<MapState> = {}): MapState => ({
   intruders: [{ gamertag: "Rat", x: 4441, z: 4442, lastSeenAt: new Date("2026-09-12T09:45:00Z"), distanceM: 300 }],
   publicBases: [{ x: 3331, z: 3332 }],
   pins: [pin()],
-  bounties: [],
+  bounties: [{ gamertag: "Fugitive", reason: "smoked the whole clan", fix: { x: 9991, z: 9992, at: new Date("2026-09-12T09:15:00Z") } }],
   travelPoints: [{ x: 2221, z: 2222 }],
   hub: { x: 1111, z: 1112 },
   layers: { base: true, clanmates: true, intruders: true, pins: true },
@@ -33,7 +33,7 @@ const mapFixture = (over: Partial<MapState> = {}): MapState => ({
 });
 
 /** Every value in `mapFixture` that no reply may ever carry. */
-const FORBIDDEN = ["Rat", "wolf", "Bex", "mate-1", "7771", "7772", "6661", "6662", "5551", "5552", "4441", "4442", "3331", "3332", "2221", "2222", "1111", "1112"];
+const FORBIDDEN = ["Rat", "wolf", "Bex", "mate-1", "7771", "7772", "6661", "6662", "5551", "5552", "4441", "4442", "3331", "3332", "2221", "2222", "1111", "1112", "Fugitive", "smoked the whole clan", "9991", "9992"];
 
 describe("/map pins", () => {
   it("lists the clan's own pins with their ids", async () => {

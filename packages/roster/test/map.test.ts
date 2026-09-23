@@ -152,15 +152,34 @@ describe("mapState / dropPin / deletePin", () => {
       await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
       const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty2.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
       await fix(file!.id, T, 500, 600, ago(60_000));
-      await db.insert(bounties).values(openBounty(T, { status: "revoked", closedAt: now, revokedByDiscordId: "1" }));
-
-      const s = await mapStateDb(db, "5", now) as MapState;
-      expect(s.bounties).toEqual([]);
+      const overrides: Record<string, Partial<typeof bounties.$inferInsert>> = {
+        claimed: { status: "claimed", closedAt: now, claimedByDayzId: T, claimEventId: 1, claimedAt: now },
+        expired: { status: "expired", closedAt: now },
+        revoked: { status: "revoked", closedAt: now, revokedByDiscordId: "1" },
+      };
+      for (const [status, over] of Object.entries(overrides)) {
+        await db.execute(sql`truncate table bounties restart identity cascade`);
+        await db.insert(bounties).values(openBounty(T, over));
+        const s = await mapStateDb(db, "5", now) as MapState;
+        expect(s.bounties, `status=${status}`).toEqual([]);
+      }
     });
 
     it("omits a target with no fix", async () => {
       await db.insert(players).values({ dayzId: U, gamertag: "Unfixed", firstSeenAt: now, lastSeenAt: now });
       await db.insert(bounties).values(openBounty(U));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
+    });
+
+    it("an OPEN bounty on another server (not the viewer's active server) shows no pin", async () => {
+      const [other] = await db.insert(servers).values({ name: "Other", map: "livonia", clockOffsetMs: 0, active: false }).returning();
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId: other!.id, filename: "bounty3.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      const [e] = await db.insert(events).values({ serverId: other!.id, admFileId: file!.id, lineIndex: 0, type: "player.position", occurredAt: ago(60_000), payload: {} }).returning();
+      await db.insert(playerPositions).values({ serverId: other!.id, dayzId: T, x: "500", z: "600", alt: "100", occurredAt: ago(60_000), eventId: e!.id });
+      await db.insert(bounties).values({ ...openBounty(T), serverId: other!.id });
 
       const s = await mapStateDb(db, "5", now) as MapState;
       expect(s.bounties).toEqual([]);

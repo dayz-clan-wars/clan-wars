@@ -40,6 +40,15 @@ describe("bountyAnnounceTick", () => {
     expect((await db.select().from(bounties)).every((b) => b.placedAnnouncedAt === null)).toBe(true);
   });
 
+  it("⚠️ a closed bounty whose WANTED post fails never gets its close post attempted", async () => {
+    await db.insert(bounties).values({ ...base(), serverId, status: "claimed", closedAt: now, claimedByDayzId: K, claimEventId: 1, claimedAt: now });
+    let calls = 0;
+    const r = await bountyAnnounceTick(db, async () => { calls++; throw new Error("discord down"); }, { now, siteBaseUrl: "https://x" });
+    expect(calls).toBe(1); expect(r.posted).toBe(0); expect(r.blockedAt).not.toBeNull();
+    const [b] = await db.select().from(bounties);
+    expect(b!.placedAnnouncedAt).toBeNull(); expect(b!.closedAnnouncedAt).toBeNull();
+  });
+
   it("posts nothing twice", async () => {
     await db.insert(bounties).values({ ...base(), serverId });
     const sent: string[] = [];

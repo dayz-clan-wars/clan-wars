@@ -25,7 +25,7 @@ export function bountyPostText(p: BountyPost, siteBaseUrl: string): string {
     case "claimed":
       return `💀 ${b(p.killer)} collected the bounty on ${b(p.target)}${p.weapon ? ` with ${escapeMarkdown(p.weapon)}` : ""}.`;
     case "expired":
-      return `⌛ The bounty on ${b(p.target)} has expired. They served their time.`;
+      return `⌛ The bounty on ${b(p.target)} has expired.`;
     case "revoked":
       return `The bounty on ${b(p.target)} was lifted by an admin.`;
   }

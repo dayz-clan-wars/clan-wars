@@ -61,4 +61,26 @@ describe("/bounty", () => {
     const r = await handler("bounty place")(ctx(), input({ isAdmin: true, strings: { player: T, reason: "x" } }));
     expect(r.content).toMatch(/already has an open bounty/u);
   });
+
+  /**
+   * ⚠️ 25 rows × up-to-200-char reasons can exceed Discord's 2,000-char reply limit.
+   * `/bounty list` must truncate each reason and, if it still has to cut, say so
+   * rather than let Discord silently reject an oversized reply.
+   */
+  it("⚠️ truncates long reasons and stays under Discord's 2,000-char reply limit", async () => {
+    const [s] = await db.select().from(servers);
+    const longReason = "x".repeat(200);
+    for (let i = 0; i < 25; i++) {
+      const dayzId = `bounty-target-${i}`;
+      await db.insert(players).values({ dayzId, gamertag: `Target${i}`, firstSeenAt: NOW, lastSeenAt: NOW });
+      await db.insert(bounties).values({
+        serverId: s!.id, targetDayzId: dayzId, reason: longReason, placedByDiscordId: "9", placedAt: NOW,
+        onlineBudgetMs: 3_600_000, deadlineAt: new Date(NOW.getTime() + 30 * 86_400_000), status: "open",
+      });
+    }
+    const r = await handler("bounty list")(ctx(), input({ isAdmin: true }));
+    expect(r.content!.length).toBeLessThanOrEqual(2000);
+    expect(r.content).not.toContain(longReason);
+    expect(r.content).toMatch(/…and \d+ more/u);
+  });
 });

@@ -24,18 +24,19 @@ in-game verification tick confirms it.
 | `CLAN_VOICE_CATEGORY_ID` | yes | The Discord category id the bot creates clan voice channels in. Right-click the category with Developer Mode enabled to copy it. |
 | `LINKED_ROLE_ID` | yes | The Discord role id the bot uses for the @Linked role. Right-click the role with Developer Mode enabled to copy it. |
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
-| `LEADERBOARDS_CHANNEL_ID` | no (unset means nothing is posted or edited) | The channel holding the nine standing leaderboard messages, one per board, edited in place. The bot posts them itself on its first pass; give it a channel players cannot post in, or a stray message will sit among them. |
-| `LEADERBOARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the nine board messages reconcile. Same clock as the crowns, which read the same boards. |
+| `LEADERBOARDS_CHANNEL_ID` | no (unset means nothing is posted or edited) | The channel holding the ten standing leaderboard messages, one per board, edited in place. The bot posts them itself on its first pass; give it a channel players cannot post in, or a stray message will sit among them. |
+| `LEADERBOARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the ten board messages reconcile. Same clock as the crowns, which read the same boards. |
 | `CROWN_RAIDERS_ROLE_ID` | no (unset means that crown is never touched) | Role held by the #1 of the raiders board in the current season. Create the role by hand — the bot only adds and removes members, so the name, colour, icon and position stay yours. |
 | `CROWN_KILLERS_ROLE_ID` | no | Same, for the kills board. |
 | `CROWN_KD_ROLE_ID` | no | Same, for the K/D board (which already requires `KD_MIN_KILLS` kills to appear on at all). |
 | `CROWN_STREAKS_ROLE_ID` | no | Same, for the best-killstreak board. |
 | `CROWN_LONGEST_KILL_ROLE_ID` | no | Same, for the longest-kill board. |
+| `CROWN_BOUNTY_KILLS_ROLE_ID` | no | Same, for the bounty-kills board. |
 | `CROWN_BUILDERS_ROLE_ID` | no | Same, for the builders board. |
 | `CROWN_PLAYTIME_ROLE_ID` | no | Same, for the play-time board. |
 | `CROWN_DEATHS_ROLE_ID` | no | Same, for the most-PvP-deaths board. |
 | `CROWN_FRIENDLY_FIRE_ROLE_ID` | no | Same, for the friendly-fire board. |
-| `CROWN_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the nine crowns reconcile. Each pass is nine leaderboard queries, so this is deliberately not every tick. |
+| `CROWN_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the ten crowns reconcile. Each pass is ten leaderboard queries, so this is deliberately not every tick. |
 | `BOOSTER_TICK_INTERVAL_MS` | no (default `900000`, 15 minutes) | How often the booster tick re-fetches the guild's member list to mirror who is currently boosting into `discord_boosters` — the table the ingest worker's booster-kit spawner reads. Not gated by any feature flag; it always runs. `guild.members.fetch()` is a heavy full-cache call, so this is deliberately not every tick — a stale read is bounded by the next server restart anyway (a kit only reappears then). Runbook `docs/deploy/2026-09-19-booster-kits.md`. |
 | `ACHIEVEMENTS_CHANNEL_ID` | no (unset means the achievements wall is off) | The Discord channel id the public achievements wall posts to, alongside the normal clan-channel/DM notice for every unlock. Unset by default: unlocks still happen, nothing posts there. |
 | `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |

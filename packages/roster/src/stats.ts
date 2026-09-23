@@ -89,8 +89,8 @@ export type Boards = {
 };
 /**
  * The ten board names, in display order: raiding first, then offensive PvP
- * (kills, K/D, streak, range), building, play time, bounty kills, and last
- * the two shameful boards (deaths, friendly fire). The URL segment of a
+ * (kills, K/D, streak, range), bounty kills, then building, play time, and
+ * last the two shameful boards (deaths, friendly fire). The URL segment of a
  * full-board page is one of these.
  */
 export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire"] as const;
