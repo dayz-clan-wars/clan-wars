@@ -40,6 +40,35 @@ export const SOLO_LAPSE_MS = 7 * DAY;
  */
 export const HUB_POSITION = { x: 100, z: 93 } as const;
 
+/**
+ * The Hub's no-combat zone (spec 2026-09-22-hub-combat §2.1): a CYLINDER, not a
+ * circle. The Hub floats — floor 997.5 m, doors 998.6 m, every door within 22 m
+ * of HUB_POSITION — and the ground directly beneath it is ordinary map where a
+ * fight is legal.
+ * ⚠️ The floor is what makes that so. Drop it and every fight on the hill below
+ * the Hub is a one-hour ban.
+ */
+export const HUB_ZONE_RADIUS_M = 100;
+export const HUB_ZONE_MIN_ALTITUDE_M = 900;
+/** Every hit, kill or trap at the Hub. Measured from when the bot PROCESSES it — log delay must not eat the hour. */
+export const HUB_BAN_MS = 1 * HOUR;
+/** Self-defence: A may hit B back this long after B hit A. Per pair. */
+export const HUB_RETALIATION_WINDOW_MS = 2 * MIN;
+/**
+ * ⚠️ Not about the sentence. An unseeded or rewound `hub-watch` cursor would
+ * otherwise replay the whole log into bans — including the 2026-09-20 brawl,
+ * from before the rule existed. Far longer than any log delay seen.
+ */
+export const HUB_OFFENCE_MAX_AGE_MS = 24 * HOUR;
+/**
+ * Placing one of these at the Hub is an offence. The first five were read off
+ * `item.placed` payloads in factions_live on 2026-09-22.
+ * ⚠️ `Plastic_Explosive` has NEVER been placed on this server — vanilla, and
+ * included on that basis; confirm its classname the first time it appears.
+ * A missing classname here is a trap the rule silently allows.
+ */
+export const HUB_TRAP_CLASSES = ["BearTrap", "LandMineTrap", "TripwireTrap", "ImprovisedExplosive", "ClaymoreMine", "Plastic_Explosive"] as const;
+
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
 /** Fri 00:00 → Mon 00:00 UTC. Enforced by the game server's config, not here. */

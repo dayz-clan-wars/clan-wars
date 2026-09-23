@@ -94,8 +94,17 @@ export const BAN_MAX_ATTEMPTS = 3;
  * player starts linking, and without this column it would also lift a ban
  * somebody earned by griefing inside another clan's base.
  */
-export const BAN_REASONS = ["zone", "unlinked_pc"] as const;
+export const BAN_REASONS = ["zone", "unlinked_pc", "hub_combat"] as const;
 export type BanReason = (typeof BAN_REASONS)[number];
+/**
+ * What a ban is FOR, in words a player reads — the ban DM and #bans both use
+ * this. A Record, so a new reason cannot ship without wording.
+ */
+export const BAN_REASON_TEXT: Record<BanReason, string> = {
+  zone: "base-zone enforcement",
+  unlinked_pc: "playing on PC without a linked account",
+  hub_combat: "combat at the Fast Travel Hub",
+};
 
 /**
  * The three REAL ban transitions the public `#bans` channel announces.

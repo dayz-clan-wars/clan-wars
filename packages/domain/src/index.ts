@@ -8,6 +8,7 @@ export * from "./factions";
 export * from "./rules";
 export * from "./leadership";
 export * from "./spacing";
+export * from "./hub";
 export * from "./scoring";
 export * from "./travel";
 export * from "./guide-numbers";
