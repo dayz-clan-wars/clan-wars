@@ -295,7 +295,7 @@ export function drawIntruders({ L, group, pt, data, now, ages, p }: Ctx): void {
   }
 }
 
-/** Every open bounty's target. Name, "wanted" and the age — never a coordinate (the rule at the top of this file). */
+/** Every open bounty whose target is online. Name, "wanted" and the age — never a coordinate (the rule at the top of this file). */
 export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
   for (const b of data.bounties) {
     const text = (age: string) => `${escapeHtml(b.gamertag)} · wanted · ${escapeHtml(age)}`;
