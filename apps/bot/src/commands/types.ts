@@ -72,6 +72,11 @@ export type Ctx = {
   db: Database;
   /** The `SERVER_EVENTS_CHANNEL_ID` poster, or null when `AIRDROP_TICK` is off. */
   serverEvents: ((content: string) => Promise<void>) | null;
+  /**
+   * `BOUNTY_TICK`. `/bounty place` refuses when it is off: with no tick and no
+   * poster, a bounty would be a punishment nobody is told about and nobody can collect.
+   */
+  bountiesEnabled: boolean;
 };
 
 export type Handler = (ctx: Ctx, input: CommandInput) => Promise<Reply>;

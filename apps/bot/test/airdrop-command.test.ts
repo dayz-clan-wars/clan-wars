@@ -21,7 +21,7 @@ describe("/airdrop place", () => {
   });
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {})) =>
-    ({ db, now: NOW, serverEvents: post, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now: NOW, serverEvents: post, bountiesEnabled: false, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; colour?: string | null } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
     string: (n: string) => (n === "location" ? over.location ?? "dolnik" : over.colour ?? null),

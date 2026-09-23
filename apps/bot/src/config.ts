@@ -162,6 +162,11 @@ export type BotConfig = {
    */
   airdrop: { enabled: boolean; weeklyCap: number; minPop: number };
   /**
+   * Gates the bounty tick and its poster (spec 2026-09-23-bounties). `/bounty place`
+   * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
+   */
+  bounties: { enabled: boolean };
+  /**
    * Where the airdrop tick announces a drop's location. Fatal when the tick
    * is on and this is unset — see the load-time check below.
    */
@@ -476,6 +481,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       weeklyCap: positiveInt(env, "AIRDROP_WEEKLY_CAP", 2),
       minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
     },
+    bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -565,6 +571,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // channel this feature cannot work at all, rather than working less well.
   if (config.airdrop.enabled && !config.serverEventsChannelId) {
     throw new Error("AIRDROP_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the location announcement is the only way a drop is ever found, so with no channel to post it this is misconfigured, not merely degraded.");
+  }
+  // ⚠️ Fatal, like WEEKLY_VEHICLE_WIPE: the announcement is the whole point of a
+  // bounty — a punishment nobody is told about is not one.
+  if (config.bounties.enabled && !config.serverEventsChannelId) {
+    throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

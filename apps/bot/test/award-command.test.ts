@@ -17,7 +17,7 @@ describe("/award", () => {
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true });
   });
 
-  const ctx = () => ({ db, now: NOW, serverEvents: null, roster: {} as never, siteBaseUrl: "https://dayzclanwars.com" }) as unknown as Ctx;
+  const ctx = () => ({ db, now: NOW, serverEvents: null, bountiesEnabled: false, roster: {} as never, siteBaseUrl: "https://dayzclanwars.com" }) as unknown as Ctx;
   const input = (o: { isAdmin?: boolean; user?: string | null; award?: string; reason?: string; grant?: string } = {}) => ({
     actorDiscordId: "9", isAdmin: o.isAdmin ?? true,
     string: (n: string) => (n === "award" ? o.award ?? "plate-carrier" : n === "reason" ? o.reason ?? "Winner, Sept KOTH" : n === "grant" ? o.grant ?? null : null),
