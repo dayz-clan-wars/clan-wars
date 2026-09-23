@@ -9,6 +9,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - CI checks on pull requests finish faster: the packages' tests now run side by side,
   and CI's throwaway test database no longer waits on the disk after every write.
+- Test runs no longer print tens of thousands of database notices, so a real failure
+  is easy to find in the CI log.
 
 ## [1.36.0] - 2026-09-23
 
