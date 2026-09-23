@@ -33,13 +33,13 @@ export async function seedLink(db: Database, a: { dayzId: string; discordId: str
 }
 export async function seedKill(db: Database, a: {
   serverId: number; killer: string | null; victim: string; at: Date; weapon?: string | null; distanceM?: number | null;
-  cause?: string; friendlyFire?: boolean; killerFactionId?: number | null; victimFactionId?: number | null;
+  cause?: string; friendlyFire?: boolean; killerFactionId?: number | null; victimFactionId?: number | null; atHub?: boolean;
 }) {
   const ev = await seedEvent(db, { serverId: a.serverId, type: a.killer ? "player.killed" : "player.died", at: a.at, payload: {} });
   const [k] = await db.insert(kills).values({
     serverId: a.serverId, eventId: ev.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
     weapon: a.weapon ?? (a.killer ? "M4-A1" : null), distanceM: a.distanceM == null ? null : String(a.distanceM),
-    cause: a.cause ?? (a.killer ? "pvp" : "died"), friendlyFire: a.friendlyFire ?? false,
+    cause: a.cause ?? (a.killer ? "pvp" : "died"), friendlyFire: a.friendlyFire ?? false, atHub: a.atHub ?? false,
     killerFactionId: a.killerFactionId ?? null, victimFactionId: a.victimFactionId ?? null,
   }).returning();
   return k!;
