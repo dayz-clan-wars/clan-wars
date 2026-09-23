@@ -4,7 +4,7 @@ import { CANVAS_PX, MAX_ZOOM, gridRef, worldToLatLng } from "@/lib/map-projectio
 import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
-  baseIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
+  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
 } from "@/lib/map-icons";
 
 /**
@@ -28,17 +28,19 @@ export type WireState = {
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: string; distanceM: number }[];
   publicBases: { x: number; z: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: string; expiresAt: string }[];
+  bounties: { gamertag: string; reason: string; fix: WireFix }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
 };
 
 /** The same thing with real `Date`s — what everything below reads. */
-export type MapData = Omit<WireState, "you" | "clanmates" | "intruders" | "pins"> & {
+export type MapData = Omit<WireState, "you" | "clanmates" | "intruders" | "pins" | "bounties"> & {
   you: { gamertag: string; fix: { x: number; z: number; at: Date } | null };
   clanmates: { dayzId: string; gamertag: string; fix: { x: number; z: number; at: Date } }[];
   intruders: { gamertag: string; x: number; z: number; lastSeenAt: Date; distanceM: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: Date; expiresAt: Date }[];
+  bounties: { gamertag: string; reason: string; fix: { x: number; z: number; at: Date } }[];
 };
 
 /** JSON never carries a Date. Every `at` comes back as an ISO string; put them back. */
@@ -49,6 +51,7 @@ export function parseState(raw: WireState): MapData {
     clanmates: raw.clanmates.map((m) => ({ ...m, fix: { x: m.fix.x, z: m.fix.z, at: new Date(m.fix.at) } })),
     intruders: raw.intruders.map((i) => ({ ...i, lastSeenAt: new Date(i.lastSeenAt) })),
     pins: raw.pins.map((p) => ({ ...p, at: new Date(p.at), expiresAt: new Date(p.expiresAt) })),
+    bounties: raw.bounties.map((b) => ({ ...b, fix: { x: b.fix.x, z: b.fix.z, at: new Date(b.fix.at) } })),
   };
 }
 
@@ -289,6 +292,20 @@ export function drawIntruders({ L, group, pt, data, now, ages, p }: Ctx): void {
       .bindTooltip(text(age), tag(`${TAG}-intruder`));
     marker.addTo(group);
     ages.push({ at: i.lastSeenAt, layer: marker, tooltip: text, last: age });
+  }
+}
+
+/** Every open bounty's target. Name, "wanted" and the age — never a coordinate (the rule at the top of this file). */
+export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
+  for (const b of data.bounties) {
+    const text = (age: string) => `${escapeHtml(b.gamertag)} · wanted · ${escapeHtml(age)}`;
+    const age = fixAge(b.fix.at, new Date(now));
+    const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: false })
+      .bindTooltip(text(age), tag(`${TAG}-intruder`))
+      .bindPopup(`${text(age)}<br>${escapeHtml(b.reason)}`, POPUP);
+    markOpen(marker);
+    marker.addTo(group);
+    ages.push({ at: b.fix.at, layer: marker, tooltip: text, last: age });
   }
 }
 

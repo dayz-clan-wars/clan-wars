@@ -11,7 +11,7 @@ import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
@@ -41,8 +41,8 @@ const PLACE_PANE = "places";
 const AGE_TICK_MS = 30_000;
 
 type LayerKey = keyof typeof LAYER_LABELS;
-/** The four every linked viewer has; the other four are gated on `layers.*`. */
-const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "places", "terrain"];
+/** The six every linked viewer has; the other four are gated on `layers.*`. */
+const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "places", "terrain", "bounties"];
 const ALL_KEYS = Object.keys(LAYER_LABELS) as LayerKey[];
 const ALL_ON = Object.fromEntries(ALL_KEYS.map((k) => [k, true])) as Record<LayerKey, boolean>;
 
@@ -265,6 +265,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     drawBase(ctx("base"));
     drawClanmates(ctx("clanmates"));
     drawIntruders(ctx("intruders"));
+    drawBounties(ctx("bounties"));
     drawPublicBases(ctx("publicBases"));
     drawPins(ctx("pins"));
     drawTravel(ctx("travel"));
