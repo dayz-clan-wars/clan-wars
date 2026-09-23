@@ -167,5 +167,7 @@ delete from consumer_cursors where consumer_name = 'hub-watch';
 
 Left in place, the cursor still points at the moment the tick was switched off, and
 the first tick back would ban every Hub offence from the last 24 h
-(`HUB_OFFENCE_MAX_AGE_MS`) — offences committed while enforcement was off — in one pass. Leave `kills.at_hub` in
-place — the column is harmless, and dropping it would need the old code back.
+(`HUB_OFFENCE_MAX_AGE_MS`) — offences committed while enforcement was off — in one pass.
+
+Leave `kills.at_hub` in place — the column is harmless, and dropping it would need the
+old code back.
