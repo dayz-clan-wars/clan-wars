@@ -22,7 +22,12 @@ export async function backfillHubPositions(db: Database, opts: { serverId: numbe
   let after = 0;
   for (;;) {
     const batch = await db.select({ id: events.id, subIndex: events.subIndex, content: rawLines.content })
-      .from(events).leftJoin(rawLines, eq(rawLines.id, events.rawLineId))
+      // ⚠️ Joined on the natural key (file, line), NOT `events.raw_line_id`: a reparse
+      // inserts events whose raw line already exists, so the worker's
+      // onConflictDoNothing().returning() hands back nothing and `raw_line_id` is
+      // null — 22 of 308 kill events in factions_live on 2026-09-22. Joining on the
+      // id would skip every one of them silently, and their Hub kills would keep scoring.
+      .from(events).leftJoin(rawLines, and(eq(rawLines.admFileId, events.admFileId), eq(rawLines.lineIndex, events.lineIndex)))
       .where(and(
         eq(events.serverId, opts.serverId), gt(events.id, after),
         inArray(events.type, ["player.hit", "player.killed"]),

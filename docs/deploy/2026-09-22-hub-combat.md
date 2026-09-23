@@ -52,8 +52,10 @@ cd /opt/clan-wars && set -a && . ./.env && set +a
 pnpm --filter @factions/bot exec tsx ../../scripts/backfill-hub-positions.ts --server 1
 ```
 
-Expect `unparsed` at or near zero: every hit and kill event has its raw line. A large
-`unparsed` means events without `raw_line_id` — investigate before applying. Then:
+Expect `unparsed` at or near zero. The raw line is matched by file and line number, so
+events a reparse created (whose `raw_line_id` is null — 472 hits and 22 kills on
+2026-09-22) are found too. A large `unparsed` means raw lines genuinely missing —
+investigate before applying. Then:
 
 ```bash
 pnpm --filter @factions/bot exec tsx ../../scripts/backfill-hub-positions.ts --server 1 --apply
@@ -120,6 +122,13 @@ before that seed is ever banned — the cursor starts at the head, so the week o
 fighting before the rule is never replayed into bans. `HUB_OFFENCE_MAX_AGE_MS` (24 h)
 is only the backstop if the `hub-watch` cursor row is ever lost.
 
+Expect a burst of achievement work on this first start. `rebuild:kills` gave every kill
+a new `kills.id`, above the achievement tick's watermark, so the tick treats every
+player with a kill as touched and re-runs their rules once. That can **grant** badges,
+with a Discord card each, and that is correct: a run that a Hub *death* used to break
+now continues, so `killing_spree`/`unstoppable` can be newly earned with a past
+`earnedAt`. Nothing already held is posted again.
+
 ## 8. Verify
 
 ```sql
@@ -148,5 +157,15 @@ hour after `banned_at`. `#bans` announces it as "combat at the Fast Travel Hub".
 ## 10. Rollback
 
 Remove `HUB_BAN_TICK` from `.env` and `sudo systemctl restart clan-wars-bot`. Pending
-Hub bans still apply and expire on their own within the hour. Leave `kills.at_hub` in
+Hub bans still apply and expire on their own within the hour.
+
+⚠️ **Before turning it back on**, delete its cursor so it re-seeds at the head:
+
+```sql
+delete from consumer_cursors where consumer_name = 'hub-watch';
+```
+
+Left in place, the cursor still points at the moment the tick was switched off, and
+the first tick back would ban every Hub offence from the last 24 h
+(`HUB_OFFENCE_MAX_AGE_MS`) — offences committed while enforcement was off — in one pass. Leave `kills.at_hub` in
 place — the column is harmless, and dropping it would need the old code back.

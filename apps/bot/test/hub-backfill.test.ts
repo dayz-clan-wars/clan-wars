@@ -47,6 +47,16 @@ describe("backfillHubPositions", () => {
     expect("victimPos" in (await payloads())[0]!).toBe(false);
   });
 
+  it("⚠️ a reparsed event (raw_line_id null, raw line present) is found by file + line, not skipped", async () => {
+    // A reparse inserts events whose raw line already exists, so the worker's
+    // onConflictDoNothing().returning() hands back nothing and raw_line_id is null —
+    // 22 of 308 kill events in factions_live on 2026-09-22.
+    await db.insert(rawLines).values({ admFileId: fileId, lineIndex: line, content: KILL });
+    await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.killed", occurredAt: new Date(), payload: { victimDayzId: V } });
+    expect(await backfillHubPositions(db, { serverId, apply: true })).toEqual({ scanned: 1, updated: 1, unparsed: 0 });
+    expect((await payloads())[0]).toMatchObject({ killerPos: { x: 99, y: 998.6, z: 93 } });
+  });
+
   it("an event without a raw line is counted as unparsed, not guessed", async () => {
     await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.hit", occurredAt: new Date(), payload: { victimDayzId: V } });
     expect(await backfillHubPositions(db, { serverId, apply: true })).toEqual({ scanned: 1, updated: 0, unparsed: 1 });
