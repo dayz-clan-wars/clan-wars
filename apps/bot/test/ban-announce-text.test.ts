@@ -2,6 +2,10 @@ import { describe, it, expect } from "vitest";
 import { banAnnouncementText, type BanAnnouncement } from "../src/ban-announce-text.js";
 
 describe("banAnnouncementText", () => {
+  it("applied / hub_combat names the Hub", () => {
+    expect(banAnnouncementText({ kind: "applied", gamertag: "Ay", reason: "hub_combat", expiresAt: "2026-09-22T13:00:00Z" }))
+      .toMatch(/^🔨 \*\*Ay\*\* banned until .+ — combat at the Fast Travel Hub\.$/u);
+  });
   it("applied / unlinked_pc: playing on PC without a linked account", () => {
     const a: BanAnnouncement = { kind: "applied", gamertag: "Wolfie", reason: "unlinked_pc", expiresAt: null };
     expect(banAnnouncementText(a))

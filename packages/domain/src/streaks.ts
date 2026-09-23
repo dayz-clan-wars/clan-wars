@@ -1,10 +1,15 @@
-export type StreakRow = { killer: string | null; victim: string; friendlyFire: boolean; occurredAt: Date };
+export type StreakRow = {
+  killer: string | null; victim: string; friendlyFire: boolean; occurredAt: Date;
+  /** A Hub kill (spec 2026-09-22-hub-combat): skipped on both sides, like friendly fire. */
+  atHub?: boolean;
+};
 
 /**
  * One player's PvP streak from their own kill rows, ascending. Same rule as
  * packages/roster/src/stats.ts bestStreaks and killstreak-feed-tick.ts's
  * `runUpTo`: a non-friendly-fire kill of another player extends the run; a
  * non-friendly death to another player resets it; a non-player death does not.
+ * A Hub kill (`atHub`) is skipped exactly as friendly fire is, on both sides.
  *
  * ⚠️ Friendly fire is skipped on BOTH sides (2026-09-21). Until then this reset
  * the run on a friendly death, which meant a clanmate could end a teammate's
@@ -23,11 +28,11 @@ export function streakOf(rows: readonly StreakRow[], dayzId: string): { best: nu
   const firstAt = new Map<number, Date>();
   const firstIndex = new Map<number, number>();
   rows.forEach((r, i) => {
-    if (r.killer === dayzId && r.victim !== dayzId && !r.friendlyFire) {
+    if (r.killer === dayzId && r.victim !== dayzId && !r.friendlyFire && !r.atHub) {
       run += 1;
       if (!firstAt.has(run)) { firstAt.set(run, r.occurredAt); firstIndex.set(run, i); }
       if (run > best) best = run;
-    } else if (r.victim === dayzId && r.killer !== null && r.killer !== dayzId && !r.friendlyFire) {
+    } else if (r.victim === dayzId && r.killer !== null && r.killer !== dayzId && !r.friendlyFire && !r.atHub) {
       run = 0;
     }
   });

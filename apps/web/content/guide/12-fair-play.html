@@ -43,9 +43,18 @@
 <h2>Combat logging</h2>
 <p>Don't log out within {{COMBAT_LOG_MS|minutes}} of combat — shots fired or received, voice contact, or being inside a base while it is raided. An accidental disconnect: rejoin as fast as you can and open a ticket.</p>
 
+<h2>No combat at the Hub</h2>
+<div class="rule"><p><strong>The Fast Travel Hub is a no-combat zone.</strong> Hit someone, kill someone, or place a trap or explosive there, and you are banned for {{HUB_BAN_MS|hours}}. It is automatic: no ticket, no staff. The bot reads it straight from the log.</p></div>
+<ul>
+<li>Self-defence is allowed. If someone hits you, you may hit them back for {{HUB_RETALIATION_WINDOW_MS|minutes}}. Whoever lands the first hit is the one banned.</li>
+<li>The Hub is everything within {{HUB_ZONE_RADIUS_M|m}} of the arrival point, up in the sky. The ground directly below it is ordinary map, and a fight there is fine.</li>
+<li>A kill at the Hub counts for nothing: not on the boards, not your K/D, not a streak, not an achievement. That goes for every kill ever made there, not just new ones.</li>
+<li>Every offence is its own {{HUB_BAN_MS|hours}} ban, never longer. More hits while that ban is on its way don't add to it.</li>
+</ul>
+
 <h2>Enforcement</h2>
 <ul>
-<li>Report through a ticket, with video. Staff cannot act on "trust me". Dismantling, building and boost-stacking inside a watch zone are the exception: the bot catches them from the log, and the base's owner presses charges from <code>/base</code> — no ticket, no staff.</li>
+<li>Report through a ticket, with video. Staff cannot act on "trust me". Dismantling, building and boost-stacking inside a watch zone are the exception: the bot catches them from the log, and the base's owner presses charges from <code>/base</code> — no ticket, no staff. Combat at the Hub is the other exception: the bot bans it on its own.</li>
 <li>Warning, then temporary ban, then permanent, at staff discretion. Exploits and cheating skip straight to permanent.</li>
 <li>Staff never create, edit or delete a clan, a flag, a base or a raid. If it looks like they did, they didn't — a person was removed and the system followed.</li>
 </ul>

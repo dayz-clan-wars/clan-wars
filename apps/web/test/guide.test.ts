@@ -180,3 +180,14 @@ describe("the search index", () => {
     for (const e of index.filter((e) => e.heading)) expect(e.text.length, e.href).toBeGreaterThan(0);
   });
 });
+
+describe("the Hub rule's rendered copy", () => {
+  // A {{KEY|hours}} token after a counting word reads "one 1 hour ban" once rendered.
+  it("never doubles the count around a rendered duration", () => {
+    for (const file of ["11-getting-around.html", "12-fair-play.html", "13-rules-on-one-page.html"]) {
+      const html = renderFragment(readFileSync(join(CONTENT_DIR, file), "utf8")).html;
+      expect(html, file).not.toMatch(/\b(one|a|an) 1 hour\b/u);
+      expect(html, file).toMatch(/1 hour ban/u);
+    }
+  });
+});

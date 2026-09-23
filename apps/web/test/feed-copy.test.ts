@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { DEATH_CAUSES } from "@factions/domain";
-import { FEED_KIND, DEATH_CAUSE, FINISHED, EMPTY_FEED, FEED_TITLE, FRIENDLY_FIRE_MARK, deathCause, steps, shot } from "../lib/feed-copy";
+import { FEED_KIND, DEATH_CAUSE, FINISHED, EMPTY_FEED, FEED_TITLE, FRIENDLY_FIRE_MARK, HUB_MARK, deathCause, steps, shot } from "../lib/feed-copy";
 
 describe("feed copy", () => {
   it("names every kind", () => {
@@ -12,6 +12,7 @@ describe("feed copy", () => {
     expect(EMPTY_FEED).toBe("Nothing in the log for this scope.");
     expect(FEED_TITLE).toBe("Feed");
     expect(FRIENDLY_FIRE_MARK).toBe("friendly fire");
+    expect(HUB_MARK).toBe("at the Hub — doesn't count");
   });
   it("covers every cause the kills column can hold — the parser's and the verdict's", () => {
     for (const c of DEATH_CAUSES) expect(c in DEATH_CAUSE, c).toBe(true);

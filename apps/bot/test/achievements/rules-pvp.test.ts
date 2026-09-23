@@ -97,4 +97,23 @@ describe("pvp rules", () => {
     await seedKill(db, { serverId, killer: A, victim: B, at: m(20), friendlyFire: true });
     expect(await rule("blue_on_blue")(db, player, ctx)).toMatchObject({ count: 1, earnedAt: m(20) });
   });
+
+  it("Hub kills earn nothing: counts, distance, streaks, nemesis and payback all ignore them (spec 2026-09-22-hub-combat)", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(0), distanceM: 400, atHub: true });
+    expect((await rule("first_blood")(db, player, ctx)).count).toBe(0);
+    expect((await rule("sniper")(db, player, ctx)).count).toBe(0);
+    for (let i = 0; i < 5; i++) await seedKill(db, { serverId, killer: A, victim: B, at: m(10 + i), atHub: true });
+    expect((await rule("nemesis")(db, player, ctx)).count).toBe(0);
+    expect((await rule("killing_spree")(db, player, ctx)).count).toBe(0);
+    await seedKill(db, { serverId, killer: B, victim: A, at: m(20), atHub: true });   // a Hub death is not "them killing you"
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(21) });
+    expect((await rule("payback")(db, player, ctx)).count).toBe(0);
+  });
+
+  it("a Hub death does not break a streak", async () => {
+    for (let i = 0; i < 3; i++) await seedKill(db, { serverId, killer: A, victim: B, at: m(i) });
+    await seedKill(db, { serverId, killer: B, victim: A, at: m(5), atHub: true });
+    for (let i = 0; i < 2; i++) await seedKill(db, { serverId, killer: A, victim: C, at: m(10 + i) });
+    expect((await rule("killing_spree")(db, player, ctx)).count).toBe(5);
+  });
 });

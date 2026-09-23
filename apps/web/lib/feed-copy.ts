@@ -13,6 +13,8 @@ export const FEED_KIND: Record<FeedEntry["kind"], { label: string; tone: string 
 export const EMPTY_FEED = "Nothing in the log for this scope.";
 export const FEED_TITLE = "Feed";
 export const FRIENDLY_FIRE_MARK = "friendly fire";
+/** A kill at the Fast Travel Hub: shown, scores nowhere (spec 2026-09-22-hub-combat). */
+export const HUB_MARK = "at the Hub — doesn't count";
 
 /**
  * What a killer-less death was — every word `kills.cause` may hold

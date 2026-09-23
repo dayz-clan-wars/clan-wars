@@ -101,3 +101,13 @@ describe("boostStackFor", () => {
     expect(boostStackFor([a, b], c)).toEqual([a, b, c]);
   });
 });
+
+import { BAN_REASONS, BAN_REASON_TEXT } from "../src/enforcement";
+describe("BAN_REASON_TEXT", () => {
+  it("every ban reason has player-facing wording", () => {
+    expect(BAN_REASONS).toContain("hub_combat");
+    for (const r of BAN_REASONS) expect(BAN_REASON_TEXT[r]).toMatch(/\S/u);
+    expect(BAN_REASON_TEXT.zone).toBe("base-zone enforcement");
+    expect(BAN_REASON_TEXT.hub_combat).toBe("combat at the Fast Travel Hub");
+  });
+});

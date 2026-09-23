@@ -5,6 +5,21 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- No combat at the Fast Travel Hub: a hit, a kill or a trap placed there is an automatic
+  one-hour ban (`HUB_BAN_TICK`). Firing back within two minutes of being hit is
+  self-defence. The ground below the Hub is not the Hub.
+
+### Changed
+
+- A kill at the Hub counts for nothing — boards, K/D, streaks, achievements and the
+  Discord feeds — including every Hub kill already on record. Achievements that only Hub
+  kills earned are revoked. The kill feed and the player timeline still show Hub kills,
+  marked.
+- The ban DM names the real reason for every ban (it said "base-zone enforcement" for
+  all of them, PC bans included).
+
 ## [1.33.0] - 2026-09-22
 
 ### Added

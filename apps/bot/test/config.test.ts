@@ -558,6 +558,18 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("HUB_BAN_TICK", () => {
+    it("defaults off", () => {
+      expect(loadConfig(OK).hubBanTick).toBe(false);
+    });
+    it("⚠️ on without ENFORCEMENT_TICK refuses to load — hubTick's rows would never be applied", () => {
+      expect(() => loadConfig({ ...OK, HUB_BAN_TICK: "true" })).toThrow(/HUB_BAN_TICK is on but ENFORCEMENT_TICK is off/u);
+    });
+    it("on with ENFORCEMENT_TICK loads", () => {
+      expect(loadConfig({ ...OK, HUB_BAN_TICK: "true", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).hubBanTick).toBe(true);
+    });
+  });
+
   describe("the leaderboard crowns", () => {
     it("are all off by default", () => {
       expect(loadConfig(OK).crownRoleIds).toEqual({});

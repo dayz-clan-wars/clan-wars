@@ -1,5 +1,5 @@
 import type { Encounter, FeedEntry, PlayerFeed } from "@factions/roster";
-import { EMPTY_FEED, FEED_KIND, FEED_TITLE, FINISHED, FRIENDLY_FIRE_MARK, deathCause, shot, steps } from "@/lib/feed-copy";
+import { EMPTY_FEED, FEED_KIND, FEED_TITLE, FINISHED, FRIENDLY_FIRE_MARK, HUB_MARK, deathCause, shot, steps } from "@/lib/feed-copy";
 import { PAGER } from "@/lib/stats-copy";
 import { seasonQuery } from "@/lib/board-page";
 import { Panel, Pager } from "./ui";
@@ -11,18 +11,19 @@ function Name({ gamertag }: { gamertag: string }) {
 }
 const Detail = ({ children }: { children: React.ReactNode }) => <span className="font-mono text-xs text-muted"> · {children}</span>;
 const FF = () => <Detail><span className="text-rust-2">{FRIENDLY_FIRE_MARK}</span></Detail>;
+const Hub = () => <Detail><span className="text-rust-2">{HUB_MARK}</span></Detail>;
 
 /** The sentence for one feed line. */
 function FeedLine({ e }: { e: FeedEntry }) {
   switch (e.kind) {
     case "kill": {
       const s = shot(e.distanceM, e.weapon);
-      return <>{e.cause === "finished" ? FINISHED.kill : "Killed"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
+      return <>{e.cause === "finished" ? FINISHED.kill : "Killed"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}{e.atHub && <Hub />}</>;
     }
     case "death": {
       const s = shot(e.distanceM, e.weapon);
       if (e.other === null) { const c = deathCause(e.cause); return <>Died{c && ` ${c}`}</>; }
-      return <>{e.cause === "finished" ? FINISHED.death : "Killed by"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}</>;
+      return <>{e.cause === "finished" ? FINISHED.death : "Killed by"} <Name gamertag={e.other} />{s && <Detail>{s}</Detail>}{e.friendlyFire && <FF />}{e.atHub && <Hub />}</>;
     }
     case "raid": return <>Lowered <strong className="font-bold text-ink">{e.victim.name}</strong>&rsquo;s flag</>;
     case "raised": return <>Raised the colours</>;
@@ -91,7 +92,7 @@ export function OpponentRows({ items, encounters, me, side }: {
                   return (
                     <li key={i} className="flex min-h-[32px] flex-wrap items-center gap-x-3 text-xs">
                       <span className="font-mono text-muted">{stamp(e.at)}</span>
-                      <span className="text-ink-2">{s || "—"}{e.friendlyFire && <FF />}</span>
+                      <span className="text-ink-2">{s || "—"}{e.friendlyFire && <FF />}{e.atHub && <Hub />}</span>
                     </li>
                   );
                 })}

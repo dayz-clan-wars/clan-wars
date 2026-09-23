@@ -39,6 +39,9 @@ importers:
 
   apps/bot:
     dependencies:
+      '@factions/adm-parser':
+        specifier: workspace:*
+        version: link:../../packages/adm-parser
       '@factions/ceremony':
         specifier: workspace:*
         version: link:../../packages/ceremony

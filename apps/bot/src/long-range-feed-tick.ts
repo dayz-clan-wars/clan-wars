@@ -61,7 +61,7 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
     const rows = await this.db.select({
       eventId: kills.eventId, serverId: kills.serverId, occurredAt: kills.occurredAt,
       killerDayzId: kills.killerDayzId, victimDayzId: kills.victimDayzId,
-      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire,
+      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire, atHub: kills.atHub,
     }).from(kills)
       .where(and(gt(kills.eventId, cursor), pvp))
       .orderBy(asc(kills.eventId))
@@ -72,7 +72,8 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
       // ⚠️ Null is "the log did not say", not zero. Reading it as 0 would be a
       // lie in the one direction this feed cares about.
       const distanceM = r.distanceM === null ? null : Number(r.distanceM);
-      const qualifies = distanceM !== null && Number.isFinite(distanceM) && distanceM >= this.minM;
+      // ⚠️ A Hub kill is never a record-worthy shot: it scores nowhere (spec 2026-09-22-hub-combat).
+      const qualifies = !r.atHub && distanceM !== null && Number.isFinite(distanceM) && distanceM >= this.minM;
 
       const base = {
         eventId: Number(r.eventId), occurredAt: r.occurredAt, weapon: r.weapon,
@@ -118,8 +119,8 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
       this.db.select({ n: sql<number>`count(*)::int` }).from(kills).where(where).then((r) => Number(r[0]?.n ?? 0));
 
     const [byKiller, ahead] = await Promise.all([
-      count(and(eq(kills.serverId, serverId), pvp, lte(kills.occurredAt, at), eq(kills.killerDayzId, killer), further)),
-      count(and(eq(kills.serverId, serverId), pvp, inWindow, lte(kills.occurredAt, at), further)),
+      count(and(eq(kills.serverId, serverId), pvp, eq(kills.atHub, false), lte(kills.occurredAt, at), eq(kills.killerDayzId, killer), further)),
+      count(and(eq(kills.serverId, serverId), pvp, eq(kills.atHub, false), inWindow, lte(kills.occurredAt, at), further)),
     ]);
 
     const rank = ahead + 1;

@@ -75,7 +75,7 @@ export class PgKillFeedStore implements KillFeedStore {
       killerName: killer.gamertag, victimName: victim.gamertag,
       killerTag: killerClan.tag, killerTexture: killerClan.texture,
       victimTag: victimClan.tag, victimTexture: victimClan.texture,
-      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire, cause: kills.cause,
+      weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire, atHub: kills.atHub, cause: kills.cause,
     }).from(kills)
       .leftJoin(killer, eq(killer.dayzId, kills.killerDayzId))
       .leftJoin(victim, eq(victim.dayzId, kills.victimDayzId))
@@ -98,7 +98,7 @@ export class PgKillFeedStore implements KillFeedStore {
         killer: { gamertag: r.killerName ?? "Unknown", tag: r.killerTag ?? null, texture: r.killerTexture ?? null },
         victim: { gamertag: r.victimName ?? "Unknown", tag: r.victimTag ?? null, texture: r.victimTexture ?? null },
         weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM),
-        friendlyFire: r.friendlyFire, cause: r.cause, tally, hits,
+        friendlyFire: r.friendlyFire, atHub: r.atHub, cause: r.cause, tally, hits,
       });
     }
     return out;
@@ -154,8 +154,9 @@ export class PgKillFeedStore implements KillFeedStore {
     const count = (where: ReturnType<typeof and>) =>
       this.db.select({ n: sql<number>`count(*)::int` }).from(kills).where(where).then((r) => Number(r[0]?.n ?? 0));
     const [killerKills, victimDeaths] = await Promise.all([
-      count(and(eq(kills.serverId, serverId), pvp, inWindow, upTo, eq(kills.killerDayzId, killerDayzId))),
-      count(and(eq(kills.serverId, serverId), pvp, inWindow, upTo, eq(kills.victimDayzId, victimDayzId))),
+      // A Hub kill is posted but never tallied (spec 2026-09-22-hub-combat).
+      count(and(eq(kills.serverId, serverId), pvp, eq(kills.atHub, false), inWindow, upTo, eq(kills.killerDayzId, killerDayzId))),
+      count(and(eq(kills.serverId, serverId), pvp, eq(kills.atHub, false), inWindow, upTo, eq(kills.victimDayzId, victimDayzId))),
     ]);
     return { killerKills, victimDeaths, season: season?.number ?? null };
   }

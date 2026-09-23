@@ -79,7 +79,7 @@ describe("/player", () => {
     const FORBIDDEN = ["OLDCLAN", "Old Guard", "Zeke", "Yuri", "MP5"];
     const p = profile({
       clanHistory: [{ tag: "OLDCLAN", name: "Old Guard", joinedAt: new Date("2026-01-01T00:00:00Z"), leftAt: new Date("2026-02-01T00:00:00Z") }],
-      encounters: [{ at: new Date("2026-08-01T00:00:00Z"), killer: "Zeke", victim: "Yuri", weapon: "MP5", distanceM: 30, friendlyFire: false }],
+      encounters: [{ at: new Date("2026-08-01T00:00:00Z"), killer: "Zeke", victim: "Yuri", weapon: "MP5", distanceM: 30, friendlyFire: false, atHub: false }],
     });
     const ctx = ctxWith({ playerProfile: async () => p });
     const reply = await specOf(playerGroup, "player").handler(ctx, input({ gamertag: "Ada" }));

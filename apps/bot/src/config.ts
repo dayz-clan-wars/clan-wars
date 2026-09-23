@@ -195,6 +195,12 @@ export type BotConfig = {
    */
   unlinkedPcBan: boolean;
   /**
+   * No combat at the Fast Travel Hub. Writes `hub_combat` bans for `banTick`.
+   * ⚠️ BAN_DRY_RUN is false in production, so the first Hub ban is REAL the
+   * moment this is set — a deliberate act on a chosen day, never a deploy's.
+   */
+  hubBanTick: boolean;
+  /**
    * The public #bans channel — enforced bans and unbans, announced. Undefined
    * means it is OFF: `ban_announcements` rows keep queuing (written whether or
    * not this is set) and nothing posts, same degrade-not-refuse shape as
@@ -485,6 +491,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
     unlinkedPcBan: ["1", "true"].includes((env.UNLINKED_PC_BAN ?? "").toLowerCase()),
+    hubBanTick: ["1", "true"].includes((env.HUB_BAN_TICK ?? "").toLowerCase()),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
@@ -510,6 +517,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // be applied: a silent success from the operator's point of view.
   if (config.unlinkedPcBan && !config.enforcementTick) {
     throw new Error("UNLINKED_PC_BAN is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
+  }
+  // ⚠️ Same reason: hubTick only writes rows, banTick applies them.
+  if (config.hubBanTick && !config.enforcementTick) {
+    throw new Error("HUB_BAN_TICK is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule

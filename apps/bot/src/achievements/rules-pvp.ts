@@ -5,8 +5,8 @@ import { nth, oneShot, type Rule, type RuleResult } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
 
-/** A PvP kill: another player did it, and it was not friendly fire (Global Constraints). */
-const pvpBy = (dayzId: string) => and(eq(kills.killerDayzId, dayzId), ne(kills.victimDayzId, dayzId), eq(kills.friendlyFire, false));
+/** A PvP kill: another player did it, it was not friendly fire (Global Constraints), and it was not at the Hub (spec 2026-09-22-hub-combat). */
+const pvpBy = (dayzId: string) => and(eq(kills.killerDayzId, dayzId), ne(kills.victimDayzId, dayzId), eq(kills.friendlyFire, false), eq(kills.atHub, false));
 const killCols = { id: kills.id, at: kills.occurredAt, serverId: kills.serverId, victim: kills.victimDayzId, weapon: kills.weapon, distanceM: kills.distanceM };
 type KillRow = { id: number; at: Date; serverId: number; victim: string; weapon: string | null; distanceM: string | null };
 
@@ -54,7 +54,7 @@ function streak(key: AchievementKey): Rule {
   return async (db, owner): Promise<RuleResult> => {
     const target = T(key);
     // Every kill row the player is on either side of, ascending — the walk needs deaths too.
-    const rows = await db.select({ id: kills.id, killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire, occurredAt: kills.occurredAt, serverId: kills.serverId })
+    const rows = await db.select({ id: kills.id, killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire, atHub: kills.atHub, occurredAt: kills.occurredAt, serverId: kills.serverId })
       .from(kills).where(and(or(eq(kills.killerDayzId, owner.id), eq(kills.victimDayzId, owner.id)), isNotNull(kills.killerDayzId)))
       .orderBy(asc(kills.occurredAt), asc(kills.id));
     const s = streakOf(rows, owner.id);
@@ -137,10 +137,10 @@ export const PVP_RULES: Partial<Record<AchievementKey, Rule>> = {
     const rows = await db.execute(sql`
       select k.id, k.occurred_at as at, k.server_id, k.victim_dayz_id as victim
       from kills k
-      where k.killer_dayz_id = ${owner.id} and k.victim_dayz_id <> ${owner.id} and k.friendly_fire = false
+      where k.killer_dayz_id = ${owner.id} and k.victim_dayz_id <> ${owner.id} and k.friendly_fire = false and k.at_hub = false
         and exists (
           select 1 from kills ${k2}
-          where ${k2}.killer_dayz_id = k.victim_dayz_id and ${k2}.victim_dayz_id = ${owner.id}
+          where ${k2}.killer_dayz_id = k.victim_dayz_id and ${k2}.victim_dayz_id = ${owner.id} and ${k2}.at_hub = false
             and ${k2}.occurred_at < k.occurred_at and k.occurred_at - ${k2}.occurred_at <= interval '1 hour'
         )
       order by k.occurred_at, k.id limit 1`);
@@ -163,6 +163,7 @@ export const PVP_RULES: Partial<Record<AchievementKey, Rule>> = {
 
   // ⚠️ `evidence.victim` is an unrendered dayz id — see the note on `nemesis` above. Naming the
   // clanmate someone team-killed in a public post is the worst version of that leak.
+  // A record, not a score: a Hub teamkill still counts here (spec 2026-09-22-hub-combat §4.3).
   blue_on_blue: async (db, owner) => {
     const [k] = await db.select(killCols).from(kills).where(and(eq(kills.killerDayzId, owner.id), eq(kills.friendlyFire, true)))
       .orderBy(asc(kills.occurredAt), asc(kills.id)).limit(1);

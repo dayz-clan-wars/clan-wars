@@ -181,6 +181,9 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
             killerGamertag: line.event.killerGamertag,
             weapon: line.event.weapon,
             distanceM: line.event.distanceM,
+            // ⚠️ Never `pos`: readFix would take it for a map fix (spec 2026-09-22-hub-combat §3.1).
+            victimPos: line.event.victimPos,
+            killerPos: line.event.killerPos,
           }
         : {
             victimDayzId: line.event.victimDayzId,

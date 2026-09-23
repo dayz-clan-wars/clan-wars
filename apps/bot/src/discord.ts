@@ -25,6 +25,7 @@ import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
 import { pcBanTick } from "./pc-ban-tick.js";
+import { hubTick } from "./hub-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
@@ -902,6 +903,17 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       console.error("zone tick failed", err);
     }
+    // Every tick, beside zone: a Hub offence is written the tick it is read, so
+    // banTick's next 5-minute pass applies it.
+    if (cfg.hubBanTick) {
+      try {
+        const h = await hubTick(db, { now: new Date() });
+        if (h.seeded) console.log("hub watch: cursor seeded at the log head");
+        if (h.banned.length > 0) console.log(`hub watch: ${h.banned.length} ban(s) written: ${h.banned.map((b) => b.gamertag).join(", ")}`);
+      } catch (err) {
+        console.error("hub tick failed", err);
+      }
+    }
 
     // ⚠️ Right after zoneTick, every tick, gated on cfg.enforcementTick:
     // violationTick closes what zoneTick opens (an incident gone quiet past
@@ -1696,6 +1708,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     // effect short of watching for the first real ban.
     if (!cfg.unlinkedPcBan) console.warn("UNLINKED_PC_BAN is off: unlinked PC players are not being banned.");
     else console.log("UNLINKED_PC_BAN on: unlinked PC players are banned on sight (one lift on starting to link).");
+    if (!cfg.hubBanTick) console.warn("HUB_BAN_TICK is off: combat at the Fast Travel Hub is not being banned.");
+    else console.log("HUB_BAN_TICK on: a hit, kill or trap at the Hub is a one-hour ban.");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

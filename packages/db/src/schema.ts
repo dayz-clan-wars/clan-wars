@@ -980,6 +980,13 @@ export const kills = pgTable("kills", {
   victimFactionId: bigint("victim_faction_id", { mode: "number" }).references(() => factions.id),
   killerFactionId: bigint("killer_faction_id", { mode: "number" }).references(() => factions.id),
   friendlyFire: boolean("friendly_fire").notNull().default(false),
+  /**
+   * The kill happened at the Fast Travel Hub (spec 2026-09-22-hub-combat): the
+   * attacker or the victim inside the no-combat cylinder. Like `friendly_fire`,
+   * it scores NOWHERE — every scoring read excludes it — and stays a record.
+   * False where the payload has no positions (every event before the backfill).
+   */
+  atHub: boolean("at_hub").notNull().default(false),
 }, (t) => ({
   uniqEvent: uniqueIndex("kills_event_uniq").on(t.eventId),
   byVictim: index("kills_victim_idx").on(t.serverId, t.victimDayzId, t.occurredAt),

@@ -17,7 +17,7 @@ describe("PgHitFeedStore", () => {
   let store: PgHitFeedStore;
   let line = 0;
 
-  async function mkHit(a: { at: Date; attacker: string | null; victim: string; weapon?: string | null; damage?: number; hp?: number }) {
+  async function mkHit(a: { at: Date; attacker: string | null; victim: string; weapon?: string | null; damage?: number; hp?: number; pos?: { x: number; y: number; z: number } }) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
     const [ev] = await db.insert(events).values({
       serverId, admFileId: file!.id, lineIndex: line++, type: "player.hit" as never, occurredAt: a.at,
@@ -28,6 +28,7 @@ describe("PgHitFeedStore", () => {
         attackerLabel: a.attacker ? null : "Infected",
         damage: a.damage ?? 38, bodyPart: "Torso",
         weapon: a.weapon === undefined ? "KA-74" : a.weapon, distanceM: 41,
+        ...(a.pos ? { victimPos: a.pos, attackerPos: a.pos } : {}),
       },
     }).returning({ id: events.id });
     return ev!.id;
@@ -392,5 +393,19 @@ describe("PgHitFeedStore", () => {
     expect(items[0]!.attacker.tag).toBe("BEAR");
     expect(items[0]!.victim.tag).toBe("BEAR");
     expect(items[0]!.friendlyFire).toBe(true);
+  });
+
+  it("⚠️ an engagement at the Hub comes back SUPPRESSED, not absent — it still advances the cursor", async () => {
+    const HUB = { x: 100, y: 998.6, z: 93 }, GROUND = { x: 100, y: 310, z: 93 };
+    await mkHit({ at: s(0), attacker: A, victim: B, pos: HUB });
+    await mkHit({ at: s(4), attacker: A, victim: B, pos: HUB });
+    await mkHit({ at: s(0), attacker: C, victim: D, pos: GROUND });
+    await mkFrontier(s(400));
+    const items = await store.readAfter(0, 20);
+    expect(items).toHaveLength(2);
+    const byAttacker = (s: boolean) => items.filter((i) => i.suppressed === s);
+    expect(byAttacker(true)).toHaveLength(1);
+    expect(byAttacker(true)[0]!.hits).toHaveLength(2);
+    expect(byAttacker(false)[0]!.attacker.gamertag).toBe("Charlie");
   });
 });

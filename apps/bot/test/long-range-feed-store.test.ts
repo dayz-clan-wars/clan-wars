@@ -14,7 +14,7 @@ describe("PgLongRangeFeedStore", () => {
   let store: PgLongRangeFeedStore;
   let line = 0;
 
-  async function mkKill(a: { at: Date; killer: string | null; victim: string; distanceM?: number | null; ff?: boolean }) {
+  async function mkKill(a: { at: Date; killer: string | null; victim: string; distanceM?: number | null; ff?: boolean; hub?: boolean }) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
     const [ev] = await db.insert(events).values({
       serverId, admFileId: file!.id, lineIndex: line++, type: "player.killed" as never, occurredAt: a.at, payload: {},
@@ -22,7 +22,7 @@ describe("PgLongRangeFeedStore", () => {
     await db.insert(kills).values({
       serverId, eventId: ev!.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
       weapon: "Mosin", distanceM: a.distanceM === undefined ? "340" : a.distanceM === null ? null : String(a.distanceM),
-      cause: a.killer ? "pvp" : "died", friendlyFire: a.ff ?? false,
+      cause: a.killer ? "pvp" : "died", friendlyFire: a.ff ?? false, atHub: a.hub ?? false,
     });
     return ev!.id;
   }
@@ -128,5 +128,14 @@ describe("PgLongRangeFeedStore", () => {
     expect(await store.seeded()).toBe(false);
     await store.markPosted(id);
     expect(await store.seeded()).toBe(true);
+  });
+
+  it("⚠️ a Hub kill never qualifies, and never stands as anyone's best (spec 2026-09-22-hub-combat)", async () => {
+    await mkKill({ at: s(0), killer: A, victim: B, distanceM: 400, hub: true });
+    await mkKill({ at: s(10), killer: A, victim: R, distanceM: 350 });
+    const items = await store.readAfter(0, 20);
+    expect(items[0]!.qualifies).toBe(false);
+    expect(items[1]!.qualifies).toBe(true);
+    expect(items[1]!.personalBest).toBe(true);
   });
 });

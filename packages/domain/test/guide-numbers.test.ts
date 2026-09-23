@@ -22,10 +22,11 @@ const LABELS = [
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
   "Fast travel points (outhouses, wells, bus stops)", "Hub destinations",
   "Combat log rule", "Watchtower height", "Window to press charges on a closed zone incident",
+  "Hub: combat ban", "Hub: self-defence window", "Hub: no-combat radius",
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 49 rows the hand-typed table had, in order", () => {
+  it("has the 52 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {
@@ -38,6 +39,9 @@ describe("GUIDE_NUMBERS (the appendix)", () => {
   it("renders the values the guide promised", () => {
     const v = Object.fromEntries(GUIDE_NUMBERS.map((r) => [r.label, r.value]));
     expect(v["Link: time limit"]).toBe("24 h");
+    expect(v["Hub: combat ban"]).toBe("1 h");
+    expect(v["Hub: self-defence window"]).toBe("2 min");
+    expect(v["Hub: no-combat radius"]).toBe("100 m");
     expect(v["Flags in the pool"]).toBe(`${R.FLAG_POOL_SIZE} (white is neutral)`);
     expect(v["Points: raid on #1 / bottom / unranked"]).toBe("200 / 100 / 100");
     expect(v["No-confidence vote: threshold"]).toBe("⅔ of all full members");

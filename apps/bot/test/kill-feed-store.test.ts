@@ -17,13 +17,13 @@ describe("PgKillFeedStore", () => {
   const ids: number[] = [];
 
   /** A kill whose backing event exists; returns the event id. */
-  async function mkKill(a: { at: Date; victim: string; killer: string | null; weapon?: string | null; distanceM?: number | null; vf?: number | null; kf?: number | null; ff?: boolean }) {
+  async function mkKill(a: { at: Date; victim: string; killer: string | null; weapon?: string | null; distanceM?: number | null; vf?: number | null; kf?: number | null; ff?: boolean; hub?: boolean }) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
     const [ev] = await db.insert(events).values({ serverId, admFileId: file!.id, lineIndex: ids.length, type: "player.killed" as never, occurredAt: a.at, payload: {} }).returning({ id: events.id });
     await db.insert(kills).values({
       serverId, eventId: ev!.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
       weapon: a.weapon ?? null, distanceM: a.distanceM === undefined || a.distanceM === null ? null : String(a.distanceM),
-      cause: a.killer ? "pvp" : "died", victimFactionId: a.vf ?? null, killerFactionId: a.kf ?? null, friendlyFire: a.ff ?? false,
+      cause: a.killer ? "pvp" : "died", victimFactionId: a.vf ?? null, killerFactionId: a.kf ?? null, friendlyFire: a.ff ?? false, atHub: a.hub ?? false,
     });
     ids.push(ev!.id);
     return ev!.id;
@@ -156,5 +156,14 @@ describe("PgKillFeedStore", () => {
     await mkKill({ at: h(4), victim: B, killer: A });
     const [item] = await store.readAfter(0, 10);
     expect(item!.hits).toEqual([]);
+  });
+
+  it("a Hub kill is read, marked atHub, and counts in no tally (spec 2026-09-22-hub-combat)", async () => {
+    await mkKill({ at: h(1), victim: R, killer: A });
+    await mkKill({ at: h(2), victim: R, killer: A, hub: true });
+    const [first, hub] = await store.readAfter(0, 10);
+    expect(first!.atHub).toBe(false);
+    expect(hub!.atHub).toBe(true);
+    expect(hub!.tally).toMatchObject({ killerKills: 1, victimDeaths: 1 });
   });
 });

@@ -14,14 +14,14 @@ describe("PgKillstreakFeedStore", () => {
   let store: PgKillstreakFeedStore;
   let line = 0;
 
-  async function mkKill(a: { at: Date; killer: string | null; victim: string; ff?: boolean }) {
+  async function mkKill(a: { at: Date; killer: string | null; victim: string; ff?: boolean; hub?: boolean }) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
     const [ev] = await db.insert(events).values({
       serverId, admFileId: file!.id, lineIndex: line++, type: "player.killed" as never, occurredAt: a.at, payload: {},
     }).returning({ id: events.id });
     await db.insert(kills).values({
       serverId, eventId: ev!.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
-      weapon: "KA-74", distanceM: "41.0", cause: a.killer ? "pvp" : "died", friendlyFire: a.ff ?? false,
+      weapon: "KA-74", distanceM: "41.0", cause: a.killer ? "pvp" : "died", friendlyFire: a.ff ?? false, atHub: a.hub ?? false,
     });
     return ev!.id;
   }
@@ -130,5 +130,16 @@ describe("PgKillstreakFeedStore", () => {
     expect(await store.seeded()).toBe(false);
     await store.markPosted(id);
     expect(await store.seeded()).toBe(true);
+  });
+
+  it("⚠️ a Hub kill neither extends a streak nor, as a death, ends one (spec 2026-09-22-hub-combat)", async () => {
+    await mkKill({ at: s(0), killer: A, victim: B });
+    await mkKill({ at: s(10), killer: A, victim: R });
+    await mkKill({ at: s(20), killer: A, victim: B, hub: true });
+    await mkKill({ at: s(30), killer: B, victim: A, hub: true });
+    await mkKill({ at: s(40), killer: A, victim: R });
+    const items = await store.readAfter(0, 50);
+    expect(items[2]!.streak).toBeNull();   // the Hub kill is declined
+    expect(items[items.length - 1]!.streak).toBe(3);
   });
 });

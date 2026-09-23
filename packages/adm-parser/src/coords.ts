@@ -91,6 +91,23 @@ export function parsePlayerPos(raw: string): Vec3 | null {
   return { x, y, z };
 }
 
+const IDENTITY_POS_RE = new RegExp(`pos=${V3}`, "u");
+
+/**
+ * The position inside ONE identity block's own tail — the text between its
+ * `id=<40 hex>` and its closing paren, which the caller's anchored regex has
+ * already captured. Same `pos=<x, z, altitude>` order and bounds as parsePlayerPos.
+ * ⚠️ Only ever pass a captured identity tail, never a whole line: a gamertag
+ * can carry `pos=<…>` text, and outside the identity block it would be believed.
+ */
+export function posInIdentity(tail: string): Vec3 | null {
+  const m = IDENTITY_POS_RE.exec(tail);
+  if (!m) return null;
+  const x = parseFloat(m[1]!), z = parseFloat(m[2]!), y = parseFloat(m[3]!);
+  if (!inMapBounds(x, z) || !inAltitudeBounds(y)) return null;
+  return { x, y, z };
+}
+
 export function parsePoleAt(raw: string): Vec3 | null {
   const m = POLE_AT_RE.exec(raw);
   if (!m) return null;
