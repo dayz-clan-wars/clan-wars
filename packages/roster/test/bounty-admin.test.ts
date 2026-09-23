@@ -4,7 +4,7 @@ import {
   servers, bounties, clanNotices, identityLinks, players, type Database,
 } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { placeBountyDb, revokeBountyDb, openBountiesDb } from "../src/internal/index";
+import { placeBountyDb, revokeBountyDb, openBountiesDb, searchBountyTargetsDb } from "../src/internal/index";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-23T12:00:00Z");
@@ -24,7 +24,7 @@ describe("bounty administration", () => {
     await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
   });
   const place = (over: Partial<Parameters<typeof placeBountyDb>[1]> = {}) =>
-    placeBountyDb(db, { targetDayzId: T, reason: "Combat logging", hours: null, adminDiscordId: "9", now, ...over });
+    placeBountyDb(db, { target: T, reason: "Combat logging", hours: null, adminDiscordId: "9", now, ...over });
 
   it("places a 72 h bounty with a 30-day deadline and no DM for an unlinked target", async () => {
     const out = await place();
@@ -48,7 +48,29 @@ describe("bounty administration", () => {
   });
 
   it("refuses a player the log has never seen", async () => {
-    expect(await place({ targetDayzId: "X".repeat(40) })).toEqual({ ok: false, reason: "unknown-player" });
+    expect(await place({ target: "X".repeat(40) })).toEqual({ ok: false, reason: "unknown-player" });
+  });
+
+  it("⚠️ places a bounty on a gamertag typed out in full, in any case — Discord sends the raw text when no choice is picked", async () => {
+    const out = await place({ target: "tARGET" });
+    expect(out).toMatchObject({ ok: true, gamertag: "Target" });
+    expect((await db.select().from(bounties))[0]!.targetDayzId).toBe(T);
+  });
+
+  it("refuses a typed gamertag two characters share, rather than guessing", async () => {
+    await db.insert(players).values({ dayzId: "U".repeat(40), gamertag: "target", firstSeenAt: now, lastSeenAt: now });
+    expect(await place({ target: "Target" })).toEqual({ ok: false, reason: "ambiguous-player" });
+  });
+
+  it("⚠️ autocomplete finds LINKED players too — /link's search excludes them, a bounty must not", async () => {
+    const L = "L".repeat(40);
+    await db.insert(players).values({ dayzId: L, gamertag: "Tarzan", firstSeenAt: now, lastSeenAt: new Date(now.getTime() + H) });
+    await db.insert(identityLinks).values({ discordId: "1", dayzId: L, gamertag: "Tarzan", verifiedAt: now });
+    expect(await searchBountyTargetsDb(db, "tar")).toEqual([
+      { dayzId: L, gamertag: "Tarzan" }, { dayzId: T, gamertag: "Target" },
+    ]);
+    expect(await searchBountyTargetsDb(db, "  ")).toEqual([]);
+    expect(await searchBountyTargetsDb(db, "%")).toEqual([]);
   });
 
   it("refuses hours outside 1..168, and an empty or overlong reason", async () => {

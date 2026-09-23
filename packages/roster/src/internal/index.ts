@@ -41,7 +41,7 @@ export {
 
 // Bounties: the admin side (place, revoke, list) and the claim predicate the bot's tick shares with the boards.
 export {
-  placeBountyDb, revokeBountyDb, openBountiesDb,
+  placeBountyDb, revokeBountyDb, openBountiesDb, searchBountyTargetsDb,
   type PlaceBountyOutcome, type OpenBounty,
 } from "./bounty-admin";
 export { scoringKill } from "../stats";

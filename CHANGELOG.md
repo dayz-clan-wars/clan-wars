@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- `/bounty place` now finds every player the server has seen. Players who had linked
+  their Discord account were missing from the autocomplete, and typing their name out
+  in full said the server had never seen them.
+
 ## [1.35.0] - 2026-09-23
 
 ### Added
