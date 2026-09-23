@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.35.0] - 2026-09-23
+
 ### Added
 
 - Bounties: admins can put a bounty on a player with `/bounty place`. It is announced in
