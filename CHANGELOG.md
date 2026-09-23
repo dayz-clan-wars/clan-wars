@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.36.1] - 2026-09-23
+
 ### Changed
 
 - CI checks on pull requests finish faster: the packages' tests now run side by side,
