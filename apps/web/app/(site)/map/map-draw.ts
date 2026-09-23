@@ -300,12 +300,16 @@ export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
   for (const b of data.bounties) {
     const text = (age: string) => `${escapeHtml(b.gamertag)} · wanted · ${escapeHtml(age)}`;
     const age = fixAge(b.fix.at, new Date(now));
+    const popup = (age: string) => `${text(age)}<br>${escapeHtml(b.reason)}`;
     const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: false })
       .bindTooltip(text(age), tag(`${TAG}-intruder`))
-      .bindPopup(`${text(age)}<br>${escapeHtml(b.reason)}`, POPUP);
+      .bindPopup(popup(age), POPUP);
     markOpen(marker);
     marker.addTo(group);
-    ages.push({ at: b.fix.at, layer: marker, tooltip: text, last: age });
+    // ⚠️ The popup must be registered here too, not just the tooltip — an open
+    // popup otherwise keeps its draw-time age forever while the permanent tag
+    // updates every 30 s, and the two contradict each other.
+    ages.push({ at: b.fix.at, layer: marker, tooltip: text, popup, last: age });
   }
 }
 
