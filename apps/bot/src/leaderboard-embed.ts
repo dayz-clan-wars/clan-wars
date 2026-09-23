@@ -16,7 +16,7 @@ export function boardUrl(kind: BoardKind, siteBaseUrl: string): string {
  * The board an embed's URL names, or null for anything that is not one of our
  * own board links.
  *
- * ⚠️ This is how the tick recognises its nine standing messages after a
+ * ⚠️ This is how the tick recognises its ten standing messages after a
  * restart — there is no stored id. The origin is checked, not just the tail:
  * without that, any message quoting a link that merely ENDS in a slug we know
  * would be adopted as ours and then edited.

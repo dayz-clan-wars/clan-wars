@@ -217,3 +217,18 @@ describe("achievement", () => {
     expect(noticeText({ ...base, payload }, site, dormantAfterMs)).toBe(`🏆 **[Bear Company](<${site}/clans/BEAR>)** [BEAR] earned **Fortress** — 10 defenses.`);
   });
 });
+
+describe("bounty", () => {
+  it("tells a bounty target what they are wanted for and that everyone can see them", () => {
+    const text = noticeText({ kind: "bounty_placed", target: "dm", occurredAt: now, payload: { bountyId: 1, reason: "Combat logging", hours: 72 } }, site, dormantAfterMs);
+    expect(text).toContain("Combat logging");
+    expect(text).toContain("72 h");
+    expect(text).toMatch(/map/u);
+  });
+  it("says an expired bounty is over, and a revoked one was lifted", () => {
+    const e = noticeText({ kind: "bounty_expired", target: "dm", occurredAt: now, payload: { bountyId: 1 } }, site, dormantAfterMs);
+    const r = noticeText({ kind: "bounty_revoked", target: "dm", occurredAt: now, payload: { bountyId: 1 } }, site, dormantAfterMs);
+    expect(e).toMatch(/served|expired/u);
+    expect(r).toMatch(/lifted/u);
+  });
+});

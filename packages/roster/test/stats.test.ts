@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, admFiles, events, players, identityLinks, factionMembers, seasons,
-  kills, playerSessions, membershipHistory, raids,
+  kills, playerSessions, membershipHistory, raids, bounties,
   type Database,
 } from "@factions/db";
 import { sql } from "drizzle-orm";
@@ -109,7 +109,7 @@ describe("roster player stats", () => {
   beforeEach(async () => {
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table kills, player_sessions, membership_history, clan_pins, intruder_sightings, player_positions, clan_notices, war_log_events, season_results, alpha_weeks, defenses, season_standings, raids, seasons, faction_events, faction_members, declarations, poles, identity_links, consumer_cursors, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
+      await tx.execute(sql`truncate table bounties, kills, player_sessions, membership_history, clan_pins, intruder_sightings, player_positions, clan_notices, war_log_events, season_results, alpha_weeks, defenses, season_standings, raids, seasons, faction_events, faction_members, declarations, poles, identity_links, consumer_cursors, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
     serverId = s!.id;
@@ -359,6 +359,41 @@ describe("roster player stats", () => {
       });
       const boards = await playerBoardsDb(db, ALL, undefined, now);
       expect(boards.streaks[0]).toEqual({ dayzId: A, gamertag: "Alpha", value: 6 });
+    });
+
+    /**
+     * ⚠️ Windowed on `claimed_at`, not `placed_at` or `closed_at`: a bounty placed in
+     * one season but claimed in the next counts on the claimer's season, and an
+     * `expired` row (no claimer) must never appear regardless of when it closed.
+     */
+    it("the bounty board counts claims per killer, inside the window", async () => {
+      await db.insert(bounties).values([
+        // R claims twice inside season 2 (the current one).
+        {
+          serverId, targetDayzId: A, reason: "test", placedByDiscordId: "dA",
+          placedAt: h(t50, 1), onlineBudgetMs: HOUR, deadlineAt: h(t50, 100),
+          status: "claimed", closedAt: h(t50, 3), claimedByDayzId: R, claimEventId: 1, claimedAt: h(t50, 3),
+        },
+        {
+          serverId, targetDayzId: B, reason: "test", placedByDiscordId: "dA",
+          placedAt: h(t50, 2), onlineBudgetMs: HOUR, deadlineAt: h(t50, 100),
+          status: "claimed", closedAt: h(t50, 4), claimedByDayzId: R, claimEventId: 2, claimedAt: h(t50, 4),
+        },
+        // S claims one, but before season 2 opens — outside the current window.
+        {
+          serverId, targetDayzId: B, reason: "test", placedByDiscordId: "dA",
+          placedAt: h(t0, 4), onlineBudgetMs: HOUR, deadlineAt: h(t0, 100),
+          status: "claimed", closedAt: h(t0, 5), claimedByDayzId: S, claimEventId: 3, claimedAt: h(t0, 5),
+        },
+        // An expired bounty inside season 2: never claimed, must not appear.
+        {
+          serverId, targetDayzId: N, reason: "test", placedByDiscordId: "dA",
+          placedAt: h(t50, 1), onlineBudgetMs: HOUR, deadlineAt: h(t50, 2),
+          status: "expired", closedAt: h(t50, 2),
+        },
+      ]);
+      const boards = await playerBoardsDb(db, { kind: "current" }, 10, now);
+      expect(boards.bountyKills).toEqual([{ dayzId: R, gamertag: "Romeo", value: 2 }]);
     });
   });
 

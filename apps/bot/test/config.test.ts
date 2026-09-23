@@ -375,6 +375,12 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("BOUNTY_TICK", () => {
+    it("refuses BOUNTY_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
+      expect(() => loadConfig({ ...OK, BOUNTY_TICK: "true", SERVER_EVENTS_CHANNEL_ID: undefined })).toThrow(/BOUNTY_TICK/u);
+    });
+  });
+
   describe("OPS_CHANNEL_ID", () => {
     it("is optional, off by default", () => {
       expect(loadConfig(OK).opsChannelId).toBeUndefined();

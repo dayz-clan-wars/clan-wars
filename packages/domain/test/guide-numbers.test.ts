@@ -23,10 +23,11 @@ const LABELS = [
   "Fast travel points (outhouses, wells, bus stops)", "Hub destinations",
   "Combat log rule", "Watchtower height", "Window to press charges on a closed zone incident",
   "Hub: combat ban", "Hub: self-defence window", "Hub: no-combat radius",
+  "Bounty: online time to serve (default)", "Bounty: longest an admin can set", "Bounty: closes regardless after",
 ];
 
 describe("GUIDE_NUMBERS (the appendix)", () => {
-  it("has the 52 rows the appendix holds, in order", () => {
+  it("has the 55 rows the appendix holds, in order", () => {
     expect(GUIDE_NUMBERS.map((r) => r.label)).toEqual(LABELS);
   });
   it("groups in the guide's chapter order", () => {

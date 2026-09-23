@@ -11,7 +11,7 @@ import type { CrownHolders, CrownStore } from "./crown-tick.js";
  * in the first rows and ten is plenty for any realistic tie. An eleven-way tie
  * at the top would silently drop the rest — accepted, because the alternative
  * is a second per-board query for the top value and these boards are already
- * nine reads on a five-minute clock.
+ * ten reads on a five-minute clock.
  */
 const TIE_LIMIT = 10;
 
@@ -20,7 +20,7 @@ const TIE_LIMIT = 10;
  *
  * The scope is `"current"`, which resolves to the newest season (or all-time
  * on a server with no seasons). That means a season rollover empties every
- * board and strips all nine crowns until the new season's first kills, raids
+ * board and strips all ten crowns until the new season's first kills, raids
  * and builds land — intended: each season is its own race.
  */
 export class PgCrownStore implements CrownStore {

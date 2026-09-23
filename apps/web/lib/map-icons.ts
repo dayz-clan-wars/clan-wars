@@ -32,6 +32,7 @@ export const ICON = {
   base: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
   clanmate: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   intruder: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
+  bounty: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   /** Same chip and same foot as `base` — an abandoned pole is still a pole. */
   publicBase: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
   travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
@@ -107,6 +108,13 @@ export function intruderIcon(p: Palette): string {
     `<path d="M14 5l9 9-9 9-9-9z" fill="${p.rust}"/><path d="M14 9.5v5.5M14 17.5v1.5" stroke="${p.ink}" stroke-width="2.2"/></svg>`;
 }
 
+/** A bounty target: a rust crosshair on black, with the intruder's pulse ring — hunted, not trespassing. */
+export function bountyIcon(p: Palette): string {
+  return `<span class="cw-ring" style="border-color:${p.rust}"></span>` +
+    `<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="${p.frame}"/>` +
+    `<circle cx="14" cy="14" r="7" fill="none" stroke="${p.rust}" stroke-width="2.4"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7" stroke="${p.rust}" stroke-width="2.4"/></svg>`;
+}
+
 /**
  * A public base: the same pennant-and-pole as `baseIcon`, hollow and muted
  * where yours is gold and filled — claimed against unclaimed, one silhouette.
@@ -147,6 +155,7 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "base": return `${open(` stroke="${p.gold}"`)}<path d="M10 25V3M10 4h11l-2.5 4 2.5 4H10" fill="${p.gold}"/></svg>`;
     case "clanmates": return `${open()}<circle cx="14" cy="14" r="8" fill="${p.ink}"/></svg>`;
     case "intruders": return `${open()}<path d="M14 3l11 11-11 11L3 14z" fill="${p.rust}"/><path d="M14 9v6M14 18v1.5" stroke="${p.ink}"/></svg>`;
+    case "bounties": return `${open(` stroke="${p.rust}"`)}<circle cx="14" cy="14" r="7"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7"/></svg>`;
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
     case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;

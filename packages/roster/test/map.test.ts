@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, factionMembers, identityLinks, players, playerPositions, poles, intruderSightings, declarations, clanPins, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, factionMembers, identityLinks, players, playerPositions, playerSessions, poles, intruderSightings, declarations, clanPins, bounties, type Database } from "@factions/db";
 import { HUB_POSITION, PIN_TTL_MS, TRAVEL_POINTS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { mapStateDb, dropPinDb, deletePinDb } from "../src/map";
+import { mapStateDb, dropPinDb, deletePinDb, type MapState } from "../src/map";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -15,7 +15,7 @@ describe("mapState / dropPin / deletePin", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table clan_pins, intruder_sightings, player_positions, declarations, poles, faction_members, factions, identity_links, players, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table bounties, clan_pins, intruder_sightings, player_positions, player_sessions, declarations, poles, faction_members, factions, identity_links, players, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
     // The stranger is unlinked in the common case; the map names them from `players`, the log's own record.
     await db.insert(players).values({ dayzId: X, gamertag: "Xed", firstSeenAt: now, lastSeenAt: now });
@@ -117,5 +117,129 @@ describe("mapState / dropPin / deletePin", () => {
     expect(await deletePinDb(db, "4", ok.id)).toEqual({ deleted: false });
     expect(await deletePinDb(db, "2", ok.id)).toEqual({ deleted: true });
     expect(await db.select().from(clanPins)).toEqual([]);
+  });
+
+  describe("bounties layer", () => {
+    const T = "T".repeat(40);
+    const U = "U".repeat(40);
+    let line = 0;
+    // A fresh adm_files row per test keeps this block independent of the outer
+    // beforeEach's own file/line counter — player_positions_event_uniq needs
+    // one event per fix, not a shared one, same as the outer helper.
+    const fix = async (fileId: number, dayzId: string, x: number, z: number, at: Date) => {
+      const [e] = await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.position", occurredAt: at, payload: {} }).returning();
+      await db.insert(playerPositions).values({ serverId, dayzId, x: String(x), z: String(z), alt: "100", occurredAt: at, eventId: e!.id });
+    };
+    // A pin requires the target to be ONLINE (spec §2.3) — an open `player_sessions`
+    // row on the viewer's active server, connect event required by the FK.
+    const connect = async (fileId: number, dayzId: string, connectedAt: Date, disconnectedAt: Date | null = null) => {
+      const [e] = await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.connected", occurredAt: connectedAt, payload: {} }).returning();
+      await db.insert(playerSessions).values({
+        serverId, dayzId, connectedAt, connectEventId: e!.id,
+        disconnectedAt, closeReason: disconnectedAt ? "disconnect" : null,
+      });
+    };
+    const openBounty = (targetDayzId: string, over: Partial<typeof bounties.$inferInsert> = {}) => ({
+      serverId, targetDayzId, reason: "r", placedByDiscordId: "1", placedAt: now,
+      onlineBudgetMs: 3600_000, deadlineAt: new Date(now.getTime() + 30 * 86_400_000), status: "open" as const,
+      ...over,
+    });
+
+    it("shows every open bounty target's latest fix to a linked viewer in no clan, while the target is online", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 400, 500, ago(3600_000));
+      await fix(file!.id, T, 500, 600, ago(60_000));   // newest wins
+      await connect(file!.id, T, ago(120_000));
+      await db.insert(bounties).values(openBounty(T));
+
+      const s = await mapStateDb(db, "5", now);
+      if (s === "not-linked") throw new Error("linked");
+      expect(s.bounties).toEqual([{ gamertag: "Target", reason: "r", fix: { x: 500, z: 600, at: ago(60_000) } }]);
+    });
+
+    it("⚠️ an open bounty whose target has only a CLOSED session shows no pin", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty-offline.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(60_000));
+      await connect(file!.id, T, ago(3600_000), ago(1800_000));   // logged off inside their base — no pin
+      await db.insert(bounties).values(openBounty(T));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
+    });
+
+    it("the same target, once reconnected, shows the pin again at their latest fix", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty-reconnect.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(3600_000));
+      await connect(file!.id, T, ago(7200_000), ago(3700_000));   // an earlier, closed session
+      await fix(file!.id, T, 700, 800, ago(60_000));               // fix after reconnecting
+      await connect(file!.id, T, ago(120_000));                    // reconnected — open session
+      await db.insert(bounties).values(openBounty(T));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([{ gamertag: "Target", reason: "r", fix: { x: 700, z: 800, at: ago(60_000) } }]);
+    });
+
+    it("⚠️ shows nothing once the bounty is claimed, expired or revoked", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty2.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(60_000));
+      await connect(file!.id, T, ago(120_000));
+      const overrides: Record<string, Partial<typeof bounties.$inferInsert>> = {
+        claimed: { status: "claimed", closedAt: now, claimedByDayzId: T, claimEventId: 1, claimedAt: now },
+        expired: { status: "expired", closedAt: now },
+        revoked: { status: "revoked", closedAt: now, revokedByDiscordId: "1" },
+      };
+      for (const [status, over] of Object.entries(overrides)) {
+        await db.execute(sql`truncate table bounties restart identity cascade`);
+        await db.insert(bounties).values(openBounty(T, over));
+        const s = await mapStateDb(db, "5", now) as MapState;
+        expect(s.bounties, `status=${status}`).toEqual([]);
+      }
+    });
+
+    it("omits a target with no fix", async () => {
+      await db.insert(players).values({ dayzId: U, gamertag: "Unfixed", firstSeenAt: now, lastSeenAt: now });
+      await db.insert(bounties).values(openBounty(U));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
+    });
+
+    it("an OPEN bounty on another server (not the viewer's active server) shows no pin", async () => {
+      const [other] = await db.insert(servers).values({ name: "Other", map: "livonia", clockOffsetMs: 0, active: false }).returning();
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId: other!.id, filename: "bounty3.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      const [e] = await db.insert(events).values({ serverId: other!.id, admFileId: file!.id, lineIndex: 0, type: "player.position", occurredAt: ago(60_000), payload: {} }).returning();
+      await db.insert(playerPositions).values({ serverId: other!.id, dayzId: T, x: "500", z: "600", alt: "100", occurredAt: ago(60_000), eventId: e!.id });
+      await db.insert(bounties).values({ ...openBounty(T), serverId: other!.id });
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
+    });
+
+    // ⚠️ The EXISTS in map.ts joins `player_sessions.server_id = bounties.server_id` —
+    // an open bounty on the viewer's server whose target is only online on a
+    // DIFFERENT server must show no pin. `player_sessions` has no notion of "the
+    // viewer's active server" on its own; without that join condition an open
+    // session anywhere would satisfy the EXISTS.
+    it("⚠️ a bounty on the viewer's server whose target's only open session is on a DIFFERENT server shows no pin", async () => {
+      const [other] = await db.insert(servers).values({ name: "Other", map: "livonia", clockOffsetMs: 0, active: false }).returning();
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty4.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(60_000));   // a fix exists on the viewer's own server
+      const [otherFile] = await db.insert(admFiles).values({ serverId: other!.id, filename: "bounty4-other.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      const [otherE] = await db.insert(events).values({ serverId: other!.id, admFileId: otherFile!.id, lineIndex: 0, type: "player.connected", occurredAt: ago(120_000), payload: {} }).returning();
+      await db.insert(playerSessions).values({
+        serverId: other!.id, dayzId: T, connectedAt: ago(120_000), connectEventId: otherE!.id,
+        disconnectedAt: null, closeReason: null,
+      });
+      await db.insert(bounties).values(openBounty(T));   // on the viewer's own server
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
+    });
   });
 });

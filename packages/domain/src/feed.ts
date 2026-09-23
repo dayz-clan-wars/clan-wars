@@ -31,6 +31,7 @@ export const CLAN_NOTICE_KINDS = [
   "leader_removed", "succession_claimed", "succession_voided", "succession_done",
   "vote_opened", "vote_passed", "vote_failed", "codes_rotated", "guest", "achievement",
   "zone_warning", "ban_applied", "booster_kit_unchosen", "award_granted",
+  "bounty_placed", "bounty_expired", "bounty_revoked",
 ] as const;
 export type ClanNoticeKind = (typeof CLAN_NOTICE_KINDS)[number];
 export const NOTICE_TARGETS = ["channel", "dm"] as const;

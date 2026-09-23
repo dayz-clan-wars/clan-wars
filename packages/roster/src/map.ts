@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, players } from "@factions/db";
+import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players } from "@factions/db";
 import { publicPoles } from "@factions/declarations";
 import {
   FAST_TRAVEL_POINTS, HOLDING_STATUSES, HUB_POSITION, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
@@ -32,6 +32,19 @@ export type MapState = {
    * would turn into a dead link if collapsed before it got there.
    */
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: Date; expiresAt: Date }[];
+  /**
+   * ⚠️ The second exception to §10.3's "no position of anyone outside your clan"
+   * (spec 2026-09-23-bounties §2.3): while an admin-placed bounty on a player is
+   * OPEN and the target is ONLINE, every linked viewer sees their last fix.
+   * `status = 'open'` and an EXISTS against `player_sessions` (open session,
+   * same server) are both in the WHERE clause, never a filter afterwards — a
+   * closed bounty, or a target who has disconnected, exposes nothing. Without
+   * the online check, a target who logs off inside their clan's base leaves a
+   * pin on that base for up to `BOUNTY_DEADLINE_MS`, publishing a base
+   * location (CLAUDE.md, "Pole coordinates are a raid target") and exposing
+   * clanmates who did nothing.
+   */
+  bounties: { gamertag: string; reason: string; fix: MapFix }[];
   travelPoints: readonly { x: number; z: number }[];
   hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
@@ -88,6 +101,20 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
 
   const publicBases = (await publicPoles(db, serverId, now)).map((p) => ({ x: n(p.x), z: n(p.z) }));
 
+  // `players`, not `identity_links`: a wanted player is often unlinked (spec §2.2).
+  // The EXISTS against `player_sessions` (open session, same server) is the
+  // "only while online" rule (spec §2.3) — in the WHERE clause, not a filter
+  // afterwards, so a target who has disconnected is never selected at all.
+  const wanted = await db.select({ dayzId: bounties.targetDayzId, gamertag: players.gamertag, reason: bounties.reason })
+    .from(bounties).leftJoin(players, eq(players.dayzId, bounties.targetDayzId))
+    .where(and(
+      eq(bounties.serverId, serverId),
+      eq(bounties.status, "open"),
+      sql`exists (select 1 from ${playerSessions} where ${playerSessions.serverId} = ${bounties.serverId} and ${playerSessions.dayzId} = ${bounties.targetDayzId} and ${playerSessions.disconnectedAt} is null)`,
+    ))
+    .orderBy(asc(bounties.id));
+  const wantedFixes = await lastFixes(db, serverId, wanted.map((w) => w.dayzId));
+
   return {
     world: { size: WORLD_SIZE_M },
     you: { gamertag: link.gamertag, fix: fixes.get(link.dayzId) ?? null },
@@ -96,6 +123,7 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
     intruders: intruders.map((i) => ({ gamertag: i.gamertag ?? "someone", x: n(i.x), z: n(i.z), lastSeenAt: i.lastSeenAt, distanceM: i.distanceM })),
     publicBases,
     pins: pins.map((p) => ({ id: p.id, x: n(p.x), z: n(p.z), icon: p.icon as PinIcon, note: p.note, by: p.by, at: p.at, expiresAt: p.expiresAt })),
+    bounties: wanted.flatMap((w) => { const f = wantedFixes.get(w.dayzId); return f ? [{ gamertag: w.gamertag ?? "someone", reason: w.reason, fix: f }] : []; }),
     travelPoints: FAST_TRAVEL_POINTS,
     hub: HUB_POSITION,
     layers: { base: decl !== undefined, clanmates: clan !== undefined, intruders: decl !== undefined, pins: clan !== undefined },

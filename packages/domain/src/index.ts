@@ -23,3 +23,4 @@ export * from "./enforcement";
 export * from "./pc-gate";
 export * from "./booster-kit";
 export * from "./awards";
+export * from "./bounties";

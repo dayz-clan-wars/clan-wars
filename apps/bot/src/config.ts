@@ -95,31 +95,31 @@ export type BotConfig = {
    */
   alphaRoleId: string;
   /**
-   * The leaderboards channel: nine standing messages, one per board, edited
+   * The leaderboards channel: ten standing messages, one per board, edited
    * in place. Optional — unset and nothing is posted or edited anywhere.
    */
   leaderboardsChannelId: string | undefined;
   /**
-   * How often the nine board messages reconcile. Default 5 minutes, the same
-   * clock the crowns run on: both read the same nine leaderboards, and a
+   * How often the ten board messages reconcile. Default 5 minutes, the same
+   * clock the crowns run on: both read the same ten leaderboards, and a
    * board that moved should move its crown and its message together.
    */
   leaderboardTickIntervalMs: number;
   /**
-   * The nine leaderboard crowns: one role per board, held by whoever is #1 on
+   * The ten leaderboard crowns: one role per board, held by whoever is #1 on
    * it in the current season (`crown-tick.ts`).
    *
    * Created by hand once, like `@Linked` and `@Alpha` — the bot only adds and
    * removes members, so the name, colour, icon and position stay yours.
    *
    * ⚠️ Every one is OPTIONAL and a board with no id here is never touched, so
-   * the crowns can be rolled out a few at a time. All nine unset means the
+   * the crowns can be rolled out a few at a time. All ten unset means the
    * tick does not run at all.
    */
   crownRoleIds: Partial<Record<BoardKind, string>>;
   /**
    * How often the crowns reconcile. Default 5 minutes, not every tick: each
-   * pass is nine leaderboard queries, and a crown that moves within five
+   * pass is ten leaderboard queries, and a crown that moves within five
    * minutes of the kill that moved it is as live as anyone can tell.
    */
   crownTickIntervalMs: number;
@@ -161,6 +161,11 @@ export type BotConfig = {
    * `minPop` is the floor under the trailing high-water population a drop requires.
    */
   airdrop: { enabled: boolean; weeklyCap: number; minPop: number };
+  /**
+   * Gates the bounty tick and its poster (spec 2026-09-23-bounties). `/bounty place`
+   * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
+   */
+  bounties: { enabled: boolean };
   /**
    * Where the airdrop tick announces a drop's location. Fatal when the tick
    * is on and this is unset — see the load-time check below.
@@ -300,6 +305,7 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
   kd: "CROWN_KD_ROLE_ID",
   streaks: "CROWN_STREAKS_ROLE_ID",
   longestKills: "CROWN_LONGEST_KILL_ROLE_ID",
+  bountyKills: "CROWN_BOUNTY_KILLS_ROLE_ID",
   builders: "CROWN_BUILDERS_ROLE_ID",
   playTime: "CROWN_PLAYTIME_ROLE_ID",
   deaths: "CROWN_DEATHS_ROLE_ID",
@@ -315,7 +321,7 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
  * Discord writes a time. It prints as a steady `crowns: 1 added, 1 removed`,
  * which reads exactly like normal churn — the silent kind of wrong this file's
  * other validators exist to catch, and an easy copy-paste to make when pasting
- * nine ids in a row.
+ * ten ids in a row.
  */
 function crownRoleIds(env: NodeJS.ProcessEnv): Partial<Record<BoardKind, string>> {
   const out: Partial<Record<BoardKind, string>> = {};
@@ -476,6 +482,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       weeklyCap: positiveInt(env, "AIRDROP_WEEKLY_CAP", 2),
       minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
     },
+    bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -565,6 +572,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // channel this feature cannot work at all, rather than working less well.
   if (config.airdrop.enabled && !config.serverEventsChannelId) {
     throw new Error("AIRDROP_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the location announcement is the only way a drop is ever found, so with no channel to post it this is misconfigured, not merely degraded.");
+  }
+  // ⚠️ Fatal, like WEEKLY_VEHICLE_WIPE: the announcement is the whole point of a
+  // bounty — a punishment nobody is told about is not one.
+  if (config.bounties.enabled && !config.serverEventsChannelId) {
+    throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

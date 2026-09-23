@@ -29,6 +29,8 @@ import { hubTick } from "./hub-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
+import { bountyTick } from "./bounty-tick.js";
+import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
 import { airdropTick } from "./airdrop-tick.js";
 import { NitradoClient } from "@factions/nitrado";
@@ -413,11 +415,11 @@ export function createOnlineBoard(client: Client, channelId: string): OnlineBoar
 }
 
 /**
- * The nine standing messages in the leaderboards channel.
+ * The ten standing messages in the leaderboards channel.
  *
  * ⚠️ `findMine` identifies a message by the board link in its embed, not by a
- * stored id — that is what lets a restart adopt the nine already there. It
- * reads a bounded slice of recent history (the channel holds nine messages;
+ * stored id — that is what lets a restart adopt the ten already there. It
+ * reads a bounded slice of recent history (the channel holds ten messages;
  * fifty is room for a few stray ones without an unbounded walk).
  *
  * ⚠️ Throws on every unreachable path, like the posters: `leaderboardTick`
@@ -603,9 +605,16 @@ export async function start(cfg: BotConfig): Promise<void> {
   const releaseStore = pgReleaseStore(db);
   const opsChannelPoster = cfg.opsChannelId ? createChannelPoster(client, cfg.opsChannelId) : null;
   const serverEventsPoster = cfg.serverEventsChannelId ? createChannelPoster(client, cfg.serverEventsChannelId) : null;
+  // ⚠️ A separate poster on the same channel, with mentions off: a bounty post carries a
+  // gamertag and an admin's free-text reason, and escaping markdown does not stop
+  // Discord parsing a literal @everyone. See createChannelPoster's comment.
+  const bountyPoster = cfg.bounties.enabled && cfg.serverEventsChannelId
+    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
+    : null;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
+    bountiesEnabled: cfg.bounties.enabled,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
@@ -803,8 +812,8 @@ export async function start(cfg: BotConfig): Promise<void> {
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
 
-  // The leaderboards channel's nine standing messages, on the same clock as
-  // the crowns below — both read the same nine boards.
+  // The leaderboards channel's ten standing messages, on the same clock as
+  // the crowns below — both read the same ten boards.
   const leaderboardStore = new PgLeaderboardStore(db);
   const leaderboardChannel = cfg.leaderboardsChannelId
     ? createLeaderboardChannel(client, cfg.leaderboardsChannelId, cfg.siteBaseUrl)
@@ -812,9 +821,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   const leaderboardState: LeaderboardState = { messageIds: null, keys: new Map() };
   let lastLeaderboardAt = 0;
 
-  // The nine leaderboard crowns. Throttled the same way the reaper is, and for
+  // The ten leaderboard crowns. Throttled the same way the reaper is, and for
   // the same reason — one interval in this process — but on its own clock,
-  // because a pass is nine leaderboard queries rather than four deletes.
+  // because a pass is ten leaderboard queries rather than four deletes.
   const crownStore = new PgCrownStore(db);
   const crownsConfigured = Object.keys(cfg.crownRoleIds).length > 0;
   let lastCrownAt = 0;
@@ -964,6 +973,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       console.error("kills tick failed", err);
     }
 
+    // ⚠️ After sessionsTick and killsTick, so a kill or a disconnect ingested this tick
+    // is seen before a bounty is judged. Its own try/catch.
+    if (cfg.bounties.enabled) {
+      try {
+        const b = await bountyTick(db, { now: new Date() });
+        if (b.claimed + b.expired > 0) console.log(`bounties: ${b.claimed} claimed, ${b.expired} expired`);
+      } catch (err) {
+        console.error("bounty tick failed", err);
+      }
+    }
+
     // ⚠️ Its own try/catch, after presence (and the map's positions/zone
     // ticks) and before the notice tick: a promotion this tick should hold
     // its clan role before a `became_full` line posts, and a channel created
@@ -1038,7 +1058,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
 
     // ⚠️ Its own try/catch, beside the crowns and on its own throttle: the
-    // nine board messages read the same leaderboards the crowns do, so they
+    // ten board messages read the same leaderboards the crowns do, so they
     // belong after the kills and sessions consumers have projected this
     // tick's events.
     if (leaderboardChannel && Date.now() - lastLeaderboardAt >= cfg.leaderboardTickIntervalMs) {
@@ -1638,6 +1658,22 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (a.posted + a.missed > 0) console.log(`announce: ${a.posted} posted, ${a.missed} missed`);
       } catch (err) {
         console.error("announce tick failed", err);
+      }
+    }
+
+    // ⚠️ After the restart tick, like every server-events poster: a slow Discord or
+    // Nitrado call must not delay a due restart. Gated on the flag alone — config
+    // refuses BOUNTY_TICK without SERVER_EVENTS_CHANNEL_ID, so bountyPoster is
+    // non-null here.
+    if (cfg.bounties.enabled) {
+      try {
+        const a = await bountyAnnounceTick(db, bountyPoster!, {
+          now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
+          onError: (id, err) => console.error(`bounty post failed for #${id}; later posts wait behind it`, err),
+        });
+        if (a.posted > 0) console.log(`bounties: ${a.posted} posted`);
+      } catch (err) {
+        console.error("bounty announce tick failed", err);
       }
     }
   });
