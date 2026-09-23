@@ -104,10 +104,15 @@ exemption.
 A ban reaches Nitrado several minutes after the offence: the worker sweeps each minute,
 and `banTick` runs in the bot's 5-minute block. A player in a brawl lands many hits in
 that time. While a player has a `hub_combat` ban that is `pending` or `applied`, their
-further Hub offences write nothing. `expiresAt = bannedAt + HUB_BAN_MS` (1 hour).
+further Hub offences write nothing.
 
-The known cost: the hour is measured from when the ban was written, so the few minutes
-before `banTick` applies it come out of the hour. This is accepted rather than stamping
+The hour starts when the bot **processes** the offence, not when it happened in game:
+`bannedAt = now`, `expiresAt = now + HUB_BAN_MS`. An offence can reach the ADM log long
+after it happened, and the worker and bot add their own delay on top. An hour measured
+from the event would be partly or wholly used up before the ban ever reached Nitrado.
+
+The remaining cost: `banTick` applies the row up to one 5-minute block after it is
+written, so those minutes come out of the hour. That is accepted rather than stamping
 expiry at apply time, which would mean a third code path in `banTick`'s expire arm for
 one reason.
 
@@ -209,17 +214,21 @@ Each tick, in batches, `hubTick` reads events past its cursor of type `player.hi
    never offences.
 3. **An offender with a `hub_combat` ban already `pending` or `applied`** writes nothing.
 4. **Otherwise** the tick inserts
-   `bans { reason: 'hub_combat', status: 'pending', bannedAt: event.occurredAt, expiresAt: occurredAt + HUB_BAN_MS, gamertag }`.
+   `bans { reason: 'hub_combat', status: 'pending', bannedAt: now, expiresAt: now + HUB_BAN_MS, gamertag }`.
 
 The cursor advances after the batch's writes commit, in the same transaction. A crash
 mid-batch re-reads the batch, and step 3 makes that harmless.
 
-⚠️ `bannedAt` is the **event's** time, not `now`. A tick that falls behind (a
-`guardedRunner` skip, a restart) would otherwise hand out a full hour starting whenever
-it caught up. With the event's time, a late tick serves what is left of the hour. A tick
-more than `HUB_BAN_MS` behind writes a ban that `banTick` expires on the pass it applies
-it, which is harmless but pointless, so the tick skips any event older than `HUB_BAN_MS`
-while still advancing its cursor. That is the same guard `zone-tick.ts` has.
+⚠️ `bannedAt` is `now`, not the event's time (§2.5). So a late offence still gets its
+full hour: after a slow log, a `guardedRunner` skip, or a bot restart.
+
+⚠️ The one staleness guard: the tick skips any event older than
+`HUB_OFFENCE_MAX_AGE_MS` = **24 h** (equal to `BAN_APPLY_LOOKBACK_MS`), while still
+advancing its cursor. It is not about the length of the sentence. It exists for the
+same reason `zone-tick.ts`'s guard does: an unseeded or rewound cursor must not replay
+the whole event log and ban everyone who ever fought at the Hub, including the 2026-09-20
+brawl from before the rule existed. 24 h is far longer than any log delay seen, and
+the runbook's cursor seed at the log head is the primary defence. This is the backstop.
 
 It runs every tick, beside `zone-tick.ts`, gated on `HUB_BAN_TICK`. Like
 `UNLINKED_PC_BAN`, it refuses to load without `ENFORCEMENT_TICK`, because without
@@ -291,8 +300,9 @@ guarded rather than relying on that.
 - `13-rules-on-one-page.html`'s Hub line gains the rule.
 - `11-getting-around.html`'s "Other survivors can be standing in it when you arrive.
   Watch your back." is replaced. It now contradicts the rule.
-- `rules.ts` gains `HUB_ZONE_RADIUS_M`, `HUB_ZONE_MIN_ALTITUDE_M`, `HUB_BAN_MS` and
-  `HUB_RETALIATION_WINDOW_MS`. `guide-numbers.ts` gets the rows the chapters use.
+- `rules.ts` gains `HUB_ZONE_RADIUS_M`, `HUB_ZONE_MIN_ALTITUDE_M`, `HUB_BAN_MS`,
+  `HUB_RETALIATION_WINDOW_MS` and `HUB_OFFENCE_MAX_AGE_MS`. The last one is not
+  player-facing and gets no guide row. `guide-numbers.ts` gets the rows the chapters use.
 
 ---
 
@@ -302,7 +312,8 @@ guarded rather than relying on that.
 |---|---|
 | An event has no position (never seen in production) | Not at the Hub. No ban, and the kill still scores. |
 | `hubTick` throws mid-batch | Transaction rolls back and the cursor does not move. The next tick re-reads, and step 3 prevents duplicates. |
-| Bot down for more than an hour | Events older than `HUB_BAN_MS` are skipped. Nobody gets a ban that would already have run out. |
+| Offence logged late, or bot down for a while | The ban is written when processed and runs a full hour from then. Only events older than 24 h are skipped. |
+| Cursor unseeded or rewound | Events older than 24 h are skipped, so history is never replayed into bans. |
 | `ENFORCEMENT_TICK` off | Config refuses to load with `HUB_BAN_TICK` set. |
 | `BAN_DRY_RUN=true` | Rows are written, and `banTick` marks them applied without calling Nitrado, announcing them, or sending a DM. The same as every other reason. |
 | Backfill re-run | Skips payloads that already have positions. |
@@ -327,7 +338,8 @@ guarded rather than relying on that.
   - a ground-level fight below the Hub doesn't ban;
   - a trap bans, and a tent doesn't;
   - a second offence while a ban is pending writes nothing;
-  - an event older than an hour is skipped and the cursor still moves;
+  - an offence processed 3 h after it happened is banned from processing time (`bannedAt = now`, `expiresAt = now + 1h`);
+  - an event older than 24 h is skipped, and the cursor still moves;
   - a hit by an infected never bans.
 - **Discrediting:** each row of the §4.3 table, both sides.
 - **`kills-tick`:** `at_hub` from the kill line, and from the crediting hit on a
