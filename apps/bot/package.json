@@ -9,6 +9,7 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
+    "@factions/adm-parser": "workspace:*",
     "@factions/ceremony": "workspace:*",
     "@factions/copy": "workspace:*",
     "@factions/declarations": "workspace:*",
