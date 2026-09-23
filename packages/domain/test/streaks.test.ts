@@ -41,4 +41,16 @@ describe("streakOf", () => {
     expect(s.reachedIndex(2)).toBe(1);
     expect(rows[s.reachedIndex(2)!]).toBe(rows[1]);
   });
+  it("a Hub kill neither extends a run nor, as a death, resets one", () => {
+    const at = (n: number) => new Date(Date.UTC(2026, 8, 20, 0, n));
+    // 3, and only 3: a Hub death that reset the run gives 2, a Hub kill that extended it gives 4.
+    const rows = [
+      { killer: "A", victim: "B", friendlyFire: false, occurredAt: at(1) },
+      { killer: "A", victim: "B", friendlyFire: false, occurredAt: at(2) },
+      { killer: "B", victim: "A", friendlyFire: false, atHub: true, occurredAt: at(3) },
+      { killer: "A", victim: "B", friendlyFire: false, occurredAt: at(4) },
+      { killer: "A", victim: "B", friendlyFire: false, atHub: true, occurredAt: at(5) },
+    ];
+    expect(streakOf(rows, "A").best).toBe(3);
+  });
 });

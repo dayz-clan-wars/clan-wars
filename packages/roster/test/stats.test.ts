@@ -71,14 +71,14 @@ describe("roster player stats", () => {
   const mkKill = async (a: {
     at: Date; victim: string; killer: string | null; cause?: string;
     victimFactionId?: number | null; killerFactionId?: number | null; friendlyFire?: boolean;
-    distanceM?: number; weapon?: string;
+    distanceM?: number; weapon?: string; atHub?: boolean;
   }) => {
     const eventId = await mkEvent({ type: a.killer ? "player.killed" : "player.died", at: a.at });
     await db.insert(kills).values({
       serverId, eventId, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
       weapon: a.weapon ?? null, distanceM: a.distanceM === undefined ? null : String(a.distanceM), cause: a.cause ?? (a.killer ? "pvp" : "infected"),
       victimFactionId: a.victimFactionId ?? null, killerFactionId: a.killerFactionId ?? null,
-      friendlyFire: a.friendlyFire ?? false,
+      friendlyFire: a.friendlyFire ?? false, atHub: a.atHub ?? false,
     });
   };
 
@@ -513,10 +513,10 @@ describe("roster player stats", () => {
       const p = (await playerProfileDb(db, "Alpha", ALL, now))!;
       // 3 deaths to R (season 2), 12 kills on R (season 1), the friendly kill on B before season 1. Self-kills and killer-less deaths are not encounters.
       expect(p.encounters).toHaveLength(16);
-      expect(p.encounters[0]).toEqual({ at: h(t50, 3), killer: "Romeo", victim: "Alpha", weapon: null, distanceM: null, friendlyFire: false });
-      expect(p.encounters[1]).toEqual({ at: h(t50, 2), killer: "Romeo", victim: "Alpha", weapon: "SKS", distanceM: 75.5, friendlyFire: false });
-      expect(p.encounters[10]).toEqual({ at: h(t0, 5), killer: "Alpha", victim: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false });
-      expect(p.encounters[15]).toEqual({ at: h(t0, -1), killer: "Alpha", victim: "Bravo", weapon: null, distanceM: null, friendlyFire: true });
+      expect(p.encounters[0]).toEqual({ at: h(t50, 3), killer: "Romeo", victim: "Alpha", weapon: null, distanceM: null, friendlyFire: false, atHub: false });
+      expect(p.encounters[1]).toEqual({ at: h(t50, 2), killer: "Romeo", victim: "Alpha", weapon: "SKS", distanceM: 75.5, friendlyFire: false, atHub: false });
+      expect(p.encounters[10]).toEqual({ at: h(t0, 5), killer: "Alpha", victim: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false, atHub: false });
+      expect(p.encounters[15]).toEqual({ at: h(t0, -1), killer: "Alpha", victim: "Bravo", weapon: null, distanceM: null, friendlyFire: true, atHub: false });
     });
     it("season 2: only the three deaths", async () => {
       const p = (await playerProfileDb(db, "Alpha", SEASON_2, now))!;
@@ -536,9 +536,9 @@ describe("roster player stats", () => {
         { kind: "built", at: h(t50, 7), steps: 1 },
         { kind: "raid", at: h(t50, 6), victim: { tag: "WOLF", name: "WOLF" } },
         { kind: "raid", at: h(t50, 5), victim: { tag: "WOLF", name: "WOLF" } },
-        { kind: "death", at: h(t50, 3), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" },
-        { kind: "death", at: h(t50, 2), other: "Romeo", weapon: "SKS", distanceM: 75.5, friendlyFire: false, cause: "pvp" },
-        { kind: "death", at: h(t50, 1), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" },
+        { kind: "death", at: h(t50, 3), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, atHub: false, cause: "pvp" },
+        { kind: "death", at: h(t50, 2), other: "Romeo", weapon: "SKS", distanceM: 75.5, friendlyFire: false, atHub: false, cause: "pvp" },
+        { kind: "death", at: h(t50, 1), other: "Romeo", weapon: null, distanceM: null, friendlyFire: false, atHub: false, cause: "pvp" },
       ]);
     });
 
@@ -547,13 +547,13 @@ describe("roster player stats", () => {
       const kinds = feed.entries.map((e) => e.kind);
       // Newest first: two colours raises (h50, h51; the Flag_Wolf raise at h52 is still a raise BY Alpha), the killer-less death at h21, the dismantle at h14, the build hour, twelve kills.
       expect(kinds.slice(0, 3)).toEqual(["raised", "raised", "raised"]);
-      expect(feed.entries[3]).toEqual({ kind: "death", at: h(t0, 21), other: null, weapon: null, distanceM: null, friendlyFire: false, cause: "infected" });
+      expect(feed.entries[3]).toEqual({ kind: "death", at: h(t0, 21), other: null, weapon: null, distanceM: null, friendlyFire: false, atHub: false, cause: "infected" });
       expect(feed.entries[4]).toEqual({ kind: "dismantled", at: h(t0, 14), steps: 1 });
       expect(feed.entries[5]).toEqual({ kind: "built", at: h(t0, 12), steps: 1 });
       expect(feed.entries.filter((e) => e.kind === "built").map((e) => (e as { steps: number }).steps)).toEqual([1, 1, 1]);
       expect(feed.entries.filter((e) => e.kind === "kill")).toHaveLength(12);
       expect(feed.entries.find((e) => e.kind === "kill" && e.at.getTime() === h(t0, 5).getTime()))
-        .toEqual({ kind: "kill", at: h(t0, 5), other: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false, cause: "pvp" });
+        .toEqual({ kind: "kill", at: h(t0, 5), other: "Romeo", weapon: "DMR", distanceM: 250, friendlyFire: false, atHub: false, cause: "pvp" });
     });
 
     it("groups build steps by the hour they fell in", async () => {
@@ -580,9 +580,9 @@ describe("roster player stats", () => {
     it("the friendly kill and the self-kill read as the log had them", async () => {
       // All-time is longer than a page: read it wide.
       const feed = (await playerFeedDb(db, "Alpha", ALL, 1, now, 100))!;
-      expect(feed.entries.find((e) => e.kind === "kill" && e.friendlyFire)).toEqual({ kind: "kill", at: h(t0, -1), other: "Bravo", weapon: null, distanceM: null, friendlyFire: true, cause: "pvp" });
+      expect(feed.entries.find((e) => e.kind === "kill" && e.friendlyFire)).toEqual({ kind: "kill", at: h(t0, -1), other: "Bravo", weapon: null, distanceM: null, friendlyFire: true, atHub: false, cause: "pvp" });
       const romeo = (await playerFeedDb(db, "Romeo", SEASON_2, 1, now))!;
-      expect(romeo.entries.find((e) => e.kind === "death")).toEqual({ kind: "death", at: h(t50, 4), other: null, weapon: null, distanceM: null, friendlyFire: false, cause: "pvp" });
+      expect(romeo.entries.find((e) => e.kind === "death")).toEqual({ kind: "death", at: h(t50, 4), other: null, weapon: null, distanceM: null, friendlyFire: false, atHub: false, cause: "pvp" });
     });
   });
 
@@ -732,6 +732,65 @@ describe("roster player stats", () => {
         .toEqual([{ dayzId: R, gamertag: "Romeo", value: 3 }]);
       expect((await playerProfileDb(db, "Romeo", SEASON_2, now))!.pvpKills).toBe(3);
       expect((await playerProfileDb(db, "Romeo", ALL, now))!.pvpKills).toBe(4);
+    });
+  });
+
+  // spec 2026-09-22-hub-combat §2.7: a Hub kill scores nowhere, on either side,
+  // and stays a record. Two fresh players so the shared fixture's numbers stand.
+  describe("Hub kills score nowhere", () => {
+    const H1 = "dayz-H1", H2 = "dayz-H2";
+    const at = (n: number) => h(t50, 100 + n);
+    beforeEach(async () => {
+      await db.insert(players).values([
+        { dayzId: H1, gamertag: "Hotel", firstSeenAt: t0, lastSeenAt: t50 },
+        { dayzId: H2, gamertag: "India", firstSeenAt: t0, lastSeenAt: t50 },
+      ]);
+    });
+    const row = (rows: { dayzId: string; value: number }[], id: string) => rows.find((r) => r.dayzId === id)?.value;
+
+    it("not a kill for the killer, not a death for the victim, on the boards", async () => {
+      await mkKill({ at: at(1), victim: H2, killer: H1 });
+      await mkKill({ at: at(2), victim: H2, killer: H1, atHub: true });
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(row(boards.killers, H1)).toBe(1);
+      expect(row(boards.deaths, H2)).toBe(1);
+    });
+
+    it("neither extends nor breaks a streak", async () => {
+      // 3, and only 3: a Hub death that reset the run gives 2, a Hub kill that extended it gives 4.
+      await mkKill({ at: at(1), victim: H2, killer: H1 });
+      await mkKill({ at: at(2), victim: H2, killer: H1 });
+      await mkKill({ at: at(3), victim: H1, killer: H2, atHub: true });   // a Hub death does not reset H1
+      await mkKill({ at: at(4), victim: H2, killer: H1 });
+      await mkKill({ at: at(5), victim: H2, killer: H1, atHub: true });   // a Hub kill does not extend
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(row(boards.streaks, H1)).toBe(3);
+      expect((await playerProfileDb(db, "Hotel", ALL, now))!.bestStreak).toBe(3);
+    });
+
+    it("⚠️ a Hub teamkill is not on the friendly-fire board or the profile's friendly-fire counts either", async () => {
+      await mkKill({ at: at(1), victim: H2, killer: H1, victimFactionId: bearId, killerFactionId: bearId, friendlyFire: true, atHub: true });
+      const boards = await playerBoardsDb(db, ALL, undefined, now);
+      expect(row(boards.friendlyFire, H1)).toBeUndefined();
+      const p1 = (await playerProfileDb(db, "Hotel", ALL, now))!;
+      const p2 = (await playerProfileDb(db, "India", ALL, now))!;
+      expect([p1.friendlyFireKills, p2.friendlyFireDeaths]).toEqual([0, 0]);
+    });
+
+    it("not on the profile's kills, deaths, K/D or longest kill", async () => {
+      await mkKill({ at: at(1), victim: H2, killer: H1, atHub: true, distanceM: 400 });
+      const p1 = (await playerProfileDb(db, "Hotel", ALL, now))!;
+      const p2 = (await playerProfileDb(db, "India", ALL, now))!;
+      expect([p1.pvpKills, p2.pvpDeaths, p1.longestKill]).toEqual([0, 0, null]);
+    });
+
+    it("still a record: encounters and the feed carry it, marked atHub", async () => {
+      await mkKill({ at: at(1), victim: H2, killer: H1, atHub: true });
+      expect((await playerProfileDb(db, "Hotel", ALL, now))!.encounters[0]).toMatchObject({ atHub: true });
+      const feed = (await playerFeedDb(db, "Hotel", ALL, 1, now))!;
+      expect(feed.entries[0]).toMatchObject({ kind: "kill", atHub: true });
+      const victimFeed = (await playerFeedDb(db, "India", ALL, 1, now))!;
+      expect(victimFeed.entries[0]).toMatchObject({ kind: "death", atHub: true });
     });
   });
 });

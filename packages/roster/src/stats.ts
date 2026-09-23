@@ -126,6 +126,8 @@ export type PlayerProfile = {
 /** One PvP kill between this player and another, either way round. Names, not ids: the page links them. */
 export type Encounter = {
   at: Date; killer: string; victim: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean;
+  /** At the Fast Travel Hub: shown, scores nowhere (spec 2026-09-22-hub-combat). */
+  atHub: boolean;
 };
 
 /**
@@ -136,8 +138,8 @@ export type Encounter = {
  */
 export type FeedEntry =
   /** `cause` is `finished` for a credited kill (the victim was shot to near-zero and left to die), else the log's word. */
-  | { kind: "kill"; at: Date; other: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean; cause: string | null }
-  | { kind: "death"; at: Date; other: string | null; weapon: string | null; distanceM: number | null; friendlyFire: boolean; cause: string | null }
+  | { kind: "kill"; at: Date; other: string; weapon: string | null; distanceM: number | null; friendlyFire: boolean; atHub: boolean; cause: string | null }
+  | { kind: "death"; at: Date; other: string | null; weapon: string | null; distanceM: number | null; friendlyFire: boolean; atHub: boolean; cause: string | null }
   | { kind: "raid"; at: Date; victim: { tag: string; name: string } }
   | { kind: "raised"; at: Date }
   | { kind: "built"; at: Date; steps: number }
@@ -249,8 +251,11 @@ const byAnotherPlayer = sql`${kills.killerDayzId} is not null and ${kills.killer
  * ⚠️ The friendly-fire BOARD must not use this (it counts exactly what this excludes),
  * and neither must the feeds — `encountersOf` and the timeline are records of what
  * happened, and carry `friendlyFire` per row so the surface can mark it.
+ *
+ * ⚠️ A Hub kill (`at_hub`, spec 2026-09-22-hub-combat) is excluded by the same rule, for
+ * the same reason: it is not a fight. It is off the friendly-fire board too — see there.
  */
-const scoringKill = and(byAnotherPlayer, eq(kills.friendlyFire, false))!;
+const scoringKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), eq(kills.atHub, false))!;
 
 const gamertagOf = (col: PgColumn) => sql<string>`coalesce(${players.gamertag}, ${col})`;
 
@@ -299,7 +304,7 @@ const sessionOverlaps = (w: Window, now: Date): SQL => sql`
  * a long streak is a teamkill.
  */
 async function bestStreaks(db: Database, serverId: number, w: Window): Promise<Map<string, number>> {
-  const rows = await db.select({ killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire })
+  const rows = await db.select({ killer: kills.killerDayzId, victim: kills.victimDayzId, friendlyFire: kills.friendlyFire, atHub: kills.atHub })
     .from(kills)
     .where(and(eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w)))
     .orderBy(asc(kills.occurredAt), asc(kills.id));
@@ -307,8 +312,8 @@ async function bestStreaks(db: Database, serverId: number, w: Window): Promise<M
   const best = new Map<string, number>();
   for (const r of rows) {
     // ⚠️ `continue`, not an else-branch on the death: a friendly kill must fall
-    // through BOTH halves of this loop.
-    if (r.friendlyFire) continue;
+    // through BOTH halves of this loop. A Hub kill is skipped the same way.
+    if (r.friendlyFire || r.atHub) continue;
     const n = (run.get(r.killer!) ?? 0) + 1;
     run.set(r.killer!, n);
     if (n > (best.get(r.killer!) ?? 0)) best.set(r.killer!, n);
@@ -441,7 +446,8 @@ function boardRows(
     case "kd": return kdBoard(db, serverId, w, roster, limit, offset);
     case "playTime": return playTimeBoard(db, serverId, w, now, roster, limit, offset);
     case "friendlyFire": return countBoard(db, kills.killerDayzId, kills, and(
-      eq(kills.serverId, serverId), eq(kills.friendlyFire, true), byAnotherPlayer,
+      // ⚠️ `at_hub = false`: a Hub teamkill scores nowhere, not even here (spec 2026-09-22-hub-combat).
+      eq(kills.serverId, serverId), eq(kills.friendlyFire, true), eq(kills.atHub, false), byAnotherPlayer,
       inWindow(kills.occurredAt, w), inRoster(kills.killerDayzId, roster),
     )!, limit, offset);
     case "builders": return buildersBoard(db, serverId, w, roster, limit, offset);
@@ -648,8 +654,8 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
     killCount(db, and(mine, inW, scoringKill, eq(kills.victimDayzId, dayzId))!),
     opponents(db, kills.victimDayzId, and(mine, inW, scoringKill, eq(kills.killerDayzId, dayzId))!),
     opponents(db, kills.killerDayzId, and(mine, inW, scoringKill, eq(kills.victimDayzId, dayzId))!),
-    killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
-    killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.victimDayzId, dayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
+    killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.atHub, false), eq(kills.killerDayzId, dayzId), sql`${kills.victimDayzId} <> ${dayzId}`)!),
+    killCount(db, and(mine, inW, eq(kills.friendlyFire, true), eq(kills.atHub, false), eq(kills.victimDayzId, dayzId), sql`${kills.killerDayzId} <> ${dayzId}`)!),
     db.select({ n: sql<number>`count(*)::int` }).from(raids)
       .where(and(eq(raids.serverId, serverId), eq(raids.raiderDayzId, dayzId), raidsInScope(w))),
     upkeepRaiseCount(db, serverId, dayzId, w),
@@ -698,7 +704,7 @@ export async function playerProfileDb(db: Database, gamertag: string, scope: Sta
 async function encountersOf(db: Database, serverId: number, dayzId: string, w: Window): Promise<Encounter[]> {
   const rows = await db.select({
     at: kills.occurredAt, killer: kills.killerDayzId, victim: kills.victimDayzId,
-    weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire,
+    weapon: kills.weapon, distanceM: kills.distanceM, friendlyFire: kills.friendlyFire, atHub: kills.atHub,
   }).from(kills)
     .where(and(
       eq(kills.serverId, serverId), byAnotherPlayer, inWindow(kills.occurredAt, w),
@@ -711,7 +717,7 @@ async function encountersOf(db: Database, serverId: number, dayzId: string, w: W
   const nameOf = new Map(names.map((n) => [n.dayzId, n.gamertag]));
   return rows.map((r) => ({
     at: r.at, killer: nameOf.get(r.killer!) ?? r.killer!, victim: nameOf.get(r.victim) ?? r.victim,
-    weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM), friendlyFire: r.friendlyFire,
+    weapon: r.weapon, distanceM: r.distanceM === null ? null : Number(r.distanceM), friendlyFire: r.friendlyFire, atHub: r.atHub,
   }));
 }
 
@@ -733,31 +739,31 @@ export async function playerFeedDb(
 
   type Raw = {
     kind: FeedEntry["kind"]; at: Date; other: string | null; weapon: string | null; distance_m: string | null;
-    friendly_fire: boolean; cause: string | null; tag: string | null; name: string | null; n: number;
+    friendly_fire: boolean; at_hub: boolean; cause: string | null; tag: string | null; name: string | null; n: number;
   };
   const rows = await db.execute<Raw>(sql`
-    select kind, at, other, weapon, distance_m, friendly_fire, cause, tag, name, n from (
+    select kind, at, other, weapon, distance_m, friendly_fire, at_hub, cause, tag, name, n from (
       select 'kill' as kind, ${kills.occurredAt} as at, coalesce(${players.gamertag}, ${kills.victimDayzId}) as other,
-        ${kills.weapon} as weapon, ${kills.distanceM} as distance_m, ${kills.friendlyFire} as friendly_fire,
+        ${kills.weapon} as weapon, ${kills.distanceM} as distance_m, ${kills.friendlyFire} as friendly_fire, ${kills.atHub} as at_hub,
         ${kills.cause} as cause, null::text as tag, null::text as name, 1 as n
       from ${kills} left join ${players} on ${players.dayzId} = ${kills.victimDayzId}
       where ${kills.serverId} = ${serverId} and ${kills.killerDayzId} = ${me} and ${kills.victimDayzId} <> ${me} and ${inWindow(kills.occurredAt, w)}
       union all
       select 'death', ${kills.occurredAt},
         case when ${kills.killerDayzId} is null or ${kills.killerDayzId} = ${kills.victimDayzId} then null else coalesce(${players.gamertag}, ${kills.killerDayzId}) end,
-        ${kills.weapon}, ${kills.distanceM}, ${kills.friendlyFire}, ${kills.cause}, null, null, 1
+        ${kills.weapon}, ${kills.distanceM}, ${kills.friendlyFire}, ${kills.atHub}, ${kills.cause}, null, null, 1
       from ${kills} left join ${players} on ${players.dayzId} = ${kills.killerDayzId}
       where ${kills.serverId} = ${serverId} and ${kills.victimDayzId} = ${me} and ${inWindow(kills.occurredAt, w)}
       union all
-      select 'raid', ${raids.firstLowerAt}, null, null, null, false, null, ${factions.tag}, ${factions.name}, 1
+      select 'raid', ${raids.firstLowerAt}, null, null, null, false, false, null, ${factions.tag}, ${factions.name}, 1
       from ${raids} join ${factions} on ${factions.id} = ${raids.victimFactionId}
       where ${raids.serverId} = ${serverId} and ${raids.raiderDayzId} = ${me} and ${raidsInScope(w)}
       union all
-      select 'raised', ${events.occurredAt}, null, null, null, false, null, null, null, 1
+      select 'raised', ${events.occurredAt}, null, null, null, false, false, null, null, null, 1
       from ${events}
       where ${events.serverId} = ${serverId} and ${events.type} = 'flag.raised' and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
       union all
-      select case when ${events.type} = 'base.built' then 'built' else 'dismantled' end, max(${events.occurredAt}), null, null, null, false, null, null, null, count(*)::int
+      select case when ${events.type} = 'base.built' then 'built' else 'dismantled' end, max(${events.occurredAt}), null, null, null, false, false, null, null, null, count(*)::int
       from ${events}
       where ${events.serverId} = ${serverId} and ${events.type} in ('base.built', 'base.dismantled') and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
       group by ${events.type}, date_trunc('hour', ${events.occurredAt})
@@ -769,8 +775,8 @@ export async function playerFeedDb(
     const at = new Date(r.at);
     const distanceM = r.distance_m === null ? null : Number(r.distance_m);
     switch (r.kind) {
-      case "kill": return { kind: "kill", at, other: r.other!, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, cause: r.cause };
-      case "death": return { kind: "death", at, other: r.other, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, cause: r.cause };
+      case "kill": return { kind: "kill", at, other: r.other!, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, atHub: r.at_hub, cause: r.cause };
+      case "death": return { kind: "death", at, other: r.other, weapon: r.weapon, distanceM, friendlyFire: r.friendly_fire, atHub: r.at_hub, cause: r.cause };
       case "raid": return { kind: "raid", at, victim: { tag: r.tag!, name: r.name! } };
       case "raised": return { kind: "raised", at };
       case "built": return { kind: "built", at, steps: Number(r.n) };
