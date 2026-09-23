@@ -10,7 +10,7 @@
     "test": "turbo run test --concurrency=1",
     "typecheck:scripts": "tsc -p scripts/tsconfig.json",
     "typecheck": "pnpm typecheck:scripts && turbo run typecheck",
-    "ci": "pnpm typecheck:scripts && turbo run typecheck test --concurrency=1",
+    "ci": "pnpm typecheck:scripts && turbo run typecheck test --concurrency=4",
     "db:migrate": "tsx scripts/migrate.ts",
     "rebuild:standings": "tsx scripts/rebuild-standings.ts",
     "rebuild:sessions": "tsx scripts/rebuild-sessions.ts",
