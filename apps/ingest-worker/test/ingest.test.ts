@@ -63,7 +63,7 @@ describe("ingestFile", () => {
     await ingestFile(db, { ...opts(), lines });
     const rows = await db.select().from(events).orderBy(events.lineIndex);
     expect(rows.map((r) => r.type)).toEqual(["player.hit", "player.unconscious", "player.died"]);
-    expect(rows[0]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso", weapon: null, distanceM: null });
+    expect(rows[0]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", victimHp: 92.35, attackerType: "infected", attackerDayzId: null, attackerGamertag: null, attackerLabel: "Infected", damage: 7.65, bodyPart: "Torso", weapon: null, distanceM: null, victimPos: { x: 10848.6, y: 174.9, z: 11077 }, attackerPos: null });
     expect(rows[1]!.payload).toEqual({ dayzId: ID, gamertag: "YrJustBad", disconnecting: false });
     expect(rows[2]!.payload).toEqual({ victimDayzId: ID, victimGamertag: "YrJustBad", cause: "died", entity: null, water: 598.786, energy: 0, bleedSources: 1 });
   });
@@ -101,6 +101,24 @@ describe("ingestFile", () => {
     const r = await ingestFile(db, { ...opts(), lines });
     expect(r.eventsAppended).toBe(0);
     expect(r.unparsedFlagLines).toBe(2);
+  });
+
+  it("a hit and a kill keep both players' positions — and never under `pos`", async () => {
+    const K = "B".repeat(40);
+    const lines = [
+      "AdminLog started on 2026-07-22 at 07:01:37",
+      `17:24:38 | Player "Vic" (id=${ID} pos=<101.0, 95.0, 998.6>)[HP: 71.6] hit by Player "Kil" (id=${K} pos=<99.3, 93.2, 998.6>) into Torso(21) for 28.3 damage (Bullet_556x45) with M4-A1 from 2.6 meters`,
+      `17:25:00 | Player "Vic" (DEAD) (id=${ID} pos=<101.0, 95.0, 998.6>) killed by Player "Kil" (id=${K} pos=<99.0, 93.0, 998.6>) with M4-A1 from 2.1 meters`,
+    ];
+    await ingestFile(db, { ...opts(), lines });
+    const rows = await db.select().from(events).orderBy(events.lineIndex);
+    const hit = rows.find((r) => r.type === "player.hit")!.payload as Record<string, unknown>;
+    const kill = rows.find((r) => r.type === "player.killed")!.payload as Record<string, unknown>;
+    expect(hit).toMatchObject({ victimPos: { x: 101, y: 998.6, z: 95 }, attackerPos: { x: 99.3, y: 998.6, z: 93.2 } });
+    expect(kill).toMatchObject({ victimPos: { x: 101, y: 998.6, z: 95 }, killerPos: { x: 99, y: 998.6, z: 93 } });
+    // ⚠️ `pos` is a map fix to positions-tick's readFix: a kill carrying it would pin the victim on the killer's map.
+    expect("pos" in hit).toBe(false);
+    expect("pos" in kill).toBe(false);
   });
 
   it("ingests a deployable placement to item.placed with itemClass and pos in the payload", async () => {

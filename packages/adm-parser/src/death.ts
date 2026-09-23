@@ -1,8 +1,10 @@
-import { classifyEntityLabel } from "@factions/domain";
+import { classifyEntityLabel, type Vec3 } from "@factions/domain";
+import { posInIdentity } from "./coords.js";
 
 export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "explosion" | "environment" | "died";
 export type DeathLine =
-  | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null }
+  /** `victimPos`/`killerPos`: each from its own identity block — the Hub rule reads them (spec 2026-09-22-hub-combat). */
+  | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null; victimPos: Vec3 | null; killerPos: Vec3 | null }
   /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads. */
   | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null };
 
@@ -10,7 +12,7 @@ const ID = "[0-9A-F]{40}";
 // ⚠️ Both identities anchored on their 40-hex ids; the victim's `(DEAD)` marker sits between the name and the id —
 // and so does the KILLER's when they died in the same exchange (a mutual kill). Without that optional marker the
 // line falls through to DEATH_RE, whose entity regex reads the word "Player" and files a real kill as "environment".
-const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\) killed by Player "([^"]+)" (?:\\(DEAD\\) )?\\(id=(${ID})[^)]*\\)(.*)$`, "u");
+const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})([^)]*)\\) killed by Player "([^"]+)" (?:\\(DEAD\\) )?\\(id=(${ID})([^)]*)\\)(.*)$`, "u");
 const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\)(.*)$`, "u");
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
 const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
@@ -29,9 +31,10 @@ export function parseDeath(raw: string): DeathLine | null {
   if (raw.includes(" hit by ") || raw.includes(" is unconscious")) return null;
   const k = KILL_RE.exec(raw);
   if (k) {
-    const w = WEAPON_RE.exec(k[5]!);
-    return { kind: "killed", victimGamertag: k[1]!, victimDayzId: k[2]!, killerGamertag: k[3]!, killerDayzId: k[4]!,
-      weapon: w ? w[1]!.trim() : null, distanceM: w?.[2] ? parseFloat(w[2]) : null };
+    const w = WEAPON_RE.exec(k[7]!);
+    return { kind: "killed", victimGamertag: k[1]!, victimDayzId: k[2]!, killerGamertag: k[4]!, killerDayzId: k[5]!,
+      weapon: w ? w[1]!.trim() : null, distanceM: w?.[2] ? parseFloat(w[2]) : null,
+      victimPos: posInIdentity(k[3]!), killerPos: posInIdentity(k[6]!) };
   }
   const m = DEATH_RE.exec(raw);
   if (!m) return null;
