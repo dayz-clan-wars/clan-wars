@@ -71,6 +71,28 @@ describe("banAnnounceTick", () => {
     expect(await postedIds()).toEqual([1, 2, 3]);
   });
 
+  it("renders each row by its own kind COLUMN, which the payload does not carry", async () => {
+    // ⚠️ `announceTx` stores kind in the column and gamertag/reason/expiresAt
+    // in the payload. Rendering the payload alone read kind as undefined, and
+    // every unban posted to #bans as a second "banned until" line (2026-09-23,
+    // the first hub-combat ban to expire). Every other test here queues the
+    // default `applied`, which is why none of them could see it.
+    await insertRow(1, { kind: "applied" });
+    await insertRow(2, { kind: "expired" });
+    await insertRow(3, { kind: "lifted" });
+
+    const seen: string[] = [];
+    const post = vi.fn(async (content: string) => { seen.push(content); });
+
+    await banAnnounceTick(db, post, { now: at("2026-09-17T12:00:00Z"), serverId });
+
+    expect(seen).toEqual([
+      "🔨 **P1** banned permanently — base-zone enforcement.",
+      "🔓 **P2** unbanned — ban served.",
+      "🔓 **P3** unbanned.",
+    ]);
+  });
+
   it("does not re-post a row already marked posted", async () => {
     await insertRow(1, { postedAt: at("2026-09-16T00:00:00Z") });
     await insertRow(2);
