@@ -89,11 +89,14 @@ describe("the web app reads nothing", () => {
     expect(offenders.map((o) => o.file)).toEqual([]);
   });
 
+  // ⚠️ The timeout is for the IMPORT, not the assertion: this cold-loads the whole
+  // roster → db → domain graph. Alone it takes ~0.9 s; in CI beside other turbo
+  // tasks it took 4.8 s and then 5.03 s, failing vitest's 5 s default.
   it("⚠️ @factions/roster exports exactly the allowlist the site is permitted", async () => {
     // The capability rule (frontend rebuild §6; target spec §10.4). This is
     // the site's half of the pin; packages/roster/test/exports.test.ts is
     // the package's. Both must change for an export to land.
     const roster = await import("@factions/roster");
     expect(Object.keys(roster).sort()).toEqual(["BOARD_KINDS", "BOARD_PAGE_SIZE", "DECLARE_SOLO_REASONS", "FEED_PAGE_SIZE", "ISSUE_OUTCOME_KINDS", "NOTIFICATIONS_PAGE_SIZE", "REPORT_REASONS", "SUGGEST_SCOPES", "VAULT_NAME_MAX", "VAULT_NOTE_MAX", "acceptInvite", "achievementsFor", "addLock", "alphas", "attention", "award", "awards", "baseDamageWindow", "baseFor", "boardPage", "boosterKit", "cancelAwardPlacement", "cancelKitPlacement", "cancelLink", "castVote", "claimCeremony", "claimContext", "claimSuccession", "clanBoard", "clanBoardPage", "clanByTag", "clanFor", "confirmLock", "confirmRebind", "decideRequest", "declareSolo", "declineInvite", "deleteLock", "deletePin", "demote", "directory", "disband", "dropPin", "editLock", "grantGuestPass", "invite", "kick", "leave", "linkStatus", "liveServers", "makeRoster", "mapState", "markAllNoticesRead", "markNoticeRead", "myInvites", "myRequests", "notificationsFor", "openVote", "playerBoards", "playerFeed", "playerProfile", "promote", "releaseSolo", "rename", "reportIncident", "requestJoin", "restartsScheduled", "revealLock", "revokeGuestPass", "revokeInvite", "rotateLocks", "saveAwardPick", "saveBoosterKit", "saveBoosterKitSlot", "scoreboard", "searchGamertags", "seasons", "setRecruitingPost", "startAwardPlacement", "startKitPlacement", "startLink", "suggestGamertags", "transfer", "unlink", "vaultFor", "viewerFor", "warLog", "withdrawRequest"]);
-  });
+  }, 30_000);
 });

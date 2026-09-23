@@ -91,8 +91,9 @@ worth knowing before you read a red check:
   container, so concurrent PR runs are fully isolated. The local hazard is unchanged.
 - CI's `TEST_DATABASE_URL` points at that container, not at 5434. It is still a BASE url —
   the same derivation applies, which is the whole reason CI needs no per-package setup.
-- Since 2026-09-23 CI runs the packages **in parallel** (`pnpm run ci` has no
-  `--concurrency=1`) — safe because every DB-backed package has its own database, the
+- Since 2026-09-23 CI runs the packages **in parallel** (`pnpm run ci` uses
+  `--concurrency=4`, the runner's core count — the default 10 oversubscribed it enough to
+  time out a 0.9 s test) — safe because every DB-backed package has its own database, the
   same fact `pnpm -r test` already relies on — and turns off `fsync`,
   `synchronous_commit` and `full_page_writes` on its container in a hand-added
   `ci.yml` step. ⚠️ That step is not in `.rigging.json` (rigging has no key for it); a
