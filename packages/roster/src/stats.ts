@@ -254,8 +254,12 @@ const byAnotherPlayer = sql`${kills.killerDayzId} is not null and ${kills.killer
  *
  * ⚠️ A Hub kill (`at_hub`, spec 2026-09-22-hub-combat) is excluded by the same rule, for
  * the same reason: it is not a fight. It is off the friendly-fire board too — see there.
+ *
+ * ⚠️ Exported for the bounty tick (`@factions/roster/internal` only, never the
+ * package root): a bounty is claimed by exactly this kind of kill, and a respelling
+ * would be the fourth copy of a rule that has already drifted three ways.
  */
-const scoringKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), eq(kills.atHub, false))!;
+export const scoringKill = and(byAnotherPlayer, eq(kills.friendlyFire, false), eq(kills.atHub, false))!;
 
 const gamertagOf = (col: PgColumn) => sql<string>`coalesce(${players.gamertag}, ${col})`;
 
