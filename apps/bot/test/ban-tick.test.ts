@@ -296,6 +296,14 @@ describe("banTick", () => {
     expect(notice!.payload).not.toHaveProperty("poleKey");
   });
 
+  it("the offender's DM names the ban's own reason — a Hub ban is not 'base-zone enforcement'", async () => {
+    await db.insert(identityLinks).values({ discordId: "d-offender", dayzId: DAYZ_ID, gamertag: "Sasha", verifiedAt: at("2026-09-01T00:00:00Z") });
+    await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), expiresAt: at("2026-09-15T02:00:00Z"), reason: "hub_combat" });
+    await banTick(db, fakeClient(), { now: at("2026-09-15T01:05:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+    const [notice] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "ban_applied"));
+    expect(notice!.payload).toMatchObject({ reason: "combat at the Fast Travel Hub" });
+  });
+
   it("a dry-run apply never notifies the offender — nothing actually happened", async () => {
     await db.insert(identityLinks).values({ discordId: "d-offender", dayzId: DAYZ_ID, gamertag: "Sasha", verifiedAt: at("2026-09-01T00:00:00Z") });
     await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });

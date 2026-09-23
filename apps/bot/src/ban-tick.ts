@@ -1,6 +1,6 @@
 import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or } from "drizzle-orm";
 import { bans, banAnnouncements, identityLinks, type Database } from "@factions/db";
-import { BAN_MAX_ATTEMPTS } from "@factions/domain";
+import { BAN_MAX_ATTEMPTS, BAN_REASON_TEXT } from "@factions/domain";
 import { noticeUserTx } from "@factions/roster/internal";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
@@ -206,7 +206,7 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
             kind: "ban_applied", occurredAt: now,
             payload: {
               until: row.expiresAt ? row.expiresAt.toISOString() : null,
-              reason: "base-zone enforcement",
+              reason: BAN_REASON_TEXT[row.reason],
             },
           });
         });

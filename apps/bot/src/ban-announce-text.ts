@@ -1,4 +1,4 @@
-import type { BanAnnouncementKind, BanReason } from "@factions/domain";
+import { BAN_REASON_TEXT, type BanAnnouncementKind, type BanReason } from "@factions/domain";
 import { at } from "@factions/copy";
 import { escapeMarkdown } from "./kill-feed-embed.js";
 
@@ -42,7 +42,7 @@ export function banAnnouncementText(a: BanAnnouncement): string {
   if (a.reason === "unlinked_pc") {
     return `🔨 **${tag}** banned — playing on PC without a linked account. Link your account to lift it.`;
   }
-  if (a.expiresAt === null) return `🔨 **${tag}** banned permanently — base-zone enforcement.`;
+  if (a.expiresAt === null) return `🔨 **${tag}** banned permanently — ${BAN_REASON_TEXT[a.reason]}.`;
   // ⚠️ `at()` degrades to null on an unrepresentable instant (copy's
   // contract) — same null-degrade pattern as `war-log-text.ts`'s
   // `season_closed`, chosen over a hand-formatted fallback: that fallback
@@ -52,6 +52,6 @@ export function banAnnouncementText(a: BanAnnouncement): string {
   // date is what actually stays truthful.
   const when = at(new Date(a.expiresAt));
   return when
-    ? `🔨 **${tag}** banned until ${when} — base-zone enforcement.`
-    : `🔨 **${tag}** banned — base-zone enforcement.`;
+    ? `🔨 **${tag}** banned until ${when} — ${BAN_REASON_TEXT[a.reason]}.`
+    : `🔨 **${tag}** banned — ${BAN_REASON_TEXT[a.reason]}.`;
 }
