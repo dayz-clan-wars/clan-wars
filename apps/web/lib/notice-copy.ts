@@ -280,7 +280,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   }) },
   bounty_placed: { group: "Enforcement", render: (p) => ({
     kicker: "Bounty", title: "There is a bounty on you",
-    body: `${p.reason ? `${String(p.reason)}. ` : ""}Until someone kills you, or you have played ${typeof p.hours === "number" ? `${p.hours} h` : "your time"} online, your last known position is on everyone's map. Logging off does not run the clock.`,
+    body: `${p.reason ? `${String(p.reason)}. ` : ""}Until someone kills you, or you have played ${typeof p.hours === "number" ? `${p.hours} h` : "your time"} online, your position shows on everyone's map whenever you're online. Logging off takes you off the map, and does not run the clock.`,
     cta: { label: "See the map", href: "/map" } }) },
   bounty_expired: { group: "Enforcement", render: () => ({
     kicker: "Bounty", title: "Your bounty expired", body: "It expired unclaimed. You are off the map." }) },

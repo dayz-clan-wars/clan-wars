@@ -75,6 +75,15 @@ the hunt to be real. The rest of §10.3 is unchanged and applies to this layer:
 
 The target sees their own pin, on purpose: they know they are wanted.
 
+**Only while the target is online** (owner decision, 2026-09-23, after the final
+review). The pin shows only while the target has an open `player_sessions` row on
+that server; the moment they disconnect it disappears. Without this, a target who
+logs off inside their clan's base and stays away leaves a pin on that base for up
+to `BOUNTY_DEADLINE_MS` — publishing a base location, which no page may carry
+(CLAUDE.md, "Pole coordinates are a raid target"), and exposing clanmates who did
+nothing. It also matches §2.4: only online time counts, so the hunt happens while
+they play. The open-session condition is in the same WHERE clause as `status = 'open'`.
+
 ### 2.4 The sentence is served online, with a ceiling
 
 A bounty carries an **online budget**: `BOUNTY_DEFAULT_MS` (72 h) unless the admin

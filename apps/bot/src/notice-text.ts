@@ -227,8 +227,8 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   bounty_placed: (p) => {
     const hours = typeof p.hours === "number" ? `${p.hours} h` : "a while";
     return `🎯 An admin has put a bounty on you${p.reason ? ` for ${String(p.reason)}` : ""}. `
-      + `Until someone kills you, or you have played ${hours} online, your last known position is on everyone's map. `
-      + "Logging off does not run the clock.";
+      + `Until someone kills you, or you have played ${hours} online, your position shows on everyone's map whenever you're online. `
+      + "Logging off takes you off the map, and does not run the clock.";
   },
   bounty_expired: () => "⌛ The bounty on you has expired and you are off the map.",
   bounty_revoked: () => "The bounty on you was lifted by an admin. You are off the map.",

@@ -9,9 +9,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - Bounties: admins can put a bounty on a player with `/bounty place`. It is announced in
   the server events channel, DM'd to the player, and shows their last known position on
-  everyone's map until another player kills them (friendly fire and Hub kills don't
-  count) or they have served their online time. A new board, Most bounty kills, counts
-  who collects them. Off until `BOUNTY_TICK` is set.
+  everyone's map while they are online, until another player kills them (friendly fire
+  and Hub kills don't count) or they have served their online time. A new board, Most
+  bounty kills, counts who collects them. Off until `BOUNTY_TICK` is set.
 
 ## [1.34.0] - 2026-09-22
 
