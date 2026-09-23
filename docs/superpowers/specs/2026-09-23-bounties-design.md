@@ -77,8 +77,9 @@ The target sees their own pin, on purpose: they know they are wanted.
 
 ### 2.4 The sentence is served online, with a ceiling
 
-A bounty carries an **online budget**: `BOUNTY_DEFAULT_HOURS` (72) unless the admin
-passes `hours:` (1 to `BOUNTY_MAX_HOURS`, 168). Only time the target spends
+A bounty carries an **online budget**: `BOUNTY_DEFAULT_MS` (72 h) unless the admin
+passes `hours:` (1 to `BOUNTY_MAX_MS`, 168 h). The constants are `_MS` because
+`guide-numbers.ts` infers a number's unit from its suffix. Only time the target spends
 connected counts down, summed from `player_sessions` overlapping
 `[placed_at, now]`, an open session counted up to `now`. Logging off to wait it out
 does not work.
@@ -127,6 +128,12 @@ if the kill's `occurred_at` is before the instant the budget ran out (or the
 deadline). Log lag must not rob a hunter of a kill made in time. A kill after the
 budget ran out does not claim.
 
+The same lag cuts the other way: the budget can run out at T while a kill at T − 1
+is still in a log file the worker has not ingested. So a bounty is only **expired**
+once `now >= end + BOUNTY_EXPIRY_SETTLE_MS` (15 min, a housekeeping constant, not
+in the guide) — until then it stays open, on the map, and claimable by any kill
+made before `end`.
+
 ---
 
 ## 3. Data
@@ -158,7 +165,7 @@ bounties
   check: (status = 'revoked') = (revoked_by_discord_id is not null)
   unique (server_id, target_dayz_id) where status = 'open'          -- one open bounty
   index (server_id, status)
-  index (server_id, claimed_by_dayz_id, closed_at) where status = 'claimed'   -- the board
+  index (server_id, claimed_by_dayz_id, claimed_at) where status = 'claimed'  -- the board
 ```
 
 No foreign key to `kills`: `rebuild:kills` deletes those rows (§2.7).
@@ -174,7 +181,7 @@ DM. Lock order: `bounties` sits **immediately before `clan_notices`**, after
 
 ### 4.1 Rules — `packages/domain/src/rules.ts`, `guide-numbers.ts`
 
-`BOUNTY_DEFAULT_HOURS = 72`, `BOUNTY_MAX_HOURS = 168`,
+`BOUNTY_DEFAULT_MS = 72 * HOUR`, `BOUNTY_MAX_MS = 7 * DAY`, `BOUNTY_EXPIRY_SETTLE_MS = 15 min`,
 `BOUNTY_DEADLINE_MS = 30 * DAY`, `BOUNTY_REASON_MAX = 200`, each with a
 `guide-numbers.ts` row. Plus a pure `bountyOutcome(bounty, onlineMs, firstKill, now)`
 in `packages/domain/src/bounties.ts` returning `open | claimed | expired` per §2.4 and
@@ -235,7 +242,7 @@ hours; never a position (`clan_notices_no_coordinates`).
 
 ### 4.7 Map — `map.ts`, `map-draw.ts`, `map-view.tsx`, `map-copy.ts`
 
-`MapState` gains `bounties: { gamertag, reason, x, z, at }[]` for every linked
+`MapState` gains `bounties: { gamertag, reason, fix: MapFix }[]` (the clanmates shape) for every linked
 viewer: the latest `player_positions` fix (`lastFixes()`) of each open bounty's
 target on the viewer's server, joined on `bounties.status = 'open'`. A target with
 no fix inside `POSITION_RETENTION_MS` is omitted from the pins. `drawBounties` draws
@@ -245,7 +252,8 @@ labelled **Bounties**, on by default. `map-copy.test.ts`'s layer count goes 9 �
 ### 4.8 Board — `bountyKills`
 
 A tenth `BoardKind`: `count(*)` of `bounties` where `status = 'claimed'`, grouped by
-`claimed_by_dayz_id`, scoped by `closed_at` to the board's season scope. Touches the
+`claimed_by_dayz_id`, scoped by `claimed_at` (the kill's time) to the board's
+season scope. Touches the
 `Record<BoardKind, …>` tables in `packages/copy/src/stats.ts` (label, slug, value),
 `boardRows`/`boardsFor` in `packages/roster/src/stats.ts`, `leaderboard-embed.ts`'s
 line format, `/board`'s choices, and the tests that say nine. The Discord channel
@@ -260,8 +268,8 @@ load, as for the weekly vehicle wipe, because an unannounced bounty defeats the 
 ### 4.10 Guide
 
 A **Bounties** section in `12-fair-play.html` (punishment) — what a bounty is, that
-it shows on the map, `{{BOUNTY_DEFAULT_HOURS}}` online, the
-`{{BOUNTY_DEADLINE_MS}}` ceiling, what claims it (no friendly fire, no Hub kills),
+it shows on the map, `{{BOUNTY_DEFAULT_MS|hours}}` online, the
+`{{BOUNTY_DEADLINE_MS|days}}` ceiling, what claims it (no friendly fire, no Hub kills),
 and the board. `10-the-map.html` gains the layer in its table.
 
 ---
