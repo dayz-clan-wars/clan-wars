@@ -39,6 +39,31 @@ describe("killsTick", () => {
   const ev = (type: string, payload: unknown, at: Date) =>
     db.insert(events).values({ serverId, admFileId: file1, lineIndex: line++, type: type as never, occurredAt: at, payload }).returning({ id: events.id });
 
+  const HUB = { x: 100, y: 998.6, z: 93 };
+  const GROUND = { x: 100, y: 310, z: 93 };
+
+  it("a kill at the Hub is recorded with atHub — either party inside is enough", async () => {
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: GROUND }, t1);
+    await ev("player.killed", { victimDayzId: A, killerDayzId: R, weapon: "M4-A1", distanceM: 3, victimPos: GROUND, killerPos: GROUND }, t5);
+    await killsTick(db);
+    const rows = await db.select().from(kills).orderBy(kills.occurredAt);
+    expect(rows.map((r) => r.atHub)).toEqual([true, false]);
+  });
+
+  it("a kill with no positions (every event before this deploy) is not at the Hub", async () => {
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "AKM", distanceM: 1 }, t1);
+    await killsTick(db);
+    expect((await db.select().from(kills))[0]!.atHub).toBe(false);
+  });
+
+  it("a credited kill is at the Hub when the crediting hit was", async () => {
+    await ev("player.hit", { victimDayzId: R, attackerType: "player", attackerDayzId: A, victimHp: 10, weapon: "M4-A1", distanceM: 4, victimPos: HUB, attackerPos: HUB }, t1);
+    await ev("player.died", { victimDayzId: R, cause: "died", water: 1000, energy: 1000, bleedSources: 0 }, new Date(t1.getTime() + 20_000));
+    await killsTick(db);
+    const [k] = await db.select().from(kills);
+    expect(k).toMatchObject({ cause: "finished", killerDayzId: A, atHub: true });
+  });
+
   it("1. A kills R (different clans): killerFactionId BEAR, victimFactionId WOLF, friendlyFire false", async () => {
     await ev("player.killed", { victimDayzId: R, victimGamertag: "R", killerDayzId: A, killerGamertag: "A", weapon: "AKM", distanceM: 123.4 }, t1);
     const result = await killsTick(db);

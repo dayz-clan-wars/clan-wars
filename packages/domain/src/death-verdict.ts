@@ -44,6 +44,8 @@ export type RecentHit = {
   attackerId?: string | null;
   weapon?: string | null;
   distanceM?: number | null;
+  /** The hit was at the Hub (kills-tick sets it; the verdict never reads it). A credit from it is a Hub kill. */
+  atHub?: boolean;
 };
 
 export type RecentUnconscious = { secondsBeforeDeath: number; disconnecting: boolean };

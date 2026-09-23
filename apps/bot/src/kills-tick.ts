@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { kills, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { classifyDeath, finishedBy, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
+import { atHub, classifyDeath, finishedBy, readVec3, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
 import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 
@@ -15,7 +15,7 @@ export type KillsTickResult = {
   written: number;
 };
 
-type KilledPayload = { victimDayzId: string; killerDayzId: string; weapon: string | null; distanceM: number | null };
+type KilledPayload = { victimDayzId: string; killerDayzId: string; weapon: string | null; distanceM: number | null; atHub: boolean };
 type DiedPayload = { victimDayzId: string; cause: string; water: number | null; energy: number | null; bleedSources: number | null };
 const num = (v: unknown): number | null => (typeof v === "number" ? v : null);
 
@@ -29,6 +29,8 @@ function readKilledPayload(payload: unknown): KilledPayload | null {
     killerDayzId: p.killerDayzId,
     weapon: typeof p.weapon === "string" ? p.weapon : null,
     distanceM: typeof p.distanceM === "number" ? p.distanceM : null,
+    // Either party inside the Hub makes it a Hub kill. No positions (a pre-backfill event) is not at the Hub.
+    atHub: atHub(readVec3(p.victimPos)) || atHub(readVec3(p.killerPos)),
   };
 }
 
@@ -72,7 +74,8 @@ async function verdictOf(db: Database, serverId: number, payload: DiedPayload, a
       const type = p.attackerType;
       hits.push({ attackerType: type === "player" || type === "infected" ? type : "environment", attackerLabel: typeof p.attackerLabel === "string" ? p.attackerLabel : null,
         victimHp: num(p.victimHp), secondsBeforeDeath: secondsBefore(r.occurredAt),
-        attackerId: typeof p.attackerDayzId === "string" ? p.attackerDayzId : null, weapon: typeof p.weapon === "string" ? p.weapon : null, distanceM: num(p.distanceM) });
+        attackerId: typeof p.attackerDayzId === "string" ? p.attackerDayzId : null, weapon: typeof p.weapon === "string" ? p.weapon : null, distanceM: num(p.distanceM),
+        atHub: atHub(readVec3(p.victimPos)) || atHub(readVec3(p.attackerPos)) });
     } else {
       outs.push({ disconnecting: p.disconnecting === true, secondsBeforeDeath: secondsBefore(r.occurredAt) });
     }
@@ -145,6 +148,7 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             victimFactionId,
             killerFactionId,
             friendlyFire,
+            atHub: payload.atHub,
           })
           .onConflictDoNothing({ target: kills.eventId })
           .returning({ id: kills.id });
@@ -180,6 +184,9 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             victimFactionId,
             killerFactionId,
             friendlyFire,
+            // ⚠️ `finishedBy` returns one of the hits it was given, so the credit's
+            // Hub flag is the crediting hit's. A hit at the Hub earns a kill that scores nowhere.
+            atHub: finisher?.atHub ?? false,
           })
           .onConflictDoNothing({ target: kills.eventId })
           .returning({ id: kills.id });

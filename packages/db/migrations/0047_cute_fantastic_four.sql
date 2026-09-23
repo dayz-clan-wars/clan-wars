@@ -1,0 +1,1 @@
+ALTER TABLE "kills" ADD COLUMN "at_hub" boolean DEFAULT false NOT NULL;
