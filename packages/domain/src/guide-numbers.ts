@@ -38,6 +38,7 @@ const SCALARS: Record<string, number> = {
   COMBAT_LOG_MS: R.COMBAT_LOG_MS,
   VIOLATION_REPORT_WINDOW_MS: R.VIOLATION_REPORT_WINDOW_MS,
   HUB_BAN_MS: R.HUB_BAN_MS, HUB_RETALIATION_WINDOW_MS: R.HUB_RETALIATION_WINDOW_MS, HUB_ZONE_RADIUS_M: R.HUB_ZONE_RADIUS_M,
+  BOUNTY_DEFAULT_MS: R.BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS: R.BOUNTY_MAX_MS, BOUNTY_DEADLINE_MS: R.BOUNTY_DEADLINE_MS,
 };
 
 type Unit = "ms" | "m" | "count";
@@ -191,6 +192,9 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("Fair play", "Hub: combat ban", "HUB_BAN_MS"),
   row("Fair play", "Hub: self-defence window", "HUB_RETALIATION_WINDOW_MS"),
   row("Fair play", "Hub: no-combat radius", "HUB_ZONE_RADIUS_M"),
+  row("Fair play", "Bounty: online time to serve (default)", "BOUNTY_DEFAULT_MS"),
+  row("Fair play", "Bounty: longest an admin can set", "BOUNTY_MAX_MS"),
+  row("Fair play", "Bounty: closes regardless after", "BOUNTY_DEADLINE_MS"),
 ];
 
 /** Every key a prose token may name. */

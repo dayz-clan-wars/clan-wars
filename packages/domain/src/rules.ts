@@ -292,6 +292,22 @@ export const KIT_PLACEMENT_TTL_MS = 1 * HOUR;
  */
 export const AWARD_PLACE_BY_MS = 7 * DAY;
 
+/** A bounty's online time to serve, unless the admin passes `hours:` (spec 2026-09-23-bounties §2.4). */
+export const BOUNTY_DEFAULT_MS = 72 * HOUR;
+/** The most an admin can set. `/bounty place hours:` is capped here. */
+export const BOUNTY_MAX_MS = 7 * DAY;
+/** A bounty on a player who stops playing closes anyway, this long after it was placed. */
+export const BOUNTY_DEADLINE_MS = 30 * DAY;
+/**
+ * ⚠️ Housekeeping, not a guide number. How long past the end of a bounty it stays
+ * claimable before it is expired: a kill made just in time can still be sitting in a
+ * log file the worker has not ingested (spec §2.8). Shorter, and log lag robs a
+ * hunter; there is no downside to longer except a late "expired" post.
+ */
+export const BOUNTY_EXPIRY_SETTLE_MS = 15 * 60_000;
+/** The reason an admin types. It is posted publicly and DM'd. */
+export const BOUNTY_REASON_MAX = 200;
+
 /**
  * How far ahead of an award's expiry restart the spawner file must already
  * have dropped it (awards spec §5.3).
