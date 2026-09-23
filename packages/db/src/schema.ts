@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -1980,4 +1980,44 @@ export const playerDevices = pgTable("player_devices", {
   lastSeenAt: timestamp("last_seen_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   pk: primaryKey({ columns: [t.dayzId, t.device] }),
+}));
+
+/**
+ * A bounty an admin placed on a player (spec 2026-09-23-bounties). Keyed on
+ * `dayz_id`, not Discord: the players who most need punishing are often unlinked.
+ *
+ * ⚠️ NO foreign key from `claim_event_id` to `kills`: `rebuild:kills` deletes and
+ * reinserts every kill, and a claim is a record frozen when written (§2.7).
+ *
+ * ⚠️ Lock order: `bounties` sits immediately before `clan_notices` — the store and
+ * the tick write the bounty, then its DM, and touch no roster table.
+ */
+export const bounties = pgTable("bounties", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  targetDayzId: text("target_dayz_id").notNull(),
+  reason: text("reason").notNull(),
+  placedByDiscordId: text("placed_by_discord_id").notNull(),
+  placedAt: timestamp("placed_at", { withTimezone: true }).notNull().defaultNow(),
+  onlineBudgetMs: bigint("online_budget_ms", { mode: "number" }).notNull(),
+  deadlineAt: timestamp("deadline_at", { withTimezone: true }).notNull(),
+  status: text("status").$type<BountyStatus>().notNull().default("open"),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  claimedByDayzId: text("claimed_by_dayz_id"),
+  claimEventId: bigint("claim_event_id", { mode: "number" }),
+  /** The claiming kill's `occurred_at` — what the board windows on, not `closed_at`. */
+  claimedAt: timestamp("claimed_at", { withTimezone: true }),
+  revokedByDiscordId: text("revoked_by_discord_id"),
+  /** ⚠️ Stamped only after the post succeeds — the poster's whole retry mechanism. */
+  placedAnnouncedAt: timestamp("placed_announced_at", { withTimezone: true }),
+  closedAnnouncedAt: timestamp("closed_announced_at", { withTimezone: true }),
+}, (t) => ({
+  statusValid: check("bounties_status_valid", sql`${t.status} IN ('open','claimed','expired','revoked')`),
+  closedIffNotOpen: check("bounties_closed_iff_not_open", sql`(${t.status} = 'open') = (${t.closedAt} IS NULL)`),
+  claimComplete: check("bounties_claim_complete", sql`(${t.status} = 'claimed') = (${t.claimedByDayzId} IS NOT NULL AND ${t.claimEventId} IS NOT NULL AND ${t.claimedAt} IS NOT NULL)`),
+  revokedHasAdmin: check("bounties_revoked_has_admin", sql`(${t.status} = 'revoked') = (${t.revokedByDiscordId} IS NOT NULL)`),
+  budgetPositive: check("bounties_budget_positive", sql`${t.onlineBudgetMs} > 0`),
+  oneOpen: uniqueIndex("bounties_one_open_uniq").on(t.serverId, t.targetDayzId).where(sql`${t.status} = 'open'`),
+  byStatus: index("bounties_status_idx").on(t.serverId, t.status),
+  byClaimer: index("bounties_claimer_idx").on(t.serverId, t.claimedByDayzId, t.claimedAt).where(sql`${t.status} = 'claimed'`),
 }));
