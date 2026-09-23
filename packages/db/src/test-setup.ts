@@ -67,6 +67,14 @@ export default async function setup(): Promise<void> {
         if ((err as { code?: string }).code !== DUPLICATE_DATABASE) throw err;
       }
     }
+
+    // Every `truncate … cascade` and every re-run migration's `if not exists`
+    // raises a NOTICE, and postgres.js prints each one as a whole object —
+    // thousands of lines burying the real failures in a CI log. Set on the
+    // DATABASE, not in `createClient`, so it reaches every pool the suites open
+    // without touching the production client. Runs every time, not only on
+    // create, so databases made before this line pick it up too.
+    await admin.execute(sql.raw(`alter database "${name}" set client_min_messages = warning`));
   } finally {
     // ⚠️ Without this the vitest process keeps an open pool and hangs after the
     // last test file finishes — a green run that never exits.
