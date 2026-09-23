@@ -15,6 +15,15 @@ describe("bountyPostText", () => {
   it("escapes markdown in player-controlled names and reasons", () => {
     expect(bountyPostText({ kind: "expired", target: "**x**" }, SITE)).toContain("\\*\\*x\\*\\*");
   });
+  it("escapes markdown link syntax in target names", () => {
+    const t = bountyPostText({ kind: "expired", target: "[x](https://evil.example)" }, SITE);
+    expect(t).not.toContain("[x](https://evil.example)");
+    expect(t).toContain("\\[");
+  });
+  it("escapes spoiler syntax in target names", () => {
+    const t = bountyPostText({ kind: "expired", target: "||s||" }, SITE);
+    expect(t).not.toContain("||s||");
+  });
   it("⚠️ never carries a coordinate", () => {
     const all = [
       bountyPostText({ kind: "placed", target: "B", reason: "r", hours: 1 }, SITE),

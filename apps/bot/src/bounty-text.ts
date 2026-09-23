@@ -1,4 +1,4 @@
-import { escapeMarkdown } from "discord.js";
+import { escapeMarkdown } from "./kill-feed-embed.js";
 
 export type BountyPost =
   | { kind: "placed"; target: string; reason: string; hours: number }
