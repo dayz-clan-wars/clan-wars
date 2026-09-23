@@ -11,6 +11,9 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   and CI's throwaway test database no longer waits on the disk after every write.
 - Test runs no longer print tens of thousands of database notices, so a real failure
   is easy to find in the CI log.
+- The test that guards how quickly the bot checks for dormant clans now tests realistic
+  data. It had been passing only because its table was empty, so a slowdown could have
+  shipped unnoticed. Production was checked at the same time and is using the fast path.
 
 ## [1.36.0] - 2026-09-23
 
