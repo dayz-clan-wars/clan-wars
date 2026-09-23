@@ -278,6 +278,14 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
       ? `Until ${dateOf(p.until) ?? "a later date"}. Reason: ${p.reason ? String(p.reason) : "a zone violation"}. It lifts on its own.`
       : `Reason: ${p.reason ? String(p.reason) : "repeated zone violations"}.`,
   }) },
+  bounty_placed: { group: "Enforcement", render: (p) => ({
+    kicker: "Bounty", title: "There is a bounty on you",
+    body: `${p.reason ? `${String(p.reason)}. ` : ""}Until someone kills you, or you have played ${typeof p.hours === "number" ? `${p.hours} h` : "your time"} online, your last known position is on everyone's map. Logging off does not run the clock.`,
+    cta: { label: "See the map", href: "/map" } }) },
+  bounty_expired: { group: "Enforcement", render: () => ({
+    kicker: "Bounty", title: "Your bounty expired", body: "You served your time. You are off the map." }) },
+  bounty_revoked: { group: "Enforcement", render: () => ({
+    kicker: "Bounty", title: "Your bounty was lifted", body: "An admin lifted the bounty on you. You are off the map." }) },
 
   // ---- Dormancy ----
   dormant_raided: { group: "Dormancy", render: () => ({

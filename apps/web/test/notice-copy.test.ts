@@ -147,4 +147,17 @@ describe("notice copy", () => {
   it("falls back to the awards list when the payload has no grant id", () => {
     expect(noticeCopy("award_granted", {}, "dm").cta).toEqual({ label: "Configure your award", href: "/awards" });
   });
+
+  it("tells a bounty target what they are wanted for, points at the map, and never shows a coordinate", () => {
+    const c = noticeCopy("bounty_placed", { bountyId: 1, reason: "Combat logging", hours: 72 }, "dm");
+    expect(c.title).toMatch(/bounty/iu);
+    expect(c.body).toContain("Combat logging");
+    expect(c.body).toContain("72 h");
+    expect(c.cta).toEqual({ label: "See the map", href: "/map" });
+  });
+
+  it("says an expired bounty is over, and a revoked one was lifted", () => {
+    expect(noticeCopy("bounty_expired", { bountyId: 1 }, "dm").body).toMatch(/served|expired/iu);
+    expect(noticeCopy("bounty_revoked", { bountyId: 1 }, "dm").body).toMatch(/lifted/iu);
+  });
 });
