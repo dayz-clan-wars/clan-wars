@@ -3,7 +3,7 @@ import { bounties, identityLinks, playerSessions, players } from "@factions/db";
 import {
   BOUNTY_DEADLINE_MS, BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS, BOUNTY_REASON_MAX, onlineMs,
 } from "@factions/domain";
-import { and, asc, eq, inArray, isNull, or, gt } from "drizzle-orm";
+import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { activeServerId } from "../server";
 import { appendClanNoticeTx } from "./notices";
 
@@ -11,7 +11,50 @@ const HOUR = 3_600_000;
 
 export type PlaceBountyOutcome =
   | { ok: true; bountyId: number; gamertag: string; budgetMs: number }
-  | { ok: false; reason: "unknown-player" | "already-open" | "bad-hours" | "no-reason" | "reason-too-long" };
+  | { ok: false; reason: "unknown-player" | "ambiguous-player" | "already-open" | "bad-hours" | "no-reason" | "reason-too-long" };
+
+/** Discord's choice limit: an autocomplete answer longer than this is rejected whole. */
+const TARGET_SEARCH_LIMIT = 25;
+
+/**
+ * `/bounty place`'s autocomplete: every character the log has seen, by gamertag
+ * prefix, most recently seen first.
+ *
+ * ⚠️ NOT `searchGamertags`. That is `/link`'s search and returns only UNLINKED
+ * characters — right for linking, wrong here: it hid every linked player from
+ * `/bounty place` in production (2026-09-23), and the players an admin most often
+ * needs to punish are linked. Spec §2.2: any player the log has seen.
+ */
+export async function searchBountyTargetsDb(db: Database, prefix: string): Promise<{ dayzId: string; gamertag: string }[]> {
+  const q = prefix.trim();
+  if (q.length === 0) return [];
+  // ⚠️ Escape LIKE's metacharacters so a typed "%" or "_" matches itself, not everyone.
+  const literal = q.slice(0, 64).replace(/[\\%_]/gu, (c) => `\\${c}`);
+  return db.select({ dayzId: players.dayzId, gamertag: players.gamertag }).from(players)
+    .where(ilike(players.gamertag, `${literal}%`))
+    .orderBy(desc(players.lastSeenAt), desc(players.dayzId))
+    .limit(TARGET_SEARCH_LIMIT);
+}
+
+/**
+ * The character `target` names: a DayZ id (what an autocomplete choice sends), or
+ * else a gamertag typed out in full, matched case-insensitively.
+ *
+ * ⚠️ The gamertag fallback is not optional. When an admin types a name and sends
+ * without picking a choice, Discord delivers the raw text as the option's value;
+ * without this, a correctly spelled name reads as "never seen".
+ */
+async function resolveTarget(db: Database, target: string):
+  Promise<{ dayzId: string; gamertag: string } | "unknown-player" | "ambiguous-player"> {
+  const t = target.trim();
+  const [byId] = await db.select({ dayzId: players.dayzId, gamertag: players.gamertag }).from(players).where(eq(players.dayzId, t));
+  if (byId) return byId;
+  const byName = await db.select({ dayzId: players.dayzId, gamertag: players.gamertag }).from(players)
+    .where(sql`lower(${players.gamertag}) = lower(${t})`).limit(2);
+  // Two characters have carried this name: refuse rather than punish the wrong one.
+  if (byName.length > 1) return "ambiguous-player";
+  return byName[0] ?? "unknown-player";
+}
 
 /** True when `err` (or its `.cause`, one level) names the given Postgres constraint. */
 function violatesConstraint(err: unknown, name: string): boolean {
@@ -28,7 +71,8 @@ function violatesConstraint(err: unknown, name: string): boolean {
  * failed Discord call can never roll back the bounty or lose the post.
  */
 export async function placeBountyDb(db: Database, a: {
-  targetDayzId: string; reason: string; hours: number | null; adminDiscordId: string; now: Date;
+  /** A DayZ id from the autocomplete, or a gamertag typed in full. */
+  target: string; reason: string; hours: number | null; adminDiscordId: string; now: Date;
 }): Promise<PlaceBountyOutcome> {
   const reason = a.reason.trim();
   if (!reason) return { ok: false, reason: "no-reason" };
@@ -36,15 +80,15 @@ export async function placeBountyDb(db: Database, a: {
   const budgetMs = a.hours === null ? BOUNTY_DEFAULT_MS : a.hours * HOUR;
   if (!Number.isInteger(a.hours ?? 1) || budgetMs < HOUR || budgetMs > BOUNTY_MAX_MS) return { ok: false, reason: "bad-hours" };
 
-  const [target] = await db.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, a.targetDayzId));
-  if (!target) return { ok: false, reason: "unknown-player" };
+  const target = await resolveTarget(db, a.target);
+  if (typeof target === "string") return { ok: false, reason: target };
   const serverId = await activeServerId(db);
-  const [link] = await db.select({ discordId: identityLinks.discordId }).from(identityLinks).where(eq(identityLinks.dayzId, a.targetDayzId));
+  const [link] = await db.select({ discordId: identityLinks.discordId }).from(identityLinks).where(eq(identityLinks.dayzId, target.dayzId));
 
   try {
     const bountyId = await db.transaction(async (tx) => {
       const [row] = await tx.insert(bounties).values({
-        serverId, targetDayzId: a.targetDayzId, reason, placedByDiscordId: a.adminDiscordId,
+        serverId, targetDayzId: target.dayzId, reason, placedByDiscordId: a.adminDiscordId,
         placedAt: a.now, onlineBudgetMs: budgetMs, deadlineAt: new Date(a.now.getTime() + BOUNTY_DEADLINE_MS),
       }).returning({ id: bounties.id });
       if (link) {

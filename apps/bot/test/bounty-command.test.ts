@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, bounties, servers, players, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, bounties, servers, players, identityLinks, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { SPECS } from "../src/commands/index.js";
 import type { Ctx, CommandInput } from "../src/commands/types.js";
@@ -14,7 +14,7 @@ describe("/bounty", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table bounties, players, servers restart identity cascade`);
+    await db.execute(sql`truncate table bounties, identity_links, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true });
     await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: NOW, lastSeenAt: NOW });
   });
@@ -35,6 +35,17 @@ describe("/bounty", () => {
     boolean: () => null,
     user: () => null,
   }) as unknown as CommandInput;
+
+  it("⚠️ offers LINKED players in the player autocomplete (production, 2026-09-23: they were missing)", async () => {
+    await db.insert(identityLinks).values({ discordId: "1", dayzId: T, gamertag: "Target", verifiedAt: NOW });
+    const source = SPECS.get("bounty place")!.autocomplete!.player!;
+    expect(await source(ctx(), { actorDiscordId: "9", value: "tar" })).toEqual([{ name: "Target", value: T }]);
+  });
+
+  it("⚠️ places a bounty on a gamertag typed in full without picking from the list", async () => {
+    const r = await handler("bounty place")(ctx(), input({ isAdmin: true, strings: { player: "target", reason: "Combat logging" } }));
+    expect(r.content).toMatch(/Bounty #\d+ on \*\*Target\*\*/u);
+  });
 
   it("refuses a non-admin", async () => {
     const r = await handler("bounty place")(ctx(), input({ isAdmin: false, strings: { player: T, reason: "x" } }));

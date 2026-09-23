@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS, BOUNTY_REASON_MAX } from "@factions/domain";
-import { openBountiesDb, placeBountyDb, revokeBountyDb, type OpenBounty } from "@factions/roster/internal";
+import { openBountiesDb, placeBountyDb, revokeBountyDb, searchBountyTargetsDb, type OpenBounty } from "@factions/roster/internal";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const HOUR = 3_600_000;
@@ -51,12 +51,13 @@ async function place(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const target = input.string("player");
   if (!target) return reply("Pick the player from the list.");
   const out = await placeBountyDb(ctx.db, {
-    targetDayzId: target, reason: input.string("reason") ?? "", hours: input.integer("hours"),
+    target, reason: input.string("reason") ?? "", hours: input.integer("hours"),
     adminDiscordId: input.actorDiscordId, now: ctx.now,
   });
   if (!out.ok) {
     return reply({
       "unknown-player": "The server has never seen that player. Pick one from the list.",
+      "ambiguous-player": "More than one character has carried that name. Pick the right one from the list.",
       "already-open": "That player already has an open bounty. Lift it first to change it.",
       "bad-hours": `Hours must be between 1 and ${hours(BOUNTY_MAX_MS)}.`,
       "no-reason": "Say why. It is posted publicly and sent to them.",
@@ -86,12 +87,14 @@ async function list(ctx: Ctx, input: CommandInput): Promise<Reply> {
   return reply(rows.length === 0 ? "There are no open bounties." : joinUnderLimit(rows.map(summarize)));
 }
 
-/** Same source as `/link`: the log's own list of characters, by prefix, linked or not (spec §2.2). */
-const characters: AutocompleteSource = async (ctx, a) => {
-  if (a.value.trim().length === 0) return [];
-  const matches = await ctx.roster.searchGamertags(a.value.slice(0, 64));
-  return matches.slice(0, 25).map((m) => ({ name: m.gamertag, value: m.dayzId }));
-};
+/**
+ * Every character the log has seen, by prefix, linked or not (spec §2.2).
+ *
+ * ⚠️ Not `ctx.roster.searchGamertags`: that is `/link`'s search and returns only
+ * UNLINKED characters, which hid every linked player from this command in production.
+ */
+const characters: AutocompleteSource = async (ctx, a) =>
+  (await searchBountyTargetsDb(ctx.db, a.value)).map((m) => ({ name: m.gamertag, value: m.dayzId }));
 
 const openOnes: AutocompleteSource = async (ctx, a) => {
   const q = a.value.toLowerCase();
