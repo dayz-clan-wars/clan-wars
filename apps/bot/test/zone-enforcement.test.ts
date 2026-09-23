@@ -88,6 +88,60 @@ describe("zoneTick enforcement", () => {
     expect(i).toMatchObject({ partsBuilt: 2, hasBreach: true, hasGate: true });
   });
 
+  // The SNA raid, 2026-09-22 02:13–02:47 UTC: four CarTents and a LargeTent,
+  // each placed from the ground (311.6–311.8 m) and 3–30 m apart, then
+  // climbed — the raiders' emotes were logged 3–7 m above them. Nothing was
+  // stacked, so boostStackFor could never have seen it; ONE tent is the act.
+  const tent = (dayzId: string, x: number, z: number, itemClass = "CarTent", item = "Car Tent", when = now) =>
+    db.insert(events).values({
+      serverId, admFileId, lineIndex: line++, type: "item.placed", occurredAt: when,
+      payload: { dayzId, gamertag: "Sasha", item, itemClass, pos: { x, y: 311.8, z } },
+    }).returning({ id: events.id });
+
+  it("a single tent placed by a non-member is a breach, sentenced as a build", async () => {
+    await tent(STRANGER, 5025, 5010);
+    await zoneTick(db, { now, enforcementEnabled: true });
+    const [i] = await incidents();
+    expect(i).toMatchObject({ partsBuilt: 1, stackItems: 0, hasBreach: true, hasGate: false });
+    expect(await violations()).toMatchObject([{ kind: "build", what: "Car Tent", dayzId: STRANGER }]);
+    expect(await db.select().from(zonePlacements)).toHaveLength(0);
+  });
+
+  it("the owner is told a tent went up, naming it, even with enforcement off", async () => {
+    await tent(STRANGER, 5025, 5010, "MediumTent_Green", "Medium Tent");
+    await zoneTick(db, { now, enforcementEnabled: false });
+    expect(await incidents()).toHaveLength(0);
+    const notices = await db.select().from(clanNotices).where(eq(clanNotices.kind, "built"));
+    expect(notices.map((n) => n.payload)).toEqual([{ gamertag: "Sasha", part: "Medium Tent" }]);
+  });
+
+  it("a member's own tent is never a violation", async () => {
+    await tent(MEMBER, 5025, 5010, "LargeTent", "Large Tent");
+    await zoneTick(db, { now, enforcementEnabled: true });
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("a tent outside the zone is never a violation", async () => {
+    await tent(STRANGER, 5300, 5300);
+    await zoneTick(db, { now, enforcementEnabled: true });
+    expect(await incidents()).toHaveLength(0);
+  });
+
+  it("five tents from three raiders are one incident, five builds, three participants", async () => {
+    const A = "A".repeat(40); const B = "B".repeat(40);
+    await tent(STRANGER, 5033, 5001);
+    await tent(A, 5042, 5001, "CarTent", "Car Tent", at(12 * 60_000));
+    await tent(B, 5040, 5001, "CarTent", "Car Tent", at(17 * 60_000));
+    await tent(B, 5012, 4990, "CarTent", "Car Tent", at(19 * 60_000));
+    const [last] = await tent(STRANGER, 5015, 4993, "LargeTent", "Large Tent", at(34 * 60_000));
+    await zoneTick(db, { now: at(35 * 60_000), enforcementEnabled: true });
+    // A replay must not re-count: recordViolation dedups on the event id.
+    await db.execute(sql`update consumer_cursors set last_event_id = ${last!.id - 4} where consumer_name = 'zone-watch'`);
+    await zoneTick(db, { now: at(35 * 60_000), enforcementEnabled: true });
+    expect(await incidents()).toMatchObject([{ partsBuilt: 5, hasBreach: true }]);
+    expect(await db.select().from(zoneIncidentParticipants)).toHaveLength(3);
+  });
+
   it("a lone fireplace is recorded but is not a violation", async () => {
     await placed(STRANGER, 5010, 100, 5010, "Fireplace");
     await zoneTick(db, { now, enforcementEnabled: true });

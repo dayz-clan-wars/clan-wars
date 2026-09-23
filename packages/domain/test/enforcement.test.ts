@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   sentenceMsFor, boostStackFor, type IncidentDamage, type BoostPlacement,
   BAN_BASE_MS, BAN_BREACH_MS, BAN_GATE_MS, BAN_PER_DISMANTLE_MS,
-  BAN_FIRST_OFFENCE_CAP_MS, BOOST_STACK_RADIUS_M,
+  BAN_FIRST_OFFENCE_CAP_MS, BOOST_STACK_RADIUS_M, BOOST_ITEM_CLASSES, TENT_ITEM_CLASSES,
 } from "../src/index.js";
 
 const HOUR = 3_600_000;
@@ -109,5 +109,21 @@ describe("BAN_REASON_TEXT", () => {
     for (const r of BAN_REASONS) expect(BAN_REASON_TEXT[r]).toMatch(/\S/u);
     expect(BAN_REASON_TEXT.zone).toBe("base-zone enforcement");
     expect(BAN_REASON_TEXT.hub_combat).toBe("combat at the Fast Travel Hub");
+  });
+});
+
+describe("TENT_ITEM_CLASSES", () => {
+  it("covers every tent classname the live log has recorded a player placing", () => {
+    // ⚠️ Observed in factions_live's item.placed events on 2026-09-23. The
+    // match is exact, so a colour variant left off is a tent boost nobody sees.
+    for (const c of ["LargeTent", "CarTent", "MediumTent", "MediumTent_Green", "MediumTent_Orange"]) {
+      expect(TENT_ITEM_CLASSES).toContain(c);
+    }
+  });
+
+  it("shares no class with the boost-stack list — one placement, one rule", () => {
+    // zoneTick branches on tent BEFORE stack, so an overlap would silently
+    // take the class out of stack detection rather than double-count it.
+    expect(TENT_ITEM_CLASSES.filter((c) => (BOOST_ITEM_CLASSES as readonly string[]).includes(c))).toEqual([]);
   });
 });

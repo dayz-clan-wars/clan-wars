@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { identityLinks, intruderSightings, zoneIncidents, zoneIncidentParticipants, zonePlacements, zoneViolations } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import {
-  INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, BOOST_ITEM_CLASSES, BOOST_STACK_WINDOW_MS,
+  INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS, BOOST_ITEM_CLASSES, BOOST_STACK_WINDOW_MS, TENT_ITEM_CLASSES,
   boostStackFor, type BoostPlacement, type ClanNoticeKind, type ViolationKind, type Vec3,
 } from "@factions/domain";
 import { noticeClanTx, noticeUserTx, type NoticePayload } from "@factions/roster/internal";
@@ -32,6 +32,11 @@ function isGate(payload: unknown): boolean {
 function readItemClass(payload: unknown): string {
   const c = (payload as Record<string, unknown>).itemClass;
   return typeof c === "string" && c !== "" ? c : "unknown";
+}
+/** The display name ("Car Tent"), for the owner's alert and `/base`; the classname if absent. */
+function readItem(payload: unknown): string {
+  const i = (payload as Record<string, unknown>).item;
+  return typeof i === "string" && i !== "" ? i : readItemClass(payload);
 }
 
 const toBoostPlacement = (r: { dayzId: string; eventId: number; x: string; y: string; z: string; occurredAt: Date }): BoostPlacement =>
@@ -150,9 +155,14 @@ export async function zoneTick(
       if (!fix) continue;
       const isPosition = ev.type === "player.position";
       const isBuild = ev.type === "base.built" || ev.type === "base.dismantled";
+      // ⚠️ A tent is a BUILD, not a boost-stack placement: one tent is tall
+      // enough to climb a wall on its own, so there is no stack to wait for
+      // (TENT_ITEM_CLASSES says why, with the raid that proved it).
+      const isTent = ev.type === "item.placed"
+        && (TENT_ITEM_CLASSES as readonly string[]).includes(readItemClass(ev.payload));
       const isPlacement = ev.type === "item.placed"
         && (BOOST_ITEM_CLASSES as readonly string[]).includes(readItemClass(ev.payload));
-      if (!isPosition && !isBuild && !isPlacement) continue;
+      if (!isPosition && !isBuild && !isTent && !isPlacement) continue;
       if (ev.occurredAt.getTime() < oldest) continue;   // stale fix: the pin would have expired anyway
       out.scanned++;
       let zones = zonesByServer.get(ev.serverId);
@@ -162,8 +172,8 @@ export async function zoneTick(
       const gamertag = readGamertag(ev.payload);
       await db.transaction(async (tx) => {
         const done = async () => { await writeCursor(tx, ZONE_CONSUMER, ev.id); };
-        if (isBuild) {
-          const part = readPart(ev.payload);
+        if (isBuild || isTent) {
+          const part = isTent ? readItem(ev.payload) : readPart(ev.payload);
           const pos: Vec3 = { x: fix.x, y: fix.alt, z: fix.z };
           // ⚠️ IMPORTANT 4: the intruder/dismantle/gate ALERTS below predate
           // this branch and are unconditional, always. The incident WRITE
@@ -181,7 +191,7 @@ export async function zoneTick(
             }
             if (await alertOwner(tx, hit.zone, ev.serverId, "dismantle", ev.occurredAt, { gamertag, part })) out.alerts++;
           } else {
-            const kind: ViolationKind = isGate(ev.payload) ? "gate" : "build";
+            const kind: ViolationKind = !isTent && isGate(ev.payload) ? "gate" : "build";
             if (opts.enforcementEnabled) {
               const incidentId = await openIncident(tx, hit.zone, ev.serverId, ev.occurredAt);
               if (await recordViolation(tx, incidentId, ev.id, kind, fix.dayzId, gamertag, part, pos, ev.occurredAt)) out.violations++;
