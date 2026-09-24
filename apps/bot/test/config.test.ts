@@ -381,6 +381,32 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("KOTH_TICK", () => {
+    it("defaults off", () => {
+      expect(loadConfig(OK).koth.enabled).toBe(false);
+    });
+
+    it("KOTH_TICK needs RESTART_SCHEDULE", () => {
+      expect(() => loadConfig({
+        ...OK, KOTH_TICK: "true", SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
+      })).toThrow(/KOTH_TICK is on but RESTART_SCHEDULE/u);
+    });
+
+    it("KOTH_TICK needs SERVER_EVENTS_CHANNEL_ID", () => {
+      expect(() => loadConfig({
+        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: undefined,
+      })).toThrow(/KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID/u);
+    });
+
+    it("enables when both requirements are met", () => {
+      const cfg = loadConfig({
+        ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t",
+        SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
+      });
+      expect(cfg.koth).toEqual({ enabled: true });
+    });
+  });
+
   describe("OPS_CHANNEL_ID", () => {
     it("is optional, off by default", () => {
       expect(loadConfig(OK).opsChannelId).toBeUndefined();

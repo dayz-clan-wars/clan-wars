@@ -166,6 +166,8 @@ export type BotConfig = {
    * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
    */
   bounties: { enabled: boolean };
+  /** Gates King of the Hill's scheduling and posts (spec 2026-09-23). The restart tick's RESTORE arm runs regardless. */
+  koth: { enabled: boolean };
   /**
    * Where the airdrop tick announces a drop's location. Fatal when the tick
    * is on and this is unset — see the load-time check below.
@@ -483,6 +485,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
     },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
+    koth: { enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()) },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -577,6 +580,16 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // bounty — a punishment nobody is told about is not one.
   if (config.bounties.enabled && !config.serverEventsChannelId) {
     throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
+  }
+  // ⚠️ Same failure shape as RAID_WINDOW_TICK/AIRDROP_TICK: a session only
+  // opens at a restart, so with RESTART_SCHEDULE off nothing would ever apply it.
+  if (config.koth.enabled && !config.restartSchedule) {
+    throw new Error("KOTH_TICK is on but RESTART_SCHEDULE is off — a session only opens at a restart, so nothing would ever apply it.");
+  }
+  // ⚠️ Fatal, like AIRDROP_TICK/BOUNTY_TICK: an unannounced event is one nobody
+  // comes to, so with no channel to post it this is misconfigured, not merely degraded.
+  if (config.koth.enabled && !config.serverEventsChannelId) {
+    throw new Error("KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — an unannounced event is one nobody comes to.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.

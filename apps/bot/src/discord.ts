@@ -33,6 +33,7 @@ import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
 import { airdropTick } from "./airdrop-tick.js";
+import { kothTick } from "./koth-tick.js";
 import { NitradoClient } from "@factions/nitrado";
 import { lapseSolos } from "@factions/declarations";
 import { PgDormancyStore } from "./dormancy-store.js";
@@ -611,12 +612,17 @@ export async function start(cfg: BotConfig): Promise<void> {
   const bountyPoster = cfg.bounties.enabled && cfg.serverEventsChannelId
     ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
     : null;
+  // ⚠️ A separate poster on the same channel, with mentions off: a KotH post carries a
+  // gamertag and free-text location/reason, and escaping markdown does not stop
+  // Discord parsing a literal @everyone. See createChannelPoster's comment.
+  const kothPoster = cfg.koth.enabled && cfg.serverEventsChannelId
+    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
+    : null;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
     bountiesEnabled: cfg.bounties.enabled,
-    // Task 13 wires the real KOTH_TICK poster; always null here for now.
-    koth: null,
+    koth: kothPoster,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled
@@ -1642,6 +1648,20 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // ⚠️ AFTER the restart tick, like every server-events poster: a slow Discord
+    // call must never delay a due restart. Its own try/catch.
+    // ⚠️ Gated on the flag alone — config load refuses KOTH_TICK without
+    // SERVER_EVENTS_CHANNEL_ID, so kothPoster is non-null here.
+    if (cfg.koth.enabled) {
+      try {
+        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
+        const k = await kothTick(db, { announce: kothPoster!, ops: opsPoster }, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
+        if (k.posted + k.failed + k.scored > 0) console.log(`koth: ${k.posted} posted, ${k.failed} failed, ${k.scored} scored`);
+      } catch (err) {
+        console.error("koth tick failed", err);
+      }
+    }
+
     // ⚠️ After the restart tick, for the same reason the restart tick runs last: a slow
     // Discord call must not delay a due restart. Its own try/catch, like every step.
     // ⚠️ Gated on the flag alone — config load refuses WEEKLY_VEHICLE_WIPE without
@@ -1712,6 +1732,9 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.airdrop.enabled) console.warn("AIRDROP_TICK is off: airdrops are not being placed automatically.");
     else console.log(`airdrop automation on (cap ${cfg.airdrop.weeklyCap}/week, floor ${cfg.airdrop.minPop})`);
+
+    if (cfg.koth.enabled) console.log("king of the hill on");
+    else console.warn("KOTH_TICK is off: /koth refuses; any unfinished KotH session is still restored at the next restart.");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)
