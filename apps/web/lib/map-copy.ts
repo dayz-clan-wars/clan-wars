@@ -1,4 +1,4 @@
-import { PIN_ICONS } from "@factions/domain";
+import { PIN_ICONS, PIN_NOTE_MAX } from "@factions/domain";
 
 export { PIN_RESULT_COPY as RESULT_COPY, PIN_ICON_LABELS } from "@factions/copy";
 
@@ -38,6 +38,15 @@ export const ROSTER_COPY = { heading: "On the map", empty: "Nothing of yours is 
 export const PIN_HINT = "Press and hold, or use Pin here, to drop a pin.";
 /** Under the pin sheet's grid ref while a "Pin here" draft follows the centre. */
 export const PIN_FOLLOW = "Move the map to place it — the pin goes under the cross.";
+
+/** The pin sheet's words. */
+export const PIN_SHEET_COPY = {
+  icon: "Icon",
+  note: "Note",
+  noteHint: `optional, ${PIN_NOTE_MAX} characters at most`,
+  drop: "Drop a pin",
+  cancel: "Cancel",
+} as const;
 
 /** What the map says about its own loading. */
 export const MAP_LOAD_COPY = {

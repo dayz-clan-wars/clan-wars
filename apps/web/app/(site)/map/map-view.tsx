@@ -7,16 +7,17 @@ import type * as L from "leaflet";
  * spells the dynamic import of "leaflet" in exactly one place: `importLeaflet`.
  */
 type LeafletModule = typeof L;
-import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
+import { POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
-import { layerIcon, pinGlyph } from "@/lib/map-icons";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT } from "@/lib/map-copy";
+import { layerIcon } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
-import { followCentre, insetFor, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
+import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
+import { PinSheet } from "./pin-sheet";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
@@ -656,7 +657,23 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
-  const pinHere = () => { if (centre) setPinAt(pinAtCentre(centre)); };
+  // Set when the sheet was opened from a button, so closing it can put focus
+  // back. Not for a long-press: focus was never on a button then.
+  const returnFocus = useRef(false);
+  const pinHere = () => {
+    if (!centre) return;
+    returnFocus.current = true;
+    setPinAt(pinAtCentre(centre));
+  };
+  const cancelPin = useCallback(() => setPinAt(null), []);
+  // ⚠️ Both bars unmount while the sheet is open, so the button that opened
+  // it is gone by the time it closes. Focus goes to whichever "Pin here" is
+  // on screen now, else to the map, never to <body>.
+  useEffect(() => {
+    if (pinSheet || !returnFocus.current) return;
+    returnFocus.current = false;
+    pickReturnFocus([...document.querySelectorAll<HTMLElement>("[data-pin-here]")], el.current)?.focus();
+  }, [pinSheet]);
 
   // The popup's Delete button (map-draw.ts) carries `data-arm`: the first
   // tap swaps its label for that text, the second within four seconds
@@ -731,36 +748,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         </div>
       )}
 
-      {pinSheet && (
-        <form
-          ref={insetBy}
-          method="post" action="/api/map/pin"
-          className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame p-4 lg:inset-x-auto lg:bottom-6 lg:left-6 lg:w-[360px] lg:border-2"
-        >
-          <input type="hidden" name="x" value={pinAt.x} />
-          <input type="hidden" name="z" value={pinAt.z} />
-          <p className="font-display text-[13px] uppercase tracking-[0.06em] text-ink"><span className="mr-3 text-gold">Pin</span>{gridRef(pinAt.x, pinAt.z)}</p>
-          {pinAt.follow && <p className="mt-1 font-mono text-[11px] text-muted">{PIN_FOLLOW}</p>}
-          <fieldset className="mt-3 grid grid-cols-3 gap-2">
-            <legend className="sr-only">Icon</legend>
-            {PIN_ICONS.map((icon, i) => (
-              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-3 px-2.5 text-[13px] text-ink has-[:checked]:border-gold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
-                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="sr-only" />
-                <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: pinGlyph(pal, icon, 22) }} />
-                {PIN_ICON_LABELS[icon]}
-              </label>
-            ))}
-          </fieldset>
-          <textarea
-            name="note" maxLength={PIN_NOTE_MAX} rows={2} placeholder={`A note, ${PIN_NOTE_MAX} characters at most`}
-            className="mt-3 w-full border-2 border-rule-3 bg-ground p-2.5 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none"
-          />
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="submit" className="flex min-h-[48px] items-center justify-center bg-gold font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Drop a pin</button>
-            <button type="button" onClick={() => setPinAt(null)} className="flex min-h-[48px] items-center justify-center border-2 border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink">Cancel</button>
-          </div>
-        </form>
-      )}
+      {pinSheet && <PinSheet draft={pinAt} pal={pal} onCancel={cancelPin} insetRef={insetBy} />}
 
       {!pinSheet && (
         <>

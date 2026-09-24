@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { followCentre, insetFor, pinAtCentre, pinAtPoint } from "../lib/map-pin";
+import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint } from "../lib/map-pin";
 
 const WEB = join(import.meta.dirname, "..");
 const view = readFileSync(join(WEB, "app", "(site)", "map", "map-view.tsx"), "utf8");
@@ -42,7 +42,11 @@ describe("insetFor", () => {
 
 describe("the 'Pin here' buttons", () => {
   it("sit on both bars, only for a viewer with the pins layer", () => {
-    expect(view.match(/data-pin-here/gu)).toHaveLength(2);
+    // ⚠️ A bare substring count also catches `pickReturnFocus`'s
+    // `"[data-pin-here]"` selector string (Task 12) — that occurrence is a
+    // selector, not an attribute, so it is excluded by requiring the match
+    // not be bracketed.
+    expect(view.match(/(?<!\[)data-pin-here(?!\])/gu)).toHaveLength(2);
     expect(view.match(/\{layers\.pins && \(\s*<button type="button" data-pin-here/gu)).toHaveLength(2);
   });
 
@@ -50,5 +54,36 @@ describe("the 'Pin here' buttons", () => {
     const guide = readFileSync(join(WEB, "content", "guide", "10-the-map.html"), "utf8");
     expect(guide).toContain("Pin here");
     expect(view).not.toContain("Press and hold to drop a pin.");
+  });
+});
+
+describe("pickReturnFocus", () => {
+  /**
+   * ⚠️ Review focus 4. Both bars unmount while the pin sheet is open, so
+   * the button that opened it no longer exists when it closes. Focus has to go
+   * to the "Pin here" button that is on screen NOW (the phone's or the
+   * desktop's; the other one is display:none), or it falls to <body>.
+   */
+  // ⚠️ Typed explicitly: `offsetParent` is `unknown` on the real signature
+  // (an element's `offsetParent` is `Element | null`), and an inline literal's
+  // `null` would otherwise narrow to the literal type `null`, which a sibling
+  // literal's `{}` can't unify with under inference from two call sites.
+  type Candidate = { offsetParent: unknown; id: string };
+
+  it("picks the visible candidate", () => {
+    const hidden: Candidate = { offsetParent: null, id: "desktop" };
+    const shown: Candidate = { offsetParent: {}, id: "phone" };
+    expect(pickReturnFocus([hidden, shown], null)).toBe(shown);
+  });
+
+  it("falls back when every candidate is hidden or gone", () => {
+    const map: Candidate = { offsetParent: {}, id: "map" };
+    expect(pickReturnFocus([{ offsetParent: null, id: "x" } as Candidate], map)).toBe(map);
+    expect(pickReturnFocus([] as Candidate[], map)).toBe(map);
+    expect(pickReturnFocus([] as Candidate[], null)).toBeNull();
+  });
+
+  it("is what map-view.tsx calls when the sheet closes", () => {
+    expect(view).toContain('pickReturnFocus([...document.querySelectorAll<HTMLElement>("[data-pin-here]")], el.current)?.focus()');
   });
 });

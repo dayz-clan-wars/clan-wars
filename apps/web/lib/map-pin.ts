@@ -39,3 +39,12 @@ export function followCentre(d: PinDraft | null, c: { x: number; z: number }): P
 export function insetFor(overlay: { width: number; height: number }, viewWidth: number): number {
   return overlay.width > 0 && overlay.width >= viewWidth - 1 ? Math.round(overlay.height) : 0;
 }
+
+/**
+ * Where focus goes when the pin sheet closes. The first candidate that is laid
+ * out (`offsetParent` is null for `display: none` and for a detached node),
+ * else the fallback. Structural, so it is testable without a DOM.
+ */
+export function pickReturnFocus<T extends { offsetParent: unknown }>(candidates: readonly T[], fallback: T | null): T | null {
+  return candidates.find((c) => c.offsetParent !== null) ?? fallback;
+}
