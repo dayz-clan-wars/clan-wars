@@ -381,3 +381,26 @@ export const AIRDROP_MIN_GAP_MS = 24 * 60 * 60 * 1000;
  * three weeks), and it is an env var rather than a code change.
  */
 export const AIRDROP_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
+
+// ─── King of the Hill (spec 2026-09-23-king-of-the-hill) ───────────────────
+/** A kill scores if its VICTIM was this close to the hill's centre (2-D). */
+export const KOTH_ZONE_RADIUS_M = 500;
+export const KOTH_REMINDER_LEAD_MS = 30 * 60_000;
+/** How long after the closing restart before scoring, for log lag. */
+export const KOTH_SCORE_SETTLE_MS = 10 * 60_000;
+/** ⚠️ Reserved: the restore arm treats any preset starting with this as KotH's. */
+export const KOTH_PRESET_PREFIX = "koth-";
+export const KOTH_AWARD_KEY = "plate-carrier";
+/**
+ * The events.xml infected events a KotH session switches on.
+ * ⚠️ The livonia generator's ZOMBIE_ZONE_NAMES must be a subset — a zone with no
+ * active event spawns nothing (koth-drift.test.ts).
+ */
+export const KOTH_INFECTED_EVENTS: readonly string[] = ["InfectedCity", "InfectedVillage", "InfectedArmy", "InfectedPolice", "InfectedMedic"];
+/** The whole-file targets, by directory ("root" = the mission root, "env" = its env/). */
+export const KOTH_WHOLE_FILES: readonly { dir: "root" | "env"; name: string }[] = [
+  { dir: "root", name: "cfgplayerspawnpoints.xml" },
+  { dir: "env", name: "wolf_territories.xml" },
+  { dir: "env", name: "bear_territories.xml" },
+  { dir: "env", name: "zombie_territories.xml" },
+];
