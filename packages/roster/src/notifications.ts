@@ -41,6 +41,15 @@ export type NotificationsPage = { rows: NoticeRow[]; page: number; hasNext: bool
  * page. The notices themselves are untouched; rejoining restores visibility
  * from the new joined_at forward. Stated here because it will be reported as
  * data loss otherwise.
+ *
+ * ⚠️ One transition is often written TWICE: a clan-channel row and a DM to
+ * the member it is about, with one kind, one instant and one payload (an
+ * achievement unlock — apps/bot/src/achievements/tick.ts queueUnlockNoticesTx
+ * — or a flag_down to every full member). Discord is right to post both; this
+ * inbox is the union of the two places, so the channel copy is dropped when
+ * the SAME viewer holds the DM. The DM is kept because it is the one addressed
+ * to them. Every function below reads VISIBLE, so the list, the bell's count
+ * and the mark-all watermark agree on what exists (D1, UX review 2026-09-24).
  */
 const VISIBLE = (discordId: string) => sql`
   select n.id, n.kind, n.target, n.occurred_at, n.payload, n.faction_id
@@ -54,6 +63,14 @@ const VISIBLE = (discordId: string) => sql`
      and m.discord_id = ${discordId}
      and m.status = 'full'
    where n.target = 'channel' and n.occurred_at >= m.joined_at
+     and not exists (
+       select 1 from clan_notices d
+        where d.target = 'dm' and d.discord_target_id = ${discordId}
+          and d.kind = n.kind
+          and d.occurred_at = n.occurred_at
+          and d.faction_id is not distinct from n.faction_id
+          and d.payload = n.payload
+     )
 `;
 
 /** Every notice strictly above the watermark with no individual read row. */

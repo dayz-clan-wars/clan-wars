@@ -180,6 +180,54 @@ describe("notificationsForDb", () => {
     expect(await unreadNoticeCountDb(db, "u-nobody")).toBe(0);
   });
 
+  /**
+   * ⚠️ D1 (UX review 2026-09-24). The achievements tick queues ONE unlock as a
+   * clan-channel row AND a DM to the unlocker (a team unlock: to every full
+   * member), with one payload. Discord is right to post both; the site's inbox
+   * is a union of the two, so it listed the unlock twice.
+   */
+  it("⚠️ lists a transition once when it was both DM'd to you and posted to your clan", async () => {
+    const f = await faction("NTE");
+    await member(f, AT("2026-09-01T00:00:00Z"));
+    const at = AT("2026-09-21T10:00:00Z").toISOString();
+    const payload = JSON.stringify({ key: "veteran", name: "Veteran", description: "Play for 100 hours.", ownerKind: "player", ownerId: `dz-${YOU}`, ownerName: YOU, gamertag: "RonaldRaygun552", clanTag: "NTE" });
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'channel', null, 'achievement', ${at}, ${payload}::jsonb)`);
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'dm', ${YOU}, 'achievement', ${at}, ${payload}::jsonb)`);
+
+    const p = await notificationsForDb(db, YOU, 1);
+    expect(p.rows).toHaveLength(1);
+    expect(p.rows[0]!.target).toBe("dm");
+    expect(await unreadNoticeCountDb(db, YOU)).toBe(1);
+  });
+
+  it("still shows the clan's copy of a clanmate's unlock — the DM went to them, not you", async () => {
+    const f = await faction("NTF");
+    await member(f, AT("2026-09-01T00:00:00Z"));
+    const at = AT("2026-09-21T10:00:00Z").toISOString();
+    const payload = JSON.stringify({ key: "veteran", name: "Veteran", ownerKind: "player", ownerId: "dz-u-mate", gamertag: "Mate" });
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'channel', null, 'achievement', ${at}, ${payload}::jsonb)`);
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'dm', 'u-mate', 'achievement', ${at}, ${payload}::jsonb)`);
+
+    const p = await notificationsForDb(db, YOU, 1);
+    expect(p.rows.map((r) => r.target)).toEqual(["channel"]);
+  });
+
+  it("keeps two notices of one kind and instant that say different things", async () => {
+    const f = await faction("NTG");
+    await member(f, AT("2026-09-01T00:00:00Z"));
+    const at = AT("2026-09-21T10:00:00Z").toISOString();
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'channel', null, 'achievement', ${at}, '{"key":"veteran"}'::jsonb)`);
+    await db.execute(sql`insert into clan_notices (server_id, faction_id, target, discord_target_id, kind, occurred_at, payload)
+                         values (941, ${f}, 'dm', ${YOU}, 'achievement', ${at}, '{"key":"first-blood"}'::jsonb)`);
+
+    expect((await notificationsForDb(db, YOU, 1)).rows).toHaveLength(2);
+  });
+
   // Nested (not a sibling describe) so `db`, `dm`, `channel`, `member` and
   // `faction` — all closed over from the outer describe's beforeEach — stay
   // in scope. A sibling describe cannot see consts declared inside another
