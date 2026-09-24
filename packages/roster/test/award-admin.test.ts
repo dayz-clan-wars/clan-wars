@@ -55,6 +55,14 @@ describe("award administration", () => {
     expect(await grant()).toEqual({ ok: false, reason: "no-server" });
   });
 
+  // ⚠️ Pins the order the task-10 review restored: an unknown key is a bad
+  // request no matter the server state, so it must be caught before the
+  // server lookup ever runs — not just before the transaction opens.
+  it("reports an unknown award key ahead of a missing server, even when both are true", async () => {
+    await db.update(servers).set({ active: false });
+    expect(await grant({ awardKey: "golden-shovel" })).toEqual({ ok: false, reason: "unknown-award" });
+  });
+
   it("gives a second win its own row", async () => {
     await grant();
     await grant();

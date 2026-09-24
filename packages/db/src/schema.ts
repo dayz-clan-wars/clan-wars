@@ -2021,3 +2021,55 @@ export const bounties = pgTable("bounties", {
   byStatus: index("bounties_status_idx").on(t.serverId, t.status),
   byClaimer: index("bounties_claimer_idx").on(t.serverId, t.claimedByDayzId, t.claimedAt).where(sql`${t.status} = 'claimed'`),
 }));
+
+export type KothState = "scheduled" | "live" | "awarded" | "no_winner" | "cancelled" | "failed";
+export type KothResultRow = { dayzId: string; gamertag: string; kills: number };
+export type KothResults = { top: KothResultRow[]; topKiller: KothResultRow | null; winner: KothResultRow | null; droppedNoPosition: number };
+
+/**
+ * One King of the Hill session (spec 2026-09-23-king-of-the-hill).
+ *
+ * ⚠️ The two snapshots are what the restore puts back, never a hard-coded
+ * default: a user's later edit to the loadout list or to an Infected event must
+ * survive (spec §2.5). Each is written only from a file holding no KotH state.
+ *
+ * ⚠️ `results` is frozen when written; nothing re-scores an awarded event,
+ * including `rebuild:kills`, which renumbers `kills`.
+ *
+ * ⚠️ Lock order: `koth_events` immediately before `award_grants`.
+ */
+export const kothEvents = pgTable("koth_events", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  slotAt: timestamp("slot_at", { withTimezone: true }).notNull(),
+  location: text("location").notNull(),
+  centreX: numeric("centre_x", { precision: 12, scale: 2 }).notNull(),
+  centreZ: numeric("centre_z", { precision: 12, scale: 2 }).notNull(),
+  state: text("state").$type<KothState>().notNull(),
+  scheduledByDiscordId: text("scheduled_by_discord_id").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** ⚠️ A session is never opened without it. */
+  announcedAt: timestamp("announced_at", { withTimezone: true }),
+  remindedAt: timestamp("reminded_at", { withTimezone: true }),
+  livePostedAt: timestamp("live_posted_at", { withTimezone: true }),
+  resultsPostedAt: timestamp("results_posted_at", { withTimezone: true }),
+  cancelPostedAt: timestamp("cancel_posted_at", { withTimezone: true }),
+  loadoutSnapshot: jsonb("loadout_snapshot").$type<string[]>(),
+  infectedSnapshot: jsonb("infected_snapshot").$type<Record<string, 0 | 1>>(),
+  openedAt: timestamp("opened_at", { withTimezone: true }),
+  restoredAt: timestamp("restored_at", { withTimezone: true }),
+  results: jsonb("results").$type<KothResults>(),
+  winnerDayzId: text("winner_dayz_id"),
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id, { onDelete: "set null" }),
+  detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+}, (t) => ({
+  stateValid: check("koth_events_state_valid", sql`${t.state} IN ('scheduled','live','awarded','no_winner','cancelled','failed')`),
+  awardedHasGrant: check("koth_events_awarded_has_grant", sql`(${t.state} <> 'awarded') OR (${t.awardGrantId} IS NOT NULL)`),
+  oneOpen: uniqueIndex("koth_events_one_open").on(t.serverId).where(sql`${t.state} IN ('scheduled','live')`),
+  // ⚠️ Partial, over every state EXCEPT `cancelled` and `failed` (migration 0050).
+  // Unconditional, a `/koth cancel` or a never-announced schedule left a dead row
+  // holding its slot forever, and that slot could never be scheduled again. A
+  // slot that actually ran (`awarded`/`no_winner`) still holds it.
+  oneSlot: uniqueIndex("koth_events_slot_uq").on(t.serverId, t.slotAt)
+    .where(sql`${t.state} IN ('scheduled','live','awarded','no_winner')`),
+}));

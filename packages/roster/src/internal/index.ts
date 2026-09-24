@@ -35,7 +35,7 @@ export { playerBoardsDb } from "../stats";
 export type { Boards, BoardKind, BoardRow, StatScope } from "../stats";
 // Event awards: the admin side (grant, revoke, list) and the guild-removal revoke.
 export {
-  grantAwardDb, revokeAwardDb, listAwardsDb, revokeAwardsForTx,
+  grantAwardDb, grantAwardTx, revokeAwardDb, listAwardsDb, revokeAwardsForTx,
   type GrantAwardOutcome, type RevokeAwardOutcome, type AwardListRow,
 } from "./award-admin";
 

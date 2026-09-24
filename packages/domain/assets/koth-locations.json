@@ -1,0 +1,188 @@
+[
+  {
+    "name": "Adamów",
+    "slug": "adamow",
+    "centreX": 3072,
+    "centreZ": 6850
+  },
+  {
+    "name": "Bielawa",
+    "slug": "bielawa",
+    "centreX": 1570,
+    "centreZ": 9675
+  },
+  {
+    "name": "Borek",
+    "slug": "borek",
+    "centreX": 9802,
+    "centreZ": 8493
+  },
+  {
+    "name": "Brena",
+    "slug": "brena",
+    "centreX": 6613,
+    "centreZ": 11208
+  },
+  {
+    "name": "Dolnik",
+    "slug": "dolnik",
+    "centreX": 11306,
+    "centreZ": 657
+  },
+  {
+    "name": "Drewniki",
+    "slug": "drewniki",
+    "centreX": 5830,
+    "centreZ": 5092
+  },
+  {
+    "name": "Gieraltów",
+    "slug": "gieraltow",
+    "centreX": 11234,
+    "centreZ": 4380
+  },
+  {
+    "name": "Gliniska",
+    "slug": "gliniska",
+    "centreX": 4988,
+    "centreZ": 9919
+  },
+  {
+    "name": "Grabin",
+    "slug": "grabin",
+    "centreX": 10660,
+    "centreZ": 11023
+  },
+  {
+    "name": "Huta",
+    "slug": "huta",
+    "centreX": 5137,
+    "centreZ": 5472
+  },
+  {
+    "name": "Karlin",
+    "slug": "karlin",
+    "centreX": 10067,
+    "centreZ": 6956
+  },
+  {
+    "name": "Kolembrody",
+    "slug": "kolembrody",
+    "centreX": 8412,
+    "centreZ": 11979
+  },
+  {
+    "name": "Kulno",
+    "slug": "kulno",
+    "centreX": 11144,
+    "centreZ": 2392
+  },
+  {
+    "name": "Lembork",
+    "slug": "lembork",
+    "centreX": 8675,
+    "centreZ": 6635
+  },
+  {
+    "name": "Lipina",
+    "slug": "lipina",
+    "centreX": 5937,
+    "centreZ": 6819
+  },
+  {
+    "name": "Lukow",
+    "slug": "lukow",
+    "centreX": 3526,
+    "centreZ": 11963
+  },
+  {
+    "name": "Muratyn",
+    "slug": "muratyn",
+    "centreX": 4563,
+    "centreZ": 6383
+  },
+  {
+    "name": "Nadbór",
+    "slug": "nadbor",
+    "centreX": 6105,
+    "centreZ": 3983
+  },
+  {
+    "name": "Nidek",
+    "slug": "nidek",
+    "centreX": 6124,
+    "centreZ": 8012
+  },
+  {
+    "name": "Olszanka",
+    "slug": "olszanka",
+    "centreX": 4815,
+    "centreZ": 7673
+  },
+  {
+    "name": "Polana",
+    "slug": "polana",
+    "centreX": 3276,
+    "centreZ": 2133
+  },
+  {
+    "name": "Radacz",
+    "slug": "radacz",
+    "centreX": 4004,
+    "centreZ": 7938
+  },
+  {
+    "name": "Radunin",
+    "slug": "radunin",
+    "centreX": 7293,
+    "centreZ": 6491
+  },
+  {
+    "name": "Roztoka",
+    "slug": "roztoka",
+    "centreX": 7690,
+    "centreZ": 5317
+  },
+  {
+    "name": "Sitnik",
+    "slug": "sitnik",
+    "centreX": 11496,
+    "centreZ": 9571
+  },
+  {
+    "name": "Sobotka",
+    "slug": "sobotka",
+    "centreX": 6252,
+    "centreZ": 10250
+  },
+  {
+    "name": "Tarnow",
+    "slug": "tarnow",
+    "centreX": 9323,
+    "centreZ": 10902
+  },
+  {
+    "name": "Topolin",
+    "slug": "topolin",
+    "centreX": 1855,
+    "centreZ": 7330
+  },
+  {
+    "name": "Wrzeszcz",
+    "slug": "wrzeszcz",
+    "centreX": 9038,
+    "centreZ": 4438
+  },
+  {
+    "name": "Zalesie",
+    "slug": "zalesie",
+    "centreX": 893,
+    "centreZ": 5536
+  },
+  {
+    "name": "Zapadlisko",
+    "slug": "zapadlisko",
+    "centreX": 8053,
+    "centreZ": 8710
+  }
+]

@@ -323,6 +323,15 @@ describe("NitradoClient.statFile", () => {
     expect(stat).toEqual({ size: 19767, modifiedAtMs: 1788307434000 });
   });
 
+  it("listFiles returns the file names in a directory, and [] for a missing one", async () => {
+    // listing: { data: { entries: [{ name: "koth-a.json", type: "file" }, { name: "sub", type: "dir" }] } }
+    const fetchFn = fakeFetch({ "/file_server/list": listing([{ name: "koth-a.json", type: "file" }, { name: "sub", type: "dir" }]) });
+    expect(await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).listFiles("/m/custom")).toEqual(["koth-a.json"]);
+    // listing with no entries
+    const emptyFn = fakeFetch({ "/file_server/list": listing([]) });
+    expect(await new NitradoClient("t", 1, emptyFn as unknown as typeof fetch).listFiles("/m/nope")).toEqual([]);
+  });
+
   it("returns null when the file is not in the directory", async () => {
     const fetchFn = fakeFetch({ "/file_server/list": listing([entry({ name: "teleports.json" })]) });
     const stat = await new NitradoClient("t", 1, fetchFn as unknown as typeof fetch).statFile("/d", "faction-supplies.json");

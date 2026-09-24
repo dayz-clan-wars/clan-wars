@@ -275,6 +275,19 @@ export class NitradoClient {
     return { size: entry.size, modifiedAtMs: entry.modified_at * 1000 };
   }
 
+  /**
+   * The file names in one directory (King of the Hill checks its 44 presets are
+   * on the server in one call rather than 44 `statFile`s).
+   * ⚠️ A missing directory is `[]`, the same "no entry" reading `statFile` gives.
+   */
+  async listFiles(remoteDir: string): Promise<string[]> {
+    const listing = await this.getJson(
+      `/services/${this.serviceId}/gameservers/file_server/list?dir=${encodeURIComponent(remoteDir)}`,
+    );
+    const entries: any[] = listing?.data?.entries ?? [];
+    return entries.filter((e) => e?.type === "file" && typeof e?.name === "string").map((e) => e.name as string);
+  }
+
   /** Two steps: the API returns a signed URL, then the bytes come from there. */
   async downloadFile(filePath: string): Promise<string> {
     const dl = await this.getJson(

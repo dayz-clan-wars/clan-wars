@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { setEventActive } from "../src/events-xml.js";
+import { setEventActive, readEventActive } from "../src/events-xml.js";
 
 /** Shaped after the live clan-wars <mission>/db/events.xml (read 2026-09-12). */
 const XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
@@ -105,4 +105,12 @@ describe("setEventActive", () => {
     const xml = `<events><event name="VehicleTruck01"><active>1</active></event><event name="VehicleTruck01"><active>1</active></event></events>`;
     expect(() => setEventActive(xml, "VehicleTruck01", 0)).toThrow(/twice|duplicate|more than once/i);
   });
+});
+
+describe("readEventActive", () => {
+  it("reads the live value, ignoring a commented-out copy", () => {
+    const xml = `<events><!-- <event name="X"><active>1</active></event> --><event name="X"><active>0</active></event></events>`;
+    expect(readEventActive(xml, "X")).toBe(0);
+  });
+  it("throws on a missing event", () => expect(() => readEventActive("<events/>", "X")).toThrow(/no <event name="X">/));
 });

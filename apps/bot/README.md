@@ -57,6 +57,7 @@ in-game verification tick confirms it.
 | `SERVER_EVENTS_CHANNEL_ID` | required when `AIRDROP_TICK`, `RAID_WINDOW_TICK`, or `WEEKLY_VEHICLE_WIPE` is on | The one channel every scheduled server-event notice posts to: an airdrop's location, the raid window's advance/open/close notices, and the weekly vehicle-wipe notice. Fatal, not degraded, when any of those three is on and this is unset — each has its own player-facing reason config load refuses to start without it. |
 | `AIRDROP_WEEKLY_CAP` | no (default `2`) | A ceiling on how many airdrops can be decided in a rolling week, never a quota to hit. Plain decimal digits only. |
 | `AIRDROP_MIN_POP` | no (default `5`) | The floor under the trailing five-day high-water population an airdrop requires before it is decided. Only bites when the server's own recent peak is lower than this. Plain decimal digits only. |
+| `KOTH_TICK` | no (default off; `"1"`/`"true"` = on) | Enables `/koth` and the KotH posts and scoring. Requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`. The restore runs regardless. |
 
 Example `.env` (placeholders only — never commit real values):
 

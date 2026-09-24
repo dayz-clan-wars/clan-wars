@@ -24,11 +24,19 @@ describe("parseDeath", () => {
     [`killed by SomethingNew`, "environment", "SomethingNew"], [`bled out`, "bled_out", null], [`drowned`, "drowned", null],
     [`committed suicide`, "suicide", null], [`died.`, "died", null],
   ])("classifies '%s' as %s", (tail, cause, entity) => {
-    expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) ${tail}`)).toEqual({ kind: "died", victimDayzId: V, victimGamertag: "Vic", cause, entity, water: null, energy: null, bleedSources: null });
+    expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) ${tail}`)).toEqual({ kind: "died", victimDayzId: V, victimGamertag: "Vic", cause, entity, water: null, energy: null, bleedSources: null, victimPos: { x: 1, y: 3, z: 2 } });
   });
   it("reads the Stats> tail of a bare death — the evidence for what it died of", () => {
     expect(parseDeath(`16:06:05 | Player "Vic" (DEAD) (id=${V} pos=<6477.3, 11497.8, 189.1>) died. Stats> Water: 598.786 Energy: 0 Bleed sources: 1`))
       .toMatchObject({ kind: "died", cause: "died", water: 598.786, energy: 0, bleedSources: 1 });
+  });
+  // ⚠️ A credited ("finished") kill's event is this bare death, so King of the Hill
+  // can place it only from here. Never `pos`: readFix would take it for a map fix.
+  it("a bare death keeps the victim's position as victimPos, and a line without one is null", () => {
+    const d = parseDeath(`16:06:05 | Player "Vic" (DEAD) (id=${V} pos=<8675.0, 6635.0, 210.4>) died. Stats> Water: 598.786 Energy: 0 Bleed sources: 1`)!;
+    expect(d).toMatchObject({ kind: "died", victimPos: { x: 8675, y: 210.4, z: 6635 } });
+    expect(d).not.toHaveProperty("pos");
+    expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V}) bled out`)).toMatchObject({ kind: "died", victimPos: null });
   });
   it("a bare (DEAD) marker with no death verb is not a death", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>)`)).toBeNull();

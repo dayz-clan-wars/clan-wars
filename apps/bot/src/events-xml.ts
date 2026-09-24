@@ -71,3 +71,19 @@ export function setEventActive(
   const to = from + am[0].length;
   return { xml: xml.slice(0, from) + `<active>${active}</active>` + xml.slice(to), changed: true };
 }
+
+/**
+ * The live `<active>` of one event — for the King of the Hill snapshot (spec §2.5).
+ * Same refusals as `setEventActive`, for the same reason: a guessed value would
+ * be restored later as if it were the operator's.
+ */
+export function readEventActive(xml: string, eventName: string): ActiveFlag {
+  const masked = maskComments(xml);
+  const block = new RegExp(`<event\\s+name="${escapeRe(eventName)}"[^>]*>([\\s\\S]*?)</event>`, "g");
+  const matches = [...masked.matchAll(block)];
+  if (matches.length === 0) throw new Error(`events.xml: no <event name="${eventName}"> block found`);
+  if (matches.length > 1) throw new Error(`events.xml: <event name="${eventName}"> appears more than once (${matches.length}×) outside comments`);
+  const am = /<active>\s*(\d+)\s*<\/active>/.exec(matches[0]![1]!);
+  if (!am) throw new Error(`events.xml: <event name="${eventName}"> has no <active> element`);
+  return (Number(am[1]) === 1 ? 1 : 0) as ActiveFlag;
+}

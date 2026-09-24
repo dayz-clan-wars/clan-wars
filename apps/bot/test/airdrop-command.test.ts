@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, airdropEvents, servers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, airdropEvents, kothEvents, servers, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { airdropGroup } from "../src/commands/airdrop.js";
 import type { Ctx, CommandInput } from "../src/commands/types.js";
@@ -15,13 +15,13 @@ describe("/airdrop place", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table airdrop_events, servers restart identity cascade`);
+    await db.execute(sql`truncate table airdrop_events, koth_events, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id;
   });
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {})) =>
-    ({ db, now: NOW, serverEvents: post, bountiesEnabled: false, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now: NOW, serverEvents: post, bountiesEnabled: false, koth: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; colour?: string | null } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
     string: (n: string) => (n === "location" ? over.location ?? "dolnik" : over.colour ?? null),
@@ -85,6 +85,18 @@ describe("/airdrop place", () => {
   it("refuses when the feature is switched off", async () => {
     const reply = await place(ctx(null), input());
     expect(reply.content).toMatch(/AIRDROP_TICK/);
+    expect(await rows()).toHaveLength(0);
+  });
+
+  // ⚠️ Spec §2.12: one session cannot hold both events. The koth command has the
+  // symmetric refusal on its own side.
+  it("refuses a slot a scheduled King of the Hill event holds", async () => {
+    await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "dolnik", centreX: "0", centreZ: "0",
+      state: "scheduled", scheduledByDiscordId: "1", announcedAt: NOW,
+    });
+    const reply = await place(ctx(), input());
+    expect(reply.content).toMatch(/king of the hill/i);
     expect(await rows()).toHaveLength(0);
   });
 });
