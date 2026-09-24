@@ -18,7 +18,13 @@ import type { PinIcon } from "@factions/domain";
  */
 
 export type Palette = {
-  gold: string; ink: string; ink2: string; rust: string; olive: string;
+  gold: string; ink: string; ink2: string; olive: string;
+  /**
+   * Rust for a MARK. ⚠️ Not --color-rust: that is 2.6:1 on the frame and kept
+   * for edges (globals.css), and a marker's mark is a graphic that must meet
+   * 3:1. The intruder and bounty markers used it and failed.
+   */
+  rust2: string;
   /** The chip's ground. The one value the terrain never uses. */
   frame: string;
   /** The chip's resting edge. */
@@ -46,7 +52,7 @@ function chip(p: Palette, accent: string, inner: string, edge = p.rule2, size = 
 }
 
 /**
- * The six pin glyphs, 28-unit paths. `{a}` is the accent (gold, or rust for
+ * The six pin glyphs, 28-unit paths. `{a}` is the accent (gold, or rust-2 for
  * danger), `{f}` the frame black, `{i}` the ink mark. Order and keys match
  * `PIN_ICONS`; `map-copy.test.ts` checks nothing is missing.
  */
@@ -61,7 +67,7 @@ export const PIN_GLYPHS: Record<PinIcon, string> = {
 
 /** Danger is the one rust pin; everything else you drop is gold. */
 export function pinAccent(p: Palette, icon: PinIcon): string {
-  return icon === "danger" ? p.rust : p.gold;
+  return icon === "danger" ? p.rust2 : p.gold;
 }
 
 function glyphMarkup(p: Palette, icon: PinIcon): string {
@@ -101,18 +107,19 @@ export function clanmateIcon(p: Palette): string {
     `<circle class="cw-core-hollow" cx="14" cy="14" r="5" fill="none" stroke="${p.ink}" stroke-width="2"/></svg>`;
 }
 
-/** An intruder: a solid rust diamond with an ink mark, on black, with a slow pulse ring. */
+/** An intruder: a solid rust-2 diamond with a dark mark, on black, with a slow pulse ring. */
 export function intruderIcon(p: Palette): string {
-  return `<span class="cw-ring" style="border-color:${p.rust}"></span>` +
+  // The mark is frame-dark: ink on rust-2 is 2.6:1, the frame on it is 5:1.
+  return `<span class="cw-ring" style="border-color:${p.rust2}"></span>` +
     `<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><path d="M14 1l13 13-13 13L1 14z" fill="${p.frame}"/>` +
-    `<path d="M14 5l9 9-9 9-9-9z" fill="${p.rust}"/><path d="M14 9.5v5.5M14 17.5v1.5" stroke="${p.ink}" stroke-width="2.2"/></svg>`;
+    `<path d="M14 5l9 9-9 9-9-9z" fill="${p.rust2}"/><path d="M14 9.5v5.5M14 17.5v1.5" stroke="${p.frame}" stroke-width="2.2"/></svg>`;
 }
 
-/** A bounty target: a rust crosshair on black, with the intruder's pulse ring — hunted, not trespassing. */
+/** A bounty target: a rust-2 crosshair on black, with the intruder's pulse ring — hunted, not trespassing. */
 export function bountyIcon(p: Palette): string {
-  return `<span class="cw-ring" style="border-color:${p.rust}"></span>` +
+  return `<span class="cw-ring" style="border-color:${p.rust2}"></span>` +
     `<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="12" fill="${p.frame}"/>` +
-    `<circle cx="14" cy="14" r="7" fill="none" stroke="${p.rust}" stroke-width="2.4"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7" stroke="${p.rust}" stroke-width="2.4"/></svg>`;
+    `<circle cx="14" cy="14" r="7" fill="none" stroke="${p.rust2}" stroke-width="2.4"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7" stroke="${p.rust2}" stroke-width="2.4"/></svg>`;
 }
 
 /**
@@ -154,8 +161,8 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "you": return `${open(` stroke="${p.gold}"`)}<circle cx="14" cy="14" r="4" fill="${p.gold}" stroke="none"/><circle cx="14" cy="14" r="9"/><path d="M14 1v4M14 23v4M1 14h4M23 14h4"/></svg>`;
     case "base": return `${open(` stroke="${p.gold}"`)}<path d="M10 25V3M10 4h11l-2.5 4 2.5 4H10" fill="${p.gold}"/></svg>`;
     case "clanmates": return `${open()}<circle cx="14" cy="14" r="8" fill="${p.ink}"/></svg>`;
-    case "intruders": return `${open()}<path d="M14 3l11 11-11 11L3 14z" fill="${p.rust}"/><path d="M14 9v6M14 18v1.5" stroke="${p.ink}"/></svg>`;
-    case "bounties": return `${open(` stroke="${p.rust}"`)}<circle cx="14" cy="14" r="7"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7"/></svg>`;
+    case "intruders": return `${open()}<path d="M14 3l11 11-11 11L3 14z" fill="${p.rust2}"/><path d="M14 9v6M14 18v1.5" stroke="${p.frame}"/></svg>`;
+    case "bounties": return `${open(` stroke="${p.rust2}"`)}<circle cx="14" cy="14" r="7"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7"/></svg>`;
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
     case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;

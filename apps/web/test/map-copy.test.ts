@@ -23,7 +23,7 @@ describe("the pin icons all have words and a glyph", () => {
     expect(Object.keys(PIN_GLYPHS).sort()).toEqual([...PIN_ICONS].sort());
   });
 
-  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust: "RUST", olive: "OLIVE", frame: "FRAME", rule2: "RULE2" };
+  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust2: "RUST2", olive: "OLIVE", frame: "FRAME", rule2: "RULE2" };
 
   it("fills every placeholder — no {a}, {f} or {i} reaches the map", () => {
     for (const icon of PIN_ICONS) {
@@ -35,7 +35,7 @@ describe("the pin icons all have words and a glyph", () => {
   it("is a gold glyph on a black chip, except danger, which is the one rust pin", () => {
     expect(pinIcon(p, "loot")).toContain('stroke="GOLD"');
     expect(pinIcon(p, "loot")).toContain('fill="FRAME"');
-    expect(pinIcon(p, "danger")).toContain('stroke="RUST"');
+    expect(pinIcon(p, "danger")).toContain('stroke="RUST2"');
     expect(pinIcon(p, "danger")).not.toContain("GOLD");
   });
 });

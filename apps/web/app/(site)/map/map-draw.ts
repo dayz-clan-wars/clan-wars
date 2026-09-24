@@ -84,7 +84,8 @@ export const COLOURS = {
   gold: () => token("--color-gold", "#d9a03c"),
   ink: () => token("--color-ink", "#e8e2d4"),
   ink2: () => token("--color-ink-2", "#b5afa4"),
-  rust: () => token("--color-rust", "#8c3a22"),
+  /** Rust for a mark (3:1 on the frame). --color-rust is edges only; the map draws no edge in it. */
+  rust2: () => token("--color-rust-2", "#d4623a"),
   olive: () => token("--color-olive", "#8fa36a"),
   muted: () => token("--color-muted", "#8a857c"),
   /** Every marker's ground: the one value the terrain never uses. */
@@ -94,7 +95,7 @@ export const COLOURS = {
 
 /** The marker builders' palette, read once per draw. */
 export function palette(): Palette {
-  return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust: COLOURS.rust(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2() };
+  return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust2: COLOURS.rust2(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2() };
 }
 
 /** Leaflet's own pane sits at 400; travel points go under everything else at 350. */
