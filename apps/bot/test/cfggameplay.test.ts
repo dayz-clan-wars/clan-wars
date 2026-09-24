@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setBaseDamageDisabled, setAirdropSpawner } from "../src/cfggameplay.js";
+import { setBaseDamageDisabled, setAirdropSpawner, readSpawnGearPresets, setSpawnGearPresets } from "../src/cfggameplay.js";
 
 const REAL = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
 
@@ -170,4 +170,24 @@ describe("setAirdropSpawner", () => {
     expect(spawners(shared)).toEqual(["./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"]);
     expect(() => setAirdropSpawner(shared, null)).toThrow(/does not own/);
   });
+});
+
+const GAMEPLAY = REAL;
+
+describe("spawnGearPresetFiles", () => {
+  const KOTH = ["./custom/koth-ak74-svd.json", "./custom/koth-fal-m14.json"];
+  it("reads the list", () => expect(readSpawnGearPresets(GAMEPLAY)).toEqual(["./custom/loadout.json"]));
+  it("swaps the list and leaves every other byte alone", () => {
+    const r = setSpawnGearPresets(GAMEPLAY, KOTH);
+    expect(r.changed).toBe(true);
+    expect(readSpawnGearPresets(r.json)).toEqual(KOTH);
+    const back = setSpawnGearPresets(r.json, ["./custom/loadout.json"]);
+    expect(back.json).toBe(GAMEPLAY);
+  });
+  it("is a no-op when already wanted", () => {
+    expect(setSpawnGearPresets(GAMEPLAY, ["./custom/loadout.json"])).toEqual({ json: GAMEPLAY, changed: false });
+  });
+  // ⚠️ An empty list is a server whose fresh spawns get nothing.
+  it("refuses an empty list", () => expect(() => setSpawnGearPresets(GAMEPLAY, [])).toThrow(/empty/));
+  it("refuses a file that does not parse", () => expect(() => setSpawnGearPresets("{", KOTH)).toThrow(/did not parse/));
 });

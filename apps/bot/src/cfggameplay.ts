@@ -1,4 +1,4 @@
-import { airdropSpawnerPath, type AirdropSpec } from "@factions/domain";
+import { airdropSpawnerPath, type AirdropSpec, type ActiveFlag } from "@factions/domain";
 
 /**
  * Set `GeneralData.disableBaseDamage` in the game server's cfggameplay.json,
@@ -214,4 +214,58 @@ export function setAirdropSpawner(json: string, spec: AirdropSpec | null): { jso
   }
 
   return { json: nextJson, changed: true };
+}
+
+/** The array body, bounded by its own brackets. Textual, like SPAWNERS_RE. */
+const PRESETS_RE = /("spawnGearPresetFiles"\s*:\s*\[)([^\]]*)(\])/g;
+
+/** The parsed `PlayerData.spawnGearPresetFiles` — the authority, never the regex. */
+export function readSpawnGearPresets(json: string): string[] {
+  let input: unknown;
+  try {
+    input = JSON.parse(json);
+  } catch (err) {
+    throw new Error(`cfggameplay.json: input did not parse — refusing to read it (${(err as Error).message})`);
+  }
+  const list = (input as { PlayerData?: { spawnGearPresetFiles?: unknown } })?.PlayerData?.spawnGearPresetFiles;
+  if (!Array.isArray(list) || list.some((e) => typeof e !== "string")) {
+    throw new Error("cfggameplay.json: PlayerData.spawnGearPresetFiles is missing or is not an array of strings");
+  }
+  return list as string[];
+}
+
+/**
+ * Replace `PlayerData.spawnGearPresetFiles` wholesale (King of the Hill, spec §2.3).
+ *
+ * ⚠️ A targeted splice of this one array, for `setBaseDamageDisabled`'s reasons:
+ * every byte outside the brackets comes back identical, and a file this function
+ * breaks is a server that does not boot. So it refuses rather than guesses, and it
+ * reads the result back before returning it.
+ *
+ * ⚠️ Refuses an empty list: fresh spawns would get no gear at all.
+ */
+export function setSpawnGearPresets(json: string, wanted: string[]): { json: string; changed: boolean } {
+  if (wanted.length === 0) throw new Error("cfggameplay.json: refusing to write an empty spawnGearPresetFiles");
+  const current = readSpawnGearPresets(json);
+  if (current.length === wanted.length && current.every((p, i) => p === wanted[i])) return { json, changed: false };
+
+  const matches = [...json.matchAll(PRESETS_RE)];
+  if (matches.length !== 1) {
+    throw new Error(`cfggameplay.json: "spawnGearPresetFiles" appears ${matches.length}× — refusing to guess which one the server reads`);
+  }
+  const m = matches[0]!;
+  const [, head, body, tail] = m as unknown as [string, string, string, string];
+  const lines = body.split("\n");
+  const indent = (lines.find(isEntry) ?? '\t\t\t"').match(/^\s*/)![0];
+  const closeIndent = lines[lines.length - 1] ?? "";
+  const rebuilt = ["", ...wanted.map((p, i) => `${indent}${JSON.stringify(p)}${i < wanted.length - 1 ? "," : ""}`), closeIndent].join("\n");
+  const next = json.slice(0, m.index!) + head + rebuilt + tail + json.slice(m.index! + m[0].length);
+
+  // ⚠️ Guard 2: parsing proves loadable, reading back proves the edit landed on
+  // the list the server reads.
+  const got = readSpawnGearPresets(next);
+  if (got.length !== wanted.length || got.some((p, i) => p !== wanted[i])) {
+    throw new Error(`cfggameplay.json: after the edit spawnGearPresetFiles is ${JSON.stringify(got)}, not ${JSON.stringify(wanted)}`);
+  }
+  return { json: next, changed: true };
 }
