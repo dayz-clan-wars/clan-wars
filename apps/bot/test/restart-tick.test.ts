@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, type Database } from "@factions/db";
 import { asc, eq, sql } from "drizzle-orm";
-import { restartTick, RESTART_MESSAGE, applyGameplay, type RestartTarget } from "../src/restart-tick.js";
+import { restartTick, RESTART_MESSAGE, applyGameplay, applyEvents, type RestartTarget } from "../src/restart-tick.js";
 import { raidWindowTick } from "../src/raid-window-tick.js";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -673,6 +673,76 @@ describe("applyGameplay", () => {
     expect(out.flip!.changed).toBe(true);
     expect(host.uploadFile).toHaveBeenCalledTimes(1);
     expect(JSON.parse(host.read()).GeneralData.disableBaseDamage).toBe(false);
+  });
+});
+
+/** A Nitrado serving several files by path; records uploads by `${dir}/${name}`. */
+function fakeFiles(files: Record<string, string>) {
+  const store = new Map(Object.entries(files));
+  const downloadFile = vi.fn(async (p: string) => {
+    const v = store.get(p);
+    if (v === undefined) throw new Error(`Nitrado download 404 ${p}`);
+    return v;
+  });
+  const uploadFile = vi.fn(async (dir: string, name: string, body: string) => { store.set(`${dir}/${name}`, body); });
+  const target = {
+    status: vi.fn(async () => "started"), restart: vi.fn(async () => {}),
+    missionDbDir: vi.fn(async () => "/mission/db"), missionRootDir: vi.fn(async () => "/mission"),
+    listFiles: vi.fn(async (dir: string) => [...store.keys()].filter((k) => k.startsWith(dir + "/")).map((k) => k.slice(dir.length + 1)).filter((n) => !n.includes("/"))),
+    downloadFile, uploadFile,
+  } as unknown as RestartTarget;
+  return { target, downloadFile, uploadFile, read: (p: string) => store.get(p) };
+}
+
+const EVENTS = `<events>
+<event name="VehicleTruck01"><active>1</active></event>
+<event name="InfectedCity"><active>0</active></event>
+<event name="InfectedVillage"><active>0</active></event>
+</events>`;
+
+describe("applyEvents", () => {
+  // ⚠️ The reason applyEvents exists: two features, ONE round trip. Two
+  // download/upload pairs silently lose whichever edit uploads first.
+  it("does the truck wipe and the infected splice in one download and one upload", async () => {
+    const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
+    const r = await applyEvents(h.target, at("2026-09-12T08:00:00Z"), {
+      truckWipe: { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false },
+      infected: { InfectedCity: 1, InfectedVillage: 1 },
+    });
+    expect(r.uploaded).toBe(true);
+    expect(h.downloadFile).toHaveBeenCalledTimes(1);
+    expect(h.uploadFile).toHaveBeenCalledTimes(1);
+    const out = h.read("/mission/db/events.xml")!;
+    expect(out).toContain(`<event name="VehicleTruck01"><active>0</active>`);
+    expect(out).toContain(`<event name="InfectedCity"><active>1</active>`);
+  });
+  it("a refused infected splice does not cost the truck wipe", async () => {
+    const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
+    const r = await applyEvents(h.target, at("2026-09-12T08:00:00Z"), {
+      truckWipe: { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false },
+      infected: { InfectedNope: 1 },
+    });
+    expect(r.infectedError?.message).toMatch(/InfectedNope/);
+    expect(h.read("/mission/db/events.xml")).toContain(`<event name="VehicleTruck01"><active>0</active>`);
+  });
+  it("uploads nothing when nothing changes", async () => {
+    const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
+    const r = await applyEvents(h.target, at("2026-09-12T12:00:00Z"), { infected: { InfectedCity: 0 } });
+    expect(r.uploaded).toBe(false);
+    expect(h.uploadFile).not.toHaveBeenCalled();
+  });
+});
+
+describe("applyGameplay with KotH", () => {
+  it("swaps the preset list in the same single round trip as the raid window", async () => {
+    const h = fakeGameplayHost();
+    const r = await applyGameplay(h.target, at("2026-09-12T14:00:00Z"), {
+      raidWindow: { skips: [] }, koth: { presets: ["./custom/koth-ak74-svd.json"] },
+    });
+    expect(r.koth?.changed).toBe(true);
+    expect(h.downloadFile).toHaveBeenCalledTimes(1);
+    expect(h.uploadFile).toHaveBeenCalledTimes(1);
+    expect(h.read()).toContain('"./custom/koth-ak74-svd.json"');
   });
 });
 

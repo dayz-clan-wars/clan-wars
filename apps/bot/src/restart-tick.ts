@@ -2,7 +2,7 @@ import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvent
 import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
-import { setAirdropSpawner, setBaseDamageDisabled } from "./cfggameplay.js";
+import { setAirdropSpawner, setBaseDamageDisabled, setSpawnGearPresets } from "./cfggameplay.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -14,6 +14,8 @@ export type RestartTarget = {
   missionRootDir(): Promise<string>;
   downloadFile(path: string): Promise<string>;
   uploadFile(remoteDir: string, fileName: string, content: string): Promise<void>;
+  /** Only reached for King of the Hill: one listing of custom/ proves every preset is on the server. */
+  listFiles(dir: string): Promise<string[]>;
 };
 
 /** Which events.xml entries the wipe owns, the UTC window they are off for, and
@@ -24,38 +26,67 @@ export type TruckWipe = { events: string[]; offHour: number; onHour: number; rot
 const EVENTS_FILE = "events.xml";
 export type RestartTickResult = { restarted: number; skipped: number; missed: number; failed: number };
 
+export type EventsEdits = {
+  truckWipe?: TruckWipe;
+  /** King of the Hill's wanted `<active>` per infected event, or undefined to leave them. */
+  infected?: Record<string, 0 | 1>;
+};
+export type EventsResult = { uploaded: boolean; truckWipeError?: Error; infectedError?: Error };
+
 /**
- * Bring one server's events.xml to the state `slot` wants, immediately before its
- * restart. Returns true when a write actually went out.
+ * Bring one server's events.xml to the state `slot` wants — the truck wipe, the
+ * weekly rotation and King of the Hill's infected — immediately before its restart.
  *
- * ⚠️ Level-triggered — see `truckWipeActive`. Every slot recomputes the wanted
- * state, so the 10 daily slots outside the window each verify the trucks are back
- * on and rewrite the file if some earlier write was lost. A file already in the
- * wanted state is NEVER re-uploaded: the download still happens (that is the
- * check), the upload does not.
+ * ⚠️ ONE download and ONE upload for every feature, exactly as `applyGameplay` is
+ * for cfggameplay.json: two round trips silently lose whichever edit uploads first.
+ *
+ * ⚠️ Level-triggered — see `truckWipeActive`. A file already in the wanted state
+ * is never re-uploaded.
+ *
+ * ⚠️ Each feature's splices run in their own try/catch and are RETURNED, never
+ * thrown: KotH naming a missing event must not cost the truck wipe, or vice versa.
+ * A feature whose splice throws contributes NONE of its edits (`let next = xml`
+ * then commit), so a half-applied infected set never uploads.
  */
-async function applyTruckWipe(nitrado: RestartTarget, wipe: TruckWipe, slot: Date): Promise<boolean> {
-  const daily = truckWipeActive(slot, wipe.offHour, wipe.onHour);
+export async function applyEvents(nitrado: RestartTarget, slot: Date, edits: EventsEdits): Promise<EventsResult> {
   const dir = await nitrado.missionDbDir();
   const original = await nitrado.downloadFile(`${dir}/${EVENTS_FILE}`);
-
   let xml = original;
-  for (const name of wipe.events) xml = setEventActive(xml, name, daily).xml;
+  const out: Omit<EventsResult, "uploaded"> = {};
 
-  // ⚠️ ALL five every slot, not just this week's. A bot down across a Monday 10:00
-  // leaves that week's vehicle at 0, and by the time it returns the rotation has moved
-  // on — nothing else would ever put it back. Converging the whole set costs nothing:
-  // the download already happened, and an unchanged file is still never re-uploaded.
-  if (wipe.rotation) {
-    for (const v of WEEKLY_WIPE_VEHICLES) {
-      xml = setEventActive(xml, v.event, rotationActiveFor(slot, wipe.offHour, wipe.onHour, v.event)).xml;
+  const wipe = edits.truckWipe;
+  if (wipe && (wipe.events.length > 0 || wipe.rotation)) {
+    try {
+      let next = xml;
+      const daily = truckWipeActive(slot, wipe.offHour, wipe.onHour);
+      for (const name of wipe.events) next = setEventActive(next, name, daily).xml;
+      // ⚠️ ALL five every slot, not just this week's. A bot down across a Monday 10:00
+      // leaves that week's vehicle at 0, and by the time it returns the rotation has moved
+      // on — nothing else would ever put it back.
+      if (wipe.rotation) {
+        for (const v of WEEKLY_WIPE_VEHICLES) {
+          next = setEventActive(next, v.event, rotationActiveFor(slot, wipe.offHour, wipe.onHour, v.event)).xml;
+        }
+      }
+      xml = next;
+    } catch (err) {
+      out.truckWipeError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
-  if (xml === original) return false;
+  if (edits.infected) {
+    try {
+      let next = xml;
+      for (const [name, active] of Object.entries(edits.infected)) next = setEventActive(next, name, active).xml;
+      xml = next;
+    } catch (err) {
+      out.infectedError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
 
-  await nitrado.uploadFile(dir, EVENTS_FILE, xml);
-  return true;
+  const uploaded = xml !== original;
+  if (uploaded) await nitrado.uploadFile(dir, EVENTS_FILE, xml);
+  return { ...out, uploaded };
 }
 
 export type RaidWindow = { enabled: boolean };
@@ -75,6 +106,8 @@ export type GameplayEdits = {
   raidWindow?: { skips: SkippedWindow[] };
   /** Present when AIRDROP_TICK is on. `wanted` is the drop this slot should register, or null for none. */
   airdrop?: { wanted: AirdropSpec | null };
+  /** Present when King of the Hill is on. The wanted `spawnGearPresetFiles` list. */
+  koth?: { presets: string[] };
 };
 
 export type GameplayResult = {
@@ -82,6 +115,8 @@ export type GameplayResult = {
   flipError?: Error;
   airdrop?: { wanted: AirdropSpec | null; changed: boolean };
   airdropError?: Error;
+  koth?: { changed: boolean };
+  kothError?: Error;
   /**
    * Whether the upload actually happened — `json !== original` after both
    * splices, regardless of which edit (or edits) caused it.
@@ -125,7 +160,7 @@ export type GameplayResult = {
 export async function applyGameplay(
   nitrado: RestartTarget, slot: Date, edits: GameplayEdits,
 ): Promise<GameplayResult> {
-  if (!edits.raidWindow && !edits.airdrop) return {};
+  if (!edits.raidWindow && !edits.airdrop && !edits.koth) return {};
 
   const dir = await nitrado.missionRootDir();
   const original = await nitrado.downloadFile(`${dir}/${GAMEPLAY_FILE}`);
@@ -157,6 +192,16 @@ export async function applyGameplay(
       out.airdrop = { wanted: edits.airdrop.wanted, changed: r.changed };
     } catch (err) {
       out.airdropError = err instanceof Error ? err : new Error(String(err));
+    }
+  }
+
+  if (edits.koth) {
+    try {
+      const r = setSpawnGearPresets(json, edits.koth.presets);
+      json = r.json;
+      out.koth = { changed: r.changed };
+    } catch (err) {
+      out.kothError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -320,8 +365,9 @@ export async function restartTick(
       // independently switchable, so this must not require `events` to be non-empty.
       if (opts.truckWipe && (opts.truckWipe.events.length > 0 || opts.truckWipe.rotation)) {
         try {
-          const wrote = await applyTruckWipe(nitrado, opts.truckWipe, slot.start);
-          if (wrote) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);
+          const r = await applyEvents(nitrado, slot.start, { truckWipe: opts.truckWipe });
+          if (r.truckWipeError) console.error(`restart: server ${s.id} truck wipe refused for slot ${slot.start.toISOString()} — restarting anyway`, r.truckWipeError);
+          if (r.uploaded) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);
         } catch (err) {
           console.error(`restart: server ${s.id} truck wipe failed for slot ${slot.start.toISOString()} — restarting anyway`, err);
         }
