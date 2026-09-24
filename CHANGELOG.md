@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.38.1] - 2026-09-24
+
 ### Fixed
 
 - The map works without a mouse. Every marker can be reached with Tab and opened
