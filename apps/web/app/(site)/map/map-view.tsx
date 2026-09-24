@@ -16,6 +16,7 @@ import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
+import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
 // still gets extracted, scoped to this component's chunk rather than loaded on
@@ -140,14 +141,24 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const missing = (Object.keys(LAYER_REASONS) as (keyof typeof LAYER_REASONS)[]).filter((k) => !layers[k]);
 
   // ── The fetch loop ────────────────────────────────────────────────────────
+  // The last answer's raw body, so an unchanged poll is skipped outright (see `load`).
+  const lastBody = useRef<string | null>(null);
   const load = useCallback(async () => {
     try {
       const res = await fetch("/api/map/state", { cache: "no-store" });
       if (res.status === 401) return setError("unauthenticated");
       if (res.status === 403) return setError("not-linked");
       if (!res.ok) return setError("failed");
+      const body = await res.text();
       setError(null);
-      setData(parseState((await res.json()) as WireState));
+      // An unchanged answer changes nothing on the map. Skipping it keeps
+      // `data`, and every effect keyed on it, still. Parsed BEFORE it is
+      // remembered, so a body that fails to parse is never taken as "unchanged".
+      if (body !== lastBody.current) {
+        const next = parseState(JSON.parse(body) as WireState);
+        lastBody.current = body;
+        setData(next);
+      }
     } catch {
       setError("failed");
     }
@@ -270,7 +281,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
   const size = data?.world.size ?? null;
 
-  const ages = useRef<AgeLabel[]>([]);
+  // Per layer, so a layer that is not rebuilt keeps its labels ticking.
+  const ages = useRef<Partial<Record<LayerKey, AgeLabel[]>>>({});
+  const allAges = () => Object.values(ages.current).flatMap((a) => a ?? []);
+  // What each layer was last drawn from, and the popup open right now (by markerKey).
+  const sigs = useRef<Partial<Signatures>>({});
+  const openKey = useRef<string | null>(null);
 
   const redraw = useCallback(() => {
     const Lm = leaflet.current;
@@ -290,36 +306,48 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       }
     }
 
-    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current, index: (index.current[key] ??= new Map()), p });
-    // The same groups, cleared and rebuilt rather than diffed — what is on the
-    // map stays in lockstep with the data, with no stale layer left behind.
-    // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
+    const next = layerSignatures(d, hintRef.current);
+    const changed = changedLayers(sigs.current, next);
+    sigs.current = next;
+    // ⚠️ Captured BEFORE the clear: removing a marker fires its popupclose,
+    // which forgets the key.
+    const reopen = reopenAfter(openKey.current, changed);
+    // ⚠️ This runs on NEW DATA ONLY, and rebuilds only the layers whose data
+    // changed (map-redraw.ts). See the age tick below and AgeLabel in
     // map-draw.ts: rebuilding on the 30 s tick tore down every open popup.
-    ages.current = [];
-    // Places are the zoom's, not the data's: zoomend redraws them, not a poll.
-    for (const key of ALL_KEYS) {
-      if (key === "terrain" || key === "places") continue;
+    for (const key of changed) {
       groups.current[key]!.clearLayers();
       index.current[key]?.clear();
+      ages.current[key] = [];
     }
-    drawYou(ctx("you"));
-    // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
-    if (hintRef.current && d.you.fix) {
-      const units = WATCH_ZONE_RADIUS_M * (CANVAS_PX / d.world.size) / 2 ** MAX_ZOOM;
-      Lm.circle(pt(d.you.fix.x, d.you.fix.z), { radius: units, color: p.gold, opacity: 0.35, weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(groups.current.you!);
-    }
-    drawBase(ctx("base"));
-    drawClanmates(ctx("clanmates"));
-    drawIntruders(ctx("intruders"));
-    drawBounties(ctx("bounties"));
-    drawPublicBases(ctx("publicBases"));
-    drawPins(ctx("pins"));
-    drawTravel(ctx("travel"));
+    const ctx = (key: DataLayer): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current[key]!, index: (index.current[key] ??= new Map()), p });
+    const draws: Record<DataLayer, () => void> = {
+      you: () => {
+        drawYou(ctx("you"));
+        // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
+        if (hintRef.current && d.you.fix) {
+          const units = WATCH_ZONE_RADIUS_M * (CANVAS_PX / d.world.size) / 2 ** MAX_ZOOM;
+          Lm.circle(pt(d.you.fix.x, d.you.fix.z), { radius: units, color: p.gold, opacity: 0.35, weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(groups.current.you!);
+        }
+      },
+      base: () => drawBase(ctx("base")),
+      clanmates: () => drawClanmates(ctx("clanmates")),
+      intruders: () => drawIntruders(ctx("intruders")),
+      bounties: () => drawBounties(ctx("bounties")),
+      publicBases: () => drawPublicBases(ctx("publicBases")),
+      pins: () => drawPins(ctx("pins")),
+      travel: () => drawTravel(ctx("travel")),
+    };
+    for (const key of changed) draws[key]();
     // The grid never changes, so it is drawn once — redrawing 26 polylines
     // every poll would be churn with nothing to show for it.
     if (!gridDrawn.current) {
       drawGrid(Lm, groups.current.terrain!, pt, d.world.size);
       gridDrawn.current = true;
+    }
+    if (reopen) {
+      const layer = layerOfKey(reopen);
+      (layer ? index.current[layer]?.get(reopen) : undefined)?.openPopup();
     }
   }, []);
 
@@ -441,8 +469,13 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         // every view change, because what fits depends on where the pin now is.
         const fitOpen = () => { const p = openPopup.current; if (p) applyPopupFit(m, p); };
         fitPopupNow.current = fitOpen;
-        m.on("popupopen", (e: L.PopupEvent) => { openPopup.current = e.popup; fitOpen(); });
-        m.on("popupclose", (e: L.PopupEvent) => { if (openPopup.current === e.popup) openPopup.current = null; });
+        // Which marker the open popup belongs to, by key, so a rebuild of its layer can put it back.
+        const keyOf = (popup: L.Popup): string | null => {
+          for (const g of Object.values(index.current)) for (const [k, mk] of g ?? []) if (mk.getPopup() === popup) return k;
+          return null;
+        };
+        m.on("popupopen", (e: L.PopupEvent) => { openPopup.current = e.popup; openKey.current = keyOf(e.popup); fitOpen(); });
+        m.on("popupclose", (e: L.PopupEvent) => { if (openPopup.current === e.popup) { openPopup.current = null; openKey.current = null; } });
         m.on("moveend zoomend resize", fitOpen);
 
         if (layersRef.current.pins) {
@@ -475,7 +508,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       index.current = {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
-      ages.current = [];
+      ages.current = {};
+      sigs.current = {};
+      openKey.current = null;
       gridDrawn.current = false;
       leaflet.current = null;
     };
@@ -492,7 +527,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // Delete button mid-read, twice a minute, with no input of their own.
   // A rewritten age can change the card's height (an expiry wrapping to a
   // second line), so the fit is taken again — never the layers.
-  useEffect(() => { refreshAges(ages.current, now); fitPopupNow.current(); }, [now]);
+  useEffect(() => { refreshAges(allAges(), now); fitPopupNow.current(); }, [now]);
 
   // One group per layer, added and removed on its switch.
   useEffect(() => {
