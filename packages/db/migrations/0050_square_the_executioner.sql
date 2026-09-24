@@ -1,0 +1,2 @@
+DROP INDEX IF EXISTS "koth_events_slot_uq";--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "koth_events_slot_uq" ON "koth_events" USING btree ("server_id","slot_at") WHERE "koth_events"."state" IN ('scheduled','live','awarded','no_winner');

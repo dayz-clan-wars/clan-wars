@@ -25,6 +25,14 @@ describe("koth_events", () => {
       .rejects.toThrow(/koth_events_one_open/u);
     await db.insert(kothEvents).values(row({ slotAt: new Date("2026-10-05T20:00:00Z"), state: "cancelled" }));
   });
+  // ⚠️ Migration 0050: a cancelled or failed row must not hold its slot, or that
+  // slot can never be scheduled again; a live or finished one still does.
+  it("frees a slot held only by a cancelled or failed row, and no other", async () => {
+    await db.insert(kothEvents).values(row({ state: "cancelled" }));
+    await db.insert(kothEvents).values(row({ state: "failed" }));
+    await db.insert(kothEvents).values(row());
+    await expect(db.insert(kothEvents).values(row({ state: "no_winner" }))).rejects.toThrow(/koth_events_slot_uq/u);
+  });
   it("refuses an unknown state", async () => {
     await expect(db.insert(kothEvents).values(row({ state: "late" as never }))).rejects.toThrow(/koth_events_state_valid/u);
   });

@@ -351,6 +351,13 @@
       "when": 1790209896073,
       "tag": "0049_gifted_sheva_callister",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1790215636997,
+      "tag": "0050_square_the_executioner",
+      "breakpoints": true
     }
   ]
 }

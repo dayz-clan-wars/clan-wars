@@ -2066,5 +2066,10 @@ export const kothEvents = pgTable("koth_events", {
   stateValid: check("koth_events_state_valid", sql`${t.state} IN ('scheduled','live','awarded','no_winner','cancelled','failed')`),
   awardedHasGrant: check("koth_events_awarded_has_grant", sql`(${t.state} <> 'awarded') OR (${t.awardGrantId} IS NOT NULL)`),
   oneOpen: uniqueIndex("koth_events_one_open").on(t.serverId).where(sql`${t.state} IN ('scheduled','live')`),
-  oneSlot: uniqueIndex("koth_events_slot_uq").on(t.serverId, t.slotAt),
+  // ⚠️ Partial, over every state EXCEPT `cancelled` and `failed` (migration 0050).
+  // Unconditional, a `/koth cancel` or a never-announced schedule left a dead row
+  // holding its slot forever, and that slot could never be scheduled again. A
+  // slot that actually ran (`awarded`/`no_winner`) still holds it.
+  oneSlot: uniqueIndex("koth_events_slot_uq").on(t.serverId, t.slotAt)
+    .where(sql`${t.state} IN ('scheduled','live','awarded','no_winner')`),
 }));

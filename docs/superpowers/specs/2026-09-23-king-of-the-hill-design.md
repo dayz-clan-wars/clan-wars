@@ -228,7 +228,9 @@ was chosen deliberately: the event is part of the season.
 Constraints:
 
 - a partial unique index gives one `scheduled`/`live` row per server
-- `(server_id, slot_at)` is unique
+- `(server_id, slot_at)` is unique among `scheduled`/`live`/`awarded`/`no_winner` rows
+  (partial, migration 0050) — a `cancelled` or `failed` row does not hold its slot, or
+  a `/koth cancel` or a never-announced schedule would bar that slot forever
 - `koth_events_awarded_has_grant` CHECKs `state <> 'awarded' OR award_grant_id IS NOT NULL`
   — **one direction only**: awarded implies a grant, never the reverse. A `no_winner`
   or `cancelled` row is free to carry a null `award_grant_id`, which every other state
