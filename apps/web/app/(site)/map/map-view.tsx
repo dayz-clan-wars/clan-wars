@@ -6,7 +6,7 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import {
@@ -497,7 +497,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
     <main id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
-      <div ref={el} className="absolute inset-0" />
+      <h1 className="sr-only">The map</h1>
+      {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
+      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
 
       {/*
         ⚠️ An overlay, not an early return. Returning message JSX instead of

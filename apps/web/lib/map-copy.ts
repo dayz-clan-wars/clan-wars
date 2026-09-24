@@ -28,6 +28,9 @@ export const MAP_HINT = {
   more: "In a clan you also see clanmates and shared pins.",
 } as const;
 
+/** The Leaflet container's accessible name: what it is, and how to move through it without a pointer. */
+export const MAP_REGION_LABEL = "Map of Livonia. Tab moves between markers; Enter opens one.";
+
 /** "14 min ago", "3 h ago", "yesterday", "6 d ago" — the guide's own words for age. */
 export function fixAge(at: Date, now: Date): string {
   const min = Math.round((now.getTime() - at.getTime()) / 60_000);

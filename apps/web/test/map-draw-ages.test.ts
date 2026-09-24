@@ -62,3 +62,22 @@ describe("refreshAges", () => {
     expect(calls.length).toBeLessThanOrEqual(2);
   });
 });
+
+describe("a marker's title follows its age", () => {
+  it("rewrites the title on the element AND in the options, so a rebuilt icon keeps it", () => {
+    const attrs: Record<string, string> = {};
+    const marker = { options: {} as { title?: string }, getElement: () => ({ setAttribute: (k: string, v: string) => { attrs[k] = v; } }) };
+    const at = new Date("2026-09-23T00:00:00Z");
+    const label: AgeLabel = {
+      at,
+      layer: { setPopupContent: () => {} } as unknown as AgeLabel["layer"],
+      popup: (age) => age,
+      title: { marker: marker as unknown as NonNullable<AgeLabel["title"]>["marker"], text: (age) => `Bob, clanmate, ${age}` },
+    };
+
+    refreshAges([label], at.getTime() + 3 * 3600_000);
+
+    expect(attrs.title).toBe("Bob, clanmate, 3 h ago");
+    expect(marker.options.title).toBe("Bob, clanmate, 3 h ago");
+  });
+});

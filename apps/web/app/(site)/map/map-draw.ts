@@ -2,6 +2,7 @@ import type * as L from "leaflet";
 import type { PinIcon } from "@factions/domain";
 import { CANVAS_PX, MAX_ZOOM, gridRef, worldToLatLng } from "@/lib/map-projection";
 import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
+import { markerTitle } from "@/lib/map-labels";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
   baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
@@ -126,6 +127,8 @@ export type AgeLabel = {
   popup?: (age: string) => string;
   /** Clanmates step down with age, and a tick can cross a step as easily as a fetch can. */
   dim?: L.Marker;
+  /** A marker whose title carries the age — its accessible name, which a tick must rewrite like any label. */
+  title?: { marker: L.Marker; text: (age: string) => string };
   /** The age string last written, so an unchanged label is left alone entirely. */
   last?: string;
   step?: AgeStep;
@@ -169,6 +172,18 @@ function applyStep(marker: L.Marker, step: AgeStep): void {
   }
 }
 
+/**
+ * ⚠️ Leaflet copies `options.title` onto the icon only when it BUILDS the
+ * icon, so writing the option alone leaves the accessible name at its
+ * draw-time age for as long as the marker lives ("You, last seen just now",
+ * hours later). Both are written: the element for now, the option for a
+ * rebuild, which happens when a layer is switched off and on.
+ */
+function setTitle(marker: L.Marker, title: string): void {
+  marker.options.title = title;
+  marker.getElement()?.setAttribute("title", title);
+}
+
 /** Rewrite the age-bearing labels in place. Touches nothing else on the map. */
 export function refreshAges(ages: AgeLabel[], now: number): void {
   const at = new Date(now);
@@ -187,6 +202,7 @@ export function refreshAges(ages: AgeLabel[], now: number): void {
     a.last = age;
     if (a.tooltip) a.layer.setTooltipContent(a.tooltip(age));
     if (a.popup) a.layer.setPopupContent(a.popup(age));
+    if (a.title) setTitle(a.title.marker, a.title.text(age));
   }
 }
 
@@ -241,10 +257,10 @@ export function drawYou({ L, group, pt, data, now, ages, p }: Ctx): void {
   if (!fix) return;
   const text = (age: string) => `You · ${escapeHtml(age)}`;
   const age = fixAge(fix.at, new Date(now));
-  const marker = L.marker(pt(fix.x, fix.z), { icon: chipIcon(L, youIcon(p), ICON.you, "cw-mk-you"), keyboard: false })
+  const marker = L.marker(pt(fix.x, fix.z), { icon: chipIcon(L, youIcon(p), ICON.you, "cw-mk-you"), keyboard: true, title: markerTitle.you(age) })
     .bindTooltip(text(age), tag(`${TAG}-you`));
   marker.addTo(group);
-  ages.push({ at: fix.at, layer: marker, tooltip: text, last: age });
+  ages.push({ at: fix.at, layer: marker, tooltip: text, title: { marker, text: markerTitle.you }, last: age });
 }
 
 export function drawBase({ L, group, pt, data, p }: Ctx): void {
@@ -259,7 +275,7 @@ export function drawBase({ L, group, pt, data, p }: Ctx): void {
   const dash = { fill: false, dashArray: "6 6", interactive: false } as const;
   L.circle(pt(base.x, base.z), { ...dash, radius, color: p.frame, weight: 4, opacity: 0.9 }).addTo(group);
   L.circle(pt(base.x, base.z), { ...dash, radius, color: p.gold, weight: 2 }).addTo(group);
-  L.marker(pt(base.x, base.z), { icon: chipIcon(L, baseIcon(p), ICON.base, "cw-mk-base"), keyboard: false })
+  L.marker(pt(base.x, base.z), { icon: chipIcon(L, baseIcon(p), ICON.base, "cw-mk-base"), keyboard: true, title: markerTitle.base(base.x, base.z, base.radiusM) })
     .bindTooltip(`Your base · ${base.radiusM} m`, tag(`${TAG}-base`, "top"))
     .addTo(group);
 }
@@ -274,12 +290,12 @@ export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
   ordered.forEach((m, i) => {
     const step = ageStep(now - m.fix.at.getTime(), DIM_AFTER_MS);
     const name = escapeHtml(m.gamertag);
-    const marker = L.marker(pt(m.fix.x, m.fix.z), { icon: chipIcon(L, clanmateIcon(p), ICON.clanmate, "cw-mk-clanmate"), keyboard: false, zIndexOffset: i * 1000 });
+    const age = fixAge(m.fix.at, new Date(now));
+    const marker = L.marker(pt(m.fix.x, m.fix.z), { icon: chipIcon(L, clanmateIcon(p), ICON.clanmate, "cw-mk-clanmate"), keyboard: true, title: markerTitle.clanmate(m.gamertag, age), zIndexOffset: i * 1000 });
     // The permanent tag is the gamertag alone and never changes; the age lives
-    // in the popup, which is the only part a tick rewrites.
+    // in the popup and the title, which are what a tick rewrites.
     marker.bindTooltip(name, tag(""));
     const text = (age: string) => `<div class="${POPUP_TEXT}">${name} · ${escapeHtml(age)}</div>`;
-    const age = fixAge(m.fix.at, new Date(now));
     marker.bindPopup(text(age), POPUP);
     markOpen(marker);
     marker.addTo(group);
@@ -288,7 +304,7 @@ export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
     // element exists only once the marker is on the map, so the step is
     // applied after addTo.
     applyStep(marker, step);
-    ages.push({ at: m.fix.at, layer: marker, popup: text, dim: marker, last: age, step });
+    ages.push({ at: m.fix.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.clanmate(m.gamertag, a) }, dim: marker, last: age, step });
   });
 }
 
@@ -296,10 +312,10 @@ export function drawIntruders({ L, group, pt, data, now, ages, p }: Ctx): void {
   for (const i of data.intruders) {
     const text = (age: string) => `${escapeHtml(i.gamertag)} · ${Math.round(i.distanceM)} m · ${escapeHtml(age)}`;
     const age = fixAge(i.lastSeenAt, new Date(now));
-    const marker = L.marker(pt(i.x, i.z), { icon: chipIcon(L, intruderIcon(p), ICON.intruder, "cw-mk-intruder"), keyboard: false })
+    const marker = L.marker(pt(i.x, i.z), { icon: chipIcon(L, intruderIcon(p), ICON.intruder, "cw-mk-intruder"), keyboard: true, title: markerTitle.intruder(i.gamertag, i.distanceM, age) })
       .bindTooltip(text(age), tag(`${TAG}-intruder`));
     marker.addTo(group);
-    ages.push({ at: i.lastSeenAt, layer: marker, tooltip: text, last: age });
+    ages.push({ at: i.lastSeenAt, layer: marker, tooltip: text, title: { marker, text: (a) => markerTitle.intruder(i.gamertag, i.distanceM, a) }, last: age });
   }
 }
 
@@ -309,7 +325,7 @@ export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
     const text = (age: string) => `${escapeHtml(b.gamertag)} · wanted · ${escapeHtml(age)}`;
     const age = fixAge(b.fix.at, new Date(now));
     const popup = (age: string) => `<div class="${POPUP_TEXT}">${text(age)}<br>${escapeHtml(b.reason)}</div>`;
-    const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: false })
+    const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: true, title: markerTitle.bounty(b.gamertag, age) })
       .bindTooltip(text(age), tag(`${TAG}-intruder`))
       .bindPopup(popup(age), POPUP);
     markOpen(marker);
@@ -317,14 +333,14 @@ export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
     // ⚠️ The popup must be registered here too, not just the tooltip — an open
     // popup otherwise keeps its draw-time age forever while the permanent tag
     // updates every 30 s, and the two contradict each other.
-    ages.push({ at: b.fix.at, layer: marker, tooltip: text, popup, last: age });
+    ages.push({ at: b.fix.at, layer: marker, tooltip: text, popup, title: { marker, text: (a) => markerTitle.bounty(b.gamertag, a) }, last: age });
   }
 }
 
 export function drawPublicBases({ L, group, pt, data, p }: Ctx): void {
   for (const b of data.publicBases) {
     const icon = chipIcon(L, publicBaseIcon(p), ICON.publicBase, "cw-mk-public");
-    L.marker(pt(b.x, b.z), { icon, keyboard: false }).bindTooltip("Public base", { direction: "right", opacity: 1, className: TAG }).addTo(group);
+    L.marker(pt(b.x, b.z), { icon, keyboard: true, title: markerTitle.publicBase(b.x, b.z) }).bindTooltip("Public base", { direction: "right", opacity: 1, className: TAG }).addTo(group);
   }
 }
 
@@ -345,11 +361,11 @@ export function drawPins({ L, group, pt, data, now, ages, p }: Ctx): void {
         `</form>` +
       `</div>`;
     const age = fixAge(pin.at, new Date(now));
-    const marker = L.marker(pt(pin.x, pin.z), { icon: chipIcon(L, pinIcon(p, pin.icon), ICON.pin, "cw-mk-pin"), keyboard: false })
+    const marker = L.marker(pt(pin.x, pin.z), { icon: chipIcon(L, pinIcon(p, pin.icon), ICON.pin, "cw-mk-pin"), keyboard: true, title: markerTitle.pin(label, pin.x, pin.z, age) })
       .bindPopup(text(age), POPUP);
     markOpen(marker);
     marker.addTo(group);
-    ages.push({ at: pin.at, layer: marker, popup: text, last: age });
+    ages.push({ at: pin.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.pin(label, pin.x, pin.z, a) }, last: age });
   }
 }
 
