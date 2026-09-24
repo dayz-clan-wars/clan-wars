@@ -1,7 +1,7 @@
 import { kothEvents, servers, serverRestarts, type Database } from "@factions/db";
 import { KOTH_REMINDER_LEAD_MS, kothLocation, restartSlot } from "@factions/domain";
 import { and, eq, lt, sql } from "drizzle-orm";
-import { cancelledText, liveText, reminderText, resultsText } from "./koth-text.js";
+import { cancelledText, kothPrize, liveText, reminderText, resultsText } from "./koth-text.js";
 import { scoreAndAward, scoringReady } from "./koth-score.js";
 
 export type KothPosters = { announce: (c: string) => Promise<void>; ops: (c: string) => Promise<void> };
@@ -44,11 +44,11 @@ export async function kothTick(db: Database, posters: KothPosters, opts: { now: 
         // 2. Reminder.
         if (r.state === "scheduled" && r.announcedAt && !r.remindedAt
             && opts.now.getTime() >= r.slotAt.getTime() - KOTH_REMINDER_LEAD_MS && opts.now < r.slotAt) {
-          if (await postThen(posters.announce, reminderText(town(r), r.slotAt), () => set({ remindedAt: opts.now }), "reminder")) out.posted += 1;
+          if (await postThen(posters.announce, reminderText(town(r), r.slotAt, kothPrize(r.awardKey)), () => set({ remindedAt: opts.now }), "reminder")) out.posted += 1;
         }
         // 3. Live.
         if (r.state === "live" && !r.livePostedAt) {
-          if (await postThen(posters.announce, liveText(town(r)), () => set({ livePostedAt: opts.now }), "live post")) out.posted += 1;
+          if (await postThen(posters.announce, liveText(town(r), kothPrize(r.awardKey)), () => set({ livePostedAt: opts.now }), "live post")) out.posted += 1;
         }
         // 4. Score. ⚠️ Own try/catch: `scoreAndAward` throws DELIBERATELY on a refused
         // grant (so its transaction rolls back and the next tick retries) — letting that
@@ -71,16 +71,20 @@ export async function kothTick(db: Database, posters: KothPosters, opts: { now: 
         // post (or a rejected poster promise past `postThen`'s own catch) must not stop
         // a sibling row's results/cancel post or the ops alerts below it.
         try {
-          if ((r.state === "awarded" || r.state === "no_winner") && r.results && !r.resultsPostedAt) {
-            if (await postThen(posters.announce, resultsText(town(r), r.results), () => set({ resultsPostedAt: opts.now }), "results")) out.posted += 1;
+          if ((r.state === "awarded" || r.state === "no_winner" || r.state === "finished") && r.results && !r.resultsPostedAt) {
+            // `finished` WITH a key is a prize scoring could not grant (koth-score.ts).
+            const withheld = r.state === "finished" && r.awardKey !== null;
+            if (await postThen(posters.announce, resultsText(town(r), r.results, kothPrize(r.awardKey), withheld), () => set({ resultsPostedAt: opts.now }), "results")) out.posted += 1;
           }
           // ⚠️ Only an event players were TOLD about gets a cancellation.
           if ((r.state === "cancelled" || r.state === "failed") && r.announcedAt && !r.cancelPostedAt) {
             if (await postThen(posters.announce, cancelledText(town(r), r.slotAt), () => set({ cancelPostedAt: opts.now }), "cancellation")) out.posted += 1;
           }
           const d = r.detail as Record<string, unknown>;
-          if (r.state === "failed" && d.failure && !d.opsAlerted) {
-            await postThen(posters.ops, `⚠️ King of the Hill at ${town(r)} (${r.slotAt.toISOString()}) failed: ${d.failure}`,
+          // `failed`, or `finished` with a prize scoring could not grant.
+          if ((r.state === "failed" || r.state === "finished") && d.failure && !d.opsAlerted) {
+            const what = r.state === "failed" ? "failed" : "needs an admin";
+            await postThen(posters.ops, `⚠️ King of the Hill at ${town(r)} (${r.slotAt.toISOString()}) ${what}: ${d.failure}`,
               () => db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || '{"opsAlerted":true}'::jsonb` }).where(eq(kothEvents.id, r.id)), "ops alert");
           }
           if (typeof d.restoreError === "string" && d.restoreError !== d.restoreErrorAlerted) {

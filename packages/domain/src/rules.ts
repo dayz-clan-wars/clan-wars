@@ -390,7 +390,6 @@ export const KOTH_REMINDER_LEAD_MS = 30 * 60_000;
 export const KOTH_SCORE_SETTLE_MS = 10 * 60_000;
 /** ⚠️ Reserved: the restore arm treats any preset starting with this as KotH's. */
 export const KOTH_PRESET_PREFIX = "koth-";
-export const KOTH_AWARD_KEY = "plate-carrier";
 /**
  * The events.xml infected events a KotH session switches on.
  * ⚠️ The livonia generator's ZOMBIE_ZONE_NAMES must be a subset — a zone with no

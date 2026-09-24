@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- King of the Hill: `/koth schedule` now takes a required `prize` — any award in the
+  catalogue, or "No prize". Every post names the event's prize. With no prize the top
+  killer on the hill wins outright, linked on Discord or not, and nothing is granted.
+
 ## [1.37.0] - 2026-09-23
 
 ### Added

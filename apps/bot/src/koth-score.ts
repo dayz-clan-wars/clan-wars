@@ -1,8 +1,9 @@
 import { events, identityLinks, kills, kothEvents, players, serverRestarts, type Database, type KothResults } from "@factions/db";
 import {
-  KOTH_AWARD_KEY, KOTH_SCORE_SETTLE_MS, RESTART_PERIOD_MS, inKothZone, kothLocation, kothStandings, kothWinner,
+  KOTH_SCORE_SETTLE_MS, RESTART_PERIOD_MS, inKothZone, kothLocation, kothStandings, kothWinner,
   readVec3, type KothKill,
 } from "@factions/domain";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { grantAwardTx, scoringKill } from "@factions/roster/internal";
 import { readCursor } from "@factions/event-log";
 import { and, eq, gt, gte, lt, max, sql } from "drizzle-orm";
@@ -73,12 +74,15 @@ export async function kothKills(db: Db, row: KothRow, w: { from: Date; to: Date 
 }
 
 /**
- * Score a live row and grant the Plate Carrier, in ONE transaction that locks
- * the row first — that lock is the whole idempotency guard: two passes racing
- * after a crash grant exactly one award (lock order koth_events → award_grants
- * → clan_notices). The results are frozen here and never recomputed.
+ * Score a live row and grant its prize, in ONE transaction that locks the row
+ * first — that lock is the whole idempotency guard: two passes racing after a
+ * crash grant exactly one award (lock order koth_events → award_grants →
+ * clan_notices). The results are frozen here and never recomputed.
+ *
+ * No prize (`award_key` null): the top killer wins outright — being linked only
+ * matters when there is something to DM — and the row is `finished`.
  */
-export async function scoreAndAward(db: Database, rowId: number, opts: { now: Date; siteBaseUrl: string }): Promise<"awarded" | "no_winner" | "skipped"> {
+export async function scoreAndAward(db: Database, rowId: number, opts: { now: Date; siteBaseUrl: string }): Promise<"awarded" | "no_winner" | "finished" | "skipped"> {
   return db.transaction(async (tx) => {
     const [row] = await tx.select().from(kothEvents).where(eq(kothEvents.id, rowId)).for("update");
     if (!row || row.state !== "live") return "skipped";
@@ -87,7 +91,7 @@ export async function scoreAndAward(db: Database, rowId: number, opts: { now: Da
     const standings = kothStandings(ks);
     const linked = new Map((await tx.select({ dayzId: identityLinks.dayzId, discordId: identityLinks.discordId }).from(identityLinks))
       .map((l) => [l.dayzId, l.discordId]));
-    const winner = kothWinner(standings, (id) => linked.has(id));
+    const winner = row.awardKey === null ? standings[0] ?? null : kothWinner(standings, (id) => linked.has(id));
     const slim = (s: { dayzId: string; gamertag: string; kills: number }) => ({ dayzId: s.dayzId, gamertag: s.gamertag, kills: s.kills });
     const results: KothResults = {
       top: standings.slice(0, 5).map(slim), topKiller: standings[0] ? slim(standings[0]) : null,
@@ -97,9 +101,18 @@ export async function scoreAndAward(db: Database, rowId: number, opts: { now: Da
       await tx.update(kothEvents).set({ state: "no_winner", results }).where(eq(kothEvents.id, row.id));
       return "no_winner";
     }
+    // ⚠️ A prize the catalogue lost after scheduling is `finished` with a failure for
+    // ops, never a throw: grantAwardTx would refuse it on every tick forever, and the
+    // results post (naming the winner, and that an admin will grant it) would never go out.
+    if (row.awardKey === null || !awardsCatalogue()[row.awardKey]) {
+      const detail = row.awardKey === null ? row.detail
+        : { ...row.detail, failure: `award "${row.awardKey}" is no longer in awards.json — grant it by hand with /award grant` };
+      await tx.update(kothEvents).set({ state: "finished", results, winnerDayzId: winner.dayzId, detail }).where(eq(kothEvents.id, row.id));
+      return "finished";
+    }
     const town = kothLocation(row.location)?.name ?? row.location;
     const g = await grantAwardTx(tx, {
-      awardKey: KOTH_AWARD_KEY, winnerDiscordId: linked.get(winner.dayzId)!, grantedByDiscordId: row.scheduledByDiscordId,
+      awardKey: row.awardKey, winnerDiscordId: linked.get(winner.dayzId)!, grantedByDiscordId: row.scheduledByDiscordId,
       reason: `King of the Hill — ${town}, ${row.slotAt.toISOString().slice(0, 10)}`, siteBaseUrl: opts.siteBaseUrl,
       now: opts.now, serverId: row.serverId,
     });

@@ -2022,7 +2022,11 @@ export const bounties = pgTable("bounties", {
   byClaimer: index("bounties_claimer_idx").on(t.serverId, t.claimedByDayzId, t.claimedAt).where(sql`${t.status} = 'claimed'`),
 }));
 
-export type KothState = "scheduled" | "live" | "awarded" | "no_winner" | "cancelled" | "failed";
+/**
+ * `finished` is a session scored with no prize to grant — scheduled with none, or
+ * one whose award left the catalogue before it could be granted.
+ */
+export type KothState = "scheduled" | "live" | "awarded" | "no_winner" | "finished" | "cancelled" | "failed";
 export type KothResultRow = { dayzId: string; gamertag: string; kills: number };
 export type KothResults = { top: KothResultRow[]; topKiller: KothResultRow | null; winner: KothResultRow | null; droppedNoPosition: number };
 
@@ -2047,6 +2051,12 @@ export const kothEvents = pgTable("koth_events", {
   centreZ: numeric("centre_z", { precision: 12, scale: 2 }).notNull(),
   state: text("state").$type<KothState>().notNull(),
   scheduledByDiscordId: text("scheduled_by_discord_id").notNull(),
+  /**
+   * The prize, an `awards.json` key, chosen at `/koth schedule`. Null is "no
+   * prize" — a deliberate choice, never a default: the command's option is
+   * required. Rows from before migration 0051 were backfilled to `plate-carrier`.
+   */
+  awardKey: text("award_key"),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   /** ⚠️ A session is never opened without it. */
   announcedAt: timestamp("announced_at", { withTimezone: true }),
@@ -2063,13 +2073,15 @@ export const kothEvents = pgTable("koth_events", {
   awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id, { onDelete: "set null" }),
   detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
 }, (t) => ({
-  stateValid: check("koth_events_state_valid", sql`${t.state} IN ('scheduled','live','awarded','no_winner','cancelled','failed')`),
+  stateValid: check("koth_events_state_valid", sql`${t.state} IN ('scheduled','live','awarded','no_winner','finished','cancelled','failed')`),
   awardedHasGrant: check("koth_events_awarded_has_grant", sql`(${t.state} <> 'awarded') OR (${t.awardGrantId} IS NOT NULL)`),
+  awardedHasPrize: check("koth_events_awarded_has_prize", sql`(${t.state} <> 'awarded') OR (${t.awardKey} IS NOT NULL)`),
   oneOpen: uniqueIndex("koth_events_one_open").on(t.serverId).where(sql`${t.state} IN ('scheduled','live')`),
-  // ⚠️ Partial, over every state EXCEPT `cancelled` and `failed` (migration 0050).
+  // ⚠️ Partial, over every state EXCEPT `cancelled` and `failed` (migration 0050;
+  // 0051 adds `finished`, a session that ran).
   // Unconditional, a `/koth cancel` or a never-announced schedule left a dead row
   // holding its slot forever, and that slot could never be scheduled again. A
   // slot that actually ran (`awarded`/`no_winner`) still holds it.
   oneSlot: uniqueIndex("koth_events_slot_uq").on(t.serverId, t.slotAt)
-    .where(sql`${t.state} IN ('scheduled','live','awarded','no_winner')`),
+    .where(sql`${t.state} IN ('scheduled','live','awarded','no_winner','finished')`),
 }));

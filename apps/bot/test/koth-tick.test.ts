@@ -210,4 +210,36 @@ describe("koth tick", () => {
     expect(announce).toHaveBeenCalledTimes(1);
     expect(announce.mock.calls[0]![0]).toMatch(/RESULTS/);
   });
+
+  // A prize-less session that ran: results post, and nothing for ops.
+  it("posts a finished no-prize row's results naming the winner, with no ops alert", async () => {
+    const results = { top: [{ dayzId: "z", gamertag: "Z", kills: 3 }], topKiller: { dayzId: "z", gamertag: "Z", kills: 3 }, winner: { dayzId: "z", gamertag: "Z", kills: 3 }, droppedNoPosition: 0 };
+    await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
+      state: "finished", scheduledByDiscordId: "a", results, awardKey: null,
+    });
+    const announce = vi.fn(async (_c: string) => {}); const ops = vi.fn(async (_c: string) => {});
+    await kothTick(db, { announce, ops }, { now: at("2026-10-03T22:30:00Z"), siteBaseUrl: "https://x" });
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce.mock.calls[0]![0]).toMatch(/\*\*Z\*\* is King of the Hill/);
+    expect(announce.mock.calls[0]![0]).not.toMatch(/could not be granted/);
+    expect(ops).not.toHaveBeenCalled();
+  });
+
+  // ⚠️ A prize scoring could not grant: the winner is still named, and ops is told once.
+  it("a finished row with a withheld prize posts results and alerts ops once", async () => {
+    const results = { top: [{ dayzId: "z", gamertag: "Z", kills: 3 }], topKiller: { dayzId: "z", gamertag: "Z", kills: 3 }, winner: { dayzId: "z", gamertag: "Z", kills: 3 }, droppedNoPosition: 0 };
+    await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
+      state: "finished", scheduledByDiscordId: "a", results, awardKey: "retired-award",
+      detail: { failure: 'award "retired-award" is no longer in awards.json' },
+    });
+    const announce = vi.fn(async (_c: string) => {}); const ops = vi.fn(async (_c: string) => {});
+    await kothTick(db, { announce, ops }, { now: at("2026-10-03T22:30:00Z"), siteBaseUrl: "https://x" });
+    await kothTick(db, { announce, ops }, { now: at("2026-10-03T22:35:00Z"), siteBaseUrl: "https://x" });
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce.mock.calls[0]![0]).toMatch(/could not be granted automatically/);
+    expect(ops).toHaveBeenCalledTimes(1);
+    expect(ops.mock.calls[0]![0]).toMatch(/needs an admin: award "retired-award"/);
+  });
 });

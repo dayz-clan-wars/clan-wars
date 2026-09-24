@@ -29,7 +29,7 @@ describe("koth scoring", () => {
     ]);
     const [r] = await db.insert(kothEvents).values({
       serverId, slotAt: SLOT, location: "lembork", centreX: String(HILL.x), centreZ: String(HILL.z),
-      state: "live", scheduledByDiscordId: "admin", announcedAt: SLOT, openedAt: SLOT,
+      state: "live", scheduledByDiscordId: "admin", announcedAt: SLOT, openedAt: SLOT, awardKey: "plate-carrier",
     }).returning();
     rowId = r!.id;
   });
@@ -109,5 +109,35 @@ describe("koth scoring", () => {
     await ready();
     expect(await scoreAndAward(db, rowId, { now: at("2026-10-03T22:30:00Z"), siteBaseUrl: "https://x" })).toBe("no_winner");
     expect(await db.select().from(awardGrants)).toHaveLength(0);
+  });
+
+  const OPTS = { now: at("2026-10-03T22:30:00Z"), siteBaseUrl: "https://x" };
+
+  // No prize: being linked only matters when there is something to DM.
+  it("no prize → the top killer wins, linked or not; finished, no grant", async () => {
+    await db.update(kothEvents).set({ awardKey: null }).where(eq(kothEvents.id, rowId));
+    await db.insert(players).values({ dayzId: "u", gamertag: "Unlinked", firstSeenAt: SLOT, lastSeenAt: SLOT });
+    await kill("u", "v1", "2026-10-03T20:10:00Z", HILL);
+    await ready();
+    expect(await scoreAndAward(db, rowId, OPTS)).toBe("finished");
+    expect(await db.select().from(awardGrants)).toHaveLength(0);
+    const saved = await row();
+    expect(saved).toMatchObject({ state: "finished", winnerDayzId: "u", awardGrantId: null });
+    expect(saved.results?.winner?.gamertag).toBe("Unlinked");
+    expect((saved.detail as Record<string, unknown>).failure).toBeUndefined();
+  });
+
+  // ⚠️ A throw here would retry forever and never post the results.
+  it("a prize the catalogue lost → finished with a failure for ops, no grant, no throw", async () => {
+    await db.update(kothEvents).set({ awardKey: "retired-award" }).where(eq(kothEvents.id, rowId));
+    await db.insert(players).values({ dayzId: "l", gamertag: "Linked", firstSeenAt: SLOT, lastSeenAt: SLOT });
+    await db.insert(identityLinks).values({ discordId: "555", dayzId: "l", gamertag: "Linked", verifiedAt: SLOT });
+    await kill("l", "v1", "2026-10-03T20:10:00Z", HILL);
+    await ready();
+    expect(await scoreAndAward(db, rowId, OPTS)).toBe("finished");
+    expect(await db.select().from(awardGrants)).toHaveLength(0);
+    const saved = await row();
+    expect(saved).toMatchObject({ state: "finished", winnerDayzId: "l" });
+    expect((saved.detail as Record<string, unknown>).failure).toMatch(/retired-award.*\/award grant/);
   });
 });
