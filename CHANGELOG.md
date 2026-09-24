@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.38.0] - 2026-09-24
+
 ### Changed
 
 - King of the Hill: `/koth schedule` now takes a required `prize` — any award in the
