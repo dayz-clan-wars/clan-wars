@@ -29,3 +29,23 @@ export function retryDelay(failures: number, pollMs: number): number {
   if (failures <= 0) return pollMs;
   return RETRY_STEPS_MS[failures - 1] ?? pollMs;
 }
+
+/**
+ * Numbers each request so that only the newest one's answer is applied.
+ * Paired in map-view.tsx with an AbortController, which saves the bandwidth
+ * of a superseded request; the gate is what makes the ORDER right even when
+ * the abort lands too late.
+ */
+export function requestGate(): { begin(): number; isLatest(n: number): boolean } {
+  let latest = 0;
+  return { begin: () => ++latest, isLatest: (n) => n === latest };
+}
+
+/**
+ * The poll's next wait, or null for none at all. A background tab asks for
+ * nothing: positions arrive every five minutes whether or not anyone is
+ * looking, and coming back is a fresh load, not a wait for a timer.
+ */
+export function nextPollDelay(s: { failures: number; hidden: boolean }, pollMs: number): number | null {
+  return s.hidden ? null : retryDelay(s.failures, pollMs);
+}

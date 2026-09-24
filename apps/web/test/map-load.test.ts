@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { POSITION_FIX_MS } from "@factions/domain";
-import { RETRY_STEPS_MS, loadView, retryDelay } from "../lib/map-load";
+import { RETRY_STEPS_MS, loadView, nextPollDelay, requestGate, retryDelay } from "../lib/map-load";
 
 describe("loadView", () => {
   it("is loading until the map exists", () => {
@@ -39,5 +41,56 @@ describe("retryDelay", () => {
 
   it("is the ordinary poll after a success", () => {
     expect(retryDelay(0, POSITION_FIX_MS)).toBe(POSITION_FIX_MS);
+  });
+});
+
+describe("requestGate", () => {
+  /**
+   * ⚠️ Review focus 3. A Refresh tapped while the poll's request was out
+   * raced it, and whichever answered LAST won, so an older snapshot could
+   * overwrite a newer one.
+   */
+  it("applies only the newest request's answer, whatever order they settle in", () => {
+    const gate = requestGate();
+    const poll = gate.begin();
+    const tap = gate.begin();
+    // The tap answers first; the poll's older answer lands after it.
+    expect(gate.isLatest(tap)).toBe(true);
+    expect(gate.isLatest(poll)).toBe(false);
+  });
+
+  it("keeps separate gates separate", () => {
+    const a = requestGate();
+    const b = requestGate();
+    const n = a.begin();
+    b.begin();
+    b.begin();
+    expect(a.isLatest(n)).toBe(true);
+  });
+});
+
+describe("nextPollDelay", () => {
+  it("asks for nothing while the tab is hidden", () => {
+    expect(nextPollDelay({ failures: 0, hidden: true }, POSITION_FIX_MS)).toBeNull();
+    expect(nextPollDelay({ failures: 2, hidden: true }, POSITION_FIX_MS)).toBeNull();
+  });
+
+  it("is the backoff while visible", () => {
+    expect(nextPollDelay({ failures: 1, hidden: false }, POSITION_FIX_MS)).toBe(15_000);
+    expect(nextPollDelay({ failures: 0, hidden: false }, POSITION_FIX_MS)).toBe(POSITION_FIX_MS);
+  });
+});
+
+describe("map-view.tsx's loading", () => {
+  const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
+
+  it("imports Leaflet in one place, started on mount beside the first fetch", () => {
+    expect(view.match(/import\("leaflet"\)/gu)).toHaveLength(1);
+    expect(view).toMatch(/void load\(\);\s*importLeaflet\(\)\.catch/u);
+  });
+
+  it("aborts a superseded request, and refreshes when the tab comes back", () => {
+    expect(view).toContain("signal: ctl.signal");
+    expect(view).toContain('addEventListener("visibilitychange"');
   });
 });

@@ -2,6 +2,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type * as L from "leaflet";
+/**
+ * The Leaflet module as the dynamic import yields it. Named once, so the file
+ * spells the dynamic import of "leaflet" in exactly one place: `importLeaflet`.
+ */
+type LeafletModule = typeof L;
 import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
@@ -17,7 +22,7 @@ import {
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
-import { loadView, retryDelay, type LoadError } from "@/lib/map-load";
+import { loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
 import { MapStatus } from "./map-status";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
@@ -154,15 +159,27 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // ── The fetch loop ────────────────────────────────────────────────────────
   // The last answer's raw body, so an unchanged poll is skipped outright (see `load`).
   const lastBody = useRef<string | null>(null);
-  const load = useCallback(async (): Promise<boolean> => {
+  const gate = useRef(requestGate());
+  const inflight = useRef<AbortController | null>(null);
+  const load = useCallback(async (): Promise<boolean | null> => {
+    // ⚠️ One answer applied at a time, and only the newest. A Refresh tapped
+    // while the poll's request was still out used to race it, and whichever
+    // answered LAST won, so an older snapshot could overwrite a newer one.
+    // The abort saves the superseded request's bandwidth; the gate is what
+    // keeps the order right even when the abort lands too late.
+    inflight.current?.abort();
+    const ctl = new AbortController();
+    inflight.current = ctl;
+    const n = gate.current.begin();
     let ok = false;
     try {
-      const res = await fetch("/api/map/state", { cache: "no-store" });
+      const res = await fetch("/api/map/state", { cache: "no-store", signal: ctl.signal });
+      const body = res.ok ? await res.text() : null;
+      if (!gate.current.isLatest(n)) return null;
       if (res.status === 401) setError("unauthenticated");
       else if (res.status === 403) setError("not-linked");
-      else if (!res.ok) setError("failed");
+      else if (body === null) setError("failed");
       else {
-        const body = await res.text();
         setError(null);
         // An unchanged answer changes nothing on the map. Skipping it keeps
         // `data`, and every effect keyed on it, still. Parsed BEFORE it is
@@ -175,11 +192,28 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         ok = true;
       }
     } catch {
+      // ⚠️ An aborted request is superseded, not failed: counting it would
+      // push the backoff up every time a player taps Refresh.
+      if (!gate.current.isLatest(n)) return null;
       setError("failed");
     }
     setFailures((f) => (ok ? 0 : f + 1));
-    setSettled((n) => n + 1);
+    setSettled((s) => s + 1);
     return ok;
+  }, []);
+
+  const leafletMod = useRef<Promise<LeafletModule> | null>(null);
+  /**
+   * The Leaflet chunk, requested once.
+   * ⚠️ Started on MOUNT, beside the first state fetch. It used to wait for
+   * that fetch (the creation effect is gated on `size`), so a phone paid
+   * state → JS → tiles in series before the first tile was even asked for.
+   * Still a dynamic import, so Leaflet never enters the server bundle and
+   * never runs during SSR. This page's HTML must stay coordinate-free.
+   */
+  const importLeaflet = useCallback(() => {
+    leafletMod.current ??= import("leaflet").then((mod) => mod.default ?? (mod as unknown as LeafletModule));
+    return leafletMod.current;
   }, []);
 
   // 401 and 403 are answers, not outages: the session is gone or the character
@@ -195,6 +229,24 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   useEffect(() => {
     setEnabled(loadSwitches());
     void load();
+    importLeaflet().catch(() => { /* reported by the creation effect, which awaits this same promise */ });
+    return () => inflight.current?.abort();
+  }, [load, importLeaflet]);
+
+  const terminalRef = useRef(terminal);
+  terminalRef.current = terminal;
+  const [hidden, setHidden] = useState(() => typeof document !== "undefined" && document.visibilityState === "hidden");
+  // ⚠️ A background tab asks for nothing: no poll, no age tick. Coming back is
+  // a fresh load and a fresh clock at once, never a wait of up to five minutes
+  // for a timer that was paused.
+  useEffect(() => {
+    const onVisibility = () => {
+      const h = document.visibilityState === "hidden";
+      setHidden(h);
+      if (!h && !terminalRef.current) { setNow(Date.now()); void load(); }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [load]);
 
   // One timer, re-armed after every settled request, not an interval. The
@@ -202,17 +254,19 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // 60 s, then the poll), and a manual Refresh restarts the wait instead of
   // stacking a second schedule on the first.
   useEffect(() => {
-    if (terminal) return;
-    const id = setTimeout(() => void load(), retryDelay(failures, POSITION_FIX_MS));
+    const delay = nextPollDelay({ failures, hidden }, POSITION_FIX_MS);
+    if (terminal || delay === null) return;
+    const id = setTimeout(() => void load(), delay);
     return () => clearTimeout(id);
-  }, [load, terminal, failures, settled]);
+  }, [load, terminal, failures, settled, hidden]);
 
   // Ages tick between fetches: a fix five minutes old must not read "just now"
   // for the whole interval.
   useEffect(() => {
+    if (hidden) return;
     const id = setInterval(() => setNow(Date.now()), AGE_TICK_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [hidden]);
 
   /**
    * Center on your last known position and zoom in. The fix is whatever the
@@ -256,7 +310,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   };
 
   // ── Leaflet ───────────────────────────────────────────────────────────────
-  const leaflet = useRef<typeof import("leaflet") | null>(null);
+  const leaflet = useRef<LeafletModule | null>(null);
   const map = useRef<L.Map | null>(null);
   const groups = useRef<Partial<Record<LayerKey, L.LayerGroup>>>({});
   // Each layer's markers by key (lib/map-roster.ts), for the list's rows.
@@ -383,12 +437,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     if (!el.current || size === null) return;
     let cancelled = false;
 
-    // Dynamically imported so Leaflet never enters the server bundle and never
-    // runs during SSR — this page's HTML must stay coordinate-free.
-    void import("leaflet")
-      .then((mod) => {
+    // The chunk importLeaflet started on mount: usually in hand by now. Still
+    // dynamic, so Leaflet never enters the server bundle and never runs
+    // during SSR — this page's HTML must stay coordinate-free.
+    void importLeaflet()
+      .then((Lm) => {
         if (cancelled || !el.current) return;
-        const Lm = mod.default ?? (mod as unknown as typeof import("leaflet"));
         leaflet.current = Lm;
         const m = Lm.map(el.current, {
           crs: Lm.CRS.Simple, minZoom: 0, maxZoom: MAX_ZOOM,
@@ -523,7 +577,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           observer.current = ro;
         }
       })
-      .catch(() => { if (!cancelled) setLeafletFailed(true); });
+      .catch(() => {
+        // Forgotten, so a retry (which bumps `attempt`) asks for the chunk again rather than re-reading the failure.
+        leafletMod.current = null;
+        if (!cancelled) setLeafletFailed(true);
+      });
 
     return () => {
       cancelled = true;
