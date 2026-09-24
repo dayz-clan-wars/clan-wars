@@ -11,7 +11,7 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -137,9 +137,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const at = useSearchParams().get("at");
   const atRef = useRef(at);
   atRef.current = at;
-  // "Refreshed · just now" on the grid cell for two seconds after a tap.
+  // "Refreshed · just now" on the grid cell for two seconds after a tap, and
+  // one announcement. ⚠️ Only once the answer is in and good: flashing on the
+  // tap itself told a player "refreshed" about a request that then failed.
   const [flash, setFlash] = useState(false);
-  const refreshTap = () => { void load(); setFlash(true); setTimeout(() => setFlash(false), 2_000); };
+  const [announce, setAnnounce] = useState("");
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
   const [error, setError] = useState<LoadError | null>(null);
@@ -225,6 +227,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     leafletMod.current ??= import("leaflet").then((mod) => mod.default ?? (mod as unknown as LeafletModule));
     return leafletMod.current;
   }, []);
+
+  const refreshTap = async () => {
+    const ok = await load();
+    if (ok !== true) return;
+    setFlash(true);
+    setAnnounce(MAP_LOAD_COPY.refreshed);
+    setTimeout(() => { setFlash(false); setAnnounce(""); }, 2_000);
+  };
 
   // 401 and 403 are answers, not outages: the session is gone or the character
   // is not linked, and neither is fixed by asking again five minutes later.
@@ -686,6 +696,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // stacking context here they paint over everything else on the site.
     <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
       <h1 className="sr-only">The map</h1>
+      {/* The refresh's one announcement. Not the button: its text follows every pan. */}
+      <p role="status" className="sr-only">{announce}</p>
       {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
       <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
       <MapStatus view={view} onRetry={retry} />
@@ -827,7 +839,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 <PinMark size={16} /> Pin here
               </button>
             )}
-            <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
+            <button type="button" onClick={() => void refreshTap()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
             <a className="flex min-h-[44px] items-center border-l border-rule-2 bg-gold px-4 text-ground hover:bg-gold-hover" href={next.href}>{next.label}</a>
           </div>
 
@@ -878,10 +890,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 </button>
               )}
               {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
-              <button type="button" onClick={refreshTap} aria-live="polite" title="Refresh"
+              <button type="button" onClick={() => void refreshTap()} title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
                 {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
-                <span className="sr-only">Grid {centre?.grid ?? "000 000"}. Refresh</span>
+                <span className="sr-only">Refresh the map. Centre: grid {centre?.grid ?? "000 000"}</span>
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
             </div>
