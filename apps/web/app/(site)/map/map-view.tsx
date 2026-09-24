@@ -15,6 +15,7 @@ import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS,
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
+import { motionOptions, prefersReducedMotion } from "@/lib/map-motion";
 import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
 import { PinSheet } from "./pin-sheet";
@@ -299,7 +300,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     const m = map.current, Lm = leaflet.current, d = dataRef.current;
     const fix = d?.you.fix;
     if (!m || !Lm || !d || !fix) return;
-    m.setView(ptFor(Lm, d.world.size)(fix.x, fix.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: true });
+    m.setView(ptFor(Lm, d.world.size)(fix.x, fix.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: !prefersReducedMotion() });
   };
   const hasFix = data?.you.fix != null;
 
@@ -316,7 +317,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     const marker = layer ? index.current[layer]?.get(key) : undefined;
     if (!m || !marker) return;
     setLayersOpen(false);
-    m.setView(marker.getLatLng(), Math.max(RECENTRE_ZOOM, m.getZoom()), { animate: true });
+    m.setView(marker.getLatLng(), Math.max(RECENTRE_ZOOM, m.getZoom()), { animate: !prefersReducedMotion() });
     if (marker.getPopup()) marker.openPopup();
     marker.getElement()?.focus();
   };
@@ -501,6 +502,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           // the edge is a fact about the terrain, not a suggestion.
           maxBoundsViscosity: 1,
           attributionControl: true,
+          // Zoom, tile fade, marker slide and pan inertia: all motion, all off under prefers-reduced-motion.
+          ...motionOptions(prefersReducedMotion()),
         });
         map.current = m;
 
