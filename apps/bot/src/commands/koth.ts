@@ -4,13 +4,21 @@ import {
   KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, kothStandings, nextRestartAt,
   restartSlot,
 } from "@factions/domain";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { and, eq, inArray } from "drizzle-orm";
-import { reminderMinutes, scheduledText } from "../koth-text.js";
+import { kothPrize, reminderMinutes, scheduledText } from "../koth-text.js";
 import { kothKills, kothOpenedAt } from "../koth-score.js";
 import { escapeMarkdown } from "../site-links.js";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
+
+/**
+ * The `prize` option's value for "no prize". ⚠️ The option is REQUIRED, so a
+ * prize-less event is always a choice somebody made, never a field left blank.
+ */
+const NO_PRIZE = "none";
+const prizeName = (key: string | null) => kothPrize(key)?.label ?? "no prize";
 
 /** Postgres' `unique_violation`. postgres.js hangs it on the error object as `code`. */
 const UNIQUE_VIOLATION = "23505";
@@ -44,6 +52,9 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (!ctx.koth) return reply("KOTH_TICK is off, so nothing would ever run this event. Turn it on first.");
   const loc = kothLocation((input.string("location") ?? "").toLowerCase());
   if (!loc) return reply(`That is not one of the ${KOTH_LOCATIONS.length} KotH towns.`);
+  const asked = input.string("prize") ?? "";
+  if (asked !== NO_PRIZE && !awardsCatalogue()[asked]) return reply("Pick a prize from the list, or No prize.");
+  const awardKey = asked === NO_PRIZE ? null : asked;
   const slot = new Date(input.string("at") ?? "");
   if (Number.isNaN(slot.getTime()) || !isRestartSlot(slot)) return reply("Pick a restart slot from the list.");
   if (slot.getTime() - ctx.now.getTime() < KOTH_REMINDER_LEAD_MS) {
@@ -65,7 +76,7 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   try {
     [row] = await ctx.db.insert(kothEvents).values({
       serverId: server.id, slotAt: slot, location: loc.slug, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
-      state: "scheduled", scheduledByDiscordId: input.actorDiscordId,
+      state: "scheduled", scheduledByDiscordId: input.actorDiscordId, awardKey,
     }).returning({ id: kothEvents.id });
   } catch (err) {
     const constraint = uniqueViolation(err);
@@ -74,14 +85,14 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
     return reply("A King of the Hill event is already scheduled or live. Only one at a time.");
   }
   try {
-    await ctx.koth(scheduledText(loc.name, slot));
+    await ctx.koth(scheduledText(loc.name, slot, kothPrize(awardKey)));
   } catch (err) {
     await ctx.db.update(kothEvents).set({ state: "failed", detail: { failure: "never announced" } }).where(eq(kothEvents.id, row!.id));
     console.error("koth: scheduled announcement failed to post — nothing scheduled", err);
     return reply("I could not post the announcement, so I have not scheduled it. Check SERVER_EVENTS_CHANNEL_ID.");
   }
   await ctx.db.update(kothEvents).set({ announcedAt: ctx.now }).where(eq(kothEvents.id, row!.id));
-  return reply(`Scheduled: **${loc.name}**, opening at the ${slot.toISOString()} restart and ending at the next one.`);
+  return reply(`Scheduled: **${loc.name}**, for ${prizeName(awardKey)}, opening at the ${slot.toISOString()} restart and ending at the next one.`);
 }
 
 async function cancel(ctx: Ctx, input: CommandInput): Promise<Reply> {
@@ -110,7 +121,7 @@ async function status(ctx: Ctx, _input: CommandInput): Promise<Reply> {
   const [row] = await ctx.db.select().from(kothEvents)
     .where(and(eq(kothEvents.serverId, server.id), inArray(kothEvents.state, ["scheduled", "live"])));
   if (!row) return reply("No King of the Hill event is scheduled.");
-  const head = `${kothLocation(row.location)?.name ?? row.location}: ${row.state}, slot ${row.slotAt.toISOString()}.`;
+  const head = `${kothLocation(row.location)?.name ?? row.location}: ${row.state}, slot ${row.slotAt.toISOString()}, prize: ${prizeName(row.awardKey)}.`;
   if (row.state !== "live") return reply(head);
   // Spec §7: the standings so far, by the same reads the final score uses. Not
   // settled — log lag means the last minutes may still be arriving.
@@ -143,7 +154,10 @@ export const kothGroup: CommandGroup = {
     .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
     .addSubcommand((c) => c.setName("schedule").setDescription("Schedule a one-session King of the Hill")
       .addStringOption((o) => o.setName("location").setDescription("The town").setRequired(true).setAutocomplete(true))
-      .addStringOption((o) => o.setName("at").setDescription("The restart that opens it").setRequired(true).setAutocomplete(true)))
+      .addStringOption((o) => o.setName("at").setDescription("The restart that opens it").setRequired(true).setAutocomplete(true))
+      // Choices from the award catalogue, so a new award shows up here without a code change.
+      .addStringOption((o) => o.setName("prize").setDescription("What the top killer wins").setRequired(true)
+        .addChoices(...Object.entries(awardsCatalogue()).map(([key, a]) => ({ name: a.label, value: key })), { name: "No prize", value: NO_PRIZE })))
     .addSubcommand((c) => c.setName("cancel").setDescription("Cancel the scheduled event"))
     .addSubcommand((c) => c.setName("status").setDescription("Show the scheduled or live event")),
   specs: [

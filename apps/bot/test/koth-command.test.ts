@@ -4,6 +4,7 @@ import {
   serverRestarts, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { kothGroup } from "../src/commands/koth.js";
 import type { Ctx, CommandInput } from "../src/commands/types.js";
 
@@ -28,9 +29,9 @@ describe("/koth", () => {
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {}), now: Date = NOW) =>
     ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
-  const input = (over: Partial<CommandInput> & { location?: string; at?: string } = {}) => ({
+  const input = (over: Partial<CommandInput> & { location?: string; at?: string; prize?: string } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
-    string: (n: string) => (n === "location" ? over.location ?? "lembork" : over.at ?? SLOT.toISOString()),
+    string: (n: string) => (n === "location" ? over.location ?? "lembork" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),
     integer: () => null, boolean: () => null, user: () => null,
     ...over,
   }) as unknown as CommandInput;
@@ -41,9 +42,34 @@ describe("/koth", () => {
     const reply = await schedule(ctx(post), input());
     expect(reply.content).toMatch(/Lembork/);
     const [row] = await rows();
-    expect(row).toMatchObject({ slotAt: SLOT, location: "lembork", state: "scheduled", scheduledByDiscordId: "99" });
+    expect(row).toMatchObject({ slotAt: SLOT, location: "lembork", state: "scheduled", scheduledByDiscordId: "99", awardKey: "plate-carrier" });
     expect(row!.announcedAt).not.toBeNull();
     expect(post).toHaveBeenCalledWith(expect.stringContaining("LEMBORK"));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining("Plate Carrier"));
+  });
+
+  it("schedules with no prize: a null award_key, and the post says so", async () => {
+    const post = vi.fn(async () => {});
+    const reply = await schedule(ctx(post), input({ prize: "none" }));
+    expect(reply.content).toMatch(/no prize/);
+    const [row] = await rows();
+    expect(row!.awardKey).toBeNull();
+    expect(post).toHaveBeenCalledWith(expect.stringContaining("No prize this time"));
+  });
+
+  it("refuses a prize the catalogue does not have", async () => {
+    const reply = await schedule(ctx(), input({ prize: "golden-gun" }));
+    expect(reply.content).toMatch(/prize/i);
+    expect(await rows()).toHaveLength(0);
+  });
+
+  // ⚠️ Required, so "no prize" is always somebody's choice, never a blank field.
+  it("registers prize as a required option: every catalogue award plus No prize", () => {
+    const sub = (kothGroup.command.toJSON().options as { name: string; options?: { name: string; required?: boolean; choices?: { value: string }[] }[] }[])
+      .find((o) => o.name === "schedule")!;
+    const prize = sub.options!.find((o) => o.name === "prize")!;
+    expect(prize.required).toBe(true);
+    expect(prize.choices!.map((c) => c.value)).toEqual([...Object.keys(awardsCatalogue()), "none"]);
   });
 
   it("refuses a non-admin", async () => {

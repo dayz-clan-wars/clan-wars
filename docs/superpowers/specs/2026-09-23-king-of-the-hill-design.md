@@ -185,6 +185,17 @@ post still names the real top killer and says the prize passed down. If nobody h
 a counting kill, or nobody on the list is linked, the result is `no_winner` and
 nothing is granted.
 
+**Amended 2026-09-23 (v1.38.0): the prize is chosen per event.** `/koth schedule`
+takes a required `prize` option — any award in `awards.json`, or "No prize" — stored
+in `koth_events.award_key` (migration 0051; earlier rows backfilled to
+`plate-carrier`, and `KOTH_AWARD_KEY` is gone). Every post names the event's own
+prize. With no prize, the top killer wins outright, linked or not — being linked only
+matters when there is a grant to DM — and the row ends `finished`, not `awarded`. A
+prize whose award left the catalogue between scheduling and scoring also ends
+`finished`, with `detail.failure` alerting ops to grant it by hand; the results post
+names the winner and says an admin has been told. It is never a throw: the grant
+would be refused on every tick and the results would never post.
+
 ### 2.11 KotH kills count everywhere
 
 KotH kills are ordinary PvP. They feed the boards, streaks, achievements and crowns
@@ -212,7 +223,8 @@ was chosen deliberately: the event is part of the season.
 | `slot_at` | timestamptz | The restart slot that opens the session |
 | `location` | text | Town slug from `koth-locations.json` |
 | `centre_x`, `centre_z` | numeric | Frozen from the catalogue at schedule time |
-| `state` | text | `scheduled`, `live`, `awarded`, `no_winner`, `cancelled` or `failed` (CHECK) |
+| `state` | text | `scheduled`, `live`, `awarded`, `no_winner`, `finished` (0051), `cancelled` or `failed` (CHECK) |
+| `award_key` | text, nullable | The prize (0051, §2.10 amendment); null is "no prize". `awarded` requires it (CHECK) |
 | `scheduled_by_discord_id` | text | Also the `granted_by` on the award |
 | `announced_at` | timestamptz | ⚠️ A session is never opened without it (§5.1) |
 | `reminded_at`, `live_posted_at`, `results_posted_at`, `cancel_posted_at` | timestamptz | Each stamped only after its post succeeds |
@@ -228,7 +240,7 @@ was chosen deliberately: the event is part of the season.
 Constraints:
 
 - a partial unique index gives one `scheduled`/`live` row per server
-- `(server_id, slot_at)` is unique among `scheduled`/`live`/`awarded`/`no_winner` rows
+- `(server_id, slot_at)` is unique among `scheduled`/`live`/`awarded`/`no_winner`/`finished` rows
   (partial, migration 0050) — a `cancelled` or `failed` row does not hold its slot, or
   a `/koth cancel` or a never-announced schedule would bar that slot forever
 - `koth_events_awarded_has_grant` CHECKs `state <> 'awarded' OR award_grant_id IS NOT NULL`
@@ -257,7 +269,7 @@ skips otherwise, the same pattern as the other cross-repo assets.
 - `KOTH_REMINDER_LEAD_MS = 30 min`
 - `KOTH_SCORE_SETTLE_MS = 10 min`
 - `KOTH_PRESET_PREFIX = "koth-"`
-- `KOTH_AWARD_KEY = "plate-carrier"` (checked against the award catalogue by a test)
+- ~~`KOTH_AWARD_KEY = "plate-carrier"`~~ — removed by the §2.10 amendment; the prize is per event
 - `kothWanted(slot, rows)` returns the event this slot opens, or null. The row must
   have `slot_at == slot`, `state = 'scheduled'` and `announced_at` set.
 - `inKothZone(pos, centre)` is `distance2d(pos, centre) <= KOTH_ZONE_RADIUS_M`.
@@ -379,7 +391,7 @@ The results are frozen when written. Nothing re-scores an awarded event, includi
 These are ManageGuild commands with ephemeral replies. `parity.test.ts` needs no
 entry.
 
-- `/koth schedule location:<town> at:<slot>`
+- `/koth schedule location:<town> at:<slot> prize:<award or No prize>`
   - `location` autocompletes from the catalogue.
   - `at` autocompletes the restart slots of the next 7 days.
   - It refuses if the slot is less than `KOTH_REMINDER_LEAD_MS` away, and on any

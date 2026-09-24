@@ -3,8 +3,9 @@
 An admin schedules a one-session King of the Hill event at one of 31 Livonia towns:
 for that session every fresh spawn lands at the hill in a KotH kit, infected and
 predators converge there, and kills whose victim is within `KOTH_ZONE_RADIUS_M`
-(500 m) of the hill are scored, with the top linked killer winning the Plate Carrier
-award. Spec: `docs/superpowers/specs/2026-09-23-king-of-the-hill-design.md`.
+(500 m) of the hill are scored. The prize is chosen at scheduling (since v1.38.0):
+any award in `awards.json`, won by the top LINKED killer, or no prize, in which case
+the top killer wins outright and the row ends `finished`. Spec: `docs/superpowers/specs/2026-09-23-king-of-the-hill-design.md`.
 
 ## 1. Merge and publish the `livonia` Release
 
@@ -95,7 +96,8 @@ missed and posts the cancellation.
 
 ## 4. Rehearsal on a quiet slot
 
-Run `/koth schedule location:<town> at:<slot>` for a slot at least 2 hours out (well
+Run `/koth schedule location:<town> at:<slot> prize:No prize` (a rehearsal should
+not hand out a real week of gear; pick a real award to rehearse the grant too) for a slot at least 2 hours out (well
 past `KOTH_REMINDER_LEAD_MS` = 30 min — the command refuses anything closer). Watch
 `#server-events` for the "scheduled" post, then the "reminder" post 30 minutes before
 the slot.
@@ -167,3 +169,11 @@ row and posts a cancellation for a session that did in fact boot with the KotH f
 (the same edge airdrops have). The row cannot be re-run. Check the server: if it is
 in KotH mode, the next slot's restore arm puts it back regardless; tell
 `#server-events` by hand that the session was void, and `/koth schedule` another.
+
+## A prize that could not be granted (v1.38.0)
+
+If the award an event was scheduled with is removed from `awards.json` before the
+session is scored, the row ends `finished` with `detail.failure`, `#ops` gets one
+"needs an admin" alert naming the award, and the results post names the winner and
+says an admin has been told. Grant it by hand with `/award grant`, to the winner the
+results post named (`koth_events.winner_dayz_id`).
