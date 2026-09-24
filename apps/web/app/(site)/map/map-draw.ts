@@ -126,14 +126,25 @@ export type AgeLabel = {
   layer: L.Layer;
   /** Renders the tooltip text for a given age string. */
   tooltip?: (age: string) => string;
-  /** Renders the popup HTML for a given age string. */
-  popup?: (age: string) => string;
+  /**
+   * Renders the popup HTML for a given age string at a given instant.
+   * ⚠️ `now` is not redundant with `age`: a pin's popup also says when it
+   * expires, and an expiry closed over the draw-time clock never moved — the
+   * pins layer is rebuilt only when the pins change, so "expires in 6 d" stood
+   * the day before the pin went, beside an age that did move.
+   */
+  popup?: (age: string, now: Date) => string;
   /** Clanmates step down with age, and a tick can cross a step as easily as a fetch can. */
   dim?: L.Marker;
   /** A marker whose title carries the age — its accessible name, which a tick must rewrite like any label. */
   title?: { marker: L.Marker; text: (age: string) => string };
   /** The age string last written, so an unchanged label is left alone entirely. */
   last?: string;
+  /**
+   * The popup HTML last written. Compared whole, not by age, because an
+   * expiry can change while the age string does not ("3 d ago" lasts a day).
+   */
+  lastPopup?: string;
   step?: AgeStep;
 };
 
@@ -205,12 +216,17 @@ export function refreshAges(ages: AgeLabel[], now: number): void {
     }
     const age = fixAge(a.at, at);
     // "3 h ago" is still "3 h ago" for most ticks; rewriting it anyway would
-    // replace an open popup's DOM twice a minute for no visible change.
-    if (age === a.last) continue;
+    // replace an open popup's DOM twice a minute for no visible change (and
+    // disarm a half-pressed Delete in it).
+    const popup = a.popup?.(age, at);
+    const aged = age !== a.last;
     a.last = age;
-    if (a.tooltip) a.layer.setTooltipContent(a.tooltip(age));
-    if (a.popup) a.layer.setPopupContent(a.popup(age));
-    if (a.title) setTitle(a.title.marker, a.title.text(age));
+    if (aged && a.tooltip) a.layer.setTooltipContent(a.tooltip(age));
+    if (popup !== undefined && popup !== a.lastPopup) {
+      a.lastPopup = popup;
+      a.layer.setPopupContent(popup);
+    }
+    if (aged && a.title) setTitle(a.title.marker, a.title.text(age));
   }
 }
 
@@ -311,7 +327,8 @@ export function drawClanmates({ L, group, pt, data, now, ages, index, p }: Ctx):
     // in the popup and the title, which are what a tick rewrites.
     marker.bindTooltip(name, tag(""));
     const text = (age: string) => `<div class="${POPUP_TEXT}">${name} · ${escapeHtml(age)}</div>`;
-    marker.bindPopup(text(age), popupOptions(POPUP));
+    const html = text(age);
+    marker.bindPopup(html, popupOptions(POPUP));
     markOpen(marker);
     marker.addTo(group);
     index.set(markerKey.clanmate(m.dayzId), marker);
@@ -320,7 +337,7 @@ export function drawClanmates({ L, group, pt, data, now, ages, index, p }: Ctx):
     // element exists only once the marker is on the map, so the step is
     // applied after addTo.
     applyStep(marker, step);
-    ages.push({ at: m.fix.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.clanmate(m.gamertag, a) }, dim: marker, last: age, step });
+    ages.push({ at: m.fix.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.clanmate(m.gamertag, a) }, dim: marker, last: age, lastPopup: html, step });
   });
 }
 
@@ -351,7 +368,7 @@ export function drawBounties({ L, group, pt, data, now, ages, index, p }: Ctx): 
     // ⚠️ The popup must be registered here too, not just the tooltip — an open
     // popup otherwise keeps its draw-time age forever while the permanent tag
     // updates every 30 s, and the two contradict each other.
-    ages.push({ at: b.fix.at, layer: marker, tooltip: text, popup, title: { marker, text: (a) => markerTitle.bounty(b.gamertag, a) }, last: age });
+    ages.push({ at: b.fix.at, layer: marker, tooltip: text, popup, title: { marker, text: (a) => markerTitle.bounty(b.gamertag, a) }, last: age, lastPopup: popup(age) });
   }
 }
 
@@ -367,12 +384,12 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
     const label = PIN_ICON_LABELS[pin.icon];
     const note = pin.note ? `<p class="m-0 px-3.5 pt-2.5 text-[13px] leading-normal text-ink">${escapeHtml(pin.note)}</p>` : "";
     // Grid ref, never a coordinate: it is what the guide and the bottom bar speak.
-    const text = (age: string) =>
+    const text = (age: string, at: Date) =>
       `<div class="min-w-[13rem] max-w-[16rem]">` +
         `<div class="flex items-center gap-2.5 border-b border-rule-2 py-3 pl-3.5 pr-11">${pinGlyph(p, pin.icon, 20)}` +
           `<span class="font-display text-[13px] uppercase tracking-[0.06em] text-ink">${escapeHtml(label)}</span>` +
           `<span class="ml-auto font-mono text-[11px] text-muted">Grid ${gridRef(pin.x, pin.z)}</span></div>${note}` +
-        `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by ?? "a member")} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +
+        `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by ?? "a member")} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, at))}</p>` +
         `<form method="post" action="/api/map/pin/delete" class="m-0">` +
           `<input type="hidden" name="id" value="${pin.id}" />` +
           // The grid square to come back to: six digits, never a coordinate (lib/map-url.ts).
@@ -381,12 +398,13 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
         `</form>` +
       `</div>`;
     const age = fixAge(pin.at, new Date(now));
+    const html = text(age, new Date(now));
     const marker = L.marker(pt(pin.x, pin.z), { icon: chipIcon(L, pinIcon(p, pin.icon), ICON.pin, "cw-mk-pin"), keyboard: true, title: markerTitle.pin(label, pin.x, pin.z, age) })
-      .bindPopup(text(age), popupOptions(POPUP));
+      .bindPopup(html, popupOptions(POPUP));
     markOpen(marker);
     marker.addTo(group);
     index.set(markerKey.pin(pin.id), marker);
-    ages.push({ at: pin.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.pin(label, pin.x, pin.z, a) }, last: age });
+    ages.push({ at: pin.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.pin(label, pin.x, pin.z, a) }, last: age, lastPopup: html });
   }
 }
 
