@@ -9,6 +9,8 @@ import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
+import { layerOfKey, rosterRows } from "@/lib/map-roster";
+import { MapRoster } from "./map-roster";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
@@ -173,6 +175,26 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   };
   const hasFix = data?.you.fix != null;
 
+  /**
+   * A list row's action: centre on its marker, open it, and put focus ON it.
+   * ⚠️ Focus moves to the marker because the row's own button is about to be
+   * unmounted with the panel, and focus left on a dead element drops a
+   * keyboard user back at the top of the page. Enter on the focused marker
+   * reopens its popup, and Escape closes it (Leaflet's own handling).
+   */
+  const goTo = (key: string) => {
+    const m = map.current;
+    const layer = layerOfKey(key);
+    const marker = layer ? index.current[layer]?.get(key) : undefined;
+    if (!m || !marker) return;
+    setLayersOpen(false);
+    m.setView(marker.getLatLng(), Math.max(RECENTRE_ZOOM, m.getZoom()), { animate: true });
+    if (marker.getPopup()) marker.openPopup();
+    marker.getElement()?.focus();
+  };
+  // Recomputed each render, and `now` ticks every 30 s, so a row's age never goes stale.
+  const rows = data ? rosterRows(data, enabled, new Date(now)) : [];
+
   const toggle = (key: LayerKey) => {
     setEnabled((prev) => {
       const next = { ...prev, [key]: !prev[key] };
@@ -185,6 +207,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const leaflet = useRef<typeof import("leaflet") | null>(null);
   const map = useRef<L.Map | null>(null);
   const groups = useRef<Partial<Record<LayerKey, L.LayerGroup>>>({});
+  // Each layer's markers by key (lib/map-roster.ts), for the list's rows.
+  const index = useRef<Partial<Record<LayerKey, Map<string, L.Marker>>>>({});
   const gridDrawn = useRef(false);
   // The open popup, and the call that keeps its card inside the container.
   const openPopup = useRef<L.Popup | null>(null);
@@ -248,14 +272,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       }
     }
 
-    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current, p });
+    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current, index: (index.current[key] ??= new Map()), p });
     // The same groups, cleared and rebuilt rather than diffed — what is on the
     // map stays in lockstep with the data, with no stale layer left behind.
     // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
     // map-draw.ts: rebuilding on the 30 s tick tore down every open popup.
     ages.current = [];
     // Places are the zoom's, not the data's: zoomend redraws them, not a poll.
-    for (const key of ALL_KEYS) if (key !== "terrain" && key !== "places") groups.current[key]!.clearLayers();
+    for (const key of ALL_KEYS) {
+      if (key === "terrain" || key === "places") continue;
+      groups.current[key]!.clearLayers();
+      index.current[key]?.clear();
+    }
     drawYou(ctx("you"));
     // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
     if (hintRef.current && d.you.fix) {
@@ -421,6 +449,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       openPopup.current = null;
       fitPopupNow.current = () => {};
       groups.current = {};
+      index.current = {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
       ages.current = [];
@@ -588,6 +617,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                     ))}
                   </ul>
                 )}
+                <MapRoster rows={rows} onGo={goTo} />
                 <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
@@ -634,6 +664,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
+              <MapRoster rows={rows} onGo={goTo} />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
                 <span>Last known, not live.</span>
                 {layers.pins && <span>Press and hold to drop a pin.</span>}
