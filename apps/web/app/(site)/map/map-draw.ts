@@ -1,6 +1,6 @@
 import type * as L from "leaflet";
 import type { PinIcon } from "@factions/domain";
-import { CANVAS_PX, MAX_ZOOM, gridRef, worldToLatLng } from "@/lib/map-projection";
+import { CANVAS_PX, MAX_ZOOM, gridRef, gridRefKey, worldToLatLng } from "@/lib/map-projection";
 import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
 import { markerTitle } from "@/lib/map-labels";
 import { markerKey } from "@/lib/map-roster";
@@ -368,6 +368,8 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
         `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by ?? "a member")} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +
         `<form method="post" action="/api/map/pin/delete" class="m-0">` +
           `<input type="hidden" name="id" value="${pin.id}" />` +
+          // The grid square to come back to: six digits, never a coordinate (lib/map-url.ts).
+          `<input type="hidden" name="at" value="${gridRefKey(pin.x, pin.z)}" />` +
           `<button type="submit" data-arm="Delete it? Tap again" class="flex min-h-[44px] w-full items-center justify-center border-t border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink shadow-[inset_0_2px_0_var(--color-rust)] hover:bg-rust/15">Delete pin</button>` +
         `</form>` +
       `</div>`;

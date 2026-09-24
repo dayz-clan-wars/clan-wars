@@ -2,6 +2,8 @@ import { NextResponse, type NextRequest } from "next/server";
 import { dropPin } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { siteUrl } from "@/lib/auth/site-url";
+import { gridRefKey } from "@/lib/map-projection";
+import { pinResultPath } from "@/lib/map-url";
 
 /**
  * POST from the pin form on /map. Every rule — full member, six icons, the
@@ -26,5 +28,8 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // silently truncated to something the player did not write.
   const note = typeof rawNote === "string" && rawNote.trim() !== "" ? rawNote.slice(0, 1000) : null;
   const out = await dropPin(session.sub, { x, z, icon, note });
-  return NextResponse.redirect(siteUrl(origin, "/map", `?result=${out.ok ? "dropped" : out.reason}`), { status: 303 });
+  // Back to the pin's own grid square, dropped or refused, rather than the
+  // whole world. A non-numeric field is NaN and simply gets no `at`.
+  const at = Number.isFinite(x) && Number.isFinite(z) ? gridRefKey(x, z) : null;
+  return NextResponse.redirect(siteUrl(origin, "/map", pinResultPath(out.ok ? "dropped" : out.reason, at)), { status: 303 });
 }

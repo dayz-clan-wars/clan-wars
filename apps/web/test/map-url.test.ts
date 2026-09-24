@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
-import { withoutResult } from "../lib/map-url";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { pinResultPath, withoutResult } from "../lib/map-url";
 
 describe("withoutResult", () => {
   it("drops ?result and keeps the grid square", () => {
@@ -9,5 +11,32 @@ describe("withoutResult", () => {
   it("leaves a bare path bare", () => {
     expect(withoutResult("https://dayzclanwars.com/map?result=deleted")).toBe("/map");
     expect(withoutResult("https://dayzclanwars.com/map")).toBe("/map");
+  });
+});
+
+describe("pinResultPath", () => {
+  it("sends the player back to the pin's grid square with the result", () => {
+    expect(pinResultPath("dropped", "043087")).toBe("?result=dropped&at=043087");
+  });
+
+  /** ⚠️ `at` on the delete form is player-supplied: six digits or nothing, so it can carry neither a coordinate nor a second parameter. */
+  it("drops an `at` that is not exactly six digits", () => {
+    expect(pinResultPath("deleted", null)).toBe("?result=deleted");
+    expect(pinResultPath("deleted", "043087&result=dropped")).toBe("?result=deleted");
+    expect(pinResultPath("deleted", "4321.7")).toBe("?result=deleted");
+    expect(pinResultPath("deleted", "1043087")).toBe("?result=deleted");
+  });
+});
+
+describe("the pin routes keep the view", () => {
+  const API = join(import.meta.dirname, "..", "app", "api", "map", "pin");
+  const draw = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-draw.ts"), "utf8");
+
+  it.each([join(API, "route.ts"), join(API, "delete", "route.ts")])("%s redirects through pinResultPath", (file) => {
+    expect(readFileSync(file, "utf8")).toMatch(/siteUrl\(origin, "\/map", pinResultPath\(/u);
+  });
+
+  it("the delete form posts the pin's grid square", () => {
+    expect(draw).toContain('<input type="hidden" name="at" value="${gridRefKey(pin.x, pin.z)}" />');
   });
 });

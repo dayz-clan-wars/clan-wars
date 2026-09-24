@@ -2,6 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { deletePin } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { siteUrl } from "@/lib/auth/site-url";
+import { pinResultPath } from "@/lib/map-url";
 
 /**
  * POST from a pin's popup. Any full member of the clan can clear a pin; the
@@ -16,5 +17,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   const form = await req.formData();
   const id = Number(form.get("id"));
   const out = Number.isInteger(id) && id > 0 ? await deletePin(session.sub, id) : { deleted: false };
-  return NextResponse.redirect(siteUrl(origin, "/map", `?result=${out.deleted ? "deleted" : "not-deleted"}`), { status: 303 });
+  // The form carries the pin's grid square; pinResultPath accepts six digits or nothing.
+  const rawAt = form.get("at");
+  return NextResponse.redirect(siteUrl(origin, "/map", pinResultPath(out.deleted ? "deleted" : "not-deleted", typeof rawAt === "string" ? rawAt : null)), { status: 303 });
 }
