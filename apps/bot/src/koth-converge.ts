@@ -114,14 +114,23 @@ export async function planKoth(db: Database, nitrado: RestartTarget, serverId: n
     .where(and(eq(kothEvents.serverId, serverId), isNotNull(kothEvents.loadoutSnapshot)))
     .orderBy(desc(kothEvents.slotAt)).limit(1);
   const presetsNow = readSpawnGearPresets(await nitrado.downloadFile(`${root}/${GAMEPLAY}`));
-  const presets = restoredPresets(presetsNow, latest?.loadoutSnapshot ?? null);
+  const problems: string[] = [];
+  let presets: string[] | null;
+  try {
+    presets = restoredPresets(presetsNow, latest?.loadoutSnapshot ?? null);
+  } catch (err) {
+    // ⚠️ Spec §5.3: an empty restore leaves ONLY the preset list alone. Letting this
+    // throw out of planKoth skipped the infected and whole-file restores with it,
+    // at every slot, for as long as the koth-only list stayed on the server.
+    presets = null;
+    problems.push(err instanceof Error ? err.message : String(err));
+  }
 
   const [unrestored] = await db.select().from(kothEvents).where(and(
     eq(kothEvents.serverId, serverId), isNotNull(kothEvents.infectedSnapshot), isNull(kothEvents.restoredAt),
   )).orderBy(desc(kothEvents.slotAt)).limit(1);
 
   const defaults: FileEdit[] = [];
-  const problems: string[] = [];
   for (const f of KOTH_WHOLE_FILES) {
     try {
       defaults.push({ dir: targetDir(root, f.dir), name: f.name, content: await readNonEmpty(nitrado, `${root}/koth/default/${f.name}`) });
@@ -130,10 +139,12 @@ export async function planKoth(db: Database, nitrado: RestartTarget, serverId: n
       problems.push(err instanceof Error ? err.message : String(err));
     }
   }
+  // ⚠️ One write for every restore problem this slot: two separate `||` merges of
+  // the same `restoreError` key would leave only whichever landed last.
   if (problems.length > 0) {
     const [newest] = await db.select({ id: kothEvents.id }).from(kothEvents).where(eq(kothEvents.serverId, serverId)).orderBy(desc(kothEvents.slotAt)).limit(1);
     if (newest) await db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || ${JSON.stringify({ restoreError: problems.join("; ") })}::jsonb` }).where(eq(kothEvents.id, newest.id));
-    console.error(`koth: server ${serverId} could not restore every default — ${problems.join("; ")}`);
+    console.error(`koth: server ${serverId} could not restore everything — ${problems.join("; ")}`);
   }
 
   return {

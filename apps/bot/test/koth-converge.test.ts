@@ -145,6 +145,34 @@ describe("planKoth", () => {
     expect(String(saved!.detail.restoreError)).toMatch(/bear_territories\.xml/);
   });
 
+  // ⚠️ Spec §5.3: a preset list that would restore to empty leaves ONLY the preset
+  // list alone. It once threw out of planKoth, and the infected and whole-file
+  // restores were skipped with it — every slot, indefinitely.
+  it("a refused preset restore leaves the list alone and records why; infected and files still restore", async () => {
+    const row = await schedule({ state: "live", openedAt: SLOT,
+      infectedSnapshot: { InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 } });
+    const live = Object.fromEntries(KOTH_WHOLE_FILES.map((f) => [f.dir === "root" ? `/m/${f.name}` : `/m/env/${f.name}`, `lembork ${f.name}`]));
+    const m = mission({ ...live, "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json") });
+    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    expect(p.presets).toBeNull();
+    expect(p.infected).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
+    expect(p.infectedRestoreRowId).toBe(row.id);
+    expect(p.files.map((f) => f.content)).toEqual(KOTH_WHOLE_FILES.map((f) => `default ${f.name}`));
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(String(saved!.detail.restoreError)).toMatch(/spawnGearPresetFiles/);
+  });
+
+  it("a refused preset restore and a missing default in one slot record both, neither overwriting the other", async () => {
+    const row = await schedule({ state: "live", openedAt: SLOT });
+    const m = mission({ "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json"),
+      "/m/koth/default/bear_territories.xml": undefined });
+    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    expect(p.presets).toBeNull();
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(String(saved!.detail.restoreError)).toMatch(/spawnGearPresetFiles/);
+    expect(String(saved!.detail.restoreError)).toMatch(/bear_territories\.xml/);
+  });
+
   // ⚠️ Review focus #1: the operator's own later edits must survive.
   it("a later user edit survives: no koth- entry, restored_at set → nothing touched", async () => {
     await schedule({ state: "no_winner", openedAt: SLOT, restoredAt: NEXT, loadoutSnapshot: ["./custom/loadout.json"],
