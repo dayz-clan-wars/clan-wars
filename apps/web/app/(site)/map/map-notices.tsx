@@ -10,14 +10,16 @@ import { MAP_LOAD_COPY } from "@/lib/map-copy";
  * A pin result can be dismissed; the stale warning cannot, because it clears
  * itself on the next good refresh.
  */
-export function MapNotices({ notice, stale, onDismiss, tone }: {
+export function MapNotices({ notice, stale, onDismiss, tone, lines = [] }: {
   notice?: string;
   stale: boolean;
   onDismiss: () => void;
   /** The ground it sits on: the desktop floats on the map (frame), the phone bar is already frame (surface). */
   tone: "frame" | "surface";
+  /** Standing facts about this map (nobody on it, no position for you). Not dismissable: each clears itself. */
+  lines?: readonly string[];
 }) {
-  if (!notice && !stale) return null;
+  if (!notice && !stale && lines.length === 0) return null;
   const bg = tone === "frame" ? "bg-frame" : "bg-surface";
   return (
     <div className="flex flex-col gap-2">
@@ -28,6 +30,7 @@ export function MapNotices({ notice, stale, onDismiss, tone }: {
         </div>
       )}
       {stale && <p role="status" className={`m-0 border border-rule-3 ${bg} px-3 py-2 text-sm text-ink`}>{MAP_LOAD_COPY.stale}</p>}
+      {lines.map((line) => <p key={line} className={`m-0 border border-rule-2 ${bg} px-3 py-2 text-sm text-ink-2`}>{line}</p>)}
     </div>
   );
 }

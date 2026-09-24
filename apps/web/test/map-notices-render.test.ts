@@ -41,3 +41,19 @@ describe("where the desktop notices sit", () => {
     expect(view).toContain("window.history.replaceState(window.history.state, \"\", withoutResult(window.location.href))");
   });
 });
+
+describe("MapNotices' standing lines", () => {
+  it("renders each line with no dismiss of its own", () => {
+    const html = render({ lines: ["No clanmates on the map yet."] });
+    expect(html).toContain("No clanmates on the map yet.");
+    expect(html).not.toContain("Dismiss");
+  });
+});
+
+describe("both legends read the same line", () => {
+  const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
+  it("uses MAP_LEGEND twice and no hand-written legend", () => {
+    expect(view.match(/\{MAP_LEGEND\}/gu)).toHaveLength(2);
+    expect(view).not.toContain("Last known, not live.");
+  });
+});

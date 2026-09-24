@@ -11,7 +11,7 @@ import { POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, NO_FIX, emptyLine } from "@/lib/map-copy";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -322,6 +322,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   };
   // Recomputed each render, and `now` ticks every 30 s, so a row's age never goes stale.
   const rows = data ? rosterRows(data, enabled, new Date(now)) : [];
+
+  // Standing facts, shown once there is data to state them from.
+  const info = data ? [emptyLine(data, layers), data.you.fix ? null : NO_FIX].filter((s): s is string => s !== null) : [];
+  const noticesUp = Boolean(shownNotice) || view === "stale" || info.length > 0;
 
   const toggle = (key: LayerKey) => {
     setEnabled((prev) => {
@@ -817,7 +821,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </ul>
                 )}
                 <MapRoster rows={rows} onGo={goTo} />
-                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">{MAP_LEGEND}{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
           </div>
@@ -837,9 +841,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             corner and the layers the top-right: at left-6 top-6 a notice sat
             over the zoom buttons for as long as it stayed up.
           */}
-          {(shownNotice || view === "stale") && (
+          {noticesUp && (
             <div id={CHROME_IDS.notices} className="absolute left-1/2 top-6 z-[1100] hidden w-[360px] -translate-x-1/2 lg:block">
-              <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="frame" />
+              <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="frame" lines={info} />
             </div>
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
@@ -860,9 +864,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
           <div ref={insetBy} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
-            {(shownNotice || view === "stale") && (
+            {noticesUp && (
               <div className="mx-4 mt-3">
-                <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="surface" />
+                <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="surface" lines={info} />
               </div>
             )}
             {layersOpen && (
@@ -878,7 +882,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
               <MapRoster rows={rows} onGo={goTo} />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
-                <span>Last known, not live.</span>
+                <span>{MAP_LEGEND}</span>
                 {layers.pins && <span>{PIN_HINT}</span>}
                 {guide && <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a>}
               </div>

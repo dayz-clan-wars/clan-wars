@@ -81,4 +81,15 @@ export function expiresIn(expiresAt: Date, now: Date): string {
 /** Past 24 h a marker is dimmed (guide ch. 10). */
 export const DIM_AFTER_MS = 24 * 3600_000;
 
+/** The legend, on both layouts. The age comes from DIM_AFTER_MS, so the words cannot drift from the dimming. */
+export const MAP_LEGEND = `Last known, not live. A clanmate unseen for ${DIM_AFTER_MS / 3_600_000} h is dimmed and hollow.`;
+
+/** Why "Center on me" is off. In words on the page: a `title` never shows on a phone. */
+export const NO_FIX = "No position for you yet — the server has not logged your character since you linked.";
+
+/** A clan member's map with nobody on it says so, rather than looking broken. */
+export function emptyLine(d: { clanmates: readonly unknown[] }, layers: { clanmates: boolean }): string | null {
+  return layers.clanmates && d.clanmates.length === 0 ? "No clanmates on the map yet — one appears once the server logs them." : null;
+}
+
 export { PIN_ICONS };

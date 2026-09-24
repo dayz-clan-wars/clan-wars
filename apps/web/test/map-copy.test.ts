@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { PIN_ICONS } from "@factions/domain";
-import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge } from "../lib/map-copy";
+import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge, MAP_LEGEND, NO_FIX, emptyLine } from "../lib/map-copy";
 import { AGE_OPACITY, PIN_GLYPHS, ageStep, pinGlyph, pinIcon, type Palette } from "../lib/map-icons";
 
 /**
@@ -112,5 +112,24 @@ describe("fixAge", () => {
 describe("DIM_AFTER_MS", () => {
   it("is a day — past that a dot is dimmed (guide ch. 10)", () => {
     expect(DIM_AFTER_MS).toBe(24 * 3600_000);
+  });
+});
+
+describe("the map's plain-words lines", () => {
+  it("says the clanmates layer is empty, instead of showing nothing", () => {
+    expect(emptyLine({ clanmates: [] }, { clanmates: true })).toMatch(/^No clanmates on the map yet/u);
+    expect(emptyLine({ clanmates: [{}] }, { clanmates: true })).toBeNull();
+    // Not in a clan: the layers panel already says what would add the layer.
+    expect(emptyLine({ clanmates: [] }, { clanmates: false })).toBeNull();
+  });
+
+  it("says why there is no position — in words on the page, not a tooltip a phone never shows", () => {
+    expect(NO_FIX).toMatch(/^No position for you yet/u);
+  });
+
+  /** The phone's legend used to omit the 24 h dimming the desktop's stated. */
+  it("has one legend, naming the dimming age from DIM_AFTER_MS", () => {
+    expect(MAP_LEGEND).toContain(`${DIM_AFTER_MS / 3_600_000} h`);
+    expect(MAP_LEGEND).toMatch(/dimmed and hollow/u);
   });
 });
