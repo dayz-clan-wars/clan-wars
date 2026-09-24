@@ -10,8 +10,11 @@ import { ROSTER_COPY } from "@/lib/map-copy";
  *
  * Rendered twice (the desktop panel and the phone sheet, one of them always
  * `display: none`), so the heading id comes from `useId`, never a literal.
+ *
+ * `nested` is the phone sheet, which scrolls itself: a list that also scrolled
+ * inside it trapped a swipe, and the legend under the list went out of reach.
  */
-export function MapRoster({ rows, onGo }: { rows: RosterRow[]; onGo: (key: string) => void }) {
+export function MapRoster({ rows, onGo, nested = false }: { rows: RosterRow[]; onGo: (key: string) => void; nested?: boolean }) {
   const head = useId();
   return (
     <section aria-labelledby={head} className="border-t border-rule-2">
@@ -19,7 +22,7 @@ export function MapRoster({ rows, onGo }: { rows: RosterRow[]; onGo: (key: strin
       {rows.length === 0 ? (
         <p className="m-0 px-5 pb-3 text-sm text-dim">{ROSTER_COPY.empty}</p>
       ) : (
-        <ul className="m-0 max-h-[40dvh] list-none overflow-y-auto p-0 pb-1.5">
+        <ul className={`m-0 list-none p-0 pb-1.5 ${nested ? "" : "max-h-[40dvh] overflow-y-auto"}`}>
           {rows.map((r) => (
             <li key={r.key}>
               <button type="button" onClick={() => onGo(r.key)} className="flex min-h-[44px] w-full flex-col items-start justify-center px-5 py-1.5 text-left hover:bg-surface">

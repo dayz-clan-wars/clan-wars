@@ -70,4 +70,11 @@ describe("map-view.tsx redraws only what changed", () => {
   it("skips an answer whose body is byte-for-byte the last one", () => {
     expect(view).toContain("body !== lastBody.current");
   });
+
+  // The hint's dashed ring is in the "you" signature, but a signature is only
+  // compared when redraw runs: without `hint` in the deps, dismissing the hint
+  // left its ring on the map until the next poll brought new data.
+  it("redraws when the hint is dismissed, not only on new data", () => {
+    expect(view).toMatch(/useEffect\(redraw, \[data, hint, redraw\]\);/u);
+  });
 });

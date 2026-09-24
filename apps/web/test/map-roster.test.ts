@@ -83,3 +83,30 @@ describe("MapRoster", () => {
     expect(html).not.toContain("<button");
   });
 });
+
+/**
+ * On a phone the roster sits inside the bottom sheet, which already scrolls
+ * (max-h-[45dvh]). A second scroller inside it trapped a swipe: the list
+ * scrolled, the sheet did not, and the legend below the list was unreachable
+ * on a short screen. The desktop aside keeps the list's own scroll.
+ */
+describe("MapRoster's scrolling", () => {
+  const rows = rosterRows(DATA, ALL, now);
+  it("scrolls on its own by default (the desktop aside)", () => {
+    const html = renderToStaticMarkup(createElement(MapRoster, { rows, onGo: () => {} }));
+    expect(html).toContain("overflow-y-auto");
+  });
+
+  it("leaves scrolling to the sheet when nested in one", () => {
+    const html = renderToStaticMarkup(createElement(MapRoster, { rows, onGo: () => {}, nested: true }));
+    expect(html).not.toContain("overflow-y-auto");
+    expect(html).not.toContain("max-h-");
+  });
+
+  it("is nested in the phone sheet", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { join } = await import("node:path");
+    const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
+    expect(view.match(/<MapRoster rows=\{rows\} onGo=\{goTo\} nested \/>/gu)).toHaveLength(1);
+  });
+});

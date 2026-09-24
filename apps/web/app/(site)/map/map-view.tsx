@@ -674,7 +674,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   }, [size, attempt]);
 
   // Structure follows the data. Nothing here reads `now`.
-  useEffect(redraw, [data, redraw]);
+  // `hint` too: its ring is drawn into the "you" group, so dismissing it must redraw (only "you" rebuilds).
+  useEffect(redraw, [data, hint, redraw]);
 
   // ⚠️ The age tick rewrites text and NOTHING else. It must never clear a
   // layer group: a player reading a pin note would lose the note and its
@@ -739,13 +740,15 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     return () => root.removeEventListener("click", onClick);
   }, []);
 
-  // Escape closes the panel; nothing else on this page listens for it.
+  // Escape closes the panel. ⚠️ Not while the pin sheet is open: its own
+  // Escape cancels the draft, and this window listener heard the same keypress
+  // and closed the panel too — one Escape undid two things.
   useEffect(() => {
-    if (!layersOpen) return;
+    if (!layersOpen || pinSheet) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLayersOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [layersOpen]);
+  }, [layersOpen, pinSheet]);
 
   // The chrome an open card must clear just changed size: the panel opened or
   // closed, or a notice came or went. Refit, or the card stays where the old
@@ -903,7 +906,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
-              <MapRoster rows={rows} onGo={goTo} />
+              {/* `nested`: the sheet scrolls; a second scroller inside it trapped a swipe. */}
+              <MapRoster rows={rows} onGo={goTo} nested />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
                 <span>{MAP_LEGEND}</span>
                 {layers.pins && <span>{PIN_HINT}</span>}
@@ -934,7 +938,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
               <button type="button" onClick={() => void refreshTap()} title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
-                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
+                {/* The one accessible name; the visible grid above is aria-hidden so it is not said twice. */}
                 <span className="sr-only">Refresh the map. Centre: grid {centre?.grid ?? "000 000"}</span>
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>

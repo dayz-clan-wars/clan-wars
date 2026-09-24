@@ -375,7 +375,10 @@ export function drawBounties({ L, group, pt, data, now, ages, index, p }: Ctx): 
 export function drawPublicBases({ L, group, pt, data, p }: Ctx): void {
   for (const b of data.publicBases) {
     const icon = chipIcon(L, publicBaseIcon(p), ICON.publicBase, "cw-mk-public");
-    L.marker(pt(b.x, b.z), { icon, keyboard: true, title: markerTitle.publicBase(b.x, b.z) }).bindTooltip("Public base", { direction: "right", opacity: 1, className: TAG }).addTo(group);
+    // Not a tab stop: it opens nothing and is not in the "On the map" list, so
+    // Tab would only interleave strangers' bases with the player's own markers.
+    // The title stays, for a pointer's hover and a screen reader's browse mode.
+    L.marker(pt(b.x, b.z), { icon, keyboard: false, title: markerTitle.publicBase(b.x, b.z) }).bindTooltip("Public base", { direction: "right", opacity: 1, className: TAG }).addTo(group);
   }
 }
 

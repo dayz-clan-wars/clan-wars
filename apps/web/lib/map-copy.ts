@@ -85,8 +85,12 @@ export const DIM_AFTER_MS = 24 * 3600_000;
 /** The legend, on both layouts. The age comes from DIM_AFTER_MS, so the words cannot drift from the dimming. */
 export const MAP_LEGEND = `Last known, not live. A clanmate unseen for ${DIM_AFTER_MS / 3_600_000} h is dimmed and hollow.`;
 
-/** Why "Center on me" is off. In words on the page: a `title` never shows on a phone. */
-export const NO_FIX = "No position for you yet — the server has not logged your character since you linked.";
+/**
+ * Why "Center on me" is off. In words on the page: a `title` never shows on a phone.
+ * "Recently", not "since you linked": a fix older than POSITION_RETENTION_MS is
+ * reaped, so a returning player with no fix HAS been logged since linking.
+ */
+export const NO_FIX = "No position for you yet — the server has not logged your character recently.";
 
 /** A clan member's map with nobody on it says so, rather than looking broken. */
 export function emptyLine(d: { clanmates: readonly unknown[] }, layers: { clanmates: boolean }): string | null {

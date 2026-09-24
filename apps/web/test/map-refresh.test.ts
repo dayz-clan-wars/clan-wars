@@ -29,3 +29,20 @@ describe("refresh feedback", () => {
     expect(view.match(/onClick=\{\(\) => void refreshTap\(\)\}/gu)).toHaveLength(2);
   });
 });
+
+// The phone's Refresh already carries "Refresh the map. Centre: grid …" in an
+// sr-only span; the visible grid beside it made the name say the grid twice.
+describe("the phone Refresh's accessible name", () => {
+  it("hides the visible grid from the accessibility tree", () => {
+    expect(view).toContain('<span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span>');
+  });
+});
+
+// Escape in the pin sheet cancels the draft (pin-sheet.tsx). The layers
+// panel's window listener heard the same keypress and closed too, so one
+// Escape undid two things.
+describe("Escape with the pin sheet open", () => {
+  it("leaves the layers panel alone", () => {
+    expect(view).toMatch(/if \(!layersOpen \|\| pinSheet\) return;/u);
+  });
+});

@@ -42,6 +42,14 @@ describe("every marker a player can open is reachable by keyboard and named", ()
       expect(call).toContain("keyboard: false");
       return;
     }
+    // Public bases open nothing (a tooltip, no popup) and are not in the "On
+    // the map" list, so as tab stops they only interleaved strangers' bases
+    // with the player's own markers. Still named, for a pointer's hover.
+    if (call.includes("markerTitle.publicBase")) {
+      expect(call).toContain("keyboard: false");
+      expect(call).toContain("title: markerTitle.publicBase(");
+      return;
+    }
     expect(call).toContain("keyboard: true");
     expect(call).toContain("title: markerTitle.");
   });

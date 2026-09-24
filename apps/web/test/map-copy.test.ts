@@ -127,6 +127,12 @@ describe("the map's plain-words lines", () => {
     expect(NO_FIX).toMatch(/^No position for you yet/u);
   });
 
+  // A player whose fixes aged out of POSITION_RETENTION_MS has been logged
+  // since they linked — just not recently. "Since you linked" was false for them.
+  it("does not claim the character was never logged", () => {
+    expect(NO_FIX).toBe("No position for you yet — the server has not logged your character recently.");
+  });
+
   /** The phone's legend used to omit the 24 h dimming the desktop's stated. */
   it("has one legend, naming the dimming age from DIM_AFTER_MS", () => {
     expect(MAP_LEGEND).toContain(`${DIM_AFTER_MS / 3_600_000} h`);
