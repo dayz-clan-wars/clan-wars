@@ -31,6 +31,22 @@
 .leaflet-control-attribution { font-family: var(--font-mono); font-size: 11px; padding: 3px 8px; border: 1px solid var(--color-rule-2); border-radius: 0; margin: 0; }
 .leaflet-control-attribution a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: 1px; }
 /*
+ * ⚠️ The zoom control at Leaflet's own specificity. Leaflet's hover/focus and
+ * disabled rules are (0,2,1) — `.leaflet-bar a:hover`, `.leaflet-bar
+ * a.leaflet-disabled` — and beat the (0,1,1) `.leaflet-bar a` above even
+ * from the earlier sheet: #f4f4f4 under ink (1.1:1) on every hover, and a
+ * grey zoom-out on EVERY load, because the map opens at its zoom floor, where
+ * zoom-out is disabled. `.leaflet-touch .leaflet-bar a` (0,2,1) sizes the
+ * buttons 30px; `.leaflet-container .leaflet-bar a` matches it and comes later.
+ */
+.leaflet-container .leaflet-bar { border: 2px solid var(--color-rule-2); border-radius: 0; box-shadow: none; }
+.leaflet-container .leaflet-bar a { width: 44px; height: 44px; line-height: 44px; border-radius: 0; }
+.leaflet-bar a:hover,
+.leaflet-bar a:focus { background: var(--color-surface); color: var(--color-gold); }
+/* After hover/focus on purpose: a disabled button that is hovered stays disabled-looking. */
+.leaflet-bar a.leaflet-disabled { background: var(--color-frame); color: var(--color-dim); }
+.leaflet-bar a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: -2px; }
+/*
  * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
  * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and
  * these rules only keep it from being a white box and let a class flip its
@@ -46,7 +62,8 @@
 .cw-map-tag::before { display: none; }
 .cw-map-tag-you { color: var(--color-gold); }
 .cw-map-tag-base { border-color: var(--color-gold); }
-.cw-map-tag-intruder { border-color: var(--color-rust); }
+/* rust-2: a 1px tag edge in --color-rust is 2.6:1 on the frame and vanishes on the terrain. */
+.cw-map-tag-intruder { border-color: var(--color-rust-2); }
 /* A clanmate's core hollows past a day (`cw-stale` is toggled by the age tick). */
 .cw-mk-clanmate .cw-core-hollow { display: none; }
 .cw-mk-clanmate.cw-stale .cw-core-solid { display: none; }
@@ -90,8 +107,17 @@
 /* Pin and clanmate popups: the site's squared 2px frame, no rounded white card. */
 .cw-map-popup .leaflet-popup-content-wrapper { border-radius: 0; border: 2px solid var(--color-rule-2); padding: 0; box-shadow: 0 12px 32px rgb(0 0 0 / .45); }
 .cw-map-popup .leaflet-popup-content { margin: 0; line-height: normal; }
-.cw-map-popup .leaflet-popup-close-button { color: var(--color-muted); }
-.cw-map-popup .leaflet-popup-close-button:hover { color: var(--color-ink); }
+/*
+ * ⚠️ `a.` is load-bearing. Leaflet's rule is `.leaflet-container
+ * a.leaflet-popup-close-button` (0,2,1), which beat the old unqualified
+ * selector here — `.cw-map-popup` scoping `leaflet-popup-close-button` alone,
+ * (0,2,0) — and left a 24px #757575 cross at 2.8:1: the only way to close a
+ * card on a phone. Same specificity, later sheet: these win. The popup
+ * bodies leave 44px clear on the right for it (POPUP_TEXT in map-draw.ts).
+ */
+.cw-map-popup a.leaflet-popup-close-button { width: 44px; height: 44px; font: 20px/44px var(--font-mono); color: var(--color-muted); }
+.cw-map-popup a.leaflet-popup-close-button:hover,
+.cw-map-popup a.leaflet-popup-close-button:focus { color: var(--color-ink); }
 /*
  * A popup near the world's edge moves its CARD, because this map cannot pan
  * one into view — see lib/map-popup-fit.ts, which writes these two properties
@@ -99,5 +125,5 @@
  * the pin, and hidden outright once it would slide off the card's corner.
  */
 .cw-map-popup .leaflet-popup-content-wrapper,
-.cw-map-popup .leaflet-popup-close-button { transform: translate(var(--cw-fit-x, 0px), var(--cw-fit-y, 0px)); }
+.cw-map-popup a.leaflet-popup-close-button { transform: translate(var(--cw-fit-x, 0px), var(--cw-fit-y, 0px)); }
 .cw-map-popup.cw-no-tip .leaflet-popup-tip-container { display: none; }

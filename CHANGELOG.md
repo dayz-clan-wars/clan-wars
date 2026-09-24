@@ -5,6 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The map works without a mouse. Every marker can be reached with Tab and opened
+  with Enter, and each one is named with its age. A new "On the map" list under
+  Layers names you, your base, intruders, bounties, clanmates and pins by grid
+  square, and jumps to each one.
+- "Pin here" drops a pin at the centre of the map, so you no longer need a
+  right-click or a long-press. Move the map and the pin follows the cross until
+  you drop it. After you drop or delete a pin, the map opens back on that pin's
+  grid square instead of the whole world.
+- The map no longer closes an open popup every five minutes. A pin note, or a
+  half-confirmed Delete, now stays open through a refresh unless that pin itself
+  changed.
+- The map says "Loading the map…" while it loads. If the first load fails, it
+  says so, offers Try again, and retries within 15 seconds instead of five
+  minutes. It stops polling while the tab is in the background and refreshes as
+  soon as you come back.
+- The zoom buttons are 44 px and stay dark on hover and when disabled, and a
+  popup's close button is 44 px. Notices no longer cover the zoom buttons, can
+  be dismissed, and do not come back when you reload.
+- The raid and restart timers now show above the map instead of being hidden
+  under it.
+- Intruder, bounty and danger markers are drawn in a brighter rust that stands
+  out from the terrain. Popups stay clear of the layers panel and the desktop
+  bar. The pin form takes keyboard focus, closes on Escape, and labels its note.
+  Leaflet's animations stop when your device asks for reduced motion.
+- The map says when there is nothing on it yet, and says why "Center on me" is
+  off when the server has no recent position for you. The legend is the same on
+  a phone as on a desktop.
+- The first-map hint sits above the phone's bottom bar instead of under it, and
+  its close button is 44 px.
+
 ## [1.38.0] - 2026-09-24
 
 ### Changed

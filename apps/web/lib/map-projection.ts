@@ -68,9 +68,16 @@ export function gridRefKey(x: number, z: number): string {
   return gridRef(x, z).replace(" ", "");
 }
 
+/**
+ * A grid key's whole shape: exactly six digits. The one statement of it —
+ * lib/map-url.ts gates the `at` it writes into a URL on this same regex, so
+ * the page never parses a key the redirect would not have written.
+ */
+export const GRID_KEY = /^\d{6}$/u;
+
 /** The centre of the cell a grid ref names, in metres — or null for anything that is not six digits inside the world. */
 export function parseGridRef(key: string | null | undefined, size: number): { x: number; z: number } | null {
-  if (!key || !/^\d{6}$/u.test(key)) return null;
+  if (!key || !GRID_KEY.test(key)) return null;
   const cx = Number(key.slice(0, 3)), cz = Number(key.slice(3));
   const x = cx * 100 + 50, z = cz * 100 + 50;
   if (x > size || z > size) return null;

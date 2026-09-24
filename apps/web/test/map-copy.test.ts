@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { PIN_ICONS } from "@factions/domain";
-import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge } from "../lib/map-copy";
+import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge, MAP_LEGEND, NO_FIX, emptyLine, infoLines } from "../lib/map-copy";
 import { AGE_OPACITY, PIN_GLYPHS, ageStep, pinGlyph, pinIcon, type Palette } from "../lib/map-icons";
 
 /**
@@ -23,7 +23,7 @@ describe("the pin icons all have words and a glyph", () => {
     expect(Object.keys(PIN_GLYPHS).sort()).toEqual([...PIN_ICONS].sort());
   });
 
-  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust: "RUST", olive: "OLIVE", frame: "FRAME", rule2: "RULE2" };
+  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust2: "RUST2", olive: "OLIVE", frame: "FRAME", rule2: "RULE2" };
 
   it("fills every placeholder — no {a}, {f} or {i} reaches the map", () => {
     for (const icon of PIN_ICONS) {
@@ -35,7 +35,7 @@ describe("the pin icons all have words and a glyph", () => {
   it("is a gold glyph on a black chip, except danger, which is the one rust pin", () => {
     expect(pinIcon(p, "loot")).toContain('stroke="GOLD"');
     expect(pinIcon(p, "loot")).toContain('fill="FRAME"');
-    expect(pinIcon(p, "danger")).toContain('stroke="RUST"');
+    expect(pinIcon(p, "danger")).toContain('stroke="RUST2"');
     expect(pinIcon(p, "danger")).not.toContain("GOLD");
   });
 });
@@ -112,5 +112,58 @@ describe("fixAge", () => {
 describe("DIM_AFTER_MS", () => {
   it("is a day — past that a dot is dimmed (guide ch. 10)", () => {
     expect(DIM_AFTER_MS).toBe(24 * 3600_000);
+  });
+});
+
+describe("the map's plain-words lines", () => {
+  it("says the clanmates layer is empty, instead of showing nothing", () => {
+    expect(emptyLine({ clanmates: [] }, { clanmates: true })).toMatch(/^No clanmates on the map yet/u);
+    expect(emptyLine({ clanmates: [{}] }, { clanmates: true })).toBeNull();
+    // Not in a clan: the layers panel already says what would add the layer.
+    expect(emptyLine({ clanmates: [] }, { clanmates: false })).toBeNull();
+  });
+
+  it("says why there is no position — in words on the page, not a tooltip a phone never shows", () => {
+    expect(NO_FIX).toMatch(/^No position for you yet/u);
+  });
+
+  // A player whose fixes aged out of POSITION_RETENTION_MS has been logged
+  // since they linked — just not recently. "Since you linked" was false for them.
+  it("does not claim the character was never logged", () => {
+    expect(NO_FIX).toBe("No position for you yet — the server has not logged your character recently.");
+  });
+
+  /** The phone's legend used to omit the 24 h dimming the desktop's stated. */
+  it("has one legend, naming the dimming age from DIM_AFTER_MS", () => {
+    expect(MAP_LEGEND).toContain(`${DIM_AFTER_MS / 3_600_000} h`);
+    expect(MAP_LEGEND).toMatch(/dimmed and hollow/u);
+  });
+});
+
+describe("infoLines waits for the map to be ready", () => {
+  const withFix = { clanmates: [], you: { fix: {} } };
+  const noFix = { clanmates: [], you: { fix: null } };
+
+  it("shows nothing while loading, even with data in hand", () => {
+    // data can arrive before Leaflet's chunk does — showing lines here would
+    // paint over MapStatus's own "loading" overlay.
+    expect(infoLines("loading", noFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows nothing on failed-first — the retry overlay owns that state", () => {
+    expect(infoLines("failed-first", noFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows nothing with no data yet, regardless of view", () => {
+    expect(infoLines("ready", undefined, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows lines once ready", () => {
+    expect(infoLines("ready", noFix, { clanmates: false })).toEqual([NO_FIX]);
+    expect(infoLines("ready", withFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("still shows lines while stale — the map IS on screen, just possibly out of date", () => {
+    expect(infoLines("stale", noFix, { clanmates: false })).toEqual([NO_FIX]);
   });
 });

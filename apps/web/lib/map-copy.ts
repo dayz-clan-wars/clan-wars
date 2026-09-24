@@ -1,4 +1,5 @@
-import { PIN_ICONS } from "@factions/domain";
+import { PIN_ICONS, PIN_NOTE_MAX } from "@factions/domain";
+import type { LoadView } from "./map-load";
 
 export { PIN_RESULT_COPY as RESULT_COPY, PIN_ICON_LABELS } from "@factions/copy";
 
@@ -28,6 +29,35 @@ export const MAP_HINT = {
   more: "In a clan you also see clanmates and shared pins.",
 } as const;
 
+/** The Leaflet container's accessible name: what it is, and how to move through it without a pointer. */
+export const MAP_REGION_LABEL = "Map of Livonia. Tab moves between markers; Enter opens one.";
+
+/** The "On the map" list in the layers panel and sheet. */
+export const ROSTER_COPY = { heading: "On the map", empty: "Nothing of yours is on the map yet." } as const;
+
+/** How to drop a pin: the legend's line, on both bars. */
+export const PIN_HINT = "Press and hold, or use Pin here, to drop a pin.";
+/** Under the pin sheet's grid ref while a "Pin here" draft follows the centre. */
+export const PIN_FOLLOW = "Move the map to place it — the pin goes under the cross.";
+
+/** The pin sheet's words. */
+export const PIN_SHEET_COPY = {
+  icon: "Icon",
+  note: "Note",
+  noteHint: `optional, ${PIN_NOTE_MAX} characters at most`,
+  drop: "Drop a pin",
+  cancel: "Cancel",
+} as const;
+
+/** What the map says about its own loading. */
+export const MAP_LOAD_COPY = {
+  loading: "Loading the map…",
+  failedFirst: "The map could not load. It will try again in a moment.",
+  retry: "Try again",
+  stale: "The map could not be refreshed. What you see may be out of date.",
+  refreshed: "Map refreshed.",
+} as const;
+
 /** "14 min ago", "3 h ago", "yesterday", "6 d ago" — the guide's own words for age. */
 export function fixAge(at: Date, now: Date): string {
   const min = Math.round((now.getTime() - at.getTime()) / 60_000);
@@ -51,5 +81,37 @@ export function expiresIn(expiresAt: Date, now: Date): string {
 
 /** Past 24 h a marker is dimmed (guide ch. 10). */
 export const DIM_AFTER_MS = 24 * 3600_000;
+
+/** The legend, on both layouts. The age comes from DIM_AFTER_MS, so the words cannot drift from the dimming. */
+export const MAP_LEGEND = `Last known, not live. A clanmate unseen for ${DIM_AFTER_MS / 3_600_000} h is dimmed and hollow.`;
+
+/**
+ * Why "Center on me" is off. In words on the page: a `title` never shows on a phone.
+ * "Recently", not "since you linked": a fix older than POSITION_RETENTION_MS is
+ * reaped, so a returning player with no fix HAS been logged since linking.
+ */
+export const NO_FIX = "No position for you yet — the server has not logged your character recently.";
+
+/** A clan member's map with nobody on it says so, rather than looking broken. */
+export function emptyLine(d: { clanmates: readonly unknown[] }, layers: { clanmates: boolean }): string | null {
+  return layers.clanmates && d.clanmates.length === 0 ? "No clanmates on the map yet — one appears once the server logs them." : null;
+}
+
+/**
+ * The standing-fact lines, gated on the map actually being up. `data` can
+ * arrive before `mapReady` does — the JSON fetch and the Leaflet chunk load
+ * in parallel on mount — so computing these from `data` alone let them paint
+ * over MapStatus's "loading"/"failed-first" overlay, which is supposed to own
+ * those states exclusively. "stale" still shows lines: the map IS on screen
+ * then, just possibly out of date.
+ */
+export function infoLines(
+  view: LoadView,
+  d: { clanmates: readonly unknown[]; you: { fix: unknown } } | null | undefined,
+  layers: { clanmates: boolean },
+): string[] {
+  if (!d || (view !== "ready" && view !== "stale")) return [];
+  return [emptyLine(d, layers), d.you.fix ? null : NO_FIX].filter((s): s is string => s !== null);
+}
 
 export { PIN_ICONS };

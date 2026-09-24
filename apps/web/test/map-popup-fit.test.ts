@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { FIT_PAD, FLIP_CLEAR, fitPopup, tipReach } from "../lib/map-popup-fit";
+import { CHROME_IDS, FIT_PAD, FLIP_CLEAR, chromePad, fitPopup, tipReach } from "../lib/map-popup-fit";
 
 /**
  * ⚠️ The bug these pin down: a pin dropped near the world's edge opened a popup
@@ -123,5 +123,39 @@ describe("every popup on the map opts into the fit", () => {
 
   it("styles the open frame for any chip, not just a pin's", () => {
     expect(css).toMatch(/^\.cw-open \.cw-chip-edge \{/mu);
+  });
+});
+
+/**
+ * ⚠️ The fit used to clear only the zoom control. The layers panel
+ * (top-right, 300px), the desktop bar (bottom-left) and the notices
+ * (top centre) all paint at z-1100, above the popup pane's 700, so a card
+ * fitted under any of them opened hidden, Delete button included.
+ */
+describe("chromePad", () => {
+  const rect = (left: number, top: number, width: number, height: number) => ({ left, top, width, height, right: left + width, bottom: top + height });
+  const view = rect(0, 0, 1280, 800);
+
+  it("is the plain gutter with no chrome on screen", () => {
+    expect(chromePad(view, {})).toEqual({ top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left: FIT_PAD });
+  });
+
+  it("clears the zoom control on the left, the corner panel on the right, the bar at the bottom, the notices at the top", () => {
+    const pad = chromePad(view, {
+      zoom: rect(10, 10, 48, 92),
+      corner: rect(1280 - 24 - 300, 24, 300, 500),
+      bar: rect(24, 800 - 24 - 48, 520, 48),
+      notices: rect(460, 24, 360, 44),
+    });
+    expect(pad).toEqual({ left: 58 + FIT_PAD, right: 324 + FIT_PAD, bottom: 72 + FIT_PAD, top: 68 + FIT_PAD });
+  });
+
+  it("ignores chrome that is display:none (a zero box) — the phone's hidden desktop bar", () => {
+    expect(chromePad(view, { bar: rect(0, 0, 0, 0), corner: rect(0, 0, 0, 0) })).toEqual({ top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left: FIT_PAD });
+  });
+
+  it("is the ids map-view.tsx gives that chrome", () => {
+    const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
+    for (const key of Object.keys(CHROME_IDS)) expect(view).toContain(`id={CHROME_IDS.${key}}`);
   });
 });

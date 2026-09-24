@@ -2,17 +2,33 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type * as L from "leaflet";
-import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
+/**
+ * The Leaflet module as the dynamic import yields it. Named once, so the file
+ * spells the dynamic import of "leaflet" in exactly one place: `importLeaflet`.
+ */
+type LeafletModule = typeof L;
+import { POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
-import { layerIcon, pinGlyph } from "@/lib/map-icons";
-import { applyPopupFit } from "@/lib/map-popup-fit";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, infoLines } from "@/lib/map-copy";
+import { layerIcon } from "@/lib/map-icons";
+import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
+import { layerOfKey, rosterRows } from "@/lib/map-roster";
+import { motionOptions, prefersReducedMotion } from "@/lib/map-motion";
+import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
+import { MapRoster } from "./map-roster";
+import { PinSheet } from "./pin-sheet";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
+import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
+import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
+import { SITE_STRIPS_ID, mapTop } from "@/lib/site-strips";
+import { withoutResult } from "@/lib/map-url";
+import { MapStatus } from "./map-status";
+import { MapNotices } from "./map-notices";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
 // still gets extracted, scoped to this component's chunk rather than loaded on
@@ -76,6 +92,16 @@ function Reticle({ size = 20 }: { size?: number }) {
   );
 }
 
+/** The pins layer's own glyph (lib/map-icons.ts `layerIcon("pins")`), in currentColor, for "Pin here". */
+function PinMark({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true">
+      <path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="currentColor" />
+      <path d="M7 25h14" />
+    </svg>
+  );
+}
+
 function Sprocket({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true">
@@ -100,22 +126,45 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     try { setHint(localStorage.getItem(HINT_KEY) !== "1"); } catch { setHint(true); }
   }, [bare]);
   const dismissHint = () => { setHint(false); try { localStorage.setItem(HINT_KEY, "1"); } catch { /* a private window forgets; fine */ } };
+  // The pin form's answer. Shown until dismissed, but taken out of the address
+  // at once: a reload used to replay "Pin dropped." for as long as the tab lived.
+  const [shownNotice, setShownNotice] = useState(notice);
+  useEffect(() => {
+    if (!notice) return;
+    // Next keeps its own router state in history.state; passing it back leaves the router undisturbed.
+    try { window.history.replaceState(window.history.state, "", withoutResult(window.location.href)); } catch { /* the notice still dismisses */ }
+  }, [notice]);
   // `/map?at=043087` (from /base's "Map →") opens on that grid square. Read
   // once, client-side: the HTML still carries no metre coordinate, and a
   // bad key is simply the whole map.
   const at = useSearchParams().get("at");
   const atRef = useRef(at);
   atRef.current = at;
-  // "Refreshed · just now" on the grid cell for two seconds after a tap.
+  // "Refreshed · just now" on the grid cell for two seconds after a tap, and
+  // one announcement. ⚠️ Only once the answer is in and good: flashing on the
+  // tap itself told a player "refreshed" about a request that then failed.
   const [flash, setFlash] = useState(false);
-  const refreshTap = () => { void load(); setFlash(true); setTimeout(() => setFlash(false), 2_000); };
+  const [announce, setAnnounce] = useState("");
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
-  const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
+  // Failures in a row (the backoff), and a count of settled requests: each
+  // settle re-arms the one poll timer, so the next wait follows the last answer.
+  const [failures, setFailures] = useState(0);
+  const [settled, setSettled] = useState(0);
+  // The map exists (Leaflet loaded and built), or its chunk failed to load.
+  // `attempt` re-runs the creation effect for a retry after a chunk failure.
+  const [mapReady, setMapReady] = useState(false);
+  const [leafletFailed, setLeafletFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
+  // Chunk failures in a row: the ladder for the automatic retry below. Zeroed once the map exists.
+  const [chunkFailures, setChunkFailures] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [enabled, setEnabled] = useState<Record<LayerKey, boolean>>(ALL_ON);
-  const [centre, setCentre] = useState("000 000");
-  const [pinAt, setPinAt] = useState<{ x: number; z: number } | null>(null);
+  // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
+  const [centre, setCentre] = useState<{ grid: string; x: number; z: number } | null>(null);
+  const [pinAt, setPinAt] = useState<PinDraft | null>(null);
+  const shell = useRef<HTMLElement>(null);
   // The layers live behind a sprocket. Closed by default: the map is the
   // page, and a panel that stays open covers the terrain a player came for.
   const [layersOpen, setLayersOpen] = useState(false);
@@ -125,40 +174,135 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const missing = (Object.keys(LAYER_REASONS) as (keyof typeof LAYER_REASONS)[]).filter((k) => !layers[k]);
 
   // ── The fetch loop ────────────────────────────────────────────────────────
-  const load = useCallback(async () => {
+  // The last answer's raw body, so an unchanged poll is skipped outright (see `load`).
+  const lastBody = useRef<string | null>(null);
+  const gate = useRef(requestGate());
+  const inflight = useRef<AbortController | null>(null);
+  const load = useCallback(async (): Promise<boolean | null> => {
+    // ⚠️ One answer applied at a time, and only the newest. A Refresh tapped
+    // while the poll's request was still out used to race it, and whichever
+    // answered LAST won, so an older snapshot could overwrite a newer one.
+    // The abort saves the superseded request's bandwidth; the gate is what
+    // keeps the order right even when the abort lands too late.
+    inflight.current?.abort();
+    const ctl = new AbortController();
+    inflight.current = ctl;
+    const n = gate.current.begin();
+    let ok = false;
     try {
-      const res = await fetch("/api/map/state", { cache: "no-store" });
-      if (res.status === 401) return setError("unauthenticated");
-      if (res.status === 403) return setError("not-linked");
-      if (!res.ok) return setError("failed");
-      setError(null);
-      setData(parseState((await res.json()) as WireState));
+      const res = await fetch("/api/map/state", { cache: "no-store", signal: ctl.signal });
+      const body = res.ok ? await res.text() : null;
+      if (!gate.current.isLatest(n)) return null;
+      if (res.status === 401) setError("unauthenticated");
+      else if (res.status === 403) setError("not-linked");
+      else if (body === null) setError("failed");
+      else {
+        setError(null);
+        // An unchanged answer changes nothing on the map. Skipping it keeps
+        // `data`, and every effect keyed on it, still. Parsed BEFORE it is
+        // remembered, so a body that fails to parse is never taken as "unchanged".
+        if (body !== lastBody.current) {
+          const next = parseState(JSON.parse(body) as WireState);
+          lastBody.current = body;
+          setData(next);
+        }
+        ok = true;
+      }
     } catch {
+      // ⚠️ An aborted request is superseded, not failed: counting it would
+      // push the backoff up every time a player taps Refresh.
+      if (!gate.current.isLatest(n)) return null;
       setError("failed");
     }
+    setFailures((f) => (ok ? 0 : f + 1));
+    setSettled((s) => s + 1);
+    return ok;
   }, []);
+
+  const leafletMod = useRef<Promise<LeafletModule> | null>(null);
+  /**
+   * The Leaflet chunk, requested once.
+   * ⚠️ Started on MOUNT, beside the first state fetch. It used to wait for
+   * that fetch (the creation effect is gated on `size`), so a phone paid
+   * state → JS → tiles in series before the first tile was even asked for.
+   * Still a dynamic import, so Leaflet never enters the server bundle and
+   * never runs during SSR. This page's HTML must stay coordinate-free.
+   */
+  const importLeaflet = useCallback(() => {
+    leafletMod.current ??= import("leaflet").then((mod) => mod.default ?? (mod as unknown as LeafletModule));
+    return leafletMod.current;
+  }, []);
+
+  const refreshTap = async () => {
+    const ok = await load();
+    if (ok !== true) return;
+    setFlash(true);
+    setAnnounce(MAP_LOAD_COPY.refreshed);
+    setTimeout(() => { setFlash(false); setAnnounce(""); }, 2_000);
+  };
 
   // 401 and 403 are answers, not outages: the session is gone or the character
   // is not linked, and neither is fixed by asking again five minutes later.
   const terminal = error === "unauthenticated" || error === "not-linked";
+  const view = loadView({ mapReady, error, leafletFailed });
+  const retry = () => {
+    // A Leaflet chunk that failed to load is only fetched again by re-running the creation effect.
+    if (leafletFailed) { setLeafletFailed(false); setAttempt((a) => a + 1); }
+    void load();
+  };
 
   useEffect(() => {
     setEnabled(loadSwitches());
     void load();
+    importLeaflet().catch(() => { /* reported by the creation effect, which awaits this same promise */ });
+    return () => inflight.current?.abort();
+  }, [load, importLeaflet]);
+
+  const terminalRef = useRef(terminal);
+  terminalRef.current = terminal;
+  const [hidden, setHidden] = useState(() => typeof document !== "undefined" && document.visibilityState === "hidden");
+  // ⚠️ A background tab asks for nothing: no poll, no age tick. Coming back is
+  // a fresh load and a fresh clock at once, never a wait of up to five minutes
+  // for a timer that was paused.
+  useEffect(() => {
+    const onVisibility = () => {
+      const h = document.visibilityState === "hidden";
+      setHidden(h);
+      if (!h && !terminalRef.current) { setNow(Date.now()); void load(); }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
   }, [load]);
 
+  // One timer, re-armed after every settled request, not an interval. The
+  // next wait depends on how the last answer went (lib/map-load.ts: 15 s,
+  // 60 s, then the poll), and a manual Refresh restarts the wait instead of
+  // stacking a second schedule on the first.
   useEffect(() => {
-    if (terminal) return;
-    const id = setInterval(() => void load(), POSITION_FIX_MS);
-    return () => clearInterval(id);
-  }, [load, terminal]);
+    const delay = nextPollDelay({ failures, hidden }, POSITION_FIX_MS);
+    if (terminal || delay === null) return;
+    const id = setTimeout(() => void load(), delay);
+    return () => clearTimeout(id);
+  }, [load, terminal, failures, settled, hidden]);
+
+  // ⚠️ The poll never retries a failed Leaflet chunk (the state fetch worked,
+  // so it waits the full five minutes and refetches state only), yet the
+  // failed-first line promises "It will try again in a moment". This keeps
+  // that promise, on the same ladder as the fetch (lib/map-load.ts).
+  useEffect(() => {
+    const delay = chunkRetryDelay({ leafletFailed, mapReady, hidden, chunkFailures }, POSITION_FIX_MS);
+    if (terminal || delay === null) return;
+    const id = setTimeout(() => { setLeafletFailed(false); setAttempt((a) => a + 1); void load(); }, delay);
+    return () => clearTimeout(id);
+  }, [leafletFailed, mapReady, hidden, chunkFailures, terminal, load]);
 
   // Ages tick between fetches: a fix five minutes old must not read "just now"
   // for the whole interval.
   useEffect(() => {
+    if (hidden) return;
     const id = setInterval(() => setNow(Date.now()), AGE_TICK_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [hidden]);
 
   /**
    * Center on your last known position and zoom in. The fix is whatever the
@@ -169,9 +313,36 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     const m = map.current, Lm = leaflet.current, d = dataRef.current;
     const fix = d?.you.fix;
     if (!m || !Lm || !d || !fix) return;
-    m.setView(ptFor(Lm, d.world.size)(fix.x, fix.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: true });
+    m.setView(ptFor(Lm, d.world.size)(fix.x, fix.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: !prefersReducedMotion() });
   };
   const hasFix = data?.you.fix != null;
+
+  /**
+   * A list row's action: centre on its marker, open it, and put focus ON it.
+   * ⚠️ Focus moves to the marker because the row's own button is about to be
+   * unmounted with the panel, and focus left on a dead element drops a
+   * keyboard user back at the top of the page. Enter on the focused marker
+   * reopens its popup, and Escape closes it (Leaflet's own handling).
+   */
+  const goTo = (key: string) => {
+    const m = map.current;
+    const layer = layerOfKey(key);
+    const marker = layer ? index.current[layer]?.get(key) : undefined;
+    if (!m || !marker) return;
+    setLayersOpen(false);
+    m.setView(marker.getLatLng(), Math.max(RECENTRE_ZOOM, m.getZoom()), { animate: !prefersReducedMotion() });
+    if (marker.getPopup()) marker.openPopup();
+    marker.getElement()?.focus();
+  };
+  // Recomputed each render, and `now` ticks every 30 s, so a row's age never goes stale.
+  const rows = data ? rosterRows(data, enabled, new Date(now)) : [];
+
+  // Standing facts, shown only once the map is actually up (lib/map-copy.ts's
+  // infoLines): `data` can arrive before `mapReady` does, and painting these
+  // from `data` alone raced Leaflet's chunk, showing them over MapStatus's own
+  // loading/failed-first overlay.
+  const info = infoLines(view, data, layers);
+  const noticesUp = Boolean(shownNotice) || view === "stale" || info.length > 0;
 
   const toggle = (key: LayerKey) => {
     setEnabled((prev) => {
@@ -182,9 +353,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   };
 
   // ── Leaflet ───────────────────────────────────────────────────────────────
-  const leaflet = useRef<typeof import("leaflet") | null>(null);
+  const leaflet = useRef<LeafletModule | null>(null);
   const map = useRef<L.Map | null>(null);
   const groups = useRef<Partial<Record<LayerKey, L.LayerGroup>>>({});
+  // Each layer's markers by key (lib/map-roster.ts), for the list's rows.
+  const index = useRef<Partial<Record<LayerKey, Map<string, L.Marker>>>>({});
   const gridDrawn = useRef(false);
   // The open popup, and the call that keeps its card inside the container.
   const openPopup = useRef<L.Popup | null>(null);
@@ -199,24 +372,47 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const observer = useRef<ResizeObserver | null>(null);
   const barObserver = useRef<ResizeObserver | null>(null);
 
-  // ⚠️ The phone bar must sit BESIDE the map's box, not over it. The world
-  // has a hard edge (maxBoundsViscosity 1) and the zoom floor fits the whole
-  // map to the container, so anything drawn over the container's bottom
-  // hides the south of the map with no way to pan it into view. The bar's
-  // height varies (a notice, the layer chips), so it is measured and the map
-  // element's bottom inset follows it; the map's own ResizeObserver then
-  // re-measures Leaflet and the floor. On desktop the bar is display:none
-  // and measures 0. A callback ref, because the bar unmounts while the pin
-  // sheet is open and comes back as a new element.
-  const phoneBar = useCallback((bar: HTMLDivElement | null) => {
+  // ⚠️ An overlay at the bottom must sit BESIDE the map's box, not over it.
+  // The world has a hard edge (maxBoundsViscosity 1) and the zoom floor fits
+  // the whole map to the container, so anything drawn over the container's
+  // bottom hides the south of the map with no way to pan it into view. The
+  // phone bar's height varies (a notice, the layer chips), and the phone pin
+  // sheet replaces it while open, so whichever is mounted is measured
+  // (lib/map-pin.ts `insetFor`). The map element's bottom follows it, and
+  // `--cw-inset` on <main> tells the "Pin here" cross where the map's centre
+  // is. The map's own ResizeObserver then re-measures Leaflet and the floor.
+  // A callback ref, because the two overlays unmount and remount each other.
+  const insetBy = useCallback((overlay: HTMLElement | null) => {
     barObserver.current?.disconnect();
     barObserver.current = null;
-    if (!bar || typeof ResizeObserver === "undefined") return;
-    const fit = () => { if (el.current) el.current.style.bottom = `${bar.offsetHeight}px`; };
+    if (!overlay || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const px = insetFor(overlay.getBoundingClientRect(), shell.current?.clientWidth ?? 0);
+      if (el.current) el.current.style.bottom = `${px}px`;
+      shell.current?.style.setProperty("--cw-inset", `${px}px`);
+    };
     fit();
     const ro = new ResizeObserver(fit);
-    ro.observe(bar);
+    ro.observe(overlay);
     barObserver.current = ro;
+  }, []);
+  // ⚠️ The map is `fixed` below the top bar, and the strips under the bar are
+  // ordinary flow, so it used to paint straight over them: the raid countdown
+  // invisible on the one page raiders plan from, and the install strip's
+  // buttons still tabbable underneath. The map's top follows the strips'
+  // measured height instead. A dismissed install strip shrinks it; the
+  // marquee's and the timers' heights vary with the servers and the width.
+  // Before the first measure, `top-bar` (the class) holds the map under the
+  // bar alone.
+  useEffect(() => {
+    const strips = document.getElementById(SITE_STRIPS_ID);
+    const main = shell.current;
+    if (!strips || !main || typeof ResizeObserver === "undefined") return;
+    const fit = () => { main.style.top = mapTop(strips.offsetHeight); };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(strips);
+    return () => ro.disconnect();
   }, []);
   // `layers` comes from the server render and never changes for a mounted
   // MapView, but the creation effect deliberately depends on `size` alone —
@@ -228,7 +424,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
   const size = data?.world.size ?? null;
 
-  const ages = useRef<AgeLabel[]>([]);
+  // Per layer, so a layer that is not rebuilt keeps its labels ticking.
+  const ages = useRef<Partial<Record<LayerKey, AgeLabel[]>>>({});
+  const allAges = () => Object.values(ages.current).flatMap((a) => a ?? []);
+  // What each layer was last drawn from, and the popup open right now (by markerKey).
+  const sigs = useRef<Partial<Signatures>>({});
+  const openKey = useRef<string | null>(null);
 
   const redraw = useCallback(() => {
     const Lm = leaflet.current;
@@ -248,32 +449,48 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       }
     }
 
-    const ctx = (key: LayerKey): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current, p });
-    // The same groups, cleared and rebuilt rather than diffed — what is on the
-    // map stays in lockstep with the data, with no stale layer left behind.
-    // ⚠️ This runs on NEW DATA ONLY. See the age tick below and AgeLabel in
+    const next = layerSignatures(d, hintRef.current);
+    const changed = changedLayers(sigs.current, next);
+    sigs.current = next;
+    // ⚠️ Captured BEFORE the clear: removing a marker fires its popupclose,
+    // which forgets the key.
+    const reopen = reopenAfter(openKey.current, changed);
+    // ⚠️ This runs on NEW DATA ONLY, and rebuilds only the layers whose data
+    // changed (map-redraw.ts). See the age tick below and AgeLabel in
     // map-draw.ts: rebuilding on the 30 s tick tore down every open popup.
-    ages.current = [];
-    // Places are the zoom's, not the data's: zoomend redraws them, not a poll.
-    for (const key of ALL_KEYS) if (key !== "terrain" && key !== "places") groups.current[key]!.clearLayers();
-    drawYou(ctx("you"));
-    // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
-    if (hintRef.current && d.you.fix) {
-      const units = WATCH_ZONE_RADIUS_M * (CANVAS_PX / d.world.size) / 2 ** MAX_ZOOM;
-      Lm.circle(pt(d.you.fix.x, d.you.fix.z), { radius: units, color: p.gold, opacity: 0.35, weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(groups.current.you!);
+    for (const key of changed) {
+      groups.current[key]!.clearLayers();
+      index.current[key]?.clear();
+      ages.current[key] = [];
     }
-    drawBase(ctx("base"));
-    drawClanmates(ctx("clanmates"));
-    drawIntruders(ctx("intruders"));
-    drawBounties(ctx("bounties"));
-    drawPublicBases(ctx("publicBases"));
-    drawPins(ctx("pins"));
-    drawTravel(ctx("travel"));
+    const ctx = (key: DataLayer): Ctx => ({ L: Lm, group: groups.current[key]!, pt, data: d, now: nowRef.current, ages: ages.current[key]!, index: (index.current[key] ??= new Map()), p });
+    const draws: Record<DataLayer, () => void> = {
+      you: () => {
+        drawYou(ctx("you"));
+        // The hint's faint dashed ring: what a base's watch zone would add around you. Same group as the dot, so it comes and goes with it.
+        if (hintRef.current && d.you.fix) {
+          const units = WATCH_ZONE_RADIUS_M * (CANVAS_PX / d.world.size) / 2 ** MAX_ZOOM;
+          Lm.circle(pt(d.you.fix.x, d.you.fix.z), { radius: units, color: p.gold, opacity: 0.35, weight: 2, dashArray: "6 6", fill: false, interactive: false }).addTo(groups.current.you!);
+        }
+      },
+      base: () => drawBase(ctx("base")),
+      clanmates: () => drawClanmates(ctx("clanmates")),
+      intruders: () => drawIntruders(ctx("intruders")),
+      bounties: () => drawBounties(ctx("bounties")),
+      publicBases: () => drawPublicBases(ctx("publicBases")),
+      pins: () => drawPins(ctx("pins")),
+      travel: () => drawTravel(ctx("travel")),
+    };
+    for (const key of changed) draws[key]();
     // The grid never changes, so it is drawn once — redrawing 26 polylines
     // every poll would be churn with nothing to show for it.
     if (!gridDrawn.current) {
       drawGrid(Lm, groups.current.terrain!, pt, d.world.size);
       gridDrawn.current = true;
+    }
+    if (reopen) {
+      const layer = layerOfKey(reopen);
+      (layer ? index.current[layer]?.get(reopen) : undefined)?.openPopup();
     }
   }, []);
 
@@ -281,12 +498,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     if (!el.current || size === null) return;
     let cancelled = false;
 
-    // Dynamically imported so Leaflet never enters the server bundle and never
-    // runs during SSR — this page's HTML must stay coordinate-free.
-    void import("leaflet")
-      .then((mod) => {
+    // The chunk importLeaflet started on mount: usually in hand by now. Still
+    // dynamic, so Leaflet never enters the server bundle and never runs
+    // during SSR — this page's HTML must stay coordinate-free.
+    void importLeaflet()
+      .then((Lm) => {
         if (cancelled || !el.current) return;
-        const Lm = mod.default ?? (mod as unknown as typeof import("leaflet"));
         leaflet.current = Lm;
         const m = Lm.map(el.current, {
           crs: Lm.CRS.Simple, minZoom: 0, maxZoom: MAX_ZOOM,
@@ -298,6 +515,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           // the edge is a fact about the terrain, not a suggestion.
           maxBoundsViscosity: 1,
           attributionControl: true,
+          // Zoom, tile fade, marker slide and pan inertia: all motion, all off under prefers-reduced-motion.
+          ...motionOptions(prefersReducedMotion()),
         });
         map.current = m;
 
@@ -367,8 +586,15 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         drawPlaces();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
+        setMapReady(true);
+        setChunkFailures(0);
 
-        const readCentre = () => { const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size); setCentre(gridRef(c.x, c.z)); };
+        const readCentre = () => {
+          const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
+          setCentre({ grid: gridRef(c.x, c.z), x: c.x, z: c.z });
+          // A "Pin here" draft rides the centre: pan, and the pin moves under the cross.
+          setPinAt((d) => followCentre(d, c));
+        };
         readCentre();
         m.on("moveend", readCentre);
         // Long-press on touch, right-click on desktop — Leaflet gives both the
@@ -390,14 +616,19 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         // every view change, because what fits depends on where the pin now is.
         const fitOpen = () => { const p = openPopup.current; if (p) applyPopupFit(m, p); };
         fitPopupNow.current = fitOpen;
-        m.on("popupopen", (e: L.PopupEvent) => { openPopup.current = e.popup; fitOpen(); });
-        m.on("popupclose", (e: L.PopupEvent) => { if (openPopup.current === e.popup) openPopup.current = null; });
+        // Which marker the open popup belongs to, by key, so a rebuild of its layer can put it back.
+        const keyOf = (popup: L.Popup): string | null => {
+          for (const g of Object.values(index.current)) for (const [k, mk] of g ?? []) if (mk.getPopup() === popup) return k;
+          return null;
+        };
+        m.on("popupopen", (e: L.PopupEvent) => { openPopup.current = e.popup; openKey.current = keyOf(e.popup); fitOpen(); });
+        m.on("popupclose", (e: L.PopupEvent) => { if (openPopup.current === e.popup) { openPopup.current = null; openKey.current = null; } });
         m.on("moveend zoomend resize", fitOpen);
 
         if (layersRef.current.pins) {
           m.on("contextmenu", (e: L.LeafletMouseEvent) => {
             const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
-            setPinAt({ x: Math.round(w.x), z: Math.round(w.z) });
+            setPinAt(pinAtPoint(w));
           });
         }
 
@@ -410,7 +641,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           observer.current = ro;
         }
       })
-      .catch(() => { if (!cancelled) setError("failed"); });
+      .catch(() => {
+        // Forgotten, so a retry (which bumps `attempt`) asks for the chunk again rather than re-reading the failure.
+        leafletMod.current = null;
+        if (!cancelled) { setLeafletFailed(true); setChunkFailures((n) => n + 1); }
+      });
 
     return () => {
       cancelled = true;
@@ -421,26 +656,33 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       openPopup.current = null;
       fitPopupNow.current = () => {};
       groups.current = {};
+      index.current = {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
-      ages.current = [];
+      ages.current = {};
+      sigs.current = {};
+      openKey.current = null;
       gridDrawn.current = false;
       leaflet.current = null;
+      setMapReady(false);
     };
-    // Only `size`: re-running this per poll would destroy and rebuild the map,
-    // snapping the view and closing popups with no user input.
+    // Only `size` and `attempt`: re-running this per poll would destroy and
+    // rebuild the map, snapping the view and closing popups with no user input.
+    // `attempt` changes only on a retry after the Leaflet chunk failed to load,
+    // when there is no map to lose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size]);
+  }, [size, attempt]);
 
   // Structure follows the data. Nothing here reads `now`.
-  useEffect(redraw, [data, redraw]);
+  // `hint` too: its ring is drawn into the "you" group, so dismissing it must redraw (only "you" rebuilds).
+  useEffect(redraw, [data, hint, redraw]);
 
   // ⚠️ The age tick rewrites text and NOTHING else. It must never clear a
   // layer group: a player reading a pin note would lose the note and its
   // Delete button mid-read, twice a minute, with no input of their own.
   // A rewritten age can change the card's height (an expiry wrapping to a
   // second line), so the fit is taken again — never the layers.
-  useEffect(() => { refreshAges(ages.current, now); fitPopupNow.current(); }, [now]);
+  useEffect(() => { refreshAges(allAges(), now); fitPopupNow.current(); }, [now]);
 
   // One group per layer, added and removed on its switch.
   useEffect(() => {
@@ -459,6 +701,23 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+  // Set when the sheet was opened from a button, so closing it can put focus
+  // back. Not for a long-press: focus was never on a button then.
+  const returnFocus = useRef(false);
+  const pinHere = () => {
+    if (!centre) return;
+    returnFocus.current = true;
+    setPinAt(pinAtCentre(centre));
+  };
+  const cancelPin = useCallback(() => setPinAt(null), []);
+  // ⚠️ Both bars unmount while the sheet is open, so the button that opened
+  // it is gone by the time it closes. Focus goes to whichever "Pin here" is
+  // on screen now, else to the map, never to <body>.
+  useEffect(() => {
+    if (pinSheet || !returnFocus.current) return;
+    returnFocus.current = false;
+    pickReturnFocus([...document.querySelectorAll<HTMLElement>("[data-pin-here]")], el.current)?.focus();
+  }, [pinSheet]);
 
   // The popup's Delete button (map-draw.ts) carries `data-arm`: the first
   // tap swaps its label for that text, the second within four seconds
@@ -481,13 +740,20 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     return () => root.removeEventListener("click", onClick);
   }, []);
 
-  // Escape closes the panel; nothing else on this page listens for it.
+  // Escape closes the panel. ⚠️ Not while the pin sheet is open: its own
+  // Escape cancels the draft, and this window listener heard the same keypress
+  // and closed the panel too — one Escape undid two things.
   useEffect(() => {
-    if (!layersOpen) return;
+    if (!layersOpen || pinSheet) return;
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setLayersOpen(false); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [layersOpen]);
+  }, [layersOpen, pinSheet]);
+
+  // The chrome an open card must clear just changed size: the panel opened or
+  // closed, or a notice came or went. Refit, or the card stays where the old
+  // chrome left it.
+  useEffect(() => { fitPopupNow.current(); }, [layersOpen, shownNotice, view]);
   // Read once the component is on a page: the fallbacks equal the tokens, so
   // the server render and the browser agree on every glyph.
   const pal = palette();
@@ -496,8 +762,26 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
-    <main id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
-      <div ref={el} className="absolute inset-0" />
+    // `top-bar` (the class) is only the pre-measure fallback — the strips
+    // effect above overwrites `style.top` with `mapTop()` once it can measure
+    // #site-strips, so the map starts under the timers too, not just the bar.
+    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
+      <h1 className="sr-only">The map</h1>
+      {/* The refresh's one announcement. Not the button: its text follows every pan. */}
+      <p role="status" className="sr-only">{announce}</p>
+      {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
+      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
+      <MapStatus view={view} onRetry={retry} />
+
+      {pinSheet && pinAt.follow && (
+        // The cross marks the map's centre, which is where a "Pin here" draft
+        // lands. It sits between the markers (600) and the popups (700): over
+        // everything it points at, under anything open. The map ends
+        // `--cw-inset` above the bottom, so its centre is half of what remains.
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc((100% - var(--cw-inset, 0px)) / 2)" }}>
+          <Reticle size={32} />
+        </div>
+      )}
 
       {/*
         ⚠️ An overlay, not an early return. Returning message JSX instead of
@@ -518,39 +802,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         </div>
       )}
 
-      {pinSheet && (
-        <form
-          method="post" action="/api/map/pin"
-          className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame p-4 lg:inset-x-auto lg:bottom-6 lg:left-6 lg:w-[360px] lg:border-2"
-        >
-          <input type="hidden" name="x" value={pinAt.x} />
-          <input type="hidden" name="z" value={pinAt.z} />
-          <p className="font-display text-[13px] uppercase tracking-[0.06em] text-ink"><span className="mr-3 text-gold">Pin</span>{gridRef(pinAt.x, pinAt.z)}</p>
-          <fieldset className="mt-3 grid grid-cols-3 gap-2">
-            <legend className="sr-only">Icon</legend>
-            {PIN_ICONS.map((icon, i) => (
-              <label key={icon} className="flex min-h-[44px] cursor-pointer items-center gap-2 border-2 border-rule-3 px-2.5 text-[13px] text-ink has-[:checked]:border-gold has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
-                <input type="radio" name="icon" value={icon} defaultChecked={i === 0} className="sr-only" />
-                <span aria-hidden="true" className="flex flex-none" dangerouslySetInnerHTML={{ __html: pinGlyph(pal, icon, 22) }} />
-                {PIN_ICON_LABELS[icon]}
-              </label>
-            ))}
-          </fieldset>
-          <textarea
-            name="note" maxLength={PIN_NOTE_MAX} rows={2} placeholder={`A note, ${PIN_NOTE_MAX} characters at most`}
-            className="mt-3 w-full border-2 border-rule-3 bg-ground p-2.5 font-mono text-sm text-ink placeholder:text-muted focus:border-gold focus:outline-none"
-          />
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            <button type="submit" className="flex min-h-[48px] items-center justify-center bg-gold font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Drop a pin</button>
-            <button type="button" onClick={() => setPinAt(null)} className="flex min-h-[48px] items-center justify-center border-2 border-rule-2 font-display text-xs uppercase tracking-[0.06em] text-ink">Cancel</button>
-          </div>
-        </form>
-      )}
+      {pinSheet && <PinSheet draft={pinAt} pal={pal} onCancel={cancelPin} insetRef={insetBy} />}
 
       {!pinSheet && (
         <>
           {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
-          <div className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
+          <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
             <button
               type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
               className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
@@ -586,41 +843,58 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                     ))}
                   </ul>
                 )}
-                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+                <MapRoster rows={rows} onGo={goTo} />
+                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">{MAP_LEGEND}{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
           </div>
           {hint && (
-            <div role="note" className="absolute inset-x-4 top-[calc(50%-40px)] z-[1100] border-2 border-gold bg-frame px-4 py-3.5 lg:inset-x-auto lg:left-6 lg:top-auto lg:bottom-24 lg:w-[360px]">
-              <div className="flex items-baseline justify-between gap-4">
+            // ⚠️ Above the phone bar (`--cw-inset`, set by insetBy), not mid-screen:
+            // the middle is exactly where "you" lands after Center on me, and the
+            // hint covered the one marker it was describing.
+            <div role="note" className="absolute inset-x-4 bottom-[calc(var(--cw-inset,0px)+12px)] z-[1100] border-2 border-gold bg-frame px-4 py-3.5 lg:inset-x-auto lg:left-6 lg:bottom-24 lg:w-[360px]">
+              <div className="flex items-center justify-between gap-4">
                 <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">{MAP_HINT.kicker}</span>
-                <button type="button" onClick={dismissHint} className="-mr-2 flex h-9 w-9 items-center justify-center font-mono text-sm text-muted hover:text-ink" aria-label="Dismiss">✕</button>
+                <button type="button" onClick={dismissHint} className="-mr-3 flex h-11 w-11 flex-none items-center justify-center font-mono text-sm text-muted hover:text-ink" aria-label="Dismiss">✕</button>
               </div>
               <p className="mt-1.5 text-sm leading-relaxed text-ink">{MAP_HINT.before}<a className="text-gold hover:underline" href="/base">{MAP_HINT.cta}</a>{MAP_HINT.after}</p>
               <p className="mt-2 text-xs leading-relaxed text-muted">{MAP_HINT.more}</p>
             </div>
           )}
-          {/* Notices stay visible with the panel closed: a failed refresh is not a setting. */}
-          {(notice || error === "failed") && (
-            <div className="absolute left-6 top-6 z-[1100] hidden w-[360px] lg:block">
-              {notice && <p role="status" className="border border-rule-2 bg-frame px-3 py-2 text-sm text-ink">{notice}</p>}
-              {error === "failed" && <p role="status" className="mt-2 border border-rust bg-frame px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+          {/*
+            Notices stay visible with the panel closed: a failed refresh is not
+            a setting. Top centre, because the zoom control owns the top-left
+            corner and the layers the top-right: at left-6 top-6 a notice sat
+            over the zoom buttons for as long as it stayed up.
+          */}
+          {noticesUp && (
+            <div id={CHROME_IDS.notices} className="absolute left-1/2 top-6 z-[1100] hidden w-[360px] -translate-x-1/2 lg:block">
+              <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="frame" lines={info} />
             </div>
           )}
-          <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
-            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
+          <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
+            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre?.grid ?? "000 000"}</span>
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
               <Reticle size={16} /> Center on me
             </button>
-            <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
+            {layers.pins && (
+              <button type="button" data-pin-here onClick={pinHere} disabled={centre === null}
+                className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
+                <PinMark size={16} /> Pin here
+              </button>
+            )}
+            <button type="button" onClick={() => void refreshTap()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
             <a className="flex min-h-[44px] items-center border-l border-rule-2 bg-gold px-4 text-ground hover:bg-gold-hover" href={next.href}>{next.label}</a>
           </div>
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
-          <div ref={phoneBar} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
-            {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
-            {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+          <div ref={insetBy} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
+            {noticesUp && (
+              <div className="mx-4 mt-3">
+                <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="surface" lines={info} />
+              </div>
+            )}
             {layersOpen && (
               <div id="map-layers-sheet">
               <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
@@ -632,9 +906,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
+              {/* `nested`: the sheet scrolls; a second scroller inside it trapped a swipe. */}
+              <MapRoster rows={rows} onGo={goTo} nested />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
-                <span>Last known, not live.</span>
-                {layers.pins && <span>Press and hold to drop a pin.</span>}
+                <span>{MAP_LEGEND}</span>
+                {layers.pins && <span>{PIN_HINT}</span>}
                 {guide && <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a>}
               </div>
               </div>
@@ -652,11 +928,19 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 <Reticle size={18} />
                 <span className="sr-only">Center on me</span>
               </button>
+              {layers.pins && (
+                <button type="button" data-pin-here onClick={pinHere} disabled={centre === null}
+                  className="flex h-11 w-11 flex-none items-center justify-center border-2 border-rule-3 text-ink disabled:opacity-40">
+                  <PinMark size={18} />
+                  <span className="sr-only">Pin here</span>
+                </button>
+              )}
               {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
-              <button type="button" onClick={refreshTap} aria-live="polite" title="Refresh"
+              <button type="button" onClick={() => void refreshTap()} title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
-                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
-                <span className="sr-only">Grid {centre}. Refresh</span>
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
+                {/* The one accessible name; the visible grid above is aria-hidden so it is not said twice. */}
+                <span className="sr-only">Refresh the map. Centre: grid {centre?.grid ?? "000 000"}</span>
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
             </div>
