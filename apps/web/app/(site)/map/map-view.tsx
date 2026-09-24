@@ -6,10 +6,11 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
+import { followCentre, insetFor, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
 import {
   FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
@@ -78,6 +79,16 @@ function Reticle({ size = 20 }: { size?: number }) {
   );
 }
 
+/** The pins layer's own glyph (lib/map-icons.ts `layerIcon("pins")`), in currentColor, for "Pin here". */
+function PinMark({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true">
+      <path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="currentColor" />
+      <path d="M7 25h14" />
+    </svg>
+  );
+}
+
 function Sprocket({ size = 20 }: { size?: number }) {
   return (
     <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="square" aria-hidden="true">
@@ -116,8 +127,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [enabled, setEnabled] = useState<Record<LayerKey, boolean>>(ALL_ON);
-  const [centre, setCentre] = useState("000 000");
-  const [pinAt, setPinAt] = useState<{ x: number; z: number } | null>(null);
+  // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
+  const [centre, setCentre] = useState<{ grid: string; x: number; z: number } | null>(null);
+  const [pinAt, setPinAt] = useState<PinDraft | null>(null);
+  const shell = useRef<HTMLElement>(null);
   // The layers live behind a sprocket. Closed by default: the map is the
   // page, and a panel that stays open covers the terrain a player came for.
   const [layersOpen, setLayersOpen] = useState(false);
@@ -223,23 +236,28 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const observer = useRef<ResizeObserver | null>(null);
   const barObserver = useRef<ResizeObserver | null>(null);
 
-  // ⚠️ The phone bar must sit BESIDE the map's box, not over it. The world
-  // has a hard edge (maxBoundsViscosity 1) and the zoom floor fits the whole
-  // map to the container, so anything drawn over the container's bottom
-  // hides the south of the map with no way to pan it into view. The bar's
-  // height varies (a notice, the layer chips), so it is measured and the map
-  // element's bottom inset follows it; the map's own ResizeObserver then
-  // re-measures Leaflet and the floor. On desktop the bar is display:none
-  // and measures 0. A callback ref, because the bar unmounts while the pin
-  // sheet is open and comes back as a new element.
-  const phoneBar = useCallback((bar: HTMLDivElement | null) => {
+  // ⚠️ An overlay at the bottom must sit BESIDE the map's box, not over it.
+  // The world has a hard edge (maxBoundsViscosity 1) and the zoom floor fits
+  // the whole map to the container, so anything drawn over the container's
+  // bottom hides the south of the map with no way to pan it into view. The
+  // phone bar's height varies (a notice, the layer chips), and the phone pin
+  // sheet replaces it while open, so whichever is mounted is measured
+  // (lib/map-pin.ts `insetFor`). The map element's bottom follows it, and
+  // `--cw-inset` on <main> tells the "Pin here" cross where the map's centre
+  // is. The map's own ResizeObserver then re-measures Leaflet and the floor.
+  // A callback ref, because the two overlays unmount and remount each other.
+  const insetBy = useCallback((overlay: HTMLElement | null) => {
     barObserver.current?.disconnect();
     barObserver.current = null;
-    if (!bar || typeof ResizeObserver === "undefined") return;
-    const fit = () => { if (el.current) el.current.style.bottom = `${bar.offsetHeight}px`; };
+    if (!overlay || typeof ResizeObserver === "undefined") return;
+    const fit = () => {
+      const px = insetFor(overlay.getBoundingClientRect(), shell.current?.clientWidth ?? 0);
+      if (el.current) el.current.style.bottom = `${px}px`;
+      shell.current?.style.setProperty("--cw-inset", `${px}px`);
+    };
     fit();
     const ro = new ResizeObserver(fit);
-    ro.observe(bar);
+    ro.observe(overlay);
     barObserver.current = ro;
   }, []);
   // `layers` comes from the server render and never changes for a mounted
@@ -396,7 +414,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
 
-        const readCentre = () => { const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size); setCentre(gridRef(c.x, c.z)); };
+        const readCentre = () => {
+          const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
+          setCentre({ grid: gridRef(c.x, c.z), x: c.x, z: c.z });
+          // A "Pin here" draft rides the centre: pan, and the pin moves under the cross.
+          setPinAt((d) => followCentre(d, c));
+        };
         readCentre();
         m.on("moveend", readCentre);
         // Long-press on touch, right-click on desktop — Leaflet gives both the
@@ -425,7 +448,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         if (layersRef.current.pins) {
           m.on("contextmenu", (e: L.LeafletMouseEvent) => {
             const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
-            setPinAt({ x: Math.round(w.x), z: Math.round(w.z) });
+            setPinAt(pinAtPoint(w));
           });
         }
 
@@ -488,6 +511,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+  const pinHere = () => { if (centre) setPinAt(pinAtCentre(centre)); };
 
   // The popup's Delete button (map-draw.ts) carries `data-arm`: the first
   // tap swaps its label for that text, the second within four seconds
@@ -525,10 +549,20 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
-    <main id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
+    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
       <h1 className="sr-only">The map</h1>
       {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
       <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
+
+      {pinSheet && pinAt.follow && (
+        // The cross marks the map's centre, which is where a "Pin here" draft
+        // lands. It sits between the markers (600) and the popups (700): over
+        // everything it points at, under anything open. The map ends
+        // `--cw-inset` above the bottom, so its centre is half of what remains.
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc((100% - var(--cw-inset, 0px)) / 2)" }}>
+          <Reticle size={32} />
+        </div>
+      )}
 
       {/*
         ⚠️ An overlay, not an early return. Returning message JSX instead of
@@ -551,12 +585,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
       {pinSheet && (
         <form
+          ref={insetBy}
           method="post" action="/api/map/pin"
           className="absolute inset-x-0 bottom-0 z-[1100] max-h-[70dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame p-4 lg:inset-x-auto lg:bottom-6 lg:left-6 lg:w-[360px] lg:border-2"
         >
           <input type="hidden" name="x" value={pinAt.x} />
           <input type="hidden" name="z" value={pinAt.z} />
           <p className="font-display text-[13px] uppercase tracking-[0.06em] text-ink"><span className="mr-3 text-gold">Pin</span>{gridRef(pinAt.x, pinAt.z)}</p>
+          {pinAt.follow && <p className="mt-1 font-mono text-[11px] text-muted">{PIN_FOLLOW}</p>}
           <fieldset className="mt-3 grid grid-cols-3 gap-2">
             <legend className="sr-only">Icon</legend>
             {PIN_ICONS.map((icon, i) => (
@@ -618,7 +654,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </ul>
                 )}
                 <MapRoster rows={rows} onGo={goTo} />
-                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && " Press and hold to drop a pin."}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
+                <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">Last known, not live. Markers older than 24 h are dimmed.{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
             )}
           </div>
@@ -640,17 +676,23 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             </div>
           )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
-            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre}</span>
+            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre?.grid ?? "000 000"}</span>
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
               <Reticle size={16} /> Center on me
             </button>
+            {layers.pins && (
+              <button type="button" data-pin-here onClick={pinHere} disabled={centre === null}
+                className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
+                <PinMark size={16} /> Pin here
+              </button>
+            )}
             <button type="button" onClick={() => void load()} className="flex min-h-[44px] items-center border-l border-rule-2 px-4 text-ink hover:text-gold">Refresh</button>
             <a className="flex min-h-[44px] items-center border-l border-rule-2 bg-gold px-4 text-ground hover:bg-gold-hover" href={next.href}>{next.label}</a>
           </div>
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
-          <div ref={phoneBar} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
+          <div ref={insetBy} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
             {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
             {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
             {layersOpen && (
@@ -667,7 +709,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               <MapRoster rows={rows} onGo={goTo} />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
                 <span>Last known, not live.</span>
-                {layers.pins && <span>Press and hold to drop a pin.</span>}
+                {layers.pins && <span>{PIN_HINT}</span>}
                 {guide && <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a>}
               </div>
               </div>
@@ -685,11 +727,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 <Reticle size={18} />
                 <span className="sr-only">Center on me</span>
               </button>
+              {layers.pins && (
+                <button type="button" data-pin-here onClick={pinHere} disabled={centre === null}
+                  className="flex h-11 w-11 flex-none items-center justify-center border-2 border-rule-3 text-ink disabled:opacity-40">
+                  <PinMark size={18} />
+                  <span className="sr-only">Pin here</span>
+                </button>
+              )}
               {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
               <button type="button" onClick={refreshTap} aria-live="polite" title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
-                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
-                <span className="sr-only">Grid {centre}. Refresh</span>
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
+                <span className="sr-only">Grid {centre?.grid ?? "000 000"}. Refresh</span>
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
             </div>

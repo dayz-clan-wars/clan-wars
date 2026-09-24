@@ -34,6 +34,11 @@ export const MAP_REGION_LABEL = "Map of Livonia. Tab moves between markers; Ente
 /** The "On the map" list in the layers panel and sheet. */
 export const ROSTER_COPY = { heading: "On the map", empty: "Nothing of yours is on the map yet." } as const;
 
+/** How to drop a pin: the legend's line, on both bars. */
+export const PIN_HINT = "Press and hold, or use Pin here, to drop a pin.";
+/** Under the pin sheet's grid ref while a "Pin here" draft follows the centre. */
+export const PIN_FOLLOW = "Move the map to place it — the pin goes under the cross.";
+
 /** "14 min ago", "3 h ago", "yesterday", "6 d ago" — the guide's own words for age. */
 export function fixAge(at: Date, now: Date): string {
   const min = Math.round((now.getTime() - at.getTime()) / 60_000);
