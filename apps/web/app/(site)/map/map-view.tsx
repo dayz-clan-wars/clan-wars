@@ -6,7 +6,7 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT, MAP_LOAD_COPY } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -17,6 +17,8 @@ import {
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
+import { loadView, retryDelay, type LoadError } from "@/lib/map-load";
+import { MapStatus } from "./map-status";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
 // still gets extracted, scoped to this component's chunk rather than loaded on
@@ -125,7 +127,16 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const refreshTap = () => { void load(); setFlash(true); setTimeout(() => setFlash(false), 2_000); };
   const el = useRef<HTMLDivElement>(null);
   const [data, setData] = useState<MapData | null>(null);
-  const [error, setError] = useState<"unauthenticated" | "not-linked" | "failed" | null>(null);
+  const [error, setError] = useState<LoadError | null>(null);
+  // Failures in a row (the backoff), and a count of settled requests: each
+  // settle re-arms the one poll timer, so the next wait follows the last answer.
+  const [failures, setFailures] = useState(0);
+  const [settled, setSettled] = useState(0);
+  // The map exists (Leaflet loaded and built), or its chunk failed to load.
+  // `attempt` re-runs the creation effect for a retry after a chunk failure.
+  const [mapReady, setMapReady] = useState(false);
+  const [leafletFailed, setLeafletFailed] = useState(false);
+  const [attempt, setAttempt] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [enabled, setEnabled] = useState<Record<LayerKey, boolean>>(ALL_ON);
   // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
@@ -143,41 +154,58 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // ── The fetch loop ────────────────────────────────────────────────────────
   // The last answer's raw body, so an unchanged poll is skipped outright (see `load`).
   const lastBody = useRef<string | null>(null);
-  const load = useCallback(async () => {
+  const load = useCallback(async (): Promise<boolean> => {
+    let ok = false;
     try {
       const res = await fetch("/api/map/state", { cache: "no-store" });
-      if (res.status === 401) return setError("unauthenticated");
-      if (res.status === 403) return setError("not-linked");
-      if (!res.ok) return setError("failed");
-      const body = await res.text();
-      setError(null);
-      // An unchanged answer changes nothing on the map. Skipping it keeps
-      // `data`, and every effect keyed on it, still. Parsed BEFORE it is
-      // remembered, so a body that fails to parse is never taken as "unchanged".
-      if (body !== lastBody.current) {
-        const next = parseState(JSON.parse(body) as WireState);
-        lastBody.current = body;
-        setData(next);
+      if (res.status === 401) setError("unauthenticated");
+      else if (res.status === 403) setError("not-linked");
+      else if (!res.ok) setError("failed");
+      else {
+        const body = await res.text();
+        setError(null);
+        // An unchanged answer changes nothing on the map. Skipping it keeps
+        // `data`, and every effect keyed on it, still. Parsed BEFORE it is
+        // remembered, so a body that fails to parse is never taken as "unchanged".
+        if (body !== lastBody.current) {
+          const next = parseState(JSON.parse(body) as WireState);
+          lastBody.current = body;
+          setData(next);
+        }
+        ok = true;
       }
     } catch {
       setError("failed");
     }
+    setFailures((f) => (ok ? 0 : f + 1));
+    setSettled((n) => n + 1);
+    return ok;
   }, []);
 
   // 401 and 403 are answers, not outages: the session is gone or the character
   // is not linked, and neither is fixed by asking again five minutes later.
   const terminal = error === "unauthenticated" || error === "not-linked";
+  const view = loadView({ mapReady, error, leafletFailed });
+  const retry = () => {
+    // A Leaflet chunk that failed to load is only fetched again by re-running the creation effect.
+    if (leafletFailed) { setLeafletFailed(false); setAttempt((a) => a + 1); }
+    void load();
+  };
 
   useEffect(() => {
     setEnabled(loadSwitches());
     void load();
   }, [load]);
 
+  // One timer, re-armed after every settled request, not an interval. The
+  // next wait depends on how the last answer went (lib/map-load.ts: 15 s,
+  // 60 s, then the poll), and a manual Refresh restarts the wait instead of
+  // stacking a second schedule on the first.
   useEffect(() => {
     if (terminal) return;
-    const id = setInterval(() => void load(), POSITION_FIX_MS);
-    return () => clearInterval(id);
-  }, [load, terminal]);
+    const id = setTimeout(() => void load(), retryDelay(failures, POSITION_FIX_MS));
+    return () => clearTimeout(id);
+  }, [load, terminal, failures, settled]);
 
   // Ages tick between fetches: a fix five minutes old must not read "just now"
   // for the whole interval.
@@ -441,6 +469,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         drawPlaces();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
+        setMapReady(true);
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
@@ -494,7 +523,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           observer.current = ro;
         }
       })
-      .catch(() => { if (!cancelled) setError("failed"); });
+      .catch(() => { if (!cancelled) setLeafletFailed(true); });
 
     return () => {
       cancelled = true;
@@ -513,11 +542,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       openKey.current = null;
       gridDrawn.current = false;
       leaflet.current = null;
+      setMapReady(false);
     };
-    // Only `size`: re-running this per poll would destroy and rebuild the map,
-    // snapping the view and closing popups with no user input.
+    // Only `size` and `attempt`: re-running this per poll would destroy and
+    // rebuild the map, snapping the view and closing popups with no user input.
+    // `attempt` changes only on a retry after the Leaflet chunk failed to load,
+    // when there is no map to lose.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [size]);
+  }, [size, attempt]);
 
   // Structure follows the data. Nothing here reads `now`.
   useEffect(redraw, [data, redraw]);
@@ -588,6 +620,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       <h1 className="sr-only">The map</h1>
       {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
       <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
+      <MapStatus view={view} onRetry={retry} />
 
       {pinSheet && pinAt.follow && (
         // The cross marks the map's centre, which is where a "Pin here" draft
@@ -704,10 +737,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             </div>
           )}
           {/* Notices stay visible with the panel closed: a failed refresh is not a setting. */}
-          {(notice || error === "failed") && (
+          {(notice || view === "stale") && (
             <div className="absolute left-6 top-6 z-[1100] hidden w-[360px] lg:block">
               {notice && <p role="status" className="border border-rule-2 bg-frame px-3 py-2 text-sm text-ink">{notice}</p>}
-              {error === "failed" && <p role="status" className="mt-2 border border-rust bg-frame px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+              {view === "stale" && <p role="status" className="mt-2 border border-rule-3 bg-frame px-3 py-2 text-sm text-ink">{MAP_LOAD_COPY.stale}</p>}
             </div>
           )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
@@ -729,7 +762,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
           <div ref={insetBy} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
             {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
-            {error === "failed" && <p role="status" className="mx-4 mt-3 border border-rust bg-surface px-3 py-2 text-sm text-ink">The map could not be refreshed. What you see may be out of date.</p>}
+            {view === "stale" && <p role="status" className="mx-4 mt-3 border border-rule-3 bg-surface px-3 py-2 text-sm text-ink">{MAP_LOAD_COPY.stale}</p>}
             {layersOpen && (
               <div id="map-layers-sheet">
               <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
