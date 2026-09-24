@@ -5,15 +5,17 @@ export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "anim
 export type DeathLine =
   /** `victimPos`/`killerPos`: each from its own identity block — the Hub rule reads them (spec 2026-09-22-hub-combat). */
   | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null; victimPos: Vec3 | null; killerPos: Vec3 | null }
-  /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads. */
-  | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null };
+  /** `water`/`energy`/`bleedSources` are the `Stats>` tail a bare death carries — the evidence classifyDeath reads.
+   * ⚠️ `victimPos`: a credited ("finished") kill's event IS this bare death, so King of the Hill
+   * can place it only from here — without it every credited kill is dropped as unplaced. */
+  | { kind: "died"; victimDayzId: string; victimGamertag: string; cause: DeathCause; entity: string | null; water: number | null; energy: number | null; bleedSources: number | null; victimPos: Vec3 | null };
 
 const ID = "[0-9A-F]{40}";
 // ⚠️ Both identities anchored on their 40-hex ids; the victim's `(DEAD)` marker sits between the name and the id —
 // and so does the KILLER's when they died in the same exchange (a mutual kill). Without that optional marker the
 // line falls through to DEATH_RE, whose entity regex reads the word "Player" and files a real kill as "environment".
 const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})([^)]*)\\) killed by Player "([^"]+)" (?:\\(DEAD\\) )?\\(id=(${ID})([^)]*)\\)(.*)$`, "u");
-const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})[^)]*\\)(.*)$`, "u");
+const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})([^)]*)\\)(.*)$`, "u");
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
 const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
 const VERB_RE = /\b(died|committed suicide|bled out|drowned|killed by)\b/u;
@@ -38,7 +40,7 @@ export function parseDeath(raw: string): DeathLine | null {
   }
   const m = DEATH_RE.exec(raw);
   if (!m) return null;
-  const tail = m[3]!; const lower = tail.toLowerCase();
+  const tail = m[4]!; const lower = tail.toLowerCase();
   if (!VERB_RE.test(lower)) return null;      // a corpse re-listed by the PlayerList is not a death
   const entity = ENTITY_RE.exec(tail)?.[1] ?? null;
   const cause: DeathCause =
@@ -48,5 +50,6 @@ export function parseDeath(raw: string): DeathLine | null {
     : "died";
   const s = STATS_RE.exec(tail);
   return { kind: "died", victimGamertag: m[1]!, victimDayzId: m[2]!, cause, entity: lower.includes("killed by") ? entity : null,
-    water: s ? parseFloat(s[1]!) : null, energy: s ? parseFloat(s[2]!) : null, bleedSources: s ? parseInt(s[3]!, 10) : null };
+    water: s ? parseFloat(s[1]!) : null, energy: s ? parseFloat(s[2]!) : null, bleedSources: s ? parseInt(s[3]!, 10) : null,
+    victimPos: posInIdentity(m[3]!) };
 }

@@ -72,6 +72,17 @@ describe("koth scoring", () => {
     expect(r.dropped).toBe(1);
   });
 
+  // ⚠️ A credited kill cites the bare `player.died` event, never a `player.killed` one;
+  // its position comes from the died payload's victimPos (FI1), or it is never placed.
+  it("counts a credited (finished) kill whose bare death was on the hill", async () => {
+    const [e] = await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.died", occurredAt: at("2026-10-03T20:15:00Z"),
+      payload: { victimDayzId: "v9", victimGamertag: "V", cause: "died", entity: null, water: null, energy: null, bleedSources: null, victimPos: { x: HILL.x + 10, y: 100, z: HILL.z } } }).returning();
+    await db.insert(kills).values({ serverId, eventId: e!.id, occurredAt: at("2026-10-03T20:15:00Z"), victimDayzId: "v9", killerDayzId: "f", cause: "finished" });
+    const r = await kothKills(db, await row(), await kothWindow(db, await row()));
+    expect(r.kills.map((k) => k.killerDayzId)).toEqual(["f"]);
+    expect(r.dropped).toBe(0);
+  });
+
   it("awards the top LINKED player once, even when run twice", async () => {
     await db.insert(players).values([
       { dayzId: "u", gamertag: "Unlinked", firstSeenAt: SLOT, lastSeenAt: SLOT },
