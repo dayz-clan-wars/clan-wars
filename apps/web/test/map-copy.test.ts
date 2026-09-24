@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { PIN_ICONS } from "@factions/domain";
-import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge, MAP_LEGEND, NO_FIX, emptyLine } from "../lib/map-copy";
+import { LAYER_LABELS, PIN_ICON_LABELS, RESULT_COPY, DIM_AFTER_MS, expiresIn, fixAge, MAP_LEGEND, NO_FIX, emptyLine, infoLines } from "../lib/map-copy";
 import { AGE_OPACITY, PIN_GLYPHS, ageStep, pinGlyph, pinIcon, type Palette } from "../lib/map-icons";
 
 /**
@@ -131,5 +131,33 @@ describe("the map's plain-words lines", () => {
   it("has one legend, naming the dimming age from DIM_AFTER_MS", () => {
     expect(MAP_LEGEND).toContain(`${DIM_AFTER_MS / 3_600_000} h`);
     expect(MAP_LEGEND).toMatch(/dimmed and hollow/u);
+  });
+});
+
+describe("infoLines waits for the map to be ready", () => {
+  const withFix = { clanmates: [], you: { fix: {} } };
+  const noFix = { clanmates: [], you: { fix: null } };
+
+  it("shows nothing while loading, even with data in hand", () => {
+    // data can arrive before Leaflet's chunk does — showing lines here would
+    // paint over MapStatus's own "loading" overlay.
+    expect(infoLines("loading", noFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows nothing on failed-first — the retry overlay owns that state", () => {
+    expect(infoLines("failed-first", noFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows nothing with no data yet, regardless of view", () => {
+    expect(infoLines("ready", undefined, { clanmates: false })).toEqual([]);
+  });
+
+  it("shows lines once ready", () => {
+    expect(infoLines("ready", noFix, { clanmates: false })).toEqual([NO_FIX]);
+    expect(infoLines("ready", withFix, { clanmates: false })).toEqual([]);
+  });
+
+  it("still shows lines while stale — the map IS on screen, just possibly out of date", () => {
+    expect(infoLines("stale", noFix, { clanmates: false })).toEqual([NO_FIX]);
   });
 });

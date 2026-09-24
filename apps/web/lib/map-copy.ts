@@ -1,4 +1,5 @@
 import { PIN_ICONS, PIN_NOTE_MAX } from "@factions/domain";
+import type { LoadView } from "./map-load";
 
 export { PIN_RESULT_COPY as RESULT_COPY, PIN_ICON_LABELS } from "@factions/copy";
 
@@ -90,6 +91,23 @@ export const NO_FIX = "No position for you yet — the server has not logged you
 /** A clan member's map with nobody on it says so, rather than looking broken. */
 export function emptyLine(d: { clanmates: readonly unknown[] }, layers: { clanmates: boolean }): string | null {
   return layers.clanmates && d.clanmates.length === 0 ? "No clanmates on the map yet — one appears once the server logs them." : null;
+}
+
+/**
+ * The standing-fact lines, gated on the map actually being up. `data` can
+ * arrive before `mapReady` does — the JSON fetch and the Leaflet chunk load
+ * in parallel on mount — so computing these from `data` alone let them paint
+ * over MapStatus's "loading"/"failed-first" overlay, which is supposed to own
+ * those states exclusively. "stale" still shows lines: the map IS on screen
+ * then, just possibly out of date.
+ */
+export function infoLines(
+  view: LoadView,
+  d: { clanmates: readonly unknown[]; you: { fix: unknown } } | null | undefined,
+  layers: { clanmates: boolean },
+): string[] {
+  if (!d || (view !== "ready" && view !== "stale")) return [];
+  return [emptyLine(d, layers), d.you.fix ? null : NO_FIX].filter((s): s is string => s !== null);
 }
 
 export { PIN_ICONS };

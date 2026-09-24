@@ -11,7 +11,7 @@ import { POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, NO_FIX, emptyLine } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, infoLines } from "@/lib/map-copy";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -323,8 +323,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // Recomputed each render, and `now` ticks every 30 s, so a row's age never goes stale.
   const rows = data ? rosterRows(data, enabled, new Date(now)) : [];
 
-  // Standing facts, shown once there is data to state them from.
-  const info = data ? [emptyLine(data, layers), data.you.fix ? null : NO_FIX].filter((s): s is string => s !== null) : [];
+  // Standing facts, shown only once the map is actually up (lib/map-copy.ts's
+  // infoLines): `data` can arrive before `mapReady` does, and painting these
+  // from `data` alone raced Leaflet's chunk, showing them over MapStatus's own
+  // loading/failed-first overlay.
+  const info = infoLines(view, data, layers);
   const noticesUp = Boolean(shownNotice) || view === "stale" || info.length > 0;
 
   const toggle = (key: LayerKey) => {
