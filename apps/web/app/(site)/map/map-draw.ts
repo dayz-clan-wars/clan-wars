@@ -209,6 +209,14 @@ export function ptFor(L: typeof import("leaflet"), size: number) {
 const POPUP = { className: "cw-map-popup", closeButton: true } as const;
 
 /**
+ * A text-only popup's body. ⚠️ `pr-11` keeps the text clear of the close
+ * button, which map.css makes 44px square in the card's top-right corner; the
+ * `min-h` keeps a one-line card at least as tall as that button, or the
+ * button hangs off the card's foot.
+ */
+const POPUP_TEXT = "min-h-[44px] py-3 pl-3.5 pr-11 font-mono text-[13px] leading-normal text-ink";
+
+/**
  * The chip's frame turns gold while its popup is open.
  *
  * ⚠️ Load-bearing for a popup near the world's edge, not decoration. A card
@@ -270,7 +278,7 @@ export function drawClanmates({ L, group, pt, data, now, ages, p }: Ctx): void {
     // The permanent tag is the gamertag alone and never changes; the age lives
     // in the popup, which is the only part a tick rewrites.
     marker.bindTooltip(name, tag(""));
-    const text = (age: string) => `${name} · ${escapeHtml(age)}`;
+    const text = (age: string) => `<div class="${POPUP_TEXT}">${name} · ${escapeHtml(age)}</div>`;
     const age = fixAge(m.fix.at, new Date(now));
     marker.bindPopup(text(age), POPUP);
     markOpen(marker);
@@ -300,7 +308,7 @@ export function drawBounties({ L, group, pt, data, now, ages, p }: Ctx): void {
   for (const b of data.bounties) {
     const text = (age: string) => `${escapeHtml(b.gamertag)} · wanted · ${escapeHtml(age)}`;
     const age = fixAge(b.fix.at, new Date(now));
-    const popup = (age: string) => `${text(age)}<br>${escapeHtml(b.reason)}`;
+    const popup = (age: string) => `<div class="${POPUP_TEXT}">${text(age)}<br>${escapeHtml(b.reason)}</div>`;
     const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: false })
       .bindTooltip(text(age), tag(`${TAG}-intruder`))
       .bindPopup(popup(age), POPUP);
@@ -327,7 +335,7 @@ export function drawPins({ L, group, pt, data, now, ages, p }: Ctx): void {
     // Grid ref, never a coordinate: it is what the guide and the bottom bar speak.
     const text = (age: string) =>
       `<div class="min-w-[13rem] max-w-[16rem]">` +
-        `<div class="flex items-center gap-2.5 border-b border-rule-2 px-3.5 py-3">${pinGlyph(p, pin.icon, 20)}` +
+        `<div class="flex items-center gap-2.5 border-b border-rule-2 py-3 pl-3.5 pr-11">${pinGlyph(p, pin.icon, 20)}` +
           `<span class="font-display text-[13px] uppercase tracking-[0.06em] text-ink">${escapeHtml(label)}</span>` +
           `<span class="ml-auto font-mono text-[11px] text-muted">Grid ${gridRef(pin.x, pin.z)}</span></div>${note}` +
         `<p class="m-0 px-3.5 pb-3 pt-1.5 font-mono text-[11px] text-muted">${escapeHtml(pin.by ?? "a member")} · ${escapeHtml(age)} · ${escapeHtml(expiresIn(pin.expiresAt, new Date(now)))}</p>` +

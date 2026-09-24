@@ -34,3 +34,60 @@ describe("Leaflet's CSS and the site's restyling of it", () => {
     expect(globals).not.toMatch(/\.leaflet-/u);
   });
 });
+
+/**
+ * ⚠️ Leaflet's own rules for the zoom buttons' hover, focus and disabled
+ * states, and for the popup close button, are one class MORE specific than
+ * a plain restyle (`.leaflet-bar a:hover` against `.leaflet-bar a`). So they
+ * won even from the earlier sheet:
+ * - a #f4f4f4 box under ink (1.1:1) on every hover
+ * - a grey disabled zoom-out on every load, because the map opens at its floor
+ * - a 24px #757575 close cross (2.8:1)
+ * Every override here has to match Leaflet's specificity; the later sheet
+ * then wins.
+ */
+describe("Leaflet's control states, at Leaflet's own specificity", () => {
+  const rule = (selector: RegExp): string => mapCss.match(new RegExp(`${selector.source}\\s*\\{([^}]*)\\}`, "u"))?.[1] ?? "";
+
+  it("paints zoom hover and focus in the palette, not Leaflet's #f4f4f4", () => {
+    const body = rule(/\.leaflet-bar a:hover,\s*\.leaflet-bar a:focus/u);
+    expect(body).toContain("background: var(--color-surface)");
+    expect(body).toContain("color: var(--color-gold)");
+  });
+
+  it("paints a disabled zoom button dim on the frame", () => {
+    const body = rule(/\.leaflet-bar a\.leaflet-disabled/u);
+    expect(body).toContain("background: var(--color-frame)");
+    expect(body).toContain("color: var(--color-dim)");
+  });
+
+  it("sizes the zoom buttons 44px, above `.leaflet-touch .leaflet-bar a`'s 30px", () => {
+    const body = rule(/\.leaflet-container \.leaflet-bar a/u);
+    expect(body).toMatch(/width: 44px;/u);
+    expect(body).toMatch(/height: 44px;/u);
+    expect(body).toMatch(/line-height: 44px;/u);
+  });
+
+  it("gives the popup close button 44px and a readable colour, at `a.` specificity", () => {
+    const body = rule(/\.cw-map-popup a\.leaflet-popup-close-button/u);
+    expect(body).toMatch(/width: 44px;/u);
+    expect(body).toMatch(/height: 44px;/u);
+    expect(body).toContain("color: var(--color-muted)");
+    expect(rule(/\.cw-map-popup a\.leaflet-popup-close-button:hover,\s*\.cw-map-popup a\.leaflet-popup-close-button:focus/u)).toContain("color: var(--color-ink)");
+    // The unqualified form is (0,2,0) and loses to Leaflet's (0,2,1).
+    expect(mapCss).not.toMatch(/\.cw-map-popup \.leaflet-popup-close-button/u);
+  });
+});
+
+describe("popup text clears the 44px close button", () => {
+  const draw = readFileSync(join(MAP, "map-draw.ts"), "utf8");
+
+  it("pads every text-only popup's right edge by the button's width, and is at least as tall as it", () => {
+    expect(draw).toMatch(/const POPUP_TEXT = "(?=[^"]*\bpr-11\b)(?=[^"]*min-h-\[44px\])[^"]*"/u);
+    expect(draw.match(/\$\{POPUP_TEXT\}/gu)?.length).toBe(2);
+  });
+
+  it("pads the pin card's header the same way", () => {
+    expect(draw).toContain("border-b border-rule-2 py-3 pl-3.5 pr-11");
+  });
+});
