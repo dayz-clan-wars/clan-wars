@@ -9,6 +9,24 @@ import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from 
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
 
+/** Postgres' `unique_violation`. postgres.js hangs it on the error object as `code`. */
+const UNIQUE_VIOLATION = "23505";
+
+/**
+ * ⚠️ The open-check above the insert is a plain SELECT, not a lock — two
+ * concurrent `/koth schedule` calls can both pass it and both reach the
+ * INSERT. `koth_events_one_open` (or, for two calls racing the same slot,
+ * `koth_events_slot_uq`) is what actually prevents the second row; this is
+ * what turns that DB-level refusal back into the same friendly reply instead
+ * of the router's generic failure text. Anything else rethrows.
+ */
+function uniqueViolation(err: unknown): string | null {
+  if (typeof err !== "object" || err === null) return null;
+  const e = err as { code?: unknown; constraint_name?: unknown };
+  if (e.code !== UNIQUE_VIOLATION) return null;
+  return typeof e.constraint_name === "string" ? e.constraint_name : "";
+}
+
 async function activeServer(ctx: Ctx) {
   return (await ctx.db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1))[0] ?? null;
 }
@@ -40,10 +58,18 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   ));
   if (drop.length > 0) return reply("An airdrop is already set for that session. Pick another slot.");
 
-  const [row] = await ctx.db.insert(kothEvents).values({
-    serverId: server.id, slotAt: slot, location: loc.slug, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
-    state: "scheduled", scheduledByDiscordId: input.actorDiscordId,
-  }).returning({ id: kothEvents.id });
+  let row: { id: number } | undefined;
+  try {
+    [row] = await ctx.db.insert(kothEvents).values({
+      serverId: server.id, slotAt: slot, location: loc.slug, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
+      state: "scheduled", scheduledByDiscordId: input.actorDiscordId,
+    }).returning({ id: kothEvents.id });
+  } catch (err) {
+    const constraint = uniqueViolation(err);
+    if (constraint === null) throw err;
+    if (constraint === "koth_events_slot_uq") return reply("Another King of the Hill event just took that slot. Pick another.");
+    return reply("A King of the Hill event is already scheduled or live. Only one at a time.");
+  }
   try {
     await ctx.koth(scheduledText(loc.name, slot));
   } catch (err) {

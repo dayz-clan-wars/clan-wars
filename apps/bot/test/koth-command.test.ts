@@ -127,6 +127,40 @@ describe("/koth", () => {
     expect(reply.content).toMatch(/scheduled/);
   });
 
+  // (I1) The open-check is a plain SELECT, not a lock: two concurrent calls can both
+  // pass it and both reach the INSERT. `koth_events_one_open` (or, racing the same
+  // slot, `koth_events_slot_uq`) is what actually stops the second row; this pins
+  // that the loser gets the same friendly refusal as the pre-existing "already
+  // scheduled" reply — never a raw error reaching the router's generic failure text
+  // — and that exactly one row lands.
+  //
+  // ⚠️ A bare `Promise.all([schedule(...), schedule(...)])` on a cold pool does NOT
+  // race here: postgres.js's pool starts with no connections, and the first call
+  // finishes its whole sequence of round trips on an already-idle connection before
+  // the second call's new connection has even finished its handshake — confirmed by
+  // instrumenting both calls (the second settles strictly after the first, every
+  // time, over 5 runs). Issuing a couple of trivial queries first forces the pool to
+  // open (and idle) two connections, so the two schedule() calls that follow actually
+  // start from warm connections and interleave — confirmed to reproduce the raw
+  // `23505` on `koth_events_one_open` deterministically, every time, against the
+  // unpatched handler.
+  it("a concurrent /koth schedule gets the friendly refusal, not a raw error", async () => {
+    await Promise.all([db.execute(sql`select 1`), db.execute(sql`select 1`), db.execute(sql`select 1`)]);
+    const postA = vi.fn(async () => {});
+    const postB = vi.fn(async () => {});
+    const [replyA, replyB] = await Promise.all([
+      schedule(ctx(postA), input()),
+      schedule(ctx(postB), input()),
+    ]);
+    const replies = [replyA, replyB];
+    const winners = replies.filter((r) => /Lembork/.test(r.content ?? ""));
+    const losers = replies.filter((r) => !/Lembork/.test(r.content ?? ""));
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect(losers[0]!.content).toMatch(/already|took that slot/i);
+    expect(await rows()).toHaveLength(1);
+  });
+
   it("autocompletes towns by prefix and the next 7 days of slots", async () => {
     const towns = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.location!(ctx(), { actorDiscordId: "99", value: "le" });
     expect(towns.map((t) => t.value)).toContain("lembork");
