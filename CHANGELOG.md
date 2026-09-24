@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- King of the Hill: `/koth schedule` turns one restart window into a KotH session at a
+  Livonia town — hill spawns, KotH loadouts, infected and predators on the hill — and
+  grants the Plate Carrier to the top linked killer within 500 m.
+
 ## [1.36.1] - 2026-09-23
 
 ### Changed

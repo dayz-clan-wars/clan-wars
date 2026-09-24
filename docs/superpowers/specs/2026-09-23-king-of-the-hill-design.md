@@ -170,7 +170,7 @@ hill. The results post reports how many kills were dropped for that reason.
 
 ### 2.9 The window
 
-It runs from the opening restart to the closing restart, taken from the `restarted_at`
+It runs from the opening restart to the closing restart, taken from the `issued_at`
 of the two `server_restarts` rows. If the closing row does not exist, it falls back to
 `slot_at + RESTART_PERIOD_MS`.
 
@@ -229,13 +229,21 @@ Constraints:
 
 - a partial unique index gives one `scheduled`/`live` row per server
 - `(server_id, slot_at)` is unique
-- `award_grant_id` is non-null if and only if `state = 'awarded'`
+- `koth_events_awarded_has_grant` CHECKs `state <> 'awarded' OR award_grant_id IS NOT NULL`
+  — **one direction only**: awarded implies a grant, never the reverse. A `no_winner`
+  or `cancelled` row is free to carry a null `award_grant_id`, which every other state
+  does too; the CHECK only has to stop the one impossible case, an `awarded` row with
+  nothing granted. `award_grant_id`'s FK is `ON DELETE set null` (§3 table above), so
+  the CHECK deliberately does not also require the reverse — a revoked award elsewhere
+  nulling this column must not retroactively make an already-`awarded` row invalid
 
 **Lock order:** `koth_events` goes immediately before `award_grants`. The award
 transaction is `koth_events` → `award_grants` → `clan_notices`.
 
 `packages/domain/assets/koth-locations.json`: a vendored copy of
-`livonia/koth/locations/index.json` (name, slug, centre, spawn radius). A drift test
+`livonia/koth/locations/index.json` (name, slug, centre, spawn radius) — **31 towns**.
+The catalogue is the count, not a remembered round number; this spec said 32 in an
+earlier draft. A drift test
 compares it with `../livonia/koth/locations/index.json` when that path exists and
 skips otherwise, the same pattern as the other cross-repo assets.
 
@@ -254,8 +262,9 @@ skips otherwise, the same pattern as the other cross-repo assets.
 - `kothStandings(kills)` returns the ordered `{ dayzId, gamertag, kills, reachedAt }[]`.
 - `kothWinner(standings, isLinked)` returns the first linked entry, or null.
 
-The radius and the prize are player-facing, so they get rows in `guide-numbers.ts`
-and tokens in a short **King of the Hill** guide section.
+There is no guide section. Airdrops have none either (`docs/superpowers/specs/2026-09-20-airdrop-events-design.md`)
+— the Discord posts (§8) carry the numbers straight from these constants, and that is
+the only place a player needs them. `guide-numbers.ts` stays untouched by this feature.
 
 ---
 
@@ -265,8 +274,11 @@ and tokens in a short **King of the Hill** guide section.
 
 The opening is all-or-nothing, and is verified before anything is written.
 
-1. Download the four town files from `koth/locations/<slug>/` **and** the four
-   defaults from `koth/default/`. If any are missing or empty, nothing is touched:
+1. Confirm the 44 `koth-*.json` presets are on the server with **one** `listFiles` of
+   `custom/`, checked against `KOTH_PRESET_FILES` — not 44 individual downloads.
+   Then download the four town files from `koth/locations/<slug>/` **and** the four
+   defaults from `koth/default/`. If any preset is missing, or any of those eight
+   files is missing or empty, nothing is touched:
    - the row goes to `failed` with the reason in `detail`
    - a line goes to `OPS_CHANNEL_ID` (or an error log line if that is unset)
    - a cancellation is queued
@@ -331,7 +343,9 @@ way an airdrop's restart message names its location.
 
 Scoring runs for a `live` row once **both** of these hold:
 
-- the closing restart is at least `KOTH_SCORE_SETTLE_MS` in the past
+- the closing restart (the window's end, §2.9 — `server_restarts.issued_at`, never
+  `restarted_at`; the column holds the restart POST's timestamp) is at least
+  `KOTH_SCORE_SETTLE_MS` in the past
 - the kills consumer's cursor (`KILLS_CONSUMER`) has passed every event with
   `occurred_at` up to the window's end
 
