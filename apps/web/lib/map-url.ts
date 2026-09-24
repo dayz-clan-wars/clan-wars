@@ -3,6 +3,7 @@
  * grid square to open on. Both are read by the page; neither ever carries a
  * metre coordinate.
  */
+import { GRID_KEY } from "./map-projection";
 
 /** The same address without `?result`, as a path (for `history.replaceState`). */
 export function withoutResult(href: string): string {
@@ -10,8 +11,6 @@ export function withoutResult(href: string): string {
   url.searchParams.delete("result");
   return `${url.pathname}${url.search}${url.hash}`;
 }
-
-const GRID_KEY = /^\d{6}$/u;
 
 /**
  * Where a pin form lands afterwards: the result notice, plus the grid square

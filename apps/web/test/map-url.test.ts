@@ -40,3 +40,23 @@ describe("the pin routes keep the view", () => {
     expect(draw).toContain('<input type="hidden" name="at" value="${gridRefKey(pin.x, pin.z)}" />');
   });
 });
+
+/**
+ * "Six digits" was stated twice — here and in parseGridRef — with nothing to
+ * hold them together. One regex now; this fails if map-url grows its own again,
+ * or if gridRefKey ever writes a key the shared shape would refuse.
+ */
+describe("the grid key's shape is stated once", () => {
+  it("map-url uses map-projection's GRID_KEY, not its own", () => {
+    const src = readFileSync(join(import.meta.dirname, "..", "lib", "map-url.ts"), "utf8");
+    expect(src).toMatch(/import \{[^}]*\bGRID_KEY\b[^}]*\} from "\.\/map-projection"/u);
+    expect(src).not.toMatch(/\\d\{6\}/u);
+  });
+
+  it("every key gridRefKey writes matches it", async () => {
+    const { GRID_KEY, gridRefKey } = await import("../lib/map-projection");
+    for (const [x, z] of [[0, 0], [4321.7, 8765.2], [12799, 12799], [-5, 50]] as const) {
+      expect(gridRefKey(x, z)).toMatch(GRID_KEY);
+    }
+  });
+});
