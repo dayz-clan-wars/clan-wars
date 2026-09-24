@@ -31,8 +31,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   out from the terrain. Popups stay clear of the layers panel and the desktop
   bar. The pin form takes keyboard focus, closes on Escape, and labels its note.
   Leaflet's animations stop when your device asks for reduced motion.
-- The map's empty and no-fix lines wait for the map to be ready before showing,
-  and popups skip their auto-pan when the device asks for reduced motion.
+- The map says when there is nothing on it yet, and says why "Center on me" is
+  off when the server has no recent position for you. The legend is the same on
+  a phone as on a desktop.
+- The first-map hint sits above the phone's bottom bar instead of under it, and
+  its close button is 44 px.
 
 ## [1.38.0] - 2026-09-24
 
