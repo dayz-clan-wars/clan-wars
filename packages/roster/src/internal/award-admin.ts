@@ -12,6 +12,31 @@ export type GrantAwardOutcome =
   | { ok: false; reason: "unknown-award" | "no-reason" | "no-server" };
 
 /**
+ * The grant and its DM, inside a caller's transaction — for King of the Hill,
+ * which must lock its own row first so a retry cannot grant twice (lock order:
+ * koth_events → award_grants → clan_notices).
+ */
+export async function grantAwardTx(tx: Tx, a: {
+  awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date; serverId: number;
+}): Promise<GrantAwardOutcome> {
+  const def = awardsCatalogue()[a.awardKey];
+  if (!def) return { ok: false, reason: "unknown-award" };
+  const reason = a.reason.trim();
+  if (!reason) return { ok: false, reason: "no-reason" };
+  const placeBy = new Date(a.now.getTime() + AWARD_PLACE_BY_MS);
+  const [row] = await tx.insert(awardGrants).values({
+    awardKey: def.key, discordId: a.winnerDiscordId, grantedByDiscordId: a.grantedByDiscordId,
+    reason, grantedAt: a.now, placeBy, updatedAt: a.now,
+  }).returning({ id: awardGrants.id });
+  await appendClanNoticeTx(tx, {
+    serverId: a.serverId, factionId: null, target: "dm", discordTargetId: a.winnerDiscordId,
+    kind: "award_granted", occurredAt: a.now,
+    payload: { grantId: row!.id, awardKey: def.key, label: def.label, reason, placeBy: placeBy.toISOString(), awardUrl: `${a.siteBaseUrl}/awards/${row!.id}` },
+  });
+  return { ok: true, grantId: row!.id, placeBy };
+}
+
+/**
  * Hand an event winner an award (spec §4.1). Admin-only; the gate is the
  * command's, because this is reachable only through `@factions/roster/internal`.
  *
@@ -26,33 +51,12 @@ export type GrantAwardOutcome =
 export async function grantAwardDb(db: Database, a: {
   awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date;
 }): Promise<GrantAwardOutcome> {
-  const def = awardsCatalogue()[a.awardKey];
-  if (!def) return { ok: false, reason: "unknown-award" };
-  const reason = a.reason.trim();
-  if (!reason) return { ok: false, reason: "no-reason" };
   // ⚠️ `clan_notices.server_id` is NOT NULL, so the DM needs a server even
   // though an award belongs to no clan. The one active server, picked the way
   // `/airdrop place` picks it.
   const [server] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
   if (!server) return { ok: false, reason: "no-server" };
-
-  const placeBy = new Date(a.now.getTime() + AWARD_PLACE_BY_MS);
-  const grantId = await db.transaction(async (tx) => {
-    const [row] = await tx.insert(awardGrants).values({
-      awardKey: def.key, discordId: a.winnerDiscordId, grantedByDiscordId: a.grantedByDiscordId,
-      reason, grantedAt: a.now, placeBy, updatedAt: a.now,
-    }).returning({ id: awardGrants.id });
-    await appendClanNoticeTx(tx, {
-      serverId: server.id, factionId: null, target: "dm", discordTargetId: a.winnerDiscordId,
-      kind: "award_granted", occurredAt: a.now,
-      payload: {
-        grantId: row!.id, awardKey: def.key, label: def.label, reason,
-        placeBy: placeBy.toISOString(), awardUrl: `${a.siteBaseUrl}/awards/${row!.id}`,
-      },
-    });
-    return row!.id;
-  });
-  return { ok: true, grantId, placeBy };
+  return db.transaction((tx) => grantAwardTx(tx, { ...a, serverId: server.id }));
 }
 
 export type RevokeAwardOutcome = { ok: true } | { ok: false; reason: "not-found" | "ended" };
