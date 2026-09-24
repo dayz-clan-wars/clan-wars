@@ -11,7 +11,7 @@ import { PIN_ICONS, PIN_NOTE_MAX, POSITION_FIX_MS } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT, MAP_LOAD_COPY } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_REGION_LABEL, LAYER_LABELS, PIN_ICON_LABELS, PIN_FOLLOW, PIN_HINT } from "@/lib/map-copy";
 import { layerIcon, pinGlyph } from "@/lib/map-icons";
 import { applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -23,7 +23,9 @@ import {
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
+import { withoutResult } from "@/lib/map-url";
 import { MapStatus } from "./map-status";
+import { MapNotices } from "./map-notices";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
 // still gets extracted, scoped to this component's chunk rather than loaded on
@@ -121,6 +123,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     try { setHint(localStorage.getItem(HINT_KEY) !== "1"); } catch { setHint(true); }
   }, [bare]);
   const dismissHint = () => { setHint(false); try { localStorage.setItem(HINT_KEY, "1"); } catch { /* a private window forgets; fine */ } };
+  // The pin form's answer. Shown until dismissed, but taken out of the address
+  // at once: a reload used to replay "Pin dropped." for as long as the tab lived.
+  const [shownNotice, setShownNotice] = useState(notice);
+  useEffect(() => {
+    if (!notice) return;
+    // Next keeps its own router state in history.state; passing it back leaves the router undisturbed.
+    try { window.history.replaceState(window.history.state, "", withoutResult(window.location.href)); } catch { /* the notice still dismisses */ }
+  }, [notice]);
   // `/map?at=043087` (from /base's "Map →") opens on that grid square. Read
   // once, client-side: the HTML still carries no metre coordinate, and a
   // bad key is simply the whole map.
@@ -794,11 +804,15 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               <p className="mt-2 text-xs leading-relaxed text-muted">{MAP_HINT.more}</p>
             </div>
           )}
-          {/* Notices stay visible with the panel closed: a failed refresh is not a setting. */}
-          {(notice || view === "stale") && (
-            <div className="absolute left-6 top-6 z-[1100] hidden w-[360px] lg:block">
-              {notice && <p role="status" className="border border-rule-2 bg-frame px-3 py-2 text-sm text-ink">{notice}</p>}
-              {view === "stale" && <p role="status" className="mt-2 border border-rule-3 bg-frame px-3 py-2 text-sm text-ink">{MAP_LOAD_COPY.stale}</p>}
+          {/*
+            Notices stay visible with the panel closed: a failed refresh is not
+            a setting. Top centre, because the zoom control owns the top-left
+            corner and the layers the top-right: at left-6 top-6 a notice sat
+            over the zoom buttons for as long as it stayed up.
+          */}
+          {(shownNotice || view === "stale") && (
+            <div className="absolute left-1/2 top-6 z-[1100] hidden w-[360px] -translate-x-1/2 lg:block">
+              <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="frame" />
             </div>
           )}
           <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
@@ -819,8 +833,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
           {/* Phones: a bottom bar; the sprocket unfolds the layers as chips above it. */}
           <div ref={insetBy} className="absolute inset-x-0 bottom-0 z-[1100] max-h-[45dvh] overflow-y-auto border-t-2 border-rule-2 bg-frame pb-[env(safe-area-inset-bottom)] lg:hidden">
-            {notice && <p role="status" className="mx-4 mt-3 border border-rule-2 bg-surface px-3 py-2 text-sm text-ink">{notice}</p>}
-            {view === "stale" && <p role="status" className="mx-4 mt-3 border border-rule-3 bg-surface px-3 py-2 text-sm text-ink">{MAP_LOAD_COPY.stale}</p>}
+            {(shownNotice || view === "stale") && (
+              <div className="mx-4 mt-3">
+                <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="surface" />
+              </div>
+            )}
             {layersOpen && (
               <div id="map-layers-sheet">
               <div className="flex gap-2 overflow-x-auto px-4 pb-3 pt-3">
