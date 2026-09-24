@@ -49,3 +49,21 @@ export function requestGate(): { begin(): number; isLatest(n: number): boolean }
 export function nextPollDelay(s: { failures: number; hidden: boolean }, pollMs: number): number | null {
   return s.hidden ? null : retryDelay(s.failures, pollMs);
 }
+
+/**
+ * The wait before asking for Leaflet's chunk again, or null for none.
+ *
+ * ⚠️ The poll cannot do this. A chunk failure is not a state-fetch failure —
+ * the state came back fine, so `failures` is 0, the poll waits the full five
+ * minutes and then refetches only the state. MapStatus says "It will try
+ * again in a moment", and before this nothing did until the player pressed
+ * Try again. Same ladder as the fetch; past it, the poll's pace, but never
+ * giving up — a map that needs a click to appear is the bug.
+ */
+export function chunkRetryDelay(
+  s: { leafletFailed: boolean; mapReady: boolean; hidden: boolean; chunkFailures: number },
+  pollMs: number,
+): number | null {
+  if (!s.leafletFailed || s.mapReady || s.hidden || s.chunkFailures <= 0) return null;
+  return retryDelay(s.chunkFailures, pollMs);
+}

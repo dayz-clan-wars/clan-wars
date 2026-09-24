@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { POSITION_FIX_MS } from "@factions/domain";
-import { RETRY_STEPS_MS, loadView, nextPollDelay, requestGate, retryDelay } from "../lib/map-load";
+import { RETRY_STEPS_MS, chunkRetryDelay, loadView, nextPollDelay, requestGate, retryDelay } from "../lib/map-load";
 
 describe("loadView", () => {
   it("is loading until the map exists", () => {
@@ -81,6 +81,34 @@ describe("nextPollDelay", () => {
   });
 });
 
+/**
+ * ⚠️ A failed Leaflet chunk is NOT retried by the poll: the state fetch
+ * succeeded, so the poll re-arms at the full five minutes and only refetches
+ * state. MapStatus promised "It will try again in a moment" and nothing did,
+ * until a player pressed Try again. This is the schedule that keeps that promise.
+ */
+describe("chunkRetryDelay", () => {
+  const base = { leafletFailed: true, mapReady: false, hidden: false };
+
+  it("retries on the ladder after each chunk failure in a row", () => {
+    expect(chunkRetryDelay({ ...base, chunkFailures: 1 }, POSITION_FIX_MS)).toBe(RETRY_STEPS_MS[0]);
+    expect(chunkRetryDelay({ ...base, chunkFailures: 2 }, POSITION_FIX_MS)).toBe(RETRY_STEPS_MS[1]);
+    // Past the ladder it keeps trying, at the poll's pace: a map that never
+    // loads without a click is the bug this exists to fix.
+    expect(chunkRetryDelay({ ...base, chunkFailures: 3 }, POSITION_FIX_MS)).toBe(POSITION_FIX_MS);
+  });
+
+  it("stops once the map is ready, or when nothing failed", () => {
+    expect(chunkRetryDelay({ ...base, mapReady: true, chunkFailures: 2 }, POSITION_FIX_MS)).toBeNull();
+    expect(chunkRetryDelay({ ...base, leafletFailed: false, chunkFailures: 2 }, POSITION_FIX_MS)).toBeNull();
+    expect(chunkRetryDelay({ ...base, chunkFailures: 0 }, POSITION_FIX_MS)).toBeNull();
+  });
+
+  it("asks for nothing from a background tab", () => {
+    expect(chunkRetryDelay({ ...base, hidden: true, chunkFailures: 1 }, POSITION_FIX_MS)).toBeNull();
+  });
+});
+
 describe("map-view.tsx's loading", () => {
   const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
 
@@ -92,5 +120,9 @@ describe("map-view.tsx's loading", () => {
   it("aborts a superseded request, and refreshes when the tab comes back", () => {
     expect(view).toContain("signal: ctl.signal");
     expect(view).toContain('addEventListener("visibilitychange"');
+  });
+
+  it("schedules the chunk retry from chunkRetryDelay", () => {
+    expect(view).toMatch(/chunkRetryDelay\(\{[^}]*chunkFailures[^}]*\}, POSITION_FIX_MS\)/u);
   });
 });

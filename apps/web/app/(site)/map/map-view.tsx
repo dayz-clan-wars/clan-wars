@@ -24,7 +24,7 @@ import {
   drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
-import { loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
+import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
 import { SITE_STRIPS_ID, mapTop } from "@/lib/site-strips";
 import { withoutResult } from "@/lib/map-url";
 import { MapStatus } from "./map-status";
@@ -157,6 +157,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const [mapReady, setMapReady] = useState(false);
   const [leafletFailed, setLeafletFailed] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  // Chunk failures in a row: the ladder for the automatic retry below. Zeroed once the map exists.
+  const [chunkFailures, setChunkFailures] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const [enabled, setEnabled] = useState<Record<LayerKey, boolean>>(ALL_ON);
   // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
@@ -282,6 +284,17 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     const id = setTimeout(() => void load(), delay);
     return () => clearTimeout(id);
   }, [load, terminal, failures, settled, hidden]);
+
+  // ⚠️ The poll never retries a failed Leaflet chunk (the state fetch worked,
+  // so it waits the full five minutes and refetches state only), yet the
+  // failed-first line promises "It will try again in a moment". This keeps
+  // that promise, on the same ladder as the fetch (lib/map-load.ts).
+  useEffect(() => {
+    const delay = chunkRetryDelay({ leafletFailed, mapReady, hidden, chunkFailures }, POSITION_FIX_MS);
+    if (terminal || delay === null) return;
+    const id = setTimeout(() => { setLeafletFailed(false); setAttempt((a) => a + 1); void load(); }, delay);
+    return () => clearTimeout(id);
+  }, [leafletFailed, mapReady, hidden, chunkFailures, terminal, load]);
 
   // Ages tick between fetches: a fix five minutes old must not read "just now"
   // for the whole interval.
@@ -574,6 +587,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
         setMapReady(true);
+        setChunkFailures(0);
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
@@ -630,7 +644,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       .catch(() => {
         // Forgotten, so a retry (which bumps `attempt`) asks for the chunk again rather than re-reading the failure.
         leafletMod.current = null;
-        if (!cancelled) setLeafletFailed(true);
+        if (!cancelled) { setLeafletFailed(true); setChunkFailures((n) => n + 1); }
       });
 
     return () => {
