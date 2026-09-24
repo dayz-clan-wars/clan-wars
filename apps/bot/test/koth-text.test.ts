@@ -25,9 +25,11 @@ describe("koth text", () => {
     expect(t).toMatch(/2 kills/);
   });
   // ⚠️ A gamertag is player-controlled text; markdown in it must not restyle the post.
+  // Includes brackets/parens too — the house escaper (site-links.ts) covers those; the
+  // narrower escaper this used to have did not.
   it("escapes markdown in gamertags", () => {
-    const t = resultsText("Lembork", { top: [{ dayzId: "x", gamertag: "**boss**", kills: 1 }], topKiller: null, winner: null, droppedNoPosition: 0 });
-    expect(t).toContain("\\*\\*boss\\*\\*");
+    const t = resultsText("Lembork", { top: [{ dayzId: "x", gamertag: "**[boss](x)**", kills: 1 }], topKiller: null, winner: null, droppedNoPosition: 0 });
+    expect(t).toContain("\\*\\*\\[boss\\]\\(x\\)\\*\\*");
   });
   it("no winner and cancelled read plainly", () => {
     expect(resultsText("Lembork", { top: [], topKiller: null, winner: null, droppedNoPosition: 0 })).toMatch(/nobody/i);

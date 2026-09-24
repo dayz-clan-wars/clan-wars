@@ -50,30 +50,45 @@ export async function kothTick(db: Database, posters: KothPosters, opts: { now: 
         if (r.state === "live" && !r.livePostedAt) {
           if (await postThen(posters.announce, liveText(town(r)), () => set({ livePostedAt: opts.now }), "live post")) out.posted += 1;
         }
-        // 4. Score.
-        if (r.state === "live" && await scoringReady(db, r, opts.now)) {
-          const res = await scoreAndAward(db, r.id, { now: opts.now, siteBaseUrl: opts.siteBaseUrl });
-          if (res !== "skipped") out.scored += 1;
+        // 4. Score. ⚠️ Own try/catch: `scoreAndAward` throws DELIBERATELY on a refused
+        // grant (so its transaction rolls back and the next tick retries) — letting that
+        // propagate out of this loop would skip every other row on the server, and skip
+        // steps 5–7 entirely, every tick, silently. A stuck row must never block a
+        // different one (the house rule, notice-tick.ts).
+        try {
+          if (r.state === "live" && await scoringReady(db, r, opts.now)) {
+            const res = await scoreAndAward(db, r.id, { now: opts.now, siteBaseUrl: opts.siteBaseUrl });
+            if (res !== "skipped") out.scored += 1;
+          }
+        } catch (err) {
+          console.error(`koth: scoring row ${r.id} failed — retrying next tick`, err);
         }
       }
       // 5–7 re-read, so a row scored above posts its results this same tick.
       for (const r of await db.select().from(kothEvents).where(eq(kothEvents.serverId, s.id))) {
         const set = (v: Partial<Row>) => db.update(kothEvents).set(v).where(eq(kothEvents.id, r.id));
-        if ((r.state === "awarded" || r.state === "no_winner") && r.results && !r.resultsPostedAt) {
-          if (await postThen(posters.announce, resultsText(town(r), r.results), () => set({ resultsPostedAt: opts.now }), "results")) out.posted += 1;
-        }
-        // ⚠️ Only an event players were TOLD about gets a cancellation.
-        if ((r.state === "cancelled" || r.state === "failed") && r.announcedAt && !r.cancelPostedAt) {
-          if (await postThen(posters.announce, cancelledText(town(r), r.slotAt), () => set({ cancelPostedAt: opts.now }), "cancellation")) out.posted += 1;
-        }
-        const d = r.detail as Record<string, unknown>;
-        if (r.state === "failed" && d.failure && !d.opsAlerted) {
-          await postThen(posters.ops, `⚠️ King of the Hill at ${town(r)} (${r.slotAt.toISOString()}) failed: ${d.failure}`,
-            () => db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || '{"opsAlerted":true}'::jsonb` }).where(eq(kothEvents.id, r.id)), "ops alert");
-        }
-        if (typeof d.restoreError === "string" && d.restoreError !== d.restoreErrorAlerted) {
-          await postThen(posters.ops, `⚠️ King of the Hill could not restore every default file: ${d.restoreError}`,
-            () => db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || ${JSON.stringify({ restoreErrorAlerted: d.restoreError })}::jsonb` }).where(eq(kothEvents.id, r.id)), "restore alert");
+        // ⚠️ Own try/catch per row, same reason as step 4: a DB error stamping one row's
+        // post (or a rejected poster promise past `postThen`'s own catch) must not stop
+        // a sibling row's results/cancel post or the ops alerts below it.
+        try {
+          if ((r.state === "awarded" || r.state === "no_winner") && r.results && !r.resultsPostedAt) {
+            if (await postThen(posters.announce, resultsText(town(r), r.results), () => set({ resultsPostedAt: opts.now }), "results")) out.posted += 1;
+          }
+          // ⚠️ Only an event players were TOLD about gets a cancellation.
+          if ((r.state === "cancelled" || r.state === "failed") && r.announcedAt && !r.cancelPostedAt) {
+            if (await postThen(posters.announce, cancelledText(town(r), r.slotAt), () => set({ cancelPostedAt: opts.now }), "cancellation")) out.posted += 1;
+          }
+          const d = r.detail as Record<string, unknown>;
+          if (r.state === "failed" && d.failure && !d.opsAlerted) {
+            await postThen(posters.ops, `⚠️ King of the Hill at ${town(r)} (${r.slotAt.toISOString()}) failed: ${d.failure}`,
+              () => db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || '{"opsAlerted":true}'::jsonb` }).where(eq(kothEvents.id, r.id)), "ops alert");
+          }
+          if (typeof d.restoreError === "string" && d.restoreError !== d.restoreErrorAlerted) {
+            await postThen(posters.ops, `⚠️ King of the Hill could not restore every default file: ${d.restoreError}`,
+              () => db.update(kothEvents).set({ detail: sql`${kothEvents.detail} || ${JSON.stringify({ restoreErrorAlerted: d.restoreError })}::jsonb` }).where(eq(kothEvents.id, r.id)), "restore alert");
+          }
+        } catch (err) {
+          console.error(`koth: results/cancel/ops posting for row ${r.id} failed — retrying next tick`, err);
         }
       }
     } catch (err) {

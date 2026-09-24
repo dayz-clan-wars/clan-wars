@@ -8,6 +8,22 @@ import { writeCursor } from "@factions/event-log";
 import { KILLS_CONSUMER } from "../src/kills-tick.js";
 import { kothTick } from "../src/koth-tick.js";
 
+// A row id to make `scoreAndAward` throw for, set per-test — simplest reliable way to
+// force the deliberate-throw path (a refused award grant) without wiring up a real
+// refusal in `koth-score.ts`. `vi.mock`'s factory is hoisted above this file's other
+// imports, so the set is declared with `vi.hoisted` and mutated from inside a test.
+const throwForRowId = vi.hoisted(() => ({ id: null as number | null }));
+vi.mock("../src/koth-score.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/koth-score.js")>();
+  return {
+    ...actual,
+    scoreAndAward: async (db: Database, rowId: number, opts: { now: Date; siteBaseUrl: string }) => {
+      if (rowId === throwForRowId.id) throw new Error("koth: forced scoring failure for test");
+      return actual.scoreAndAward(db, rowId, opts);
+    },
+  };
+});
+
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
 const SLOT = at("2026-10-03T20:00:00Z");
@@ -16,6 +32,7 @@ const END = at("2026-10-03T22:00:00Z");
 describe("koth tick", () => {
   let db: Database; let serverId = 0; let fileId = 0; let line = 0;
   beforeEach(async () => {
+    throwForRowId.id = null;
     db = createClient(URL); await runMigrations(db);
     await db.execute(sql`truncate table koth_events, award_grants, clan_notices, kills, events, adm_files, identity_links, players, server_restarts, consumer_cursors, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
@@ -155,5 +172,42 @@ describe("koth tick", () => {
     await kothTick(db, { announce, ops }, { now: at("2026-10-03T20:15:00Z"), siteBaseUrl: "https://x" });
     expect(ops).toHaveBeenCalledTimes(2);
     expect(ops.mock.calls[1]![0]).toMatch(/events\.xml could not be read/);
+  });
+
+  // I2: `koth_events_one_open` allows only one `scheduled`/`live` row per server at a
+  // time, so the sibling here is an already-`awarded` row (steps 5–7) rather than a
+  // second live one — that's still enough to prove one row's thrown scoring cannot
+  // starve a different row's results post in the same tick.
+  it("a row whose scoring throws does not block another row's results post", async () => {
+    await db.insert(serverRestarts).values([
+      { serverId, scheduledFor: SLOT, issuedAt: at("2026-10-03T20:00:04Z"), outcome: "restarted" },
+      { serverId, scheduledFor: END, issuedAt: at("2026-10-03T22:00:04Z"), outcome: "restarted" },
+    ]);
+    const [live] = await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
+      state: "live", scheduledByDiscordId: "a", announcedAt: SLOT, openedAt: SLOT, livePostedAt: SLOT,
+    }).returning();
+    throwForRowId.id = live!.id;
+    await ready();
+
+    // A different, already-scored row on the same server, still awaiting its results
+    // post — steps 5–7 must reach it even though the row above throws in step 4.
+    const results = { top: [{ dayzId: "z", gamertag: "Z", kills: 3 }], topKiller: { dayzId: "z", gamertag: "Z", kills: 3 }, winner: null, droppedNoPosition: 0 };
+    await db.insert(kothEvents).values({
+      serverId, slotAt: at("2026-10-01T18:00:00Z"), location: "kabanino", centreX: "1000", centreZ: "2000",
+      state: "no_winner", scheduledByDiscordId: "a", results,
+    });
+
+    const announce = vi.fn(async (_c: string) => {}); const ops = vi.fn(async (_c: string) => {});
+    const res = await kothTick(db, { announce, ops }, { now: at("2026-10-03T22:30:00Z"), siteBaseUrl: "https://x" });
+
+    expect(res.scored).toBe(0);
+    const rows = await db.select().from(kothEvents).where(eq(kothEvents.serverId, serverId));
+    const liveRow = rows.find((r) => r.id === live!.id)!;
+    expect(liveRow.state).toBe("live"); // the forced throw never wrote anything — next tick retries
+    const scoredRow = rows.find((r) => r.location === "kabanino")!;
+    expect(scoredRow.resultsPostedAt).not.toBeNull();
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce.mock.calls[0]![0]).toMatch(/RESULTS/);
   });
 });

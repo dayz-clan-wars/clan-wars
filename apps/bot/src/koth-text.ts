@@ -1,10 +1,11 @@
 import { atRel } from "@factions/copy";
 import type { KothResults } from "@factions/db";
 import { KOTH_ZONE_RADIUS_M } from "@factions/domain";
+import { escapeMarkdown as esc } from "./site-links.js";
 
 // ⚠️ A gamertag is player-controlled text landing in a public channel; escaping
-// markdown here is what stops it restyling the post (bans-announce does the same).
-const esc = (s: string) => s.replace(/([\\*_~`|>])/g, "\\$1");
+// markdown here is what stops it restyling the post — the house escaper
+// (site-links.ts), same one ban-announce-text.ts uses. Do not add a second escaper.
 const rules = `Fresh spawns start on the hill with a KotH kit. A kill counts when the victim is within ${KOTH_ZONE_RADIUS_M} m of the centre. Most kills wins a week of the Plate Carrier.`;
 
 export function scheduledText(town: string, slotAt: Date): string {
