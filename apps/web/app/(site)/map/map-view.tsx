@@ -832,10 +832,13 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             )}
           </div>
           {hint && (
-            <div role="note" className="absolute inset-x-4 top-[calc(50%-40px)] z-[1100] border-2 border-gold bg-frame px-4 py-3.5 lg:inset-x-auto lg:left-6 lg:top-auto lg:bottom-24 lg:w-[360px]">
-              <div className="flex items-baseline justify-between gap-4">
+            // ⚠️ Above the phone bar (`--cw-inset`, set by insetBy), not mid-screen:
+            // the middle is exactly where "you" lands after Center on me, and the
+            // hint covered the one marker it was describing.
+            <div role="note" className="absolute inset-x-4 bottom-[calc(var(--cw-inset,0px)+12px)] z-[1100] border-2 border-gold bg-frame px-4 py-3.5 lg:inset-x-auto lg:left-6 lg:bottom-24 lg:w-[360px]">
+              <div className="flex items-center justify-between gap-4">
                 <span className="font-mono text-[11px] uppercase tracking-[0.18em] text-gold">{MAP_HINT.kicker}</span>
-                <button type="button" onClick={dismissHint} className="-mr-2 flex h-9 w-9 items-center justify-center font-mono text-sm text-muted hover:text-ink" aria-label="Dismiss">✕</button>
+                <button type="button" onClick={dismissHint} className="-mr-3 flex h-11 w-11 flex-none items-center justify-center font-mono text-sm text-muted hover:text-ink" aria-label="Dismiss">✕</button>
               </div>
               <p className="mt-1.5 text-sm leading-relaxed text-ink">{MAP_HINT.before}<a className="text-gold hover:underline" href="/base">{MAP_HINT.cta}</a>{MAP_HINT.after}</p>
               <p className="mt-2 text-xs leading-relaxed text-muted">{MAP_HINT.more}</p>
