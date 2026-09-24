@@ -28,7 +28,7 @@ function VoteAct({ row }: { row: NoticeRow }) {
       <input type="hidden" name="act" value="vote" />
       <input type="hidden" name="back" value="/notifications" />
       <input type="hidden" name="confirm" value="yes" />
-      <ConfirmButton confirm="Cast it?" className={btn("primary")}>Cast your vote</ConfirmButton>
+      <ConfirmButton confirm="Press again to vote" className={btn("primary")}>Cast your vote</ConfirmButton>
     </form>
   );
 }

@@ -113,12 +113,12 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                     <form action="/api/vault/rotate" method="post" className="contents">
                       <input type="hidden" name="lockId" value={lock.id} />
                       <input type="hidden" name="confirm" value="yes" />
-                      <ConfirmButton confirm="Rotate it?" className={`${btnSecondary} w-full`}>Rotate code</ConfirmButton>
+                      <ConfirmButton confirm="Press again to rotate" className={`${btnSecondary} w-full`}>Rotate code</ConfirmButton>
                     </form>
                     <form action="/api/vault/delete" method="post" className="contents">
                       <input type="hidden" name="lockId" value={lock.id} />
                       <input type="hidden" name="confirm" value="yes" />
-                      <ConfirmButton confirm="Delete it?" className={`${btnDanger} w-full`}>Delete</ConfirmButton>
+                      <ConfirmButton confirm="Press again to delete" className={`${btnDanger} w-full`}>Delete</ConfirmButton>
                     </form>
                   </div>
                   <p className="m-0 font-mono text-[11px] leading-relaxed text-muted">Rotate and Delete are two-press: the first tap arms, the second within 4 s does it. Rotating here does not change the lock in the game.</p>
@@ -148,7 +148,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             <form action="/api/vault/rotate" method="post" className="sm:col-span-2">
               <input type="hidden" name="all" value="yes" />
               <input type="hidden" name="confirm" value="yes" />
-              <ConfirmButton confirm="Rotate every lock?" className={`${btnSecondary} w-full`}>Rotate all</ConfirmButton>
+              <ConfirmButton confirm="Press again to rotate all" className={`${btnSecondary} w-full`}>Rotate all</ConfirmButton>
             </form>
           </div>
         )}

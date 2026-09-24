@@ -116,7 +116,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                     <form className="mt-4 border-t border-rule-2 pt-4" action="/api/base/release" method="post">
                       <input type="hidden" name="confirm" value="yes" />
                       <p className="text-sm leading-relaxed text-ink-2">Releasing makes the pole public if nobody declares it within the grace period.</p>
-                      <ConfirmButton confirm="Release it?" className={`mt-3 ${btnDanger}`}>Release this base</ConfirmButton>
+                      <ConfirmButton confirm="Press again to release" className={`mt-3 ${btnDanger}`}>Release this base</ConfirmButton>
                     </form>
                   </>
                 ) : (

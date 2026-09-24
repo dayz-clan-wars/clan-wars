@@ -71,7 +71,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               {guestPasses.map((p) => (
                 <li key={p.id} className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
                   <span><span className="font-mono">{p.userDiscordId}</span> <span className="text-xs text-muted">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span></span>
-                  <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><ConfirmButton confirm="Revoke it?" className={`${btnSecondary} !px-3.5`}>Revoke</ConfirmButton></form>
+                  <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><ConfirmButton confirm="Press again to revoke" className={`${btnSecondary} !px-3.5`}>Revoke</ConfirmButton></form>
                 </li>
               ))}
             </ul>

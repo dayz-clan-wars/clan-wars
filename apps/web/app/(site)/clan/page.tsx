@@ -94,10 +94,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         {isPending ? <>asked {ago(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {ago(r.joinedAt)}{r.lastSeenAt && ` · seen ${ago(r.lastSeenAt)}`}</>}
                       </div>
                     </div>
-                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
-                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
+                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
+                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
                     {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="promote" target={r.discordId}>Make officer</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId} confirm="Demote them?">Demote</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId} confirm="Press again to demote">Demote</RowAction>}
                   </li>
                 );
               })}
@@ -118,7 +118,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                     {invitesOut.map((inv) => (
                       <li key={inv.id} className="flex min-h-[52px] items-center justify-between gap-3 text-sm text-ink">
                         <span><span className="font-mono">{inv.inviteeGamertag ?? "unknown"}</span> <span className="text-xs text-muted">expires {when(inv.expiresAt)}</span></span>
-                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><ConfirmButton confirm="Withdraw it?" className={`${btnSecondary} !px-3.5`}>Withdraw</ConfirmButton></form>
+                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><ConfirmButton confirm="Press again to withdraw" className={`${btnSecondary} !px-3.5`}>Withdraw</ConfirmButton></form>
                       </li>
                     ))}
                   </ul>
@@ -164,7 +164,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                   <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/claim-succession" method="post">
                     <input type="hidden" name="confirm" value="yes" />
                     <p className="text-sm leading-relaxed text-ink-2">The leader has been silent for {days(LEADER_SILENT_MS)}. Claiming opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if they are seen in game.</p>
-                    <ConfirmButton confirm="Claim it?" className={`mt-3 ${btnPrimary}`}>Claim leadership</ConfirmButton>
+                    <ConfirmButton confirm="Press again to claim" className={`mt-3 ${btnPrimary}`}>Claim leadership</ConfirmButton>
                   </form>
                 )}
               </PanelBody>
@@ -180,7 +180,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       {leadership.openVote.inElectorate && !leadership.openVote.myBallot && (
                         <form className="mt-3" action="/api/clan/cast-vote" method="post">
                           <input type="hidden" name="confirm" value="yes" />
-                          <ConfirmButton confirm="Cast it?" className={btnPrimary}>Vote yes</ConfirmButton>
+                          <ConfirmButton confirm="Press again to vote" className={btnPrimary}>Vote yes</ConfirmButton>
                         </form>
                       )}
                       {leadership.openVote.myBallot && <p className="mt-2 text-sm text-ink-2">You voted.</p>}
@@ -206,7 +206,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         ))}
                       </select>
                     </label>
-                    <ConfirmButton confirm="Open the vote?" className={`mt-3 ${btnSecondary}`} disabled={voteBlocked}>Nominate</ConfirmButton>
+                    <ConfirmButton confirm="Press again to open the vote" className={`mt-3 ${btnSecondary}`} disabled={voteBlocked}>Nominate</ConfirmButton>
                     {voteBlocked && <p className="mt-2 text-xs text-muted">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt!)}.</p>}
                   </form>
                 </details>
