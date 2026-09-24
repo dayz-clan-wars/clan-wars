@@ -615,6 +615,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
     bountiesEnabled: cfg.bounties.enabled,
+    // Task 13 wires the real KOTH_TICK poster; always null here for now.
+    koth: null,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled

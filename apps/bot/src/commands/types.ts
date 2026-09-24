@@ -77,6 +77,8 @@ export type Ctx = {
    * poster, a bounty would be a punishment nobody is told about and nobody can collect.
    */
   bountiesEnabled: boolean;
+  /** The KotH announcement poster (mentions off), or null when `KOTH_TICK` is off. */
+  koth: ((content: string) => Promise<void>) | null;
 };
 
 export type Handler = (ctx: Ctx, input: CommandInput) => Promise<Reply>;

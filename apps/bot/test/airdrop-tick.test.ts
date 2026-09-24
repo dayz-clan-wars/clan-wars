@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, admFiles, airdropEvents, events, playerSessions, servers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, admFiles, airdropEvents, events, kothEvents, playerSessions, servers, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { airdropTick } from "../src/airdrop-tick.js";
 import { airdropText, scrubText } from "../src/airdrop-text.js";
@@ -14,7 +14,7 @@ describe("airdropTick", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table airdrop_events, player_sessions, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table airdrop_events, koth_events, player_sessions, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id;
     line = 0;
@@ -316,6 +316,21 @@ describe("airdropTick", () => {
     const all = await rows();
     expect(all).toHaveLength(1);
     expect(all[0]).toMatchObject({ location: "nadbor", manual: true });
+  });
+
+  // ⚠️ Spec §2.12: the automatic decision never runs for a slot a scheduled KotH
+  // event holds — the tick's side of the refusal `/airdrop place` gives a human.
+  it("decides nothing for a slot a scheduled King of the Hill event holds", async () => {
+    await online(6, "2026-09-21T18:00:00Z", null);
+    await db.insert(kothEvents).values({
+      serverId, slotAt: at("2026-09-21T20:00:00Z"), location: "dolnik", centreX: "0", centreZ: "0",
+      state: "scheduled", scheduledByDiscordId: "1", announcedAt: NOW,
+    });
+    const post = vi.fn(async (_content: string) => {});
+    const r = await run(post);
+    expect(r).toEqual({ decided: 0, posted: 0, failed: 0 });
+    expect(post).not.toHaveBeenCalled();
+    expect(await rows()).toHaveLength(0);
   });
 });
 

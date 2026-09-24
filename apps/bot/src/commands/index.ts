@@ -7,6 +7,7 @@ import { clanGroup } from "./clan.js";
 import { clansGroup } from "./clans.js";
 import { foundGroup } from "./found.js";
 import { guestGroup } from "./guest.js";
+import { kothGroup } from "./koth.js";
 import { leadGroup } from "./lead.js";
 import { linkGroup } from "./link.js";
 import { mapGroup } from "./map.js";
@@ -23,7 +24,7 @@ import type { CommandGroup, CommandSpec, ComponentHandler, ModalHandler } from "
  * bijection — so a command cannot be registered with nothing behind it, and a
  * handler cannot rot unreachable.
  */
-export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup, rosterGroup, clanGroup, clansGroup, leadGroup, foundGroup, guestGroup, vaultGroup, mapGroup, scoreboardGroup, alphasGroup, seasonsGroup, warlogGroup, playerGroup, boardGroup, achievementsGroup, airdropGroup, awardGroup, bountyGroup];
+export const GROUPS: CommandGroup[] = [linkGroup, baseGroup, meGroup, rosterGroup, clanGroup, clansGroup, leadGroup, foundGroup, guestGroup, vaultGroup, mapGroup, scoreboardGroup, alphasGroup, seasonsGroup, warlogGroup, playerGroup, boardGroup, achievementsGroup, airdropGroup, awardGroup, bountyGroup, kothGroup];
 
 export const SPECS: Map<string, CommandSpec> = new Map(
   GROUPS.flatMap((g) => g.specs).map((s) => [s.path, s]),

@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
-import { airdropEvents, servers } from "@factions/db";
+import { airdropEvents, kothEvents, servers } from "@factions/db";
 import { AIRDROP_COLOURS, AIRDROP_LOCATIONS, chooseAirdrop, nextRestartAt } from "@factions/domain";
 import { and, eq, inArray } from "drizzle-orm";
 import { airdropText } from "../airdrop-text.js";
@@ -52,6 +52,14 @@ async function placeAirdrop(ctx: Ctx, input: CommandInput): Promise<Reply> {
   }
 
   const slot = nextRestartAt(ctx.now);
+  // ⚠️ Spec §2.12: a King of the Hill session and an airdrop cannot share a slot.
+  // The koth command refuses the symmetric case.
+  const koth = await ctx.db.select({ id: kothEvents.id }).from(kothEvents).where(and(
+    eq(kothEvents.serverId, server.id), eq(kothEvents.slotAt, slot), eq(kothEvents.state, "scheduled"),
+  ));
+  if (koth.length > 0) {
+    return reply("King of the Hill holds that session. No airdrop on top of it.");
+  }
   await ctx.db.insert(airdropEvents).values({
     serverId: server.id, slotAt: slot, location, colour, decidedAt: ctx.now,
     // ⚠️ pop and threshold are recorded as 0, not as the live numbers: this row

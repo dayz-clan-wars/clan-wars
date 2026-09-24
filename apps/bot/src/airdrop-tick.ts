@@ -1,4 +1,4 @@
-import { airdropEvents, servers, type Database } from "@factions/db";
+import { airdropEvents, kothEvents, servers, type Database } from "@factions/db";
 import {
   AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
   nextRestartAt, RESTART_PERIOD_MS, shouldFire,
@@ -141,6 +141,14 @@ export async function airdropTick(
       const [already] = await db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents)
         .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slot))).limit(1);
       if (already) continue;
+
+      // ⚠️ Spec §2.12: one session cannot hold both events. A scheduled KotH row
+      // for this slot means the automatic decision never runs for it — the same
+      // refusal `/airdrop place` gives a human trying the same thing.
+      const [koth] = await db.select({ id: kothEvents.id }).from(kothEvents).where(and(
+        eq(kothEvents.serverId, s.id), eq(kothEvents.slotAt, slot), eq(kothEvents.state, "scheduled"),
+      )).limit(1);
+      if (koth) continue;
 
       const open = await db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
         eq(airdropEvents.serverId, s.id), inArray(airdropEvents.state, ["announced", "live"]),
