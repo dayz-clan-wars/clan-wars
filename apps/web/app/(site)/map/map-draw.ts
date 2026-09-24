@@ -4,6 +4,7 @@ import { CANVAS_PX, MAX_ZOOM, gridRef, gridRefKey, worldToLatLng } from "@/lib/m
 import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
 import { markerTitle } from "@/lib/map-labels";
 import { markerKey } from "@/lib/map-roster";
+import { popupOptions } from "@/lib/map-motion";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
   baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
@@ -228,6 +229,11 @@ export function ptFor(L: typeof import("leaflet"), size: number) {
  * it is still clipped away by `.leaflet-container`'s `overflow: hidden` near the
  * world's edge — the 2026-09-12 bug, silently, for that one popup. Pinned by
  * test/map-popup-fit.test.ts.
+ *
+ * ⚠️ Never passed to `bindPopup` bare — always through `popupOptions(POPUP)`
+ * (`lib/map-motion.ts`), which adds `autoPan` for the visitor's motion
+ * preference. `POPUP` itself carries no `autoPan`, so a bare use would silently
+ * animate the map under reduced motion.
  */
 const POPUP = { className: "cw-map-popup", closeButton: true } as const;
 
@@ -305,7 +311,7 @@ export function drawClanmates({ L, group, pt, data, now, ages, index, p }: Ctx):
     // in the popup and the title, which are what a tick rewrites.
     marker.bindTooltip(name, tag(""));
     const text = (age: string) => `<div class="${POPUP_TEXT}">${name} · ${escapeHtml(age)}</div>`;
-    marker.bindPopup(text(age), POPUP);
+    marker.bindPopup(text(age), popupOptions(POPUP));
     markOpen(marker);
     marker.addTo(group);
     index.set(markerKey.clanmate(m.dayzId), marker);
@@ -338,7 +344,7 @@ export function drawBounties({ L, group, pt, data, now, ages, index, p }: Ctx): 
     const popup = (age: string) => `<div class="${POPUP_TEXT}">${text(age)}<br>${escapeHtml(b.reason)}</div>`;
     const marker = L.marker(pt(b.fix.x, b.fix.z), { icon: chipIcon(L, bountyIcon(p), ICON.bounty, "cw-mk-bounty"), keyboard: true, title: markerTitle.bounty(b.gamertag, age) })
       .bindTooltip(text(age), tag(`${TAG}-intruder`))
-      .bindPopup(popup(age), POPUP);
+      .bindPopup(popup(age), popupOptions(POPUP));
     markOpen(marker);
     marker.addTo(group);
     index.set(markerKey.bounty(b.gamertag), marker);
@@ -376,7 +382,7 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
       `</div>`;
     const age = fixAge(pin.at, new Date(now));
     const marker = L.marker(pt(pin.x, pin.z), { icon: chipIcon(L, pinIcon(p, pin.icon), ICON.pin, "cw-mk-pin"), keyboard: true, title: markerTitle.pin(label, pin.x, pin.z, age) })
-      .bindPopup(text(age), POPUP);
+      .bindPopup(text(age), popupOptions(POPUP));
     markOpen(marker);
     marker.addTo(group);
     index.set(markerKey.pin(pin.id), marker);

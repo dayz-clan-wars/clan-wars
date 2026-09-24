@@ -18,3 +18,16 @@ export function prefersReducedMotion(): boolean {
     return false;
   }
 }
+
+/**
+ * ⚠️ Leaflet's popup `autoPan` (default on) pans the WHOLE MAP, animated,
+ * whenever a popup opens near the container edge — a `map.panBy` Leaflet
+ * drives itself, independent of `zoomAnimation`/`fadeAnimation`/`inertia`
+ * above, so it needs its own guard rather than riding theirs.
+ * `lib/map-popup-fit.ts`'s `applyPopupFit` already keeps the card itself on
+ * screen without moving the map, so this only ever turns autoPan OFF under
+ * reduced motion; a visitor with no preference keeps Leaflet's default.
+ */
+export function popupOptions<T extends object>(base: T): T & { autoPan: boolean } {
+  return { ...base, autoPan: !prefersReducedMotion() };
+}
