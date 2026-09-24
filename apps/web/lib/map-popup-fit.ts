@@ -31,6 +31,38 @@ export const FIT_PAD = 8;
 export type Pad = { top: number; right: number; bottom: number; left: number };
 const EVEN: Pad = { top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left: FIT_PAD };
 
+/** A box in page coordinates, as `getBoundingClientRect` gives it. */
+export type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
+
+/** The map's own chrome outside Leaflet's container, by id: map-view.tsx sets these, `applyPopupFit` measures them. */
+export const CHROME_IDS = { corner: "map-corner", bar: "map-bar", notices: "map-notices" } as const;
+
+/**
+ * The gutter on each side of the map, taken from the chrome that paints over
+ * it. ⚠️ Everything here paints above the popup pane (Leaflet's controls at
+ * 1000, the site's at 1100; popups at 700), so a card fitted underneath any of
+ * it opens hidden. Each box is measured, never guessed, and a `display: none`
+ * box (zero size) is ignored, so the phone's hidden desktop chrome costs nothing.
+ *
+ * - zoom control (top-left) → the left gutter
+ * - the sprocket and its layers panel (top-right) → the right gutter
+ * - the desktop grid/refresh bar (bottom-left) → the bottom gutter
+ * - the notices (top centre) → the top gutter
+ *
+ * A whole side for a corner's box is conservative on purpose: a card that
+ * slides a little further than it strictly had to is still readable, and one
+ * that lands under the panel is not.
+ */
+export function chromePad(view: Rect, chrome: { zoom?: Rect | null; corner?: Rect | null; bar?: Rect | null; notices?: Rect | null }): Pad {
+  const shown = (r: Rect | null | undefined): r is Rect => r != null && r.width > 0 && r.height > 0;
+  return {
+    top: shown(chrome.notices) ? Math.max(FIT_PAD, chrome.notices.bottom - view.top + FIT_PAD) : FIT_PAD,
+    right: shown(chrome.corner) ? Math.max(FIT_PAD, view.right - chrome.corner.left + FIT_PAD) : FIT_PAD,
+    bottom: shown(chrome.bar) ? Math.max(FIT_PAD, view.bottom - chrome.bar.top + FIT_PAD) : FIT_PAD,
+    left: shown(chrome.zoom) ? Math.max(FIT_PAD, chrome.zoom.right - view.left + FIT_PAD) : FIT_PAD,
+  };
+}
+
 /**
  * A pin chip is 28 px square, anchored at its centre (`ICON.pin`), so 20 px
  * below the anchor clears its lower half with a gap to spare.
@@ -110,17 +142,20 @@ export function applyPopupFit(map: L.Map, popup: L.Popup): void {
   const was = { x: px(root.style.getPropertyValue("--cw-fit-x")), y: px(root.style.getPropertyValue("--cw-fit-y")) };
   const box = card.getBoundingClientRect();
   const view = map.getContainer().getBoundingClientRect();
-  // ⚠️ Leaflet's controls paint at z-index 1000 and the popup pane at 700, so a
-  // card fitted into the top-left corner opens UNDERNEATH the zoom buttons. The
-  // control's own box is measured, never guessed, and becomes the left gutter:
-  // that is the one edge where this map has chrome of its own.
-  const zoom = map.getContainer().querySelector(".leaflet-control-zoom");
-  const left = zoom ? Math.max(FIT_PAD, zoom.getBoundingClientRect().right - view.left + FIT_PAD) : FIT_PAD;
+  // ⚠️ The chrome over the map, measured every time (chromePad above): the
+  // zoom control is Leaflet's own, and the rest are the page's, found by id.
+  const byId = (id: string) => document.getElementById(id)?.getBoundingClientRect() ?? null;
+  const pad = chromePad(view, {
+    zoom: map.getContainer().querySelector(".leaflet-control-zoom")?.getBoundingClientRect() ?? null,
+    corner: byId(CHROME_IDS.corner),
+    bar: byId(CHROME_IDS.bar),
+    notices: byId(CHROME_IDS.notices),
+  });
   const fit = fitPopup(
     { left: box.left - view.left - was.x, top: box.top - view.top - was.y, width: box.width, height: box.height },
     { width: view.width, height: view.height },
     map.latLngToContainerPoint(at).y,
-    { top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left },
+    pad,
   );
   root.style.setProperty("--cw-fit-x", `${fit.dx}px`);
   root.style.setProperty("--cw-fit-y", `${fit.dy}px`);

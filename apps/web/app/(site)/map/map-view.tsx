@@ -13,7 +13,7 @@ import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT } from "@/lib/map-copy";
 import { layerIcon } from "@/lib/map-icons";
-import { applyPopupFit } from "@/lib/map-popup-fit";
+import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
 import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
@@ -722,6 +722,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [layersOpen]);
+
+  // The chrome an open card must clear just changed size: the panel opened or
+  // closed, or a notice came or went. Refit, or the card stays where the old
+  // chrome left it.
+  useEffect(() => { fitPopupNow.current(); }, [layersOpen, shownNotice, view]);
   // Read once the component is on a page: the fallbacks equal the tokens, so
   // the server render and the browser agree on every glyph.
   const pal = palette();
@@ -775,7 +780,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       {!pinSheet && (
         <>
           {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
-          <div className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
+          <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
             <button
               type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
               className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
@@ -833,11 +838,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             over the zoom buttons for as long as it stayed up.
           */}
           {(shownNotice || view === "stale") && (
-            <div className="absolute left-1/2 top-6 z-[1100] hidden w-[360px] -translate-x-1/2 lg:block">
+            <div id={CHROME_IDS.notices} className="absolute left-1/2 top-6 z-[1100] hidden w-[360px] -translate-x-1/2 lg:block">
               <MapNotices notice={shownNotice} stale={view === "stale"} onDismiss={() => setShownNotice(undefined)} tone="frame" />
             </div>
           )}
-          <div className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
+          <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre?.grid ?? "000 000"}</span>
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
