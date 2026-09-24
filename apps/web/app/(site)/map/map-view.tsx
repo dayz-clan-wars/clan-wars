@@ -24,6 +24,7 @@ import {
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
+import { SITE_STRIPS_ID, mapTop } from "@/lib/site-strips";
 import { withoutResult } from "@/lib/map-url";
 import { MapStatus } from "./map-status";
 import { MapNotices } from "./map-notices";
@@ -374,6 +375,24 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     ro.observe(overlay);
     barObserver.current = ro;
   }, []);
+  // ⚠️ The map is `fixed` below the top bar, and the strips under the bar are
+  // ordinary flow, so it used to paint straight over them: the raid countdown
+  // invisible on the one page raiders plan from, and the install strip's
+  // buttons still tabbable underneath. The map's top follows the strips'
+  // measured height instead. A dismissed install strip shrinks it; the
+  // marquee's and the timers' heights vary with the servers and the width.
+  // Before the first measure, `top-bar` (the class) holds the map under the
+  // bar alone.
+  useEffect(() => {
+    const strips = document.getElementById(SITE_STRIPS_ID);
+    const main = shell.current;
+    if (!strips || !main || typeof ResizeObserver === "undefined") return;
+    const fit = () => { main.style.top = mapTop(strips.offsetHeight); };
+    fit();
+    const ro = new ResizeObserver(fit);
+    ro.observe(strips);
+    return () => ro.disconnect();
+  }, []);
   // `layers` comes from the server render and never changes for a mounted
   // MapView, but the creation effect deliberately depends on `size` alone —
   // reading it through a ref keeps that honest.
@@ -711,6 +730,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // `isolate` is load-bearing, not cosmetic: Leaflet puts its panes at
     // 200-700 and its controls at 1000, absolutely positioned. Without a
     // stacking context here they paint over everything else on the site.
+    // `top-bar` (the class) is only the pre-measure fallback — the strips
+    // effect above overwrites `style.top` with `mapTop()` once it can measure
+    // #site-strips, so the map starts under the timers too, not just the bar.
     <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
       <h1 className="sr-only">The map</h1>
       {/* The refresh's one announcement. Not the button: its text follows every pan. */}
