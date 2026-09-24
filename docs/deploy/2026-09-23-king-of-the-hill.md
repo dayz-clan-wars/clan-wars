@@ -37,7 +37,9 @@ avoids it.
 
 ## 2. Migrate
 
-Migration `0049_gifted_sheva_callister.sql` adds `koth_events`. As with every other
+Migrations `0049_gifted_sheva_callister.sql` (adds `koth_events`) and
+`0050_square_the_executioner.sql` (makes `koth_events_slot_uq` partial, so a
+cancelled or never-announced row no longer holds its slot) ship together. As with every other
 migration here, it is applied by the release deployer, never by the bot
 (`CLAUDE.md`'s "Migrations are applied automatically on a release deploy, and by
 nothing else"). On the auto-deploy path `deploy/deploy-release.sh` runs
@@ -79,13 +81,17 @@ sudo systemctl restart clan-wars-bot
 Check the startup log line — `apps/bot/src/discord.ts` logs exactly one of:
 
 - `king of the hill on` — the flag is live
-- `KOTH_TICK is off: /koth refuses; any unfinished KotH session is still restored
-  at the next restart.` — the flag did not take effect; check `.env` was sourced
+- `KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH
+  session is still restored at the next restart.` — the flag did not take effect;
+  check `.env` was sourced
 
 ⚠️ **The restore arm ignores `KOTH_TICK` entirely.** It runs at every slot, on or off,
 whenever any `koth_events` row has ever existed on the server (`planKoth`'s first
-query) — so turning the flag off mid-session does not strand the server in KotH mode,
-and the "off" log line above is accurate about `/koth` but not about the restore.
+query) — so turning the flag off mid-session does not strand the server in KotH mode.
+The flag gates only two things: `/koth schedule`, and the OPENING of a session
+(`restartTick`'s `koth.open`). With it off, a `scheduled` row whose slot arrives is
+left `scheduled` and never opened; once the flag is back, `koth-tick` fails it as
+missed and posts the cancellation.
 
 ## 4. Rehearsal on a quiet slot
 
@@ -124,11 +130,20 @@ from koth_events order by id desc limit 5;
 
 ## 5. Rollback
 
-`KOTH_TICK=false`, then `sudo systemctl restart clan-wars-bot`. `/koth` now refuses
-every subcommand; a `scheduled` or `live` row is not touched by the flag. The restore
-arm still runs at the next slot regardless (§3 above) — a `live` row's session ends
-and its four files come back at the closing restart exactly as if the flag were still
-on, because `planKoth` never gates on it. If a session needs to be stopped
+1. **`/koth cancel` first**, while a `scheduled` row exists — it works with the flag on
+   or off, and it is the only thing that tells `#server-events` the session is off
+   (the cancellation post goes out from `koth-tick`, so with the flag already off it
+   posts once the flag is back; the row is `cancelled` immediately either way).
+   `/koth cancel` refuses inside the opening slot itself — by then the restart tick is
+   already writing the town's files, and the next restart ends the session anyway.
+2. `KOTH_TICK=false`, then `sudo systemctl restart clan-wars-bot`. Only
+   `/koth schedule` refuses now; `/koth cancel` and `/koth status` still work. With the
+   flag off no session opens, and a `scheduled` row you did not cancel stays
+   `scheduled` until the flag is back, when `koth-tick` fails it as missed.
+
+The restore arm still runs at the next slot regardless (§3 above) — a `live` row's
+session ends and its four files come back at the closing restart exactly as if the
+flag were still on, because only the opening is gated on the flag. If a session needs to be stopped
 immediately rather than waiting for its own closing restart, reverting the code (not
 just the flag) removes the tick that opens future ones; an already-`live` session
 still needs its own closing restart, or a hand `update koth_events set state =
@@ -137,8 +152,18 @@ manual-fallback pattern for a stuck flag) to short-circuit it.
 
 ## 6. Turning it off for good
 
-Same shape as `docs/deploy/2026-09-21-airdrops.md` §6: `KOTH_TICK=false` stops new
-schedules but, unlike airdrops, does *not* leave a live session stuck — the restore
+`/koth cancel` any `scheduled` row first (§5), then as in
+`docs/deploy/2026-09-21-airdrops.md` §6: `KOTH_TICK=false` stops new schedules and
+openings but, unlike airdrops, does *not* leave a live session stuck — the restore
 arm is unconditional (§3). Let a `live` session reach its own closing restart before
 relying on that, the same way you would not force-remove a live airdrop's spawner
 entry unless it had to come off immediately.
+
+## 7. Known edge: a restart Nitrado accepted but we never heard back from
+
+If the opening restart's POST reaches Nitrado but times out on our side, the retry
+sees the server `restarting` and records the slot `skipped` — so `koth-tick` fails the
+row and posts a cancellation for a session that did in fact boot with the KotH files
+(the same edge airdrops have). The row cannot be re-run. Check the server: if it is
+in KotH mode, the next slot's restore arm puts it back regardless; tell
+`#server-events` by hand that the session was void, and `/koth schedule` another.

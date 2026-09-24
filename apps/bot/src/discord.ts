@@ -1604,7 +1604,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, airdrop: cfg.airdrop });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, airdrop: cfg.airdrop, koth: { open: cfg.koth.enabled } });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1734,7 +1734,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     else console.log(`airdrop automation on (cap ${cfg.airdrop.weeklyCap}/week, floor ${cfg.airdrop.minPop})`);
 
     if (cfg.koth.enabled) console.log("king of the hill on");
-    else console.warn("KOTH_TICK is off: /koth refuses; any unfinished KotH session is still restored at the next restart.");
+    else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)

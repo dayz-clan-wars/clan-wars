@@ -14,13 +14,26 @@ type KothRow = typeof kothEvents.$inferSelect;
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type Db = Database | Tx;
 
+/** When the restart for `slot` was actually issued, or undefined if it was not (yet) restarted. */
+async function issuedAt(db: Db, serverId: number, slot: Date): Promise<Date | undefined> {
+  return (await db.select({ issuedAt: serverRestarts.issuedAt }).from(serverRestarts).where(and(
+    eq(serverRestarts.serverId, serverId), eq(serverRestarts.scheduledFor, slot), eq(serverRestarts.outcome, "restarted"),
+  )).limit(1))[0]?.issuedAt;
+}
+
+/**
+ * Where a session's window starts: the opening restart's issue time, else the slot.
+ * ⚠️ One statement, used by the final score AND `/koth status`'s live standings —
+ * two spellings would let the standings a player saw disagree with the result.
+ */
+export async function kothOpenedAt(db: Db, row: KothRow): Promise<Date> {
+  return (await issuedAt(db, row.serverId, row.slotAt)) ?? row.slotAt;
+}
+
 /** The opening and closing restarts' actual issue times (spec §2.9). */
 export async function kothWindow(db: Db, row: KothRow): Promise<{ from: Date; to: Date }> {
   const end = new Date(row.slotAt.getTime() + RESTART_PERIOD_MS);
-  const at = async (slot: Date) => (await db.select({ issuedAt: serverRestarts.issuedAt }).from(serverRestarts).where(and(
-    eq(serverRestarts.serverId, row.serverId), eq(serverRestarts.scheduledFor, slot), eq(serverRestarts.outcome, "restarted"),
-  )).limit(1))[0]?.issuedAt;
-  return { from: (await at(row.slotAt)) ?? row.slotAt, to: (await at(end)) ?? end };
+  return { from: await kothOpenedAt(db, row), to: (await issuedAt(db, row.serverId, end)) ?? end };
 }
 
 /**

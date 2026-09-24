@@ -52,14 +52,19 @@ async function readNonEmpty(nitrado: RestartTarget, path: string): Promise<strin
  * has EVER existed — the only case the restore arm may skip entirely.
  *
  * ⚠️ Not gated on KOTH_TICK by the caller: switching the feature off
- * mid-event must still put the server back (spec §5.3).
+ * mid-event must still put the server back (spec §5.3). `allowOpen` (the flag)
+ * gates the OPENING branch alone: with the tick off nothing would post, remind
+ * or score a session, so a due row is left `scheduled` for koth-tick to fail as
+ * missed once the flag is back — and the restore arm below runs either way.
  *
  * ⚠️ The opening is verified BEFORE anything is written, and a refusal returns
  * the RESTORE plan: a KotH we could not reverse is worse than one that never
  * starts (§5.1), and a half-written open from an earlier failed attempt is
  * undone the same way.
  */
-export async function planKoth(db: Database, nitrado: RestartTarget, serverId: number, slot: Date): Promise<KothPlan | null> {
+export async function planKoth(
+  db: Database, nitrado: RestartTarget, serverId: number, slot: Date, opts: { allowOpen: boolean },
+): Promise<KothPlan | null> {
   // ⚠️ FIRST, before any Nitrado call: a server that has never had a KotH row
   // must cost the restart tick nothing — not a single download (restart-tick.test.ts's
   // throwing fake holds this).
@@ -70,7 +75,7 @@ export async function planKoth(db: Database, nitrado: RestartTarget, serverId: n
   const dbDir = await nitrado.missionDbDir();
   const candidates = await db.select().from(kothEvents)
     .where(and(eq(kothEvents.serverId, serverId), eq(kothEvents.state, "scheduled")));
-  const opening = kothWanted(slot, candidates);
+  const opening = opts.allowOpen ? kothWanted(slot, candidates) : null;
 
   let failure: string | null = null;
   if (opening) {
@@ -165,11 +170,15 @@ async function differing(nitrado: RestartTarget, edits: FileEdit[]): Promise<Fil
   return out;
 }
 
-/** Upload each edit. Each is independent: one failed upload does not stop the rest. */
+/**
+ * Upload each edit. Each is independent: one failed upload does not stop the rest.
+ * The list is `planKoth`'s, which has already dropped every file that matches its
+ * target — a second comparison here only doubled the downloads.
+ */
 export async function convergeKothFiles(nitrado: RestartTarget, files: FileEdit[]): Promise<{ uploaded: number; errors: string[] }> {
   let uploaded = 0;
   const errors: string[] = [];
-  for (const f of await differing(nitrado, files)) {
+  for (const f of files) {
     try {
       await nitrado.uploadFile(f.dir, f.name, f.content);
       uploaded += 1;

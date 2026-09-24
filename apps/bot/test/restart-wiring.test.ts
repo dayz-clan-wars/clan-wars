@@ -15,6 +15,11 @@ describe("restart tick wiring", () => {
   it("passes cfg.truckWipe into the restart tick, the only thing that fires it", () => {
     expect(src).toMatch(/await restartTick\(db, nitradoFor, \{[^}]*truckWipe: cfg\.truckWipe/u);
   });
+  // ⚠️ FI2: absent means "never open". Dropping this leaves KOTH_TICK=true scheduling
+  // events that every restart then silently declines to open.
+  it("passes KOTH_TICK into the restart tick as koth.open", () => {
+    expect(src).toMatch(/await restartTick\(db, nitradoFor, \{[^\n]*koth: \{ open: cfg\.koth\.enabled \}/u);
+  });
   it("runs the restart tick after the last Discord poster (noticeTick), not before", () => {
     const noticeAt = src.indexOf("await noticeTick(");
     const restartAt = src.indexOf("await restartTick(db, nitradoFor,");

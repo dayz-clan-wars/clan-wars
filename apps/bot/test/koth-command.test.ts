@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  createClient, runMigrations, requireTestDatabaseUrl, airdropEvents, kothEvents, servers, type Database,
+  createClient, runMigrations, requireTestDatabaseUrl, airdropEvents, kothEvents, servers, admFiles, events, kills, players,
+  serverRestarts, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
 import { kothGroup } from "../src/commands/koth.js";
@@ -20,7 +21,7 @@ describe("/koth", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table koth_events, airdrop_events, servers restart identity cascade`);
+    await db.execute(sql`truncate table koth_events, airdrop_events, kills, events, adm_files, players, server_restarts, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id;
   });
@@ -111,6 +112,28 @@ describe("/koth", () => {
     expect(after!.state).toBe("live");
   });
 
+  // ⚠️ M2: at the opening slot the restart tick may already be writing the town's
+  // files; a cancel now would race it. The next restart ends the session anyway.
+  it("cancel refuses inside the opening slot and leaves the row alone", async () => {
+    await schedule(ctx(), input());
+    const reply = await cancel(ctx(undefined, at("2026-10-03T20:00:30Z")), input());
+    expect(reply.content).toMatch(/opening this slot/i);
+    expect(reply.content).toMatch(/next restart/i);
+    const [row] = await rows();
+    expect(row!.state).toBe("scheduled");
+  });
+
+  // ⚠️ FI4 (migration 0050): a cancelled or never-announced row must not hold its slot.
+  it("a cancelled slot, or one whose announcement failed, can be scheduled again", async () => {
+    await schedule(ctx(vi.fn(async () => { throw new Error("channel gone"); })), input());
+    const first = await schedule(ctx(), input());
+    expect(first.content).toMatch(/Scheduled/);
+    await cancel(ctx(), input());
+    const again = await schedule(ctx(), input());
+    expect(again.content).toMatch(/Scheduled/);
+    expect((await rows()).map((r) => r.state).sort()).toEqual(["cancelled", "failed", "scheduled"]);
+  });
+
   it("cancel refuses a non-admin and reports nothing scheduled", async () => {
     const nonAdmin = await cancel(ctx(), input({ isAdmin: false }));
     expect(nonAdmin.content).toMatch(/admin/i);
@@ -125,6 +148,43 @@ describe("/koth", () => {
     const reply = await status(ctx(), input());
     expect(reply.content).toMatch(/Lembork/);
     expect(reply.content).toMatch(/scheduled/);
+  });
+
+  // ⚠️ Spec §7: a live event shows its standings so far, from the opening restart to now.
+  it("status on a live event shows the top five so far, gamertags escaped", async () => {
+    const [row] = await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
+      state: "live", scheduledByDiscordId: "1", announcedAt: NOW, openedAt: SLOT,
+    }).returning();
+    await db.insert(serverRestarts).values({ serverId, scheduledFor: SLOT, issuedAt: at("2026-10-03T20:00:04Z"), outcome: "restarted" });
+    const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: SLOT, linesIngested: 0, complete: true }).returning();
+    await db.insert(players).values({ dayzId: "a", gamertag: "**Boss**", firstSeenAt: SLOT, lastSeenAt: SLOT });
+    let line = 0;
+    const kill = async (killer: string, iso: string, x: number) => {
+      const [e] = await db.insert(events).values({ serverId, admFileId: f!.id, lineIndex: line++, type: "player.killed", occurredAt: at(iso),
+        payload: { killerDayzId: killer, victimDayzId: `v${line}`, victimPos: { x, y: 100, z: 6635 } } }).returning();
+      await db.insert(kills).values({ serverId, eventId: e!.id, occurredAt: at(iso), victimDayzId: `v${line}`, killerDayzId: killer, cause: "killed" });
+    };
+    await kill("a", "2026-10-03T20:10:00Z", 8675);
+    await kill("a", "2026-10-03T20:11:00Z", 8680);
+    await kill("b", "2026-10-03T20:12:00Z", 8675);
+    await kill("b", "2026-10-03T20:00:01Z", 8675);        // before the opening restart was issued
+    await kill("c", "2026-10-03T20:13:00Z", 8675 + 900);  // off the hill
+    const reply = await status(ctx(undefined, at("2026-10-03T21:00:00Z")), input());
+    expect(reply.content).toMatch(/live/);
+    expect(reply.content).toContain("1. \\*\\*Boss\\*\\* — 2");
+    expect(reply.content).toContain("2. b — 1");
+    expect(reply.content).not.toMatch(/\bc — /);
+    expect(row!.id).toBeGreaterThan(0);
+  });
+
+  it("status on a live event with no kills yet says so", async () => {
+    await db.insert(kothEvents).values({
+      serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
+      state: "live", scheduledByDiscordId: "1", announcedAt: NOW, openedAt: SLOT,
+    });
+    const reply = await status(ctx(undefined, at("2026-10-03T21:00:00Z")), input());
+    expect(reply.content).toMatch(/no kills on the hill yet/i);
   });
 
   // (I1) The open-check is a plain SELECT, not a lock: two concurrent calls can both

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, servers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, serverRestarts, servers, type Database } from "@factions/db";
 import { KOTH_PRESET_FILES, KOTH_WHOLE_FILES } from "@factions/domain";
 import { eq, sql } from "drizzle-orm";
 import { planKoth, convergeKothFiles } from "../src/koth-converge.js";
@@ -54,12 +54,12 @@ const schedule = (over: Record<string, unknown> = {}) => db.insert(kothEvents).v
 
 describe("planKoth", () => {
   it("is null when no KotH event has ever existed — nothing to open or restore", async () => {
-    expect(await planKoth(db, mission().target, serverId, SLOT)).toBeNull();
+    expect(await planKoth(db, mission().target, serverId, SLOT, { allowOpen: true })).toBeNull();
   });
 
   it("opens: the presets, all five infected on, the four town files, and snapshots first", async () => {
     const row = await schedule();
-    const p = (await planKoth(db, mission().target, serverId, SLOT))!;
+    const p = (await planKoth(db, mission().target, serverId, SLOT, { allowOpen: true }))!;
     expect(p.failure).toBeNull();
     expect(p.opening?.id).toBe(row.id);
     expect(p.presets).toEqual([...KOTH_PRESET_FILES]);
@@ -74,7 +74,7 @@ describe("planKoth", () => {
   it("missing default refuses: failed, restore plan, nothing KotH in it", async () => {
     const row = await schedule();
     const m = mission({ "/m/koth/default/zombie_territories.xml": undefined });
-    const p = (await planKoth(db, m.target, serverId, SLOT))!;
+    const p = (await planKoth(db, m.target, serverId, SLOT, { allowOpen: true }))!;
     expect(p.failure).toMatch(/koth\/default\/zombie_territories\.xml/);
     expect(p.opening).toBeNull();
     expect(p.presets).toBeNull();
@@ -88,14 +88,14 @@ describe("planKoth", () => {
 
   it("an empty town source refuses too — an empty spawn file is never uploaded", async () => {
     await schedule();
-    const p = (await planKoth(db, mission({ "/m/koth/locations/lembork/cfgplayerspawnpoints.xml": "  \n" }).target, serverId, SLOT))!;
+    const p = (await planKoth(db, mission({ "/m/koth/locations/lembork/cfgplayerspawnpoints.xml": "  \n" }).target, serverId, SLOT, { allowOpen: true }))!;
     expect(p.failure).toMatch(/is empty/);
     expect(p.opening).toBeNull();
   });
 
   it("a missing preset on the server refuses too", async () => {
     await schedule();
-    const p = (await planKoth(db, mission({ [`/m/custom/${KOTH_PRESET_FILES[0]!.slice(9)}`]: undefined }).target, serverId, SLOT))!;
+    const p = (await planKoth(db, mission({ [`/m/custom/${KOTH_PRESET_FILES[0]!.slice(9)}`]: undefined }).target, serverId, SLOT, { allowOpen: true }))!;
     expect(p.failure).toMatch(/preset/);
   });
 
@@ -103,7 +103,7 @@ describe("planKoth", () => {
   it("never snapshots a list that already holds koth- entries", async () => {
     const row = await schedule();
     const kothGameplay = GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json");
-    await planKoth(db, mission({ "/m/cfggameplay.json": kothGameplay }).target, serverId, SLOT);
+    await planKoth(db, mission({ "/m/cfggameplay.json": kothGameplay }).target, serverId, SLOT, { allowOpen: true });
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.loadoutSnapshot).toBeNull();
   });
@@ -114,7 +114,7 @@ describe("planKoth", () => {
       infectedSnapshot: { InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 },
     });
     const allOn = EVENTS.replace(/<active>0<\/active>/g, "<active>1</active>");
-    await planKoth(db, mission({ "/m/db/events.xml": allOn }).target, serverId, SLOT);
+    await planKoth(db, mission({ "/m/db/events.xml": allOn }).target, serverId, SLOT, { allowOpen: true });
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.infectedSnapshot).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
   });
@@ -126,7 +126,7 @@ describe("planKoth", () => {
     });
     const live = Object.fromEntries(KOTH_WHOLE_FILES.map((f) => [f.dir === "root" ? `/m/${f.name}` : `/m/env/${f.name}`, `lembork ${f.name}`]));
     const m = mission({ ...live, "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json") });
-    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.opening).toBeNull();
     expect(p.presets).toEqual(["./custom/loadout.json"]);
     expect(p.infected).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
@@ -139,7 +139,7 @@ describe("planKoth", () => {
     const row = await schedule({ state: "live", openedAt: SLOT });
     const live = Object.fromEntries(KOTH_WHOLE_FILES.map((f) => [f.dir === "root" ? `/m/${f.name}` : `/m/env/${f.name}`, `lembork ${f.name}`]));
     const m = mission({ ...live, "/m/koth/default/bear_territories.xml": undefined });
-    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.files.map((f) => f.name)).toEqual(KOTH_WHOLE_FILES.map((f) => f.name).filter((n) => n !== "bear_territories.xml"));
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(String(saved!.detail.restoreError)).toMatch(/bear_territories\.xml/);
@@ -153,7 +153,7 @@ describe("planKoth", () => {
       infectedSnapshot: { InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 } });
     const live = Object.fromEntries(KOTH_WHOLE_FILES.map((f) => [f.dir === "root" ? `/m/${f.name}` : `/m/env/${f.name}`, `lembork ${f.name}`]));
     const m = mission({ ...live, "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json") });
-    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.presets).toBeNull();
     expect(p.infected).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
     expect(p.infectedRestoreRowId).toBe(row.id);
@@ -166,7 +166,7 @@ describe("planKoth", () => {
     const row = await schedule({ state: "live", openedAt: SLOT });
     const m = mission({ "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json"),
       "/m/koth/default/bear_territories.xml": undefined });
-    const p = (await planKoth(db, m.target, serverId, NEXT))!;
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.presets).toBeNull();
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(String(saved!.detail.restoreError)).toMatch(/spawnGearPresetFiles/);
@@ -178,7 +178,7 @@ describe("planKoth", () => {
     await schedule({ state: "no_winner", openedAt: SLOT, restoredAt: NEXT, loadoutSnapshot: ["./custom/loadout.json"],
       infectedSnapshot: { InfectedCity: 0, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 } });
     const edited = GAMEPLAY.replace('"./custom/loadout.json"', '"./custom/loadout.json",\n\t\t\t"./custom/extra.json"');
-    const p = (await planKoth(db, mission({ "/m/cfggameplay.json": edited }).target, serverId, at("2026-10-04T10:00:00Z")))!;
+    const p = (await planKoth(db, mission({ "/m/cfggameplay.json": edited }).target, serverId, at("2026-10-04T10:00:00Z"), { allowOpen: true }))!;
     expect(p.presets).toBeNull();
     expect(p.infected).toBeNull();
     expect(p.files).toEqual([]);
@@ -186,15 +186,23 @@ describe("planKoth", () => {
 });
 
 describe("convergeKothFiles", () => {
-  it("uploads only the files that differ, to root or env", async () => {
+  // The differing-only filter is planKoth's (its `files` tests above); this uploads what it is given.
+  it("uploads each edit to root or env; one failure does not stop the rest", async () => {
     const m = mission();
+    const upload = m.uploadFile.getMockImplementation()!;
+    m.uploadFile.mockImplementation(async (dir: string, name: string, body: string) => {
+      if (name === "bear_territories.xml") throw new Error("ftp refused");
+      return upload(dir, name, body);
+    });
     const r = await convergeKothFiles(m.target, [
+      { dir: "/m/env", name: "bear_territories.xml", content: "lembork bear_territories.xml" },
       { dir: "/m", name: "cfgplayerspawnpoints.xml", content: "lembork cfgplayerspawnpoints.xml" },
-      { dir: "/m/env", name: "wolf_territories.xml", content: "default wolf_territories.xml" },
+      { dir: "/m/env", name: "wolf_territories.xml", content: "lembork wolf_territories.xml" },
     ]);
-    expect(r.uploaded).toBe(1);
-    expect(r.errors).toEqual([]);
+    expect(r.uploaded).toBe(2);
+    expect(r.errors).toEqual([expect.stringMatching(/\/m\/env\/bear_territories\.xml: ftp refused/)]);
     expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe("lembork cfgplayerspawnpoints.xml");
+    expect(m.read("/m/env/wolf_territories.xml")).toBe("lembork wolf_territories.xml");
   });
 });
 
@@ -204,7 +212,7 @@ describe("restartTick with KotH", () => {
     const m = mission();
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map() });
+    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(restart).toHaveBeenCalledWith(expect.stringContaining("King of the Hill at Lembork"));
     expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe("lembork cfgplayerspawnpoints.xml");
     expect(m.read("/m/env/zombie_territories.xml")).toBe("lembork zombie_territories.xml");
@@ -214,7 +222,7 @@ describe("restartTick with KotH", () => {
     expect(saved!.state).toBe("live");
     expect(saved!.openedAt).not.toBeNull();
 
-    await restartTick(db, () => target, { now: at("2026-10-03T22:00:05Z"), lastError: new Map() });
+    await restartTick(db, () => target, { now: at("2026-10-03T22:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(restart).toHaveBeenLastCalledWith("Scheduled restart");
     expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe("default cfgplayerspawnpoints.xml");
     expect(m.read("/m/env/zombie_territories.xml")).toBe("default zombie_territories.xml");
@@ -224,10 +232,56 @@ describe("restartTick with KotH", () => {
     expect(saved!.restoredAt).not.toBeNull();
   });
 
+  // ⚠️ FI2: KOTH_TICK off must never OPEN a session (nothing would score or post it),
+  // but the restore arm runs regardless — switching off mid-event still puts the server back.
+  it("with KOTH_TICK off, a due row is not opened and stays scheduled; an earlier session still restores", async () => {
+    const prior = await schedule({ slotAt: at("2026-10-03T18:00:00Z"), state: "no_winner", openedAt: at("2026-10-03T18:00:00Z"),
+      loadoutSnapshot: ["./custom/loadout.json"],
+      infectedSnapshot: { InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 } });
+    const row = await schedule();
+    const live = Object.fromEntries(KOTH_WHOLE_FILES.map((f) => [f.dir === "root" ? `/m/${f.name}` : `/m/env/${f.name}`, `lembork ${f.name}`]));
+    const allOn = EVENTS.replace(/<active>0<\/active>/g, "<active>1</active>");
+    const m = mission({ ...live, "/m/db/events.xml": allOn, "/m/cfggameplay.json": GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json") });
+    const restart = vi.fn(async () => {});
+    const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
+    for (const koth of [{ open: false }, undefined]) {
+      await db.delete(serverRestarts);
+      await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth });
+      expect(restart).toHaveBeenLastCalledWith("Scheduled restart");
+      const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+      expect(saved!.state).toBe("scheduled");
+      expect(saved!.loadoutSnapshot).toBeNull();
+    }
+    expect(m.read("/m/cfggameplay.json")).toBe(GAMEPLAY);
+    expect(m.read("/m/db/events.xml")).toBe(EVENTS);
+    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe("default cfgplayerspawnpoints.xml");
+    const [p] = await db.select().from(kothEvents).where(eq(kothEvents.id, prior.id));
+    expect(p!.restoredAt).not.toBeNull();
+  });
+
+  // ⚠️ FT9: an opening that already failed must not put KotH's presets in the file.
+  it("an opening whose events.xml write fails does not upload the koth- presets", async () => {
+    const row = await schedule();
+    const m = mission();
+    const upload = m.uploadFile.getMockImplementation()!;
+    m.uploadFile.mockImplementation(async (dir: string, name: string, body: string) => {
+      if (name === "events.xml") throw new Error("ftp refused");
+      return upload(dir, name, body);
+    });
+    const restart = vi.fn(async () => {});
+    const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
+    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
+    expect(restart).toHaveBeenCalledWith("Scheduled restart");
+    expect(m.read("/m/cfggameplay.json")).toBe(GAMEPLAY);
+    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe("default cfgplayerspawnpoints.xml");
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(saved!.state).toBe("failed");
+  });
+
   it("a failed restart POST leaves the row scheduled, not live", async () => {
     const row = await schedule();
     const target = { ...mission().target, status: async () => "started", restart: async () => { throw new Error("503"); } } as unknown as RestartTarget;
-    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map() });
+    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("scheduled");
   });
@@ -238,7 +292,7 @@ describe("restartTick with KotH", () => {
     const m = mission({ "/m/koth/default/wolf_territories.xml": undefined });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map() });
+    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(r.restarted).toBe(1);
     expect(restart).toHaveBeenCalledWith("Scheduled restart");
     expect(m.uploadFile).not.toHaveBeenCalled();
@@ -255,7 +309,7 @@ describe("restartTick with KotH", () => {
     const m = mission({ "/m/cfggameplay.json": twice });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map() });
+    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(r.restarted).toBe(1);
     expect(restart).toHaveBeenCalledWith("Scheduled restart");
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));

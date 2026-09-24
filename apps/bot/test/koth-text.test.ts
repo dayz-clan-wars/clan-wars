@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { scheduledText, reminderText, liveText, resultsText, cancelledText } from "../src/koth-text.js";
-import { KOTH_ZONE_RADIUS_M } from "@factions/domain";
+import { KOTH_AWARD_KEY, KOTH_REMINDER_LEAD_MS, KOTH_ZONE_RADIUS_M } from "@factions/domain";
+import { awardsCatalogue } from "@factions/domain/awards";
 
 const SLOT = new Date("2026-10-03T20:00:00Z");
 
@@ -12,6 +13,14 @@ describe("koth text", () => {
       expect(t).toMatch(/Plate Carrier/);
       expect(t).toContain("<t:");
     }
+  });
+  // ⚠️ Two statements of one fact: the lead and the prize length live in rules.ts and
+  // the award catalogue, never as literals in the copy.
+  it("the reminder's lead and the prize's length render from their constants", () => {
+    expect(reminderText("Lembork", SLOT)).toContain(`IN ${KOTH_REMINDER_LEAD_MS / 60_000} MINUTES`);
+    const days = awardsCatalogue()[KOTH_AWARD_KEY]!.durationDays;
+    const want = days === 7 ? "a week" : `${days} days`;
+    expect(scheduledText("Lembork", SLOT)).toContain(`wins ${want} of the`);
   });
   it("results list the top five, the winner, and a passed-down prize", () => {
     const t = resultsText("Lembork", {

@@ -1,10 +1,13 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { airdropEvents, kothEvents, servers } from "@factions/db";
 import {
-  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, nextRestartAt,
+  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, kothStandings, nextRestartAt,
+  restartSlot,
 } from "@factions/domain";
 import { and, eq, inArray } from "drizzle-orm";
-import { scheduledText } from "../koth-text.js";
+import { reminderMinutes, scheduledText } from "../koth-text.js";
+import { kothKills, kothOpenedAt } from "../koth-score.js";
+import { escapeMarkdown } from "../site-links.js";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
@@ -44,7 +47,7 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const slot = new Date(input.string("at") ?? "");
   if (Number.isNaN(slot.getTime()) || !isRestartSlot(slot)) return reply("Pick a restart slot from the list.");
   if (slot.getTime() - ctx.now.getTime() < KOTH_REMINDER_LEAD_MS) {
-    return reply("That slot is under 30 minutes away. Pick a later one, so players get the reminder.");
+    return reply(`That slot is under ${reminderMinutes} minutes away. Pick a later one, so players get the reminder.`);
   }
 
   const server = await activeServer(ctx);
@@ -90,6 +93,13 @@ async function cancel(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (!row) return reply("Nothing is scheduled.");
   // ⚠️ A live session is already on the server; the next restart ends it anyway.
   if (row.state === "live") return reply("It is already live. It ends at the next restart.");
+  // ⚠️ The opening slot is now: the restart tick may be writing the town's files
+  // and the presets this very pass. Cancelling under it would leave a row
+  // `cancelled` over a server that boots into KotH anyway, with a cancellation
+  // posted for a session that is running. The next restart ends it regardless.
+  if (row.slotAt.getTime() === restartSlot(ctx.now).start.getTime()) {
+    return reply("It is opening this slot, so it is too late to cancel. It ends at the next restart.");
+  }
   await ctx.db.update(kothEvents).set({ state: "cancelled" }).where(and(eq(kothEvents.id, row.id), eq(kothEvents.state, "scheduled")));
   return reply(`Cancelled ${kothLocation(row.location)?.name ?? row.location}. The channel will be told.`);
 }
@@ -100,7 +110,15 @@ async function status(ctx: Ctx, _input: CommandInput): Promise<Reply> {
   const [row] = await ctx.db.select().from(kothEvents)
     .where(and(eq(kothEvents.serverId, server.id), inArray(kothEvents.state, ["scheduled", "live"])));
   if (!row) return reply("No King of the Hill event is scheduled.");
-  return reply(`${kothLocation(row.location)?.name ?? row.location}: ${row.state}, slot ${row.slotAt.toISOString()}.`);
+  const head = `${kothLocation(row.location)?.name ?? row.location}: ${row.state}, slot ${row.slotAt.toISOString()}.`;
+  if (row.state !== "live") return reply(head);
+  // Spec §7: the standings so far, by the same reads the final score uses. Not
+  // settled — log lag means the last minutes may still be arriving.
+  const { kills } = await kothKills(ctx.db, row, { from: await kothOpenedAt(ctx.db, row), to: ctx.now });
+  const top = kothStandings(kills).slice(0, 5);
+  if (top.length === 0) return reply(`${head}\nNo kills on the hill yet.`);
+  // ⚠️ Gamertags are player-controlled; the house escaper keeps them from restyling the reply.
+  return reply([head, "Standings so far:", ...top.map((t, i) => `${i + 1}. ${escapeMarkdown(t.gamertag)} — ${t.kills}`)].join("\n"));
 }
 
 const towns: AutocompleteSource = async (_ctx, a) => KOTH_LOCATIONS

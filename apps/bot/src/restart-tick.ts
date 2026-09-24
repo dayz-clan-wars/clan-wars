@@ -320,7 +320,11 @@ async function record(db: Database, serverId: number, slot: Date, now: Date, out
 export async function restartTick(
   db: Database,
   nitradoFor: (serviceId: number) => RestartTarget,
-  opts: { now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow; airdrop?: { enabled: boolean } },
+  opts: {
+    now: Date; lastError?: Map<number, string>; truckWipe?: TruckWipe; raidWindow?: RaidWindow; airdrop?: { enabled: boolean };
+    /** ⚠️ `open` is KOTH_TICK. Absent means off: a session is only ever opened on purpose. The restore runs regardless. */
+    koth?: { open: boolean };
+  },
 ): Promise<RestartTickResult> {
   const result: RestartTickResult = { restarted: 0, skipped: 0, missed: 0, failed: 0 };
   const lastError = opts.lastError ?? moduleLastError;
@@ -368,7 +372,7 @@ export async function restartTick(
       // leaves every KotH file as it is; the next slot plans again.
       let koth: KothPlan | null = null;
       try {
-        koth = await planKoth(db, nitrado, s.id, slot.start);
+        koth = await planKoth(db, nitrado, s.id, slot.start, { allowOpen: opts.koth?.open ?? false });
       } catch (err) {
         console.error(`koth: server ${s.id} could not plan slot ${slot.start.toISOString()} — restarting anyway`, err);
       }
@@ -471,7 +475,10 @@ export async function restartTick(
           airdropLocation = intent.enabling?.location ?? intent.wanted?.location ?? null;
         }
 
-        if (koth?.presets) edits.koth = { presets: koth.presets };
+        // ⚠️ Same guard as the whole files below: an opening that already failed
+        // (its infected splice or events.xml write) must not put KotH's presets in
+        // the file — the row is `failed` and nothing would ever advertise the session.
+        if (koth?.presets && (koth.opening === null || kothOpening !== null)) edits.koth = { presets: koth.presets };
 
         const gameplay = await applyGameplay(nitrado, slot.start, edits);
 
