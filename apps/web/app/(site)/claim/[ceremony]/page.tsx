@@ -9,7 +9,7 @@ import { when, days, ago } from "@/lib/format";
 import { flagImagePath } from "@/src/flag-images";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, FieldError, invalid, btnCta, field, fieldLabel, checkbox, kickerSm } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, FieldError, invalid, btnCta, field, fieldLabel, checkbox, kickerSm, SubmitButton } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — found your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -94,7 +94,7 @@ export default async function ClaimPage({ params, searchParams }: { params: Prom
           </Panel>
 
           <p className="text-sm leading-relaxed text-ink-2">Claiming reserves the name, tag, flag and pole. Raise your flag at the pole within {days(ACTIVATION_WINDOW_MS)} to activate. No two bases sit within {MIN_BASE_SPACING_M} m of each other — if the pole is too close to one you cannot see, the claim is refused.</p>
-          <button className={btnCta} type="submit">Found the clan <span className="font-mono normal-case">→</span></button>
+          <SubmitButton className={btnCta} pending={<>Founding… <span className="font-mono normal-case">→</span></>}>Found the clan <span className="font-mono normal-case">→</span></SubmitButton>
         </form>
         <BackLine href="/me">Your page</BackLine>
       </Body>

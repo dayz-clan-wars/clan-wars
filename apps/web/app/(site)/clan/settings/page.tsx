@@ -8,7 +8,7 @@ import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox, SubmitButton } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 
@@ -53,7 +53,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <label className="block"><span className={fieldLabel}>When you play</span><input className={field} name="playWindow" defaultValue={clan.playWindow ?? ""} maxLength={RECRUITING_LIMITS.playWindow} placeholder="EU evenings, weekends" /></label>
               <label className="block"><span className={fieldLabel}>Language</span><input className={field} name="language" defaultValue={clan.language ?? ""} maxLength={RECRUITING_LIMITS.language} placeholder="English" /></label>
               <label className="block"><span className={fieldLabel}>Pitch</span><textarea className={`${field} py-3`} name="pitch" defaultValue={clan.pitch ?? ""} maxLength={RECRUITING_LIMITS.pitch} rows={3} /></label>
-              <button className={`${btnPrimary} self-start`} type="submit">Save</button>
+              <SubmitButton className={`${btnPrimary} self-start`}>Save</SubmitButton>
             </form>
           </PanelBody>
         </Panel>
@@ -63,7 +63,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             <p id="guest-note" className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
             <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
               <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><GamertagField scope="linked" {...invalid(err, "target")} className={invalid(err, "target").className ?? ""} name="target" placeholder="" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "target" ? "err-target guest-note" : "guest-note"} /><FieldError err={err} name="target" /></label>
-              <button className={`${btnPrimary} self-start`} type="submit">Grant pass</button>
+              <SubmitButton className={`${btnPrimary} self-start`}>Grant pass</SubmitButton>
             </form>
           </PanelBody>
           {guestPasses.length === 0 ? <PanelBody className="border-t border-rule-2 !py-3"><p className="text-sm text-ink-2">No open passes.</p></PanelBody> : (
@@ -86,7 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err, "name")} className={`${field} ${invalid(err, "name").className ?? ""}`} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /><FieldError err={err} name="name" /></label>
                   <label className="block"><span className={fieldLabel}>Tag</span><input name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} {...invalid(err, "tag")} className={`${field} uppercase ${invalid(err, "tag").className ?? ""}`} aria-describedby={err?.field === "tag" ? "err-tag rename-note" : "rename-note"} /><FieldError err={err} name="tag" /></label>
                   <p id="rename-note" className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
-                  <button className={`${btnSecondary} self-start`} type="submit">Rename</button>
+                  <SubmitButton className={`${btnSecondary} self-start`}>Rename</SubmitButton>
                 </form>
               </PanelBody>
             </Panel>
@@ -101,7 +101,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                       </select>
                     </label>
                     <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I become an officer and they lead.</label>
-                    <button className={`${btnDanger} self-start`} type="submit">Transfer</button>
+                    <SubmitButton className={`${btnDanger} self-start`} pending="Transferring…">Transfer</SubmitButton>
                   </form>
                 )}
               </PanelBody>
@@ -117,7 +117,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   {rebindCandidates.map((c) => (
                     <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
                       <span>raised by <span className="font-mono">{c.by}</span> {ago(c.raisedAt)}</span>
-                      <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><button className={`${btnPrimary} !px-3.5`} type="submit">Move here</button></form>
+                      <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><SubmitButton className={`${btnPrimary} !px-3.5`}>Move here</SubmitButton></form>
                     </li>
                   ))}
                 </ul>
@@ -131,7 +131,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                 <p className="mt-2 text-sm leading-relaxed text-ink-2">{DISBAND_WARNING}</p>
                 <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/disband" method="post">
                   <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> Disband {clan.name}.</label>
-                  <button className={`mt-3 ${btnDanger}`} type="submit">Disband the clan</button>
+                  <SubmitButton className={`mt-3 ${btnDanger}`} pending="Disbanding…">Disband the clan</SubmitButton>
                 </form>
               </PanelBody>
             </Panel>

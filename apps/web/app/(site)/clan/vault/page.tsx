@@ -11,7 +11,7 @@ import { RevealButton } from "./reveal-button";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
-import { Page, PageHead, Body, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel } from "@/app/components/ui";
+import { Page, PageHead, Body, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, SubmitButton } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -90,7 +90,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
               {lock.changedInGame && (
                 <form action="/api/vault/confirm" method="post" className="flex flex-none border-l border-rule-2">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <button className="flex min-h-[48px] items-center px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:text-ink" type="submit">Confirm changed</button>
+                  <SubmitButton className="flex min-h-[48px] items-center px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:text-ink">Confirm changed</SubmitButton>
                 </form>
               )}
             </div>
@@ -107,7 +107,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                         {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                       </select>
                     </label>
-                    <button className={`${btnSecondary} self-start`} type="submit">Save</button>
+                    <SubmitButton className={`${btnSecondary} self-start`}>Save</SubmitButton>
                   </form>
                   <div className="grid grid-cols-2 gap-2 border-t border-rule-2 pt-4">
                     <form action="/api/vault/rotate" method="post" className="contents">
@@ -142,7 +142,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
                 </label>
                 <label className="block"><span className={fieldLabel}>Code</span><input {...invalid(err, "code")} className={`${field} ${invalid(err, "code").className ?? ""}`} name="code" pattern={CODE_PATTERN} inputMode="numeric" title={`${VAULT_CODE_DIGITS} digits`} aria-describedby={err?.field === "code" ? "err-code code-note" : "code-note"} /><FieldError err={err} name="code" /></label>
                 <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS} digits. Leave it blank and one is generated.</p>
-                <button className={`${btnPrimary} self-start`} type="submit">Add lock</button>
+                <SubmitButton className={`${btnPrimary} self-start`}>Add lock</SubmitButton>
               </form>
             </details>
             <form action="/api/vault/rotate" method="post" className="sm:col-span-2">

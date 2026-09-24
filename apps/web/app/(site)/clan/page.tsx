@@ -8,7 +8,7 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox, SubmitButton } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
@@ -25,7 +25,7 @@ function RowAction({ action, target, children, style = btnSecondary, confirm }: 
       <input type="hidden" name="target" value={target} />
       {confirm
         ? <ConfirmButton confirm={confirm} className={`${style} !px-3.5`}>{children}</ConfirmButton>
-        : <button className={`${style} !px-3.5`} type="submit">{children}</button>}
+        : <SubmitButton className={`${style} !px-3.5`}>{children}</SubmitButton>}
     </form>
   );
 }
@@ -109,7 +109,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
                   <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
-                  <button className={`${btnPrimary} min-h-[52px] flex-none`} type="submit">Invite</button>
+                  <SubmitButton className={`${btnPrimary} min-h-[52px] flex-none`}>Invite</SubmitButton>
                 </form>
                 <FieldError err={err} name="gamertag" />
                 <p id="invite-note" className="mt-2.5 text-xs text-muted">They must have linked their character on the site.</p>
@@ -139,8 +139,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-3 first:border-t-0 lg:px-5">
                         <span><span className="font-mono text-sm text-ink">{r.gamertag ?? "unknown"}</span><div className="text-xs text-muted">asked {ago(r.createdAt)}</div></span>
                         <span className="flex gap-2">
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="accepted" /><button className={`${btnPrimary} !px-3.5`} type="submit">Accept</button></form>
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="declined" /><button className={`${btnSecondary} !px-3.5`} type="submit">Decline</button></form>
+                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="accepted" /><SubmitButton className={`${btnPrimary} !px-3.5`}>Accept</SubmitButton></form>
+                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="declined" /><SubmitButton className={`${btnSecondary} !px-3.5`}>Decline</SubmitButton></form>
                         </span>
                       </li>
                     ))}
@@ -221,7 +221,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                 : (
                   <form action="/api/clan/leave" method="post">
                     <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I cannot join a clan again for a while after leaving.</label>
-                    <button className={`mt-3.5 ${btnDanger}`} type="submit">Leave the clan</button>
+                    <SubmitButton className={`mt-3.5 ${btnDanger}`} pending="Leaving…">Leave the clan</SubmitButton>
                   </form>
                 )}
             </PanelBody>

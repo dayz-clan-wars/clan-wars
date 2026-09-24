@@ -1,5 +1,5 @@
 import type { NoticeRow } from "@factions/roster";
-import { ConfirmButton } from "@/app/components/ui";
+import { ConfirmButton, SubmitButton } from "@/app/components/ui";
 
 /**
  * The buttons a notice offers.
@@ -48,7 +48,7 @@ function InviteAct({ row, act, label, tone }: { row: NoticeRow; act: "accept" | 
       <input type="hidden" name="act" value={act} />
       <input type="hidden" name="back" value="/notifications" />
       {row.clanId !== null && <input type="hidden" name="clanId" value={row.clanId} />}
-      <button type="submit" className={btn(tone)}>{label}</button>
+      <SubmitButton className={btn(tone)}>{label}</SubmitButton>
     </form>
   );
 }

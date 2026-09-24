@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { NOTICE_GROUPS, noticeGroup, type NoticeGroup } from "@/lib/notice-copy";
 import { notificationsHref, noticeDay } from "@/lib/notifications-page";
 import { NoticeArticle } from "@/app/components/notice-row";
-import { Pager, Notice } from "@/app/components/ui";
+import { Pager, Notice, SubmitButton } from "@/app/components/ui";
 import { NoticeActions } from "./actions";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
@@ -53,7 +53,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
       <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-3">
         <h1 className="m-0 font-display text-[34px] uppercase tracking-[0.02em] text-ink">Notifications</h1>
         <form action="/api/notifications/read-all" method="post">
-          <button type="submit" className="flex min-h-[38px] items-center border border-rule-3 px-3.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-2 hover:border-ink hover:text-ink">Mark all read</button>
+          <SubmitButton className="flex min-h-[38px] items-center border border-rule-3 px-3.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-2 hover:border-ink hover:text-ink">Mark all read</SubmitButton>
         </form>
       </div>
       <p className="mt-2.5 max-w-[62ch] text-sm leading-relaxed text-muted text-pretty">

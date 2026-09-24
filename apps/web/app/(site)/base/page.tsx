@@ -8,7 +8,7 @@ import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { ago, days, when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link, SubmitButton } from "@/app/components/ui";
 import { ReportButton } from "./report-button";
 
 export const metadata: Metadata = {
@@ -138,7 +138,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                       </div>
                       <form action="/api/base/declare" method="post">
                         <input type="hidden" name="poleKey" value={c.poleKey} />
-                        <button className={btnPrimary} type="submit" disabled={view.declaration !== null}>Declare</button>
+                        <SubmitButton className={btnPrimary} disabled={view.declaration !== null}>Declare</SubmitButton>
                       </form>
                     </li>
                   ))}
