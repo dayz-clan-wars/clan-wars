@@ -57,16 +57,16 @@ export function ConfirmButton({ confirm, className, children, disabled = false, 
 
   return (
     <>
-      {/* ⚠️ Styled off `data-pending`, never a class containing the literal word
-          "disabled" — same reason as SubmitButton (lib/submit-button.tsx): an
-          `aria-disabled:` variant is a static string in the class attribute and
-          fires even server-rendered, which would break the SSR "plain button"
-          test below. The guard (submit-guard.ts) is what stops the second
-          POST; the attribute and class only say so. */}
-      <button ref={ref} type="submit" className={`${className} ${phase === "armed" ? ARMED_CLASS : ""} [&[data-pending]]:opacity-40`}
+      {/* ⚠️ `aria-disabled:opacity-40`, the same idiom `report-button.tsx` and
+          `link-flow.tsx` use for the same pending look — unlike SubmitButton
+          (components/submit-button.tsx), this file's SSR test never does a
+          blunt substring check for the word "disabled" across the whole
+          markup, so the variant is safe here. The guard (submit-guard.ts) is
+          what actually stops the second POST; the attribute and class only
+          say so. */}
+      <button ref={ref} type="submit" className={`${className} ${phase === "armed" ? ARMED_CLASS : ""} aria-disabled:opacity-40`}
         aria-live="polite" disabled={disabled}
         aria-describedby={phase === "armed" ? hint : undefined}
-        data-pending={phase === "pending" || undefined}
         aria-disabled={phase === "pending" || undefined} aria-busy={phase === "pending" || undefined}
         onClick={(e) => {
           const { next, submit } = confirmPress(phase);

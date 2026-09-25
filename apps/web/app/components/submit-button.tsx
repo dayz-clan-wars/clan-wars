@@ -27,8 +27,16 @@ export function SubmitButton({ className, children, pending: pendingLabel, disab
   }, []);
   return (
     // ⚠️ Styled off `data-pending`, never a class containing the literal word
-    // "disabled" (an `aria-disabled:` variant would fire even server-rendered,
-    // since the string is static) — the SSR test pins a plain enabled button.
+    // "disabled". `report-button.tsx` and `link-flow.tsx` DO use an
+    // `aria-disabled:opacity-40` variant for the same pending look, and it is
+    // fine there — the variant only matches once `aria-disabled` is actually
+    // present. It cannot be used HERE because the SSR test below does a
+    // blunt substring check for the word "disabled" across the WHOLE
+    // rendered markup, not just the attribute: a static class name like
+    // `aria-disabled:opacity-40` is written into `class="…"` verbatim
+    // whether or not the attribute ever fires, and that alone trips the
+    // check on the idle, enabled render. `data-pending` sidesteps it because
+    // nothing in its name contains the word.
     <button ref={ref} type="submit" className={`${className} [&[data-pending]]:opacity-40`} disabled={disabled}
       data-pending={pending || undefined} aria-disabled={pending || undefined} aria-busy={pending || undefined}>
       {pending && pendingLabel !== undefined ? pendingLabel : children}
