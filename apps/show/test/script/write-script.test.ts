@@ -20,6 +20,11 @@ describe("screenScript", () => {
     expect(await screenScript("Boris: hi", [], moderate)).toEqual(["moderation: slur"]);
     expect(await screenScript("Boris: hi", [], allow)).toEqual([]);
   });
+
+  it("matches a blocked text as a whole word only, not inside a longer word", async () => {
+    expect(await screenScript("Boris: the boss has class.", ["SS"], allow)).toEqual([]);
+    expect(await screenScript("Pavel: SS again.", ["SS"], allow)).toEqual(['blocked text: "SS"']);
+  });
 });
 
 describe("writeScript", () => {

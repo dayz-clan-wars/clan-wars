@@ -2,6 +2,7 @@ import { buildShowPrompt } from "../prompt/build.js";
 import { EpisodeParseError, parseEpisode } from "../prompt/parse.js";
 import { blocklistHit } from "../screening/blocklist.js";
 import type { Moderate } from "../screening/moderate.js";
+import { escapeRe } from "../screening/redact.js";
 import type { Storyline, StoryContext } from "../story/types.js";
 
 export const MAX_SCRIPT_ATTEMPTS = 2;
@@ -20,8 +21,8 @@ export type ScriptResult =
 export async function screenScript(text: string, blocked: string[], moderate: Moderate): Promise<string[]> {
   const hit = blocklistHit(text);
   if (hit !== null) return [`blocklist: ${hit}`];
-  const lower = text.toLowerCase();
-  const surfaced = blocked.find((b) => lower.includes(b.toLowerCase()));
+  // Whole words only, any case (as redact.ts's inProse): "SS" must not fail "boss".
+  const surfaced = blocked.find((b) => new RegExp(`(?<![A-Za-z0-9])${escapeRe(b)}(?![A-Za-z0-9])`, "iu").test(text));
   if (surfaced !== undefined) return [`blocked text: "${surfaced}"`];
   const [verdict] = await moderate([text]);
   return verdict!.block ? [`moderation: ${verdict!.reason || "blocked"}`] : [];

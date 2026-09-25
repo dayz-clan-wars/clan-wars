@@ -5,7 +5,7 @@ import type { Verdict } from "./store.js";
 export type Redaction = { text: string; kinds: TextKind[]; replacement: string | null; reason: string | null; source: Verdict["source"] };
 export type ScreeningReport = { redactions: Redaction[] };
 
-const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
+export const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 /**
  * Apply the screening verdicts to the context (spec §7.3):
