@@ -11,12 +11,22 @@ export class EpisodeParseError extends Error {}
 
 export type ParsedEpisode = { narrative: string; title: string; storylines: Storyline[] };
 
-/** The show never airs an em dash (spec \u00a72.3). Deterministic, so no regenerate is spent on it. */
+/**
+ * The show never airs an em dash (spec \u00a72.3). Deterministic, so no regenerate is spent on it.
+ *
+ * Collapses a whole run of em dashes (with any whitespace between them, e.g. "\u2014\u2014" or
+ * "\u2014 \u2014") into a single ", ", then cleans up the three places that comma must never land:
+ * the very start of the string, the start of a line, and right after a speaker's colon.
+ */
 export function normalizeDashes(s: string): string {
-  return s.replace(/\s*\u2014\s*/gu, ", ").replace(/,\s*([.!?])/gu, "$1");
+  return s
+    .replace(/\s*(?:\u2014\s*)+/gu, ", ")
+    .replace(/:\s*,\s*/gu, ": ")
+    .replace(/(^|\n)\s*,\s*/gu, "$1")
+    .replace(/,\s*([.!?])/gu, "$1");
 }
 
-const SPEAKER = /^\*{0,2}(boris|pavel)\*{0,2}:\*{0,2}\s*/iu;
+const SPEAKER = /^(?:[-*\u2022]\s+)?\*{0,2}(boris|pavel)\*{0,2}:\*{0,2}\s*/iu;
 const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 
 /**

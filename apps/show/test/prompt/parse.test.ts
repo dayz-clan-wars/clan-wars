@@ -46,13 +46,42 @@ describe("parseEpisode", () => {
     ["a long title", reply(dialogue, block.replace("The Curse", "x".repeat(41)))],
     ["no storylines", reply(dialogue, JSON.stringify({ title: "T", storylines: [] }))],
     ["a malformed storyline", reply(dialogue, JSON.stringify({ title: "T", storylines: [{ title: "x", players: "Gold" }] }))],
+    ["a narrator line", reply(`${dialogue}\nNarrator: Meanwhile, elsewhere.`)],
   ])("rejects %s", (_label, raw) => {
     expect(() => parseEpisode(raw)).toThrow(EpisodeParseError);
+  });
+
+  it("normalizes an em-dash-led dialogue line", () => {
+    const d = dialogue.replace("Pavel: Line 1.", "Pavel: " + "\u2014" + " Oh no.");
+    const p = parseEpisode(reply(d));
+    expect(p.narrative.split("\n")[1]).toBe("Pavel: Oh no.");
+  });
+
+  it("tolerates a leading bullet before the speaker", () => {
+    const d = dialogue.replace("Boris: Line 0.", "- Boris: Line 0.");
+    const p = parseEpisode(reply(d));
+    expect(p.narrative.split("\n")[0]).toBe("Boris: Line 0.");
   });
 });
 
 describe("normalizeDashes", () => {
   it("never leaves a comma before a full stop", () => {
     expect(normalizeDashes("Wait \u2014.")).toBe("Wait.");
+  });
+
+  it("never leaves a leading comma when the dash opens the string", () => {
+    expect(normalizeDashes("\u2014 Well then.")).toBe("Well then.");
+  });
+
+  it("collapses a run of adjacent em dashes into one comma", () => {
+    expect(normalizeDashes("Wait \u2014\u2014 really?")).toBe("Wait, really?");
+  });
+
+  it("collapses a run of space-separated em dashes into one comma", () => {
+    expect(normalizeDashes("Wait \u2014 \u2014 really?")).toBe("Wait, really?");
+  });
+
+  it("never leaves a comma right after a speaker colon", () => {
+    expect(normalizeDashes("Boris: \u2014 Well.")).toBe("Boris: Well.");
   });
 });
