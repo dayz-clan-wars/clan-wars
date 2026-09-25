@@ -1815,8 +1815,8 @@ describe("blocklist", () => {
   });
 
   it.each([
-    "Nazis", "N4Z1", "n a z i", "Naaaazi", "n\u0430zi", "xX_H1tl3r_Xx", "SiegHeil", "1488Crew", "14/88", "KKK", "k k k",
-    "WhitePower", "\u5350", "Third Reich",
+    "Nazis", "N4Z1", "n a z i", "Naaaazi", "n\u0430zi", "xX_H1tl3r_Xx", "SiegHeil", "Sieg Heil", "1488Crew", "14/88", "14 88",
+    "KKK", "k k k", "WhitePower", "White Power", "\u5350", "Third Reich", "Pavel: welcome, n4z1 friends",
   ])("⚠️ blocks %s", (s) => {
     expect(blocklistHit(s)).not.toBeNull();
   });
