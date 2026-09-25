@@ -332,6 +332,19 @@ describe("airdropTick", () => {
     expect(post).not.toHaveBeenCalled();
     expect(await rows()).toHaveLength(0);
   });
+
+  it("logs that it skipped a slot King of the Hill took", async () => {
+    await online(9, "2026-09-21T18:00:00Z", null);
+    await db.insert(kothEvents).values({
+      serverId, slotAt: at("2026-09-21T20:00:00Z"), location: "lembork", centreX: "1", centreZ: "1",
+      state: "scheduled", origin: "auto", announcedAt: NOW,
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const r = await run(vi.fn(async () => {}));
+    expect(r.decided).toBe(0);
+    expect(log).toHaveBeenCalledWith(expect.stringContaining("airdrop: skipped 2026-09-21T20:00:00.000Z: koth"));
+    log.mockRestore();
+  });
 });
 
 describe("airdropText", () => {
