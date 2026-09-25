@@ -14,7 +14,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   the clan was created lands on their clan instead of a "not found" page.
 - A refused form keeps what you typed: the claim form, including which founders you
   unticked; rename; invite; guest pass; and the vault's add and edit forms. A vault code
-  is never carried back.
+  or note is never carried back.
 - A refused vault edit reopens that lock's form, with the reason inside it.
 - On the claim page, a flag or roster refusal moves focus to that section.
 - Pressing charges on /base keeps keyboard focus on the confirm step and announces the
