@@ -3,7 +3,13 @@ import { currentSession } from "./viewer";
 import { siteUrl } from "./auth/site-url";
 import type { Session } from "./auth/session";
 
-/** Non-secret values a refused form sends back, so the player does not retype them (H2). */
+/**
+ * Non-secret values a refused form sends back, so the player does not
+ * retype them (H2). ⚠️ A field name is matched against `NEVER_KEEP`
+ * case-insensitively, and rejected outright unless it is a plain identifier
+ * (letters, digits, "_", "-") — see `neverKeep` — so `Code`, `CODE` and a
+ * dotted name like `kept.code` are refused exactly like `code`.
+ */
 export type Keep = Record<string, string | readonly string[]>;
 export type Redirect = { back: string; code: string; keep?: Keep };
 
@@ -96,6 +102,23 @@ export const KEEP_LIST_MAX = 16;
  * passes it — or a crafted link that carries it — still cannot leak one.
  */
 const NEVER_KEEP = new Set(["code"]);
+/** A field name safe to prefix and put on the query — no dots, no odd characters. */
+const FIELD_NAME_RE = /^[A-Za-z0-9_-]+$/u;
+
+/**
+ * ⚠️ The single gate for "never keep this field", used by both write-side
+ * callers (`resultQuery`, `keepFrom`). `NEVER_KEEP.has(name)` alone is not
+ * enough: it is an exact, case-sensitive match, so `Code`/`CODE` sail past it,
+ * and a name containing a "." can forge a `kept.` segment of its own — a
+ * field literally named `kept.code` would otherwise write the same
+ * `kept.code=` query param `code` does. Lowercasing before the set check
+ * catches the first; requiring a plain identifier (no ".", no other
+ * punctuation) catches the second, since a legitimate field name never needs
+ * one.
+ */
+function neverKeep(name: string): boolean {
+  return !FIELD_NAME_RE.test(name) || NEVER_KEEP.has(name.toLowerCase());
+}
 
 const keepable = (v: string) => v.length > 0 && v.length <= KEEP_VALUE_MAX;
 
@@ -110,7 +133,7 @@ const keepable = (v: string) => v.length > 0 && v.length <= KEEP_VALUE_MAX;
 export function resultQuery(code: string, keep?: Keep): string {
   const q = new URLSearchParams({ result: code });
   for (const [name, value] of Object.entries(keep ?? {})) {
-    if (NEVER_KEEP.has(name)) continue;
+    if (neverKeep(name)) continue;
     const values = typeof value === "string" ? [value] : value.slice(0, KEEP_LIST_MAX);
     for (const v of values) if (keepable(v)) q.append(KEEP_PREFIX + name, v);
   }
@@ -125,7 +148,7 @@ export function resultQuery(code: string, keep?: Keep): string {
 export function keepFrom(form: FormData, fields: Record<string, number>): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [name, max] of Object.entries(fields)) {
-    if (NEVER_KEEP.has(name)) continue;
+    if (neverKeep(name)) continue;
     const v = form.get(name);
     if (typeof v !== "string") continue;
     const t = v.trim();

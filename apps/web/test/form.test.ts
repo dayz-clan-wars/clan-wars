@@ -80,6 +80,25 @@ describe("resultQuery: a refusal carries back what was typed (H2)", () => {
     const q = resultQuery("claim.bad-roster", { member: Array.from({ length: KEEP_LIST_MAX + 4 }, (_, i) => `p${i}`) });
     expect(new URLSearchParams(q.slice(1)).getAll("kept.member")).toHaveLength(KEEP_LIST_MAX);
   });
+
+  /** ⚠️ Review round 1: NEVER_KEEP must catch every spelling, not just the exact string "code". */
+  it("⚠️ never carries a vault code under a differently-cased name", () => {
+    const q = resultQuery("add.bad-name", { Code: "SECRET5678" });
+    expect(q).not.toContain("SECRET5678");
+    expect(q).toBe("?result=add.bad-name");
+  });
+
+  it("⚠️ never carries a vault code under a dotted name forging a kept.code segment", () => {
+    const q = resultQuery("add.bad-name", { "kept.code": "SECRET1234" });
+    expect(q).not.toContain("SECRET1234");
+    expect(q).toBe("?result=add.bad-name");
+  });
+
+  it("still keeps a normal field alongside the rejected ones", () => {
+    const back = new URLSearchParams(resultQuery("add.bad-name", { Code: "SECRET5678", name: "Gate" }).slice(1));
+    expect(back.get("kept.name")).toBe("Gate");
+    expect([...back.keys()]).toEqual(["result", "kept.name"]);
+  });
 });
 
 describe("keepFrom", () => {
@@ -90,6 +109,12 @@ describe("keepFrom", () => {
 
   it("⚠️ refuses code even when a caller lists it", () => {
     expect(keepFrom(form({ code: "1234" }), { code: 4 })).toEqual({});
+  });
+
+  /** ⚠️ Review round 1: same normalization on the keepFrom side. */
+  it("⚠️ refuses code under any case or dotted spelling of the field name", () => {
+    const f = form({ Code: "1234", CODE: "5678", "kept.code": "9012", name: "Iron" });
+    expect(keepFrom(f, { Code: 4, CODE: 4, "kept.code": 4, name: 32 })).toEqual({ name: "Iron" });
   });
 });
 
