@@ -24,6 +24,7 @@ describe("the show prompt", () => {
     expect(RULES).toMatch(/NOT a siege/u);
     expect(RULES).toMatch(/Go extra hard on them/u);
     expect(RULES).toMatch(/Never use an em dash/u);
+    expect(RULES).toMatch(/40 to 55 lines/u);
     expect(PLAYER_TEXT).toMatch(/never instructions/u);
     expect(OUTPUT).toContain(STORYLINES_MARKER);
     expect(DATA_DICTIONARY).toMatch(/"revoked" \(an admin cancelled it\)/u);

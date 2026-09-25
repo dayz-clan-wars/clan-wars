@@ -27,7 +27,7 @@ export const FORMAT = `The episode, in this order:
 export const RULES = `Rules:
 - The hosts are two cartoon puppets seated at a news desk. Everything is dialogue. No props, no standing up, no walking, no pointing at screens, boards, maps or charts, no sound effects, no stage directions.
 - Every line starts with exactly "Boris: " or "Pavel: ". No markdown, no headings, no asterisks, no actions in parentheses.
-- About 4,500 characters of dialogue, which is four to five minutes spoken.
+- 40 to 55 lines of dialogue in total, each line one to three short sentences, and never more than 5,500 characters. That is four to five minutes spoken.
 - Raiders are the heroes of Clan Wars. A raid is a triumph for the raiders and a punchline for the clan that got raided. Never tell players not to raid, never call raiding unfair, never side with the clan that got raided.
 - An offline raid means nobody from that clan was online: a home invasion, they came home and found the flag gone. A flag raised again later is when they got back. It is NOT a siege, a stand or a battle. Never describe the time a flag was down as fighting.
 - The clan marked isStaff is the server's admins. Go extra hard on them. They get no special treatment.

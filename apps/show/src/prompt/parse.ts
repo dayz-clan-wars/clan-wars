@@ -7,7 +7,16 @@ export const MAX_NARRATIVE_CHARS = 6000;
 export const MAX_TITLE_CHARS = 40;
 const MIN_LINES = 10;
 
-export class EpisodeParseError extends Error {}
+export class EpisodeParseError extends Error {
+  readonly reason: "too_long" | "format";
+  readonly length?: number;
+
+  constructor(message: string, reason: "too_long" | "format" = "format", length?: number) {
+    super(message);
+    this.reason = reason;
+    this.length = length;
+  }
+}
 
 export type ParsedEpisode = { narrative: string; title: string; storylines: Storyline[] };
 
@@ -45,7 +54,9 @@ export function parseEpisode(raw: string): ParsedEpisode {
   if (bad !== undefined) throw new EpisodeParseError(`not a dialogue line: ${bad.slice(0, 80)}`);
   if (lines.length < MIN_LINES) throw new EpisodeParseError(`only ${lines.length} lines of dialogue`);
   const narrative = normalizeDashes(lines.join("\n"));
-  if (narrative.length > MAX_NARRATIVE_CHARS) throw new EpisodeParseError(`script is ${narrative.length} characters, cap is ${MAX_NARRATIVE_CHARS}`);
+  if (narrative.length > MAX_NARRATIVE_CHARS) {
+    throw new EpisodeParseError(`script is ${narrative.length} characters, cap is ${MAX_NARRATIVE_CHARS}`, "too_long", narrative.length);
+  }
 
   let parsed: unknown;
   try { parsed = parseJsonObject(raw.slice(cut + STORYLINES_MARKER.length)); } catch { throw new EpisodeParseError("storylines block is not JSON"); }

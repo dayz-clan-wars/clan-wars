@@ -58,6 +58,19 @@ describe("parseEpisode", () => {
     expect(() => parseEpisode(raw)).toThrow(EpisodeParseError);
   });
 
+  it("⚠️ marks the over-cap rejection with reason \"too_long\", and the length that triggered it", () => {
+    const raw = reply(`${dialogue}\n${"Boris: " + "a".repeat(MAX_NARRATIVE_CHARS)}`);
+    try {
+      parseEpisode(raw);
+      expect.fail("expected parseEpisode to throw");
+    } catch (err) {
+      expect(err).toBeInstanceOf(EpisodeParseError);
+      const e = err as EpisodeParseError;
+      expect(e.reason).toBe("too_long");
+      expect(e.length).toBeGreaterThan(MAX_NARRATIVE_CHARS);
+    }
+  });
+
   it("normalizes an em-dash-led dialogue line", () => {
     const d = dialogue.replace("Pavel: Line 1.", "Pavel: " + "\u2014" + " Oh no.");
     const p = parseEpisode(reply(d));

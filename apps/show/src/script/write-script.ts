@@ -35,6 +35,12 @@ export async function screenScript(text: string, blocked: string[], moderate: Mo
 /**
  * Generate, parse and screen, with one regenerate (spec §7.2, §8.3). `{ ok: false }` is
  * the `held` outcome: nothing from it may be voiced or published.
+ *
+ * A model reply that parses as over the character cap gets one trim call within the
+ * same attempt, before the attempt counts as failed: the raw reply is handed back with
+ * an instruction to cut it under 5,500 characters, keeping every storyline and the
+ * format. The trimmed reply is parsed and, if it parses, screened exactly like a first
+ * draft. If the trim also fails to parse, the attempt fails with both reasons recorded.
  */
 export async function writeScript(context: StoryContext, blocked: string[], deps: { generate: Generate; moderate: Moderate; allowed?: string[] }): Promise<ScriptResult> {
   const { system, user } = buildShowPrompt(context);
@@ -47,7 +53,16 @@ export async function writeScript(context: StoryContext, blocked: string[], deps
     } catch (err) {
       if (!(err instanceof EpisodeParseError)) throw err;
       reasons.push(`attempt ${attempt}: ${err.message}`);
-      continue;
+      if (err.reason !== "too_long") continue;
+      const trimUser = `${user}\n\nYour script below is ${err.length} characters. Cut it to under 5,500 characters: drop the weakest jokes and lines, keep every storyline and the format (dialogue lines, then the ===STORYLINES=== line and its JSON). Return the whole episode.\n\n${raw}`;
+      const trimmedRaw = await deps.generate(system, trimUser);
+      try {
+        parsed = parseEpisode(trimmedRaw);
+      } catch (err2) {
+        if (!(err2 instanceof EpisodeParseError)) throw err2;
+        reasons.push(`attempt ${attempt} (trimmed): ${err2.message}`);
+        continue;
+      }
     }
     const screened = [parsed.narrative, parsed.title, ...parsed.storylines.flatMap((s) => [s.title, s.status, ...s.players, ...s.clans, ...s.openQuestions])].join("\n");
     const failed = await screenScript(screened, blocked, deps.moderate, deps.allowed);
