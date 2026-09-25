@@ -1,10 +1,11 @@
 import { airdropEvents, kothEvents, servers, type Database } from "@factions/db";
 import {
   AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
-  nextRestartAt, RESTART_PERIOD_MS, shouldFire,
+  nextRestartAt, shouldFire,
 } from "@factions/domain";
 import { and, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
 import { airdropText, scrubText } from "./airdrop-text.js";
+import { historyInstants, popsAt } from "./population.js";
 
 export type AirdropPoster = (content: string) => Promise<void>;
 /** ⚠️ `posted` counts scrub notices too, not only announcements — see `scrubStep`. */
@@ -65,24 +66,6 @@ async function scrubStep(db: Database, serverId: number, post: AirdropPoster, no
     posted += 1;
   }
   return posted;
-}
-
-/**
- * Players connected at `instant`, from the session spans (spec §2's
- * reconstruction, as a single statement per instant set).
- */
-async function popsAt(db: Database, serverId: number, instants: Date[]): Promise<number[]> {
-  if (instants.length === 0) return [];
-  const rows = await db.execute<{ t: Date; c: number }>(sql`
-    select t, (
-      select count(*)::int from player_sessions s
-      where s.server_id = ${serverId}
-        and s.connected_at <= t
-        and (s.disconnected_at is null or s.disconnected_at > t)
-    ) as c
-    from unnest(array[${sql.join(instants.map((d) => sql`${d.toISOString()}::timestamptz`), sql`, `)}]) as t
-  `);
-  return [...rows].map((r) => Number(r.c));
 }
 
 /**
@@ -148,7 +131,10 @@ export async function airdropTick(
       const [koth] = await db.select({ id: kothEvents.id }).from(kothEvents).where(and(
         eq(kothEvents.serverId, s.id), eq(kothEvents.slotAt, slot), eq(kothEvents.state, "scheduled"),
       )).limit(1);
-      if (koth) continue;
+      if (koth) {
+        console.log(`airdrop: skipped ${slot.toISOString()}: koth`);
+        continue;
+      }
 
       const open = await db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
         eq(airdropEvents.serverId, s.id), inArray(airdropEvents.state, ["announced", "live"]),
@@ -169,16 +155,8 @@ export async function airdropTick(
         .orderBy(sql`${airdropEvents.decidedAt} desc`).limit(1);
 
       // The trailing history: every decision instant on the slot grid, five days back.
-      // ⚠️ The loop stops STRICTLY BEFORE this slot's own decision instant. With a max
-      // rather than a percentile that guard stops being a nicety: a window including
-      // the current sample would make `pop >= max` true of every pop that is its own
-      // maximum, and the population test would fire on any new record including a
-      // record of 1.
-      const instants: Date[] = [];
-      for (let t = decisionInstantFor(slot).getTime() - AIRDROP_HISTORY_MS;
-           t < decisionInstantFor(slot).getTime(); t += RESTART_PERIOD_MS) {
-        instants.push(new Date(t));
-      }
+      // ⚠️ Strictly before this slot's own decision instant — see historyInstants.
+      const instants = historyInstants(decisionInstantFor(slot), AIRDROP_HISTORY_MS);
       const [pop] = await popsAt(db, s.id, [opts.now]);
       const threshold = highWater(await popsAt(db, s.id, instants));
 

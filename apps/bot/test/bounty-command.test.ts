@@ -20,7 +20,7 @@ describe("/bounty", () => {
   });
 
   const ctx = (over: Partial<Ctx> = {}) => ({
-    db, now: NOW, serverEvents: null, bountiesEnabled: true, koth: null, roster: {} as never, siteBaseUrl: "https://dayzclanwars.com", ...over,
+    db, now: NOW, serverEvents: null, bountiesEnabled: true, koth: null, kothVote: null, roster: {} as never, siteBaseUrl: "https://dayzclanwars.com", ...over,
   }) as unknown as Ctx;
 
   const input = (o: {

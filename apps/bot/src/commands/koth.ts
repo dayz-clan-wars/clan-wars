@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { airdropEvents, kothEvents, servers } from "@factions/db";
 import {
-  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, kothStandings, nextRestartAt,
+  KOTH_LOCATIONS, KOTH_MIN_GAP_MS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothGapOk, kothLocation, kothStandings, nextRestartAt,
   restartSlot,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -9,6 +9,7 @@ import { and, eq, inArray } from "drizzle-orm";
 import { kothPrize, reminderMinutes, scheduledText } from "../koth-text.js";
 import { kothKills, kothOpenedAt } from "../koth-score.js";
 import { escapeMarkdown } from "../site-links.js";
+import { lastKothSlot } from "../koth-vote-store.js";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
@@ -66,6 +67,11 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const open = await ctx.db.select({ id: kothEvents.id }).from(kothEvents)
     .where(and(eq(kothEvents.serverId, server.id), inArray(kothEvents.state, ["scheduled", "live"])));
   if (open.length > 0) return reply("A King of the Hill event is already scheduled or live. Only one at a time.");
+  // ⚠️ Spec 2026-09-24 §2.2: every path holds the gap, so the three cannot disagree
+  // about whether a session is "too soon".
+  if (!kothGapOk(slot, await lastKothSlot(ctx.db, server.id, slot))) {
+    return reply(`That is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill. Pick a later slot.`);
+  }
   // ⚠️ Spec §2.12: one session cannot hold both. The airdrop side refuses too.
   const drop = await ctx.db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
     eq(airdropEvents.serverId, server.id), eq(airdropEvents.slotAt, slot), inArray(airdropEvents.state, ["announced", "live"]),
@@ -76,7 +82,7 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   try {
     [row] = await ctx.db.insert(kothEvents).values({
       serverId: server.id, slotAt: slot, location: loc.slug, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
-      state: "scheduled", scheduledByDiscordId: input.actorDiscordId, awardKey,
+      state: "scheduled", origin: "admin", scheduledByDiscordId: input.actorDiscordId, awardKey,
     }).returning({ id: kothEvents.id });
   } catch (err) {
     const constraint = uniqueViolation(err);

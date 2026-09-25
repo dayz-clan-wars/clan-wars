@@ -2029,6 +2029,7 @@ export const bounties = pgTable("bounties", {
  * one whose award left the catalogue before it could be granted.
  */
 export type KothState = "scheduled" | "live" | "awarded" | "no_winner" | "finished" | "cancelled" | "failed";
+export type KothOrigin = "admin" | "auto" | "vote";
 export type KothResultRow = { dayzId: string; gamertag: string; kills: number };
 export type KothResults = { top: KothResultRow[]; topKiller: KothResultRow | null; winner: KothResultRow | null; droppedNoPosition: number };
 
@@ -2052,7 +2053,18 @@ export const kothEvents = pgTable("koth_events", {
   centreX: numeric("centre_x", { precision: 12, scale: 2 }).notNull(),
   centreZ: numeric("centre_z", { precision: 12, scale: 2 }).notNull(),
   state: text("state").$type<KothState>().notNull(),
-  scheduledByDiscordId: text("scheduled_by_discord_id").notNull(),
+  /**
+   * Who or what started it (spec 2026-09-24 §2.1). Nothing downstream of the row
+   * reads it except the weekly cap, which counts `auto` alone.
+   * ⚠️ The default is for the pre-0052 bot's inserts during a deploy, not a
+   * convenience: every current writer states it.
+   */
+  origin: text("origin").$type<KothOrigin>().notNull().default("admin"),
+  /** Null on `admin`/`vote` rows. On `auto`, what the trigger saw — so a surprise event can be explained. */
+  popAtDecision: integer("pop_at_decision"),
+  threshold: numeric("threshold"),
+  /** The admin, or a vote's starter. Null exactly on `auto` rows (CHECK below). */
+  scheduledByDiscordId: text("scheduled_by_discord_id"),
   /**
    * The prize, an `awards.json` key, chosen at `/koth schedule`. Null is "no
    * prize" — a deliberate choice, never a default: the command's option is
@@ -2076,6 +2088,8 @@ export const kothEvents = pgTable("koth_events", {
   detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
 }, (t) => ({
   stateValid: check("koth_events_state_valid", sql`${t.state} IN ('scheduled','live','awarded','no_winner','finished','cancelled','failed')`),
+  originValid: check("koth_events_origin_valid", sql`${t.origin} IN ('admin','auto','vote')`),
+  originScheduler: check("koth_events_origin_scheduler", sql`(${t.origin} = 'auto') = (${t.scheduledByDiscordId} IS NULL)`),
   awardedHasGrant: check("koth_events_awarded_has_grant", sql`(${t.state} <> 'awarded') OR (${t.awardGrantId} IS NOT NULL)`),
   awardedHasPrize: check("koth_events_awarded_has_prize", sql`(${t.state} <> 'awarded') OR (${t.awardKey} IS NOT NULL)`),
   oneOpen: uniqueIndex("koth_events_one_open").on(t.serverId).where(sql`${t.state} IN ('scheduled','live')`),
@@ -2086,4 +2100,53 @@ export const kothEvents = pgTable("koth_events", {
   // slot that actually ran (`awarded`/`no_winner`) still holds it.
   oneSlot: uniqueIndex("koth_events_slot_uq").on(t.serverId, t.slotAt)
     .where(sql`${t.state} IN ('scheduled','live','awarded','no_winner','finished')`),
+}));
+
+export type KothVoteState = "open" | "passed" | "failed" | "void";
+
+/**
+ * A player-called King of the Hill vote (spec 2026-09-24 §5.2, §6).
+ * ⚠️ `koth_votes_slot_uq` is UNCONDITIONAL: one vote per slot, ever. A failed or
+ * void vote is not re-run for the same session, and the automatic trigger reads a
+ * failed one as the players' answer (§3.2).
+ */
+export const kothVotes = pgTable("koth_votes", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  slotAt: timestamp("slot_at", { withTimezone: true }).notNull(),
+  location: text("location").notNull(),
+  startedByDiscordId: text("started_by_discord_id").notNull(),
+  openedAt: timestamp("opened_at", { withTimezone: true }).notNull(),
+  closesAt: timestamp("closes_at", { withTimezone: true }).notNull(),
+  electorateSize: integer("electorate_size").notNull(),
+  turnoutFloor: integer("turnout_floor").notNull(),
+  channelId: text("channel_id"),
+  messageId: text("message_id"),
+  /** The last content written to the message, so the tick edits only on a change. */
+  tallyText: text("tally_text"),
+  state: text("state").$type<KothVoteState>().notNull(),
+  closedAt: timestamp("closed_at", { withTimezone: true }),
+  resultPostedAt: timestamp("result_posted_at", { withTimezone: true }),
+  kothEventId: bigint("koth_event_id", { mode: "number" }).references(() => kothEvents.id, { onDelete: "set null" }),
+  detail: jsonb("detail").$type<Record<string, string | number | boolean | null>>().notNull().default({}),
+}, (t) => ({
+  stateValid: check("koth_votes_state_valid", sql`${t.state} IN ('open','passed','failed','void')`),
+  closedIffNotOpen: check("koth_votes_closed_iff_not_open", sql`(${t.state} = 'open') = (${t.closedAt} IS NULL)`),
+  passedHasEvent: check("koth_votes_passed_has_event", sql`${t.state} <> 'passed' OR ${t.kothEventId} IS NOT NULL`),
+  // ⚠️ A literal copy of KOTH_VOTE_TURNOUT_MIN — koth-vote-drift.test.ts.
+  electorateMin: check("koth_votes_electorate_min", sql`${t.electorateSize} >= 5`),
+  oneOpen: uniqueIndex("koth_votes_one_open").on(t.serverId).where(sql`${t.state} = 'open'`),
+  oneSlot: uniqueIndex("koth_votes_slot_uq").on(t.serverId, t.slotAt),
+}));
+
+/** The frozen electorate and the ballots: having a row is being eligible (§5.3). */
+export const kothVoteVoters = pgTable("koth_vote_voters", {
+  voteId: bigint("vote_id", { mode: "number" }).notNull().references(() => kothVotes.id, { onDelete: "cascade" }),
+  discordId: text("discord_id").notNull(),
+  dayzId: text("dayz_id").notNull(),
+  ballot: boolean("ballot"),
+  castAt: timestamp("cast_at", { withTimezone: true }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.voteId, t.discordId] }),
+  castIffBallot: check("koth_vote_voters_cast_iff_ballot", sql`(${t.ballot} IS NULL) = (${t.castAt} IS NULL)`),
 }));

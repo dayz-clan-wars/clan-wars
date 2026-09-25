@@ -34,7 +34,7 @@ describe("/base", () => {
     const [a] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: NOW, linesIngested: 0, complete: true }).returning();
     admFileId = a!.id;
     line = 0;
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
 
   const pole = (poleKey: string, x: number, z: number) => db.insert(poles).values({

@@ -28,7 +28,7 @@ describe("/koth", () => {
   });
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {}), now: Date = NOW) =>
-    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, kothVote: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; at?: string; prize?: string } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
     string: (n: string) => (n === "location" ? over.location ?? "lembork" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),
@@ -245,6 +245,21 @@ describe("/koth", () => {
     expect(losers).toHaveLength(1);
     expect(losers[0]!.content).toMatch(/already|took that slot/i);
     expect(await rows()).toHaveLength(1);
+  });
+
+  it("refuses a slot within 24 h of the last event's slot", async () => {
+    await db.insert(kothEvents).values({
+      serverId, slotAt: at("2026-10-03T00:00:00Z"), location: "borek", centreX: "1", centreZ: "1",
+      state: "no_winner", origin: "vote", scheduledByDiscordId: "7",
+    });
+    const reply = await schedule(ctx(), input());
+    expect(reply.content).toMatch(/24 hours/);
+    expect((await rows()).filter((r) => r.state === "scheduled")).toHaveLength(0);
+  });
+
+  it("writes origin 'admin'", async () => {
+    await schedule(ctx(), input());
+    expect((await rows())[0]!.origin).toBe("admin");
   });
 
   it("autocompletes towns by prefix and the next 7 days of slots", async () => {

@@ -58,6 +58,10 @@ in-game verification tick confirms it.
 | `AIRDROP_WEEKLY_CAP` | no (default `2`) | A ceiling on how many airdrops can be decided in a rolling week, never a quota to hit. Plain decimal digits only. |
 | `AIRDROP_MIN_POP` | no (default `5`) | The floor under the trailing five-day high-water population an airdrop requires before it is decided. Only bites when the server's own recent peak is lower than this. Plain decimal digits only. |
 | `KOTH_TICK` | no (default off; `"1"`/`"true"` = on) | Enables `/koth` and the KotH posts and scoring. Requires `RESTART_SCHEDULE` and `SERVER_EVENTS_CHANNEL_ID`. The restore runs regardless. |
+| `KOTH_AUTO_TICK` | no (default off; `"1"`/`"true"` = on; requires `KOTH_TICK`) | Enables automatic King of the Hill sessions on record-population nights (airdrop-style high-water, 24h gap, at most `KOTH_WEEKLY_CAP` a week). Prize-less. |
+| `KOTH_WEEKLY_CAP` | no (default `2`) | How many automatic King of the Hill sessions (`origin = 'auto'`) may start per ISO week (Monday 00:00 UTC through the following Sunday), not a rolling 7 days. |
+| `KOTH_AUTO_MIN_POP` | no (default `10`) | The population floor an automatic King of the Hill decision must clear, beside the high-water mark. |
+| `KOTH_VOTE` | no (default off; `"1"`/`"true"` = on; requires `KOTH_TICK`) | Enables `/kothvote`, letting linked in-game players call a King of the Hill session by two-thirds vote. Prize-less. |
 
 Example `.env` (placeholders only — never commit real values):
 

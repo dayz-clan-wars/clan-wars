@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { scheduledText, reminderText, liveText, resultsText, cancelledText, kothPrize } from "../src/koth-text.js";
+import { scheduledText, reminderText, liveText, resultsText, cancelledText, kothPrize, voteMessage, votePassedText, voteFailedText, voteVoidText, hhmm } from "../src/koth-text.js";
 import { KOTH_REMINDER_LEAD_MS, KOTH_ZONE_RADIUS_M } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 
@@ -70,4 +70,35 @@ describe("koth text", () => {
     expect(cancelledText("Lembork", SLOT)).toMatch(/CANCELLED/);
     expect(liveText("Lembork", PC)).toMatch(/LIVE/);
   });
+});
+
+describe("vote texts", () => {
+  const v = { town: "Borek", slotAt: new Date("2026-10-03T16:00:00Z"), closesAt: new Date("2026-10-03T15:30:00Z"), floor: 5, starter: "Mina_*" };
+  it("names the slot, the close, the floor and the tally", () => {
+    const m = voteMessage(v, { yes: 1, no: 0 });
+    expect(m).toContain("**16:00 UTC**");
+    expect(m).toContain("**Borek**");
+    expect(m).toContain("until **15:30 UTC**");
+    expect(m).toContain("needs **5** votes");
+    expect(m).toContain("Yes 1 · No 0 · 1 of 5 votes cast");
+  });
+  // ⚠️ A gamertag is player-controlled.
+  it("escapes the starter's gamertag", () => expect(voteMessage(v, { yes: 1, no: 0 })).toContain("Mina\\_\\*"));
+  it("swaps the deadline for the closing line once closed", () => {
+    const m = voteMessage(v, { yes: 4, no: 1 }, "Voting has closed: passed.");
+    expect(m).not.toContain("until");
+    expect(m).toContain("Voting has closed: passed.");
+  });
+  it("says which bar a failed vote missed", () => {
+    expect(voteFailedText("Borek", { yes: 3, no: 0 }, 5, "turnout")).toMatch(/3 of the 5 votes/);
+    expect(voteFailedText("Borek", { yes: 4, no: 3 }, 5, "majority")).toMatch(/two-thirds/);
+  });
+  it("announces a passed vote as the event, with no prize", () => {
+    const t = votePassedText("Borek", v.slotAt, { yes: 5, no: 1 });
+    expect(t).toContain("KING OF THE HILL: BOREK");
+    expect(t).toContain("No prize this time");
+    expect(t).toContain("Yes 5 · No 1");
+  });
+  it("renders a void reason", () => expect(voteVoidText("Borek", "voting was switched off")).toContain("voting was switched off"));
+  it("formats UTC hours", () => expect(hhmm(new Date("2026-10-03T06:00:00Z"))).toBe("06:00 UTC"));
 });

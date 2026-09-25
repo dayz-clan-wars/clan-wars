@@ -403,7 +403,20 @@ describe("loadConfig", () => {
         ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t",
         SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
       });
-      expect(cfg.koth).toEqual({ enabled: true });
+      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: false, weeklyCap: 2, minPop: 10 }, vote: { enabled: false } });
+    });
+
+    const KOTH_ON = { ...OK, KOTH_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: "123456789012345678" };
+
+    it("KOTH_AUTO_TICK needs KOTH_TICK", () => {
+      expect(() => loadConfig({ ...OK, KOTH_AUTO_TICK: "true" })).toThrow(/KOTH_AUTO_TICK is on but KOTH_TICK is off/u);
+    });
+    it("KOTH_VOTE needs KOTH_TICK", () => {
+      expect(() => loadConfig({ ...OK, KOTH_VOTE: "true" })).toThrow(/KOTH_VOTE is on but KOTH_TICK is off/u);
+    });
+    it("reads the automatic trigger's cap and floor", () => {
+      const cfg = loadConfig({ ...KOTH_ON, KOTH_AUTO_TICK: "true", KOTH_WEEKLY_CAP: "3", KOTH_AUTO_MIN_POP: "12", KOTH_VOTE: "1" });
+      expect(cfg.koth).toEqual({ enabled: true, auto: { enabled: true, weeklyCap: 3, minPop: 12 }, vote: { enabled: true } });
     });
   });
 

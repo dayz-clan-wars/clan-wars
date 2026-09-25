@@ -413,3 +413,26 @@ export const KOTH_WHOLE_FILES: readonly { dir: "root" | "env"; name: string }[] 
   { dir: "env", name: "bear_territories.xml" },
   { dir: "env", name: "zombie_territories.xml" },
 ];
+
+// ─── KotH automatic trigger and vote (spec 2026-09-24-koth-auto-and-vote) ───
+/** Every KotH, whatever started it, is at least this long after the last one's slot (§2.2). */
+export const KOTH_MIN_GAP_MS = 24 * 60 * 60 * 1000;
+/**
+ * The automatic trigger's high-water window (§3). Same length as the airdrop's,
+ * and the same caveat: `KOTH_AUTO_MIN_POP` is the lever, not this.
+ */
+export const KOTH_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
+/** How many recent towns the draw excludes (§2.4). */
+export const KOTH_NO_REPEAT = 5;
+/** Players online needed to open a vote (§6.1). */
+export const KOTH_VOTE_MIN_POP = 10;
+/**
+ * The turnout floor's minimum, and so the smallest electorate a vote may open with.
+ * ⚠️ Mirrored as a literal in `koth_votes_electorate_min`; koth-vote-drift.test.ts.
+ */
+export const KOTH_VOTE_TURNOUT_MIN = 5;
+/** Two-thirds, as integers — `yes * DEN >= cast * NUM`, never a float 0.666…. */
+export const KOTH_VOTE_PASS_NUM = 2;
+export const KOTH_VOTE_PASS_DEN = 3;
+/** The shortest a vote may be open before it closes (§4). */
+export const KOTH_VOTE_MIN_OPEN_MS = 10 * 60_000;

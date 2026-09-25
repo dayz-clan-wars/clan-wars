@@ -10,6 +10,7 @@ import type {
 } from "discord.js";
 import type { Roster } from "@factions/roster";
 import type { Database } from "@factions/db";
+import type { KothVoteChannel } from "../koth-vote-channel.js";
 
 /** A row a `Reply` can carry: buttons or a single select menu, never mixed in one row. */
 export type ReplyRow = ActionRowBuilder<ButtonBuilder> | ActionRowBuilder<StringSelectMenuBuilder>;
@@ -79,6 +80,12 @@ export type Ctx = {
   bountiesEnabled: boolean;
   /** The KotH announcement poster (mentions off), or null when `KOTH_TICK` is off. */
   koth: ((content: string) => Promise<void>) | null;
+  /**
+   * `/kothvote`'s channel, or null when SERVER_EVENTS_CHANNEL_ID is unset.
+   * ⚠️ Present even with `KOTH_VOTE` off (`enabled: false`): the vote tick must
+   * still close — and edit — a vote that was open when the flag went off.
+   */
+  kothVote: { enabled: boolean; channel: KothVoteChannel } | null;
 };
 
 export type Handler = (ctx: Ctx, input: CommandInput) => Promise<Reply>;
