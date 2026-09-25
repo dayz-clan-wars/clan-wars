@@ -155,7 +155,7 @@ export function BoosterKitPanel({ owner }: { owner: Owner }) {
         <p className="text-sm leading-relaxed text-ink-2">
           Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
         </p>
-        <a href="/kit" className={btnPrimary}>Open your kit</a>
+        <a href="/kit" className={`mt-3 ${btnPrimary}`}>Open your kit</a>
       </PanelBody>
     </Panel>
   );
@@ -175,7 +175,7 @@ export function AwardsPanel({ owner }: { owner: Owner }) {
         <p className="text-sm leading-relaxed text-ink-2">
           You have {owner.openAwards === 1 ? "an award" : `${owner.openAwards} awards`} to set up or keep an eye on.
         </p>
-        <a href="/awards" className={btnPrimary}>Open your awards</a>
+        <a href="/awards" className={`mt-3 ${btnPrimary}`}>Open your awards</a>
       </PanelBody>
     </Panel>
   );
@@ -211,9 +211,10 @@ export function AccountPanel({ owner }: { owner: Owner }) {
           <a className={cell} href="/map">The map <span className="text-gold">→</span></a>
         </div>
       ) : (
-        <div className="grid grid-cols-3 border-t border-rule-2">
-          <a className={`${cell} border-r border-rule-2`} href="/base">Solo base <span className="text-gold">→</span></a>
-          <a className={`${cell} border-r border-rule-2`} href="/map">The map <span className="text-gold">→</span></a>
+        // ⚠️ One column on a phone: three columns at 375px wrapped "Browse the clans →" onto three lines (L6).
+        <div className="grid grid-cols-1 border-t border-rule-2 sm:grid-cols-3">
+          <a className={`${cell} border-b border-rule-2 sm:border-b-0 sm:border-r`} href="/base">Solo base <span className="text-gold">→</span></a>
+          <a className={`${cell} border-b border-rule-2 sm:border-b-0 sm:border-r`} href="/map">The map <span className="text-gold">→</span></a>
           <a className={cell} href="/clans">Browse the clans <span className="text-gold">→</span></a>
         </div>
       )}

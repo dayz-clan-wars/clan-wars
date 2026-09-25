@@ -46,7 +46,8 @@ export function NotificationsBell({ unread, recent, now = new Date() }: {
               plumbing (there's no pathname passed into SiteLayout today) — a hidden
               field carrying a hardcoded value would be exactly as dead as this was. */}
           <form action="/api/notifications/read-all" method="post">
-            <button type="submit" className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Mark all read</button>
+            {/* ⚠️ 44px tall: as bare 11px text this was a 17px-high target, measured live. */}
+            <button type="submit" className="inline-flex min-h-[44px] items-center font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Mark all read</button>
           </form>
         </div>
         {recent.length === 0
