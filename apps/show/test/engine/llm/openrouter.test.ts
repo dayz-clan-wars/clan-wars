@@ -14,6 +14,13 @@ describe("createChat", () => {
     expect(JSON.parse(String(init.body))).toEqual({ model: "m", messages: [{ role: "user", content: "hi" }], response_format: { type: "json_object" } });
   });
 
+  it("passes an abort signal, so a hung request times out", async () => {
+    const fetchImpl = vi.fn(async () => ok("hello"));
+    await createChat({ apiKey: "k", fetchImpl: fetchImpl as unknown as typeof fetch, timeoutMs: 5_000 })({ model: "m", messages: [] });
+    const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
   it("throws on a non-2xx and on an empty reply", async () => {
     const bad = createChat({ apiKey: "k", fetchImpl: (async () => new Response("nope", { status: 502 })) as unknown as typeof fetch });
     await expect(bad({ model: "m", messages: [] })).rejects.toThrow(OpenRouterError);

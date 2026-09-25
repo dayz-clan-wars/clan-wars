@@ -7,11 +7,14 @@ export class OpenRouterError extends Error {}
 const ENDPOINT = "https://openrouter.ai/api/v1/chat/completions";
 
 /** One OpenRouter chat completion. Throws on any failure; callers decide what failure means. */
-export function createChat(deps: { apiKey: string; fetchImpl?: typeof fetch }): ChatFn {
+export function createChat(deps: { apiKey: string; fetchImpl?: typeof fetch; timeoutMs?: number }): ChatFn {
   const fetchImpl = deps.fetchImpl ?? fetch;
+  const timeoutMs = deps.timeoutMs ?? 120_000;
   return async (req) => {
     const res = await fetchImpl(ENDPOINT, {
       method: "POST",
+      // A hung request would otherwise hang the whole run.
+      signal: AbortSignal.timeout(timeoutMs),
       headers: { "content-type": "application/json", authorization: `Bearer ${deps.apiKey}`, "x-title": "Clan Wars show" },
       body: JSON.stringify({
         model: req.model,
