@@ -43,6 +43,16 @@ describe("buildStoryContext", () => {
     expect(texts.entries().map((e) => e.text).sort()).toEqual(["GoldSkull588", "SNA"]);
   });
 
+  it("carries a previous storyline's names capped, exactly as screening sees them", async () => {
+    const long = "L".repeat(40);
+    const storylines = [{ title: "t", players: [long], clans: ["C".repeat(20)], status: "s", openQuestions: [] }];
+    await fx.episode({ weekStart: PREV_MON, episodeNumber: 2, title: "Knives Out", storylines, narrative: "Boris: hi" });
+    const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: "db" });
+    expect(context.previous!.storylines[0]!.players).toEqual(["L".repeat(32)]);
+    expect(context.previous!.storylines[0]!.clans).toEqual(["C".repeat(12)]);
+    expect(texts.entries().map((e) => e.text).sort()).toEqual(["C".repeat(12), "L".repeat(32)]);
+  });
+
   it("previous: null skips the lookup (a database without show_episodes yet)", async () => {
     const { context } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
     expect(context.previous).toBeNull();

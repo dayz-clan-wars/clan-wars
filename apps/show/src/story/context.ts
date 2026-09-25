@@ -26,7 +26,7 @@ export async function buildStoryContext(db: Database, opts: {
   const week = { serverId: season.serverId, from, to, texts };
 
   const clans = await clansForWeek(db, { serverId: season.serverId, seasonId: season.id, weekStart: opts.weekStart, staffTags: opts.staffTags, texts });
-  const [raids, players, friendlyFire, clanBeefs, flagEvents, bounties, koth, airdrops, previous] = await Promise.all([
+  const [raids, players, friendlyFire, clanBeefs, flagEvents, bounties, koth, airdrops, lastEpisode] = await Promise.all([
     raidsForWeek(db, { serverId: season.serverId, weekStart: opts.weekStart, texts }),
     peopleForWeek(db, week),
     friendlyFireForWeek(db, week),
@@ -39,11 +39,16 @@ export async function buildStoryContext(db: Database, opts: {
   ]);
 
   // Last week's names were screened last week, but an operator may have blocked one
-  // since. Registering them puts them through this week's screen too.
-  for (const s of previous?.storylines ?? []) {
-    s.players.forEach((p) => texts.gamertag(p));
-    s.clans.forEach((c) => texts.clanTag(c));
-  }
+  // since. Registering them puts them through this week's screen too, and the context
+  // carries the capped form registration returns: exactly what screening sees.
+  const previous = lastEpisode === null ? null : {
+    ...lastEpisode,
+    storylines: lastEpisode.storylines.map((s) => ({
+      ...s,
+      players: s.players.map((p) => texts.gamertag(p)),
+      clans: s.clans.map((c) => texts.clanTag(c)),
+    })),
+  };
 
   return {
     context: {
