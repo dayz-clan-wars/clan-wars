@@ -38,6 +38,7 @@ describe("events and the previous episode", () => {
   });
 
   it("KotH results name the winner and top killers", async () => {
+    await fx.player("y", "YrJustBad"); await fx.player("c", "CainObennett");
     await fx.koth({ location: "gliniska", slotAt: at(3, 20), top: [
       { dayzId: "y", gamertag: "YrJustBad", kills: 77 }, { dayzId: "c", gamertag: "CainObennett", kills: 27 },
     ] });
@@ -45,6 +46,22 @@ describe("events and the previous episode", () => {
       location: "gliniska", at: at(3, 20).toISOString(), winner: "YrJustBad",
       top: [{ gamertag: "YrJustBad", kills: 77 }, { gamertag: "CainObennett", kills: 27 }],
     }]);
+  });
+
+  // Controller ruling (spec §5.2): the bot froze KotH gamertags as
+  // coalesce(players.gamertag, killer dayz id), so a frozen name can be a raw DayZ id.
+  // Each is named by its CURRENT players row, or UNKNOWN_PLAYER when there is none.
+  it("KotH names an unlinked killer 'an unknown survivor', never the frozen DayZ id", async () => {
+    await fx.player("c", "CainObennett");
+    await fx.koth({ location: "gliniska", slotAt: at(3, 20), top: [
+      { dayzId: "ghost-koth-id", gamertag: "ghost-koth-id", kills: 9 }, { dayzId: "c", gamertag: "OldCainName", kills: 4 },
+    ] });
+    const out = await kothForWeek(db, read());
+    expect(out).toEqual([{
+      location: "gliniska", at: at(3, 20).toISOString(), winner: "an unknown survivor",
+      top: [{ gamertag: "an unknown survivor", kills: 9 }, { gamertag: "CainObennett", kills: 4 }],
+    }]);
+    expect(JSON.stringify(out)).not.toContain("ghost-koth-id");
   });
 
   it("airdrops in the week only", async () => {

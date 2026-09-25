@@ -50,22 +50,39 @@ export async function bountiesForWeek(db: Database, a: WeekRead): Promise<Bounty
   }));
 }
 
-type KothRow = { gamertag: string; kills: number };
+type KothRow = { dayzId?: string; gamertag: string; kills: number };
 type KothResultsJson = { top?: KothRow[]; winner?: KothRow | null; topKiller?: KothRow | null } | null;
 
+/**
+ * ⚠️ The bot froze each KotH gamertag as `coalesce(players.gamertag, killer dayz id)`,
+ * so `results.*.gamertag` can be a raw DayZ id (spec §5.2). Never read it: name each
+ * row by its `dayzId`'s CURRENT `players` row, or UNKNOWN_PLAYER when there is none.
+ */
 export async function kothForWeek(db: Database, a: WeekRead): Promise<KothStory[]> {
   const rs = await rows<{ location: string; at: string | Date; results: KothResultsJson | string }>(db, sql`
     select location, slot_at as at, results from koth_events
     where server_id = ${a.serverId} and ${between("slot_at", a)} and state in ('awarded', 'finished', 'no_winner')
     order by slot_at asc`);
-  return rs.map((r) => {
-    const res = (typeof r.results === "string" ? JSON.parse(r.results) : r.results) as KothResultsJson;
-    const winner = res?.winner?.gamertag ?? res?.topKiller?.gamertag ?? null;
+  const parsed = rs.map((r) => ({ r, res: (typeof r.results === "string" ? JSON.parse(r.results) : r.results) as KothResultsJson }));
+  const ids = new Set<string>();
+  for (const { res } of parsed) {
+    for (const k of [res?.winner, res?.topKiller, ...(res?.top ?? []).slice(0, 5)]) if (k?.dayzId) ids.add(k.dayzId);
+  }
+  const names = new Map<string, string>();
+  if (ids.size > 0) {
+    const ps = await rows<{ dayz_id: string; gamertag: string }>(db, sql`
+      select dayz_id, gamertag from players
+      where dayz_id in (${sql.join([...ids].map((id) => sql`${id}`), sql`, `)})`);
+    for (const p of ps) names.set(p.dayz_id, p.gamertag);
+  }
+  const nameOf = (k: KothRow) => a.texts.gamertag((k.dayzId !== undefined ? names.get(k.dayzId) : undefined) ?? UNKNOWN_PLAYER);
+  return parsed.map(({ r, res }) => {
+    const winner = res?.winner ?? res?.topKiller ?? null;
     return {
       location: r.location,
       at: iso(r.at),
-      winner: winner === null ? null : a.texts.gamertag(winner),
-      top: (res?.top ?? []).slice(0, 5).map((t) => ({ gamertag: a.texts.gamertag(t.gamertag), kills: t.kills })),
+      winner: winner === null ? null : nameOf(winner),
+      top: (res?.top ?? []).slice(0, 5).map((t) => ({ gamertag: nameOf(t), kills: t.kills })),
     };
   });
 }
