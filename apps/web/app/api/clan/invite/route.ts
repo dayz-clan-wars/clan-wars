@@ -10,6 +10,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const gamertag = text(form, "gamertag", GAMERTAG_MAX);
     if (!gamertag) return code("input", "bad-input");
     const { outcome } = await invite(session.sub, { gamertag });
-    return code("invite", outcome);
+    // H2: a refused invite keeps the gamertag, so a mistyped capital is one edit, not a retype.
+    return outcome === "ok" ? code("invite", outcome) : { back: "/clan", code: code("invite", outcome), keep: { gamertag } };
   });
 }

@@ -11,6 +11,7 @@ import { when, days, hours, ago } from "@/lib/format";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox, SubmitButton } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
+import { readKept } from "@/lib/form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
 
@@ -32,8 +33,10 @@ function RowAction({ action, target, children, style = btnSecondary, confirm }: 
 
 const row = "flex min-h-[56px] flex-wrap items-center gap-3 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:min-h-[60px] lg:gap-4 lg:px-5";
 
-export default async function ClanPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  const { result } = await searchParams;
+export default async function ClanPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const q = await searchParams;
+  const result = typeof q.result === "string" ? q.result : undefined;
+  const kept = readKept(q);
   const session = await currentSession();
   if (!session) {
     return <SessionLost next="/clan" />;
@@ -108,7 +111,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             <Panel title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
-                  <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
+                  <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" defaultValue={kept.get("gamertag")} placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
                   <SubmitButton className={`${btnPrimary} min-h-[52px] flex-none`}>Invite</SubmitButton>
                 </form>
                 <FieldError err={err} name="gamertag" />

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { clanFor } from "@factions/roster";
-import { CLAN_NAME_LENGTH, CLAN_TAG_LENGTH, GUEST_PASS_MS, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
+import { GUEST_PASS_MS, REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS } from "@factions/domain";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
@@ -10,14 +10,18 @@ import { when, days, hours, ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox, SubmitButton } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
+import { readKept } from "@/lib/form";
+import { RenameForm } from "./rename-form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-export default async function SettingsPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  const { result } = await searchParams;
+export default async function SettingsPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const q = await searchParams;
+  const result = typeof q.result === "string" ? q.result : undefined;
+  const kept = readKept(q);
   const session = await currentSession();
   if (!session) return <SessionLost next="/clan/settings" />;
   const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
@@ -62,7 +66,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <PanelBody>
             <p id="guest-note" className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
             <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
-              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><GamertagField scope="linked" {...invalid(err, "target")} className={invalid(err, "target").className ?? ""} name="target" placeholder="" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "target" ? "err-target guest-note" : "guest-note"} /><FieldError err={err} name="target" /></label>
+              <label className="block"><span className={fieldLabel}>Discord user id or gamertag</span><GamertagField scope="linked" {...invalid(err, "target")} className={invalid(err, "target").className ?? ""} name="target" defaultValue={kept.get("target")} placeholder="" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "target" ? "err-target guest-note" : "guest-note"} /><FieldError err={err} name="target" /></label>
               <SubmitButton className={`${btnPrimary} self-start`}>Grant pass</SubmitButton>
             </form>
           </PanelBody>
@@ -82,12 +86,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           <>
             <Panel num="03" title="Rename" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
               <PanelBody>
-                <form className="flex flex-col gap-3" action="/api/clan/rename" method="post">
-                  <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err, "name")} className={`${field} ${invalid(err, "name").className ?? ""}`} name="name" defaultValue={clan.name} required minLength={CLAN_NAME_LENGTH.min} maxLength={CLAN_NAME_LENGTH.max} /><FieldError err={err} name="name" /></label>
-                  <label className="block"><span className={fieldLabel}>Tag</span><input name="tag" defaultValue={clan.tag} minLength={CLAN_TAG_LENGTH.min} maxLength={CLAN_TAG_LENGTH.max} pattern="[A-Za-z0-9]+" title={`${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits`} {...invalid(err, "tag")} className={`${field} uppercase ${invalid(err, "tag").className ?? ""}`} aria-describedby={err?.field === "tag" ? "err-tag rename-note" : "rename-note"} /><FieldError err={err} name="tag" /></label>
-                  <p id="rename-note" className="text-xs text-muted">The old name and tag stay held — nobody else can take them.</p>
-                  <SubmitButton className={`${btnSecondary} self-start`}>Rename</SubmitButton>
-                </form>
+                <RenameForm name={clan.name} tag={clan.tag} err={err} kept={{ name: kept.get("name"), tag: kept.get("tag") }} />
               </PanelBody>
             </Panel>
 
