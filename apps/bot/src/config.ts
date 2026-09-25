@@ -166,8 +166,12 @@ export type BotConfig = {
    * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
    */
   bounties: { enabled: boolean };
-  /** Gates King of the Hill's scheduling and posts (spec 2026-09-23). The restart tick's RESTORE arm runs regardless. */
-  koth: { enabled: boolean };
+  /**
+   * `KOTH_TICK` gates opening anything; `auto` and `vote` are the two ways a row
+   * comes about without an admin (spec 2026-09-24). Both refuse to load without
+   * `KOTH_TICK`: a row they create would be decided and never opened.
+   */
+  koth: { enabled: boolean; auto: { enabled: boolean; weeklyCap: number; minPop: number }; vote: { enabled: boolean } };
   /**
    * Where the airdrop tick announces a drop's location. Fatal when the tick
    * is on and this is unset — see the load-time check below.
@@ -485,7 +489,15 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
     },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
-    koth: { enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()) },
+    koth: {
+      enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()),
+      auto: {
+        enabled: ["1", "true"].includes((env.KOTH_AUTO_TICK ?? "").trim().toLowerCase()),
+        weeklyCap: positiveInt(env, "KOTH_WEEKLY_CAP", 2),
+        minPop: positiveInt(env, "KOTH_AUTO_MIN_POP", 10),
+      },
+      vote: { enabled: ["1", "true"].includes((env.KOTH_VOTE ?? "").trim().toLowerCase()) },
+    },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -590,6 +602,12 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // comes to, so with no channel to post it this is misconfigured, not merely degraded.
   if (config.koth.enabled && !config.serverEventsChannelId) {
     throw new Error("KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — an unannounced event is one nobody comes to.");
+  }
+  if (config.koth.auto.enabled && !config.koth.enabled) {
+    throw new Error("KOTH_AUTO_TICK is on but KOTH_TICK is off — an automatic event would be decided and announced, and never opened.");
+  }
+  if (config.koth.vote.enabled && !config.koth.enabled) {
+    throw new Error("KOTH_VOTE is on but KOTH_TICK is off — a passed vote would announce an event nothing ever opens.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.
