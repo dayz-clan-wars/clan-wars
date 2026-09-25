@@ -66,3 +66,41 @@ export function resultsText(town: string, r: KothResults, prize: KothPrize, with
 export function cancelledText(town: string, slotAt: Date): string {
   return `**KING OF THE HILL CANCELLED: ${town.toUpperCase()}**\nThe session planned for ${atRel(slotAt) ?? "the restart"} will not run.`;
 }
+
+export const hhmm = (d: Date) => `${d.toISOString().slice(11, 16)} UTC`;
+
+export type VoteView = { town: string; slotAt: Date; closesAt: Date; floor: number; starter: string };
+export type Tally = { yes: number; no: number };
+const tallyLine = (t: Tally, floor: number) => `Yes ${t.yes} · No ${t.no} · ${t.yes + t.no} of ${floor} votes cast`;
+
+/**
+ * The public vote message (spec §6.2). Re-rendered every tick by koth-vote-tick.ts
+ * and written only when it differs from `tally_text`.
+ * ⚠️ `closed` replaces the deadline line — a closed vote that still says "can vote
+ * until" invites presses that will all be refused.
+ */
+export function voteMessage(v: VoteView, t: Tally, closed?: string): string {
+  const who = closed ?? `Linked players who were in game when this opened can vote until **${hhmm(v.closesAt)}**.`;
+  return [
+    `**King of the Hill vote.** ${esc(v.starter)} wants the **${hhmm(v.slotAt)}** restart to be King of the Hill at **${v.town}**.`,
+    `${who} It needs **${v.floor}** votes and two-thirds Yes. No prize, just the hill.`,
+    "",
+    tallyLine(t, v.floor),
+  ].join("\n");
+}
+
+/** A passed vote's post IS the event's announcement (and its reminder: it closes at T−30). */
+export function votePassedText(town: string, slotAt: Date, t: Tally): string {
+  return [`The vote passed (Yes ${t.yes} · No ${t.no}).`, scheduledText(town, slotAt, null)].join("\n");
+}
+
+export function voteFailedText(town: string, t: Tally, floor: number, reason: "turnout" | "majority"): string {
+  const why = reason === "turnout"
+    ? `only ${t.yes + t.no} of the ${floor} votes it needed were cast`
+    : `Yes ${t.yes} · No ${t.no} is short of two-thirds`;
+  return `The King of the Hill vote for ${town} failed: ${why}.`;
+}
+
+export function voteVoidText(town: string, why: string): string {
+  return `The King of the Hill vote for ${town} did not go ahead: ${why}.`;
+}
