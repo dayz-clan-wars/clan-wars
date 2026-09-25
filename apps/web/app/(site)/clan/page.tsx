@@ -8,13 +8,14 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox, SubmitButton } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, SubmitButton } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { readKept } from "@/lib/form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
 import { RowAction } from "@/app/components/row-action";
+import { LeaveForm } from "./leave-form";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -211,10 +212,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
               {leader
                 ? <p className="text-sm leading-relaxed text-ink-2">A leader cannot leave. <a className={link} href="/clan/settings">Transfer leadership</a> first, or disband.</p>
                 : (
-                  <form action="/api/clan/leave" method="post">
-                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I cannot join a clan again for a while after leaving.</label>
-                    <SubmitButton className={`mt-3.5 ${btnDanger}`} pending="Leaving…">Leave the clan</SubmitButton>
-                  </form>
+                  <LeaveForm />
                 )}
             </PanelBody>
           </Panel>
