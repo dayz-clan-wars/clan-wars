@@ -128,13 +128,18 @@ const keepable = (v: string) => v.length > 0 && v.length <= KEEP_VALUE_MAX;
  * ⚠️ URLSearchParams, never string concatenation: a typed "&" or "=" would
  * otherwise split the query and a kept name would come back as two fields.
  * An over-long value is DROPPED, not cut — a silently truncated name in the
- * field is worse than an empty one.
+ * field is worse than an empty one. An over-long LIST is dropped the same
+ * way (F2): `.slice(0, KEEP_LIST_MAX)` used to cut it to the first N, which
+ * for the claim roster meant the first sixteen names stayed ticked and the
+ * rest silently fell off with no sign anything was missing. Dropping the
+ * whole list instead makes the caller fall back to its own default (the
+ * claim form's all-ticked roster), which is at least honest.
  */
 export function resultQuery(code: string, keep?: Keep): string {
   const q = new URLSearchParams({ result: code });
   for (const [name, value] of Object.entries(keep ?? {})) {
     if (neverKeep(name)) continue;
-    const values = typeof value === "string" ? [value] : value.slice(0, KEEP_LIST_MAX);
+    const values = typeof value === "string" ? [value] : value.length > KEEP_LIST_MAX ? [] : value;
     for (const v of values) if (keepable(v)) q.append(KEEP_PREFIX + name, v);
   }
   return `?${q.toString()}`;
@@ -170,7 +175,9 @@ export function readKept(params: Record<string, string | string[] | undefined>):
     if (NEVER_KEEP.has(name) || !Object.hasOwn(params, key)) return [];
     const v = params[key];
     const list = typeof v === "string" ? [v] : Array.isArray(v) ? v : [];
-    return list.filter(keepable).slice(0, KEEP_LIST_MAX);
+    // F2, same rule as resultQuery: a forged link over the cap is dropped
+    // entirely, not truncated — see the comment on resultQuery.
+    return list.length > KEEP_LIST_MAX ? [] : list.filter(keepable);
   };
   return { get: (name) => all(name)[0], all };
 }
