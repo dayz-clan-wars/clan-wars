@@ -22,7 +22,7 @@ const countFor = (badge: "you" | "clan" | undefined, counts: Counts) => (badge ?
 
 export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: boolean; counts?: Counts }) {
   const { pathname, here } = useHere();
-  const cell = "flex h-full items-center border-l border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em]";
+  const cell = "flex h-full items-center border-l border-rule-2 px-3 font-display text-xs uppercase tracking-[0.06em] xl:px-4";
   return (
     <nav aria-label="Site" className="flex h-full items-stretch whitespace-nowrap">
       {barFor(signedIn).map((group, gi) => (
@@ -31,7 +31,7 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
             const on = isCurrent(m, pathname);
             return (
               <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
-                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"} ${m.quiet ? "!hidden xl:!flex" : ""}`}>
+                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
                 {m.label}<Badge n={countFor(m.badge, counts)} label="waiting" />
               </a>
             );
@@ -41,7 +41,7 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
       {signedIn ? (
         // POST only: the logout route refuses GET (app/api/auth/logout/route.ts).
         <form action="/api/auth/logout" method="post" className="flex items-stretch border-l border-rule-2">
-          <button type="submit" className="flex h-full items-center pl-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Sign out</button>
+          <button type="submit" className="flex h-full items-center pl-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink xl:pl-5">Sign out</button>
         </form>
       ) : (
         <a href={signInHref(here)} className="ml-4 flex items-center bg-gold px-5 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Sign in</a>

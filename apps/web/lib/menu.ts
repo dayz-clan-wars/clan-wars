@@ -17,7 +17,13 @@ export type MenuItem = {
   href: string;
   /** Paths that light this item up besides its own prefix (Scoreboard owns /alphas and /seasons). */
   also?: readonly string[];
-  /** The bar draws this one quieter (the guide is a different kind of place) and, below xl, not at all: signed in, nine cells, the bell (site-bar.tsx, since the notifications feature), and Sign out already fill 1024px. It stays in the drawer and the footer. */
+  /**
+   * The bar draws this one quieter (the guide is a different kind of place).
+   * ⚠️ Quieter, never hidden: at 1024–1279px the drawer is gone (lg:hidden)
+   * and the footer is on two pages, so a hidden Guide cell left the guide
+   * unreachable (M2, 2026-09-24). The bar makes room below xl by dropping the
+   * wordmark to sr-only and tightening the cells (site-bar.tsx, menu-list.tsx).
+   */
   quiet?: boolean;
   /** Which of the site's two attention counts sits on this item (App Review §01). */
   badge?: "you" | "clan";
