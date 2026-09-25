@@ -10,7 +10,7 @@ import { ConfirmButton, SubmitButton } from "@/app/components/ui";
  * every render, for a button most players never press.
  */
 const btn = (tone: "primary" | "ghost") =>
-  `flex min-h-[38px] items-center border px-4 font-display text-xs uppercase tracking-[0.06em] ${
+  `flex min-h-[44px] items-center border px-4 font-display text-xs uppercase tracking-[0.06em] ${
     tone === "primary" ? "border-gold bg-gold text-ground hover:bg-gold-hover" : "border-rule-3 text-ink hover:border-ink"}`;
 
 /**

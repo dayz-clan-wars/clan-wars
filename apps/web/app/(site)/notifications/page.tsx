@@ -4,8 +4,9 @@ import { redirect } from "next/navigation";
 import { NOTICE_GROUPS, noticeGroup, type NoticeGroup } from "@/lib/notice-copy";
 import { notificationsHref, noticeDay } from "@/lib/notifications-page";
 import { NoticeArticle } from "@/app/components/notice-row";
-import { Pager, Notice, SubmitButton } from "@/app/components/ui";
+import { Pager, Notice, SubmitButton, btnSecondary } from "@/app/components/ui";
 import { NoticeActions } from "./actions";
+import { FilterChips } from "./filter-chips";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { LEADERSHIP_RESULT_COPY } from "@/lib/leadership-copy";
 import { NOTIFICATIONS_RESULT_COPY } from "@/lib/notifications-copy";
@@ -44,16 +45,12 @@ export default async function NotificationsPage({ searchParams }: { searchParams
 
   const href = (o: { page?: number; group?: NoticeGroup | null }) => notificationsHref({ page, group }, o);
 
-  const chip = (label: string, on: boolean, to: string) =>
-    <a key={label} href={to} aria-current={on ? "true" : undefined}
-       className={`flex min-h-[34px] items-center border px-3 font-mono text-[11px] uppercase tracking-[0.12em] ${on ? "border-gold bg-gold text-ground" : "border-rule-2 text-ink-2 hover:text-ink"}`}>{label}</a>;
-
   return (
     <main id="main" tabIndex={-1} className="max-w-[900px] px-4 pb-20 pt-10 outline-none lg:px-8">
       <div className="flex flex-wrap items-baseline justify-between gap-x-5 gap-y-3">
         <h1 className="m-0 font-display text-[34px] uppercase tracking-[0.02em] text-ink">Notifications</h1>
         <form action="/api/notifications/read-all" method="post">
-          <SubmitButton className="flex min-h-[38px] items-center border border-rule-3 px-3.5 font-mono text-[11px] uppercase tracking-[0.18em] text-ink-2 hover:border-ink hover:text-ink">Mark all read</SubmitButton>
+          <SubmitButton className={btnSecondary}>Mark all read</SubmitButton>
         </form>
       </div>
       <p className="mt-2.5 max-w-[62ch] text-sm leading-relaxed text-muted text-pretty">
@@ -62,10 +59,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
 
       {notice && <Notice>{notice}</Notice>}
 
-      <div role="group" aria-label="Filter" className="mt-6 flex flex-wrap gap-2">
-        {chip("All", !group, href({ group: null, page: 1 }))}
-        {NOTICE_GROUPS.map((g) => chip(g, group === g, href({ group: g, page: 1 })))}
-      </div>
+      <FilterChips group={group} href={href} />
 
       {days.length === 0 ? (
         <p className="mt-9 border-2 border-rule-2 bg-frame px-4 py-8 text-center text-sm text-muted">

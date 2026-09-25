@@ -59,7 +59,7 @@ export function RevealButton({ lockId, className = btnSecondary }: { lockId: num
       <div role="status" className="flex min-h-[48px] flex-wrap items-center gap-3 px-4">
         <span className="font-mono text-lg tracking-[0.2em] text-gold">{code}</span>
         <span aria-hidden="true" className="font-mono text-xs tabular-nums text-muted">hides in {left} s</span>
-        <button type="button" className="font-mono text-xs uppercase tracking-[0.18em] text-muted hover:text-ink" onClick={() => { stop(); setCode(null); }}>Hide now</button>
+        <button type="button" className="inline-flex min-h-[44px] items-center px-2 font-mono text-xs uppercase tracking-[0.18em] text-muted hover:text-ink" onClick={() => { stop(); setCode(null); }}>Hide now</button>
       </div>
     );
   }
