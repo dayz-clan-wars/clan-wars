@@ -122,6 +122,9 @@ export async function makeFixture(db: Database) {
       const winner = a.top[0] ?? null;
       await db.insert(kothEvents).values({
         serverId, slotAt: a.slotAt, location: a.location, centreX: "0", centreZ: "0", state: "finished",
+        // koth_events_origin_scheduler requires scheduledByDiscordId non-null whenever
+        // origin is not 'auto'; origin defaults to 'admin', so this fills that CHECK.
+        scheduledByDiscordId: "admin",
         results: { top: a.top, topKiller: winner, winner, droppedNoPosition: 0 },
       });
     },
