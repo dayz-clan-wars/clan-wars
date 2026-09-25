@@ -9,6 +9,7 @@ import { SkipLink } from "@/app/components/ui";
 import { ServerStrip } from "@/app/components/server-strip";
 import { TimerBar } from "@/app/components/timer-bar";
 import { serverStripLines } from "@/lib/server-strip";
+import { POPOVER_GROUP } from "@/lib/popover";
 
 /**
  * The guide's chrome on the site's own pieces: the top bar (with a "/ Field
@@ -43,9 +44,10 @@ export default async function GuideLayout({ children }: { children: React.ReactN
         counts={counts}
         notifications={session ? { unread: counts?.notices ?? 0, recent, now } : undefined}
         extra={
-        <details className="group relative">
+        <details name={POPOVER_GROUP} className="group">
           <summary className="flex min-h-[44px] cursor-pointer list-none items-center border border-rule-3 px-3 font-display text-xs uppercase tracking-[0.06em] text-ink group-open:border-ink [&::-webkit-details-marker]:hidden">Contents</summary>
-          <div className="absolute right-0 top-[calc(100%+8px)] z-[1300] max-h-[75dvh] w-[min(86vw,320px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+          {/* ⚠️ Fixed to the viewport, not hung off the button: signed in, Contents sits left of the bell and Menu, and a right-anchored panel ran ~98px off a 375px screen (H1). */}
+          <div className="fixed inset-x-3 top-[calc(var(--spacing-bar)+8px)] z-[1300] max-h-[calc(100dvh-var(--spacing-bar)-16px)] overflow-y-auto border-2 border-rule-2 bg-frame pb-4 pt-3 shadow-[0_16px_40px_rgba(0,0,0,.6)]">
             <div className="px-4 pb-3"><GuideSearch index={index} /></div>
             <Contents />
             <a className="mt-4 block px-6 font-mono text-[11px] uppercase tracking-[0.18em] text-muted" href="/">&larr; Back to the site</a>

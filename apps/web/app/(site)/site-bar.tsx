@@ -2,6 +2,7 @@ import type { SearchEntry } from "@/app/guide/index";
 import type { NoticeRow } from "@factions/roster";
 import { BarNav, Drawer } from "./menu-list";
 import { NotificationsBell } from "@/app/components/notifications-bell";
+import { PopoverDismiss } from "@/app/components/popover-dismiss";
 import type { Counts } from "@/lib/menu";
 
 /**
@@ -41,6 +42,8 @@ export function SiteBar({ signedIn, crumb, extra, guideIndex, counts, notificati
         {signedIn && notifications && <NotificationsBell {...notifications} />}
         <Drawer signedIn={signedIn} guideIndex={guideIndex} counts={counts} />
       </div>
+      {/* One handler for the whole popover group (lib/popover.ts): Escape, click-outside, one open at a time. */}
+      <PopoverDismiss />
     </header>
   );
 }

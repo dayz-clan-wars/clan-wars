@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { barFor, isCurrent, menuFor, signInHref, type Counts } from "@/lib/menu";
+import { POPOVER_GROUP } from "@/lib/popover";
 import { GuideSearch } from "@/app/guide/search";
 import type { SearchEntry } from "@/app/guide/index";
 
@@ -51,34 +52,25 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
 
 /**
  * The phone drawer: a <details> so it works without JavaScript and closes on
- * navigation; this adds Escape, click-outside, and the dimmed backdrop. The
- * summary reads "Menu" closed and "Close" open, filled gold when open.
+ * navigation, with a dimmed backdrop. The summary reads "Menu" closed and
+ * "Close" open, filled gold when open. Escape, click-outside and
+ * one-popover-at-a-time come from PopoverDismiss (mounted by SiteBar) for the
+ * whole popover group, so the drawer no longer carries listeners of its own.
  */
 export function Drawer({ signedIn, guideIndex, counts = { you: 0, clan: 0 } }: { signedIn: boolean; guideIndex?: SearchEntry[]; counts?: Counts }) {
   const { pathname, here } = useHere();
   const root = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => {
-    const details = root.current;
-    if (!details) return;
-    const close = () => details.removeAttribute("open");
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    const onClick = (e: MouseEvent) => { if (!details.contains(e.target as Node)) close(); };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("click", onClick);
-    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("click", onClick); };
-  }, []);
-
   const item = "flex min-h-[48px] items-center justify-between px-5 font-display text-sm uppercase tracking-[0.06em]";
   return (
-    <details ref={root} className="group">
+    <details ref={root} name={POPOVER_GROUP} className="group">
       <summary className="relative flex min-h-[44px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">Menu</span><span className="hidden group-open:inline">Close</span>
         {counts.you + counts.clan > 0 && <span className="absolute -right-2 -top-2 group-open:hidden"><Badge n={counts.you + counts.clan} label="waiting" /></span>}
       </summary>
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
       <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
-      <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] max-h-[calc(100dvh-72px)] w-[300px] max-w-[calc(100vw-24px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+      <nav aria-label="Site" className="absolute right-3 top-[calc(var(--spacing-bar)+8px)] z-[1300] max-h-[calc(100dvh-var(--spacing-bar)-20px)] w-[300px] max-w-[calc(100vw-24px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
         {guideIndex && <div className="border-b-2 border-rule-2 p-3"><GuideSearch index={guideIndex} compact /></div>}
         {menuFor(signedIn).map((group, gi) => (
           <ul key={gi} className={`py-2 ${gi > 0 ? "border-t-2 border-rule-2" : ""}`}>
