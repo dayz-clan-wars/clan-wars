@@ -13,7 +13,8 @@ export const metadata: Metadata = { title: "Clan Wars — scoreboard" };
 export const dynamic = "force-dynamic";
 
 const th = "border-b-2 border-rule-2 px-6 py-3.5 text-left font-mono text-xs font-normal uppercase tracking-[0.18em] text-muted";
-const num = "px-6 text-right font-mono text-sm text-ink-2";
+/** ⚠️ tabular-nums: a right-aligned column of proportional digits is ragged (L1). */
+const num = "px-6 text-right font-mono text-sm tabular-nums text-ink-2";
 
 export default async function ScoreboardPage() {
   const { season, rows } = await scoreboard();
@@ -56,7 +57,7 @@ export default async function ScoreboardPage() {
                             </span>
                           </a>
                         </td>
-                        <td className={`px-6 text-right font-display text-2xl ${dormant ? "text-muted" : "text-ink"}`}>{r.points}</td>
+                        <td className={`px-6 text-right font-display text-2xl tabular-nums ${dormant ? "text-muted" : "text-ink"}`}>{r.points}</td>
                         <td className={num}>{r.raids}</td>
                         <td className={num}>{r.timesRaided}</td>
                         <td className={num}>{r.defenses}</td>

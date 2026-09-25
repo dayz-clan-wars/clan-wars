@@ -42,9 +42,9 @@ export function BoardRows({ kind, rows, clans, first = 1 }: { kind: Kind; rows: 
             <span className="w-7"><Rank n={n} /></span>
             <RowFlag clan={clans[r.dayzId]} />
             <a className="truncate font-mono text-sm text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
-            {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs text-muted">{r.kills} / {r.deaths}</span>}
+            {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs tabular-nums text-muted">{r.kills} / {r.deaths}</span>}
             {kind === "longestKills" && "weapon" in r && r.weapon && <span className="ml-auto truncate font-mono text-xs text-muted">{r.weapon}</span>}
-            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{boardValue(kind, r.value)}</span>
+            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} tabular-nums ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{boardValue(kind, r.value)}</span>
           </li>
         );
       })}

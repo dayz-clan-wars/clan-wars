@@ -34,7 +34,7 @@ export default async function AlphasPage() {
                       <span className="block truncate font-display text-[15px] text-ink lg:text-base">{e.name}</span>
                       <span className="hidden font-mono text-[11px] text-ink-2 lg:inline">[{e.tag}]</span>
                     </a>
-                    <span className="ml-auto font-display text-base text-ink lg:text-lg">{e.points} <span className="hidden font-mono text-[11px] text-muted lg:inline">pts</span></span>
+                    <span className="ml-auto font-display text-base tabular-nums text-ink lg:text-lg">{e.points} <span className="hidden font-mono text-[11px] text-muted lg:inline">pts</span></span>
                   </li>
                 ))}
               </ul>

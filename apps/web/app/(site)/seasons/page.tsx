@@ -12,7 +12,8 @@ export const metadata: Metadata = { title: "Clan Wars — seasons" };
 export const dynamic = "force-dynamic";
 
 const th = "border-b-2 border-rule-2 px-4 py-3 text-left font-mono text-xs font-normal uppercase tracking-[0.18em] text-muted lg:px-6";
-const num = "px-4 text-right font-mono text-sm text-ink-2 lg:px-6";
+/** ⚠️ tabular-nums: a right-aligned column of proportional digits is ragged (L1). */
+const num = "px-4 text-right font-mono text-sm tabular-nums text-ink-2 lg:px-6";
 
 export default async function SeasonsPage() {
   const closed = await seasons();
@@ -59,7 +60,7 @@ export default async function SeasonsPage() {
                           <span className="font-mono text-xs text-ink-2">[{r.tag}]</span>
                         </a>
                       </td>
-                      <td className="px-4 text-right font-display text-lg text-ink lg:px-6">{r.points}</td>
+                      <td className="px-4 text-right font-display text-lg tabular-nums text-ink lg:px-6">{r.points}</td>
                       <td className={num}>{r.raids}</td>
                       <td className={num}>{r.timesRaided}</td>
                       <td className={num}>{r.defenses}</td>
