@@ -3,7 +3,7 @@ import type { Database } from "@factions/db";
 import { scoringKill } from "@factions/roster/internal";
 import type { PlayerTexts } from "./registry.js";
 import type { ClanVsClan, FfPair, PlayerLine, StoryContext } from "./types.js";
-import { rows, tsz, iso } from "./sql.js";
+import { rows, tsz, iso, UNKNOWN_PLAYER } from "./sql.js";
 
 export type WeekRead = { serverId: number; from: Date; to: Date; texts: PlayerTexts };
 
@@ -30,7 +30,7 @@ const line = (texts: PlayerTexts, r: LineRow): PlayerLine => ({
 export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryContext["players"]> {
   const board = (col: SQL) => rows<LineRow>(db, sql`
     with cur as (${currentClan(a.serverId)})
-    select coalesce(p.gamertag, ${col}) as gamertag, cur.name as clan_name, cur.tag as clan_tag, count(*)::int as value
+    select coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as gamertag, cur.name as clan_name, cur.tag as clan_tag, count(*)::int as value
     from kills
     left join players p on p.dayz_id = ${col}
     left join cur on cur.dayz_id = ${col}
@@ -41,8 +41,8 @@ export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryCon
     board(sql`kills.victim_dayz_id`),
     rows<{ gamertag: string; clan_name: string | null; clan_tag: string | null; victim: string; metres: number; weapon: string | null }>(db, sql`
       with cur as (${currentClan(a.serverId)})
-      select coalesce(pk.gamertag, kills.killer_dayz_id) as gamertag, cur.name as clan_name, cur.tag as clan_tag,
-        coalesce(pv.gamertag, kills.victim_dayz_id) as victim, kills.distance_m::float8 as metres, kills.weapon
+      select coalesce(pk.gamertag, ${UNKNOWN_PLAYER}) as gamertag, cur.name as clan_name, cur.tag as clan_tag,
+        coalesce(pv.gamertag, ${UNKNOWN_PLAYER}) as victim, kills.distance_m::float8 as metres, kills.weapon
       from kills
       left join players pk on pk.dayz_id = kills.killer_dayz_id
       left join players pv on pv.dayz_id = kills.victim_dayz_id
@@ -50,7 +50,7 @@ export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryCon
       where ${inWeek(a)} and ${scoringKill} and kills.distance_m is not null
       order by kills.distance_m desc limit 3`),
     rows<{ gamertag: string; cause: string; at: string | Date }>(db, sql`
-      select coalesce(p.gamertag, kills.victim_dayz_id) as gamertag, kills.cause, kills.occurred_at as at
+      select coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as gamertag, kills.cause, kills.occurred_at as at
       from kills left join players p on p.dayz_id = kills.victim_dayz_id
       where ${inWeek(a)} and kills.cause in (${sql.join(ODD_CAUSES.map((c) => sql`${c}`), sql`, `)})
       order by kills.occurred_at asc limit 10`),
@@ -77,7 +77,7 @@ export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryCon
 export async function friendlyFireForWeek(db: Database, a: WeekRead): Promise<FfPair[]> {
   const rs = await rows<{ clan_name: string; clan_tag: string; killer: string; victim: string; n: number; weapons: string[] | null; first: string | Date; last: string | Date }>(db, sql`
     select f.name as clan_name, f.tag as clan_tag,
-      coalesce(pk.gamertag, kills.killer_dayz_id) as killer, coalesce(pv.gamertag, kills.victim_dayz_id) as victim,
+      coalesce(pk.gamertag, ${UNKNOWN_PLAYER}) as killer, coalesce(pv.gamertag, ${UNKNOWN_PLAYER}) as victim,
       count(*)::int as n,
       array_agg(distinct kills.weapon) filter (where kills.weapon is not null) as weapons,
       min(kills.occurred_at) as first, max(kills.occurred_at) as last

@@ -9,6 +9,9 @@ export async function rows<T>(db: Database, q: SQL): Promise<T[]> {
 /** A Date as a timestamptz parameter. */
 export const tsz = (d: Date): SQL => sql`${d.toISOString()}::timestamptz`;
 
+/** ⚠️ A player with no `players` row is named by this, never by their DayZ id (spec §5.2). */
+export const UNKNOWN_PLAYER = "an unknown survivor";
+
 /**
  * ⚠️ drizzle's postgres-js driver hands timestamps back as strings, not Dates, on raw
  * `execute`. Accept both so a driver change does not turn every time into "Invalid Date".

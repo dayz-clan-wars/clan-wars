@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
 import type { PlayerTexts } from "./registry.js";
 import type { RaidStory } from "./types.js";
-import { rows, tsz, iso } from "./sql.js";
+import { rows, tsz, iso, UNKNOWN_PLAYER } from "./sql.js";
 
 /**
  * Each raid this week, tagged online or offline (spec §5.3).
@@ -22,7 +22,7 @@ export async function raidsForWeek(db: Database, a: { serverId: number; weekStar
     victim_name: string; victim_tag: string; victims_online: number; login_min: number | null; reraise_min: number | null;
   }>(db, sql`
     select r.first_lower_at as at, r.points,
-      coalesce(p.gamertag, r.raider_dayz_id) as raider,
+      coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as raider,
       rf.name as raider_name, rf.tag as raider_tag, vf.name as victim_name, vf.tag as victim_tag,
       (select count(distinct s.dayz_id)::int
          from player_sessions s

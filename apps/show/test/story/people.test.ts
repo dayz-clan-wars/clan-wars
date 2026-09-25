@@ -64,4 +64,14 @@ describe("people, friendly fire and beefs", () => {
       { killerClan: { name: "Zone 2", tag: "Z2" }, victimClan: { name: "SNA", tag: "SNA" }, kills: 2 },
     ]);
   });
+
+  it("⚠️ a killer or victim with no players row is never named by their DayZ id (spec §5.2)", async () => {
+    await fx.kill({ at: at(4, 1), killer: "ghost-killer-id", victim: "ghost-victim-id", weapon: "DMR" });
+    const p = await peopleForWeek(db, read());
+    expect(p.topKillers.some((l) => l.gamertag === "an unknown survivor")).toBe(true);
+    expect(p.mostDeaths.some((l) => l.gamertag === "an unknown survivor")).toBe(true);
+    const json = JSON.stringify(p);
+    expect(json).not.toContain("ghost-killer-id");
+    expect(json).not.toContain("ghost-victim-id");
+  });
 });

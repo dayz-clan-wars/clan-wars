@@ -66,4 +66,9 @@ describe("raidsForWeek", () => {
     const [r] = await read();
     expect(r).toMatchObject({ kind: "offline", minutesUntilVictimLogin: 60 });
   });
+
+  it("⚠️ a raider with no players row is named 'an unknown survivor', not their DayZ id (spec §5.2)", async () => {
+    await fx.raid({ victim: sna, raider: "ghost-raider-id", raiderClan: null, at: at(1, 2), points: 0 });
+    expect((await read())[0]).toMatchObject({ raider: "an unknown survivor" });
+  });
 });
