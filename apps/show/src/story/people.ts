@@ -1,5 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { Database } from "@factions/db";
+import type { DeathCauseWord } from "@factions/domain";
 import { scoringKill } from "@factions/roster/internal";
 import type { PlayerTexts } from "./registry.js";
 import type { ClanVsClan, FfPair, PlayerLine, StoryContext } from "./types.js";
@@ -8,7 +9,7 @@ import { rows, tsz, iso, UNKNOWN_PLAYER } from "./sql.js";
 export type WeekRead = { serverId: number; from: Date; to: Date; texts: PlayerTexts };
 
 /** Deaths worth a joke. `died` (cause unknown) and `bled_out` are not. */
-const ODD_CAUSES = ["wolf", "bear", "animal", "mauled", "drowned", "fall", "dehydration", "starvation", "vehicle", "explosion"];
+const ODD_CAUSES = ["wolf", "bear", "animal", "mauled", "drowned", "fall", "dehydration", "starvation", "vehicle", "explosion"] satisfies readonly DeathCauseWord[];
 
 /** Each player's CURRENT full clan, for the tag beside their name. */
 const currentClan = (serverId: number): SQL => sql`
