@@ -4,6 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { AwardFlow } from "../app/(site)/awards/[id]/award-flow";
 import type { AwardPageView } from "@/lib/award-view";
+import { when } from "@/lib/format";
 
 const def = awardsCatalogue()["plate-carrier"]!;
 const view = (over: Partial<AwardPageView> = {}): AwardPageView => ({
@@ -38,5 +39,24 @@ describe("the award page", () => {
     const html = render(view({ state: "lapsed" }));
     expect(html).toMatch(/not placed in time/iu);
     expect(html).not.toContain("Place in game");
+  });
+
+  /**
+   * ⚠️ The page is a client component that is also server-rendered. A
+   * `toLocaleString(undefined, …)` in it rendered the server's zone on the
+   * first paint and the viewer's on hydration, and swapped the text.
+   */
+  it("⚠️ says the same time whatever zone renders it", () => {
+    const was = process.env.TZ;
+    try {
+      process.env.TZ = "Pacific/Auckland";
+      const a = render(view());
+      process.env.TZ = "America/Los_Angeles";
+      const b = render(view());
+      expect(a).toBe(b);
+      expect(a).toContain(when(new Date("2026-09-29T12:00:00.000Z")));
+    } finally {
+      if (was === undefined) delete process.env.TZ; else process.env.TZ = was;
+    }
   });
 });

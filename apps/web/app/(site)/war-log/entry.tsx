@@ -1,5 +1,6 @@
 import type { WarLogEntry } from "@factions/roster";
 import { duration } from "@/lib/scoring-copy";
+import { when } from "@/lib/format";
 import { kickerSm } from "@/app/components/ui";
 
 /** The war log's sentence for one entry, shared by /war-log and the landing page. Copy unchanged from before the redesign. */
@@ -30,9 +31,9 @@ export function WarLogLine({ e, points = false }: { e: WarLogEntry; points?: boo
   );
 }
 
-/** "Raid · 7 Sep 22:14" in gold, "Defense · …" in olive. */
+/** "Raid · 7 Sep, 22:14 UTC" in gold, "Defense · …" in olive. ⚠️ `when()`, so the clock says which zone it is in — it shows on the landing page and every clan page, beside nothing else that does (M5). */
 export function WarLogKicker({ e, time }: { e: WarLogEntry; time?: string }) {
-  const stamp = time ?? e.at.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+  const stamp = time ?? when(e.at);
   return (
     <span className={`font-mono text-[11px] uppercase tracking-[0.12em] ${e.kind === "raid" ? "text-gold" : "text-olive"}`}>
       {e.kind === "raid" ? "Raid" : "Defense"} · {stamp}

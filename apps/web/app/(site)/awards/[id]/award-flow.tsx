@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AwardDef, AwardItem } from "@factions/domain";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { when as whenUtc } from "@/lib/format";
 import { GROUND_RULES, RESULT_COPY, STATE_COPY } from "@/lib/award-copy";
 import type { AwardPageView } from "@/lib/award-view";
 import { Page, btnCta, btnPrimary, kicker } from "@/app/components/ui";
@@ -11,7 +12,13 @@ import { SequenceCard } from "../../kit/sequence-card";
 
 const POLL_MS = 5_000;
 const OPEN = new Set(["unplaced", "waiting", "live"]);
-const when = (iso: string) => new Date(iso).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+/**
+ * ⚠️ UTC, never the viewer's zone: this client component is also server-
+ * rendered, and a zone-dependent string differs between the two renders, so
+ * hydration swapped the text under the reader (M5). UTC is also what every
+ * other deadline on the site says.
+ */
+const when = (iso: string) => whenUtc(new Date(iso));
 
 /**
  * One award's page.
