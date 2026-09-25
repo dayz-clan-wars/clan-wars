@@ -3,7 +3,9 @@ import { currentSession } from "./viewer";
 import { siteUrl } from "./auth/site-url";
 import type { Session } from "./auth/session";
 
-export type Redirect = { back: string; code: string };
+/** Non-secret values a refused form sends back, so the player does not retype them (H2). */
+export type Keep = Record<string, string | readonly string[]>;
+export type Redirect = { back: string; code: string; keep?: Keep };
 
 /**
  * The pure half of a form redirect: given an origin, a path, and an already
@@ -33,8 +35,8 @@ export async function formAction(req: NextRequest, back: string, run: (session: 
   if (!session) return redirectTo(origin, "/login", `?next=${encodeURIComponent(back)}`);
   const form = await req.formData();
   const out = await run(session, form);
-  const { back: target, code } = typeof out === "string" ? { back, code: out } : out;
-  return redirectTo(origin, target, `?result=${encodeURIComponent(code)}`);
+  const { back: target, code, keep } = typeof out === "string" ? { back, code: out, keep: undefined } : out;
+  return redirectTo(origin, target, resultQuery(code, keep));
 }
 
 export function text(form: FormData, name: string, max: number): string | null {
@@ -78,4 +80,74 @@ const BACKS = new Set(["/me", "/clan", "/clan/settings", "/clan/vault", "/notifi
 
 export function safeBack(value: FormDataEntryValue | string | null, fallback: string): string {
   return typeof value === "string" && BACKS.has(value) ? value : fallback;
+}
+
+/** Query-string prefix for kept values: `?result=…&kept.name=…`. */
+export const KEEP_PREFIX = "kept.";
+/** No kept value is longer than this, whatever the field's own limit. */
+export const KEEP_VALUE_MAX = 200;
+/** No kept list (the claim roster) is longer than this. */
+export const KEEP_LIST_MAX = 16;
+
+/**
+ * ⚠️ Never kept, never read back. A vault code must never enter a URL
+ * (CLAUDE.md, the vault); a kept value is in the address bar, the history and
+ * the access log. Enforced here, in BOTH directions, so a future route that
+ * passes it — or a crafted link that carries it — still cannot leak one.
+ */
+const NEVER_KEEP = new Set(["code"]);
+
+const keepable = (v: string) => v.length > 0 && v.length <= KEEP_VALUE_MAX;
+
+/**
+ * The query a form redirect carries: the result code, then any kept values.
+ *
+ * ⚠️ URLSearchParams, never string concatenation: a typed "&" or "=" would
+ * otherwise split the query and a kept name would come back as two fields.
+ * An over-long value is DROPPED, not cut — a silently truncated name in the
+ * field is worse than an empty one.
+ */
+export function resultQuery(code: string, keep?: Keep): string {
+  const q = new URLSearchParams({ result: code });
+  for (const [name, value] of Object.entries(keep ?? {})) {
+    if (NEVER_KEEP.has(name)) continue;
+    const values = typeof value === "string" ? [value] : value.slice(0, KEEP_LIST_MAX);
+    for (const v of values) if (keepable(v)) q.append(KEEP_PREFIX + name, v);
+  }
+  return `?${q.toString()}`;
+}
+
+/**
+ * The fields of a refused form worth handing back, trimmed, each within its
+ * own limit. Only the fields named in `fields` — a route lists what it keeps,
+ * so nothing is kept by accident.
+ */
+export function keepFrom(form: FormData, fields: Record<string, number>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, max] of Object.entries(fields)) {
+    if (NEVER_KEEP.has(name)) continue;
+    const v = form.get(name);
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (t.length > 0 && t.length <= Math.min(max, KEEP_VALUE_MAX)) out[name] = t;
+  }
+  return out;
+}
+
+export type Kept = { get(name: string): string | undefined; all(name: string): string[] };
+
+/**
+ * A page's view of its kept values. ⚠️ Attacker-suppliable like every query
+ * value, so the page only ever puts one into a field's defaultValue or
+ * re-checks an option it already lists — never renders it as text.
+ */
+export function readKept(params: Record<string, string | string[] | undefined>): Kept {
+  const all = (name: string): string[] => {
+    const key = KEEP_PREFIX + name;
+    if (NEVER_KEEP.has(name) || !Object.hasOwn(params, key)) return [];
+    const v = params[key];
+    const list = typeof v === "string" ? [v] : Array.isArray(v) ? v : [];
+    return list.filter(keepable).slice(0, KEEP_LIST_MAX);
+  };
+  return { get: (name) => all(name)[0], all };
 }
