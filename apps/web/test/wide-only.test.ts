@@ -18,8 +18,8 @@ describe("WideOnly", () => {
     expect(html).toBe("");
   });
 
-  it("⚠️ asks for Tailwind's lg exactly", () => {
-    expect(readFileSync(join(WEB, "app", "components", "wide-only.tsx"), "utf8")).toContain('"(min-width: 1024px)"');
+  it("⚠️ asks for Tailwind's lg exactly, in rem so it never drifts from a non-16px root font", () => {
+    expect(readFileSync(join(WEB, "app", "components", "wide-only.tsx"), "utf8")).toContain('"(min-width: 64rem)"');
   });
 
   it("wraps the landing page's flag pool, which no longer needs a CSS hide", () => {

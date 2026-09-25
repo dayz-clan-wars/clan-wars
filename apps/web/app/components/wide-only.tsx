@@ -1,8 +1,13 @@
 "use client";
 import { useSyncExternalStore } from "react";
 
-/** ⚠️ Tailwind's `lg` (64rem = 1024px). Two statements of one breakpoint; test/wide-only.test.ts pins this one. */
-const QUERY = "(min-width: 1024px)";
+/**
+ * ⚠️ Tailwind's `lg` is 64rem, not the 1024px it equals only at a 16px root
+ * font size — a media query in `px` drifts from the `lg:` classes below it
+ * the moment a visitor's browser default differs. Two statements of one
+ * breakpoint; test/wide-only.test.ts pins this one.
+ */
+const QUERY = "(min-width: 64rem)";
 
 const subscribe = (onChange: () => void) => {
   const m = window.matchMedia(QUERY);
