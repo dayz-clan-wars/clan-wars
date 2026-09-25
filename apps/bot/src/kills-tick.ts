@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { kills, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { atHub, classifyDeath, finishedBy, readVec3, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
+import { atHub, classifyDeath, finishedBy, hubKillDiscredited, readVec3, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
 import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 
@@ -148,7 +148,7 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             victimFactionId,
             killerFactionId,
             friendlyFire,
-            atHub: payload.atHub,
+            atHub: hubKillDiscredited(payload.atHub, ev.occurredAt),
           })
           .onConflictDoNothing({ target: kills.eventId })
           .returning({ id: kills.id });
@@ -185,8 +185,9 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
             killerFactionId,
             friendlyFire,
             // ⚠️ `finishedBy` returns one of the hits it was given, so the credit's
-            // Hub flag is the crediting hit's. A hit at the Hub earns a kill that scores nowhere.
-            atHub: finisher?.atHub ?? false,
+            // Hub flag is the crediting hit's. A hit at the Hub earns a kill that scores nowhere
+            // — judged at the death's instant, the kill's own time, like a `player.killed`.
+            atHub: hubKillDiscredited(finisher?.atHub ?? false, ev.occurredAt),
           })
           .onConflictDoNothing({ target: kills.eventId })
           .returning({ id: kills.id });

@@ -37,6 +37,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
   open obligation.
 - /link and /kit stop checking for emote confirmations while their tab is in the background.
 
+## [1.39.0] - 2026-09-25
+
+### Changed
+
+- Kills made at the Fast Travel Hub before it became a no-combat zone count
+  again — on the boards, in your K/D, your streaks and your achievements. Nobody
+  broke a rule that did not exist yet. Any badge those kills earned comes back
+  quietly, without a new card. Hub combat is still a one-hour ban, and a kill
+  there from 23 September on still counts for nothing.
+
 ## [1.38.1] - 2026-09-24
 
 ### Fixed

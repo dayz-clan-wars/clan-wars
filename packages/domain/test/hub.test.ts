@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { atHub, hubOffence, readVec3 } from "../src/hub";
+import { atHub, hubKillDiscredited, hubOffence, readVec3 } from "../src/hub";
+import { HUB_COMBAT_FROM } from "../src/rules";
 import { HUB_POSITION, HUB_TRAP_CLASSES } from "../src/rules";
 
 const A = "A".repeat(40), B = "B".repeat(40);
@@ -26,6 +27,21 @@ describe("readVec3", () => {
   it("reads a stored payload vector", () => expect(readVec3({ x: 1, y: 2, z: 3 })).toEqual({ x: 1, y: 2, z: 3 }));
   it("rejects anything that is not three finite numbers", () => {
     for (const v of [null, undefined, "1,2,3", { x: 1, y: 2 }, { x: "1", y: 2, z: 3 }, { x: NaN, y: 2, z: 3 }]) expect(readVec3(v)).toBeNull();
+  });
+});
+
+describe("hubKillDiscredited", () => {
+  const before = new Date(HUB_COMBAT_FROM.getTime() - 1);
+  it("a kill in the zone from HUB_COMBAT_FROM on is discredited", () => {
+    expect(hubKillDiscredited(true, HUB_COMBAT_FROM)).toBe(true);
+    expect(hubKillDiscredited(true, new Date(HUB_COMBAT_FROM.getTime() + 86_400_000))).toBe(true);
+  });
+  it("⚠️ a kill in the zone before the rule existed is not — the rule is not retroactive", () => {
+    expect(hubKillDiscredited(true, before)).toBe(false);
+  });
+  it("a kill outside the zone never is", () => {
+    expect(hubKillDiscredited(false, HUB_COMBAT_FROM)).toBe(false);
+    expect(hubKillDiscredited(false, before)).toBe(false);
   });
 });
 

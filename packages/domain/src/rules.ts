@@ -50,6 +50,16 @@ export const HUB_POSITION = { x: 100, z: 93 } as const;
  */
 export const HUB_ZONE_RADIUS_M = 100;
 export const HUB_ZONE_MIN_ALTITUDE_M = 900;
+/**
+ * When the Hub became a no-combat zone: the bot's first `HUB_BAN_TICK on` (v1.34.0).
+ * A Hub kill from before it scores like any other — nobody broke a rule that did
+ * not exist yet. Discrediting was retroactive until 2026-09-24; see spec
+ * 2026-09-22-hub-combat §2.6.
+ * ⚠️ `kills.at_hub` is recomputed from this on every `rebuild:kills`, so it is the
+ * ONLY statement of the line. Setting `at_hub` by hand would be undone by the next
+ * rebuild, silently.
+ */
+export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
 /** Every hit, kill or trap at the Hub. Measured from when the bot PROCESSES it — log delay must not eat the hour. */
 export const HUB_BAN_MS = 1 * HOUR;
 /** Self-defence: A may hit B back this long after B hit A. Per pair. */
