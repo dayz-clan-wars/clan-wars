@@ -45,10 +45,10 @@ export function NoticeArticle({ row, actions, now = new Date() }: {
       <span aria-hidden="true" className={`mt-[7px] h-[7px] w-[7px] flex-none ${row.unread ? (alarm ? "bg-rust-2" : "bg-gold") : "bg-transparent"}`} />
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-baseline justify-between gap-x-3.5 gap-y-1.5">
-          <span className={`font-mono text-[10px] font-bold uppercase tracking-[0.16em] ${kicker}`}>
+          <span className={`font-mono text-[11px] font-bold uppercase tracking-[0.16em] ${kicker}`}>
             {c.kicker}{row.unread && <span className="sr-only"> (Unread)</span>}
           </span>
-          <time dateTime={row.occurredAt.toISOString()} className="font-mono text-[10px] tracking-[0.1em] text-dim">
+          <time dateTime={row.occurredAt.toISOString()} className="font-mono text-[11px] tracking-[0.1em] text-dim">
             {noticeAge(row.occurredAt, now)}
           </time>
         </div>

@@ -49,7 +49,9 @@ export default async function AlphasPage() {
             <div className="grid lg:grid-cols-2">
               {closed.map((s, i) => (
                 <div key={s.number} className={`flex items-center gap-4 p-4 lg:gap-5 lg:p-5 ${i % 2 === 0 ? "lg:border-r lg:border-rule-2" : ""} ${i > 0 ? "border-t border-rule-2 lg:border-t-0" : ""}`}>
-                  <span className="font-display text-[40px] leading-none text-rule-2 lg:text-[48px]">S{s.number}</span>
+                  {/* ⚠️ The only place /alphas names the season, so it is real text for a screen reader and dim, not rule-2 (1.34:1), for everyone else (H4). */}
+                  <span aria-hidden="true" className="font-display text-[40px] leading-none text-dim lg:text-[48px]">S{s.number}</span>
+                  <span className="sr-only">Season {s.number}</span>
                   {s.champion && <img src={`/${flagThumbPath(s.champion.texture)}`} alt="" loading="lazy" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
                   <div>
                     <div className={`${kickerSm} !text-gold`}>Champion</div>

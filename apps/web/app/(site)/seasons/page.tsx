@@ -26,7 +26,8 @@ export default async function SeasonsPage() {
         ) : closed.map((s) => (
           <Panel key={s.number} title={`Season ${s.number}`} aside={<>{when(s.startedAt)} – {when(s.endedAt)}</>}>
             <div className="flex items-center gap-4 border-b border-rule-2 p-4 lg:gap-5 lg:p-5">
-              <span className="font-display text-[40px] leading-none text-rule-2 lg:text-[48px]">S{s.number}</span>
+              {/* Decoration: the panel's own title already says "Season N". Dim, not rule-2 (1.34:1), because it is still read by eye (H4). */}
+              <span aria-hidden="true" className="font-display text-[40px] leading-none text-dim lg:text-[48px]">S{s.number}</span>
               {s.champion && <img src={`/${flagThumbPath(s.champion.texture)}`} alt="" loading="lazy" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
               <div>
                 <div className={`${kickerSm} !text-gold`}>Champion</div>

@@ -36,19 +36,20 @@
 
 /* A rule: the thing a player is promised. The one loud device on the page. */
 .prose-guide .rule { margin: 28px 0 20px; padding: 18px 20px; border: 2px solid var(--color-gold); max-width: 66ch; font-size: 15px; line-height: 1.6; }
-.prose-guide .rule::before { content: "Promise"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-gold); }
+.prose-guide .rule::before { content: "Promise"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-gold); }
 .prose-guide .rule p { margin: 0; }
 .prose-guide .rule p + p { margin-top: .7em; }
 .prose-guide .rule strong { color: var(--color-ink); }
 
 /* What the server can see — the honesty box. Quiet, grey, never gold. */
 .prose-guide .log { margin: 20px 0; padding: 18px 20px; background: var(--color-frame); border: 2px solid var(--color-rule-2); color: var(--color-ink-2); font-size: 15px; line-height: 1.6; max-width: 66ch; }
-.prose-guide .log .t { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-muted); }
+.prose-guide .log .t { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-muted); }
 .prose-guide .log p:last-child { margin-bottom: 0; }
 
-/* Enforced by people — rust means an obligation, not a decoration. */
+/* Enforced by people — rust means an obligation, not a decoration.
+   ⚠️ The EDGE is --color-rust; the LABEL is --color-rust-2. --color-rust as text is 2.6:1 on the frame (H3); rust-2 is the same hue at 5:1. */
 .prose-guide .human { margin: 20px 0; padding: 18px 20px; border: 2px solid var(--color-rust); background: var(--color-frame); max-width: 66ch; font-size: 15px; line-height: 1.6; }
-.prose-guide .human::before { content: "Enforced by people"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-rust); }
+.prose-guide .human::before { content: "Enforced by people"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-rust-2); }
 .prose-guide .human p:last-child { margin-bottom: 0; }
 
 /* An announcement as the bot would post it. */

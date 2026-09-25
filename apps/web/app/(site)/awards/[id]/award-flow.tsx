@@ -122,7 +122,7 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
                 <button key={slot} type="button" disabled={!isOpen}
                   onClick={() => { setQuery(""); setOpen(slot); }}
                   className={`flex min-h-[116px] flex-col items-stretch p-2 text-left lg:min-h-[170px] lg:p-3 ${e ? "border border-rule-2 bg-frame" : "border border-dashed border-rule-2"} disabled:cursor-default`}>
-                  <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted">{s.label}</span>
+                  <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">{s.label}</span>
                   {e?.image
                     ? <img src={`/${e.image}`} alt="" className="my-1.5 h-[62px] w-full object-contain lg:h-24" />
                     : <span className="my-1.5 flex h-[62px] items-center justify-center text-xl text-rule-3 lg:h-24" aria-hidden="true">+</span>}
