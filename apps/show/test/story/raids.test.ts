@@ -57,4 +57,13 @@ describe("raidsForWeek", () => {
     await fx.raid({ victim: sna, raider: "p-solo", raiderClan: null, at: at(1, 2), points: 0 });
     expect((await read())[0]).toMatchObject({ raider: "TIDEPRIDE113384", raiderClan: null });
   });
+
+  it("counts a login by a member who left the clan shortly after the raid (membership at the raid instant, spec §5.3)", async () => {
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(4, 2), points: 200 });
+    // p-cain was a member of sna AT the raid; leaves 30 minutes later, then logs in 60 minutes after the raid.
+    await db.execute(sql`update membership_history set left_at = ${at(4, 2, 30).toISOString()}::timestamptz where dayz_id = 'p-cain'`);
+    await fx.session({ dayzId: "p-cain", from: at(4, 3), to: at(4, 5) });
+    const [r] = await read();
+    expect(r).toMatchObject({ kind: "offline", minutesUntilVictimLogin: 60 });
+  });
 });

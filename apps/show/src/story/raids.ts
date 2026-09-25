@@ -33,7 +33,7 @@ export async function raidsForWeek(db: Database, a: { serverId: number; weekStar
       (select round(extract(epoch from (min(s.connected_at) - r.first_lower_at)) / 60)::int
          from player_sessions s
          join membership_history mh on mh.dayz_id = s.dayz_id and mh.faction_id = r.victim_faction_id
-           and mh.joined_at <= s.connected_at and (mh.left_at is null or mh.left_at > s.connected_at)
+           and mh.joined_at <= r.first_lower_at and (mh.left_at is null or mh.left_at > r.first_lower_at)
         where s.server_id = r.server_id and s.connected_at > r.first_lower_at) as login_min,
       (select round(extract(epoch from (min(d.defended_at) - r.first_lower_at)) / 60)::int
          from defenses d
