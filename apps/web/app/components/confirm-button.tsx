@@ -28,8 +28,20 @@ export const ARMED_CLASS = "!border-2 !border-gold !bg-ground !text-gold";
  * submitted. The form guard (lib/submit-guard.ts) refuses a second `submit`
  * even when this component's state has not caught up.
  */
+/**
+ * Fix round 1 (Task 13 review): pulled out of the JSX so the armed branch —
+ * unreachable from SSR, which only ever renders `idle` — can be unit-tested
+ * directly instead of only through the idle path.
+ */
+export function confirmButtonContent(phase: ConfirmPhase, children: React.ReactNode, confirm: React.ReactNode, pendingLabel?: React.ReactNode): React.ReactNode {
+  return phase === "armed" ? confirm : phase === "pending" && pendingLabel !== undefined ? pendingLabel : children;
+}
+
 export function ConfirmButton({ confirm, className, children, disabled = false, pending: pendingLabel }: {
-  confirm: string; className: string; children: React.ReactNode; disabled?: boolean; pending?: React.ReactNode;
+  // ⚠️ Fix round 1: widened from `string` — RowAction needs to append the
+  // sr-only `who` span to the armed label too, not just the idle one, or a
+  // screen reader hears "Press again to remove" with no name while armed.
+  confirm: React.ReactNode; className: string; children: React.ReactNode; disabled?: boolean; pending?: React.ReactNode;
 }) {
   const [phase, setPhase] = useState<ConfirmPhase>("idle");
   const ref = useRef<HTMLButtonElement>(null);
@@ -64,7 +76,7 @@ export function ConfirmButton({ confirm, className, children, disabled = false, 
           if (phase === "idle") timer.current = setTimeout(() => setPhase(confirmExpire), ARM_MS);
         }}
         onBlur={() => { clear(); setPhase(confirmBlur); }}>
-        {phase === "armed" ? confirm : phase === "pending" && pendingLabel !== undefined ? pendingLabel : children}
+        {confirmButtonContent(phase, children, confirm, pendingLabel)}
       </button>
       {/* M4: the second press, explained to a screen reader while it is armed. Visually the gold look and the "Press again to …" label say it. */}
       {phase === "armed" && <span id={hint} className="sr-only">{`Press again within ${ARM_MS / 1000} seconds to confirm. Wait, or move away, and it cancels itself.`}</span>}

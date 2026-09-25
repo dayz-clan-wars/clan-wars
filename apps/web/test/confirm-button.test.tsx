@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
 import { confirmBlur, confirmExpire, confirmPress, type ConfirmPhase } from "../lib/confirm-press";
 import { guardFormSubmit } from "../lib/submit-guard";
-import { ARMED_CLASS, ConfirmButton } from "../app/components/confirm-button";
+import { ARMED_CLASS, ConfirmButton, confirmButtonContent } from "../app/components/confirm-button";
 
 const submitEvent = () => new Event("submit", { cancelable: true });
 
@@ -60,6 +60,32 @@ describe("ConfirmButton", () => {
   it("has an armed look in gold, never rust", () => {
     expect(ARMED_CLASS).toContain("border-gold");
     expect(ARMED_CLASS).not.toContain("rust");
+  });
+});
+
+describe("confirmButtonContent (Task 13 fix round 1)", () => {
+  /**
+   * SSR only ever renders the idle phase, which is why the review finding
+   * (RowAction's sr-only `who` span disappearing while armed) slipped past
+   * the original tests. This exercises the armed branch directly, the way
+   * RowAction now builds it: `confirm` plus the same who-span appended to
+   * `children` in the idle case.
+   */
+  it("renders the confirm node's who span while armed", () => {
+    const confirmNode = <>Press again to remove<span className="sr-only">{" Ada"}</span></>;
+    const html = renderToStaticMarkup(<>{confirmButtonContent("armed", "Remove", confirmNode)}</>);
+    expect(html).toContain("Press again to remove");
+    expect(html).toContain('<span class="sr-only"> Ada</span>');
+  });
+
+  it("falls back to children when idle", () => {
+    const html = renderToStaticMarkup(<>{confirmButtonContent("idle", "Remove", "Press again to remove")}</>);
+    expect(html).toBe("Remove");
+  });
+
+  it("prefers the pending label while pending, when one is given", () => {
+    const html = renderToStaticMarkup(<>{confirmButtonContent("pending", "Remove", "Press again to remove", "Removing…")}</>);
+    expect(html).toBe("Removing…");
   });
 });
 
