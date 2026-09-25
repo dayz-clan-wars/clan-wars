@@ -37,3 +37,18 @@ export function confirmReply(action: string, actorDiscordId: string, prompt: str
   );
   return { content: prompt, components: [row], ephemeral: true };
 }
+
+/**
+ * A PUBLIC vote button: `cw:v:kothvote:<voteId>:yes|no`.
+ * ⚠️ Not a `cw:c:` id. Those name one actor and `route.ts` refuses anyone else's
+ * press; a vote button is pressed by the whole electorate, and eligibility is
+ * `koth_vote_voters`, checked by the handler — never the id.
+ */
+export function voteButtonId(voteId: number, yes: boolean): string {
+  return `${PREFIX}:v:kothvote:${voteId}:${yes ? "yes" : "no"}`;
+}
+
+export function parseVoteButtonId(id: string): { voteId: number; yes: boolean } | null {
+  const m = /^cw:v:kothvote:(\d+):(yes|no)$/u.exec(id);
+  return m ? { voteId: Number(m[1]), yes: m[2] === "yes" } : null;
+}

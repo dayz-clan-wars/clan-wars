@@ -56,7 +56,7 @@ describe("a slash command, end to end", () => {
   });
 
   it("writes the lock /vault add's modal described, and /vault list reads it back", async () => {
-    const ctx = { roster: makeRoster(() => db, () => now), now, siteBaseUrl: "https://x", db, serverEvents: null, bountiesEnabled: false, koth: null };
+    const ctx = { roster: makeRoster(() => db, () => now), now, siteBaseUrl: "https://x", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
 
     const added = await vaultGroup.modals!["vault-add"]!(ctx, {
       actorDiscordId: LEADER_DISCORD, arg: "officer",

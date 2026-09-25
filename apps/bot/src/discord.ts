@@ -623,6 +623,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
     bountiesEnabled: cfg.bounties.enabled,
     koth: kothPoster,
+    // Task 12 wires the real channel adapter; this task only needs Ctx to compile.
+    kothVote: null,
   });
   // ⚠️ `allowedMentions: { parse: [] }` — see createChannelPoster's comment.
   // This is the one poster in this file that publishes player-controlled

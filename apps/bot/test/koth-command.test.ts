@@ -28,7 +28,7 @@ describe("/koth", () => {
   });
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {}), now: Date = NOW) =>
-    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, kothVote: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; at?: string; prize?: string } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
     string: (n: string) => (n === "location" ? over.location ?? "lembork" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),

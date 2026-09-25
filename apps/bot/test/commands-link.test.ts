@@ -25,7 +25,7 @@ describe("/link status", () => {
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
 
   const run = (i: CommandInput) => SPECS.get("link status")!.handler(ctx, i);
@@ -61,7 +61,7 @@ describe("/link start", () => {
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
     await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
 
   const spec = () => SPECS.get("link start")!;
@@ -100,7 +100,7 @@ describe("/link cancel and /link unlink", () => {
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, declarations, poles, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
-    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null };
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
 
   it("says so when there was nothing to cancel", async () => {
