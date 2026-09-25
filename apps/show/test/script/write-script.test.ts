@@ -54,4 +54,11 @@ describe("writeScript", () => {
     const moderate: Moderate = async () => { throw new Error("moderation down"); };
     await expect(writeScript(context, [], { generate: async () => reply(), moderate })).rejects.toThrow("moderation down");
   });
+
+  it("⚠️ a blocked name surfaced only in a storyline's players is caught, not just dialogue", async () => {
+    const withStorylinePlayer = `${dialogue()}\n===STORYLINES===\n${JSON.stringify({ title: "The Curse", storylines: [{ title: "t", players: ["EvilTag"], clans: [], status: "s", openQuestions: [] }] })}`;
+    const generate = vi.fn(async () => withStorylinePlayer);
+    const r = await writeScript(context, ["EvilTag"], { generate, moderate: allow });
+    expect(r).toEqual({ ok: false, attempts: 2, reasons: ['attempt 1: blocked text: "EvilTag"', 'attempt 2: blocked text: "EvilTag"'] });
+  });
 });

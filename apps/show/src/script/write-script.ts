@@ -44,7 +44,7 @@ export async function writeScript(context: StoryContext, blocked: string[], deps
       reasons.push(`attempt ${attempt}: ${err.message}`);
       continue;
     }
-    const screened = [parsed.narrative, parsed.title, ...parsed.storylines.flatMap((s) => [s.title, s.status, ...s.openQuestions])].join("\n");
+    const screened = [parsed.narrative, parsed.title, ...parsed.storylines.flatMap((s) => [s.title, s.status, ...s.players, ...s.clans, ...s.openQuestions])].join("\n");
     const failed = await screenScript(screened, blocked, deps.moderate);
     if (failed.length === 0) return { ok: true, ...parsed, attempts: attempt };
     reasons.push(...failed.map((f) => `attempt ${attempt}: ${f}`));

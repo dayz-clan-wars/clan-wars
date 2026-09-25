@@ -61,7 +61,7 @@ export function parseEpisode(raw: string): ParsedEpisode {
       throw new EpisodeParseError(`storyline ${i} is malformed`);
     }
     return {
-      title: normalizeDashes(x.title), players: x.players, clans: x.clans,
+      title: normalizeDashes(x.title), players: x.players.map(normalizeDashes), clans: x.clans.map(normalizeDashes),
       status: normalizeDashes(x.status), openQuestions: x.openQuestions.map(normalizeDashes),
     };
   });

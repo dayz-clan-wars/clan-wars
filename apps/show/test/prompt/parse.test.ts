@@ -36,6 +36,13 @@ describe("parseEpisode", () => {
     expect(JSON.stringify(p)).not.toContain("\u2014");
   });
 
+  it("normalizes em dashes in storyline players and clans, not just title and status", () => {
+    const b = block.replace('"GoldSkull588"', '"Gold\u2014Skull"');
+    const p = parseEpisode(reply(dialogue, b));
+    expect(p.storylines[0]!.players).toEqual(["Gold, Skull"]);
+    expect(JSON.stringify(p)).not.toContain("\u2014");
+  });
+
   it.each([
     ["no marker", dialogue],
     ["a stage direction", reply(`${dialogue}\n(Boris stands up)`)],
