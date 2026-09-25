@@ -5,6 +5,7 @@ import { LINK_EMOTES } from "@factions/domain";
 import type { IssueOutcome, LinkStatus } from "@factions/roster";
 import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, formatRemaining } from "@/lib/link-copy";
 import { readJson, resolveTyped, type Match } from "@/lib/link-claim";
+import { visiblePoll } from "@/lib/visible-poll";
 import { when } from "@/lib/format";
 import { btnCta, btnQuiet, btnSecondary, field } from "@/app/components/ui";
 
@@ -48,9 +49,9 @@ export function LinkFlow({ initial }: { initial: Status }) {
   // bot's tick batches, so a confirmation lands seconds to a minute behind
   // the emote; five seconds is often enough to feel live without hammering.
   useEffect(() => {
-    if (!status.challenge) return;
-    const id = setInterval(() => { void refresh(); }, POLL_MS);
-    return () => clearInterval(id);
+    if (!status.challenge) return undefined;
+    // L9: paused while the tab is hidden; the player is in game performing the emotes.
+    return visiblePoll(document, () => { void refresh(); }, POLL_MS);
   }, [status.challenge?.id]);
 
   const start = async (dayzId: string, newSequence = false) => {

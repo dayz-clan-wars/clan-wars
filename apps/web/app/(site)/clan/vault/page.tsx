@@ -38,7 +38,9 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   const err = fieldError(result, VAULT_RESULT_COPY);
   // ⚠️ readKept never returns `code` (lib/form.ts NEVER_KEEP): nothing on this page can refill one.
   const kept = readKept(q);
-  const view = await vaultFor(session.sub);
+  // L9: the hero's clan read runs BESIDE the vault's own, not after it. It is still two
+  // reads (vaultFor answers only for the vault); what this removes is the serial wait.
+  const [view, clan] = await Promise.all([vaultFor(session.sub), clanFor(session.sub)]);
 
   if (typeof view === "string") {
     return (
@@ -52,7 +54,6 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     );
   }
 
-  const clan = await clanFor(session.sub);
   const officer = typeof clan !== "string" && clan.me.status === "full" && (clan.me.role === "officer" || clan.me.role === "leader");
   const { locks, history } = view;
   const keptLock = { name: kept.get("name"), note: kept.get("note"), minRole: kept.get("minRole") };

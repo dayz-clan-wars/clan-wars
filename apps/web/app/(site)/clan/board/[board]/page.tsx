@@ -28,7 +28,8 @@ export default async function ClanFullBoardPage({ params, searchParams }: Params
   const { season, page: rawPage } = await searchParams;
   const parsed = parseSeasonParam(season);
 
-  const page = await clanBoardPage(session.sub, kind, parsed === "default" ? { kind: "current" } : parsed, parsePageParam(rawPage));
+  // L9: the hero's clan read runs beside the board read rather than after it.
+  const [page, view] = await Promise.all([clanBoardPage(session.sub, kind, parsed === "default" ? { kind: "current" } : parsed, parsePageParam(rawPage)), clanFor(session.sub)]);
   if (typeof page === "string") {
     return (
       <Page>
@@ -40,7 +41,6 @@ export default async function ClanFullBoardPage({ params, searchParams }: Params
     );
   }
 
-  const view = await clanFor(session.sub);
   return (
     <Page wide>
       {typeof view === "string"

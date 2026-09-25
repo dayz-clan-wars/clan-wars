@@ -5,6 +5,7 @@ import type { Catalogue, CatalogueEntry, KitSlot } from "@factions/domain";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GROUND_RULES, KIT_GRID_ORDER, KIT_PIECES, RESULT_COPY, SLOT_LABELS, savedToast } from "@/lib/kit-copy";
 import { dismissTimer, UNDO_MS } from "@/lib/dismiss-timer";
+import { visiblePoll } from "@/lib/visible-poll";
 import type { KitView } from "@/lib/kit-view";
 import { DISCORD_INVITE } from "@/lib/site-meta";
 import { Page, btnCta, kicker, link } from "@/app/components/ui";
@@ -101,8 +102,8 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
    */
   useEffect(() => {
     if (!view.challenge) return undefined;
-    const id = setInterval(() => { void refresh(); }, POLL_MS);
-    return () => clearInterval(id);
+    // L9: paused while the tab is hidden, which is most of the time a player is in game performing the sequence.
+    return visiblePoll(document, () => { void refresh(); }, POLL_MS);
   }, [view.challenge?.id, refresh]);
 
   /**

@@ -26,7 +26,8 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
   // ⚠️ ONE call on every path, refusal included: `{ kind: "current" }` is
   // resolved inside the roster from its own `seasons` list, so a "default"
   // parse no longer needs an all-time probe first.
-  const boards = await clanBoard(session.sub, parsed === "default" ? { kind: "current" } : parsed, BOARD_TOP);
+  // L9: the hero's clan read runs beside the board read rather than after it.
+  const [boards, view] = await Promise.all([clanBoard(session.sub, parsed === "default" ? { kind: "current" } : parsed, BOARD_TOP), clanFor(session.sub)]);
   if (isRefusal(boards)) {
     return (
       <Page>
@@ -38,8 +39,6 @@ export default async function ClanBoardPage({ searchParams }: { searchParams: Pr
     );
   }
 
-  // The hero's data. A board exists only for a full member, so this is a ClanView on every path that reaches here.
-  const view = await clanFor(session.sub);
   return (
     <Page wide>
       {typeof view === "string"
