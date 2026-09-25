@@ -11,9 +11,12 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (lockId === null) return vaultCode("input", "bad-input");
     // M11: every refusal names its lock, so the page reopens THAT lock's editor with the
     // sentence inside it; H2: with what was typed. The edit form has no code field.
+    // ⚠️ Nor note (F3, same reason as the add route): it never rides in the
+    // redirect. The editor's own defaultValue falls back to the STORED note
+    // instead, so a refused edit still shows something, just not the URL's.
     const refuse = (c: string): Redirect => ({
       back: "/clan/vault", code: c,
-      keep: { lock: String(lockId), ...keepFrom(form, { name: VAULT_NAME_MAX, note: VAULT_NOTE_MAX, minRole: MIN_ROLE_MAX }) },
+      keep: { lock: String(lockId), ...keepFrom(form, { name: VAULT_NAME_MAX, minRole: MIN_ROLE_MAX }) },
     });
     const name = text(form, "name", VAULT_NAME_MAX);
     if (!name) return refuse(vaultCode("edit", "bad-name"));

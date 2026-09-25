@@ -25,12 +25,22 @@ describe("the code field (M10)", () => {
 });
 
 describe("a refused add keeps its input (H2)", () => {
-  it("reopens with name, note and rank", () => {
-    const html = renderToStaticMarkup(<AddLockForm err={null} open kept={{ name: "Gate & Co", note: "by the well", minRole: "officer" }} />);
+  it("reopens with name and rank", () => {
+    const html = renderToStaticMarkup(<AddLockForm err={null} open kept={{ name: "Gate & Co", minRole: "officer" }} />);
     expect(html).toMatch(/<details[^>]*open=""/u);
     expect(input(html, 'name="name"')).toContain('value="Gate &amp; Co"');
-    expect(input(html, 'name="note"')).toContain('value="by the well"');
     expect(html).toContain('<option value="officer" selected="">');
+  });
+
+  /**
+   * F3: note is rank-gated free text next to the code field, so it must
+   * never rest in the address bar, browser history or an nginx log any more
+   * than a code does. A refused add falls back to an EMPTY note, not the
+   * typed one.
+   */
+  it("⚠️ a refused add's note falls back to empty, never the address bar", () => {
+    const html = renderToStaticMarkup(<AddLockForm err={null} open kept={{ name: "Gate", minRole: "officer" }} />);
+    expect(input(html, 'name="note"')).not.toMatch(/ value=/u);
   });
 
   /** ⚠️ Review focus 3: a crafted ?kept.code= never reaches the page. */
@@ -41,11 +51,15 @@ describe("a refused add keeps its input (H2)", () => {
     expect(html).not.toContain("1234");
   });
 
-  /** ⚠️ Review focus 3: the route never lists the code among what it keeps. */
-  it("⚠️ the add route keeps name, note and rank — never the code", () => {
+  /**
+   * ⚠️ Review focus 3: the route never lists the code among what it keeps.
+   * F3: nor note any more — see the WHY comment on the route itself.
+   */
+  it("⚠️ the add route keeps name and rank — never the code, never the note", () => {
     const route = read("app", "api", "vault", "add", "route.ts");
-    expect(route).toContain("keepFrom(form, { name: VAULT_NAME_MAX, note: VAULT_NOTE_MAX, minRole: MIN_ROLE_MAX })");
+    expect(route).toContain("keepFrom(form, { name: VAULT_NAME_MAX, minRole: MIN_ROLE_MAX })");
     expect(route).not.toMatch(/keepFrom\([^)]*code/u);
+    expect(route).not.toMatch(/keepFrom\([^)]*note/u);
   });
 
   it("ignores a kept rank that is not a rank", () => {
@@ -70,5 +84,12 @@ describe("a refused edit opens its own lock (M11)", () => {
 
   it("the edit route names its lock on every refusal", () => {
     expect(read("app", "api", "vault", "edit", "route.ts")).toContain("keep: { lock: String(lockId),");
+  });
+
+  /** F3: same rule as the add route — note never rides in the redirect. */
+  it("⚠️ the edit route keeps name and rank — never the note", () => {
+    const route = read("app", "api", "vault", "edit", "route.ts");
+    expect(route).toContain("keepFrom(form, { name: VAULT_NAME_MAX, minRole: MIN_ROLE_MAX })");
+    expect(route).not.toMatch(/keepFrom\([^)]*note/u);
   });
 });
