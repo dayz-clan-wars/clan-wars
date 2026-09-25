@@ -52,10 +52,6 @@ describe("which pages use which flag", () => {
     "app/(site)/clans/[tag]/page.tsx",
     "app/(site)/players/[gamertag]/page.tsx",
     "app/components/own-clan-hero.tsx",
-    // ⚠️ The brief names this claim/[ceremony]/page.tsx, but the page itself
-    // renders no <img> — it delegates to claim-form.tsx, which does. Kept
-    // full-size and untouched here: it's the FORMS plan's file.
-    "app/(site)/claim/[ceremony]/claim-form.tsx",
   ]);
   const sources = (readdirSync(join(WEB, "app"), { recursive: true, encoding: "utf8" }) as string[])
     .filter((f) => f.endsWith(".tsx"))
