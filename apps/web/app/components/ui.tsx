@@ -162,16 +162,28 @@ export { ConfirmButton } from "./confirm-button";
 /** The submit button for a plain form POST: sends its form once (H1, UX review 2026-09-24). */
 export { SubmitButton } from "./submit-button";
 
-/** The bordered segmented nav: scoreboard/alphas/seasons, all-time/season N. */
+/**
+ * The bordered segmented nav: scoreboard/alphas/seasons, all-time/season N.
+ *
+ * ⚠️ It WRAPS, never scrolls or overflows. ScopePicker adds one cell per
+ * season, and from Season 3 one row is wider than a phone (H2, 2026-09-24).
+ * A wrapped second row keeps every season, the current one included, on
+ * screen with no JavaScript. Cells are `flex-auto` (basis = their own width),
+ * never `flex-1`: a zero basis fits any number of cells on one line and so
+ * never wraps. The hairlines are each cell's own top and left edges, pulled
+ * 1px outside the frame and clipped, so a wrapped row gets them too.
+ */
 export function SegNav({ items, label, className = "" }: { items: { label: string; href: string; current?: boolean }[]; label: string; className?: string }) {
   return (
-    <nav aria-label={label} className={`flex border-2 border-rule-3 font-display text-xs uppercase tracking-[0.04em] ${className}`}>
-      {items.map((it, i) => (
-        <a key={it.href} href={it.href} aria-current={it.current ? "page" : undefined}
-          className={`flex min-h-[44px] flex-1 items-center justify-center whitespace-nowrap px-3 text-center lg:flex-none lg:px-[18px] ${i > 0 ? "border-l border-rule-2" : ""} ${it.current ? "bg-gold text-ground" : "text-ink hover:bg-surface"}`}>
-          {it.label}
-        </a>
-      ))}
+    <nav aria-label={label} className={`max-w-full overflow-hidden border-2 border-rule-3 font-display text-xs uppercase tracking-[0.04em] ${className}`}>
+      <div className="-ml-px -mt-px flex flex-wrap">
+        {items.map((it) => (
+          <a key={it.href} href={it.href} aria-current={it.current ? "page" : undefined}
+            className={`flex min-h-[44px] flex-auto items-center justify-center whitespace-nowrap border-l border-t border-rule-2 px-3 text-center focus-visible:outline-offset-[-3px] lg:px-[18px] ${it.current ? "bg-gold text-ground" : "text-ink hover:bg-surface"}`}>
+            {it.label}
+          </a>
+        ))}
+      </div>
     </nav>
   );
 }
