@@ -8,6 +8,7 @@ import { readKept } from "@/lib/form";
 import { when, ago } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
 import { AddLockForm, Chevron, LockEditor, fold } from "./lock-forms";
+import { editingIdFor } from "@/lib/vault-form";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
@@ -62,7 +63,10 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   // inside it; a lock that has since gone (deleted by another officer) falls back to the top notice.
   const lockParam = kept.get("lock");
   const editRefused = result !== undefined && /^(edit|input)\./u.test(result) && lockParam !== undefined && ID_RE.test(lockParam);
-  const editingId = editRefused && locks.some((l) => l.id === Number(lockParam)) ? Number(lockParam) : null;
+  // ⚠️ `officer` gates this: LockEditor only renders under `officer` below, so without the
+  // check here a demoted-officer or crafted-query refusal would suppress the top notice
+  // (editingId !== null) while rendering no editor to show it in. See lib/vault-form.ts.
+  const editingId = editingIdFor(officer, editRefused, lockParam, locks);
 
   return (
     <Page wide>
