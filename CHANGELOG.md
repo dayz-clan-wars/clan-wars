@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.41.0] - 2026-09-25
+
 ### Fixed
 
 - On a phone, the notifications panel and the guide's Contents no longer open partly off
