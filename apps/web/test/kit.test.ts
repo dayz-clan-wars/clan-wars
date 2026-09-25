@@ -339,7 +339,15 @@ describe("the kit writes", () => {
   it("reports a refusal in the same place it confirms a save", () => {
     expect(FLOW).toContain("{refusal !== null && (");
     expect(FLOW).toContain('<Bar role="alert" tone="refusal">');
-    expect(FLOW).toContain('<Bar role="status" tone="plain" onHold={dismiss.hold} onRelease={dismiss.release}>');
+    expect(FLOW).toContain('role="status"');
+    expect(FLOW).toContain("tone=\"plain\"");
+    expect(FLOW).toContain('onPointerEnter={() => dismiss.hold("pointer")}');
+    expect(FLOW).toContain('onPointerLeave={() => dismiss.release("pointer")}');
+    expect(FLOW).toContain('onFocus={() => dismiss.hold("focus")}');
+    expect(FLOW).toContain('onBlur={() => dismiss.release("focus")}');
+    // F1(a): unmounting (e.g. a refusal replacing this bar) releases any
+    // stuck hold, or every later toast would sit un-dismissable.
+    expect(FLOW).toContain("onUnmount={dismiss.cancel}");
     /**
      * ⚠️ Every live region on this page is one of those two bars. A `role`
      * anywhere else is either a second announcement of the same news or a

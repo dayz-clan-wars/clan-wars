@@ -273,7 +273,15 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
         </Bar>
       )}
       {refusal === null && toast !== null && (
-        <Bar role="status" tone="plain" onHold={dismiss.hold} onRelease={dismiss.release}>
+        <Bar
+          role="status"
+          tone="plain"
+          onPointerEnter={() => dismiss.hold("pointer")}
+          onPointerLeave={() => dismiss.release("pointer")}
+          onFocus={() => dismiss.hold("focus")}
+          onBlur={() => dismiss.release("focus")}
+          onUnmount={dismiss.cancel}
+        >
           <span className="min-w-0 text-sm leading-snug text-ink">{toast.text}</span>
           <button type="button" onClick={() => { void undo(); }} disabled={busy}
             className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
@@ -296,16 +304,28 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
  * would silence the refusal, the one message here that has to interrupt.
  */
 // L1: a refusal is heavier (2px), never rust. Rust is the one cue that a player owes the server something (globals.css), and a refused pick owes it nothing.
-function Bar({ role, tone, onHold, onRelease, children }: {
-  role: "alert" | "status"; tone: "refusal" | "plain"; onHold?: () => void; onRelease?: () => void; children: React.ReactNode;
+function Bar({ role, tone, onPointerEnter, onPointerLeave, onFocus, onBlur, onUnmount, children }: {
+  role: "alert" | "status"; tone: "refusal" | "plain";
+  onPointerEnter?: () => void; onPointerLeave?: () => void;
+  onFocus?: () => void; onBlur?: () => void;
+  /**
+   * ⚠️ Fired on cleanup only, when THIS bar disappears, not on every
+   * re-render. A refusal can replace the toast (unmounting this bar)
+   * without ever firing `onMouseLeave`/`onBlur`, which would otherwise
+   * leave the pointer/focus hold stuck forever and silence every later
+   * Undo's countdown (F1a).
+   */
+  onUnmount?: () => void;
+  children: React.ReactNode;
 }) {
+  useEffect(() => () => onUnmount?.(), [onUnmount]);
   return (
     <div
       role={role}
-      onMouseEnter={onHold}
-      onMouseLeave={onRelease}
-      onFocus={onHold}
-      onBlur={onRelease}
+      onMouseEnter={onPointerEnter}
+      onMouseLeave={onPointerLeave}
+      onFocus={onFocus}
+      onBlur={onBlur}
       className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${tone === "refusal" ? "border-2 border-rule-3" : "border border-rule-3"}`}
       style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
     >
