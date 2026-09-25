@@ -112,7 +112,9 @@ export async function scoreAndAward(db: Database, rowId: number, opts: { now: Da
     }
     const town = kothLocation(row.location)?.name ?? row.location;
     const g = await grantAwardTx(tx, {
-      awardKey: row.awardKey, winnerDiscordId: linked.get(winner.dayzId)!, grantedByDiscordId: row.scheduledByDiscordId,
+      // ⚠️ Non-null: an `auto` row (the only origin with a null scheduler) never reaches
+      // an `awarded` state yet — the trigger that would create one lands in a later task.
+      awardKey: row.awardKey, winnerDiscordId: linked.get(winner.dayzId)!, grantedByDiscordId: row.scheduledByDiscordId!,
       reason: `King of the Hill — ${town}, ${row.slotAt.toISOString().slice(0, 10)}`, siteBaseUrl: opts.siteBaseUrl,
       now: opts.now, serverId: row.serverId,
     });

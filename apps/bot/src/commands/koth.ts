@@ -76,7 +76,7 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   try {
     [row] = await ctx.db.insert(kothEvents).values({
       serverId: server.id, slotAt: slot, location: loc.slug, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
-      state: "scheduled", scheduledByDiscordId: input.actorDiscordId, awardKey,
+      state: "scheduled", origin: "admin", scheduledByDiscordId: input.actorDiscordId, awardKey,
     }).returning({ id: kothEvents.id });
   } catch (err) {
     const constraint = uniqueViolation(err);
