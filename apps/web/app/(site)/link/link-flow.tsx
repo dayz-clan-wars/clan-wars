@@ -6,7 +6,7 @@ import type { IssueOutcome, LinkStatus } from "@factions/roster";
 import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, formatRemaining } from "@/lib/link-copy";
 import { readJson, resolveTyped, type Match } from "@/lib/link-claim";
 import { when } from "@/lib/format";
-import { btnCta, btnPrimary, btnQuiet, field } from "@/app/components/ui";
+import { btnCta, btnQuiet, btnSecondary, field } from "@/app/components/ui";
 
 /** `LinkStatus` after a trip through JSON: every Date is an ISO string. */
 type Wire<T> = T extends Date ? string : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;
@@ -196,7 +196,7 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
   return (
     <div className={spread}>
       <div>
-        <div className={step}>Step 3 of 3 — one step left</div>
+        <div className={step}>Step 3 of 3 — prove it</div>
         <h1 className={h1}>Prove it&rsquo;s you.</h1>
         <div className="mt-3 font-mono text-lg text-gold lg:mt-4 lg:text-xl">{challenge.gamertag}</div>
         <p className={body}>In game as that character, open the emote wheel and perform these {total}, in this order. Other emotes in between are fine — the order is what counts.</p>
@@ -208,8 +208,8 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
       {/* Rust: an obligation the player still owes the server (frontend rebuild §4). */}
       <div className="border-2 border-rust bg-frame lg:self-start">
         <div className="flex items-center justify-between gap-4 border-b-2 border-rust px-4 py-3 lg:px-5">
-          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust-2">●</span>Challenge open</h2>
-          <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}</span>
+          <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span aria-hidden="true" className="mr-3 text-rust-2">●</span>Challenge open</h2>
+          <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}<span className="lg:hidden"> left</span></span>
         </div>
         {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Note" neutral>{notice}</Refusal></div>}
         {/* ⚠️ An ordered list, because the order IS the proof. */}
@@ -251,15 +251,17 @@ function Verified({ gamertag, verifiedAt }: { gamertag: string; verifiedAt: stri
       </div>
       <div className={card}>
         <a className={button} href="/base">Your base <span className="font-mono normal-case">→</span></a>
-        <a className={`mt-3 ${btnPrimary.replace("bg-gold", "border-2 border-rule-2 bg-transparent").replace("text-ground", "text-ink")} w-full`} href="/me">Your page</a>
+        {/* M2: the real secondary button. Rewriting btnPrimary's classes left its gold hover under ink text (1.5:1) and a panel edge where a control's belongs. */}
+        <a className={`mt-3 ${btnSecondary} w-full`} href="/me">Your page</a>
       </div>
     </div>
   );
 }
 
 function Refusal({ label: title, neutral = false, children }: { label: string; neutral?: boolean; children: React.ReactNode }) {
+  // L1: a refusal owes the server nothing, so it is never rust (globals.css); the control edge makes it stand out instead.
   return (
-    <div className={`mb-4 border px-3.5 py-3 ${neutral ? "border-rule-2 bg-surface" : "border-rust bg-surface"}`} role={neutral ? "status" : "alert"}>
+    <div className={`mb-4 border px-3.5 py-3 ${neutral ? "border-rule-2 bg-surface" : "border-rule-3 bg-surface"}`} role={neutral ? "status" : "alert"}>
       <div className={label}>{title}</div>
       <div className="mt-1 text-sm leading-relaxed text-ink">{children}</div>
     </div>

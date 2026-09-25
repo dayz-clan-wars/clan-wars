@@ -28,7 +28,7 @@ export default async function LoginPage({
   return (
     <Page wide>
       <SignInCard
-        step="Step 1 of 3"
+        step="Step 1 of 3 — sign in"
         heading="Link your character."
         body="Sign in with the Discord account you use on the server. Your clan, roster and map all hang off this one link."
         action="Continue with Discord"
