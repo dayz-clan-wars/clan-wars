@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
 import { clanByTag, scoreboard, warLog, achievementsFor, type ClanPage } from "@factions/roster";
@@ -13,8 +14,17 @@ import { Page, Panel, PanelBody, Notice, Facts, Stat, btnCta, link, linkMono, ki
 import { ClanHero, Lit } from "@/app/components/clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
 import { guideLinkFor } from "@/lib/guide-links";
+import { clanTitle, NOT_FOUND_TITLE } from "@/lib/page-titles";
 
-export const metadata: Metadata = { title: "Clan Wars — clan" };
+/** ⚠️ One read per request: React's `cache` memoizes it across generateMetadata and the page, so the title costs no second query. */
+const clanFor = cache((tag: string, viewer: string | null) => clanByTag(tag, viewer));
+
+export async function generateMetadata({ params }: { params: Promise<{ tag: string }> }): Promise<Metadata> {
+  const session = await currentSession();
+  const clan = await clanFor(decodeParam((await params).tag), session?.sub ?? null);
+  return { title: clan ? clanTitle(clan) : NOT_FOUND_TITLE };
+}
+
 /** ⚠️ Public but viewer-aware (canRequest), so per request. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
@@ -32,7 +42,7 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
   const { result } = await searchParams;
   // ⚠️ Anonymous is fine here: /clans/ is public. The session only decides canRequest.
   const session = await currentSession();
-  const clan = await clanByTag(tag, session?.sub ?? null);
+  const clan = await clanFor(tag, session?.sub ?? null);
   if (!clan) notFound();
   const notice = result ? lookupCopy(RESULT_COPY, result) : undefined;
   const back = `/clans/${encodeURIComponent(clan.tag)}`;
