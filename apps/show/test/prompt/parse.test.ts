@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseEpisode, normalizeDashes, EpisodeParseError, MAX_NARRATIVE_CHARS } from "../../src/prompt/parse.js";
+import { parseEpisode, normalizeDashes, EpisodeParseError, MAX_NARRATIVE_CHARS, MAX_STORYLINES } from "../../src/prompt/parse.js";
 
 const dialogue = Array.from({ length: 12 }, (_, i) => (i % 2 === 0 ? `Boris: Line ${i}.` : `Pavel: Line ${i}.`)).join("\n");
 const block = JSON.stringify({ title: "The Curse", storylines: [{ title: "The House of SNA", players: ["GoldSkull588"], clans: ["SNA"], status: "Civil war.", openQuestions: ["Who is next?"] }] });
@@ -81,6 +81,25 @@ describe("parseEpisode", () => {
     const d = dialogue.replace("Boris: Line 0.", "- Boris: Line 0.");
     const p = parseEpisode(reply(d));
     expect(p.narrative.split("\n")[0]).toBe("Boris: Line 0.");
+  });
+
+  it("⚠️ keeps only the first MAX_STORYLINES storylines rather than throwing, so next week's \"Previously on\" never carries side segments", () => {
+    const many = Array.from({ length: 5 }, (_, i) => ({
+      title: `Storyline ${i}`, players: [`P${i}`], clans: [`C${i}`], status: `Status ${i}`, openQuestions: [`Q${i}`],
+    }));
+    const b = JSON.stringify({ title: "The Curse", storylines: many });
+    const p = parseEpisode(reply(dialogue, b));
+    expect(p.storylines).toHaveLength(MAX_STORYLINES);
+    expect(p.storylines.map((s) => s.title)).toEqual(["Storyline 0", "Storyline 1", "Storyline 2"]);
+  });
+
+  it("keeps a storylines list of exactly MAX_STORYLINES untouched", () => {
+    const three = Array.from({ length: MAX_STORYLINES }, (_, i) => ({
+      title: `Storyline ${i}`, players: [], clans: [], status: "s", openQuestions: [],
+    }));
+    const b = JSON.stringify({ title: "The Curse", storylines: three });
+    const p = parseEpisode(reply(dialogue, b));
+    expect(p.storylines).toHaveLength(MAX_STORYLINES);
   });
 });
 

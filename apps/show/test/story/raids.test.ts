@@ -4,6 +4,7 @@ import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, at, type Fx } from "../fixture.js";
 import { PlayerTexts } from "../../src/story/registry.js";
 import { raidsForWeek } from "../../src/story/raids.js";
+import { whenLabel } from "../../src/story/sql.js";
 
 describe("raidsForWeek", () => {
   let db: Database; let fx: Fx; let sna = 0; let z2 = 0;
@@ -22,7 +23,7 @@ describe("raidsForWeek", () => {
     await fx.session({ dayzId: "p-cain", from: at(1, 2, 52), to: at(1, 4) });
     await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1, 2, 37), points: 200 });
     expect(await read()).toEqual([{
-      at: at(1, 2, 37).toISOString(), raider: "chaandlr", raiderClan: { name: "Zone 2", tag: "Z2" },
+      at: at(1, 2, 37).toISOString(), when: whenLabel(at(1, 2, 37)), raider: "chaandlr", raiderClan: { name: "Zone 2", tag: "Z2" },
       victimClan: { name: "SNA", tag: "SNA" }, points: 200, kind: "offline", victimsOnline: 0,
       minutesUntilVictimLogin: 15, reRaisedAfterMinutes: null,
     }]);
@@ -70,5 +71,34 @@ describe("raidsForWeek", () => {
   it("⚠️ a raider with no players row is named 'an unknown survivor', not their DayZ id (spec §5.2)", async () => {
     await fx.raid({ victim: sna, raider: "ghost-raider-id", raiderClan: null, at: at(1, 2), points: 0 });
     expect((await read())[0]).toMatchObject({ raider: "an unknown survivor" });
+  });
+
+  it("⚠️ carries a precomputed weekday/time label, never something the model has to compute from `at`", async () => {
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1, 2, 37), points: 200 });
+    expect((await read())[0]).toMatchObject({ when: whenLabel(at(1, 2, 37)) });
+  });
+
+  it("⚠️ a clan revived (from dormant, no defense row) counts as a re-raise (spec §5.2 amendment)", async () => {
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1, 2), points: 200 });
+    await fx.factionEvent(sna, "revived", at(1, 20));
+    const [r] = await read();
+    expect(r!.reRaisedAfterMinutes).toBe(18 * 60);
+  });
+
+  it("a revival after the NEXT raid on the same clan does not count for the earlier raid", async () => {
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1, 2), points: 200 });
+    await fx.raid({ victim: sna, raider: "p-kay", raiderClan: z2, at: at(2, 0), points: 200 });
+    await fx.factionEvent(sna, "revived", at(3, 0));
+    const [first, second] = await read();
+    expect(first!.reRaisedAfterMinutes).toBeNull();
+    expect(second!.reRaisedAfterMinutes).toBe(24 * 60);
+  });
+
+  it("takes whichever of a defense or a revival lands first after the raid", async () => {
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1, 2), points: 200 });
+    await fx.factionEvent(sna, "revived", at(1, 20));
+    await fx.defense({ clan: sna, by: "p-cain", flagDownSince: at(1, 2), at: at(2, 2) });
+    const [r] = await read();
+    expect(r!.reRaisedAfterMinutes).toBe(18 * 60);
   });
 });

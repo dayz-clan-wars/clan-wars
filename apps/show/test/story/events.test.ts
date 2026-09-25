@@ -5,6 +5,7 @@ import { PlayerTexts } from "../../src/story/registry.js";
 import { weekWindow } from "../../src/weeks.js";
 import { flagEventsForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "../../src/story/events.js";
 import { loadPreviousEpisode } from "../../src/story/previous.js";
+import { whenLabel } from "../../src/story/sql.js";
 
 describe("events and the previous episode", () => {
   let db: Database; let fx: Fx;
@@ -19,8 +20,8 @@ describe("events and the previous episode", () => {
     await fx.factionEvent(sna, "renamed", at(2, 21), { name: "SNA", previousName: "OLDNAME_MUST_NOT_LEAK" });
     const out = await flagEventsForWeek(db, read());
     expect(out).toEqual([
-      { clan: { name: "SNA", tag: "SNA" }, kind: "dormant", at: at(2, 2, 37).toISOString() },
-      { clan: { name: "SNA", tag: "SNA" }, kind: "revived", at: at(2, 20, 14).toISOString() },
+      { clan: { name: "SNA", tag: "SNA" }, kind: "dormant", at: at(2, 2, 37).toISOString(), when: whenLabel(at(2, 2, 37)) },
+      { clan: { name: "SNA", tag: "SNA" }, kind: "revived", at: at(2, 20, 14).toISOString(), when: whenLabel(at(2, 20, 14)) },
     ]);
     expect(JSON.stringify(out)).not.toContain("OLDNAME");
   });
@@ -31,7 +32,7 @@ describe("events and the previous episode", () => {
     const texts = new PlayerTexts();
     await fx.bounty({ target: "xel", reason: "For funsies", placedAt: at(2, 18, 43), claimedBy: "tox", claimedAt: at(2, 23, 34), claimEventId: ev });
     expect(await bountiesForWeek(db, read(texts))).toEqual([{
-      target: "XeliteSniper190", reason: "For funsies", placedAt: at(2, 18, 43).toISOString(), status: "claimed",
+      target: "XeliteSniper190", reason: "For funsies", placedAt: at(2, 18, 43).toISOString(), placedWhen: whenLabel(at(2, 18, 43)), status: "claimed",
       claimer: "TOXIC REAPER680", hoursToClaim: 4.9, claimMetres: 3,
     }]);
     expect(texts.entries().find((e) => e.text === "For funsies")!.kinds).toEqual(["bountyReason"]);
@@ -43,7 +44,7 @@ describe("events and the previous episode", () => {
       { dayzId: "y", gamertag: "YrJustBad", kills: 77 }, { dayzId: "c", gamertag: "CainObennett", kills: 27 },
     ] });
     expect(await kothForWeek(db, read())).toEqual([{
-      location: "gliniska", at: at(3, 20).toISOString(), winner: "YrJustBad",
+      location: "gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "YrJustBad",
       top: [{ gamertag: "YrJustBad", kills: 77 }, { gamertag: "CainObennett", kills: 27 }],
     }]);
   });
@@ -58,7 +59,7 @@ describe("events and the previous episode", () => {
     ] });
     const out = await kothForWeek(db, read());
     expect(out).toEqual([{
-      location: "gliniska", at: at(3, 20).toISOString(), winner: "an unknown survivor",
+      location: "gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "an unknown survivor",
       top: [{ gamertag: "an unknown survivor", kills: 9 }, { gamertag: "CainObennett", kills: 4 }],
     }]);
     expect(JSON.stringify(out)).not.toContain("ghost-koth-id");
@@ -67,7 +68,7 @@ describe("events and the previous episode", () => {
   it("airdrops in the week only", async () => {
     await fx.airdrop({ location: "tarnow", slotAt: at(1, 22) });
     await fx.airdrop({ location: "dolnik", slotAt: at(-1, 22) });
-    expect(await airdropsForWeek(db, read())).toEqual([{ location: "tarnow", at: at(1, 22).toISOString(), state: "ended" }]);
+    expect(await airdropsForWeek(db, read())).toEqual([{ location: "tarnow", at: at(1, 22).toISOString(), when: whenLabel(at(1, 22)), state: "ended" }]);
   });
 
   it("the previous episode is the latest earlier one in the season with a narrative, published or not", async () => {
@@ -88,7 +89,7 @@ describe("events and the previous episode", () => {
     await fx.bounty({ target: "no-players-row-id", reason: "Griefing", placedAt: at(2, 18, 43) });
     const out = await bountiesForWeek(db, read());
     expect(out).toEqual([{
-      target: "an unknown survivor", reason: "Griefing", placedAt: at(2, 18, 43).toISOString(), status: "open",
+      target: "an unknown survivor", reason: "Griefing", placedAt: at(2, 18, 43).toISOString(), placedWhen: whenLabel(at(2, 18, 43)), status: "open",
       claimer: null, hoursToClaim: null, claimMetres: null,
     }]);
     expect(JSON.stringify(out)).not.toContain("no-players-row-id");

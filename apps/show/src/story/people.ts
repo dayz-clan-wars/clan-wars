@@ -4,7 +4,7 @@ import type { DeathCauseWord } from "@factions/domain";
 import { scoringKill } from "@factions/roster/internal";
 import type { PlayerTexts } from "./registry.js";
 import type { ClanVsClan, FfPair, PlayerLine, StoryContext } from "./types.js";
-import { rows, tsz, iso, UNKNOWN_PLAYER } from "./sql.js";
+import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
 
 export type WeekRead = { serverId: number; from: Date; to: Date; texts: PlayerTexts };
 
@@ -66,7 +66,7 @@ export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryCon
       metres: Math.round(r.metres),
       weapon: r.weapon,
     })),
-    oddDeaths: odd.map((r) => ({ gamertag: a.texts.gamertag(r.gamertag), cause: r.cause, at: iso(r.at) })),
+    oddDeaths: odd.map((r) => ({ gamertag: a.texts.gamertag(r.gamertag), cause: r.cause, at: iso(r.at), when: whenLabel(r.at) })),
   };
 }
 
@@ -95,7 +95,9 @@ export async function friendlyFireForWeek(db: Database, a: WeekRead): Promise<Ff
     count: r.n,
     weapons: [...(r.weapons ?? [])].sort(),
     first: iso(r.first),
+    firstWhen: whenLabel(r.first),
     last: iso(r.last),
+    lastWhen: whenLabel(r.last),
   }));
 }
 

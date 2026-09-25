@@ -29,6 +29,9 @@ describe("the show prompt", () => {
     expect(OUTPUT).toContain(STORYLINES_MARKER);
     expect(DATA_DICTIONARY).toMatch(/"revoked" \(an admin cancelled it\)/u);
     expect(DATA_DICTIONARY).toMatch(/state "live"/u);
+    expect(DATA_DICTIONARY).toMatch(/"when" label/u);
+    expect(DATA_DICTIONARY).toMatch(/[Nn]ever work out a weekday/u);
+    expect(OUTPUT).toMatch(/only the 2 or 3 numbered storylines/u);
   });
 
   it("⚠️ contains no em dash and never says faction", () => {

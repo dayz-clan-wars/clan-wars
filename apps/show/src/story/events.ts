@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
 import type { WeekRead } from "./people.js";
 import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory } from "./types.js";
-import { rows, tsz, iso, UNKNOWN_PLAYER } from "./sql.js";
+import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
 
 const FLAG_KINDS: FlagEventKind[] = ["founded", "activated", "dormant", "revived", "disbanded"];
 const between = (col: string, a: WeekRead) =>
@@ -21,7 +21,7 @@ export async function flagEventsForWeek(db: Database, a: WeekRead): Promise<Flag
     where fe.server_id = ${a.serverId} and ${between("fe.occurred_at", a)}
       and fe.kind in (${sql.join(FLAG_KINDS.map((k) => sql`${k}`), sql`, `)})
     order by fe.occurred_at asc, fe.id asc`);
-  return rs.map((r) => ({ clan: a.texts.clan(r.name, r.tag), kind: r.kind, at: iso(r.at) }));
+  return rs.map((r) => ({ clan: a.texts.clan(r.name, r.tag), kind: r.kind, at: iso(r.at), when: whenLabel(r.at) }));
 }
 
 export async function bountiesForWeek(db: Database, a: WeekRead): Promise<BountyStory[]> {
@@ -43,6 +43,7 @@ export async function bountiesForWeek(db: Database, a: WeekRead): Promise<Bounty
     target: a.texts.gamertag(r.target),
     reason: a.texts.bountyReason(r.reason),
     placedAt: iso(r.placed_at),
+    placedWhen: whenLabel(r.placed_at),
     status: r.status,
     claimer: r.claimer === null ? null : a.texts.gamertag(r.claimer),
     hoursToClaim: r.hours,
@@ -81,6 +82,7 @@ export async function kothForWeek(db: Database, a: WeekRead): Promise<KothStory[
     return {
       location: r.location,
       at: iso(r.at),
+      when: whenLabel(r.at),
       winner: winner === null ? null : nameOf(winner),
       top: (res?.top ?? []).slice(0, 5).map((t) => ({ gamertag: nameOf(t), kills: t.kills })),
     };
@@ -92,5 +94,5 @@ export async function airdropsForWeek(db: Database, a: WeekRead): Promise<Airdro
     select location, slot_at as at, state from airdrop_events
     where server_id = ${a.serverId} and ${between("slot_at", a)} and state in ('live', 'ended')
     order by slot_at asc`);
-  return rs.map((r) => ({ location: r.location, at: iso(r.at), state: r.state }));
+  return rs.map((r) => ({ location: r.location, at: iso(r.at), when: whenLabel(r.at), state: r.state }));
 }

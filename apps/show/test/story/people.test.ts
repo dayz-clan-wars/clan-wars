@@ -4,6 +4,7 @@ import { openDb, makeFixture, MON, at, type Fx } from "../fixture.js";
 import { PlayerTexts } from "../../src/story/registry.js";
 import { weekWindow } from "../../src/weeks.js";
 import { peopleForWeek, friendlyFireForWeek, clanBeefsForWeek } from "../../src/story/people.js";
+import { whenLabel } from "../../src/story/sql.js";
 
 describe("people, friendly fire and beefs", () => {
   let db: Database; let fx: Fx; let sna = 0; let z2 = 0;
@@ -49,13 +50,15 @@ describe("people, friendly fire and beefs", () => {
 
   it("odd deaths list wolves and the like, not a generic death", async () => {
     const p = await peopleForWeek(db, read());
-    expect(p.oddDeaths).toEqual([{ gamertag: "Bubba211558", cause: "wolf", at: at(3, 1).toISOString() }]);
+    expect(p.oddDeaths).toEqual([{ gamertag: "Bubba211558", cause: "wolf", at: at(3, 1).toISOString(), when: whenLabel(at(3, 1)) }]);
   });
 
   it("friendly fire pairs per clan, with weapons and first and last time", async () => {
     expect(await friendlyFireForWeek(db, read())).toEqual([{
       clan: { name: "SNA", tag: "SNA" }, killer: "GoldSkull588", victim: "CainObennett", count: 2,
-      weapons: ["(MeleeFist)", "AUR AX"], first: at(0, 21, 23).toISOString(), last: at(0, 21, 34).toISOString(),
+      weapons: ["(MeleeFist)", "AUR AX"],
+      first: at(0, 21, 23).toISOString(), firstWhen: whenLabel(at(0, 21, 23)),
+      last: at(0, 21, 34).toISOString(), lastWhen: whenLabel(at(0, 21, 34)),
     }]);
   });
 

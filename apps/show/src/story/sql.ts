@@ -17,3 +17,18 @@ export const UNKNOWN_PLAYER = "an unknown survivor";
  * `execute`. Accept both so a driver change does not turn every time into "Invalid Date".
  */
 export const iso = (v: Date | string): string => (v instanceof Date ? v : new Date(v)).toISOString();
+
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+const pad2 = (n: number): string => String(n).padStart(2, "0");
+
+/**
+ * ⚠️ The model was computing the weekday itself from `at` and getting it wrong (spec
+ * §5.2 amendment): it called a Thursday and a Friday both "Wednesday". This precomputes
+ * a human label in UTC — the whole project is UTC — so the model never has to. Uses the
+ * `Date` object's own UTC getters, never `toLocaleString` or anything else that could
+ * read the process's local timezone, so it is correct no matter what `TZ` is set to.
+ */
+export function whenLabel(v: Date | string): string {
+  const d = v instanceof Date ? v : new Date(v);
+  return `${WEEKDAYS[d.getUTCDay()]} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+}

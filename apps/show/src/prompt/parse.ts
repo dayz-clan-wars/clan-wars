@@ -6,6 +6,13 @@ export { STORYLINES_MARKER };
 export const MAX_NARRATIVE_CHARS = 6000;
 export const MAX_TITLE_CHARS = 40;
 const MIN_LINES = 10;
+/**
+ * ⚠️ FORMAT asks for 2 or 3 storylines, but the model sometimes lists side segments
+ * too — and this JSON feeds next week's "Previously on", so it must hold only the
+ * main storylines. A regenerate is not worth spending on this: keep the first
+ * MAX_STORYLINES and drop the rest rather than throwing.
+ */
+export const MAX_STORYLINES = 3;
 
 export class EpisodeParseError extends Error {
   readonly reason: "too_long" | "format";
@@ -66,7 +73,7 @@ export function parseEpisode(raw: string): ParsedEpisode {
   if (title.length > MAX_TITLE_CHARS) throw new EpisodeParseError(`title is ${title.length} characters, cap is ${MAX_TITLE_CHARS}`);
   if (!Array.isArray(o.storylines) || o.storylines.length === 0) throw new EpisodeParseError("storylines block lists no storylines");
 
-  const storylines = o.storylines.map((s, i): Storyline => {
+  const storylines = o.storylines.slice(0, MAX_STORYLINES).map((s, i): Storyline => {
     const x = s as Partial<Record<keyof Storyline, unknown>>;
     if (typeof x.title !== "string" || typeof x.status !== "string" || !isStringArray(x.players) || !isStringArray(x.clans) || !isStringArray(x.openQuestions)) {
       throw new EpisodeParseError(`storyline ${i} is malformed`);
