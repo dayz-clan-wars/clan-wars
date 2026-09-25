@@ -1,4 +1,5 @@
 import type { Database } from "@factions/db";
+import type { ClanNoticeKind } from "@factions/domain";
 import { viewerForDb, type Viewer, type Role } from "./viewer";
 import {
   linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb,
@@ -197,8 +198,8 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
      * `pageSize` lets a caller that only shows a handful (the bell panel) ask
      * for exactly that many, rather than fetching a full page and slicing it.
      */
-    notificationsFor: (discordId: string, page: number, pageSize?: number): Promise<NotificationsPage> =>
-      notificationsForDb(getDb(), discordId, page, pageSize),
+    notificationsFor: (discordId: string, page: number, pageSize?: number, kinds?: readonly ClanNoticeKind[]): Promise<NotificationsPage> =>
+      notificationsForDb(getDb(), discordId, page, pageSize, kinds),
     /** The "Mark all read" button. One watermark row, whatever the backlog. */
     markAllNoticesRead: (discordId: string): Promise<void> => markAllNoticesReadDb(getDb(), discordId),
     /** One notice, marked read because an action resolved it. */

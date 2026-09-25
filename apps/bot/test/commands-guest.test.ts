@@ -33,11 +33,31 @@ describe("/guest grant", () => {
 describe("/guest revoke", () => {
   it("offers the clan's open passes and revokes the chosen one", async () => {
     const ctx = ctxWith({
-      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", grantedBy: "111", expiresAt: new Date() }] }),
+      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", userGamertag: null, grantedBy: "111", expiresAt: new Date() }] }),
       revokeGuestPass: async (_a: string, id: number) => (id === 3 ? "ok" : "gone"),
     });
     const [choice] = await sourceOf(guestGroup, "guest revoke", "pass")(ctx, { actorDiscordId: "111", value: "" });
     expect(choice!.value).toBe("3");
     expect((await spec("guest revoke").handler(ctx, input({ pass: "3" }))).content).toBe(discordCopy("revoke-guest", "ok"));
+  });
+
+  /** M5: the autocomplete label names the guest instead of showing a raw Discord id. */
+  it("labels a linked guest's choice by gamertag", async () => {
+    const ctx = ctxWith({
+      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", userGamertag: "Gus", grantedBy: "111", expiresAt: new Date() }] }),
+    });
+    const [choice] = await sourceOf(guestGroup, "guest revoke", "pass")(ctx, { actorDiscordId: "111", value: "" });
+    expect(choice!.name).toBe("Gus");
+    expect(choice!.value).toBe("3");
+  });
+
+  /** M5: an unlinked guest still reads as a person, and the id keeps two of them apart. */
+  it("falls back to 'Discord user <id>' for an unlinked guest's choice", async () => {
+    const ctx = ctxWith({
+      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", userGamertag: null, grantedBy: "111", expiresAt: new Date() }] }),
+    });
+    const [choice] = await sourceOf(guestGroup, "guest revoke", "pass")(ctx, { actorDiscordId: "111", value: "" });
+    expect(choice!.name).toBe("Discord user 222");
+    expect(choice!.value).toBe("3");
   });
 });

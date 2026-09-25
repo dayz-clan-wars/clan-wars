@@ -5,6 +5,38 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Notifications: something both sent to you and posted to your clan, such as your own
+  achievement unlock, is listed once, not twice.
+- Signed-in forms send once. Double-tapping "Found the clan", Leave, Disband, Invite or
+  any two-press button no longer posts twice. A founder whose second tap arrived after
+  the clan was created lands on their clan instead of a "not found" page.
+- A refused form keeps what you typed: the claim form, including which founders you
+  unticked; rename; invite; guest pass; and the vault's add and edit forms. A vault code
+  or note is never carried back.
+- A refused vault edit reopens that lock's form, with the reason inside it.
+- On the claim page, a flag or roster refusal moves focus to that section.
+- Pressing charges on /base keeps keyboard focus on the confirm step and announces the
+  result.
+- /link: typing a whole gamertag and pressing Claim straight away now finds it, and Enter
+  claims. A failed request says so instead of doing nothing.
+- The /notifications filter now covers every page, not just the one on screen.
+- The kit's Undo stays for ten seconds, and stays while you point at it or focus it.
+- Buttons and filters on /notifications, and the vault's "Hide now", are full-size tap
+  targets.
+
+### Changed
+
+- Two-press buttons turn gold when armed and say "Press again to …".
+- Moving the clan's base takes a second press, as releasing one already did.
+- Guest passes are listed by the guest's gamertag.
+- Leave states the rejoin cooldown in days before you confirm.
+- Sign-in steps are numbered 1 to 3 throughout. Countdowns on phones say "left".
+- Refusals on /link, /kit and /base are no longer drawn in rust, which marks only an
+  open obligation.
+- /link and /kit stop checking for emote confirmations while their tab is in the background.
+
 ## [1.39.0] - 2026-09-25
 
 ### Changed

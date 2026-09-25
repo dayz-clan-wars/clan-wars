@@ -10,6 +10,7 @@ import { ago, days, when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
 import { ReportButton } from "./report-button";
+import { RowAction } from "@/app/components/row-action";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -116,7 +117,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                     <form className="mt-4 border-t border-rule-2 pt-4" action="/api/base/release" method="post">
                       <input type="hidden" name="confirm" value="yes" />
                       <p className="text-sm leading-relaxed text-ink-2">Releasing makes the pole public if nobody declares it within the grace period.</p>
-                      <ConfirmButton confirm="Release it?" className={`mt-3 ${btnDanger}`}>Release this base</ConfirmButton>
+                      <ConfirmButton confirm="Press again to release" className={`mt-3 ${btnDanger}`}>Release this base</ConfirmButton>
                     </form>
                   </>
                 ) : (
@@ -136,10 +137,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                         <Pole x={c.x} z={c.z} />
                         <div className="text-xs text-muted">raised {ago(c.raisedAt)}</div>
                       </div>
-                      <form action="/api/base/declare" method="post">
-                        <input type="hidden" name="poleKey" value={c.poleKey} />
-                        <button className={btnPrimary} type="submit" disabled={view.declaration !== null}>Declare</button>
-                      </form>
+                      <RowAction action="/api/base/declare" fields={{ poleKey: c.poleKey }} who={`at grid ${gridRef(c.x, c.z)}`} style={btnPrimary} disabled={view.declaration !== null}>Declare</RowAction>
                     </li>
                   ))}
                 </ul>

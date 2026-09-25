@@ -338,8 +338,16 @@ describe("the kit writes", () => {
    */
   it("reports a refusal in the same place it confirms a save", () => {
     expect(FLOW).toContain("{refusal !== null && (");
-    expect(FLOW).toContain('<Bar role="alert" tone="rust">');
-    expect(FLOW).toContain('<Bar role="status" tone="plain">');
+    expect(FLOW).toContain('<Bar role="alert" tone="refusal">');
+    expect(FLOW).toContain('role="status"');
+    expect(FLOW).toContain("tone=\"plain\"");
+    expect(FLOW).toContain('onPointerEnter={() => dismiss.hold("pointer")}');
+    expect(FLOW).toContain('onPointerLeave={() => dismiss.release("pointer")}');
+    expect(FLOW).toContain('onFocus={() => dismiss.hold("focus")}');
+    expect(FLOW).toContain('onBlur={() => dismiss.release("focus")}');
+    // F1(a): unmounting (e.g. a refusal replacing this bar) releases any
+    // stuck hold, or every later toast would sit un-dismissable.
+    expect(FLOW).toContain("onUnmount={dismiss.cancel}");
     /**
      * ⚠️ Every live region on this page is one of those two bars. A `role`
      * anywhere else is either a second announcement of the same news or a
@@ -356,6 +364,12 @@ describe("the kit writes", () => {
      * announced inconsistently or not at all.
      */
     expect(FLOW).not.toMatch(/role=\{[^}]*\?/u);
+  });
+
+  /** M9: an Undo that vanishes while the player is reaching for it is an Undo they do not have. */
+  it("keeps Undo up for ten seconds, and not at all while it is pointed at or focused", () => {
+    expect(FLOW).toContain("dismissTimer(UNDO_MS,");
+    expect(code(FLOW)).not.toContain("4500");
   });
 
   /**
@@ -375,5 +389,29 @@ describe("the kit writes", () => {
     // ⚠️ aria-modal is a claim, not a mechanism.
     expect(SHEET).toContain('aria-modal="true"');
     expect(SHEET).toContain('e.key !== "Tab"');
+  });
+});
+
+describe("kit visuals (UX review 2026-09-24)", () => {
+  /** L1: a refused pick owes the server nothing; rust is for the open sequence alone. */
+  it("never paints a refusal rust", () => {
+    expect(FLOW).not.toContain('tone="rust"');
+    expect(code(FLOW)).not.toContain("text-rust-2");
+  });
+
+  /** L7: the sequence card's h2 sat above the page's h1, so the outline began at level two. */
+  it("puts the open sequence under the page heading", () => {
+    expect(FLOW.indexOf("<SequenceCard")).toBeGreaterThan(FLOW.indexOf(">Your kit</h1>"));
+  });
+
+  it("L7: nothing smaller than 11px", () => {
+    expect(code(FLOW)).not.toMatch(/text-\[(9|10)px\]/u);
+    expect(code(CARD)).not.toMatch(/text-\[(9|10)px\]/u);
+  });
+
+  it("L7: a slot tile's edge is a control edge", () => {
+    const tile = FLOW.slice(FLOW.indexOf("function SlotTile"), FLOW.indexOf("function HowThisWorks"));
+    expect(tile).not.toContain("border-rule-2");
+    expect(tile).toContain("border-rule-3");
   });
 });

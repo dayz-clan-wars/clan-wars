@@ -8,32 +8,25 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
 import { when, days, hours, ago } from "@/lib/format";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, checkbox } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, Facts, ConfirmButton, SessionLost, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, kickerSm, field, SubmitButton } from "@/app/components/ui";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
+import { readKept } from "@/lib/form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
+import { RowAction } from "@/app/components/row-action";
+import { LeaveForm } from "./leave-form";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-/** Hidden target + one button: the shape of every per-row action. */
-function RowAction({ action, target, children, style = btnSecondary, confirm }: { action: string; target: string; children: React.ReactNode; style?: string; confirm?: string }) {
-  return (
-    <form action={`/api/clan/${action}`} method="post">
-      <input type="hidden" name="target" value={target} />
-      {confirm
-        ? <ConfirmButton confirm={confirm} className={`${style} !px-3.5`}>{children}</ConfirmButton>
-        : <button className={`${style} !px-3.5`} type="submit">{children}</button>}
-    </form>
-  );
-}
-
 const row = "flex min-h-[56px] flex-wrap items-center gap-3 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:min-h-[60px] lg:gap-4 lg:px-5";
 
-export default async function ClanPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  const { result } = await searchParams;
+export default async function ClanPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const q = await searchParams;
+  const result = typeof q.result === "string" ? q.result : undefined;
+  const kept = readKept(q);
   const session = await currentSession();
   if (!session) {
     return <SessionLost next="/clan" />;
@@ -94,10 +87,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         {isPending ? <>asked {ago(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {ago(r.joinedAt)}{r.lastSeenAt && ` · seen ${ago(r.lastSeenAt)}`}</>}
                       </div>
                     </div>
-                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
-                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Remove them?">Remove</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="promote" target={r.discordId}>Make officer</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId} confirm="Demote them?">Demote</RowAction>}
+                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="/api/clan/kick" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
+                    {!self && officer && isPending && <RowAction action="/api/clan/kick" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="/api/clan/promote" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"}>Make officer</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="/api/clan/demote" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} confirm="Press again to demote">Demote</RowAction>}
                   </li>
                 );
               })}
@@ -108,8 +101,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
             <Panel title="Invite">
               <PanelBody>
                 <form className="flex gap-2.5" action="/api/clan/invite" method="post">
-                  <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
-                  <button className={`${btnPrimary} min-h-[52px] flex-none`} type="submit">Invite</button>
+                  <GamertagField scope="linked" {...invalid(err, "gamertag")} className={`!mt-0 ${invalid(err, "gamertag").className ?? ""}`} name="gamertag" defaultValue={kept.get("gamertag")} placeholder="gamertag" aria-label="Gamertag" required maxLength={GAMERTAG_MAX} aria-describedby={err?.field === "gamertag" ? "err-gamertag invite-note" : "invite-note"} />
+                  <SubmitButton className={`${btnPrimary} min-h-[52px] flex-none`}>Invite</SubmitButton>
                 </form>
                 <FieldError err={err} name="gamertag" />
                 <p id="invite-note" className="mt-2.5 text-xs text-muted">They must have linked their character on the site.</p>
@@ -118,7 +111,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                     {invitesOut.map((inv) => (
                       <li key={inv.id} className="flex min-h-[52px] items-center justify-between gap-3 text-sm text-ink">
                         <span><span className="font-mono">{inv.inviteeGamertag ?? "unknown"}</span> <span className="text-xs text-muted">expires {when(inv.expiresAt)}</span></span>
-                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><ConfirmButton confirm="Withdraw it?" className={`${btnSecondary} !px-3.5`}>Withdraw</ConfirmButton></form>
+                        <RowAction action="/api/clan/revoke-invite" fields={{ inviteId: inv.id }} who={inv.inviteeGamertag ?? "unknown"} confirm="Press again to withdraw">Withdraw</RowAction>
                       </li>
                     ))}
                   </ul>
@@ -139,8 +132,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-3 first:border-t-0 lg:px-5">
                         <span><span className="font-mono text-sm text-ink">{r.gamertag ?? "unknown"}</span><div className="text-xs text-muted">asked {ago(r.createdAt)}</div></span>
                         <span className="flex gap-2">
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="accepted" /><button className={`${btnPrimary} !px-3.5`} type="submit">Accept</button></form>
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="declined" /><button className={`${btnSecondary} !px-3.5`} type="submit">Decline</button></form>
+                          <RowAction action="/api/clan/decide-request" fields={{ requestId: r.id, decision: "accepted" }} who={r.gamertag ?? "unknown"} style={btnPrimary}>Accept</RowAction>
+                          <RowAction action="/api/clan/decide-request" fields={{ requestId: r.id, decision: "declined" }} who={r.gamertag ?? "unknown"}>Decline</RowAction>
                         </span>
                       </li>
                     ))}
@@ -164,7 +157,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                   <form className="mt-4 border-t border-rule-2 pt-4" action="/api/clan/claim-succession" method="post">
                     <input type="hidden" name="confirm" value="yes" />
                     <p className="text-sm leading-relaxed text-ink-2">The leader has been silent for {days(LEADER_SILENT_MS)}. Claiming opens a {hours(SUCCESSION_WINDOW_MS)} window that is voided if they are seen in game.</p>
-                    <ConfirmButton confirm="Claim it?" className={`mt-3 ${btnPrimary}`}>Claim leadership</ConfirmButton>
+                    <ConfirmButton confirm="Press again to claim" className={`mt-3 ${btnPrimary}`}>Claim leadership</ConfirmButton>
                   </form>
                 )}
               </PanelBody>
@@ -180,7 +173,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       {leadership.openVote.inElectorate && !leadership.openVote.myBallot && (
                         <form className="mt-3" action="/api/clan/cast-vote" method="post">
                           <input type="hidden" name="confirm" value="yes" />
-                          <ConfirmButton confirm="Cast it?" className={btnPrimary}>Vote yes</ConfirmButton>
+                          <ConfirmButton confirm="Press again to vote" className={btnPrimary}>Vote yes</ConfirmButton>
                         </form>
                       )}
                       {leadership.openVote.myBallot && <p className="mt-2 text-sm text-ink-2">You voted.</p>}
@@ -206,7 +199,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         ))}
                       </select>
                     </label>
-                    <ConfirmButton confirm="Open the vote?" className={`mt-3 ${btnSecondary}`} disabled={voteBlocked}>Nominate</ConfirmButton>
+                    <ConfirmButton confirm="Press again to open the vote" className={`mt-3 ${btnSecondary}`} disabled={voteBlocked}>Nominate</ConfirmButton>
                     {voteBlocked && <p className="mt-2 text-xs text-muted">A vote failed recently; the next is possible after {when(leadership.nextVoteAllowedAt!)}.</p>}
                   </form>
                 </details>
@@ -219,10 +212,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
               {leader
                 ? <p className="text-sm leading-relaxed text-ink-2">A leader cannot leave. <a className={link} href="/clan/settings">Transfer leadership</a> first, or disband.</p>
                 : (
-                  <form action="/api/clan/leave" method="post">
-                    <label className="flex items-start gap-3 text-sm leading-relaxed text-ink-2"><input type="checkbox" name="confirm" value="yes" required className={`${checkbox} mt-0.5`} /> I understand I cannot join a clan again for a while after leaving.</label>
-                    <button className={`mt-3.5 ${btnDanger}`} type="submit">Leave the clan</button>
-                  </form>
+                  <LeaveForm />
                 )}
             </PanelBody>
           </Panel>

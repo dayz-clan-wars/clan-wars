@@ -3,7 +3,15 @@ import { currentSession } from "./viewer";
 import { siteUrl } from "./auth/site-url";
 import type { Session } from "./auth/session";
 
-export type Redirect = { back: string; code: string };
+/**
+ * Non-secret values a refused form sends back, so the player does not
+ * retype them (H2). ⚠️ A field name is matched against `NEVER_KEEP`
+ * case-insensitively, and rejected outright unless it is a plain identifier
+ * (letters, digits, "_", "-") — see `neverKeep` — so `Code`, `CODE` and a
+ * dotted name like `kept.code` are refused exactly like `code`.
+ */
+export type Keep = Record<string, string | readonly string[]>;
+export type Redirect = { back: string; code: string; keep?: Keep };
 
 /**
  * The pure half of a form redirect: given an origin, a path, and an already
@@ -33,8 +41,8 @@ export async function formAction(req: NextRequest, back: string, run: (session: 
   if (!session) return redirectTo(origin, "/login", `?next=${encodeURIComponent(back)}`);
   const form = await req.formData();
   const out = await run(session, form);
-  const { back: target, code } = typeof out === "string" ? { back, code: out } : out;
-  return redirectTo(origin, target, `?result=${encodeURIComponent(code)}`);
+  const { back: target, code, keep } = typeof out === "string" ? { back, code: out, keep: undefined } : out;
+  return redirectTo(origin, target, resultQuery(code, keep));
 }
 
 export function text(form: FormData, name: string, max: number): string | null {
@@ -78,4 +86,98 @@ const BACKS = new Set(["/me", "/clan", "/clan/settings", "/clan/vault", "/notifi
 
 export function safeBack(value: FormDataEntryValue | string | null, fallback: string): string {
   return typeof value === "string" && BACKS.has(value) ? value : fallback;
+}
+
+/** Query-string prefix for kept values: `?result=…&kept.name=…`. */
+export const KEEP_PREFIX = "kept.";
+/** No kept value is longer than this, whatever the field's own limit. */
+export const KEEP_VALUE_MAX = 200;
+/** No kept list (the claim roster) is longer than this. */
+export const KEEP_LIST_MAX = 16;
+
+/**
+ * ⚠️ Never kept, never read back. A vault code must never enter a URL
+ * (CLAUDE.md, the vault); a kept value is in the address bar, the history and
+ * the access log. Enforced here, in BOTH directions, so a future route that
+ * passes it — or a crafted link that carries it — still cannot leak one.
+ */
+const NEVER_KEEP = new Set(["code"]);
+/** A field name safe to prefix and put on the query — no dots, no odd characters. */
+const FIELD_NAME_RE = /^[A-Za-z0-9_-]+$/u;
+
+/**
+ * ⚠️ The single gate for "never keep this field", used by both write-side
+ * callers (`resultQuery`, `keepFrom`). `NEVER_KEEP.has(name)` alone is not
+ * enough: it is an exact, case-sensitive match, so `Code`/`CODE` sail past it,
+ * and a name containing a "." can forge a `kept.` segment of its own — a
+ * field literally named `kept.code` would otherwise write the same
+ * `kept.code=` query param `code` does. Lowercasing before the set check
+ * catches the first; requiring a plain identifier (no ".", no other
+ * punctuation) catches the second, since a legitimate field name never needs
+ * one.
+ */
+function neverKeep(name: string): boolean {
+  return !FIELD_NAME_RE.test(name) || NEVER_KEEP.has(name.toLowerCase());
+}
+
+const keepable = (v: string) => v.length > 0 && v.length <= KEEP_VALUE_MAX;
+
+/**
+ * The query a form redirect carries: the result code, then any kept values.
+ *
+ * ⚠️ URLSearchParams, never string concatenation: a typed "&" or "=" would
+ * otherwise split the query and a kept name would come back as two fields.
+ * An over-long value is DROPPED, not cut — a silently truncated name in the
+ * field is worse than an empty one. An over-long LIST is dropped the same
+ * way (F2): `.slice(0, KEEP_LIST_MAX)` used to cut it to the first N, which
+ * for the claim roster meant the first sixteen names stayed ticked and the
+ * rest silently fell off with no sign anything was missing. Dropping the
+ * whole list instead makes the caller fall back to its own default (the
+ * claim form's all-ticked roster), which is at least honest.
+ */
+export function resultQuery(code: string, keep?: Keep): string {
+  const q = new URLSearchParams({ result: code });
+  for (const [name, value] of Object.entries(keep ?? {})) {
+    if (neverKeep(name)) continue;
+    const values = typeof value === "string" ? [value] : value.length > KEEP_LIST_MAX ? [] : value;
+    for (const v of values) if (keepable(v)) q.append(KEEP_PREFIX + name, v);
+  }
+  return `?${q.toString()}`;
+}
+
+/**
+ * The fields of a refused form worth handing back, trimmed, each within its
+ * own limit. Only the fields named in `fields` — a route lists what it keeps,
+ * so nothing is kept by accident.
+ */
+export function keepFrom(form: FormData, fields: Record<string, number>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [name, max] of Object.entries(fields)) {
+    if (neverKeep(name)) continue;
+    const v = form.get(name);
+    if (typeof v !== "string") continue;
+    const t = v.trim();
+    if (t.length > 0 && t.length <= Math.min(max, KEEP_VALUE_MAX)) out[name] = t;
+  }
+  return out;
+}
+
+export type Kept = { get(name: string): string | undefined; all(name: string): string[] };
+
+/**
+ * A page's view of its kept values. ⚠️ Attacker-suppliable like every query
+ * value, so the page only ever puts one into a field's defaultValue or
+ * re-checks an option it already lists — never renders it as text.
+ */
+export function readKept(params: Record<string, string | string[] | undefined>): Kept {
+  const all = (name: string): string[] => {
+    const key = KEEP_PREFIX + name;
+    if (NEVER_KEEP.has(name) || !Object.hasOwn(params, key)) return [];
+    const v = params[key];
+    const list = typeof v === "string" ? [v] : Array.isArray(v) ? v : [];
+    // F2, same rule as resultQuery: a forged link over the cap is dropped
+    // entirely, not truncated — see the comment on resultQuery.
+    return list.length > KEEP_LIST_MAX ? [] : list.filter(keepable);
+  };
+  return { get: (name) => all(name)[0], all };
 }

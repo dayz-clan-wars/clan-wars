@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { btnDanger, btnQuiet } from "@/app/components/ui";
+import { useEffect, useId, useRef, useState } from "react";
+import { btnDanger, btnQuiet, checkbox } from "@/app/components/ui";
+import { reportFocusAfter, type ReportPhase } from "@/lib/report-focus";
 
 const ARM_MS = 8_000;
 
@@ -23,6 +24,11 @@ export type ReportParticipant = { dayzId: string; gamertag: string };
  * checkboxes exist so an owner can charge a raider without also banning a
  * helper they invited — both would otherwise be sentenced jointly on the
  * whole incident's damage (spec §2.4, §7).
+ *
+ * ⚠️ H4 (UX review 2026-09-24): focus is moved on every branch change
+ * (lib/report-focus.ts), and the outcome is spoken by ONE live region that is
+ * mounted from the first render. A region inserted together with its text is
+ * announced unreliably, and this outcome is a ban.
  */
 export function ReportButton({ incidentId, participants, minTermLabel }: { incidentId: number; participants: ReportParticipant[]; minTermLabel: string }) {
   // ⚠️ Defaults to everyone selected — the common case (a raid with no
@@ -34,11 +40,29 @@ export function ReportButton({ incidentId, participants, minTermLabel }: { incid
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressRef = useRef<HTMLButtonElement>(null);
+  const confirmRef = useRef<HTMLButtonElement>(null);
+  const statusRef = useRef<HTMLParagraphElement>(null);
+  const warningId = useId();
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
 
-  const disarm = () => {
-    if (timer.current) clearTimeout(timer.current);
-    setArmed(false);
+  const phase: ReportPhase = done ? "done" : armed ? "armed" : "idle";
+  const shown = useRef<ReportPhase>(phase);
+  useEffect(() => {
+    const target = reportFocusAfter(shown.current, phase);
+    shown.current = phase;
+    if (target === "confirm") confirmRef.current?.focus();
+    else if (target === "press") pressRef.current?.focus();
+    else if (target === "status") statusRef.current?.focus();
+  }, [phase]);
+
+  const stopTimer = () => { if (timer.current) clearTimeout(timer.current); timer.current = null; };
+  const disarm = () => { stopTimer(); setArmed(false); };
+  const arm = () => {
+    setError(null);
+    setArmed(true);
+    stopTimer();
+    timer.current = setTimeout(() => setArmed(false), ARM_MS);
   };
 
   const toggle = (dayzId: string) => {
@@ -50,7 +74,10 @@ export function ReportButton({ incidentId, participants, minTermLabel }: { incid
   };
 
   const submit = async () => {
-    disarm();
+    if (busy) return;
+    // ⚠️ The countdown stops but the armed block STAYS while the request runs:
+    // dropping it here unmounted the focused Confirm mid-request and hid "Pressing charges…".
+    stopTimer();
     setBusy(true);
     setError(null);
     try {
@@ -61,63 +88,66 @@ export function ReportButton({ incidentId, participants, minTermLabel }: { incid
       });
       if (res.status === 401) { window.location.reload(); return; }
       const data = (await res.json().catch(() => null)) as { ok?: boolean; message?: string } | null;
-      if (!data?.ok) { setError(data?.message ?? "Could not press charges on that incident."); return; }
+      if (!data?.ok) { setError(data?.message ?? "Could not press charges on that incident."); setArmed(false); return; }
       setDone(true);
     } catch {
       setError("Could not press charges on that incident.");
+      setArmed(false);
     } finally {
       setBusy(false);
     }
   };
 
-  if (done) {
-    return <p role="status" className="text-sm text-ink-2">Charges pressed. The listed players are banned.</p>;
-  }
-
   const chargedNames = participants.filter((p) => checked.has(p.dayzId)).map((p) => p.gamertag).join(", ");
 
-  if (armed) {
-    return (
-      <div role="status" className="flex flex-col gap-3">
-        <p className="text-sm leading-relaxed text-ink-2">
-          This automatically bans <span className="text-ink">{chargedNames || "nobody — pick at least one player"}</span> for at least <span className="text-ink">{minTermLabel}</span> each — doubled on a repeat offence, and <span className="text-ink">permanent</span> on a third upheld report this season. Prior offences are checked when you confirm, so a permanent ban can happen on THIS click without further warning. There is no further review after you confirm.
-        </p>
-        <div className="flex flex-wrap gap-3">
-          <button type="button" className={btnDanger} disabled={busy || checked.size === 0} onClick={() => void submit()}>
-            {busy ? "Pressing charges…" : "Confirm — press charges"}
-          </button>
-          <button type="button" className={btnQuiet} disabled={busy} onClick={disarm}>Cancel</button>
+  const body = (() => {
+    if (done) return null;
+    if (armed) {
+      return (
+        <div className="flex flex-col gap-3">
+          <p id={warningId} className="text-sm leading-relaxed text-ink-2">
+            This automatically bans <span className="text-ink">{chargedNames || "nobody — pick at least one player"}</span> for at least <span className="text-ink">{minTermLabel}</span> each — doubled on a repeat offence, and <span className="text-ink">permanent</span> on a third upheld report this season. Prior offences are checked when you confirm, so a permanent ban can happen on THIS click without further warning. There is no further review after you confirm.
+          </p>
+          <div className="flex flex-wrap gap-3">
+            {/* ⚠️ aria-disabled while busy, not disabled: a disabled button drops focus to <body>. */}
+            <button ref={confirmRef} type="button" className={`${btnDanger} aria-disabled:opacity-40`} aria-describedby={warningId}
+              aria-disabled={busy || undefined} disabled={checked.size === 0} onClick={() => void submit()}>
+              {busy ? "Pressing charges…" : "Confirm — press charges"}
+            </button>
+            <button type="button" className={`${btnQuiet} aria-disabled:opacity-40`} aria-disabled={busy || undefined} onClick={() => { if (!busy) disarm(); }}>Cancel</button>
+          </div>
         </div>
-        {error && <p className="text-sm text-rust-2">{error}</p>}
+      );
+    }
+    return (
+      <div className="flex flex-col gap-2">
+        {participants.length > 1 && (
+          <fieldset className="flex flex-col">
+            <legend className="text-xs uppercase tracking-[0.14em] text-muted">Charge</legend>
+            {participants.map((p) => (
+              <label key={p.dayzId} className="flex min-h-[44px] items-center gap-3 text-sm text-ink-2">
+                <input type="checkbox" className={checkbox} checked={checked.has(p.dayzId)} onChange={() => toggle(p.dayzId)} />
+                {p.gamertag}
+              </label>
+            ))}
+          </fieldset>
+        )}
+        <button ref={pressRef} type="button" className={btnDanger} disabled={checked.size === 0} onClick={arm}>
+          Press charges
+        </button>
       </div>
     );
-  }
+  })();
 
   return (
     <div className="flex flex-col gap-2">
-      {participants.length > 1 && (
-        <fieldset className="flex flex-col gap-1">
-          <legend className="text-xs uppercase tracking-[0.14em] text-muted">Charge</legend>
-          {participants.map((p) => (
-            <label key={p.dayzId} className="flex items-center gap-2 text-sm text-ink-2">
-              <input type="checkbox" checked={checked.has(p.dayzId)} onChange={() => toggle(p.dayzId)} />
-              {p.gamertag}
-            </label>
-          ))}
-        </fieldset>
-      )}
-      <button
-        type="button"
-        className={btnDanger}
-        disabled={checked.size === 0}
-        onClick={() => {
-          setArmed(true);
-          timer.current = setTimeout(() => setArmed(false), ARM_MS);
-        }}
-      >
-        Press charges
-      </button>
-      {error && <p className="text-sm text-rust-2">{error}</p>}
+      {body}
+      {/* ⚠️ One live region, mounted on every branch from the first render (H4). L1: a failure is plain ink on the control edge, never rust. */}
+      <p ref={statusRef} role="status" tabIndex={-1} className="text-sm focus:outline-none">
+        {done
+          ? <span className="text-ink-2">Charges pressed. The listed players are banned.</span>
+          : error && <span className="block border border-rule-3 bg-surface px-3 py-2 text-ink">{error}</span>}
+      </p>
     </div>
   );
 }

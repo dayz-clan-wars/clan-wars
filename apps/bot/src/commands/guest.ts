@@ -30,10 +30,21 @@ const revoke: Handler = async (ctx, input) => {
   return { content: discordCopy("revoke-guest", await ctx.roster.revokeGuestPass(input.actorDiscordId, id)), ephemeral: true };
 };
 
-/** Guest passes are officer+ only info; `clanFor` answers a string for anyone else, so this offers nothing. */
+/**
+ * Guest passes are officer+ only info; `clanFor` answers a string for anyone
+ * else, so this offers nothing.
+ *
+ * M5: named by the guest's gamertag, same fallback shape as the site's
+ * `GuestPassList` — a raw 18-digit Discord id told two unlinked guests
+ * apart but named neither of them. The VALUE stays the pass id regardless;
+ * only the label changes.
+ */
 const passes: AutocompleteSource = async (ctx, a) => {
   const view = await clanView(ctx, a.actorDiscordId);
-  return (view?.guestPasses ?? []).map((p) => ({ name: `guest ${p.userDiscordId}`, value: String(p.id) }));
+  return (view?.guestPasses ?? []).map((p) => ({
+    name: (p.userGamertag ?? `Discord user ${p.userDiscordId}`).slice(0, 100),
+    value: String(p.id),
+  }));
 };
 
 export const guestGroup: CommandGroup = {

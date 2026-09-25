@@ -13,6 +13,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     if (!target) return code("input", "bad-input");
     const ref = DISCORD_ID_RE.test(target) ? { discordId: target } : { gamertag: target };
     const { outcome } = await grantGuestPass(session.sub, ref);
-    return code("guest", outcome);
+    // H2: a refused grant keeps what was typed.
+    return outcome === "ok" ? code("guest", outcome) : { back: "/clan/settings", code: code("guest", outcome), keep: { target } };
   });
 }

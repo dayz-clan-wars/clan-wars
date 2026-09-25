@@ -159,6 +159,8 @@ export function PanelBody({ children, className = "" }: { children: React.ReactN
 export { Notice } from "./notice";
 /** The two-press submit button for one-click removals. */
 export { ConfirmButton } from "./confirm-button";
+/** The submit button for a plain form POST: sends its form once (H1, UX review 2026-09-24). */
+export { SubmitButton } from "./submit-button";
 
 /** The bordered segmented nav: scoreboard/alphas/seasons, all-time/season N. */
 export function SegNav({ items, label, className = "" }: { items: { label: string; href: string; current?: boolean }[]; label: string; className?: string }) {

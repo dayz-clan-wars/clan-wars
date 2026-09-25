@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CLAN_NOTICE_KINDS, type NoticeTarget } from "@factions/domain";
-import { NOTICE_COPY, NOTICE_GROUPS, noticeCopy } from "@/lib/notice-copy";
+import { NOTICE_COPY, NOTICE_GROUPS, noticeCopy, kindsInGroup, noticeGroup } from "@/lib/notice-copy";
 
 const TARGETS: NoticeTarget[] = ["channel", "dm"];
 
@@ -20,6 +20,12 @@ describe("notice copy", () => {
     for (const k of CLAN_NOTICE_KINDS) {
       expect(NOTICE_GROUPS, k).toContain(NOTICE_COPY[k].group);
     }
+  });
+
+  it("kindsInGroup partitions every kind into exactly its group (M8)", () => {
+    const all = NOTICE_GROUPS.flatMap((g) => kindsInGroup(g).map((k) => [k, g] as const));
+    expect(all.map(([k]) => k).sort()).toEqual([...CLAN_NOTICE_KINDS].sort());
+    for (const [k, g] of all) expect(noticeGroup(k)).toBe(g);
   });
 
   it("renders every kind from an empty payload without throwing or leaking undefined, on both targets", () => {

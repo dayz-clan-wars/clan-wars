@@ -260,3 +260,8 @@ describe("the kit page, rendered", () => {
     expect(html).not.toContain("Grid 074 052");
   });
 });
+
+describe("the sequence card's header (L6)", () => {
+  it("says 'left' on a phone, where 'Expires in' is hidden", () => expect(card(0)).toContain('<span class="lg:hidden"> left</span>'));
+  it("keeps the decorative bullet from being read aloud", () => expect(card(0)).toContain('<span aria-hidden="true" class="mr-3 text-rust-2">•</span>'));
+});

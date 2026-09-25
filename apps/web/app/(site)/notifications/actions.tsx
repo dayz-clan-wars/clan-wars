@@ -1,5 +1,5 @@
 import type { NoticeRow } from "@factions/roster";
-import { ConfirmButton } from "@/app/components/ui";
+import { ConfirmButton, SubmitButton } from "@/app/components/ui";
 
 /**
  * The buttons a notice offers.
@@ -10,7 +10,7 @@ import { ConfirmButton } from "@/app/components/ui";
  * every render, for a button most players never press.
  */
 const btn = (tone: "primary" | "ghost") =>
-  `flex min-h-[38px] items-center border px-4 font-display text-xs uppercase tracking-[0.06em] ${
+  `flex min-h-[44px] items-center border px-4 font-display text-xs uppercase tracking-[0.06em] ${
     tone === "primary" ? "border-gold bg-gold text-ground hover:bg-gold-hover" : "border-rule-3 text-ink hover:border-ink"}`;
 
 /**
@@ -28,7 +28,7 @@ function VoteAct({ row }: { row: NoticeRow }) {
       <input type="hidden" name="act" value="vote" />
       <input type="hidden" name="back" value="/notifications" />
       <input type="hidden" name="confirm" value="yes" />
-      <ConfirmButton confirm="Cast it?" className={btn("primary")}>Cast your vote</ConfirmButton>
+      <ConfirmButton confirm="Press again to vote" className={btn("primary")}>Cast your vote</ConfirmButton>
     </form>
   );
 }
@@ -48,7 +48,7 @@ function InviteAct({ row, act, label, tone }: { row: NoticeRow; act: "accept" | 
       <input type="hidden" name="act" value={act} />
       <input type="hidden" name="back" value="/notifications" />
       {row.clanId !== null && <input type="hidden" name="clanId" value={row.clanId} />}
-      <button type="submit" className={btn(tone)}>{label}</button>
+      <SubmitButton className={btn(tone)}>{label}</SubmitButton>
     </form>
   );
 }

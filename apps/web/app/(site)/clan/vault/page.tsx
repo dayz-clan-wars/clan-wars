@@ -1,28 +1,26 @@
 import type { Metadata } from "next";
-import { clanFor, vaultFor, VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/roster";
-import { VAULT_CODE_DIGITS } from "@factions/domain";
+import { clanFor, vaultFor } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { REFUSAL } from "@/lib/clan-copy";
 import { VAULT_INTRO, VAULT_RESULT_COPY } from "@/lib/vault-copy";
-import { VAULT_ROLES } from "@/lib/vault-form";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { readKept } from "@/lib/form";
 import { when, ago } from "@/lib/format";
 import { RevealButton } from "./reveal-button";
+import { AddLockForm, Chevron, LockEditor, fold } from "./lock-forms";
+import { editingIdFor } from "@/lib/vault-form";
 import { guideLinkFor } from "@/lib/guide-links";
 import { fieldError } from "@/lib/field-errors";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
-import { Page, PageHead, Body, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel } from "@/app/components/ui";
+import { Page, PageHead, Body, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, SubmitButton, btnSecondary, link } from "@/app/components/ui";
 
 export const metadata: Metadata = { title: "Clan Wars — vault", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
 const badge = "border px-2 py-0.5 font-mono text-[11px] uppercase tracking-[0.14em]";
-const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
 const num = (i: number) => String(i).padStart(2, "0");
-/** A fold's head: the mono caption with a chevron, 48px, full width. */
-const fold = "flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink [&::-webkit-details-marker]:hidden";
-const Chevron = () => <><span aria-hidden="true" className="group-open:hidden">▾</span><span aria-hidden="true" className="hidden group-open:inline">▴</span></>;
+const ID_RE = /^\d{1,12}$/u;
 
 /**
  * The vault (App Review §02): every lock is a collapsed card — name, rank,
@@ -30,14 +28,25 @@ const Chevron = () => <><span aria-hidden="true" className="group-open:hidden">�
  * "Edit". Rotate and Delete are two-press. Add lock and History fold too,
  * so five locks is one screen, not five.
  */
-export default async function VaultPage({ searchParams }: { searchParams: Promise<{ result?: string }> }) {
-  const { result } = await searchParams;
+export default async function VaultPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
+  const q = await searchParams;
+  const result = typeof q.result === "string" ? q.result : undefined;
   const session = await currentSession();
   if (!session) return <SessionLost next="/clan/vault" />;
   const notice = result ? lookupCopy(VAULT_RESULT_COPY, result) : undefined;
-  // Only the Add form's refusals name a field: an edit's would need the lock id to find its form.
-  const err = fieldError(result, VAULT_RESULT_COPY);
-  const view = await vaultFor(session.sub);
+  const parsed = fieldError(result, VAULT_RESULT_COPY);
+  // ⚠️ `fieldError` doesn't know which FORM a code belongs to — FIELD_FOR now
+  // has both "add.bad-name" and "edit.bad-name" — so `err` is gated to an
+  // add-prefixed code here. Without the gate, an edit's field error would
+  // also satisfy `addOpen` below and open the Add form for no reason.
+  const err = result?.startsWith("add.") ? parsed : null;
+  // F5: the edit form's own field error, shown inside the refused lock's editor (M11).
+  const editErr = result?.startsWith("edit.") ? parsed : null;
+  // ⚠️ readKept never returns `code` (lib/form.ts NEVER_KEEP): nothing on this page can refill one.
+  const kept = readKept(q);
+  // L9: the hero's clan read runs BESIDE the vault's own, not after it. It is still two
+  // reads (vaultFor answers only for the vault); what this removes is the serial wait.
+  const [view, clan] = await Promise.all([vaultFor(session.sub), clanFor(session.sub)]);
 
   if (typeof view === "string") {
     return (
@@ -51,11 +60,20 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
     );
   }
 
-  const clan = await clanFor(session.sub);
   const officer = typeof clan !== "string" && clan.me.status === "full" && (clan.me.role === "officer" || clan.me.role === "leader");
   const { locks, history } = view;
-  // The Add form stays open when a refusal named one of its fields.
-  const addOpen = err !== null;
+  const keptLock = { name: kept.get("name"), note: kept.get("note"), minRole: kept.get("minRole") };
+  // H2: the Add form stays open, with what was typed, after any refusal of an add.
+  const addRefused = result !== undefined && result.startsWith("add.") && result !== "add.ok";
+  const addOpen = err !== null || addRefused;
+  // M11: an edit's refusal carries its lock id. That lock's editor opens with the sentence
+  // inside it; a lock that has since gone (deleted by another officer) falls back to the top notice.
+  const lockParam = kept.get("lock");
+  const editRefused = result !== undefined && /^(edit|input)\./u.test(result) && lockParam !== undefined && ID_RE.test(lockParam);
+  // ⚠️ `officer` gates this: LockEditor only renders under `officer` below, so without the
+  // check here a demoted-officer or crafted-query refusal would suppress the top notice
+  // (editingId !== null) while rendering no editor to show it in. See lib/vault-form.ts.
+  const editingId = editingIdFor(officer, editRefused, lockParam, locks);
 
   return (
     <Page wide>
@@ -67,7 +85,7 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
           <h2 className="font-display text-sm uppercase tracking-[0.06em] text-ink">Your clan&rsquo;s vault</h2>
           <p className="mt-1.5 text-sm leading-relaxed text-ink-2">{VAULT_INTRO}</p>
         </div>
-        {notice && <Notice focus={err === null}>{notice}</Notice>}
+        {notice && editingId === null && <Notice focus={err === null}>{notice}</Notice>}
 
         {locks.length === 0 && <p className="text-sm text-ink-2">No locks your rank can see yet.</p>}
         {locks.map((lock, i) => (
@@ -90,65 +108,25 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
               {lock.changedInGame && (
                 <form action="/api/vault/confirm" method="post" className="flex flex-none border-l border-rule-2">
                   <input type="hidden" name="lockId" value={lock.id} />
-                  <button className="flex min-h-[48px] items-center px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:text-ink" type="submit">Confirm changed</button>
+                  <SubmitButton className="flex min-h-[48px] items-center px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-gold hover:text-ink">Confirm changed</SubmitButton>
                 </form>
               )}
             </div>
             {officer && (
-              <details className="group border-t border-rule-2">
-                <summary className={fold}>Edit <Chevron /></summary>
-                <div className="flex flex-col gap-4 border-t-2 border-rule-2 bg-surface p-4 lg:p-5">
-                  <form className="flex flex-col gap-3" action="/api/vault/edit" method="post">
-                    <input type="hidden" name="lockId" value={lock.id} />
-                    <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={lock.name} required maxLength={VAULT_NAME_MAX} /></label>
-                    <label className="block"><span className={fieldLabel}>Note</span><input className={field} name="note" defaultValue={lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /></label>
-                    <label className="block"><span className={fieldLabel}>Minimum rank</span>
-                      <select className={field} name="minRole" defaultValue={lock.minRole} required>
-                        {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                      </select>
-                    </label>
-                    <button className={`${btnSecondary} self-start`} type="submit">Save</button>
-                  </form>
-                  <div className="grid grid-cols-2 gap-2 border-t border-rule-2 pt-4">
-                    <form action="/api/vault/rotate" method="post" className="contents">
-                      <input type="hidden" name="lockId" value={lock.id} />
-                      <input type="hidden" name="confirm" value="yes" />
-                      <ConfirmButton confirm="Rotate it?" className={`${btnSecondary} w-full`}>Rotate code</ConfirmButton>
-                    </form>
-                    <form action="/api/vault/delete" method="post" className="contents">
-                      <input type="hidden" name="lockId" value={lock.id} />
-                      <input type="hidden" name="confirm" value="yes" />
-                      <ConfirmButton confirm="Delete it?" className={`${btnDanger} w-full`}>Delete</ConfirmButton>
-                    </form>
-                  </div>
-                  <p className="m-0 font-mono text-[11px] leading-relaxed text-muted">Rotate and Delete are two-press: the first tap arms, the second within 4 s does it. Rotating here does not change the lock in the game.</p>
-                </div>
-              </details>
+              <LockEditor lock={lock} open={editingId === lock.id}
+                error={editingId === lock.id ? notice : undefined} err={editingId === lock.id ? editErr : undefined}
+                kept={editingId === lock.id ? keptLock : undefined} />
             )}
           </section>
         ))}
 
         {officer && (
           <div className="grid gap-2 sm:grid-cols-2">
-            <details className="group border-2 border-rule-2 bg-frame sm:col-span-2" open={addOpen}>
-              <summary className={`${fold} !text-ink`}>+ Add lock <Chevron /></summary>
-              <form className="flex flex-col gap-3 border-t-2 border-rule-2 p-4 lg:p-5" action="/api/vault/add" method="post">
-                <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err, "name")} className={`${field} ${invalid(err, "name").className ?? ""}`} name="name" required maxLength={VAULT_NAME_MAX} /><FieldError err={err} name="name" /></label>
-                <label className="block"><span className={fieldLabel}>Note</span><input {...invalid(err, "note")} className={`${field} ${invalid(err, "note").className ?? ""}`} name="note" maxLength={VAULT_NOTE_MAX} /><FieldError err={err} name="note" /></label>
-                <label className="block"><span className={fieldLabel}>Minimum rank</span>
-                  <select className={field} name="minRole" defaultValue="member" required>
-                    {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                  </select>
-                </label>
-                <label className="block"><span className={fieldLabel}>Code</span><input {...invalid(err, "code")} className={`${field} ${invalid(err, "code").className ?? ""}`} name="code" pattern={CODE_PATTERN} inputMode="numeric" title={`${VAULT_CODE_DIGITS} digits`} aria-describedby={err?.field === "code" ? "err-code code-note" : "code-note"} /><FieldError err={err} name="code" /></label>
-                <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS} digits. Leave it blank and one is generated.</p>
-                <button className={`${btnPrimary} self-start`} type="submit">Add lock</button>
-              </form>
-            </details>
+            <AddLockForm err={err} kept={addRefused ? keptLock : {}} open={addOpen} />
             <form action="/api/vault/rotate" method="post" className="sm:col-span-2">
               <input type="hidden" name="all" value="yes" />
               <input type="hidden" name="confirm" value="yes" />
-              <ConfirmButton confirm="Rotate every lock?" className={`${btnSecondary} w-full`}>Rotate all</ConfirmButton>
+              <ConfirmButton confirm="Press again to rotate all" className={`${btnSecondary} w-full`}>Rotate all</ConfirmButton>
             </form>
           </div>
         )}

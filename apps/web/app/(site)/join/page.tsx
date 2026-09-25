@@ -25,7 +25,7 @@ export default async function JoinPage({
         the player just pressed rather than arriving unexplained.
       */}
       <SignInCard
-        step="One step left"
+        step="Step 1 of 3 — join the Discord"
         heading="Join the Discord."
         body="Clan Wars runs out of its Discord server, and the site is for players who are in it. We can add you now — Discord will ask you to confirm."
         action="Join and continue"
