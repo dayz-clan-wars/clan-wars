@@ -197,9 +197,9 @@ export function PickSheet({ label, options, current, query, busy, onQuery, onCho
           {groups.map((g) => (
             <div key={g.name} className="mt-5">
               <div className="flex items-center gap-2.5">
-                <span className="whitespace-nowrap font-mono text-[10px] uppercase tracking-[0.18em] text-muted">{g.name}</span>
+                <span className="whitespace-nowrap font-mono text-[11px] uppercase tracking-[0.18em] text-muted">{g.name}</span>
                 <span className="h-px flex-1 bg-rule-2" />
-                <span className="font-mono text-[10px] text-dim">{g.items.length}</span>
+                <span className="font-mono text-[11px] text-dim">{g.items.length}</span>
               </div>
               <div className="mt-2.5 grid grid-cols-3 gap-2 lg:grid-cols-5">
                 {g.items.map((o) => {
@@ -210,7 +210,7 @@ export function PickSheet({ label, options, current, query, busy, onQuery, onCho
                       className={`flex cursor-pointer flex-col gap-1.5 bg-frame p-2 transition-colors ${on ? "border-2 border-gold" : "border border-rule-2 hover:border-rule-3"} disabled:opacity-50`}>
                       {o.image
                         ? <img src={`/${o.image}`} alt="" className="h-14 w-full object-contain" />
-                        : <span className="flex h-14 w-full items-center justify-center border border-dashed border-rule-2 text-[10px] uppercase tracking-wide text-dim">No art</span>}
+                        : <span className="flex h-14 w-full items-center justify-center border border-dashed border-rule-2 text-[11px] uppercase tracking-wide text-dim">No art</span>}
                       <span className={`text-center text-[11px] leading-tight ${on ? "text-gold" : "text-ink-2"}`}>
                         {g.name === "One of a kind" ? o.label : short(o.label)}
                       </span>

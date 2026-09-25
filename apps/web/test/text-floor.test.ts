@@ -20,6 +20,9 @@ const OWNED = [
   "app/(site)/awards/page.tsx", "app/(site)/awards/[id]/award-flow.tsx", "app/(site)/players/page.tsx",
   "app/(site)/players/[gamertag]/page.tsx", "app/guide/layout.tsx", "app/guide/chapter.tsx", "app/guide/search.tsx",
   "app/not-found.tsx",
+  // The FORMS plan's file, added once it merged (2026-09-24 review, F7): the
+  // group name, item count and "No art" fallback are real info, not filler.
+  "app/(site)/kit/pick-sheet.tsx",
 ];
 
 describe("the 11px floor (M7)", () => {
