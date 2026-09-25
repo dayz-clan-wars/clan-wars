@@ -19,14 +19,14 @@ export type ClientOptions = {
 export function createClient(url: string, opts: ClientOptions = {}) {
   const sql = postgres(url, {
     max: 10,
-    // postgres.js TypeScript types expect a boolean for default_transaction_read_only,
-    // but Postgres startup parameters accept "on"/"off" strings at runtime. The string
-    // form is required here — postgres.js passes it to the server as a startup parameter,
-    // not a SET, so it must be the exact string Postgres recognizes.
+    // ⚠️ A startup parameter, not a `SET`: postgres.js concatenates startup parameters
+    // into the startup packet as strings, so boolean `true` is sent as "true", which
+    // Postgres accepts. Every pooled connection gets it from initialization, so no
+    // connection is accidentally writable.
     ...(opts.readOnly
       ? {
           connection: {
-            default_transaction_read_only: "on" as unknown as boolean,
+            default_transaction_read_only: true,
           },
         }
       : {}),
