@@ -8,8 +8,9 @@ import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { ago, days, when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link, SubmitButton } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
 import { ReportButton } from "./report-button";
+import { RowAction } from "@/app/components/row-action";
 
 export const metadata: Metadata = {
   title: "Clan Wars — your base",
@@ -136,10 +137,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
                         <Pole x={c.x} z={c.z} />
                         <div className="text-xs text-muted">raised {ago(c.raisedAt)}</div>
                       </div>
-                      <form action="/api/base/declare" method="post">
-                        <input type="hidden" name="poleKey" value={c.poleKey} />
-                        <SubmitButton className={btnPrimary} disabled={view.declaration !== null}>Declare</SubmitButton>
-                      </form>
+                      <RowAction action="/api/base/declare" fields={{ poleKey: c.poleKey }} who={`at grid ${gridRef(c.x, c.z)}`} style={btnPrimary} disabled={view.declaration !== null}>Declare</RowAction>
                     </li>
                   ))}
                 </ul>

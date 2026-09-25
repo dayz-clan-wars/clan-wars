@@ -14,22 +14,11 @@ import { fieldError } from "@/lib/field-errors";
 import { readKept } from "@/lib/form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
+import { RowAction } from "@/app/components/row-action";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
-
-/** Hidden target + one button: the shape of every per-row action. */
-function RowAction({ action, target, children, style = btnSecondary, confirm }: { action: string; target: string; children: React.ReactNode; style?: string; confirm?: string }) {
-  return (
-    <form action={`/api/clan/${action}`} method="post">
-      <input type="hidden" name="target" value={target} />
-      {confirm
-        ? <ConfirmButton confirm={confirm} className={`${style} !px-3.5`}>{children}</ConfirmButton>
-        : <SubmitButton className={`${style} !px-3.5`}>{children}</SubmitButton>}
-    </form>
-  );
-}
 
 const row = "flex min-h-[56px] flex-wrap items-center gap-3 border-t border-rule-2 px-4 py-2 first:border-t-0 lg:min-h-[60px] lg:gap-4 lg:px-5";
 
@@ -97,10 +86,10 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                         {isPending ? <>asked {ago(r.joinedAt)} · must stand at the base within {days(PENDING_EXPIRY_MS)}</> : <>joined {ago(r.joinedAt)}{r.lastSeenAt && ` · seen ${ago(r.lastSeenAt)}`}</>}
                       </div>
                     </div>
-                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
-                    {!self && officer && isPending && <RowAction action="kick" target={r.discordId} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="promote" target={r.discordId}>Make officer</RowAction>}
-                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="demote" target={r.discordId} confirm="Press again to demote">Demote</RowAction>}
+                    {!self && officer && r.status === "full" && r.role === "member" && <RowAction action="/api/clan/kick" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
+                    {!self && officer && isPending && <RowAction action="/api/clan/kick" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} style={btnDanger} confirm="Press again to remove">Remove</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "member" && <RowAction action="/api/clan/promote" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"}>Make officer</RowAction>}
+                    {!self && leader && r.status === "full" && r.role === "officer" && <RowAction action="/api/clan/demote" fields={{ target: r.discordId }} who={r.gamertag ?? "unknown"} confirm="Press again to demote">Demote</RowAction>}
                   </li>
                 );
               })}
@@ -121,7 +110,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                     {invitesOut.map((inv) => (
                       <li key={inv.id} className="flex min-h-[52px] items-center justify-between gap-3 text-sm text-ink">
                         <span><span className="font-mono">{inv.inviteeGamertag ?? "unknown"}</span> <span className="text-xs text-muted">expires {when(inv.expiresAt)}</span></span>
-                        <form action="/api/clan/revoke-invite" method="post"><input type="hidden" name="inviteId" value={inv.id} /><ConfirmButton confirm="Press again to withdraw" className={`${btnSecondary} !px-3.5`}>Withdraw</ConfirmButton></form>
+                        <RowAction action="/api/clan/revoke-invite" fields={{ inviteId: inv.id }} who={inv.inviteeGamertag ?? "unknown"} confirm="Press again to withdraw">Withdraw</RowAction>
                       </li>
                     ))}
                   </ul>
@@ -142,8 +131,8 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
                       <li key={r.id} className="flex flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-3 first:border-t-0 lg:px-5">
                         <span><span className="font-mono text-sm text-ink">{r.gamertag ?? "unknown"}</span><div className="text-xs text-muted">asked {ago(r.createdAt)}</div></span>
                         <span className="flex gap-2">
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="accepted" /><SubmitButton className={`${btnPrimary} !px-3.5`}>Accept</SubmitButton></form>
-                          <form action="/api/clan/decide-request" method="post"><input type="hidden" name="requestId" value={r.id} /><input type="hidden" name="decision" value="declined" /><SubmitButton className={`${btnSecondary} !px-3.5`}>Decline</SubmitButton></form>
+                          <RowAction action="/api/clan/decide-request" fields={{ requestId: r.id, decision: "accepted" }} who={r.gamertag ?? "unknown"} style={btnPrimary}>Accept</RowAction>
+                          <RowAction action="/api/clan/decide-request" fields={{ requestId: r.id, decision: "declined" }} who={r.gamertag ?? "unknown"}>Decline</RowAction>
                         </span>
                       </li>
                     ))}

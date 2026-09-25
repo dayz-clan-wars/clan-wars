@@ -1,6 +1,7 @@
 import type { ClanView } from "@factions/roster";
 import { when } from "@/lib/format";
-import { ConfirmButton, PanelBody, btnSecondary } from "@/app/components/ui";
+import { PanelBody } from "@/app/components/ui";
+import { RowAction } from "@/app/components/row-action";
 
 /**
  * The open guest passes on /clan/settings.
@@ -20,7 +21,7 @@ export function GuestPassList({ passes }: { passes: ClanView["guestPasses"] }) {
             {p.userGamertag === null && <span className="ml-2 font-mono text-xs text-muted">{p.userDiscordId}</span>}
             <span className="block text-xs text-muted">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span>
           </span>
-          <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><ConfirmButton confirm="Press again to revoke" className={`${btnSecondary} !px-3.5`}>Revoke</ConfirmButton></form>
+          <RowAction action="/api/clan/revoke-guest" fields={{ passId: p.id }} who={p.userGamertag ?? "Discord user"} confirm="Press again to revoke">Revoke</RowAction>
         </li>
       ))}
     </ul>
