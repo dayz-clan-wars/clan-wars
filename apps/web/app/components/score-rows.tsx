@@ -40,7 +40,8 @@ export function PhoneRows({ rows }: { rows: ScoreboardRow[] }) {
                     <span>raided {r.timesRaided}×</span>
                     <span>{count(r.defenses, "defense", "defenses")}</span>
                     {r.alpha && <span className="uppercase text-gold">{ALPHA_BADGE}</span>}
-                    {dormant && <span className="uppercase">Dormant</span>}
+                    {/* Same pairing as the desktop table (scoreboard/page.tsx): a dormant clan with no rank this week is unranked, not silently absent from the count. */}
+                    {dormant && <span className="uppercase">Dormant{r.rank === null && " · unranked"}</span>}
                   </span>
                 </span>
               </a>

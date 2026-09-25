@@ -39,4 +39,19 @@ describe("/scoreboard's phone rows", () => {
     expect(html).toMatch(/400<span class="sr-only"> points<\/span>/u);
     expect(html).toContain("tabular-nums");
   });
+
+  /**
+   * F9 (2026-09-24 review): the desktop table (scoreboard/page.tsx) already
+   * says "Dormant · unranked" for a dormant clan that dropped off the
+   * standings; the phone row said only "Dormant", leaving the bare em dash
+   * from <Rank> as the only sign it had no rank at all.
+   */
+  it("⚠️ says unranked, not just dormant, when a dormant clan has no rank", () => {
+    const withRank = renderToStaticMarkup(createElement(PhoneRows, { rows: [row({ status: "dormant" })] }));
+    expect(withRank).toContain("Dormant");
+    expect(withRank).not.toContain("unranked");
+
+    const unranked = renderToStaticMarkup(createElement(PhoneRows, { rows: [row({ status: "dormant", rank: null })] }));
+    expect(unranked).toContain("Dormant · unranked");
+  });
 });
