@@ -170,7 +170,7 @@ describe("weeks", () => {
     expect(() => weekWindow(new Date("2026-09-21T00:00:01Z"))).toThrow(/Monday/);
   });
 
-  it("numbers episodes from the week the season started in (spec §2.4)", () => {
+  it("numbers episodes from the week the season started in (spec \u00a72.4)", () => {
     expect(episodeNumber(SEASON_1_START, new Date("2026-09-07T00:00:00Z"))).toBe(1);
     expect(episodeNumber(SEASON_1_START, new Date("2026-09-21T00:00:00Z"))).toBe(3);
   });
@@ -225,7 +225,7 @@ export function weekWindow(weekStart: Date): WeekWindow {
   return { from: weekStart, to: new Date(weekStart.getTime() + WEEK_MS) };
 }
 
-/** 1-based index of `weekStart` among the season's weeks (spec §2.4). */
+/** 1-based index of `weekStart` among the season's weeks (spec \u00a72.4). */
 export function episodeNumber(seasonStartedAt: Date, weekStart: Date): number {
   const first = weekStartOf(seasonStartedAt);
   const n = Math.round((weekStart.getTime() - first.getTime()) / WEEK_MS) + 1;
@@ -373,7 +373,7 @@ git commit -m "feat(db): createClient readOnly option for tools that must not wr
 `packages/domain/src/show.ts`:
 ```ts
 /**
- * The weekly show's state machine (spec 2026-09-25-weekly-show §8.2). `stage` names
+ * The weekly show's state machine (spec 2026-09-25-weekly-show \u00a78.2). `stage` names
  * the last stage that FINISHED. `held` and `rejected` are terminal until an operator acts.
  * ⚠️ Mirrored by the `show_episodes_stage_valid` CHECK; `show-schema.test.ts` holds the two together.
  */
@@ -469,7 +469,7 @@ Expected: FAIL, `showEpisodes` is not exported.
 In `packages/db/src/schema.ts`, add `ShowStage` to the existing `import type { ... } from "@factions/domain";` line, then append:
 ```ts
 /**
- * The weekly show (spec 2026-09-25-weekly-show §4.1). One row per week; the row IS
+ * The weekly show (spec 2026-09-25-weekly-show \u00a74.1). One row per week; the row IS
  * the state machine. `narrative` is written once by the script stage and never by a
  * retry, so a crash after scripting can never produce a different episode.
  *
@@ -523,7 +523,7 @@ export const showPronunciations = pgTable("show_pronunciations", {
 }));
 
 /**
- * Screening verdicts for player-written text (spec §7). Keyed on the sha256 of the
+ * Screening verdicts for player-written text (spec \u00a77). Keyed on the sha256 of the
  * exact string so a long pitch is a fixed-width key.
  * ⚠️ An `operator` row always wins and is never overwritten by the automatic passes;
  * `PgScreeningStore.put` enforces that in its conflict clause.
@@ -580,7 +580,7 @@ git commit -m "feat(db): show_episodes, show_pronunciations, show_text_screening
 
 `apps/show/src/story/types.ts`:
 ```ts
-/** What the model reads (spec §5.1). Every string here that a player wrote went through `PlayerTexts`. */
+/** What the model reads (spec \u00a75.1). Every string here that a player wrote went through `PlayerTexts`. */
 
 export type ClanRef = { name: string; tag: string };
 
@@ -676,7 +676,7 @@ describe("PlayerTexts", () => {
     ]);
   });
 
-  it("caps player text at spec §6.4 lengths and returns the capped form", () => {
+  it("caps player text at spec \u00a76.4 lengths and returns the capped form", () => {
     const t = new PlayerTexts();
     const pitch = t.pitch("x".repeat(500));
     expect(pitch).toHaveLength(TEXT_CAPS.pitch);
@@ -699,14 +699,14 @@ import type { ClanRef } from "./types.js";
 
 export type TextKind = "gamertag" | "clanName" | "clanTag" | "pitch" | "bountyReason";
 
-/** Spec §6.4. A capped string is what the context carries AND what screening sees. */
+/** Spec \u00a76.4. A capped string is what the context carries AND what screening sees. */
 export const TEXT_CAPS: Record<TextKind, number> = { gamertag: 32, clanName: 32, clanTag: 12, pitch: 200, bountyReason: 100 };
 
 export type TextEntry = { text: string; kinds: TextKind[]; tagOf: string | null };
 
 /**
  * Every string a player wrote that reaches the story context, registered at the one
- * place it is read (spec §5.1). Screening and redaction work from this list, so a
+ * place it is read (spec \u00a75.1). Screening and redaction work from this list, so a
  * reader that forgets to register a string leaves it unscreened: route every
  * player-written column through one of these methods, and never put one in the
  * context any other way.
@@ -1010,7 +1010,7 @@ import type { ClanWeek } from "./types.js";
 import { rows, tsz } from "./sql.js";
 
 /**
- * Every active or dormant clan, under its CURRENT name and tag only (spec §5.2).
+ * Every active or dormant clan, under its CURRENT name and tag only (spec \u00a75.2).
  * Week points come from `raids.week_start`, the same key the week close scores on.
  */
 export async function clansForWeek(db: Database, a: {
@@ -1156,7 +1156,7 @@ import type { RaidStory } from "./types.js";
 import { rows, tsz, iso } from "./sql.js";
 
 /**
- * Each raid this week, tagged online or offline (spec §5.3).
+ * Each raid this week, tagged online or offline (spec \u00a75.3).
  *
  * ⚠️ Membership is read from `membership_history` AT THE INSTANT of the lower, never
  * from today's roster: a player who left the clan an hour earlier and was online is
@@ -1560,7 +1560,7 @@ const between = (col: string, a: WeekRead) =>
 /**
  * ⚠️ Reads ONLY `kind` and `occurred_at` from `faction_events`, and names the clan by
  * its CURRENT `factions` row. The payloads keep every name a clan ever had, including
- * one an admin made a clan change (spec §5.2). Never select `payload` here, and never
+ * one an admin made a clan change (spec \u00a75.2). Never select `payload` here, and never
  * add `renamed` or `rebound` to FLAG_KINDS: a rename is a story about the old name.
  */
 export async function flagEventsForWeek(db: Database, a: WeekRead): Promise<FlagEvent[]> {
@@ -1636,7 +1636,7 @@ import type { PreviousEpisode, Storyline } from "./types.js";
 import { rows, tsz } from "./sql.js";
 
 /**
- * Last episode's storylines for "Previously on" (spec §6.5): the latest EARLIER week in
+ * Last episode's storylines for "Previously on" (spec \u00a76.5): the latest EARLIER week in
  * the same season whose script exists, whatever happened to it after (awaiting approval,
  * rejected, published). A slow approval must never cost next week its recap.
  */
@@ -1732,7 +1732,7 @@ import { loadPreviousEpisode } from "./previous.js";
 
 /**
  * The week, as the model will read it, plus every player-written string in it
- * (spec §5). Nothing here is screened yet: pass `texts` to `screenTexts` and the
+ * (spec \u00a75). Nothing here is screened yet: pass `texts` to `screenTexts` and the
  * result to `redactContext` before any of it reaches a prompt.
  *
  * `previous: null` skips the `show_episodes` lookup, for a database the show's
@@ -1808,15 +1808,15 @@ import { blocklistHit, normalizeForms } from "../../src/screening/blocklist.js";
 
 describe("blocklist", () => {
   it("normalizes lookalikes, leet, separators and repeats", () => {
-    const f = normalizeForms("NааZ_1s"); // Cyrillic а twice
+    const f = normalizeForms("N\u0430\u0430Z_1s"); // Cyrillic \u0430 twice
     expect(f.alnum).toBe("naaz1s");
     expect(f.letters).toBe("naazis");
     expect(f.collapsed).toBe("nazis");
   });
 
   it.each([
-    "Nazis", "N4Z1", "n a z i", "Naaaazi", "nаzi", "xX_H1tl3r_Xx", "SiegHeil", "1488Crew", "14/88", "KKK", "k k k",
-    "WhitePower", "卐", "Third Reich",
+    "Nazis", "N4Z1", "n a z i", "Naaaazi", "n\u0430zi", "xX_H1tl3r_Xx", "SiegHeil", "1488Crew", "14/88", "KKK", "k k k",
+    "WhitePower", "\u5350", "Third Reich",
   ])("⚠️ blocks %s", (s) => {
     expect(blocklistHit(s)).not.toBeNull();
   });
@@ -1848,7 +1848,7 @@ Expected: FAIL, module not found.
 `apps/show/src/screening/blocklist.ts`:
 ```ts
 /**
- * The deterministic first pass over player text and over the finished script (spec §7).
+ * The deterministic first pass over player text and over the finished script (spec \u00a77).
  * Narrow on purpose: hate terms, extremist references and slurs. NOT general profanity
  * or innuendo, which the show happily riffs on ("The Cocks" is a rooster clan and must
  * pass). Anything subtler is the LLM moderator's call; a hit here is final.
@@ -2041,7 +2041,7 @@ describe("createModerator", () => {
     expect(MODERATION_SYSTEM).toContain("The Cocks");
     expect(MODERATION_SYSTEM).toMatch(/Nazi/u);
     expect(MODERATION_SYSTEM).not.toMatch(/faction/iu);
-    expect(MODERATION_SYSTEM).not.toContain("—");
+    expect(MODERATION_SYSTEM).not.toContain("\u2014");
   });
 });
 ```
@@ -2129,7 +2129,7 @@ export const MODERATION_SYSTEM = [
 ].join("\n");
 
 /**
- * One batched moderation call (spec §7.1, §7.2).
+ * One batched moderation call (spec \u00a77.1, \u00a77.2).
  *
  * ⚠️ Fails closed. A reply that is not JSON, has no `results`, or skips any item throws
  * `ModerationError`. There is no default verdict: an item the moderator did not rule on
@@ -2352,7 +2352,7 @@ import type { Moderate } from "./moderate.js";
 import type { ScreeningStore, Verdict } from "./store.js";
 
 /**
- * A verdict for every distinct string (spec §7.1). Order of authority:
+ * A verdict for every distinct string (spec \u00a77.1). Order of authority:
  * an operator row, then the blocklist as it is TODAY, then a cached moderator verdict,
  * then one batched moderator call for everything left.
  *
@@ -2514,7 +2514,7 @@ export type ScreeningReport = { redactions: Redaction[] };
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
 
 /**
- * Apply the screening verdicts to the context (spec §7.3):
+ * Apply the screening verdicts to the context (spec \u00a77.3):
  * a blocked gamertag becomes REDACTED_PLAYER_n; a blocked tag becomes REDACTED_CLAN_n;
  * a blocked clan name falls back to its tag (or the tag's alias when that is blocked too); a blocked pitch or bounty
  * reason is dropped (null). Aliases are numbered in registry order, so they are stable
@@ -2616,7 +2616,7 @@ describe("the show prompt", () => {
     expect(SYSTEM_PROMPT).toBe(parts.join("\n\n"));
   });
 
-  it("carries the standing rules (spec §2.3)", () => {
+  it("carries the standing rules (spec \u00a72.3)", () => {
     expect(RULES).toMatch(/seated at a news desk/u);
     expect(RULES).toMatch(/No props/u);
     expect(RULES).toMatch(/Raiders are the heroes/u);
@@ -2628,7 +2628,7 @@ describe("the show prompt", () => {
   });
 
   it("⚠️ contains no em dash and never says faction", () => {
-    expect(SYSTEM_PROMPT).not.toContain("—");
+    expect(SYSTEM_PROMPT).not.toContain("\u2014");
     expect(SYSTEM_PROMPT).not.toMatch(/faction/iu);
   });
 
@@ -2652,7 +2652,7 @@ Expected: FAIL, modules not found.
 `apps/show/src/prompt/system.ts`:
 ```ts
 /**
- * The weekly show's system prompt (spec §6.2), one named part per concern so a test can
+ * The weekly show's system prompt (spec \u00a76.2), one named part per concern so a test can
  * pin each rule. Appendix A of the spec is the tone this is aiming at.
  *
  * ⚠️ Player-facing voice: "clan", never "faction"; no em dash anywhere in this file's
@@ -2722,7 +2722,7 @@ import { SYSTEM_PROMPT } from "./system.js";
 /**
  * ⚠️ The context goes in as one JSON document, never spliced into prose: every player
  * string stays a quoted JSON value, which is half of the prompt-injection defence
- * (spec §6.4). `PLAYER_TEXT` in the system prompt is the other half.
+ * (spec \u00a76.4). `PLAYER_TEXT` in the system prompt is the other half.
  */
 export function buildShowPrompt(context: StoryContext): { system: string; user: string } {
   return { system: SYSTEM_PROMPT, user: `Write this week's episode from this data:\n${JSON.stringify(context)}` };
@@ -2786,13 +2786,13 @@ describe("parseEpisode", () => {
   });
 
   it("replaces em dashes with commas in the script, title and storylines", () => {
-    const d = dialogue.replace("Line 2.", "Well — maybe.");
-    const b = block.replace("The Curse", "The — Curse").replace("Civil war.", "War — again.");
+    const d = dialogue.replace("Line 2.", "Well \u2014 maybe.");
+    const b = block.replace("The Curse", "The \u2014 Curse").replace("Civil war.", "War \u2014 again.");
     const p = parseEpisode(reply(d, b));
     expect(p.narrative).toContain("Well, maybe.");
     expect(p.title).toBe("The, Curse");
     expect(p.storylines[0]!.status).toBe("War, again.");
-    expect(JSON.stringify(p)).not.toContain("—");
+    expect(JSON.stringify(p)).not.toContain("\u2014");
   });
 
   it.each([
@@ -2812,7 +2812,7 @@ describe("parseEpisode", () => {
 
 describe("normalizeDashes", () => {
   it("never leaves a comma before a full stop", () => {
-    expect(normalizeDashes("Wait —.")).toBe("Wait.");
+    expect(normalizeDashes("Wait \u2014.")).toBe("Wait.");
   });
 });
 ```
@@ -2839,16 +2839,16 @@ export class EpisodeParseError extends Error {}
 
 export type ParsedEpisode = { narrative: string; title: string; storylines: Storyline[] };
 
-/** The show never airs an em dash (spec §2.3). Deterministic, so no regenerate is spent on it. */
+/** The show never airs an em dash (spec \u00a72.3). Deterministic, so no regenerate is spent on it. */
 export function normalizeDashes(s: string): string {
-  return s.replace(/\s*—\s*/gu, ", ").replace(/,\s*([.!?])/gu, "$1");
+  return s.replace(/\s*\u2014\s*/gu, ", ").replace(/,\s*([.!?])/gu, "$1");
 }
 
 const SPEAKER = /^\*{0,2}(boris|pavel)\*{0,2}:\*{0,2}\s*/iu;
 const isStringArray = (v: unknown): v is string[] => Array.isArray(v) && v.every((x) => typeof x === "string");
 
 /**
- * The model's reply → dialogue and storylines (spec §6.3). Anything off-format throws
+ * The model's reply → dialogue and storylines (spec \u00a76.3). Anything off-format throws
  * `EpisodeParseError`, which the script stage counts as a failed attempt.
  *
  * ⚠️ Splits on the LAST marker: a clan pitch quoted on air can contain the marker text.
@@ -3003,7 +3003,7 @@ export type ScriptResult =
   | { ok: false; reasons: string[]; attempts: number };
 
 /**
- * The output screen (spec §7.2), over the whole script plus its title and storylines.
+ * The output screen (spec \u00a77.2), over the whole script plus its title and storylines.
  * Returns why it failed, or [] when it passed. A moderator error propagates: screening
  * that did not run is not screening that passed.
  */
@@ -3018,7 +3018,7 @@ export async function screenScript(text: string, blocked: string[], moderate: Mo
 }
 
 /**
- * Generate, parse and screen, with one regenerate (spec §7.2, §8.3). `{ ok: false }` is
+ * Generate, parse and screen, with one regenerate (spec \u00a77.2, \u00a78.3). `{ ok: false }` is
  * the `held` outcome: nothing from it may be voiced or published.
  */
 export async function writeScript(context: StoryContext, blocked: string[], deps: { generate: Generate; moderate: Moderate }): Promise<ScriptResult> {
@@ -3115,7 +3115,7 @@ export type ShowConfig = {
   openrouterApiKey: string;
   scriptModel: string;
   moderationModel: string;
-  /** Spec §5.4. By tag, because a player can name a clan anything. */
+  /** Spec \u00a75.4. By tag, because a player can name a clan anything. */
   staffTags: string[];
 };
 
