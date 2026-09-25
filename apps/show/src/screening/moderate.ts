@@ -20,7 +20,7 @@ export const MODERATION_SYSTEM = [
 ].join("\n");
 
 /**
- * One batched moderation call (spec §7.1, §7.2).
+ * One batched moderation call (spec section 7.1, section 7.2).
  *
  * ⚠️ Fails closed. A reply that is not JSON, has no `results`, or skips any item throws
  * `ModerationError`. There is no default verdict: an item the moderator did not rule on
@@ -43,10 +43,18 @@ export function createModerator(deps: { chat: ChatFn; model: string }): Moderate
     const results = (parsed as { results?: unknown }).results;
     if (!Array.isArray(results)) throw new ModerationError("moderation reply has no results array");
     const out: (ModerationResult | undefined)[] = texts.map(() => undefined);
+    const seen = new Set<number>();
     for (const r of results) {
       const i = (r as { i?: unknown }).i;
       const block = (r as { block?: unknown }).block;
-      if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= texts.length) continue;
+      // ⚠️ An untrustworthy index (out of range, or repeated) is not a skippable oddity:
+      // it means the reply cannot be trusted to have ruled on every item, so fail closed
+      // rather than silently drop or overwrite a verdict (spec section 7.1).
+      if (typeof i !== "number" || !Number.isInteger(i) || i < 0 || i >= texts.length) {
+        throw new ModerationError(`moderation result has an out-of-range index: ${String(i)}`);
+      }
+      if (seen.has(i)) throw new ModerationError(`moderation result ${i} appeared twice`);
+      seen.add(i);
       if (typeof block !== "boolean") throw new ModerationError(`moderation result ${i} has no boolean verdict`);
       out[i] = { block, reason: String((r as { reason?: unknown }).reason ?? "") };
     }

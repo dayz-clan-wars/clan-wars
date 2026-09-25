@@ -25,6 +25,8 @@ describe("createModerator", () => {
     ["no results array", '{"ok":true}'],
     ["a skipped item", '{"results":[{"i":0,"block":false,"reason":""}]}'],
     ["a non-boolean block", '{"results":[{"i":0,"block":"no"},{"i":1,"block":false}]}'],
+    ["a duplicate index", '{"results":[{"i":0,"block":false,"reason":""},{"i":0,"block":true,"reason":""},{"i":1,"block":false,"reason":""}]}'],
+    ["an out-of-range index", '{"results":[{"i":0,"block":false,"reason":""},{"i":1,"block":false,"reason":""},{"i":5,"block":true,"reason":""}]}'],
   ])("warns: fails closed on %s", async (_label, content) => {
     await expect(createModerator({ chat: chatReturning(content), model: "m" })(["a", "b"])).rejects.toThrow(ModerationError);
   });
@@ -33,6 +35,6 @@ describe("createModerator", () => {
     expect(MODERATION_SYSTEM).toContain("The Cocks");
     expect(MODERATION_SYSTEM).toMatch(/Nazi/u);
     expect(MODERATION_SYSTEM).not.toMatch(/faction/iu);
-    expect(MODERATION_SYSTEM).not.toContain("—");
+    expect(MODERATION_SYSTEM).not.toContain("\u2014");
   });
 });
