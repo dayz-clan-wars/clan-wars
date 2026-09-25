@@ -16,16 +16,13 @@
   margin: 40px 0 0; letter-spacing: .02em; scroll-margin-top: calc(var(--spacing-bar) + 16px);
 }
 .prose-guide h2 + p, .prose-guide h2 + ul, .prose-guide h2 + ol, .prose-guide h2 + div { margin-top: 12px; }
-/* The section anchor: faint until its heading is hovered or it is focused. */
+/* ⚠️ The section anchor is always at full --color-dim (4.9:1 on the ground), never faded.
+   A touch screen has no hover to reveal it, and any fade below full strength drops it
+   under 3:1 for a control on this near-black ground (L4; .45 measured 1.8:1). */
 .prose-guide h2 .anchor {
-  margin-left: .5em; font-family: var(--font-mono); font-size: 14px; color: var(--color-dim); text-decoration: none; opacity: .45;
+  margin-left: .5em; font-family: var(--font-mono); font-size: 14px; color: var(--color-dim); text-decoration: none;
 }
-.prose-guide h2:hover .anchor, .prose-guide h2 .anchor:focus-visible { opacity: 1; }
-.prose-guide h2 .anchor:hover { color: var(--color-gold); }
-/* ⚠️ A touch screen has no hover: there the anchor is at full strength, or it is never found (L4). */
-@media (hover: none) {
-  .prose-guide h2 .anchor { opacity: 1; }
-}
+.prose-guide h2 .anchor:hover, .prose-guide h2 .anchor:focus-visible { color: var(--color-gold); }
 .prose-guide h3 { font-size: 1.05em; font-weight: 700; margin: 1.8em 0 .4em; }
 .prose-guide p { margin: 0 0 1em; max-width: 66ch; }
 .prose-guide ul, .prose-guide ol { padding-left: 1.3em; margin: 0 0 1.1em; max-width: 66ch; }

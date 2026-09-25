@@ -11,9 +11,10 @@ import { CHAPTERS } from "../lib/guide";
 describe("section anchors (L4)", () => {
   const css = readFileSync(join(import.meta.dirname, "..", "app", "guide", "guide.css"), "utf8");
 
-  it("⚠️ are at full strength on a touch screen, which has no hover to reveal them", () => {
-    expect(css).toMatch(/@media \(hover: none\)\s*\{\s*\.prose-guide h2 \.anchor\s*\{\s*opacity:\s*1;/u);
-    expect(css).not.toMatch(/\.prose-guide h2 \.anchor\s*\{[^}]*opacity:\s*0;/u);
+  it("⚠️ are always at full strength: a touch screen has no hover to reveal them, and a fade fails contrast", () => {
+    const rule = css.match(/\.prose-guide h2 \.anchor\s*\{([^}]*)\}/u)?.[1] ?? "";
+    expect(rule).toContain("color: var(--color-dim)");
+    expect(css).not.toMatch(/\.anchor[^{]*\{[^}]*opacity/u);
   });
 
   it("⚠️ announce the copy, instead of copying silently", () => {
