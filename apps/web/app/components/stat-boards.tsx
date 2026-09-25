@@ -58,7 +58,8 @@ function BoardPanel({ kind, rows, clans, seeAll }: { kind: Kind; rows: BoardRow[
     <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={NOTE[kind] ? <span className="text-[11px]">{NOTE[kind]}</span> : undefined} className="flex flex-col">
       <BoardRows kind={kind} rows={rows} clans={clans} />
       <p className="mt-auto border-t border-rule-2 px-4 lg:px-5">
-        <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={seeAll}>{SEE_ALL} &rarr;</a>
+        {/* ⚠️ Ten of these on /players: the board's name makes each one distinct in a screen reader's link list (M9). */}
+        <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={seeAll}>{SEE_ALL}<span className="sr-only">: {BOARD_LABELS[kind]}</span>&nbsp;<span aria-hidden="true">&rarr;</span></a>
       </p>
     </Panel>
   );

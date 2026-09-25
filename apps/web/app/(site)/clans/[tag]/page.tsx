@@ -120,7 +120,7 @@ export default async function ClanDetailPage({ params, searchParams }: { params:
 
         {wall && <AchievementWall wall={wall} title="Clan achievements" className="lg:col-span-3" />}
 
-        <Panel title="War log" aside={<a className={linkMono} href={logHref}>All →</a>} className="lg:col-span-3">
+        <Panel title="War log" aside={<a className={linkMono} href={logHref}>All<span className="sr-only"> of this clan&apos;s war log</span> <span aria-hidden="true">→</span></a>} className="lg:col-span-3">
           {log.length === 0 ? (
             <PanelBody className="!py-3"><p className="text-sm text-ink-2">Nothing this season yet.</p></PanelBody>
           ) : (

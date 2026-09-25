@@ -52,3 +52,43 @@ export function PhoneRows({ rows }: { rows: ScoreboardRow[] }) {
     </>
   );
 }
+
+/**
+ * The landing page's top five: rank, flag, name, then points (and, from lg,
+ * raids and defenses). ⚠️ The numbers carry their unit for a screen reader
+ * and the header row names them for everyone: the row used to read "400 2 1"
+ * (M10). The header is aria-hidden because the units already say it.
+ */
+export function TopRows({ rows }: { rows: ScoreboardRow[] }) {
+  return (
+    <>
+      <div aria-hidden="true" className={`flex items-center gap-3 border-b border-rule-2 px-4 py-2 lg:gap-4 lg:px-5 ${kickerSm} !text-dim`}>
+        <span className="w-5 lg:w-7">#</span>
+        <span className="w-7 lg:w-8" />
+        <span>Clan</span>
+        <span className="ml-auto">Pts</span>
+        <span className="hidden w-12 text-right lg:block">Raids</span>
+        <span className="hidden w-12 text-right lg:block">Def</span>
+      </div>
+      <ul>
+        {rows.map((r) => (
+          <li key={r.tag} className="flex min-h-[56px] items-center gap-3 border-t border-rule-2 px-4 first:border-t-0 lg:min-h-[64px] lg:gap-4 lg:px-5">
+            <span className="w-5 lg:w-7"><Rank n={r.rank} size="lg" /></span>
+            <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${r.status === "dormant" ? "opacity-60" : ""}`} />
+            <a href={`/clans/${encodeURIComponent(r.tag)}`} className="min-w-0">
+              <span className={`block truncate font-display text-[15px] lg:text-base ${r.status === "dormant" ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
+              <span className="font-mono text-[11px] text-ink-2">
+                <span className="hidden lg:inline">[{r.tag}]</span>
+                {r.alpha && <><span className="hidden lg:inline"> · </span><span className="uppercase text-gold">{ALPHA_BADGE}</span></>}
+                {r.status === "dormant" && <><span className="hidden lg:inline"> · </span><span className="uppercase text-muted">dormant</span></>}
+              </span>
+            </a>
+            <span className="ml-auto font-display text-lg tabular-nums text-ink lg:text-xl">{r.points}<span className="sr-only"> points</span></span>
+            <span className="hidden w-12 text-right font-mono text-sm tabular-nums text-ink-2 lg:block">{r.raids}<span className="sr-only"> raids</span></span>
+            <span className="hidden w-12 text-right font-mono text-sm tabular-nums text-ink-2 lg:block">{r.defenses}<span className="sr-only"> defenses</span></span>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}

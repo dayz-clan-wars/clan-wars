@@ -2,11 +2,12 @@ import type { Metadata } from "next";
 import { directory, scoreboard, warLog } from "@factions/roster";
 import { FLAG_POOL_SIZE } from "@factions/domain";
 import { flagThumbPath } from "@/src/flag-images";
-import { ALPHA_BADGE, EMPTY_SCOREBOARD, EMPTY_WAR_LOG } from "@/lib/scoring-copy";
+import { EMPTY_SCOREBOARD, EMPTY_WAR_LOG } from "@/lib/scoring-copy";
 import { WarLogLine, WarLogKicker } from "./war-log/entry";
 import { currentSession } from "@/lib/viewer";
-import { Page, Panel, Stat, Rank, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
+import { Page, Panel, Stat, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
 import { HeroMap } from "@/app/components/hero-map";
+import { TopRows } from "@/app/components/score-rows";
 import { WideOnly } from "@/app/components/wide-only";
 import { DISCORD_INVITE, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site-meta";
 
@@ -77,29 +78,11 @@ export default async function Home() {
           {top.length === 0 ? (
             <p className="p-5 text-sm text-ink-2">{board.season ? "Nobody has scored yet." : EMPTY_SCOREBOARD}</p>
           ) : (
-            <ul>
-              {top.map((r) => (
-                <li key={r.tag} className="flex min-h-[56px] items-center gap-3 border-t border-rule-2 px-4 first:border-t-0 lg:min-h-[64px] lg:gap-4 lg:px-5">
-                  <span className="w-5 lg:w-7"><Rank n={r.rank} size="lg" /></span>
-                  <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${r.status === "dormant" ? "opacity-60" : ""}`} />
-                  <a href={`/clans/${encodeURIComponent(r.tag)}`} className="min-w-0">
-                    <span className={`block truncate font-display text-[15px] lg:text-base ${r.status === "dormant" ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
-                    <span className="font-mono text-[11px] text-ink-2">
-                      <span className="hidden lg:inline">[{r.tag}]</span>
-                      {r.alpha && <><span className="hidden lg:inline"> · </span><span className="uppercase text-gold">{ALPHA_BADGE}</span></>}
-                      {r.status === "dormant" && <><span className="hidden lg:inline"> · </span><span className="uppercase text-muted">dormant</span></>}
-                    </span>
-                  </a>
-                  <span className="ml-auto font-display text-lg text-ink lg:text-xl">{r.points}</span>
-                  <span className="hidden w-10 text-right font-mono text-sm text-ink-2 lg:block">{r.raids}</span>
-                  <span className="hidden w-10 text-right font-mono text-sm text-ink-2 lg:block">{r.defenses}</span>
-                </li>
-              ))}
-            </ul>
+            <TopRows rows={top} />
           )}
         </Panel>
         <div className="flex flex-col gap-5 lg:gap-6">
-          <Panel num="02" title="War log" aside={<a className={linkMono} href="/war-log">All →</a>}>
+          <Panel num="02" title="War log" aside={<a className={linkMono} href="/war-log">All<span className="sr-only"> war log entries</span> <span aria-hidden="true">→</span></a>}>
             {log.length === 0 ? (
               <p className="p-5 text-sm text-ink-2">{EMPTY_WAR_LOG}</p>
             ) : (
