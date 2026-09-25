@@ -126,10 +126,20 @@ describe("guest-pass store", () => {
     const granted = await grantGuestPassDb(db, { factionId, actorDiscordId: D.O1, userDiscordId: U9, at: now });
 
     const open = await openGuestPassesDb(db, factionId, now);
-    expect(open).toEqual([{ id: granted.passId, userDiscordId: U9, grantedBy: "Otto", expiresAt: new Date(now.getTime() + GUEST_PASS_MS) }]);
+    expect(open).toEqual([{ id: granted.passId, userDiscordId: U9, userGamertag: null, grantedBy: "Otto", expiresAt: new Date(now.getTime() + GUEST_PASS_MS) }]);
 
     await revokeGuestPassDb(db, { factionId, actorDiscordId: D.O1, passId: granted.passId!, at: now });
     expect(await openGuestPassesDb(db, factionId, now)).toEqual([]);
+  });
+
+  /** M5: /clan/settings listed passes by an 18-digit Discord id; a linked guest has a name. */
+  it("openGuestPassesDb names a linked guest by gamertag", async () => {
+    await db.insert(players).values({ dayzId: "G".repeat(40), gamertag: "Gus", firstSeenAt: now, lastSeenAt: now });
+    await db.insert(identityLinks).values({ discordId: "dG", dayzId: "G".repeat(40), gamertag: "Gus", verifiedAt: now });
+    await grantGuestPassDb(db, { factionId, actorDiscordId: D.O1, userDiscordId: "dG", at: now });
+
+    const [pass] = await openGuestPassesDb(db, factionId, now);
+    expect(pass!.userGamertag).toBe("Gus");
   });
 
   it("openPassesByVoiceChannel: maps the clan's voice channel to open users, omits expired", async () => {

@@ -4,7 +4,7 @@ import { and, eq, gt, isNull, sql } from "drizzle-orm";
 import { GUEST_PASS_MS, ROLE_RANK } from "@factions/domain";
 import { lockFactionTx, fullMemberTx } from "./leadership-store";
 import { noticeClanTx } from "./notices";
-import { gamertagOrId } from "./feed-actor";
+import { actorGamertagTx, gamertagOrId } from "./feed-actor";
 
 /** The transaction handle drizzle hands to `db.transaction`. */
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -16,7 +16,11 @@ type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 export type GrantGuestPassOutcome = "ok" | "not-permitted" | "already-active" | "is-member" | "self";
 export type RevokeGuestPassOutcome = "ok" | "not-permitted" | "gone";
 
-export type OpenGuestPass = { id: number; userDiscordId: string; grantedBy: string; expiresAt: Date };
+/**
+ * `userGamertag` is null for a guest who never linked a character: the site
+ * knows no other name for them (it never reads Discord profiles). M5.
+ */
+export type OpenGuestPass = { id: number; userDiscordId: string; userGamertag: string | null; grantedBy: string; expiresAt: Date };
 
 /**
  * Grant a 24 h guest voice pass. Officer+ only. `userDiscordId` must not be
@@ -116,7 +120,7 @@ export async function openGuestPassesDb(db: Database, factionId: number, now: Da
 
     const out: OpenGuestPass[] = [];
     for (const r of rows) {
-      out.push({ id: r.id, userDiscordId: r.userDiscordId, grantedBy: await gamertagOrId(tx, r.grantedByDiscordId), expiresAt: r.expiresAt });
+      out.push({ id: r.id, userDiscordId: r.userDiscordId, userGamertag: (await actorGamertagTx(tx, r.userDiscordId)) ?? null, grantedBy: await gamertagOrId(tx, r.grantedByDiscordId), expiresAt: r.expiresAt });
     }
     return out;
   });

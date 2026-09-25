@@ -6,12 +6,13 @@ import { RESULT_COPY, DISBAND_WARNING } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { RECRUITING_LIMITS, GAMERTAG_MAX } from "@/lib/clan-limits";
 import { GamertagField } from "@/app/components/gamertag-field";
-import { when, days, hours, ago } from "@/lib/format";
+import { days, hours, ago } from "@/lib/format";
 import { guideLinkFor } from "@/lib/guide-links";
-import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, FieldError, invalid, btnPrimary, btnSecondary, btnDanger, link, field, fieldLabel, checkbox, SubmitButton } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, FieldError, invalid, btnPrimary, btnDanger, link, field, fieldLabel, checkbox, SubmitButton } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
 import { readKept } from "@/lib/form";
 import { RenameForm } from "./rename-form";
+import { GuestPassList } from "./guest-passes";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
@@ -70,16 +71,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               <SubmitButton className={`${btnPrimary} self-start`}>Grant pass</SubmitButton>
             </form>
           </PanelBody>
-          {guestPasses.length === 0 ? <PanelBody className="border-t border-rule-2 !py-3"><p className="text-sm text-ink-2">No open passes.</p></PanelBody> : (
-            <ul className="border-t border-rule-2">
-              {guestPasses.map((p) => (
-                <li key={p.id} className="flex min-h-[60px] flex-wrap items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
-                  <span><span className="font-mono">{p.userDiscordId}</span> <span className="text-xs text-muted">granted by {p.grantedBy} · expires {when(p.expiresAt)}</span></span>
-                  <form action="/api/clan/revoke-guest" method="post"><input type="hidden" name="passId" value={p.id} /><ConfirmButton confirm="Press again to revoke" className={`${btnSecondary} !px-3.5`}>Revoke</ConfirmButton></form>
-                </li>
-              ))}
-            </ul>
-          )}
+          <GuestPassList passes={guestPasses} />
         </Panel>
 
         {leader && (

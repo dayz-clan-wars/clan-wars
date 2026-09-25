@@ -33,7 +33,7 @@ describe("/guest grant", () => {
 describe("/guest revoke", () => {
   it("offers the clan's open passes and revokes the chosen one", async () => {
     const ctx = ctxWith({
-      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", grantedBy: "111", expiresAt: new Date() }] }),
+      clanFor: async () => viewFixture({ guestPasses: [{ id: 3, userDiscordId: "222", userGamertag: null, grantedBy: "111", expiresAt: new Date() }] }),
       revokeGuestPass: async (_a: string, id: number) => (id === 3 ? "ok" : "gone"),
     });
     const [choice] = await sourceOf(guestGroup, "guest revoke", "pass")(ctx, { actorDiscordId: "111", value: "" });
