@@ -44,10 +44,18 @@ describe("the wall tile", () => {
     expect(html).toContain('class="stroke-rule-3"');
     expect(html).not.toContain("opacity-70");
   });
-  it("keeps the accessible name with the state in it", () => {
-    expect(render(tile({}))).toContain('aria-label="Ten Down: 3 / 10"');
-    expect(render(tile({ key: "first_blood", target: 1, count: 0 }))).toContain('aria-label="Ten Down: Locked"');
-    expect(render(tile({ earnedAt: new Date("2026-09-10T12:00:00Z"), count: 10 }))).toContain('aria-label="Ten Down: Earned 10 Sept"');
+  /**
+   * L8: an aria-label on an <li> is honoured by some screen readers and not
+   * others, and here it only restated the tile's own visible text. The state
+   * is in words in the tile (earned line, progress, "Locked"), so that is the
+   * one statement, for everyone.
+   */
+  it("says the state in visible words, with no aria-label on the tile", () => {
+    const tiles = [render(tile({})), render(tile({ key: "first_blood", target: 1, count: 0 })), render(tile({ earnedAt: new Date("2026-09-10T12:00:00Z"), count: 10 }))];
+    for (const html of tiles) expect(html).not.toMatch(/<li[^>]*aria-label=/u);
+    expect(tiles[0]).toContain(">3 / 10<");
+    expect(tiles[1]).toContain(">Locked<");
+    expect(tiles[2]).toMatch(/>Earned 10 Sept?</u);
   });
 });
 

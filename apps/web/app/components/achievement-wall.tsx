@@ -32,9 +32,11 @@ export function Tile({ t }: { t: AchievementTile }) {
   const pct = earned ? 100 : Math.max(0, Math.min(100, Math.round((t.count / t.target) * 100)));
   const state = earned ? "unlocked" : progress ? "progress" : "locked";
   return (
-    // ⚠️ The accessible name carries the state, not just the name: earned says
-    // when, in-progress says how far, and a one-shot says it is locked.
-    <li className={`flex items-center gap-3 border-2 px-3 py-2.5 ${earned ? `${tone.border} ${tone.bg}` : "border-rule-2 bg-surface"}`} aria-label={`${t.name}: ${earned ? earnedLine(t) : progress ?? WALL.locked}`}>
+    // ⚠️ The state is said in the tile's own visible WORDS (the earned line,
+    // the progress count, "Locked") — never only in colour, and not in an
+    // aria-label on the <li>, which some screen readers ignore and which only
+    // restated this text (L8).
+    <li className={`flex items-center gap-3 border-2 px-3 py-2.5 ${earned ? `${tone.border} ${tone.bg}` : "border-rule-2 bg-surface"}`}>
       <AchievementBadge achievementKey={t.key} group={t.group} state={state} pct={pct} size={56} className="flex-none" />
       <span className="flex min-w-0 flex-1 flex-col gap-1">
         <span className={`font-display text-[13px] uppercase tracking-[0.06em] ${earned ? tone.text : "text-ink-2"}`}>{t.name}</span>
