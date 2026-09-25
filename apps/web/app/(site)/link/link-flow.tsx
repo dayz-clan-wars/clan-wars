@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import { LINK_EMOTES } from "@factions/domain";
 import type { IssueOutcome, LinkStatus } from "@factions/roster";
-import { ENDED_COPY, ISSUE_COPY, formatRemaining } from "@/lib/link-copy";
+import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, formatRemaining } from "@/lib/link-copy";
+import { readJson, resolveTyped, type Match } from "@/lib/link-claim";
 import { when } from "@/lib/format";
 import { btnCta, btnPrimary, btnQuiet, field } from "@/app/components/ui";
 
@@ -28,11 +29,14 @@ export function LinkFlow({ initial }: { initial: Status }) {
   const [notice, setNotice] = useState<string | null>(initial.ended ? ENDED_COPY[initial.ended] : null);
   const [busy, setBusy] = useState(false);
 
+  // ⚠️ M1: every answer on this page is read through readJson (lib/link-claim.ts).
+  // A 500, a dead connection or a lapsed session's HTML used to throw out of
+  // these handlers, and the player saw nothing happen at all.
   const refresh = async () => {
-    const res = await fetch("/api/link/status", { cache: "no-store" });
-    if (res.status === 401) { window.location.assign("/login?next=/link"); return; }
-    if (!res.ok) return;
-    const next: Status = await res.json();
+    const res = await fetch("/api/link/status", { cache: "no-store" }).catch(() => null);
+    if (res?.status === 401) { window.location.assign("/login?next=/link"); return; }
+    const next = await readJson<Status>(res);
+    if (!next) return;
     setStatus((prev) => {
       // A challenge that vanished between polls ended without us: say why.
       if (prev.challenge && !next.challenge && !next.link && next.ended) setNotice(ENDED_COPY[next.ended]);
@@ -52,9 +56,11 @@ export function LinkFlow({ initial }: { initial: Status }) {
   const start = async (dayzId: string, newSequence = false) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/link/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayzId, newSequence }) });
-      if (res.status === 401) { window.location.assign("/login?next=/link"); return; }
-      const { outcome } = (await res.json()) as { outcome: Outcome };
+      const res = await fetch("/api/link/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayzId, newSequence }) }).catch(() => null);
+      if (res?.status === 401) { window.location.assign("/login?next=/link"); return; }
+      const data = await readJson<{ outcome: Outcome }>(res);
+      if (!data) { setNotice(LINK_FAILED); return; }
+      const { outcome } = data;
       if (outcome.kind === "issued" || outcome.kind === "live") {
         setNotice(outcome.kind === "issued" && outcome.switchedFrom
           ? `Canceled your challenge for ${outcome.switchedFrom} — that sequence no longer works. Here is the new one.`
@@ -70,7 +76,10 @@ export function LinkFlow({ initial }: { initial: Status }) {
   const cancel = async () => {
     setBusy(true);
     try {
-      await fetch("/api/link/cancel", { method: "POST" });
+      const res = await fetch("/api/link/cancel", { method: "POST" }).catch(() => null);
+      if (res?.status === 401) { window.location.assign("/login?next=/link"); return; }
+      // ⚠️ M1: a cancel the server did not take must not read as done — the old sequence still works.
+      if (!res?.ok) { setNotice(LINK_FAILED); return; }
       setNotice(null);
       await refresh();
     } finally { setBusy(false); }
@@ -91,17 +100,25 @@ function currentTarget(status: Status): string {
 
 function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string) => void }) {
   const [query, setQuery] = useState("");
-  const [matches, setMatches] = useState<{ dayzId: string; gamertag: string }[]>([]);
+  /** The list on screen AND the text it was fetched for — without `q`, a stale list reads as a verdict (H5). */
+  const [shown, setShown] = useState<{ q: string; matches: Match[] }>({ q: "", matches: [] });
   const [denial, setDenial] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const matches = shown.matches;
+
+  const search = async (q: string): Promise<Match[] | null> => {
+    const res = await fetch(`/api/link/search?q=${encodeURIComponent(q)}`, { cache: "no-store" }).catch(() => null);
+    return (await readJson<{ matches: Match[] }>(res))?.matches ?? null;
+  };
 
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const q = query.trim();
-    if (!q) { setMatches([]); return; }
+    if (!q) { setShown({ q: "", matches: [] }); return; }
     timer.current = setTimeout(async () => {
-      const res = await fetch(`/api/link/search?q=${encodeURIComponent(q)}`, { cache: "no-store" });
-      if (res.ok) setMatches((await res.json()).matches);
+      const found = await search(q);
+      if (found) setShown({ q, matches: found });
     }, 200);
     return () => { if (timer.current) clearTimeout(timer.current); };
   }, [query]);
@@ -109,14 +126,18 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
   /**
    * ⚠️ Resolved from the typed text on submit, not from whatever row was last
    * clicked — autocomplete is a suggestion, and the package re-validates the
-   * UID anyway. A full gamertag typed without touching the list still works.
+   * UID anyway. A full gamertag typed without touching the list still works,
+   * because resolveTyped searches again when the list is for older text (H5).
    */
-  const claim = () => {
-    const typed = query.trim().toLowerCase();
-    const found = matches.find((m) => m.gamertag.toLowerCase() === typed);
-    if (!found) { setDenial("The server has not seen that character. Pick one from the list — only characters the event log has seen can be linked."); return; }
-    setDenial(null);
-    onClaim(found.dayzId);
+  const claim = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    if (busy || checking || !query.trim()) return;
+    setChecking(true);
+    try {
+      const r = await resolveTyped(query, shown, search);
+      if (r.kind === "found") { setDenial(null); onClaim(r.dayzId); }
+      else setDenial(r.kind === "unseen" ? LINK_UNSEEN : LINK_FAILED);
+    } finally { setChecking(false); }
   };
 
   return (
@@ -127,7 +148,8 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
         <p className={body}>The gamertag you play under. Only characters the server has actually seen are listed — if yours is missing, play a session first.</p>
         <p className="mt-4 hidden font-mono text-[11px] leading-relaxed text-muted lg:block">One character per Discord account. You will prove it is you with {LINK_EMOTES} emotes in game.</p>
       </div>
-      <div className={card}>
+      {/* ⚠️ H5: a real form, so Enter in the box claims — it did nothing when the input sat outside one. */}
+      <form className={card} onSubmit={(e) => { void claim(e); }}>
         {(notice || denial) && <Refusal label="Not issued">{denial ?? notice}</Refusal>}
         <input className={field.replace("mt-1", "")} value={query}
           onChange={(e) => { setQuery(e.target.value); setDenial(null); }} placeholder="Gamertag" aria-label="Gamertag" autoComplete="off" spellCheck={false} />
@@ -149,9 +171,12 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
             })}
           </ul>
         )}
-        <button className={`mt-5 ${button}`} type="button" onClick={claim} disabled={busy || !query.trim()}>Claim it <span className="font-mono normal-case">→</span></button>
+        {/* ⚠️ aria-disabled while checking, not disabled: a disabled button drops the focus it was just pressed with. */}
+        <button className={`mt-5 ${button} aria-disabled:opacity-40`} type="submit" disabled={busy || !query.trim()} aria-disabled={checking || undefined} aria-busy={checking || undefined}>
+          {checking ? "Checking…" : <>Claim it <span className="font-mono normal-case">→</span></>}
+        </button>
         <div className="mt-4 font-mono text-[11px] leading-relaxed text-muted lg:hidden">One character per Discord account. You will prove it is you with {LINK_EMOTES} emotes in game.</div>
-      </div>
+      </form>
     </div>
   );
 }
@@ -186,7 +211,7 @@ function ProveIt({ challenge, notice, busy, onDraw, onCancel }: {
           <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm"><span className="mr-3 text-rust-2">●</span>Challenge open</h2>
           <span className="font-mono text-[11px] text-muted"><span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}</span>
         </div>
-        {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Switched" neutral>{notice}</Refusal></div>}
+        {notice && <div className="px-4 pt-4 lg:px-5"><Refusal label="Note" neutral>{notice}</Refusal></div>}
         {/* ⚠️ An ordered list, because the order IS the proof. */}
         <ol className="flex flex-col gap-2 p-4 lg:gap-2.5 lg:p-5">
           {challenge.steps.map((s, i) => (
