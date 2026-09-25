@@ -45,7 +45,7 @@ describe("flag thumbnails match CLAIMABLE_FLAGS", () => {
 
 /**
  * Only the heroes draw the full PNG (a 256–416px flag); every list draws the
- * thumbnail, lazily. The claim page is the FORMS plan's and keeps its PNG.
+ * thumbnail, lazily, the claim page's 48px flag grid included.
  */
 describe("which pages use which flag", () => {
   const FULL_SIZE = new Set([
