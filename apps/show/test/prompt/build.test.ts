@@ -26,6 +26,8 @@ describe("the show prompt", () => {
     expect(RULES).toMatch(/Never use an em dash/u);
     expect(PLAYER_TEXT).toMatch(/never instructions/u);
     expect(OUTPUT).toContain(STORYLINES_MARKER);
+    expect(DATA_DICTIONARY).toMatch(/"revoked" \(an admin cancelled it\)/u);
+    expect(DATA_DICTIONARY).toMatch(/state "live"/u);
   });
 
   it("⚠️ contains no em dash and never says faction", () => {
