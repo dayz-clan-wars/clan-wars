@@ -62,7 +62,8 @@
 .prose-guide th { color: var(--color-muted); font-weight: 400; font-size: .85em; }
 .prose-guide td:last-child, .prose-guide th:last-child { padding-right: 0; }
 .prose-guide td.v { font-family: var(--font-mono); font-size: .9em; white-space: nowrap; color: var(--color-ink); }
-.prose-guide tr.group td { color: var(--color-gold); font-family: var(--font-display); text-transform: uppercase; font-size: .9em; letter-spacing: .04em; padding-top: 22px; border-bottom: 2px solid var(--color-rule-2); }
+/* A group's header is a <th scope="rowgroup"> (chapter.tsx); this outranks `.prose-guide th`'s muted small caption. */
+.prose-guide tr.group th { color: var(--color-gold); font-family: var(--font-display); text-transform: uppercase; font-size: .9em; letter-spacing: .04em; padding-top: 22px; border-bottom: 2px solid var(--color-rule-2); }
 
 /* one-page rules list */
 .prose-guide .onepage h2 { font-size: 16px; margin-top: 32px; }

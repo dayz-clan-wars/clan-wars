@@ -68,25 +68,26 @@ function Appendix() {
       <p>Every timer, cap, radius and cooldown in the guide, in one place. Each one is read from the same rule the server enforces, so this table and the chapters cannot disagree.</p>
       <div className="tablewrap">
         <table>
-          <tbody>
-            {GUIDE_GROUPS.map((g) => (
-              <GroupRows key={g} group={g} />
-            ))}
-          </tbody>
+          {/* ⚠️ Visually the group rows are the headings; a screen reader needs the column names said once and each group as a real row-group header (M3). */}
+          <thead className="sr-only"><tr><th scope="col">Rule</th><th scope="col">Value</th></tr></thead>
+          {GUIDE_GROUPS.map((g) => (
+            <GroupRows key={g} group={g} />
+          ))}
         </table>
       </div>
     </div>
   );
 }
 
+/** One group: its own <tbody>, so `scope="rowgroup"` covers exactly its rows. */
 function GroupRows({ group }: { group: string }) {
   const rows = GUIDE_NUMBERS.filter((r) => r.group === group);
   return (
-    <>
-      <tr className="group"><td colSpan={2}>{group}</td></tr>
+    <tbody>
+      <tr className="group"><th scope="rowgroup" colSpan={2}>{group}</th></tr>
       {rows.map((r) => (
         <tr key={r.key}><td>{r.label}</td><td className="v">{r.value}</td></tr>
       ))}
-    </>
+    </tbody>
   );
 }

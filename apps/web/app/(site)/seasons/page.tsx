@@ -37,14 +37,15 @@ export default async function SeasonsPage() {
             </div>
             <div className="overflow-x-auto">
               <table className="w-full min-w-[32rem] border-collapse text-sm">
+                <caption className="sr-only">Season {s.number} final standings</caption>
                 <thead>
                   <tr>
-                    <th className={`${th} w-16`}>Rank</th>
-                    <th className={`${th} !px-0`}>Clan</th>
-                    <th className={`${th} text-right`}>Points</th>
-                    <th className={`${th} text-right`}>Raids</th>
-                    <th className={`${th} text-right`}>Raided</th>
-                    <th className={`${th} text-right`}>Defenses</th>
+                    <th scope="col" className={`${th} w-16`}>Rank</th>
+                    <th scope="col" className={`${th} !px-0`}>Clan</th>
+                    <th scope="col" className={`${th} text-right`}>Points</th>
+                    <th scope="col" className={`${th} text-right`}>Raids</th>
+                    <th scope="col" className={`${th} text-right`}>Raided</th>
+                    <th scope="col" className={`${th} text-right`}>Defenses</th>
                   </tr>
                 </thead>
                 <tbody>

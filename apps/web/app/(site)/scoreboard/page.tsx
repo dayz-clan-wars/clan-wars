@@ -28,14 +28,16 @@ export default async function ScoreboardPage() {
             {/* Desktop: the table. */}
             <Panel className="hidden lg:block">
               <table className="w-full border-collapse text-[15px]">
+                {/* The panel has no title, so the caption is the table's only name (M3). */}
+                <caption className="sr-only">Season {season.number} standings</caption>
                 <thead>
                   <tr>
-                    <th className={`${th} w-[72px]`}>Rank</th>
-                    <th className={`${th} !px-0`}>Clan</th>
-                    <th className={`${th} text-right`}>Points</th>
-                    <th className={`${th} text-right`}>Raids</th>
-                    <th className={`${th} text-right`}>Raided</th>
-                    <th className={`${th} text-right`}>Defenses</th>
+                    <th scope="col" className={`${th} w-[72px]`}>Rank</th>
+                    <th scope="col" className={`${th} !px-0`}>Clan</th>
+                    <th scope="col" className={`${th} text-right`}>Points</th>
+                    <th scope="col" className={`${th} text-right`}>Raids</th>
+                    <th scope="col" className={`${th} text-right`}>Raided</th>
+                    <th scope="col" className={`${th} text-right`}>Defenses</th>
                   </tr>
                 </thead>
                 <tbody>
