@@ -5,7 +5,7 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import ChapterPage from "../app/guide/chapter";
 import { Anchors, ANCHOR_COPIED } from "../app/guide/anchors";
-import { GuideSearch, resultsLine } from "../app/guide/search";
+import { GuideSearch, resultsLine, escapeAction } from "../app/guide/search";
 import { CHAPTERS } from "../lib/guide";
 
 describe("section anchors (L4)", () => {
@@ -39,5 +39,13 @@ describe("guide search (L7)", () => {
     expect(resultsLine("raid", 1)).toBe("1 result");
     expect(resultsLine("raid", 7)).toBe("7 results");
     expect(renderToStaticMarkup(createElement(GuideSearch, { index: [] }))).toMatch(/role="status" aria-live="polite" class="sr-only"/u);
+  });
+
+  it("⚠️ Escape clears a non-empty query before it is let close the enclosing Contents popover", () => {
+    expect(escapeAction("raid")).toBe("clear");
+    expect(escapeAction("  raid  ")).toBe("clear");
+    // The second press, once the query is already empty, bubbles to PopoverDismiss.
+    expect(escapeAction("")).toBe("bubble");
+    expect(escapeAction("   ")).toBe("bubble");
   });
 });
