@@ -7,6 +7,7 @@ import { WarLogLine, WarLogKicker } from "./war-log/entry";
 import { currentSession } from "@/lib/viewer";
 import { Page, Panel, Stat, Rank, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
 import { HeroMap } from "@/app/components/hero-map";
+import { WideOnly } from "@/app/components/wide-only";
 import { DISCORD_INVITE, SITE_NAME, SITE_DESCRIPTION } from "@/lib/site-meta";
 
 export const metadata: Metadata = {
@@ -112,12 +113,15 @@ export default async function Home() {
               </ul>
             )}
           </Panel>
-          <Panel num="03" title="Flag pool" aside={<span className={kicker}>{flags.free.length} free</span>} className="hidden lg:block">
+          {/* ⚠️ Not rendered on a phone at all (WideOnly), not CSS-hidden: a hidden panel's images download anyway (H5). */}
+          <WideOnly>
+          <Panel num="03" title="Flag pool" aside={<span className={kicker}>{flags.free.length} free</span>}>
             <div className="flex flex-wrap gap-2.5 p-5">
               {flags.free.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={f} loading="lazy" title={f} width={36} height={36} className="h-9 w-9 object-contain" />)}
               {flags.taken.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={`${f} (taken)`} loading="lazy" title={`${f} — taken`} width={36} height={36} className="h-9 w-9 object-contain opacity-35" />)}
             </div>
           </Panel>
+          </WideOnly>
         </div>
       </section>
 
