@@ -14,6 +14,7 @@ import { readKept } from "@/lib/form";
 import { RenameForm } from "./rename-form";
 import { GuestPassList } from "./guest-passes";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
+import { RowAction } from "@/app/components/row-action";
 
 export const metadata: Metadata = { title: "Clan Wars — clan settings", robots: { index: false, follow: false } };
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
@@ -108,7 +109,8 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
                   {rebindCandidates.map((c) => (
                     <li key={c.poleKey} className="flex min-h-[60px] items-center justify-between gap-3 border-t border-rule-2 px-4 py-2 text-sm text-ink first:border-t-0 lg:px-5">
                       <span>raised by <span className="font-mono">{c.by}</span> {ago(c.raisedAt)}</span>
-                      <form action="/api/clan/rebind" method="post"><input type="hidden" name="poleKey" value={c.poleKey} /><SubmitButton className={`${btnPrimary} !px-3.5`}>Move here</SubmitButton></form>
+                      {/* M6: moving starts a cooldown and releases the old pole — two-press, the same weight as Release on /base. The pole key stays in a hidden field, never rendered. */}
+                      <RowAction action="/api/clan/rebind" fields={{ poleKey: c.poleKey }} who={`(raised by ${c.by})`} style={btnPrimary} confirm="Press again to move">Move here</RowAction>
                     </li>
                   ))}
                 </ul>
