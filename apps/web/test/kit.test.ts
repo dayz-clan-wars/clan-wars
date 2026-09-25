@@ -339,7 +339,7 @@ describe("the kit writes", () => {
   it("reports a refusal in the same place it confirms a save", () => {
     expect(FLOW).toContain("{refusal !== null && (");
     expect(FLOW).toContain('<Bar role="alert" tone="rust">');
-    expect(FLOW).toContain('<Bar role="status" tone="plain">');
+    expect(FLOW).toContain('<Bar role="status" tone="plain" onHold={dismiss.hold} onRelease={dismiss.release}>');
     /**
      * ⚠️ Every live region on this page is one of those two bars. A `role`
      * anywhere else is either a second announcement of the same news or a
@@ -356,6 +356,12 @@ describe("the kit writes", () => {
      * announced inconsistently or not at all.
      */
     expect(FLOW).not.toMatch(/role=\{[^}]*\?/u);
+  });
+
+  /** M9: an Undo that vanishes while the player is reaching for it is an Undo they do not have. */
+  it("keeps Undo up for ten seconds, and not at all while it is pointed at or focused", () => {
+    expect(FLOW).toContain("dismissTimer(UNDO_MS,");
+    expect(code(FLOW)).not.toContain("4500");
   });
 
   /**

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Catalogue, CatalogueEntry, KitSlot } from "@factions/domain";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { GROUND_RULES, KIT_GRID_ORDER, KIT_PIECES, RESULT_COPY, SLOT_LABELS, savedToast } from "@/lib/kit-copy";
+import { dismissTimer, UNDO_MS } from "@/lib/dismiss-timer";
 import type { KitView } from "@/lib/kit-view";
 import { DISCORD_INVITE } from "@/lib/site-meta";
 import { Page, btnCta, kicker, link } from "@/app/components/ui";
@@ -35,7 +36,12 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
   const [refusal, setRefusal] = useState<string | null>(null);
   const [inFlight, setInFlight] = useState(0);
   const [help, setHelp] = useState(false);
-  const dismiss = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /**
+   * ⚠️ The Undo bar's clock (M9, WCAG 2.2.1): ten seconds, not four and a
+   * half, and held while the pointer or focus is on the bar. An Undo that
+   * vanishes while a player reaches for it is an Undo they do not have.
+   */
+  const [dismiss] = useState(() => dismissTimer(UNDO_MS, () => setToast(null)));
   const busy = inFlight > 0;
 
   /**
@@ -61,7 +67,7 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
 
   const applyView = useCallback((next: KitView) => { latest.current = next; setView(next); }, []);
 
-  useEffect(() => () => { if (dismiss.current) clearTimeout(dismiss.current); }, []);
+  useEffect(() => () => dismiss.cancel(), [dismiss]);
 
   /**
    * ⚠️ A poll answer is thrown away if any write started, or was still
@@ -141,10 +147,9 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
   }, [applyView]);
 
   const flash = useCallback((text: string, prev: { slot: KitSlot; value: string }) => {
-    if (dismiss.current) clearTimeout(dismiss.current);
     setToast({ text, prev });
-    dismiss.current = setTimeout(() => setToast(null), 4500);
-  }, []);
+    dismiss.start();
+  }, [dismiss]);
 
   /** Save one slot. `label` is null for "Nothing", which clears it. */
   const choose = useCallback(async (slot: KitSlot, className: string, label: string | null) => {
@@ -157,10 +162,10 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
   const undo = useCallback(async () => {
     const prev = toast?.prev;
     if (!prev) return;
-    if (dismiss.current) clearTimeout(dismiss.current);
+    dismiss.cancel();
     setToast(null);
     await post("/api/kit/slot", { slot: prev.slot, className: prev.value });
-  }, [toast, post]);
+  }, [toast, post, dismiss]);
 
   /**
    * ⚠️ Counted through `entryFor`, exactly as the tiles are drawn, not from
@@ -266,7 +271,7 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
         </Bar>
       )}
       {refusal === null && toast !== null && (
-        <Bar role="status" tone="plain">
+        <Bar role="status" tone="plain" onHold={dismiss.hold} onRelease={dismiss.release}>
           <span className="min-w-0 text-sm leading-snug text-ink">{toast.text}</span>
           <button type="button" onClick={() => { void undo(); }} disabled={busy}
             className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-gold disabled:opacity-40">
@@ -288,10 +293,16 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
  * one already on screen is announced inconsistently or not at all, which
  * would silence the refusal, the one message here that has to interrupt.
  */
-function Bar({ role, tone, children }: { role: "alert" | "status"; tone: "rust" | "plain"; children: React.ReactNode }) {
+function Bar({ role, tone, onHold, onRelease, children }: {
+  role: "alert" | "status"; tone: "rust" | "plain"; onHold?: () => void; onRelease?: () => void; children: React.ReactNode;
+}) {
   return (
     <div
       role={role}
+      onMouseEnter={onHold}
+      onMouseLeave={onRelease}
+      onFocus={onHold}
+      onBlur={onRelease}
       className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${tone === "rust" ? "border-rust" : "border-rule-3"}`}
       style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
     >
