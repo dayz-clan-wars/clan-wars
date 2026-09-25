@@ -41,7 +41,10 @@ export function HeroMap() {
 const TAG = "font-mono bg-frame px-2 py-1 border text-[13px] whitespace-nowrap";
 
 function Zone({ className }: { className: string }) {
-  return <div className={`absolute rounded-full border-[3px] border-dashed border-gold [box-shadow:0_0_0_3px_rgba(11,11,10,.7)] ${className}`} />;
+  // ⚠️ Palette token, not a hand-written frame colour: color-mix keeps the
+  // ring's glow tied to --color-frame instead of a hex copy nothing holds
+  // to the palette (see hero-map.tsx's Base/You glyphs, same rule).
+  return <div className={`absolute rounded-full border-[3px] border-dashed border-gold [box-shadow:0_0_0_3px_color-mix(in_srgb,var(--color-frame)_70%,transparent)] ${className}`} />;
 }
 
 /* ⚠️ Palette tokens as classes, never hex (L2): the glyphs are the map's own, and a hex copy of a token is a colour nothing holds to the palette. */
