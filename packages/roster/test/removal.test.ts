@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, factionVotes, factionVoteBallots, successionClaims, clanNotices,
   identityLinks, players, admFiles, declarations, poles, events, rosterCooldowns, vaultLocks,
-  guestPasses, identityHolds,
+  guestPasses, identityHolds, kothVotes, kothVoteVoters,
   type Database,
 } from "@factions/db";
 import { sql, eq, and, asc } from "drizzle-orm";
@@ -44,7 +44,7 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table guest_passes, vault_history, vault_locks, faction_vote_ballots, faction_votes, succession_claims, clan_notices, faction_join_requests, identity_holds, faction_invites, roster_cooldowns, faction_members, declarations, poles, factions, ceremony_participants, ceremonies, claim_drafts, identity_links, players, events, raw_lines, adm_files, faction_events, servers restart identity cascade`);
+      await tx.execute(sql`truncate table guest_passes, vault_history, vault_locks, faction_vote_ballots, faction_votes, succession_claims, clan_notices, faction_join_requests, identity_holds, faction_invites, roster_cooldowns, faction_members, declarations, poles, factions, ceremony_participants, ceremonies, claim_drafts, identity_links, players, events, raw_lines, adm_files, faction_events, koth_votes, servers restart identity cascade`);
     });
 
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
@@ -326,6 +326,21 @@ describe("guild removal: the one roster write a gateway event starts", () => {
     expect(await db.select().from(declarations).where(eq(declarations.ownerDayzId, UID.P))).toEqual([]);
     const [p2] = await db.select({ graceUntil: poles.graceUntil }).from(poles).where(eq(poles.poleKey, far));
     expect(p2!.graceUntil.getTime()).toBe(now.getTime() + RELEASED_POLE_GRACE_MS);
+  });
+
+  it("drops the departed user's King of the Hill voter rows, leaving the frozen electorate size", async () => {
+    const [v] = await db.insert(kothVotes).values({
+      serverId, slotAt: new Date("2026-09-05T16:00:00Z"), location: "borek", startedByDiscordId: "other",
+      openedAt: now, closesAt: new Date("2026-09-05T15:30:00Z"), electorateSize: 6, turnoutFloor: 5, state: "open",
+    }).returning();
+    await db.insert(kothVoteVoters).values([
+      { voteId: v!.id, discordId: D.M1, dayzId: UID.M1, ballot: true, castAt: now },
+      { voteId: v!.id, discordId: "nobody-else", dayzId: "x" },
+    ]);
+    await removeFromGuildDb(db, { discordId: D.M1, at: now });
+    const left = await db.select().from(kothVoteVoters);
+    expect(left.map((r) => r.discordId)).toEqual(["nobody-else"]);
+    expect((await db.select().from(kothVotes))[0]!.electorateSize).toBe(6);
   });
 
   // ------------------------------------------------- staged race (§13)
