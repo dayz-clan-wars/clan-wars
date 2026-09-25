@@ -32,8 +32,8 @@ export function WarLogLine({ e, points = false }: { e: WarLogEntry; points?: boo
 }
 
 /** "Raid · 7 Sep, 22:14 UTC" in gold, "Defense · …" in olive. ⚠️ `when()`, so the clock says which zone it is in — it shows on the landing page and every clan page, beside nothing else that does (M5). */
-export function WarLogKicker({ e, time }: { e: WarLogEntry; time?: string }) {
-  const stamp = time ?? when(e.at);
+export function WarLogKicker({ e }: { e: WarLogEntry }) {
+  const stamp = when(e.at);
   return (
     <span className={`font-mono text-[11px] uppercase tracking-[0.12em] ${e.kind === "raid" ? "text-gold" : "text-olive"}`}>
       {e.kind === "raid" ? "Raid" : "Defense"} · {stamp}
