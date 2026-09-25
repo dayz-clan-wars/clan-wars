@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, kills, membershipHistory, factions, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { seedFaction } from "./seed.js";
+import { HUB_COMBAT_FROM } from "@factions/domain";
 import { killsTick, rebuildKills } from "../src/kills-tick.js";
 
 const URL = requireTestDatabaseUrl();
@@ -42,26 +43,52 @@ describe("killsTick", () => {
   const HUB = { x: 100, y: 998.6, z: 93 };
   const GROUND = { x: 100, y: 310, z: 93 };
 
+  // ⚠️ After HUB_COMBAT_FROM: t0 above is before the rule, where a Hub kill is NOT discredited.
+  const h1 = new Date(HUB_COMBAT_FROM.getTime() + 60_000);
+  const h5 = new Date(HUB_COMBAT_FROM.getTime() + 5 * 60_000);
+
   it("a kill at the Hub is recorded with atHub — either party inside is enough", async () => {
-    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: GROUND }, t1);
-    await ev("player.killed", { victimDayzId: A, killerDayzId: R, weapon: "M4-A1", distanceM: 3, victimPos: GROUND, killerPos: GROUND }, t5);
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: GROUND }, h1);
+    await ev("player.killed", { victimDayzId: A, killerDayzId: R, weapon: "M4-A1", distanceM: 3, victimPos: GROUND, killerPos: GROUND }, h5);
     await killsTick(db);
     const rows = await db.select().from(kills).orderBy(kills.occurredAt);
     expect(rows.map((r) => r.atHub)).toEqual([true, false]);
   });
 
   it("a kill with no positions (every event before this deploy) is not at the Hub", async () => {
-    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "AKM", distanceM: 1 }, t1);
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "AKM", distanceM: 1 }, h1);
     await killsTick(db);
     expect((await db.select().from(kills))[0]!.atHub).toBe(false);
   });
 
   it("a credited kill is at the Hub when the crediting hit was", async () => {
+    await ev("player.hit", { victimDayzId: R, attackerType: "player", attackerDayzId: A, victimHp: 10, weapon: "M4-A1", distanceM: 4, victimPos: HUB, attackerPos: HUB }, h1);
+    await ev("player.died", { victimDayzId: R, cause: "died", water: 1000, energy: 1000, bleedSources: 0 }, new Date(h1.getTime() + 20_000));
+    await killsTick(db);
+    const [k] = await db.select().from(kills);
+    expect(k).toMatchObject({ cause: "finished", killerDayzId: A, atHub: true });
+  });
+
+  it("a Hub kill from before the rule is not discredited — it scores like any other", async () => {
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: HUB }, t1);
+    await killsTick(db);
+    expect((await db.select().from(kills))[0]!.atHub).toBe(false);
+  });
+
+  it("the rule starts AT HUB_COMBAT_FROM, not after it", async () => {
+    await ev("player.killed", { victimDayzId: R, killerDayzId: A, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: HUB }, new Date(HUB_COMBAT_FROM.getTime() - 1));
+    await ev("player.killed", { victimDayzId: A, killerDayzId: R, weapon: "M4-A1", distanceM: 3, victimPos: HUB, killerPos: HUB }, HUB_COMBAT_FROM);
+    await killsTick(db);
+    const rows = await db.select().from(kills).orderBy(kills.occurredAt);
+    expect(rows.map((r) => r.atHub)).toEqual([false, true]);
+  });
+
+  it("a credited kill from before the rule is not discredited either", async () => {
     await ev("player.hit", { victimDayzId: R, attackerType: "player", attackerDayzId: A, victimHp: 10, weapon: "M4-A1", distanceM: 4, victimPos: HUB, attackerPos: HUB }, t1);
     await ev("player.died", { victimDayzId: R, cause: "died", water: 1000, energy: 1000, bleedSources: 0 }, new Date(t1.getTime() + 20_000));
     await killsTick(db);
     const [k] = await db.select().from(kills);
-    expect(k).toMatchObject({ cause: "finished", killerDayzId: A, atHub: true });
+    expect(k).toMatchObject({ cause: "finished", killerDayzId: A, atHub: false });
   });
 
   it("1. A kills R (different clans): killerFactionId BEAR, victimFactionId WOLF, friendlyFire false", async () => {

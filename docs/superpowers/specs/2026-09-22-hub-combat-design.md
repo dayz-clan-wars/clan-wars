@@ -38,7 +38,8 @@ ban. Kills made there no longer count for anything.
 
 ### Out of scope
 
-- Banning anyone for combat before the deploy. Discrediting is retroactive; bans are not.
+- Banning anyone for combat before the deploy. Neither bans nor (since the §2.6
+  amendment of 2026-09-24) discrediting reach back before the rule.
 - Escalating sentences. Every offence is one hour.
 - Deleting or editing Discord posts already made about Hub kills (the kill feed,
   `#killstreaks`, achievement cards). Those are records, and Discord keeps them.
@@ -116,16 +117,24 @@ written, so those minutes come out of the hour. That is accepted rather than sta
 expiry at apply time, which would mean a third code path in `banTick`'s expire arm for
 one reason.
 
-### 2.6 Bans are forward-only; discrediting is retroactive
+### 2.6 Bans and discrediting are both forward-only (amended 2026-09-24)
 
 The ban tick's cursor is seeded at the log head at deploy, the same way the `zone-watch`
 cursor is (`docs/deploy/2026-09-07-map.md`). Nobody is banned for fighting at the Hub
 before the rule existed.
 
-Discrediting is the opposite. Every Hub kill in the log, past and future, stops scoring.
+~~Discrediting is the opposite. Every Hub kill in the log, past and future, stops scoring.
 A kill made at the Hub on 2026-09-20 was not against the rules at the time, but the
 brawl's kills were not real fights either, and a board that still counts 51 of them
-misrepresents the server.
+misrepresents the server.~~
+
+**Amended 2026-09-24:** discrediting is forward-only too. A Hub kill scores nowhere only
+from `HUB_COMBAT_FROM` (`rules.ts`, 2026-09-23T02:17:03Z — the bot's first `HUB_BAN_TICK
+on`), decided by `hubKillDiscredited` (`hub.ts`) where `kills-tick.ts` writes `at_hub`.
+All 75 Hub kills discredited at deploy predate it and were re-credited: a kill made
+before the rule broke no rule, the same reasoning that already kept bans forward-only.
+Badges those kills earned were restored silently (`backfill:achievements`, `announce:
+false`). Runbook `docs/deploy/2026-09-24-hub-recredit.md`.
 
 ### 2.7 A Hub kill scores nowhere, on either side — like friendly fire
 
