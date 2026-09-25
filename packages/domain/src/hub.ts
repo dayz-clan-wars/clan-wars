@@ -1,4 +1,4 @@
-import { HUB_POSITION, HUB_TRAP_CLASSES, HUB_ZONE_MIN_ALTITUDE_M, HUB_ZONE_RADIUS_M } from "./rules";
+import { HUB_COMBAT_FROM, HUB_POSITION, HUB_TRAP_CLASSES, HUB_ZONE_MIN_ALTITUDE_M, HUB_ZONE_RADIUS_M } from "./rules";
 import type { Vec3 } from "./vec3";
 
 /** A position as stored in an event payload (jsonb), or null. Never trusts the shape. */
@@ -18,6 +18,15 @@ export function atHub(pos: Vec3 | null): boolean {
   if (pos === null) return false;
   return pos.y >= HUB_ZONE_MIN_ALTITUDE_M
     && Math.hypot(pos.x - HUB_POSITION.x, pos.z - HUB_POSITION.z) <= HUB_ZONE_RADIUS_M;
+}
+
+/**
+ * Whether a kill scores nowhere because it was made at the Hub: in the zone
+ * (either party, the caller's `atHub`) AND made once the rule existed.
+ * Bans do not ask this — they are forward-only by their own cursor seed.
+ */
+export function hubKillDiscredited(inZone: boolean, at: Date): boolean {
+  return inZone && at.getTime() >= HUB_COMBAT_FROM.getTime();
 }
 
 export type HubOffence = { offender: string; gamertag: string; victim: string | null };

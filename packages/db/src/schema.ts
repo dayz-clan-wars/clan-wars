@@ -984,7 +984,9 @@ export const kills = pgTable("kills", {
    * The kill happened at the Fast Travel Hub (spec 2026-09-22-hub-combat): the
    * attacker or the victim inside the no-combat cylinder. Like `friendly_fire`,
    * it scores NOWHERE — every scoring read excludes it — and stays a record.
-   * False where the payload has no positions (every event before the backfill).
+   * False where the payload has no positions (every event before the backfill),
+   * and ⚠️ false for any kill before HUB_COMBAT_FROM (§2.6 amendment): the column
+   * means "discredited at the Hub", not "happened at the Hub".
    */
   atHub: boolean("at_hub").notNull().default(false),
 }, (t) => ({
