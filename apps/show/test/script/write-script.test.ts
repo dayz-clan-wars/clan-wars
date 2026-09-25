@@ -25,6 +25,13 @@ describe("screenScript", () => {
     expect(await screenScript("Boris: the boss has class.", ["SS"], allow)).toEqual([]);
     expect(await screenScript("Pavel: SS again.", ["SS"], allow)).toEqual(['blocked text: "SS"']);
   });
+
+  it("an operator-allowed text is masked from the blocklist and exact search, not from the moderator", async () => {
+    const moderate = vi.fn(allow);
+    expect(await screenScript("Boris: Heil is a real player.", [], moderate, ["Heil"])).toEqual([]);
+    expect(moderate.mock.calls[0]![0]).toEqual(["Boris: Heil is a real player."]);
+    expect(await screenScript("Boris: Heil is a real player.", [], allow)).toEqual(["blocklist: heil"]);
+  });
 });
 
 describe("writeScript", () => {
@@ -41,6 +48,14 @@ describe("writeScript", () => {
     const generate = vi.fn().mockResolvedValueOnce(reply("\nBoris: EvilTag again.")).mockResolvedValueOnce(reply());
     const r = await writeScript(context, ["EvilTag"], { generate, moderate: allow });
     expect(r).toMatchObject({ ok: true, attempts: 2 });
+  });
+
+  it("passes an operator-allowed name the blocklist would hit, and fails it without the allow", async () => {
+    const generate = async () => reply("\nBoris: Heil is a real player.");
+    expect(await writeScript(context, [], { generate, moderate: allow, allowed: ["Heil"] })).toMatchObject({ ok: true, attempts: 1 });
+    expect(await writeScript(context, [], { generate, moderate: allow })).toEqual({
+      ok: false, attempts: 2, reasons: ["attempt 1: blocklist: heil", "attempt 2: blocklist: heil"],
+    });
   });
 
   it("regenerates once after a reply that does not parse", async () => {

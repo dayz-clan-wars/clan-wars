@@ -24,6 +24,28 @@ export class MemoryScreeningStore implements ScreeningStore {
   }
 }
 
+/**
+ * For `--dry-run` against a database that has the show's tables: reads the real verdicts
+ * (operator overrides included) and keeps its own in memory, which win. ⚠️ Never writes
+ * to the backing store, so it is safe on a read-only connection.
+ */
+export class ReadThroughScreeningStore implements ScreeningStore {
+  private readonly memory = new MemoryScreeningStore();
+  constructor(private readonly backing: ScreeningStore) {}
+
+  async get(texts: string[]) {
+    const merged = await this.backing.get(texts);
+    for (const [t, v] of await this.memory.get(texts)) merged.set(t, v);
+    return merged;
+  }
+
+  async put(text: string, v: Verdict) {
+    // An operator's verdict read from the backing store is still final here.
+    if (v.source !== "operator" && (await this.backing.get([text])).get(text)?.source === "operator") return;
+    await this.memory.put(text, v);
+  }
+}
+
 export class PgScreeningStore implements ScreeningStore {
   constructor(private readonly db: Database) {}
 

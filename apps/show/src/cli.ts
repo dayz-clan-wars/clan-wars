@@ -6,7 +6,7 @@ import { episodeCode, lastEndedWeek, parseWeekArg } from "./weeks.js";
 import { buildStoryContext } from "./story/context.js";
 import { createChat } from "./engine/llm/openrouter.js";
 import { createModerator } from "./screening/moderate.js";
-import { MemoryScreeningStore } from "./screening/store.js";
+import { MemoryScreeningStore, PgScreeningStore, ReadThroughScreeningStore } from "./screening/store.js";
 import { screenTexts } from "./screening/screen.js";
 import { redactContext } from "./screening/redact.js";
 import { buildShowPrompt } from "./prompt/build.js";
@@ -39,8 +39,11 @@ try {
 
   const chat = createChat({ apiKey: cfg.openrouterApiKey });
   const moderate = createModerator({ chat, model: cfg.moderationModel });
-  // In memory: a dry run writes no verdicts anywhere. Operator overrides are not applied.
-  const verdicts = await screenTexts(texts.entries().map((e) => e.text), { store: new MemoryScreeningStore(), moderate });
+  // A dry run writes no verdicts anywhere. It reads the real ones (operator overrides
+  // included) when the show's tables exist; reads are legal on the read-only connection.
+  const store = probe?.ok ? new ReadThroughScreeningStore(new PgScreeningStore(db)) : new MemoryScreeningStore();
+  const verdicts = await screenTexts(texts.entries().map((e) => e.text), { store, moderate });
+  const allowed = [...verdicts].filter(([, v]) => v.verdict === "allow" && v.source === "operator").map(([t]) => t);
   const { context: screened, report, blocked } = redactContext(context, texts.entries(), verdicts);
 
   section(`${episodeCode(context.week.season, context.week.episode)} · week of ${weekStart.toISOString().slice(0, 10)}`, `${texts.entries().length} player strings screened, ${report.redactions.length} redacted`);
@@ -55,6 +58,7 @@ try {
   const result = await writeScript(screened, blocked, {
     generate: (system, user) => chat({ model: cfg.scriptModel, temperature: 0.9, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
     moderate,
+    allowed,
   });
   if (!result.ok) {
     section("HELD", result.reasons.join("\n"));
