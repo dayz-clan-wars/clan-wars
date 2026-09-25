@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -2149,4 +2149,77 @@ export const kothVoteVoters = pgTable("koth_vote_voters", {
 }, (t) => ({
   pk: primaryKey({ columns: [t.voteId, t.discordId] }),
   castIffBallot: check("koth_vote_voters_cast_iff_ballot", sql`(${t.ballot} IS NULL) = (${t.castAt} IS NULL)`),
+}));
+
+/**
+ * The weekly show (spec 2026-09-25-weekly-show §4.1). One row per week; the row IS
+ * the state machine. `narrative` is written once by the script stage and never by a
+ * retry, so a crash after scripting can never produce a different episode.
+ *
+ * ⚠️ Outside the lock order: written only by `apps/show`, one table per statement.
+ */
+export const showEpisodes = pgTable("show_episodes", {
+  weekStart: timestamp("week_start", { withTimezone: true }).primaryKey(),
+  seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),
+  seasonNumber: integer("season_number").notNull(),
+  episodeNumber: integer("episode_number").notNull(),
+  stage: text("stage").$type<ShowStage>().notNull().default("new"),
+  context: jsonb("context"),
+  narrative: text("narrative"),
+  storylines: jsonb("storylines"),
+  title: text("title"),
+  screeningReport: jsonb("screening_report"),
+  attempts: integer("attempts").notNull().default(0),
+  lastError: text("last_error"),
+  youtubeVideoId: text("youtube_video_id"),
+  draftMessageId: text("draft_message_id"),
+  approvedByDiscordId: text("approved_by_discord_id"),
+  approvedAt: timestamp("approved_at", { withTimezone: true }),
+  rejectedByDiscordId: text("rejected_by_discord_id"),
+  rejectedAt: timestamp("rejected_at", { withTimezone: true }),
+  youtubePublicAt: timestamp("youtube_public_at", { withTimezone: true }),
+  forumThreadId: text("forum_thread_id"),
+  discordPostedAt: timestamp("discord_posted_at", { withTimezone: true }),
+  facebookVideoId: text("facebook_video_id"),
+  facebookPostedAt: timestamp("facebook_posted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  stageValid: check("show_episodes_stage_valid", sql`${t.stage} IN ('new','context','scripted','voiced','rendered','uploaded','awaiting_approval','approved','public','posted','done','held','rejected')`),
+  episodePositive: check("show_episodes_episode_positive", sql`${t.episodeNumber} >= 1`),
+  // `held` is reachable from the script stage with no script that passed the screen.
+  narrativeAfterScript: check("show_episodes_narrative_after_script", sql`${t.stage} IN ('new','context','held') OR ${t.narrative} IS NOT NULL`),
+  seasonEpisodeUniq: uniqueIndex("show_episodes_season_episode_uniq").on(t.seasonId, t.episodeNumber),
+}));
+
+/**
+ * Spoken forms of gamertags and clan names, frozen once written so a name sounds the
+ * same every week (the KOTH show's `pronunciation` table, moved to Postgres).
+ */
+export const showPronunciations = pgTable("show_pronunciations", {
+  text: text("text").primaryKey(),
+  spoken: text("spoken").notNull(),
+  source: text("source").$type<"override" | "llm" | "fallback">().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  sourceValid: check("show_pronunciations_source_valid", sql`${t.source} IN ('override','llm','fallback')`),
+}));
+
+/**
+ * Screening verdicts for player-written text (spec §7). Keyed on the sha256 of the
+ * exact string so a long pitch is a fixed-width key.
+ * ⚠️ An `operator` row always wins and is never overwritten by the automatic passes;
+ * `PgScreeningStore.put` enforces that in its conflict clause.
+ */
+export const showTextScreening = pgTable("show_text_screening", {
+  textSha256: text("text_sha256").primaryKey(),
+  text: text("text").notNull(),
+  verdict: text("verdict").$type<"allow" | "block">().notNull(),
+  source: text("source").$type<"blocklist" | "llm" | "operator">().notNull(),
+  reason: text("reason"),
+  decidedAt: timestamp("decided_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  verdictValid: check("show_text_screening_verdict_valid", sql`${t.verdict} IN ('allow','block')`),
+  sourceValid: check("show_text_screening_source_valid", sql`${t.source} IN ('blocklist','llm','operator')`),
+  shaShape: check("show_text_screening_sha_shape", sql`${t.textSha256} ~ '^[0-9a-f]{64}$'`),
 }));
