@@ -12,3 +12,11 @@ export function minRoleFrom(form: FormData): ClanRole | null {
   const v = form.get("minRole");
   return typeof v === "string" && (VAULT_ROLES as readonly string[]).includes(v) ? (v as ClanRole) : null;
 }
+
+/** The longest `minRole` a refused form may send back — the longest rank name. */
+export const MIN_ROLE_MAX = Math.max(...VAULT_ROLES.map((r) => r.length));
+
+/** A kept rank, but only if it is one; anything else falls back. The query is attacker-suppliable. */
+export function roleOr(v: string | undefined, fallback: string): string {
+  return v !== undefined && (VAULT_ROLES as readonly string[]).includes(v) ? v : fallback;
+}
