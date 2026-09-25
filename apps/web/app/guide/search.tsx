@@ -2,10 +2,21 @@
 import { useMemo, useState } from "react";
 import type { SearchEntry } from "./index";
 
+/** What the live region says for a query `q` with `n` hits: nothing until the search starts (two characters). */
+export function resultsLine(q: string, n: number): string {
+  if (q.trim().length < 2) return "";
+  if (n === 0) return "No results";
+  return n === 1 ? "1 result" : `${n} results`;
+}
+
 /**
  * A guide search box: substring match over chapter, heading and hint text,
  * in the browser, over the index the layout built. Two characters to start,
  * twelve results at most, Escape clears.
+ *
+ * ⚠️ The count is announced through a polite live region (L7): results
+ * appear under the box as you type, and without it a screen reader hears
+ * nothing happen.
  */
 export function GuideSearch({ index, compact = false }: { index: SearchEntry[]; compact?: boolean }) {
   const [q, setQ] = useState("");
@@ -22,6 +33,7 @@ export function GuideSearch({ index, compact = false }: { index: SearchEntry[]; 
         placeholder="Search the guide" aria-label="Search the guide" autoComplete="off" spellCheck={false}
         className="block min-h-[44px] w-full border-2 border-rule-3 bg-ground px-3 font-mono text-[13px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
       />
+      <p role="status" aria-live="polite" className="sr-only">{resultsLine(q, hits.length)}</p>
       {q.trim().length >= 2 && (
         <ol className="m-0 mt-2 list-none border-2 border-rule-2 bg-frame p-0" aria-label="Results">
           {hits.length === 0 && <li className="px-3 py-2.5 text-sm text-ink-2">Nothing in the guide says that.</li>}
