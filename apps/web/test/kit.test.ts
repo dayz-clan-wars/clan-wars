@@ -338,7 +338,7 @@ describe("the kit writes", () => {
    */
   it("reports a refusal in the same place it confirms a save", () => {
     expect(FLOW).toContain("{refusal !== null && (");
-    expect(FLOW).toContain('<Bar role="alert" tone="rust">');
+    expect(FLOW).toContain('<Bar role="alert" tone="refusal">');
     expect(FLOW).toContain('<Bar role="status" tone="plain" onHold={dismiss.hold} onRelease={dismiss.release}>');
     /**
      * ⚠️ Every live region on this page is one of those two bars. A `role`
@@ -381,5 +381,29 @@ describe("the kit writes", () => {
     // ⚠️ aria-modal is a claim, not a mechanism.
     expect(SHEET).toContain('aria-modal="true"');
     expect(SHEET).toContain('e.key !== "Tab"');
+  });
+});
+
+describe("kit visuals (UX review 2026-09-24)", () => {
+  /** L1: a refused pick owes the server nothing; rust is for the open sequence alone. */
+  it("never paints a refusal rust", () => {
+    expect(FLOW).not.toContain('tone="rust"');
+    expect(code(FLOW)).not.toContain("text-rust-2");
+  });
+
+  /** L7: the sequence card's h2 sat above the page's h1, so the outline began at level two. */
+  it("puts the open sequence under the page heading", () => {
+    expect(FLOW.indexOf("<SequenceCard")).toBeGreaterThan(FLOW.indexOf(">Your kit</h1>"));
+  });
+
+  it("L7: nothing smaller than 11px", () => {
+    expect(code(FLOW)).not.toMatch(/text-\[(9|10)px\]/u);
+    expect(code(CARD)).not.toMatch(/text-\[(9|10)px\]/u);
+  });
+
+  it("L7: a slot tile's edge is a control edge", () => {
+    const tile = FLOW.slice(FLOW.indexOf("function SlotTile"), FLOW.indexOf("function HowThisWorks"));
+    expect(tile).not.toContain("border-rule-2");
+    expect(tile).toContain("border-rule-3");
   });
 });

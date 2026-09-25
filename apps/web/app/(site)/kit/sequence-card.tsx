@@ -30,10 +30,10 @@ export function SequenceCard({ challenge, busy, onDraw, onCancel }: {
     <section className="border-2 border-rust bg-frame">
       <div className="flex items-center justify-between gap-4 border-b-2 border-rust px-4 py-3 lg:px-5">
         <h2 className="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink lg:text-sm">
-          <span className="mr-3 text-rust-2">&bull;</span>Sequence open
+          <span aria-hidden="true" className="mr-3 text-rust-2">&bull;</span>Sequence open
         </h2>
         <span className="font-mono text-[11px] text-muted">
-          <span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}
+          <span className="hidden lg:inline">Expires in </span>{formatRemaining(remaining)}<span className="lg:hidden"> left</span>
         </span>
       </div>
 

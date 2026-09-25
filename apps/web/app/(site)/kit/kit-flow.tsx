@@ -187,17 +187,6 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
 
         {view.boosting && view.gamertag !== null && catalogue && (
           <div className="px-4 pb-28 pt-5 lg:px-8 lg:pb-16 lg:pt-7">
-            {view.challenge && (
-              <div className="mb-5">
-                <SequenceCard
-                  challenge={view.challenge}
-                  busy={busy}
-                  onDraw={() => { void post("/api/kit/draw"); }}
-                  onCancel={() => { void post("/api/kit/cancel"); }}
-                />
-              </div>
-            )}
-
             <div className="flex items-end justify-between gap-3">
               <div className="min-w-0">
                 <div className={kicker}>{view.gamertag}</div>
@@ -213,11 +202,23 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
                   and a second `role="status"` carrying a shorter version of
                   the same news makes a screen reader say it twice.
                 */}
-                <div className={`mt-1 font-mono text-[10px] uppercase tracking-[0.14em] ${refusal ? "text-rust-2" : "text-muted"}`}>
+                <div className={`mt-1 font-mono text-[11px] uppercase tracking-[0.14em] ${refusal ? "text-ink" : "text-muted"}`}>
                   {busy ? "Saving" : refusal ? "Not saved" : "All saved"}
                 </div>
               </div>
             </div>
+
+            {/* L7: the open sequence sits under the page's own heading, never above it. Its h2 before the h1 started the outline at level two. */}
+            {view.challenge && (
+              <div className="mt-5">
+                <SequenceCard
+                  challenge={view.challenge}
+                  busy={busy}
+                  onDraw={() => { void post("/api/kit/draw"); }}
+                  onCancel={() => { void post("/api/kit/cancel"); }}
+                />
+              </div>
+            )}
 
             <p className="mt-3.5 text-[13px] leading-relaxed text-ink-2">
               Tap any piece to change it. Changes save on their own.
@@ -262,7 +263,7 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
         confirmation of something the player just did; a refusal interrupts.
       */}
       {refusal !== null && (
-        <Bar role="alert" tone="rust">
+        <Bar role="alert" tone="refusal">
           <span className="min-w-0 text-sm leading-snug text-ink">{refusal}</span>
           <button type="button" onClick={() => setRefusal(null)}
             className="min-h-[44px] flex-none px-2.5 font-mono text-[11px] uppercase tracking-[0.14em] text-muted">
@@ -293,8 +294,9 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
  * one already on screen is announced inconsistently or not at all, which
  * would silence the refusal, the one message here that has to interrupt.
  */
+// L1: a refusal is heavier (2px), never rust. Rust is the one cue that a player owes the server something (globals.css), and a refused pick owes it nothing.
 function Bar({ role, tone, onHold, onRelease, children }: {
-  role: "alert" | "status"; tone: "rust" | "plain"; onHold?: () => void; onRelease?: () => void; children: React.ReactNode;
+  role: "alert" | "status"; tone: "refusal" | "plain"; onHold?: () => void; onRelease?: () => void; children: React.ReactNode;
 }) {
   return (
     <div
@@ -303,7 +305,7 @@ function Bar({ role, tone, onHold, onRelease, children }: {
       onMouseLeave={onRelease}
       onFocus={onHold}
       onBlur={onRelease}
-      className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 border bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${tone === "rust" ? "border-rust" : "border-rule-3"}`}
+      className={`cw-toast fixed inset-x-3 bottom-3 z-[1200] flex items-center justify-between gap-3 bg-surface py-3 pl-3.5 pr-2 shadow-[0_8px_24px_rgba(0,0,0,.6)] lg:left-auto lg:right-8 lg:w-[420px] ${tone === "refusal" ? "border-2 border-rule-3" : "border border-rule-3"}`}
       style={{ bottom: "calc(0.75rem + env(safe-area-inset-bottom))" }}
     >
       {children}
@@ -356,15 +358,15 @@ function SpotStrip({ view, busy, onDraw }: { view: KitView; busy: boolean; onDra
 function SlotTile({ slot, entry, onOpen }: { slot: KitSlot; entry: CatalogueEntry | null; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen}
-      className={`flex min-h-[116px] cursor-pointer flex-col items-stretch p-2 text-left transition-colors hover:border-rule-3 lg:min-h-[170px] lg:p-3 ${entry ? "border border-rule-2 bg-frame" : "border border-dashed border-rule-2"}`}>
-      <span className="font-mono text-[9px] uppercase tracking-[0.14em] text-muted">{SLOT_LABELS[slot]}</span>
+      className={`flex min-h-[116px] cursor-pointer flex-col items-stretch p-2 text-left transition-colors hover:border-muted lg:min-h-[170px] lg:p-3 ${entry ? "border border-rule-3 bg-frame" : "border border-dashed border-rule-3"}`}>
+      <span className="font-mono text-[11px] uppercase tracking-[0.14em] text-muted">{SLOT_LABELS[slot]}</span>
       {entry?.image
         ? <img src={`/${entry.image}`} alt="" className="my-1.5 h-[62px] w-full object-contain lg:h-24" />
         : entry
           // ⚠️ Coverage gaps are expected and must look deliberate, not broken:
           // a catalogue entry may have no picture yet, and the tile still has
           // to read as a piece you are wearing.
-          ? <span className="my-1.5 flex h-[62px] items-center justify-center border border-dashed border-rule-2 text-[10px] uppercase tracking-wide text-dim lg:h-24">No art</span>
+          ? <span className="my-1.5 flex h-[62px] items-center justify-center border border-dashed border-rule-3 text-[11px] uppercase tracking-wide text-dim lg:h-24">No art</span>
           : <span className="my-1.5 flex h-[62px] items-center justify-center text-xl text-rule-3 lg:h-24 lg:text-[26px]" aria-hidden="true">+</span>}
       <span className={`mt-auto block text-[11px] leading-tight lg:text-[13px] ${entry ? "text-ink" : "text-dim"}`}>
         {entry ? entry.label : "Empty"}
