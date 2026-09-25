@@ -11,8 +11,8 @@ screened script. Writes nothing: the connection is read-only and screening verdi
 kept in memory, so operator overrides are not applied in a dry run.
 
     set -a && . ./.env && set +a
-    pnpm show --week 2026-09-21 --dry-run
-    pnpm show --week 2026-09-21 --dry-run --print-prompt
+    pnpm run show --week 2026-09-21 --dry-run
+    pnpm run show --week 2026-09-21 --dry-run --print-prompt
 
 `--week` takes any date and uses that week's Monday; without it, the last ended week.
 Exit code 1 means the script was held by the output screen; the reasons are printed.
