@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.39.0] - 2026-09-25
+
 ### Changed
 
 - Kills made at the Fast Travel Hub before it became a no-combat zone count
