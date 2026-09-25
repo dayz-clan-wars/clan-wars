@@ -97,3 +97,22 @@ export function wikiFilenameFor(texture: string): string {
 export function flagImagePath(texture: string): string {
   return `flags/${texture}.png`;
 }
+
+/**
+ * The long edge of a list thumbnail, in px. Lists draw a flag in a 24–48px
+ * box; a 2:1 flag there is at most 48 CSS px wide, so 96 covers a 2x screen.
+ * Read by scripts/build-flag-thumbs.ts AND by test/flag-thumbs.test.ts — one
+ * statement, so the script and its test cannot disagree.
+ */
+export const FLAG_THUMB_EDGE = 96;
+
+/**
+ * A list's flag, relative to `public/`: a small WebP beside the PNG.
+ *
+ * ⚠️ Under `flags/` on purpose: `/flags/` is in lib/auth/gate.ts's
+ * PUBLIC_PREFIXES, and anything in public/ outside those lists 303s an
+ * anonymous visitor to /login — every public list would draw a broken image.
+ */
+export function flagThumbPath(texture: string): string {
+  return `flags/thumb/${texture}.webp`;
+}

@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { seasons } from "@factions/roster";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { when } from "@/lib/format";
 import { NO_SEASONS } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
@@ -27,7 +27,7 @@ export default async function SeasonsPage() {
           <Panel key={s.number} title={`Season ${s.number}`} aside={<>{when(s.startedAt)} – {when(s.endedAt)}</>}>
             <div className="flex items-center gap-4 border-b border-rule-2 p-4 lg:gap-5 lg:p-5">
               <span className="font-display text-[40px] leading-none text-rule-2 lg:text-[48px]">S{s.number}</span>
-              {s.champion && <img src={`/${flagImagePath(s.champion.texture)}`} alt="" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
+              {s.champion && <img src={`/${flagThumbPath(s.champion.texture)}`} alt="" loading="lazy" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
               <div>
                 <div className={`${kickerSm} !text-gold`}>Champion</div>
                 <div className="font-display text-base text-ink lg:text-xl">{s.champion ? <>{s.champion.name} <span className="font-mono text-xs text-ink-2">[{s.champion.tag}]</span></> : "No champion this season."}</div>
@@ -52,7 +52,7 @@ export default async function SeasonsPage() {
                       <td className="px-4 lg:px-6"><Rank n={r.rank} /></td>
                       <td className="py-3">
                         <a className="flex items-center gap-3 text-ink" href={`/clans/${encodeURIComponent(r.tag)}`}>
-                          <img src={`/${flagImagePath(r.texture)}`} alt="" width={28} height={28} className="h-7 w-7 object-contain" />
+                          <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={28} height={28} className="h-7 w-7 object-contain" />
                           <span className="font-display">{r.name}</span>
                           <span className="font-mono text-xs text-ink-2">[{r.tag}]</span>
                         </a>

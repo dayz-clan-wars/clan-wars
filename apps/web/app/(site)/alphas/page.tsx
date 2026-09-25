@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { alphas, seasons } from "@factions/roster";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { NO_ALPHAS_WEEK, EMPTY_SCOREBOARD } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
 import { Page, PageHead, Body, Panel, linkMono, kickerSm } from "@/app/components/ui";
@@ -29,7 +29,7 @@ export default async function AlphasPage() {
                 {w.entries.map((e) => (
                   <li key={e.tag} className="flex min-h-[56px] items-center gap-3 border-t border-rule-2 px-4 first:border-t-0 lg:min-h-[64px] lg:gap-3.5 lg:px-5">
                     <span className="font-display text-[22px] leading-none text-gold lg:text-[26px]">{e.rank}</span>
-                    <img src={`/${flagImagePath(e.texture)}`} alt="" width={36} height={36} className="h-7 w-7 object-contain lg:h-9 lg:w-9" />
+                    <img src={`/${flagThumbPath(e.texture)}`} alt="" loading="lazy" width={36} height={36} className="h-7 w-7 object-contain lg:h-9 lg:w-9" />
                     <a href={`/clans/${encodeURIComponent(e.tag)}`} className="min-w-0">
                       <span className="block truncate font-display text-[15px] text-ink lg:text-base">{e.name}</span>
                       <span className="hidden font-mono text-[11px] text-ink-2 lg:inline">[{e.tag}]</span>
@@ -50,7 +50,7 @@ export default async function AlphasPage() {
               {closed.map((s, i) => (
                 <div key={s.number} className={`flex items-center gap-4 p-4 lg:gap-5 lg:p-5 ${i % 2 === 0 ? "lg:border-r lg:border-rule-2" : ""} ${i > 0 ? "border-t border-rule-2 lg:border-t-0" : ""}`}>
                   <span className="font-display text-[40px] leading-none text-rule-2 lg:text-[48px]">S{s.number}</span>
-                  {s.champion && <img src={`/${flagImagePath(s.champion.texture)}`} alt="" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
+                  {s.champion && <img src={`/${flagThumbPath(s.champion.texture)}`} alt="" loading="lazy" width={48} height={48} className="h-10 w-10 object-contain lg:h-12 lg:w-12" />}
                   <div>
                     <div className={`${kickerSm} !text-gold`}>Champion</div>
                     <div className="font-display text-base text-ink lg:text-xl">{s.champion ? <>{s.champion.name} <span className="font-mono text-xs text-ink-2">[{s.champion.tag}]</span></> : "No champion this season."}</div>

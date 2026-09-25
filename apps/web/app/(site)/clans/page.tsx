@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { directory } from "@factions/roster";
 import { FLAG_POOL_SIZE } from "@factions/domain";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { ALPHA_BADGE } from "@/lib/scoring-copy";
 import { Page, PageHead, Panel, Facts, kicker, kickerSm } from "@/app/components/ui";
 import { guideLinkFor } from "@/lib/guide-links";
@@ -32,7 +32,7 @@ export default async function ClansPage() {
                 {recruiting.map((c) => (
                   <li key={c.tag} className="border-t border-rule-2 px-4 py-3.5 first:border-t-0 lg:px-5 lg:py-4">
                     <a className="flex items-center gap-3 text-ink" href={href(c.tag)}>
-                      <img src={`/${flagImagePath(c.texture)}`} alt="" width={40} height={40} className="h-9 w-9 object-contain lg:h-10 lg:w-10" />
+                      <img src={`/${flagThumbPath(c.texture)}`} alt="" loading="lazy" width={40} height={40} className="h-9 w-9 object-contain lg:h-10 lg:w-10" />
                       <span className="font-display text-base lg:text-lg">{c.name}</span>
                       <span className="hidden font-mono text-xs text-ink-2 lg:inline">[{c.tag}]</span>
                       <span className="ml-auto font-mono text-[11px] text-muted">{c.memberCount} members</span>
@@ -52,8 +52,8 @@ export default async function ClansPage() {
 
           <Panel title="The flag pool" aside={`${flags.free.length} free`} className="order-last lg:order-none">
             <div className="flex flex-wrap gap-2.5 p-4 lg:p-5">
-              {flags.free.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={f} title={f} width={40} height={40} className="h-9 w-9 object-contain lg:h-10 lg:w-10" />)}
-              {flags.taken.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={`${f} (taken)`} title={`${f} — taken`} width={40} height={40} className="h-9 w-9 object-contain opacity-30 lg:h-10 lg:w-10" />)}
+              {flags.free.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={f} loading="lazy" title={f} width={40} height={40} className="h-9 w-9 object-contain lg:h-10 lg:w-10" />)}
+              {flags.taken.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={`${f} (taken)`} loading="lazy" title={`${f} — taken`} width={40} height={40} className="h-9 w-9 object-contain opacity-30 lg:h-10 lg:w-10" />)}
             </div>
             <p className="px-4 pb-4 text-xs text-muted lg:px-5">Dimmed flags are taken. A flag flies for one clan at a time.</p>
           </Panel>
@@ -66,7 +66,7 @@ export default async function ClansPage() {
               return (
                 <li key={c.tag} className="border-t border-rule-2 first:border-t-0">
                   <a className={`flex min-h-[56px] items-center gap-3 px-4 lg:min-h-[60px] lg:gap-3.5 lg:px-5 ${dormant ? "text-ink-2" : "text-ink"}`} href={href(c.tag)}>
-                    <img src={`/${flagImagePath(c.texture)}`} alt="" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${dormant ? "opacity-60" : ""}`} />
+                    <img src={`/${flagThumbPath(c.texture)}`} alt="" loading="lazy" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${dormant ? "opacity-60" : ""}`} />
                     <span className="font-display text-[15px] lg:text-base">{c.name}</span>
                     <span className="hidden font-mono text-xs text-ink-2 lg:inline">[{c.tag}]</span>
                     {c.alpha && <span className={`${kickerSm} !text-gold`}>{ALPHA_BADGE}</span>}

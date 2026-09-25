@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { scoreboard } from "@factions/roster";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { when } from "@/lib/format";
 import { EMPTY_SCOREBOARD, ALPHA_BADGE } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
@@ -46,7 +46,7 @@ export default async function ScoreboardPage() {
                         <td className="px-6"><Rank n={r.rank} size="lg" /></td>
                         <td className="py-4">
                           <a className={`flex items-center gap-3.5 ${dormant ? "text-ink-2" : "text-ink"}`} href={`/clans/${encodeURIComponent(r.tag)}`}>
-                            <img src={`/${flagImagePath(r.texture)}`} alt="" width={36} height={36} className={`h-9 w-9 object-contain ${dormant ? "opacity-60" : ""}`} />
+                            <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={36} height={36} className={`h-9 w-9 object-contain ${dormant ? "opacity-60" : ""}`} />
                             <span>
                               <span className="block font-display text-lg">{r.name}</span>
                               <span className="font-mono text-[11px] text-ink-2">[{r.tag}]{r.alpha && <> · <span className="uppercase text-gold">{ALPHA_BADGE}</span></>}{dormant && <> · <span className="uppercase text-muted">Dormant{r.rank === null && " · unranked"}</span></>}</span>
@@ -75,7 +75,7 @@ export default async function ScoreboardPage() {
                     <li key={r.tag} className="grid min-h-[60px] grid-cols-[32px_1fr_48px_72px] items-center gap-2.5 border-t border-rule-2 px-4 py-2 first:border-t-0">
                       <Rank n={r.rank} size="lg" />
                       <a className="flex min-w-0 items-center gap-2.5" href={`/clans/${encodeURIComponent(r.tag)}`}>
-                        <img src={`/${flagImagePath(r.texture)}`} alt="" width={28} height={28} className={`h-7 w-7 flex-none object-contain ${dormant ? "opacity-60" : ""}`} />
+                        <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={28} height={28} className={`h-7 w-7 flex-none object-contain ${dormant ? "opacity-60" : ""}`} />
                         <span className="min-w-0">
                           <span className={`block truncate font-display text-[15px] ${dormant ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
                           {r.alpha && <span className="font-mono text-[11px] uppercase text-gold">{ALPHA_BADGE}</span>}

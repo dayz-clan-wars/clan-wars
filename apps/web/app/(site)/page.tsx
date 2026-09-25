@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { directory, scoreboard, warLog } from "@factions/roster";
 import { FLAG_POOL_SIZE } from "@factions/domain";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { ALPHA_BADGE, EMPTY_SCOREBOARD, EMPTY_WAR_LOG } from "@/lib/scoring-copy";
 import { WarLogLine, WarLogKicker } from "./war-log/entry";
 import { currentSession } from "@/lib/viewer";
@@ -80,7 +80,7 @@ export default async function Home() {
               {top.map((r) => (
                 <li key={r.tag} className="flex min-h-[56px] items-center gap-3 border-t border-rule-2 px-4 first:border-t-0 lg:min-h-[64px] lg:gap-4 lg:px-5">
                   <span className="w-5 lg:w-7"><Rank n={r.rank} size="lg" /></span>
-                  <img src={`/${flagImagePath(r.texture)}`} alt="" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${r.status === "dormant" ? "opacity-60" : ""}`} />
+                  <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={32} height={32} className={`h-7 w-7 object-contain lg:h-8 lg:w-8 ${r.status === "dormant" ? "opacity-60" : ""}`} />
                   <a href={`/clans/${encodeURIComponent(r.tag)}`} className="min-w-0">
                     <span className={`block truncate font-display text-[15px] lg:text-base ${r.status === "dormant" ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
                     <span className="font-mono text-[11px] text-ink-2">
@@ -114,8 +114,8 @@ export default async function Home() {
           </Panel>
           <Panel num="03" title="Flag pool" aside={<span className={kicker}>{flags.free.length} free</span>} className="hidden lg:block">
             <div className="flex flex-wrap gap-2.5 p-5">
-              {flags.free.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={f} title={f} width={36} height={36} className="h-9 w-9 object-contain" />)}
-              {flags.taken.map((f) => <img key={f} src={`/${flagImagePath(f)}`} alt={`${f} (taken)`} title={`${f} — taken`} width={36} height={36} className="h-9 w-9 object-contain opacity-35" />)}
+              {flags.free.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={f} loading="lazy" title={f} width={36} height={36} className="h-9 w-9 object-contain" />)}
+              {flags.taken.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={`${f} (taken)`} loading="lazy" title={`${f} — taken`} width={36} height={36} className="h-9 w-9 object-contain opacity-35" />)}
             </div>
           </Panel>
         </div>

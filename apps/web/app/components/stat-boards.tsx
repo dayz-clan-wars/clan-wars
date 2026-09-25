@@ -1,5 +1,5 @@
 import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow, type RowClans } from "@factions/roster";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, boardValue, scopeLabel } from "@/lib/stats-copy";
 import { BOARD_SLUGS, seasonQuery } from "@/lib/board-page";
 import { Panel, Rank, SegNav, linkMono } from "./ui";
@@ -26,7 +26,7 @@ export { NUM as BOARD_NUM, NOTE as BOARD_NOTE };
 /** The row's clan flag, or a blank of the same size so names line up. The tag is the alt text and the tooltip. */
 function RowFlag({ clan }: { clan: { tag: string; texture: string } | undefined }) {
   if (!clan) return <span aria-hidden="true" className="h-6 w-6 flex-none" />;
-  return <img src={`/${flagImagePath(clan.texture)}`} alt={`[${clan.tag}]`} title={clan.tag} width={24} height={24} className="h-6 w-6 flex-none object-contain" />;
+  return <img src={`/${flagThumbPath(clan.texture)}`} alt={`[${clan.tag}]`} loading="lazy" title={clan.tag} width={24} height={24} className="h-6 w-6 flex-none object-contain" />;
 }
 
 /** The rows of one board: rank, flag, name, the number. `first` is the rank of the first row — a later page starts higher. */
