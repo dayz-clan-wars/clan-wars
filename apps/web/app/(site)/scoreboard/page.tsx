@@ -4,7 +4,8 @@ import { flagThumbPath } from "@/src/flag-images";
 import { when } from "@/lib/format";
 import { EMPTY_SCOREBOARD, ALPHA_BADGE } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
-import { Page, PageHead, Body, Panel, Rank, kickerSm } from "@/app/components/ui";
+import { Page, PageHead, Body, Panel, Rank } from "@/app/components/ui";
+import { PhoneRows } from "@/app/components/score-rows";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — scoreboard" };
@@ -65,34 +66,11 @@ export default async function ScoreboardPage() {
                 </tbody>
               </table>
             </Panel>
-            {/* Phones: the same rows as a grid list, R / Rd / D compressed. */}
+            {/* Phones: one row per clan, the counts under the name (S1). */}
             <Panel className="lg:hidden">
-              <div className={`grid grid-cols-[32px_1fr_48px_72px] gap-2.5 border-b-2 border-rule-2 px-4 py-2.5 ${kickerSm} !text-dim`}>
-                <span>#</span><span>Clan</span><span className="text-right">Pts</span><span className="text-right">R / Rd / D</span>
-              </div>
-              <ul>
-                {rows.map((r) => {
-                  const dormant = r.status === "dormant";
-                  return (
-                    <li key={r.tag} className="grid min-h-[60px] grid-cols-[32px_1fr_48px_72px] items-center gap-2.5 border-t border-rule-2 px-4 py-2 first:border-t-0">
-                      <Rank n={r.rank} size="lg" />
-                      <a className="flex min-w-0 items-center gap-2.5" href={`/clans/${encodeURIComponent(r.tag)}`}>
-                        <img src={`/${flagThumbPath(r.texture)}`} alt="" loading="lazy" width={28} height={28} className={`h-7 w-7 flex-none object-contain ${dormant ? "opacity-60" : ""}`} />
-                        <span className="min-w-0">
-                          <span className={`block truncate font-display text-[15px] ${dormant ? "text-ink-2" : "text-ink"}`}>{r.name}</span>
-                          {r.alpha && <span className="font-mono text-[11px] uppercase text-gold">{ALPHA_BADGE}</span>}
-                          {dormant && <span className="font-mono text-[11px] uppercase text-muted">Dormant</span>}
-                        </span>
-                      </a>
-                      <span className={`text-right font-display text-xl ${dormant ? "text-muted" : "text-ink"}`}>{r.points}</span>
-                      <span className="text-right font-mono text-xs text-muted">{r.raids} / {r.timesRaided} / {r.defenses}</span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <PhoneRows rows={rows} />
             </Panel>
             <p className="mt-4 font-mono text-[11px] leading-relaxed text-muted">
-              <span className="lg:hidden">R raids · Rd times raided · D defenses. </span>
               {season.weekClosedThrough ? `Alphas through the week of ${when(season.weekClosedThrough)}.` : "No week has closed yet."}
               <span className="hidden lg:inline"> Only raids score; the higher the victim, the more it is worth.</span>
             </p>
