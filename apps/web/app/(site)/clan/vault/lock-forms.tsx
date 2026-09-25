@@ -59,16 +59,28 @@ export function AddLockForm({ err, kept, open }: { err: FieldErrorT | null; kept
  * of the page and the lock came back folded and reverted, so the officer had
  * to find which lock it was about and retype it.
  */
-export function LockEditor({ lock, open, error, kept }: { lock: { id: number; name: string; note: string | null; minRole: string }; open: boolean; error?: string; kept?: KeptLock }) {
+export function LockEditor({ lock, open, error, err, kept }: {
+  lock: { id: number; name: string; note: string | null; minRole: string }; open: boolean; error?: string;
+  /**
+   * ⚠️ F5: the same field-level error `AddLockForm` gets, so `invalid()`/
+   * `FieldError` can mark the offending input rather than only saying so in
+   * the sentence above it — a screen reader on a plain `<input>` never
+   * connects it to that sentence. `error` still carries the WHOLE-editor
+   * outcomes `err` has no field for ("gone", "not-permitted"): a Notice with
+   * no matching field is the fallback, never a second copy of a field's own
+   * message.
+   */
+  err?: FieldErrorT | null; kept?: KeptLock;
+}) {
   return (
     <details className="group border-t border-rule-2" open={open}>
       <summary className={fold}>Edit <Chevron /></summary>
       <div className="flex flex-col gap-4 border-t-2 border-rule-2 bg-surface p-4 lg:p-5">
-        {error && <Notice>{error}</Notice>}
+        {error && !err && <Notice>{error}</Notice>}
         <form className="flex flex-col gap-3" action="/api/vault/edit" method="post">
           <input type="hidden" name="lockId" value={lock.id} />
-          <label className="block"><span className={fieldLabel}>Name</span><input className={field} name="name" defaultValue={kept?.name ?? lock.name} required maxLength={VAULT_NAME_MAX} /></label>
-          <label className="block"><span className={fieldLabel}>Note</span><input className={field} name="note" defaultValue={kept?.note ?? lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /></label>
+          <label className="block"><span className={fieldLabel}>Name</span><input {...invalid(err ?? null, "name")} className={`${field} ${invalid(err ?? null, "name").className ?? ""}`} name="name" defaultValue={kept?.name ?? lock.name} required maxLength={VAULT_NAME_MAX} /><FieldError err={err ?? null} name="name" /></label>
+          <label className="block"><span className={fieldLabel}>Note</span><input {...invalid(err ?? null, "note")} className={`${field} ${invalid(err ?? null, "note").className ?? ""}`} name="note" defaultValue={kept?.note ?? lock.note ?? ""} maxLength={VAULT_NOTE_MAX} /><FieldError err={err ?? null} name="note" /></label>
           <label className="block"><span className={fieldLabel}>Minimum rank</span>
             <select className={field} name="minRole" defaultValue={roleOr(kept?.minRole, lock.minRole)} required>
               {VAULT_ROLES.map((r) => <option key={r} value={r}>{r}</option>)}

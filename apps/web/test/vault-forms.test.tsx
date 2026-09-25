@@ -82,6 +82,41 @@ describe("a refused edit opens its own lock (M11)", () => {
     expect(input(html, 'name="name"')).toContain('value="Main gate"');
   });
 
+  /**
+   * F5: a refused edit (edit.bad-name / edit.bad-note) showed the sentence
+   * inside the editor but never marked the offending input invalid — the
+   * same `invalid()`/`FieldError` treatment the Add form already gets.
+   * Without it a screen reader announces the field as plain, unremarkable
+   * text, not as the one the refusal is about.
+   */
+  it("⚠️ marks the named field invalid, the same way the Add form does", () => {
+    const html = renderToStaticMarkup(
+      <LockEditor lock={LOCK} open error="A lock name is 1 to 40 characters." err={{ field: "name", message: "A lock name is 1 to 40 characters." }} kept={{ name: "Back gate" }} />,
+    );
+    expect(input(html, 'name="name"')).toMatch(/ aria-invalid="true"/u);
+    expect(input(html, 'name="name"')).toContain('aria-describedby="err-name"');
+    expect(html).toContain('<p id="err-name"');
+    // ⚠️ Not duplicated as a second, un-attributed sentence — the field-level one is the only one.
+    expect(html.match(/A lock name is 1 to 40 characters\./gu)).toHaveLength(1);
+    // The other field is untouched.
+    expect(input(html, 'name="note"')).not.toMatch(/ aria-invalid=/u);
+  });
+
+  it("marks note invalid instead when that's the refused field", () => {
+    const html = renderToStaticMarkup(
+      <LockEditor lock={LOCK} open error="A note is at most 140 characters." err={{ field: "note", message: "A note is at most 140 characters." }} />,
+    );
+    expect(input(html, 'name="note"')).toMatch(/ aria-invalid="true"/u);
+    expect(input(html, 'name="name"')).not.toMatch(/ aria-invalid=/u);
+  });
+
+  /** A whole-editor outcome (not a field one, e.g. "gone") still shows as a plain Notice, unmarked. */
+  it("shows a whole-editor refusal as a plain Notice when it names no field", () => {
+    const html = renderToStaticMarkup(<LockEditor lock={LOCK} open error="That lock no longer exists." />);
+    expect(html).toContain("That lock no longer exists.");
+    expect(input(html, 'name="name"')).not.toMatch(/ aria-invalid=/u);
+  });
+
   it("the edit route names its lock on every refusal", () => {
     expect(read("app", "api", "vault", "edit", "route.ts")).toContain("keep: { lock: String(lockId),");
   });

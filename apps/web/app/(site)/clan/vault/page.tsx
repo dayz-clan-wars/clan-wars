@@ -34,8 +34,14 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
   const session = await currentSession();
   if (!session) return <SessionLost next="/clan/vault" />;
   const notice = result ? lookupCopy(VAULT_RESULT_COPY, result) : undefined;
-  // Only the Add form's refusals name a field; an edit's refusal is shown inside its own lock (M11).
-  const err = fieldError(result, VAULT_RESULT_COPY);
+  const parsed = fieldError(result, VAULT_RESULT_COPY);
+  // ⚠️ `fieldError` doesn't know which FORM a code belongs to — FIELD_FOR now
+  // has both "add.bad-name" and "edit.bad-name" — so `err` is gated to an
+  // add-prefixed code here. Without the gate, an edit's field error would
+  // also satisfy `addOpen` below and open the Add form for no reason.
+  const err = result?.startsWith("add.") ? parsed : null;
+  // F5: the edit form's own field error, shown inside the refused lock's editor (M11).
+  const editErr = result?.startsWith("edit.") ? parsed : null;
   // ⚠️ readKept never returns `code` (lib/form.ts NEVER_KEEP): nothing on this page can refill one.
   const kept = readKept(q);
   // L9: the hero's clan read runs BESIDE the vault's own, not after it. It is still two
@@ -108,7 +114,8 @@ export default async function VaultPage({ searchParams }: { searchParams: Promis
             </div>
             {officer && (
               <LockEditor lock={lock} open={editingId === lock.id}
-                error={editingId === lock.id ? notice : undefined} kept={editingId === lock.id ? keptLock : undefined} />
+                error={editingId === lock.id ? notice : undefined} err={editingId === lock.id ? editErr : undefined}
+                kept={editingId === lock.id ? keptLock : undefined} />
             )}
           </section>
         ))}

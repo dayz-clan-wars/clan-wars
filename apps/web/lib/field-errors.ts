@@ -22,6 +22,8 @@ export const FIELD_FOR: Record<string, string> = Object.assign(Object.create(nul
   "invite.invitee-not-linked": "gamertag", "invite.ambiguous-gamertag": "gamertag",
   "guest.target-not-linked": "target", "guest.ambiguous-gamertag": "target",
   "add.bad-name": "name", "add.bad-note": "note", "add.bad-code": "code",
+  // F5: an edit's bad-name/bad-note now marks the field the same way the Add form does.
+  "edit.bad-name": "name", "edit.bad-note": "note",
 });
 
 export type FieldError = { field: string; message: string };
