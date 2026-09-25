@@ -13,6 +13,7 @@ describe("blocklist", () => {
     "Nazis", "N4Z1", "n a z i", "Naaaazi", "n\u0430zi", "xX_H1tl3r_Xx", "SiegHeil", "Sieg Heil", "1488Crew", "14/88", "14 88",
     "KKK", "k k k", "WhitePower", "White Power", "\u5350", "Third Reich", "Pavel: welcome, n4z1 friends",
     "na z i", "h i tler", "nig g er",
+    "Heil", "ThirdReich", "Niggggger", "NazirHitler",
   ])("⚠️ blocks %s", (s) => {
     expect(blocklistHit(s)).not.toBeNull();
   });
@@ -25,6 +26,9 @@ describe("blocklist", () => {
     "Boris: the illness spreads.", "Pavel: ok I keep saying it.", "Boris: not such inkling.", "Pavel: I am retiring, Boris.",
     "Boris: gas the generator before the raid.", "Pavel: there is a chink in the armor.",
     "Boris: retard the throttle, Pavel.", "Pavel: the tranny on my truck is shot.",
+    // Known false positives (spec §7.1 allowlist): a term inside an innocent name or word.
+    "Sheila", "Theil", "Nazir", "Nazim_77", "Aryan", "AryanGamer", "Reichert", "Nigeria",
+    "Pavel: he was sniggering.", "Boris: Did you go? Ok.",
   ])("allows %s", (s) => {
     expect(blocklistHit(s)).toBeNull();
   });
