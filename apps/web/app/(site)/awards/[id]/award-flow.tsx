@@ -6,7 +6,7 @@ import { lookupCopy } from "@/lib/copy-lookup";
 import { when as whenUtc } from "@/lib/format";
 import { GROUND_RULES, RESULT_COPY, STATE_COPY } from "@/lib/award-copy";
 import type { AwardPageView } from "@/lib/award-view";
-import { Page, btnCta, btnPrimary, kicker } from "@/app/components/ui";
+import { BackLine, Page, PageHead, btnCta, btnPrimary } from "@/app/components/ui";
 import { PickSheet } from "../../kit/pick-sheet";
 import { SequenceCard } from "../../kit/sequence-card";
 
@@ -88,12 +88,10 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
   return (
     <>
       <Page>
-        <div className="px-4 pb-28 pt-5 lg:px-8 lg:pb-16 lg:pt-7">
-          <div className={kicker}>Event award</div>
-          <h1 className="mt-1.5 font-display text-[38px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">{view.label}</h1>
-          <p className="mt-2 text-sm text-ink-2">{view.reason}</p>
-
-          <div className="mt-4 border border-rule-2 bg-frame p-3.5">
+        {/* The site's own head, like every other page, instead of a hand-built one (M12). */}
+        <PageHead kicker="Event award" title={view.label} sub={view.reason} />
+        <div className="px-5 pb-28 pt-5 lg:px-8 lg:pb-16 lg:pt-6">
+          <div className="border border-rule-2 bg-frame p-3.5">
             <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink">{state.title}</div>
             <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
               {state.line}{" "}
@@ -126,9 +124,10 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
             {slots.map(([slot, s]) => {
               const e = entry(slot);
               return (
+                // ⚠️ An empty slot's dashed edge is its only affordance, so it is a CONTROL edge (rule-3, 3.2:1), not a panel's (rule-2, 1.34:1).
                 <button key={slot} type="button" disabled={!isOpen}
                   onClick={() => { setQuery(""); setOpen(slot); }}
-                  className={`flex min-h-[116px] flex-col items-stretch p-2 text-left lg:min-h-[170px] lg:p-3 ${e ? "border border-rule-2 bg-frame" : "border border-dashed border-rule-2"} disabled:cursor-default`}>
+                  className={`flex min-h-[116px] flex-col items-stretch p-2 text-left lg:min-h-[170px] lg:p-3 ${e ? "border border-rule-2 bg-frame" : "border border-dashed border-rule-3"} disabled:cursor-default`}>
                   <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">{s.label}</span>
                   {e?.image
                     ? <img src={`/${e.image}`} alt="" className="my-1.5 h-[62px] w-full object-contain lg:h-24" />
@@ -151,6 +150,7 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
           <ul className="mt-6 flex max-w-[34rem] flex-col gap-2 text-[13px] leading-relaxed text-ink-2">
             {GROUND_RULES.map((line) => <li key={line}>{line}</li>)}
           </ul>
+          <BackLine href="/awards">Your awards</BackLine>
         </div>
       </Page>
 

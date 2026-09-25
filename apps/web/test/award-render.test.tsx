@@ -59,4 +59,17 @@ describe("the award page", () => {
       if (was === undefined) delete process.env.TZ; else process.env.TZ = was;
     }
   });
+
+  it("has the site's page head and a way back to the awards list (M12)", () => {
+    const html = render(view());
+    expect(html).toMatch(/<h1[^>]*>Plate Carrier<\/h1>/u);
+    expect(html).toContain("border-b-2 border-rule-2 px-5 pb-5 pt-6"); // PageHead's own frame
+    expect(html).toMatch(/<a class="[^"]*" href="\/awards">← Your awards<\/a>/u);
+  });
+
+  it("⚠️ draws an empty slot's edge at control contrast (rule-3), not panel contrast", () => {
+    const html = render(view());
+    expect(html).toContain("border-dashed border-rule-3");
+    expect(html).not.toContain("border-dashed border-rule-2");
+  });
 });
