@@ -104,10 +104,17 @@ async function postResults(db: Database, serverId: number, channel: KothVoteChan
     let text: string | null;
     let line: string;
     if (v.state === "passed") {
-      // ⚠️ Past its slot, the event was never announced and koth-tick fails it with
-      // no cancellation; announcing it now would name a session already under way.
-      text = now < v.slotAt ? votePassedText(town(v), v.slotAt, t) : null;
-      line = "Voting has closed: passed.";
+      // ⚠️ Read the linked row's CURRENT state, not the vote's own — an admin can
+      // `/koth cancel` the event this vote created any time between close and this
+      // retry, and a `passed` vote does not know that happened. Only a `scheduled`
+      // row is still upcoming; anything else (cancelled by an admin, or moved on to
+      // `live`/etc. past the slot, the existing after-slot case below) must not be
+      // announced as if players should still show up.
+      const [ev] = v.kothEventId
+        ? await db.select({ state: kothEvents.state }).from(kothEvents).where(eq(kothEvents.id, v.kothEventId)).limit(1)
+        : [];
+      text = now < v.slotAt && ev?.state === "scheduled" ? votePassedText(town(v), v.slotAt, t) : null;
+      line = ev?.state === "cancelled" ? "Voting has closed: passed, but the event was cancelled." : "Voting has closed: passed.";
     } else if (v.state === "failed") {
       text = voteFailedText(town(v), t, v.turnoutFloor, reason === "turnout" ? "turnout" : "majority");
       line = "Voting has closed: failed.";

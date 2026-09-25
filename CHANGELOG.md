@@ -9,7 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - King of the Hill can now start on its own on the server's busiest nights
   (`KOTH_AUTO_TICK`), and players can call one with `/kothvote`: linked players
-  in game vote Yes or No, and it runs at the next restart if two-thirds agree.
+  in game vote Yes or No, and it runs at an upcoming restart if two-thirds agree.
   Neither kind has a prize. At most one King of the Hill a day.
 
 ## [1.41.0] - 2026-09-25

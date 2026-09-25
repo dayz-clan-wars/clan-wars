@@ -116,6 +116,24 @@ describe("kothVoteTick", () => {
     expect(announce).toHaveBeenCalledTimes(1);
     expect((await vote()).resultPostedAt).not.toBeNull();
   });
+  // F3: a passed vote's event, cancelled between the failed post attempt and the
+  // retry, must not be announced as upcoming on the retry.
+  it("does not announce a passed vote whose event was cancelled before the retry", async () => {
+    for (const d of ["d0", "d1", "d2", "d3"]) await cast(d, true);
+    await cast("d4", false);
+    await run(channel(), vi.fn(async () => { throw new Error("gone"); }), CLOSE);
+    expect((await vote()).state).toBe("passed");
+    expect((await vote()).resultPostedAt).toBeNull();
+    const eventId = (await vote()).kothEventId!;
+    await db.update(kothEvents).set({ state: "cancelled" }).where(eq(kothEvents.id, eventId));
+    const announce = vi.fn(async () => {});
+    await run(channel(), announce, at("2026-10-03T15:31:00Z"));
+    expect(announce).not.toHaveBeenCalledWith(expect.stringContaining("The vote passed"));
+    const [ev] = await db.select().from(kothEvents).where(eq(kothEvents.id, eventId));
+    expect(ev!.announcedAt).toBeNull();
+    expect((await vote()).resultPostedAt).toEqual(at("2026-10-03T15:31:00Z"));
+  });
+
   it("still closes and posts when the message was deleted by hand", async () => {
     for (const d of ["d0", "d1", "d2", "d3"]) await cast(d, true);
     const ch = { post: vi.fn(), edit: vi.fn(async () => { throw new Error("Unknown Message"); }) } as unknown as KothVoteChannel;

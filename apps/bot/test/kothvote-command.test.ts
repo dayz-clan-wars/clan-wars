@@ -96,10 +96,22 @@ describe("/kothvote", () => {
     await db.insert(airdropEvents).values({ serverId, slotAt: SLOT, location: "brena", colour: "blue", decidedAt: NOW, popAtDecision: 0, threshold: "0", state: "announced", manual: true, announcedAt: NOW });
     expect((await start(ctx(), input())).content).toMatch(/airdrop/i);
   });
-  it("refuses while a KotH is scheduled, and inside the 24 h gap", async () => {
+  it("refuses inside the 24 h gap", async () => {
     await populate(6, 5);
     await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-03T06:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "no_winner", origin: "admin", scheduledByDiscordId: "9" });
     expect((await start(ctx(), input())).content).toMatch(/24 hours/);
+  });
+  // F6: `kothOpen` (koth-vote-store.ts) is scoped to the SERVER, not the slot — a
+  // scheduled admin KotH anywhere blocks a vote, whichever slot it targets.
+  it("refuses while a scheduled KotH exists, at a different future slot", async () => {
+    await populate(6, 5);
+    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-04T20:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9" });
+    expect((await start(ctx(), input())).content).toMatch(/already scheduled or live/i);
+  });
+  it("refuses while a scheduled KotH exists AT the vote's own target slot", async () => {
+    await populate(6, 5);
+    await db.insert(kothEvents).values({ serverId, slotAt: SLOT, location: "borek", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9" });
+    expect((await start(ctx(), input())).content).toMatch(/already scheduled or live/i);
   });
   it("voids the vote and says so when the message cannot be posted", async () => {
     await populate(6, 5);

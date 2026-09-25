@@ -1,8 +1,21 @@
 import { describe, it, expect } from "vitest";
 import {
   chooseKothTown, kothGapOk, shouldFireKoth, turnoutFloor, voteOutcome, voteTargetSlot, voteClosesAt,
-  KOTH_LOCATIONS, KOTH_NO_REPEAT, KOTH_MIN_GAP_MS, KOTH_VOTE_TURNOUT_MIN, type KothFireInput,
+  KOTH_LOCATIONS, KOTH_NO_REPEAT, KOTH_MIN_GAP_MS, KOTH_VOTE_TURNOUT_MIN, KOTH_REMINDER_LEAD_MS,
+  AIRDROP_DECIDE_LEAD_MS, type KothFireInput,
 } from "../src/index.js";
+
+// F4: two statements of one fact. `koth-decide-tick.ts`'s `announce()` stamps
+// `reminded_at` alongside `announced_at` on the assumption that the decision instant
+// (`decisionInstantFor`, `AIRDROP_DECIDE_LEAD_MS`) IS the reminder instant
+// (`KOTH_REMINDER_LEAD_MS`) — and "KotH wins the slot" (spec §2.12) depends on
+// `kothDecideTick` and `airdropTick` deciding at the same instant, which only holds if
+// these two leads are equal. A drifted pair breaks both silently: no test fails, the
+// decide tick just stops matching the reminder, and airdrop/koth stop racing for the
+// same slot at the same tick.
+it("keeps the KotH reminder lead and the airdrop decide lead equal", () => {
+  expect(KOTH_REMINDER_LEAD_MS).toBe(AIRDROP_DECIDE_LEAD_MS);
+});
 
 const at = (iso: string) => new Date(iso);
 const SLOT = at("2026-10-03T20:00:00Z");

@@ -39,7 +39,20 @@ export async function kothDecideTick(
 
       // 2. A new decision.
       const slot = nextRestartAt(opts.now);
+      // ⚠️ `decisionInstantFor` uses AIRDROP_DECIDE_LEAD_MS, and `announce()` below
+      // stamps `reminded_at` on the assumption that IS KOTH_REMINDER_LEAD_MS — held
+      // equal by `packages/domain/test/koth-auto.test.ts`.
       if (opts.now < decisionInstantFor(slot)) continue;
+      // ⚠️ ANY row for this slot — cancelled or failed included — means the slot has
+      // already been decided once and must not be decided again. `slotTakenBy` only
+      // counts SLOT_HOLDING_STATES on purpose (so /kothvote and this tick's own vote
+      // check let a cancelled/failed row free the slot for a NEW decision by someone
+      // else); this check is the opposite guarantee — an admin's `/koth cancel` of an
+      // automatic event, or of an admin event, must stick, and this tick must never
+      // fill the freed slot back in on its own.
+      const [existing] = await db.select({ id: kothEvents.id }).from(kothEvents)
+        .where(and(eq(kothEvents.serverId, s.id), eq(kothEvents.slotAt, slot))).limit(1);
+      if (existing) continue;
       const weekStart = isoWeekStart(slot);
       const [week, votes] = await Promise.all([
         db.select({ id: kothEvents.id }).from(kothEvents).where(and(
@@ -78,9 +91,12 @@ export async function kothDecideTick(
 }
 
 /**
- * ⚠️ `reminded_at` is stamped WITH `announced_at`: the decision is made at the
- * reminder instant, so this post is the reminder. Without it koth-tick posts a
- * second message seconds later.
+ * ⚠️ `reminded_at` is stamped WITH `announced_at`: this tick may decide anywhere in
+ * [T-30, T), re-evaluating every tick like the airdrop, so the announcement can go
+ * out any time from the reminder instant up to the slot itself — but never earlier
+ * than the reminder instant. A separate reminder post would therefore only ever
+ * repeat this one seconds-to-minutes later, so koth-tick is told the reminder is
+ * already done.
  */
 async function announce(db: Database, post: (c: string) => Promise<void>, id: number, slug: string, slot: Date, now: Date): Promise<number> {
   try {

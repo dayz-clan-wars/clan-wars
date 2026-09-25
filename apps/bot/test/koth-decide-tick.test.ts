@@ -131,4 +131,22 @@ describe("kothDecideTick", () => {
     expect((await rows())[0]!.state).toBe("failed");
     expect(announce).not.toHaveBeenCalled();
   });
+
+  // F1: an admin's (or the tick's own) cancel of a slot must stick — the tick must
+  // never decide a second automatic event for a slot that already has a row, of
+  // any state.
+  it("never re-decides a slot whose automatic row was cancelled", async () => {
+    await online(11, "2026-10-03T18:00:00Z", null);
+    expect((await run()).decided).toBe(1);
+    await db.execute(sql`update koth_events set state = 'cancelled' where slot_at = ${SLOT.toISOString()}::timestamptz`);
+    expect((await run(undefined, { now: at("2026-10-03T19:31:00Z") })).decided).toBe(0);
+    expect((await rows()).length).toBe(1);
+  });
+
+  it("never decides over a cancelled admin row for the slot", async () => {
+    await online(11, "2026-10-03T18:00:00Z", null);
+    await koth({ state: "cancelled" });
+    expect((await run()).decided).toBe(0);
+    expect((await rows()).length).toBe(1);
+  });
 });
