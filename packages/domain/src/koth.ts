@@ -1,6 +1,10 @@
 import locations from "../assets/koth-locations.json";
 import presets from "../assets/koth-presets.json";
-import { KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M, RESTART_PERIOD_MS } from "./rules";
+import {
+  KOTH_MIN_GAP_MS, KOTH_NO_REPEAT, KOTH_PRESET_PREFIX, KOTH_REMINDER_LEAD_MS, KOTH_VOTE_MIN_OPEN_MS,
+  KOTH_VOTE_PASS_DEN, KOTH_VOTE_PASS_NUM, KOTH_VOTE_TURNOUT_MIN, KOTH_ZONE_RADIUS_M, RESTART_PERIOD_MS,
+} from "./rules";
+import { nextRestartAt } from "./restarts";
 import { distance2d } from "./spacing";
 
 export type KothLocation = { name: string; slug: string; centreX: number; centreZ: number };
@@ -68,4 +72,77 @@ export function restoredPresets(current: string[], snapshot: string[] | null): s
   const next = snapshot ?? current.filter((p) => !isKoth(p));
   if (next.length === 0) throw new Error("restoring spawnGearPresetFiles would leave it empty — refusing");
   return next;
+}
+
+/**
+ * Spec §2.2: slot to slot, because for KotH the session is the event.
+ * ⚠️ One statement for all three paths — /koth schedule, the automatic trigger and the vote.
+ */
+export function kothGapOk(slot: Date, lastSlotAt: Date | null): boolean {
+  return lastSlotAt === null || slot.getTime() - lastSlotAt.getTime() >= KOTH_MIN_GAP_MS;
+}
+
+/**
+ * Spec §2.4, `chooseAirdrop`'s shape.
+ * ⚠️ The fallback is not padding: an empty pool indexes undefined and throws inside a tick.
+ */
+export function chooseKothTown(recent: string[], rng: () => number): KothLocation {
+  const skip = new Set(recent.slice(0, KOTH_NO_REPEAT));
+  const pool = KOTH_LOCATIONS.filter((l) => !skip.has(l.slug));
+  const from = pool.length > 0 ? pool : KOTH_LOCATIONS;
+  return from[Math.floor(rng() * from.length)]!;
+}
+
+export type KothFireInput = {
+  slot: Date;
+  /** A koth_events row holds the slot, or an announced/live airdrop does. */
+  slotTaken: boolean;
+  /** A vote for this slot is open or failed (§3.2). */
+  voteBlocks: boolean;
+  /** A KotH is `scheduled` or `live`. */
+  openEvent: boolean;
+  /** `origin = 'auto'` rows, not cancelled/failed, in the slot's ISO week. */
+  weekCount: number;
+  weeklyCap: number;
+  lastSlotAt: Date | null;
+  pop: number;
+  /** ⚠️ Taken strictly before this decision instant — see airdrop-tick.ts. */
+  threshold: number;
+  minPop: number;
+};
+
+/** Spec §3. The refusals in the order that makes one cheapest to read. */
+export function shouldFireKoth(i: KothFireInput): boolean {
+  if (i.slotTaken || i.voteBlocks || i.openEvent) return false;
+  if (i.weekCount >= i.weeklyCap) return false;
+  if (!kothGapOk(i.slot, i.lastSlotAt)) return false;
+  return i.pop >= Math.max(i.minPop, i.threshold);
+}
+
+/** Half the frozen electorate, rounded up, never under the minimum (§4). */
+export function turnoutFloor(electorate: number): number {
+  return Math.max(KOTH_VOTE_TURNOUT_MIN, Math.ceil(electorate / 2));
+}
+
+export type VoteResult = { outcome: "passed" | "failed"; reason: "passed" | "turnout" | "majority" };
+
+/** Turnout first, so a result post can say which bar was missed. */
+export function voteOutcome(v: { cast: number; yes: number; floor: number }): VoteResult {
+  if (v.cast < v.floor) return { outcome: "failed", reason: "turnout" };
+  if (v.yes * KOTH_VOTE_PASS_DEN < v.cast * KOTH_VOTE_PASS_NUM) return { outcome: "failed", reason: "majority" };
+  return { outcome: "passed", reason: "passed" };
+}
+
+/** A vote closes when the reminder would go out: the announcement is the reminder. */
+export function voteClosesAt(slot: Date): Date {
+  return new Date(slot.getTime() - KOTH_REMINDER_LEAD_MS);
+}
+
+/** The first slot whose vote would be open at least `KOTH_VOTE_MIN_OPEN_MS`. */
+export function voteTargetSlot(now: Date): Date {
+  let slot = nextRestartAt(now);
+  while (voteClosesAt(slot).getTime() - now.getTime() < KOTH_VOTE_MIN_OPEN_MS) {
+    slot = new Date(slot.getTime() + RESTART_PERIOD_MS);
+  }
+  return slot;
 }
