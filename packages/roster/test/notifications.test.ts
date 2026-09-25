@@ -228,6 +228,32 @@ describe("notificationsForDb", () => {
     expect((await notificationsForDb(db, YOU, 1)).rows).toHaveLength(2);
   });
 
+  /**
+   * M8: the page filtered the 50 rows it had already fetched, so a filter
+   * showed "nothing on this page" while page 2 was full of matches. The kind
+   * filter must be in the query, before the LIMIT.
+   */
+  it("filters by kind in the query, so a filter reaches past the first page", async () => {
+    // ⚠️ Inserted BEFORE the 51 DMs below (not after, as the fixture might
+    // read at a glance): `order by v.id desc` is insertion order, so the
+    // channel notice must be the OLDEST row to land on page 2 unfiltered —
+    // otherwise this test cannot exercise the bug the comment above names.
+    const f = await faction("NTH");
+    await member(f, AT("2026-09-01T00:00:00Z"));
+    await channel(f, AT("2026-09-17T00:00:00Z"));
+    for (let i = 0; i < 51; i++) await dm(new Date(Date.UTC(2026, 8, 18, 0, i)));
+    expect((await notificationsForDb(db, YOU, 1)).rows.some((r) => r.kind === "promoted")).toBe(false);
+
+    const p = await notificationsForDb(db, YOU, 1, undefined, ["promoted"]);
+    expect(p.rows.map((r) => r.kind)).toEqual(["promoted"]);
+    expect(p.hasNext).toBe(false);
+  });
+
+  it("an empty kind list is an empty page, not everything", async () => {
+    await dm(AT("2026-09-18T10:00:00Z"));
+    expect(await notificationsForDb(db, YOU, 1, undefined, [])).toEqual({ rows: [], page: 1, hasNext: false });
+  });
+
   // Nested (not a sibling describe) so `db`, `dm`, `channel`, `member` and
   // `faction` — all closed over from the outer describe's beforeEach — stay
   // in scope. A sibling describe cannot see consts declared inside another

@@ -90,19 +90,27 @@ type Raw = {
  * a full 51-row page — payload JSONB and all — to throw away all but four of
  * them. Passing a smaller size here means the query itself does less work,
  * not just the slice after it.
+ *
+ * `kinds` narrows the page to those kinds IN THE QUERY (M8). The site's filter
+ * chips used to filter the 50 rows already fetched, so a filter could say
+ * "nothing here" while page 2 was full of matches, and the pager counted rows
+ * the filter then hid. An empty list is an empty page — never "everything".
  */
-export async function notificationsForDb(db: Database, discordId: string, page: number, pageSize: number = NOTIFICATIONS_PAGE_SIZE): Promise<NotificationsPage> {
+export async function notificationsForDb(db: Database, discordId: string, page: number, pageSize: number = NOTIFICATIONS_PAGE_SIZE, kinds?: readonly ClanNoticeKind[]): Promise<NotificationsPage> {
   const p = Math.max(1, Math.trunc(page));
+  if (kinds && kinds.length === 0) return { rows: [], page: p, hasNext: false };
   // ⚠️ One extra row, not a second COUNT query: "is there a next page" is the
   // only thing the pager needs, and counting an unbounded table to learn it is
   // the expensive way to answer a yes/no question.
   const limit = pageSize + 1;
   const offset = (p - 1) * pageSize;
+  const only = kinds ? sql`where v.kind in (${sql.join(kinds.map((k) => sql`${k}`), sql`, `)})` : sql``;
 
   const raw = await db.execute<Raw>(sql`
     with v as (${VISIBLE(discordId)})
     select v.*, (${UNREAD_PREDICATE(discordId)}) as unread
       from v
+     ${only}
      order by v.id desc
      limit ${limit} offset ${offset}
   `);

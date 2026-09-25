@@ -1,7 +1,7 @@
 import { notificationsFor } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { redirect } from "next/navigation";
-import { NOTICE_GROUPS, noticeGroup, type NoticeGroup } from "@/lib/notice-copy";
+import { NOTICE_GROUPS, kindsInGroup, type NoticeGroup } from "@/lib/notice-copy";
 import { notificationsHref, noticeDay } from "@/lib/notifications-page";
 import { NoticeArticle } from "@/app/components/notice-row";
 import { Pager, Notice, SubmitButton, btnSecondary } from "@/app/components/ui";
@@ -32,9 +32,10 @@ export default async function NotificationsPage({ searchParams }: { searchParams
     ? (lookupCopy(RESULT_COPY, q.result) ?? lookupCopy(LEADERSHIP_RESULT_COPY, q.result) ?? lookupCopy(NOTIFICATIONS_RESULT_COPY, q.result))
     : undefined;
 
-  const feed = await notificationsFor(session.sub, page);
+  // M8: the filter is part of the query, so it reaches every page and the pager counts what it shows.
+  const feed = await notificationsFor(session.sub, page, undefined, group ? kindsInGroup(group) : undefined);
   const now = new Date();
-  const shown = group ? feed.rows.filter((r) => noticeGroup(r.kind) === group) : feed.rows;
+  const shown = feed.rows;
 
   // Day headings are computed per page on purpose: a day spanning a page
   // boundary gets its heading on both, which beats a pager that cannot say how
@@ -63,7 +64,7 @@ export default async function NotificationsPage({ searchParams }: { searchParams
 
       {days.length === 0 ? (
         <p className="mt-9 border-2 border-rule-2 bg-frame px-4 py-8 text-center text-sm text-muted">
-          {group ? "Nothing in this filter on this page." : "Nothing here yet."}
+          {group ? "Nothing in this filter." : "Nothing here yet."}
         </p>
       ) : days.map((d) => (
         <section key={d.day} className="mt-9">

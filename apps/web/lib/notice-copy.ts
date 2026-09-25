@@ -323,3 +323,12 @@ export function noticeCopy(kind: ClanNoticeKind, payload: NoticePayload, target:
 }
 
 export const noticeGroup = (kind: ClanNoticeKind): NoticeGroup => NOTICE_COPY[kind]?.group ?? "Roster";
+
+/**
+ * Every kind in one filter group, for the query (M8). Read off NOTICE_COPY so
+ * a new kind joins its group's filter by being written there, and the chip and
+ * the row's own group can never disagree.
+ */
+export function kindsInGroup(group: NoticeGroup): ClanNoticeKind[] {
+  return (Object.keys(NOTICE_COPY) as ClanNoticeKind[]).filter((k) => NOTICE_COPY[k].group === group);
+}
