@@ -52,3 +52,24 @@ describe("enforcement tick wiring (task 10)", () => {
     expect(src).toMatch(/since = new Date\(banNow\.getTime\(\) - BAN_APPLY_LOOKBACK_MS\)/u);
   });
 });
+
+describe("King of the Hill vote and decision wiring (spec 2026-09-24 §6.5)", () => {
+  it("runs the vote tick, then the automatic decision, then the airdrop decision, all after the restart tick", () => {
+    const restartAt = src.indexOf("await restartTick(db,");
+    const voteAt = src.indexOf("await kothVoteTick(db,");
+    const decideAt = src.indexOf("await kothDecideTick(db,");
+    const airdropAt = src.indexOf("await airdropTick(db,");
+    for (const i of [restartAt, voteAt, decideAt, airdropAt]) expect(i).toBeGreaterThan(-1);
+    expect(voteAt).toBeGreaterThan(restartAt);
+    // ⚠️ The airdrop yields to a scheduled KotH row only if the row exists when it looks.
+    expect(decideAt).toBeGreaterThan(voteAt);
+    expect(airdropAt).toBeGreaterThan(decideAt);
+  });
+  it("gates the decision on cfg.koth.auto.enabled", () => {
+    expect(src).toMatch(/if \(cfg\.koth\.auto\.enabled\) \{\s*try \{\s*const d = await kothDecideTick\(db,/u);
+  });
+  // ⚠️ Not gated on KOTH_VOTE: an open vote must still close when the flag goes off.
+  it("runs the vote tick whenever the channel exists", () => {
+    expect(src).toMatch(/if \(kothVoteChannel\) \{\s*try \{\s*const v = await kothVoteTick\(db,/u);
+  });
+});
