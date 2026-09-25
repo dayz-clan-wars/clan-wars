@@ -248,7 +248,8 @@ function Verified({ gamertag, verifiedAt }: { gamertag: string; verifiedAt: stri
       <div>
         <div className={step}>Linked</div>
         <h1 className={h1}>You are {gamertag}</h1>
-        <p className={body}>Linked on {new Date(verifiedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" })}. Your clan, your base and your map hang off this.</p>
+        {/* ⚠️ timeZone: "UTC" — every date on this site is UTC, and without it a server render and a browser in another zone can format this date differently, which is a hydration mismatch here (this component is client-rendered). */}
+        <p className={body}>Linked on {new Date(verifiedAt).toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric", timeZone: "UTC" })} UTC. Your clan, your base and your map hang off this.</p>
       </div>
       <div className={card}>
         <a className={button} href="/base">Your base <span className="font-mono normal-case">→</span></a>

@@ -49,3 +49,24 @@ describe("the strip is in both shells", () => {
     expect(text.indexOf("<SiteBar")).toBeLessThan(text.indexOf("<ServerStrip"));
   });
 });
+
+/**
+ * M1, WCAG 2.2.2: moving text lasting over five seconds needs a way to pause
+ * it. `:hover` alone is no way at all on a phone or a keyboard.
+ */
+describe("the marquee can be stopped", () => {
+  const css = readFileSync(join(import.meta.dirname, "..", "app", "globals.css"), "utf8");
+  const src = readFileSync(join(import.meta.dirname, "..", "app", "components", "server-strip.tsx"), "utf8");
+
+  it("⚠️ runs two passes and stops, never infinite", () => {
+    expect(css).toMatch(/\.cw-marquee\s*\{\s*animation:\s*cw-marquee\s+\d+s\s+linear\s+2;/u);
+    expect(css).not.toMatch(/cw-marquee[^;]*infinite/u);
+  });
+
+  it("⚠️ pauses on focus as well as hover, and the strip is focusable by Tab or tap", () => {
+    expect(css).toMatch(/\.cw-marquee-host:focus \.cw-marquee/u);
+    expect(css).toMatch(/\.cw-marquee-host:hover \.cw-marquee/u);
+    expect(src).toContain("tabIndex={0}");
+    expect(src).toContain("cw-marquee-host");
+  });
+});

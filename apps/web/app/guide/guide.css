@@ -16,11 +16,13 @@
   margin: 40px 0 0; letter-spacing: .02em; scroll-margin-top: calc(var(--spacing-bar) + 16px);
 }
 .prose-guide h2 + p, .prose-guide h2 + ul, .prose-guide h2 + ol, .prose-guide h2 + div { margin-top: 12px; }
+/* ⚠️ The section anchor is always at full --color-dim (4.9:1 on the ground), never faded.
+   A touch screen has no hover to reveal it, and any fade below full strength drops it
+   under 3:1 for a control on this near-black ground (L4; .45 measured 1.8:1). */
 .prose-guide h2 .anchor {
-  margin-left: .5em; font-family: var(--font-mono); font-size: 14px; color: var(--color-dim); text-decoration: none; opacity: 0;
+  margin-left: .5em; font-family: var(--font-mono); font-size: 14px; color: var(--color-dim); text-decoration: none;
 }
-.prose-guide h2:hover .anchor, .prose-guide h2 .anchor:focus-visible { opacity: 1; }
-.prose-guide h2 .anchor:hover { color: var(--color-gold); }
+.prose-guide h2 .anchor:hover, .prose-guide h2 .anchor:focus-visible { color: var(--color-gold); }
 .prose-guide h3 { font-size: 1.05em; font-weight: 700; margin: 1.8em 0 .4em; }
 .prose-guide p { margin: 0 0 1em; max-width: 66ch; }
 .prose-guide ul, .prose-guide ol { padding-left: 1.3em; margin: 0 0 1.1em; max-width: 66ch; }
@@ -36,19 +38,20 @@
 
 /* A rule: the thing a player is promised. The one loud device on the page. */
 .prose-guide .rule { margin: 28px 0 20px; padding: 18px 20px; border: 2px solid var(--color-gold); max-width: 66ch; font-size: 15px; line-height: 1.6; }
-.prose-guide .rule::before { content: "Promise"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-gold); }
+.prose-guide .rule::before { content: "Promise"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-gold); }
 .prose-guide .rule p { margin: 0; }
 .prose-guide .rule p + p { margin-top: .7em; }
 .prose-guide .rule strong { color: var(--color-ink); }
 
 /* What the server can see — the honesty box. Quiet, grey, never gold. */
 .prose-guide .log { margin: 20px 0; padding: 18px 20px; background: var(--color-frame); border: 2px solid var(--color-rule-2); color: var(--color-ink-2); font-size: 15px; line-height: 1.6; max-width: 66ch; }
-.prose-guide .log .t { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-muted); }
+.prose-guide .log .t { display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-muted); }
 .prose-guide .log p:last-child { margin-bottom: 0; }
 
-/* Enforced by people — rust means an obligation, not a decoration. */
+/* Enforced by people — rust means an obligation, not a decoration.
+   ⚠️ The EDGE is --color-rust; the LABEL is --color-rust-2. --color-rust as text is 2.6:1 on the frame (H3); rust-2 is the same hue at 5:1. */
 .prose-guide .human { margin: 20px 0; padding: 18px 20px; border: 2px solid var(--color-rust); background: var(--color-frame); max-width: 66ch; font-size: 15px; line-height: 1.6; }
-.prose-guide .human::before { content: "Enforced by people"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 10px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-rust); }
+.prose-guide .human::before { content: "Enforced by people"; display: block; margin-bottom: 8px; font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: .18em; color: var(--color-rust-2); }
 .prose-guide .human p:last-child { margin-bottom: 0; }
 
 /* An announcement as the bot would post it. */
@@ -61,7 +64,8 @@
 .prose-guide th { color: var(--color-muted); font-weight: 400; font-size: .85em; }
 .prose-guide td:last-child, .prose-guide th:last-child { padding-right: 0; }
 .prose-guide td.v { font-family: var(--font-mono); font-size: .9em; white-space: nowrap; color: var(--color-ink); }
-.prose-guide tr.group td { color: var(--color-gold); font-family: var(--font-display); text-transform: uppercase; font-size: .9em; letter-spacing: .04em; padding-top: 22px; border-bottom: 2px solid var(--color-rule-2); }
+/* A group's header is a <th scope="rowgroup"> (chapter.tsx); this outranks `.prose-guide th`'s muted small caption. */
+.prose-guide tr.group th { color: var(--color-gold); font-family: var(--font-display); text-transform: uppercase; font-size: .9em; letter-spacing: .04em; padding-top: 22px; border-bottom: 2px solid var(--color-rule-2); }
 
 /* one-page rules list */
 .prose-guide .onepage h2 { font-size: 16px; margin-top: 32px; }

@@ -1,5 +1,5 @@
 import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow, type RowClans } from "@factions/roster";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, boardValue, scopeLabel } from "@/lib/stats-copy";
 import { BOARD_SLUGS, seasonQuery } from "@/lib/board-page";
 import { Panel, Rank, SegNav, linkMono } from "./ui";
@@ -26,7 +26,7 @@ export { NUM as BOARD_NUM, NOTE as BOARD_NOTE };
 /** The row's clan flag, or a blank of the same size so names line up. The tag is the alt text and the tooltip. */
 function RowFlag({ clan }: { clan: { tag: string; texture: string } | undefined }) {
   if (!clan) return <span aria-hidden="true" className="h-6 w-6 flex-none" />;
-  return <img src={`/${flagImagePath(clan.texture)}`} alt={`[${clan.tag}]`} title={clan.tag} width={24} height={24} className="h-6 w-6 flex-none object-contain" />;
+  return <img src={`/${flagThumbPath(clan.texture)}`} alt={`[${clan.tag}]`} loading="lazy" title={clan.tag} width={24} height={24} className="h-6 w-6 flex-none object-contain" />;
 }
 
 /** The rows of one board: rank, flag, name, the number. `first` is the rank of the first row — a later page starts higher. */
@@ -42,9 +42,9 @@ export function BoardRows({ kind, rows, clans, first = 1 }: { kind: Kind; rows: 
             <span className="w-7"><Rank n={n} /></span>
             <RowFlag clan={clans[r.dayzId]} />
             <a className="truncate font-mono text-sm text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(r.gamertag)}`}>{r.gamertag}</a>
-            {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs text-muted">{r.kills} / {r.deaths}</span>}
+            {kind === "kd" && "kills" in r && <span className="ml-auto font-mono text-xs tabular-nums text-muted">{r.kills} / {r.deaths}</span>}
             {kind === "longestKills" && "weapon" in r && r.weapon && <span className="ml-auto truncate font-mono text-xs text-muted">{r.weapon}</span>}
-            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{boardValue(kind, r.value)}</span>
+            <span className={`${kind === "kd" ? "w-11 text-right" : kind === "longestKills" && "weapon" in r && r.weapon ? "w-20 flex-none text-right" : "ml-auto"} tabular-nums ${podium ? "font-display text-base text-ink" : "font-mono text-sm text-ink-2"}`}>{boardValue(kind, r.value)}</span>
           </li>
         );
       })}
@@ -58,7 +58,8 @@ function BoardPanel({ kind, rows, clans, seeAll }: { kind: Kind; rows: BoardRow[
     <Panel num={NUM[kind]} title={BOARD_LABELS[kind]} aside={NOTE[kind] ? <span className="text-[11px]">{NOTE[kind]}</span> : undefined} className="flex flex-col">
       <BoardRows kind={kind} rows={rows} clans={clans} />
       <p className="mt-auto border-t border-rule-2 px-4 lg:px-5">
-        <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={seeAll}>{SEE_ALL} &rarr;</a>
+        {/* ⚠️ Ten of these on /players: the board's name makes each one distinct in a screen reader's link list (M9). */}
+        <a className={`${linkMono} inline-flex min-h-[44px] items-center`} href={seeAll}>{SEE_ALL}<span className="sr-only">: {BOARD_LABELS[kind]}</span>&nbsp;<span aria-hidden="true">&rarr;</span></a>
       </p>
     </Panel>
   );

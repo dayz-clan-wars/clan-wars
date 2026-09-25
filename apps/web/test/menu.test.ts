@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { barFor, isCurrent, menuFor, signInHref } from "../lib/menu";
 
@@ -63,6 +63,29 @@ describe("barFor (the desktop bar)", () => {
     expect(isCurrent(clan, "/clan/vault")).toBe(true);
     expect(isCurrent(clan, "/clans")).toBe(false);
     expect(isCurrent(clan, "/clans/WTC")).toBe(false);
+  });
+});
+
+/**
+ * M2: at 1024–1279px the quiet Guide cell was `!hidden xl:!flex`, the drawer
+ * is lg:hidden, and the footer is on two pages — so the guide was reachable
+ * from nowhere. The room now comes from the wordmark and the cell padding.
+ */
+describe("the bar between lg and xl", () => {
+  const site = (f: string) => readFileSync(join(import.meta.dirname, "..", "app", "(site)", f), "utf8");
+
+  it("⚠️ never hides the quiet Guide cell", () => {
+    expect(site("menu-list.tsx")).not.toMatch(/!hidden\s+xl:!flex/u);
+  });
+
+  it("buys the room by dropping the wordmark and the crumb to xl, never the guide", () => {
+    const bar = site("site-bar.tsx");
+    expect(bar).toMatch(/<span className="lg:max-xl:sr-only">Clan Wars<\/span>/u);
+    expect(bar).toMatch(/hidden text-muted xl:inline">\/ \{crumb\}/u);
+  });
+
+  it("the Guide is still in the bar", () => {
+    expect(barFor(true).flat().some((m) => m.href === "/guide")).toBe(true);
   });
 });
 

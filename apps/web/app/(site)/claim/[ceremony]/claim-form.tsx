@@ -1,6 +1,6 @@
 import { ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, MIN_BASE_SPACING_M } from "@factions/domain";
 import { days } from "@/lib/format";
-import { flagImagePath } from "@/src/flag-images";
+import { flagThumbPath } from "@/src/flag-images";
 import type { FieldError as FieldErrorT } from "@/lib/field-errors";
 import { Panel, PanelBody, FieldError, SubmitButton, invalid, btnCta, field, fieldLabel, checkbox, kickerSm } from "@/app/components/ui";
 
@@ -68,7 +68,8 @@ export function ClaimForm({ ceremonyId, freeFlags, participants, meDayzId, err, 
                     {/* L4: the pick is marked by a glyph as well as the edge colour, so it never rests on colour alone. */}
                     <span aria-hidden="true" className="absolute right-1 top-1 hidden h-4 w-4 items-center justify-center bg-gold font-mono text-[11px] leading-none text-ground group-has-[:checked]:flex">✓</span>
                     {/* L4: alt="" — the flag's name is the text right under it; alt={f} made a reader say it twice. */}
-                    <img src={`/${flagImagePath(f)}`} alt="" width={48} height={48} className="h-12 w-12 object-contain" />
+                    {/* H5: up to 33 tiles at once — the 96px thumb, not the ~50KB full PNG, covers this 48px box at 2x; lazy because most sit off the fold. */}
+                    <img src={`/${flagThumbPath(f)}`} alt="" loading="lazy" width={48} height={48} className="h-12 w-12 object-contain" />
                     <span className="font-mono text-[11px] text-muted">{f.replace(/^Flag_/u, "")}</span>
                   </label>
                 </li>

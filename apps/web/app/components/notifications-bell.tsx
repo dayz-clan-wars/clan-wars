@@ -1,15 +1,18 @@
 import type { NoticeRow } from "@factions/roster";
+import { POPOVER_GROUP } from "@/lib/popover";
 import { NoticeArticle } from "./notice-row";
 
 /**
  * The bell in the top bar and its panel.
  *
  * A `<details>`, like the phone drawer in menu-list.tsx, so it opens without
- * JavaScript and closes on navigation. No client JS here at all: unlike the
- * drawer, the bell needs no Escape/click-outside handling to be usable — it
- * is a small anchored panel, not a full-screen overlay stealing focus from
- * the rest of the page, so the plain `<details>` default (toggle on summary
- * click, no backdrop) is enough on its own.
+ * JavaScript and closes on navigation. It is in the bar's popover group
+ * (lib/popover.ts): opening it closes Menu or Contents, and Escape and a
+ * click outside close it (PopoverDismiss, mounted by SiteBar).
+ *
+ * ⚠️ Below lg the panel is FIXED to the viewport, not hung off the bell: the
+ * bell sits left of Menu, so a `right-0` panel ran ~55px off the left edge of
+ * a 375px phone (2026-09-24, H1). From lg it is anchored under the bell again.
  *
  * ⚠️ z-[1300] on the panel, for the same reason the bar carries it: Leaflet's
  * panes sit at 200-700, its controls at 1000, and the map page's sheets at
@@ -22,7 +25,7 @@ export function NotificationsBell({ unread, recent, now = new Date() }: {
   now?: Date;
 }) {
   return (
-    <details className="group relative flex items-stretch border-l border-rule-2">
+    <details name={POPOVER_GROUP} className="group relative flex items-stretch border-l border-rule-2">
       <summary className={`flex h-full min-h-[44px] cursor-pointer list-none items-center px-4 [&::-webkit-details-marker]:hidden ${unread > 0 ? "text-ink" : "text-muted"} hover:text-gold`}>
         {/* ⚠️ A bare number beside a bell means nothing to a screen reader. Say what it counts, in words, as the accessible name — not a title attribute. */}
         <span className="sr-only">Notifications{unread > 0 ? `, ${unread} unread` : ", none unread"}</span>
@@ -35,7 +38,7 @@ export function NotificationsBell({ unread, recent, now = new Date() }: {
           <span aria-hidden="true" className="absolute right-2 top-2 inline-flex h-[18px] min-w-[18px] items-center justify-center bg-gold px-1.5 font-mono text-[11px] font-bold text-ground">{unread}</span>
         )}
       </summary>
-      <div className="absolute right-0 top-[54px] z-[1300] w-[340px] max-w-[calc(100vw-24px)] border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)] lg:w-[400px]">
+      <div className="fixed inset-x-3 top-[calc(var(--spacing-bar)+8px)] z-[1300] max-h-[calc(100dvh-var(--spacing-bar)-16px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)] lg:absolute lg:inset-x-auto lg:right-0 lg:top-[calc(var(--spacing-bar)+2px)] lg:max-h-none lg:w-[400px]">
         <div className="flex items-center justify-between gap-3 border-b-2 border-rule-2 px-3.5 py-3">
           <span className="font-display text-xs uppercase tracking-[0.06em] text-ink">Notifications</span>
           {/* No `back` field: the route always lands on /notifications, and this panel
@@ -43,7 +46,8 @@ export function NotificationsBell({ unread, recent, now = new Date() }: {
               plumbing (there's no pathname passed into SiteLayout today) — a hidden
               field carrying a hardcoded value would be exactly as dead as this was. */}
           <form action="/api/notifications/read-all" method="post">
-            <button type="submit" className="font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Mark all read</button>
+            {/* ⚠️ 44px tall: as bare 11px text this was a 17px-high target, measured live. */}
+            <button type="submit" className="inline-flex min-h-[44px] items-center font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Mark all read</button>
           </form>
         </div>
         {recent.length === 0

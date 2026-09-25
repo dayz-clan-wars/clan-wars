@@ -12,7 +12,8 @@ const TONE: Record<RaidTone, { cell: string; kicker: string; divider: string; la
   warn: { cell: "bg-frame", kicker: "text-dim", divider: "bg-rule-2", label: "text-muted", value: "text-gold", rule: "bg-rule-2" },
 };
 
-const KICKER = "font-mono text-[10px] font-bold uppercase tracking-[0.16em] lg:text-[11px] lg:tracking-[0.18em]";
+/** ⚠️ 11px at every width: the kicker carries real words ("Raid", "Restart", a skip reason), and 10px failed the floor on the phone (M7). Tracking tightens on a phone instead, so the two columns still fit. */
+const KICKER = "font-mono text-[11px] font-bold uppercase tracking-[0.12em] lg:tracking-[0.18em]";
 const VALUE = "font-mono text-[15px] font-bold tabular-nums lg:text-[17px] lg:tracking-[0.02em]";
 /** The hairline between a kicker and its value. The phone stacks the two, so it only appears from lg. */
 const DIVIDER = "hidden w-px flex-none self-stretch lg:block";

@@ -1,7 +1,8 @@
 "use client";
-import { useEffect, useRef } from "react";
+import { useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import { barFor, isCurrent, menuFor, signInHref, type Counts } from "@/lib/menu";
+import { POPOVER_GROUP } from "@/lib/popover";
 import { GuideSearch } from "@/app/guide/search";
 import type { SearchEntry } from "@/app/guide/index";
 
@@ -21,7 +22,7 @@ const countFor = (badge: "you" | "clan" | undefined, counts: Counts) => (badge ?
 
 export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: boolean; counts?: Counts }) {
   const { pathname, here } = useHere();
-  const cell = "flex h-full items-center border-l border-rule-2 px-4 font-display text-xs uppercase tracking-[0.06em]";
+  const cell = "flex h-full items-center border-l border-rule-2 px-3 font-display text-xs uppercase tracking-[0.06em] xl:px-4";
   return (
     <nav aria-label="Site" className="flex h-full items-stretch whitespace-nowrap">
       {barFor(signedIn).map((group, gi) => (
@@ -30,7 +31,7 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
             const on = isCurrent(m, pathname);
             return (
               <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
-                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"} ${m.quiet ? "!hidden xl:!flex" : ""}`}>
+                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
                 {m.label}<Badge n={countFor(m.badge, counts)} label="waiting" />
               </a>
             );
@@ -40,7 +41,7 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
       {signedIn ? (
         // POST only: the logout route refuses GET (app/api/auth/logout/route.ts).
         <form action="/api/auth/logout" method="post" className="flex items-stretch border-l border-rule-2">
-          <button type="submit" className="flex h-full items-center pl-5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink">Sign out</button>
+          <button type="submit" className="flex h-full items-center pl-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink xl:pl-5">Sign out</button>
         </form>
       ) : (
         <a href={signInHref(here)} className="ml-4 flex items-center bg-gold px-5 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Sign in</a>
@@ -51,34 +52,25 @@ export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: b
 
 /**
  * The phone drawer: a <details> so it works without JavaScript and closes on
- * navigation; this adds Escape, click-outside, and the dimmed backdrop. The
- * summary reads "Menu" closed and "Close" open, filled gold when open.
+ * navigation, with a dimmed backdrop. The summary reads "Menu" closed and
+ * "Close" open, filled gold when open. Escape, click-outside and
+ * one-popover-at-a-time come from PopoverDismiss (mounted by SiteBar) for the
+ * whole popover group, so the drawer no longer carries listeners of its own.
  */
 export function Drawer({ signedIn, guideIndex, counts = { you: 0, clan: 0 } }: { signedIn: boolean; guideIndex?: SearchEntry[]; counts?: Counts }) {
   const { pathname, here } = useHere();
   const root = useRef<HTMLDetailsElement>(null);
 
-  useEffect(() => {
-    const details = root.current;
-    if (!details) return;
-    const close = () => details.removeAttribute("open");
-    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
-    const onClick = (e: MouseEvent) => { if (!details.contains(e.target as Node)) close(); };
-    document.addEventListener("keydown", onKey);
-    document.addEventListener("click", onClick);
-    return () => { document.removeEventListener("keydown", onKey); document.removeEventListener("click", onClick); };
-  }, []);
-
   const item = "flex min-h-[48px] items-center justify-between px-5 font-display text-sm uppercase tracking-[0.06em]";
   return (
-    <details ref={root} className="group">
+    <details ref={root} name={POPOVER_GROUP} className="group">
       <summary className="relative flex min-h-[44px] cursor-pointer list-none items-center border border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold group-open:bg-gold group-open:text-ground [&::-webkit-details-marker]:hidden">
         <span className="group-open:hidden">Menu</span><span className="hidden group-open:inline">Close</span>
         {counts.you + counts.clan > 0 && <span className="absolute -right-2 -top-2 group-open:hidden"><Badge n={counts.you + counts.clan} label="waiting" /></span>}
       </summary>
       {/* The backdrop sits under the panel but over the page; a tap on it is a click outside the panel's <details>… except it IS inside. So it closes itself. */}
       <div className="fixed inset-x-0 bottom-0 top-bar z-[1290] bg-ground/70" onClick={() => root.current?.removeAttribute("open")} aria-hidden="true" />
-      <nav aria-label="Site" className="absolute right-3 top-[60px] z-[1300] max-h-[calc(100dvh-72px)] w-[300px] max-w-[calc(100vw-24px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
+      <nav aria-label="Site" className="absolute right-3 top-[calc(var(--spacing-bar)+8px)] z-[1300] max-h-[calc(100dvh-var(--spacing-bar)-20px)] w-[300px] max-w-[calc(100vw-24px)] overflow-y-auto border-2 border-rule-2 bg-frame shadow-[0_16px_40px_rgba(0,0,0,.6)]">
         {guideIndex && <div className="border-b-2 border-rule-2 p-3"><GuideSearch index={guideIndex} compact /></div>}
         {menuFor(signedIn).map((group, gi) => (
           <ul key={gi} className={`py-2 ${gi > 0 ? "border-t-2 border-rule-2" : ""}`}>

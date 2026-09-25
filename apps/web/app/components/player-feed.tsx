@@ -2,9 +2,11 @@ import type { Encounter, FeedEntry, PlayerFeed } from "@factions/roster";
 import { EMPTY_FEED, FEED_KIND, FEED_TITLE, FINISHED, FRIENDLY_FIRE_MARK, HUB_MARK, deathCause, shot, steps } from "@/lib/feed-copy";
 import { PAGER } from "@/lib/stats-copy";
 import { seasonQuery } from "@/lib/board-page";
+import { when } from "@/lib/format";
 import { Panel, Pager } from "./ui";
 
-const stamp = (d: Date) => d.toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", timeZone: "UTC" });
+/** ⚠️ `when()`: an exact log instant, so it says UTC like every other one on the site (M5). */
+const stamp = when;
 
 function Name({ gamertag }: { gamertag: string }) {
   return <a className="font-mono text-ink underline-offset-4 hover:underline" href={`/players/${encodeURIComponent(gamertag)}`}>{gamertag}</a>;
@@ -37,7 +39,7 @@ function FeedRow({ kind, at, children }: { kind: FeedEntry["kind"]; at: Date; ch
   const k = FEED_KIND[kind];
   return (
     <li className="flex flex-col gap-1 border-t border-rule-2 px-4 py-3 text-sm text-ink-2 first:border-t-0 lg:min-h-[52px] lg:flex-row lg:items-center lg:gap-5 lg:px-5 lg:py-2">
-      <span className={`flex gap-2 font-mono text-[11px] uppercase tracking-[0.12em] lg:w-[190px] lg:flex-none ${k.tone}`}>
+      <span className={`flex gap-2 font-mono text-[11px] uppercase tracking-[0.12em] lg:w-[230px] lg:flex-none ${k.tone}`}>
         <span className="w-[74px] flex-none">{k.label}</span><span className="text-muted">{stamp(at)}</span>
       </span>
       <span className="min-w-0"><span className="text-ink">{children}</span></span>

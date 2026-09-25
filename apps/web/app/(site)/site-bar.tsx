@@ -2,6 +2,7 @@ import type { SearchEntry } from "@/app/guide/index";
 import type { NoticeRow } from "@factions/roster";
 import { BarNav, Drawer } from "./menu-list";
 import { NotificationsBell } from "@/app/components/notifications-bell";
+import { PopoverDismiss } from "@/app/components/popover-dismiss";
 import type { Counts } from "@/lib/menu";
 
 /**
@@ -26,11 +27,12 @@ export function SiteBar({ signedIn, crumb, extra, guideIndex, counts, notificati
   notifications?: { unread: number; recent: NoticeRow[]; now?: Date };
 }) {
   return (
-    <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame pl-4 pr-4 lg:pl-8 lg:pr-8">
+    <header className="sticky top-0 z-[1300] flex h-bar items-center justify-between border-b-2 border-rule-2 bg-frame px-4 lg:px-5 xl:px-8">
+      {/* ⚠️ Between lg and xl the wordmark and the crumb give up their width so every nav cell fits, the Guide included (M2). The mark stays; the name stays for a screen reader. */}
       <a className="flex items-center gap-2.5 font-display text-sm uppercase tracking-[0.02em] text-ink" href="/">
         <img src="/mark.png" alt="" width={28} height={28} />
-        Clan Wars
-        {crumb && <span className="ml-1.5 hidden text-muted lg:inline">/ {crumb}</span>}
+        <span className="lg:max-xl:sr-only">Clan Wars</span>
+        {crumb && <span className="ml-1.5 hidden text-muted xl:inline">/ {crumb}</span>}
       </a>
       <div className="hidden h-full items-stretch lg:flex">
         <BarNav signedIn={signedIn} counts={counts} />
@@ -41,6 +43,8 @@ export function SiteBar({ signedIn, crumb, extra, guideIndex, counts, notificati
         {signedIn && notifications && <NotificationsBell {...notifications} />}
         <Drawer signedIn={signedIn} guideIndex={guideIndex} counts={counts} />
       </div>
+      {/* One handler for the whole popover group (lib/popover.ts): Escape, click-outside, one open at a time. */}
+      <PopoverDismiss />
     </header>
   );
 }

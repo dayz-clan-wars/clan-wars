@@ -24,13 +24,16 @@ describe("AchievementBadge", () => {
     expect(clampPct(NaN)).toBe(0);
   });
   it("colours by group when unlocked, grey when locked, and never names a coordinate", () => {
+    // ⚠️ Unlocked stays hex ATTRIBUTES: the share card draws it through next/og, which resolves no CSS.
     const unlocked = render({ state: "unlocked", group: "pve" });
     expect(unlocked).toContain('stroke="#8fa36a"');
     expect(unlocked).toContain('fill="#8fa36a1f"');
+    // Locked and progress are site-only, so they take the palette's tokens as classes.
     const locked = render({ state: "locked", group: "pve" });
     expect(locked).not.toContain("#8fa36a");
-    expect(locked).toContain('stroke="#4a4640"');
-    expect(render({ state: "progress", group: "pve" })).toContain('stroke="#8a857c"');
+    expect(locked).toContain('class="fill-frame stroke-rule-2"');
+    expect(locked).toContain('class="stroke-rule-3"');
+    expect(render({ state: "progress", group: "pve" })).toContain('class="stroke-muted"');
   });
   it("is hidden from assistive tech — the tile carries the name", () => {
     expect(render({})).toMatch(/^<svg aria-hidden="true"/u);

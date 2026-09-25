@@ -5,6 +5,37 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- On a phone, the notifications panel and the guide's Contents no longer open partly off
+  the left edge of the screen, and only one of Menu, notifications and Contents can be
+  open at a time.
+- The season picker wraps onto a second row instead of running off a phone screen once
+  there are three or more seasons.
+- Flag lists load small thumbnails instead of full-size flags, and phones no longer
+  download the landing page's flag pool, which they never showed.
+- Small labels are easier to read: nothing meaningful is smaller than 11px, and the
+  guide's "Enforced by people" label and the season numbers on /alphas and /seasons
+  are no longer near-invisible.
+- The server-name banner stops scrolling after two passes, and pauses when tapped or
+  focused.
+- The Guide stays in the top bar on screens 1024–1279px wide.
+- Screen readers: the standings and every-number tables name their columns, the war
+  log's days are headings, every "See all" and "All" link says where it goes, the
+  landing scoreboard's numbers say what they count, the guide announces search results
+  and copied links, and the achievement tiles no longer repeat themselves.
+- Times in the war log and player feeds say UTC, and an award's deadlines no longer
+  change on screen after the page loads.
+- Clan and player pages show the clan's or player's name in the browser tab.
+- On a phone, /scoreboard shows each clan's full name and tag with its raids,
+  times raided and defenses underneath, and long clan names on /clans wrap instead
+  of pushing the member count off the screen.
+- The award page has the site's heading, a link back to your awards, and empty slots
+  you can see.
+- The install banner's close button, the notifications panel's "Mark all read", the
+  404 page's links and the account links on your page are full-size touch targets.
+- Number columns line up.
+
 ## [1.40.0] - 2026-09-25
 
 ### Fixed

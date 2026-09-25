@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { cache } from "react";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
 import { playerProfile, playerFeed, viewerFor, achievementsFor, type PlayerProfile } from "@factions/roster";
@@ -19,8 +20,28 @@ import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Facts, BackLine, Footer, kickerSm, kicker, link } from "@/app/components/ui";
 import { ClanHero, Lit } from "@/app/components/clan-hero";
 import { flagImagePath } from "@/src/flag-images";
+import { playerTitle, NOT_FOUND_TITLE } from "@/lib/page-titles";
 
-export const metadata: Metadata = { title: "Clan Wars — player" };
+/**
+ * The profile read, memoized per request so generateMetadata and the page
+ * share it. ⚠️ Keyed on the RAW `?season=` string, not on a parsed scope:
+ * `cache` compares arguments by identity, and two scope objects built in two
+ * places would never match.
+ */
+const profileFor = cache((gamertag: string, season: string | undefined) => {
+  const parsed = parseSeasonParam(season);
+  return playerProfile(gamertag, parsed === "default" ? { kind: "current" } : parsed);
+});
+
+type Params = { params: Promise<{ gamertag: string }>; searchParams: Promise<{ season?: string | string[]; page?: string | string[]; unlink?: string; result?: string }> };
+
+export async function generateMetadata({ params, searchParams }: Params): Promise<Metadata> {
+  const { season } = await searchParams;
+  const profile = await profileFor(decodeParam((await params).gamertag), typeof season === "string" ? season : undefined);
+  // The record's own spelling of the gamertag, never the URL's.
+  return { title: profile ? playerTitle(profile.gamertag) : NOT_FOUND_TITLE };
+}
+
 /**
  * ⚠️ Public, but LIVE: rendered per request so the build never bakes a roster
  * into a static chunk (spec §10.1). Also the signed-in owner's home: when the
@@ -49,12 +70,7 @@ function OpponentList({ items, encounters, me, side }: {
   );
 }
 
-export default async function PlayerProfilePage({
-  params, searchParams,
-}: {
-  params: Promise<{ gamertag: string }>;
-  searchParams: Promise<{ season?: string | string[]; page?: string | string[]; unlink?: string; result?: string }>;
-}) {
+export default async function PlayerProfilePage({ params, searchParams }: Params) {
   // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
   const gamertag = decodeParam((await params).gamertag);
   const { season, page: rawPage, unlink: unlinkCode, result } = await searchParams;
@@ -65,7 +81,7 @@ export default async function PlayerProfilePage({
   // The profile and its feed page are the two reads, side by side.
   // ⚠️ The wall is lifetime, never scoped, and `.catch(() => null)` on purpose:
   // an achievement read that fails must cost the page its wall, never the profile.
-  const [profile, feed, session, wall] = await Promise.all([playerProfile(gamertag, scope), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession(), achievementsFor({ gamertag }).catch(() => null)]);
+  const [profile, feed, session, wall] = await Promise.all([profileFor(gamertag, typeof season === "string" ? season : undefined), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession(), achievementsFor({ gamertag }).catch(() => null)]);
 
   if (!profile || !feed) notFound();
   // The viewer's link decides ownership; the rest of the owner's state is only read once it does.

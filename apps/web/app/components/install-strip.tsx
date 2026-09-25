@@ -69,7 +69,8 @@ export function InstallStrip() {
       {state === "prompt" && (
         <button type="button" onClick={() => void install()} className="flex min-h-[44px] flex-none items-center bg-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-ground">Install</button>
       )}
-      <button type="button" onClick={dismiss} className="flex min-h-[44px] flex-none items-center font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink" aria-label="Not now">✕</button>
+      {/* ⚠️ 44px WIDE as well as tall: the bare glyph was an ~8px-wide target (M8). */}
+      <button type="button" onClick={dismiss} className="flex min-h-[44px] min-w-[44px] flex-none items-center justify-center font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink" aria-label="Not now"><span aria-hidden="true">✕</span></button>
     </div>
   );
 }

@@ -45,7 +45,8 @@ export default function ChapterPage({ chapter }: { chapter: Chapter }) {
       <nav className="mt-10 grid max-w-[66ch] grid-cols-2 border-2 border-rule-2 lg:mt-14" aria-label="Previous and next">
         {prev ? (
           <a className="block min-h-[72px] border-r border-rule-2 px-4 py-3.5 text-ink hover:bg-frame lg:px-5 lg:py-4" href={hrefFor(prev)}>
-            <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-muted">&larr; Back</span>
+            {/* "Previous", not "Back": this is the previous CHAPTER, not the page you came from (L7). */}
+            <span className="block font-mono text-[11px] uppercase tracking-[0.18em] text-muted">&larr; Previous</span>
             <span className="mt-1.5 block font-display text-sm lg:text-[15px]">{prev.number}. {prev.title}</span>
           </a>
         ) : <span className="min-h-[72px] border-r border-rule-2" aria-hidden="true" />}
@@ -68,25 +69,26 @@ function Appendix() {
       <p>Every timer, cap, radius and cooldown in the guide, in one place. Each one is read from the same rule the server enforces, so this table and the chapters cannot disagree.</p>
       <div className="tablewrap">
         <table>
-          <tbody>
-            {GUIDE_GROUPS.map((g) => (
-              <GroupRows key={g} group={g} />
-            ))}
-          </tbody>
+          {/* ⚠️ Visually the group rows are the headings; a screen reader needs the column names said once and each group as a real row-group header (M3). */}
+          <thead className="sr-only"><tr><th scope="col">Rule</th><th scope="col">Value</th></tr></thead>
+          {GUIDE_GROUPS.map((g) => (
+            <GroupRows key={g} group={g} />
+          ))}
         </table>
       </div>
     </div>
   );
 }
 
+/** One group: its own <tbody>, so `scope="rowgroup"` covers exactly its rows. */
 function GroupRows({ group }: { group: string }) {
   const rows = GUIDE_NUMBERS.filter((r) => r.group === group);
   return (
-    <>
-      <tr className="group"><td colSpan={2}>{group}</td></tr>
+    <tbody>
+      <tr className="group"><th scope="rowgroup" colSpan={2}>{group}</th></tr>
       {rows.map((r) => (
         <tr key={r.key}><td>{r.label}</td><td className="v">{r.value}</td></tr>
       ))}
-    </>
+    </tbody>
   );
 }
