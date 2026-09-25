@@ -16,7 +16,9 @@ const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/gu, "\\$&");
  *
  * Every string VALUE in the context that equals a blocked text is replaced. Inside
  * `previous` (sentences the model wrote last week) names are also replaced where they
- * appear inside a longer string, since a name there is embedded in prose.
+ * appear inside a longer string, since a name there is embedded in prose. That in-prose
+ * match ignores case, since last week's storyline text is free-form and a blocked name
+ * can resurface there in any casing.
  */
 export function redactContext(context: StoryContext, entries: TextEntry[], verdicts: Map<string, Verdict>): {
   context: StoryContext; report: ScreeningReport; blocked: string[];
@@ -39,7 +41,7 @@ export function redactContext(context: StoryContext, entries: TextEntry[], verdi
 
   const names = [...replace].filter((kv): kv is [string, string] => kv[1] !== null).sort((a, b) => b[0].length - a[0].length);
   const inProse = (s: string) =>
-    names.reduce((acc, [from, to]) => acc.replace(new RegExp(`(?<![A-Za-z0-9])${escapeRe(from)}(?![A-Za-z0-9])`, "gu"), to), s);
+    names.reduce((acc, [from, to]) => acc.replace(new RegExp(`(?<![A-Za-z0-9])${escapeRe(from)}(?![A-Za-z0-9])`, "giu"), to), s);
 
   const walk = (v: unknown, prose: boolean): unknown => {
     if (typeof v === "string") return replace.has(v) ? replace.get(v)! : prose ? inProse(v) : v;

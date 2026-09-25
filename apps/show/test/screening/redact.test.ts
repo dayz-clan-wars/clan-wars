@@ -36,6 +36,14 @@ describe("redactContext", () => {
     expect(r.blocked).toEqual(["EvilTag"]);
   });
 
+  it("matches a blocked name in prose case-insensitively", () => {
+    const { t, context } = world();
+    context.previous!.storylines[0]!.status = "EVILTAG rampaged, eviltag's gang too";
+    const r = redactContext(context, t.entries(), new Map([["EvilTag", block()]]));
+    expect(r.context.previous!.storylines[0]!.status).toBe("REDACTED_PLAYER_1 rampaged, REDACTED_PLAYER_1's gang too");
+    expect(JSON.stringify(r.context).toLowerCase()).not.toContain("eviltag");
+  });
+
   it("a blocked clan name with a clean tag goes by its tag", () => {
     const { t, context } = world();
     const r = redactContext(context, t.entries(), new Map([["Bad Name", block()]]));
