@@ -44,10 +44,11 @@ function Zone({ className }: { className: string }) {
   return <div className={`absolute rounded-full border-[3px] border-dashed border-gold [box-shadow:0_0_0_3px_rgba(11,11,10,.7)] ${className}`} />;
 }
 
+/* ⚠️ Palette tokens as classes, never hex (L2): the glyphs are the map's own, and a hex copy of a token is a colour nothing holds to the palette. */
 function Base({ className, size }: { className: string; size: number }) {
   return (
-    <svg className={`absolute ${className}`} width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="#d9a03c" strokeWidth="2" strokeLinecap="square">
-      <rect x="1" y="1" width="26" height="26" fill="#0b0b0a" stroke="#0b0b0a" />
+    <svg className={`absolute stroke-gold ${className}`} width={size} height={size} viewBox="0 0 28 28" fill="none" strokeWidth="2" strokeLinecap="square">
+      <rect x="1" y="1" width="26" height="26" className="fill-frame stroke-frame" />
       <rect x="5" y="9" width="18" height="14" />
       <path d="M5 9l9-6 9 6M12 23v-7h4v7" />
     </svg>
@@ -59,7 +60,7 @@ function Intruder({ className, label, size = 32 }: { className: string; label?: 
     <div className={`absolute flex items-center gap-2 ${className}`}>
       <span className="relative flex items-center justify-center" style={{ width: size, height: size }}>
         <span className="absolute -inset-[5px] rotate-45 border-[3px] border-rust" />
-        <svg width={size} height={size} viewBox="0 0 28 28"><circle cx="14" cy="14" r="9" fill="#0b0b0a" /><circle cx="14" cy="14" r="5" fill="#d4623a" /></svg>
+        <svg width={size} height={size} viewBox="0 0 28 28"><circle cx="14" cy="14" r="9" className="fill-frame" /><circle cx="14" cy="14" r="5" className="fill-rust-2" /></svg>
       </span>
       {label && <span className={`${TAG} border-rust text-rust-2`}>{label}</span>}
     </div>
@@ -69,9 +70,9 @@ function Intruder({ className, label, size = 32 }: { className: string; label?: 
 function You({ className, label, size }: { className: string; label: string; size: number }) {
   return (
     <div className={`absolute flex items-center gap-2 ${className}`}>
-      <svg width={size} height={size} viewBox="0 0 28 28" fill="none" stroke="#d9a03c" strokeWidth="2" strokeLinecap="square">
-        <circle cx="14" cy="14" r="13" fill="#0b0b0a" stroke="#0b0b0a" />
-        <circle cx="14" cy="14" r="4" fill="#d9a03c" stroke="none" />
+      <svg className="stroke-gold" width={size} height={size} viewBox="0 0 28 28" fill="none" strokeWidth="2" strokeLinecap="square">
+        <circle cx="14" cy="14" r="13" className="fill-frame stroke-frame" />
+        <circle cx="14" cy="14" r="4" className="fill-gold" stroke="none" />
         <circle cx="14" cy="14" r="9" />
         <path d="M14 1v4M14 23v4M1 14h4M23 14h4" />
       </svg>
@@ -83,7 +84,7 @@ function You({ className, label, size }: { className: string; label: string; siz
 function Mate({ className, label }: { className: string; label: string }) {
   return (
     <div className={`absolute flex items-center gap-2 ${className}`}>
-      <svg width={32} height={32} viewBox="0 0 28 28"><circle cx="14" cy="14" r="9" fill="#0b0b0a" /><circle cx="14" cy="14" r="5" fill="#e8e2d4" /></svg>
+      <svg width={32} height={32} viewBox="0 0 28 28"><circle cx="14" cy="14" r="9" className="fill-frame" /><circle cx="14" cy="14" r="5" className="fill-ink" /></svg>
       <span className={`${TAG} border-rule-2 text-ink`}>{label}</span>
     </div>
   );

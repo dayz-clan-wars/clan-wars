@@ -41,7 +41,7 @@ describe("the wall tile", () => {
   it("a locked one-shot says Locked and draws the grey badge", () => {
     const html = render(tile({ key: "first_blood", target: 1, count: 0 }));
     expect(html).toContain(">Locked<");
-    expect(html).toContain('stroke="#4a4640"');
+    expect(html).toContain('class="stroke-rule-3"');
     expect(html).not.toContain("opacity-70");
   });
   it("keeps the accessible name with the state in it", () => {
