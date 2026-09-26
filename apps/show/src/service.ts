@@ -92,8 +92,9 @@ export async function serviceMain(args: ServiceArgs, env: NodeJS.ProcessEnv = pr
   // ⚠️ The same lock for timer and manual runs, so the two can never overlap (spec §2.5).
   const lock = await io.lock(cfg.databaseUrl, SHOW_LOCK_KEY);
   if (!lock) { io.log("another show run holds the lock; exiting"); return 0; }
-  const db = io.openDb(cfg.databaseUrl);
+  let db: Database | undefined;
   try {
+    db = io.openDb(cfg.databaseUrl);
     if (!cfg.enabled) { io.log("SHOW_ENABLED is off; nothing to do"); return 0; }
     if (args.force) {
       const r = await forceWeek(db, args.week!, { repost: args.repost });
@@ -106,8 +107,11 @@ export async function serviceMain(args: ServiceArgs, env: NodeJS.ProcessEnv = pr
     io.log(`${row.weekStart.toISOString().slice(0, 10)}: ${outcome} at ${row.stage}`);
     return outcome === "failed" ? 1 : 0;
   } finally {
-    await lock.release();
-    // Only close a client this function opened; the tests pass their own and keep it open.
-    if (io === REAL_IO) await db.$client.end();
+    try {
+      await lock.release();
+    } finally {
+      // Only close a client this function opened; the tests pass their own and keep it open.
+      if (db && io === REAL_IO) await db.$client.end();
+    }
   }
 }

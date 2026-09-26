@@ -1,4 +1,5 @@
 import { parseArgs } from "node:util";
+import { dispatch } from "./dispatch.js";
 import { runDryRun } from "./dry-run.js";
 import { serviceMain } from "./service.js";
 import { parseWeekArg } from "./weeks.js";
@@ -17,7 +18,13 @@ const { values } = parseArgs({
   },
 });
 
-if (values["dry-run"] || values.render) {
+const d = dispatch(values);
+if (d.kind === "usage") {
+  process.stderr.write(`${d.message}\n`);
+  process.exit(2);
+}
+
+if (d.kind === "review") {
   process.exitCode = await runDryRun({ week: values.week, printPrompt: values["print-prompt"], render: values.render });
 } else {
   process.exitCode = await serviceMain({ week: values.week ? parseWeekArg(values.week) : undefined, force: values.force, repost: values.repost });
