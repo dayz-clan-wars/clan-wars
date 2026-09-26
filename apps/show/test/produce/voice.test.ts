@@ -153,6 +153,15 @@ describe("voiceEpisode", () => {
     expect(second.key).not.toBe(episodeCacheKey({ weekStart: "2026-09-21", narrative: NARRATIVE }));
   });
 
+  it("a script over the 6,000-character speech cap fails before any ElevenLabs call", async () => {
+    const h = harness();
+    const narrative = `Boris: ${"x".repeat(3100)}\nPavel: ${"y".repeat(3100)}`;
+    await expect(voiceEpisode(h.deps, { weekStart: "2026-09-21", narrative, context: CONTEXT })).rejects.toThrow(
+      /6200 characters/,
+    );
+    expect(h.fetchBodies).toHaveLength(0);
+  });
+
   it("throws when the narrative has no dialogue (nothing to animate)", async () => {
     const h = harness();
     await expect(
