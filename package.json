@@ -23,7 +23,8 @@
     "launch": "tsx scripts/launch.ts",
     "raid:skip": "tsx scripts/raid-skip.ts",
     "release:sync": "tsx scripts/release-sync.ts",
-    "deploy:select": "tsx scripts/deploy-select.ts"
+    "deploy:select": "tsx scripts/deploy-select.ts",
+    "show": "pnpm --filter @factions/show run cli"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

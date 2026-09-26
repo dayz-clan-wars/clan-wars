@@ -145,6 +145,34 @@ importers:
         specifier: ^2.1.0
         version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
 
+  apps/show:
+    dependencies:
+      '@factions/db':
+        specifier: workspace:*
+        version: link:../../packages/db
+      '@factions/domain':
+        specifier: workspace:*
+        version: link:../../packages/domain
+      '@factions/roster':
+        specifier: workspace:*
+        version: link:../../packages/roster
+      drizzle-orm:
+        specifier: ^0.36.0
+        version: 0.36.4(@types/react@19.2.18)(postgres@3.4.9)(react@19.2.8)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      tsx:
+        specifier: ^4.19.0
+        version: 4.23.12
+      typescript:
+        specifier: ^5.6.0
+        version: 5.9.3
+      vitest:
+        specifier: ^2.1.0
+        version: 2.1.9(@types/node@22.20.1)(lightningcss@1.32.0)
+
   apps/web:
     dependencies:
       '@factions/copy':
