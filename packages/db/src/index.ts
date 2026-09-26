@@ -5,4 +5,4 @@ export * from "./migrate";
 export * from "./migration-plan";
 export * from "./migrations-folder";
 export * from "./test-database-url";
-export { clearReferrals } from "./clear-referrals";
+export { clearReferrals, assertTestDatabaseName } from "./clear-referrals";
