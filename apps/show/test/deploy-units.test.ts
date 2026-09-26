@@ -14,6 +14,8 @@ describe("clan-wars-show units (spec §2.5, §14)", () => {
     }
     expect(s).toMatch(/^ExecStart=\/home\/acab\/\.local\/bin\/pnpm --filter @factions\/show start$/mu);
     expect(s).not.toMatch(/^Restart=/mu); // a failed run waits for the next timer tick
+    // ⚠️ A hung run would hold the advisory lock forever; systemd kills it and the next tick retries.
+    expect(s).toMatch(/^TimeoutStartSec=90min$/mu);
   });
   it("fires every 10 minutes and catches up after downtime", () => {
     const t = unit("clan-wars-show.timer");

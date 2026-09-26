@@ -43,6 +43,29 @@ describe("createDiscord", () => {
     expect(waits[0]).toBe(1750);
   });
 
+  it("gives up after 5 attempts that all return 429", async () => {
+    const waits: number[] = [];
+    const { calls, fetchImpl } = fakeFetch(Array.from({ length: 10 }, () => ({ status: 429, body: { retry_after: 0.1 } })));
+    const d = createDiscord({ token: "T", fetchImpl, sleep: async (ms) => { waits.push(ms); } });
+    await expect(d.post("c1", { content: "x" })).rejects.toThrow(/429/u);
+    expect(calls).toHaveLength(5);
+    expect(waits).toHaveLength(4);
+  });
+
+  it("throws at once on a 429 with no JSON retry_after (a Cloudflare ban page)", async () => {
+    const waits: number[] = [];
+    const calls: string[] = [];
+    // Finite (a 200 after three bans) so an unbounded retry loop fails this test instead of hanging it.
+    const fetchImpl = (async (url: string) => {
+      calls.push(url);
+      return calls.length <= 3 ? new Response("<html>error 1015</html>", { status: 429, headers: { "content-type": "text/html" } }) : new Response(JSON.stringify({ id: "m" }), { status: 200 });
+    }) as unknown as typeof fetch;
+    const d = createDiscord({ token: "T", fetchImpl, sleep: async (ms) => { waits.push(ms); } });
+    await expect(d.post("c1", { content: "x" })).rejects.toThrow(/429/u);
+    expect(calls).toHaveLength(1);
+    expect(waits).toHaveLength(0);
+  });
+
   it("throws on any other failure with the status", async () => {
     const { fetchImpl } = fakeFetch([{ status: 403, body: { message: "Missing Access" } }]);
     await expect(createDiscord({ token: "T", fetchImpl }).post("c1", { content: "x" })).rejects.toThrow(/403/u);

@@ -29,19 +29,28 @@ const seen = (m: RawMessage): SeenMessage => ({ id: m.id, content: m.content, au
 // ⚠️ Gamertags and clan names are player-controlled; a message must never ping anyone.
 const NO_MENTIONS = { parse: [] as string[] };
 
-/** Bot-token REST, no gateway (spec §9.3). Retries a 429 after Discord's retry_after; any other non-2xx throws. */
+const MAX_429_ATTEMPTS = 5;
+
+/** Bot-token REST, no gateway (spec §9.3). Retries a 429 after Discord's retry_after (bounded); any other non-2xx throws. */
 export function createDiscord(deps: { token: string; fetchImpl?: typeof fetch; sleep?: (ms: number) => Promise<void> }): Discord {
   const fetchImpl = deps.fetchImpl ?? fetch;
   const sleep = deps.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
 
   async function call<T>(method: string, path: string, body?: unknown, form?: FormData): Promise<T> {
-    for (;;) {
+    for (let attempt = 1; ; attempt++) {
       const headers: Record<string, string> = { Authorization: `Bot ${deps.token}`, "User-Agent": DISCORD_USER_AGENT };
       if (body !== undefined) headers["Content-Type"] = "application/json";
       const res = await fetchImpl(`${DISCORD_API}${path}`, { method, headers, body: form ?? (body === undefined ? undefined : JSON.stringify(body)) });
       if (res.status === 429) {
-        const j = (await res.json().catch(() => ({}))) as { retry_after?: number };
-        await sleep(Math.ceil(Number(j.retry_after ?? 1) * 1000) + 250);
+        const text = await res.text();
+        let retryAfter: unknown;
+        try { retryAfter = (JSON.parse(text) as { retry_after?: unknown }).retry_after; } catch { /* not JSON: see below */ }
+        // ⚠️ Bounded: a Cloudflare 1015 ban answers 429 with an HTML page and no retry_after, and
+        // retrying it forever would hang the run while it holds the advisory lock. No numeric
+        // retry_after throws at once; a real rate limit gets at most MAX_429_ATTEMPTS tries.
+        if (typeof retryAfter !== "number" || !Number.isFinite(retryAfter)) throw new DiscordHttpError(`Discord ${method} ${path} failed 429 with no retry_after: ${text.slice(0, 300)}`, 429);
+        if (attempt >= MAX_429_ATTEMPTS) throw new DiscordHttpError(`Discord ${method} ${path} failed 429 after ${attempt} attempts`, 429);
+        await sleep(Math.ceil(retryAfter * 1000) + 250);
         continue;
       }
       if (!res.ok) throw new DiscordHttpError(`Discord ${method} ${path} failed ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);

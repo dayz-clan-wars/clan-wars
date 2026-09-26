@@ -18,6 +18,10 @@ Nice=10
 IOSchedulingClass=idle
 # /var/lib/clan-wars-show, owned by acab: SHOW_CACHE_DIR's default.
 StateDirectory=clan-wars-show
+# ⚠️ A hung run (a stuck request, a wedged ffmpeg) would hold the advisory lock forever and
+# block every later tick. A normal render takes minutes; systemd kills anything past this and
+# the next tick resumes from the row.
+TimeoutStartSec=90min
 ExecStart=/home/acab/.local/bin/pnpm --filter @factions/show start
 StandardOutput=journal
 StandardError=journal
