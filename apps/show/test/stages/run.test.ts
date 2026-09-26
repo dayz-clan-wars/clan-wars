@@ -203,6 +203,26 @@ describe("runStages: publishing", () => {
     expect(f.playlist.size).toBe(0);
   });
 
+  it("turning approval off never publishes a draft already waiting: its reactions still decide", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    const waiting = await runStages(f.deps, MON);
+    expect(waiting).toMatchObject({ outcome: "waiting", row: { stage: "awaiting_approval" } });
+    expect(f.publicIds.size).toBe(0);
+    f.reactions.set(`${draftOf(f).id}:✅`, ["ADMIN1"]);
+    expect((await runStages(f.deps, MON)).row).toMatchObject({ stage: "done", approvedByDiscordId: "ADMIN1" });
+  });
+
+  it("a waiting draft with the ops channel unset fails, never goes public", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false, opsChannelId: null };
+    const r = await runStages(f.deps, MON);
+    expect(r).toMatchObject({ outcome: "failed", row: { stage: "awaiting_approval" } });
+    expect(f.publicIds.size).toBe(0);
+  });
+
   it("with approval off goes from upload straight to public and posted", async () => {
     const f = fakeDeps(db);
     f.deps.cfg = { ...f.deps.cfg, requireApproval: false };

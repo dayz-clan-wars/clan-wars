@@ -139,13 +139,20 @@ const awaitingApproval: Step = async (deps, row) => {
 };
 
 const approved: Step = async (deps, row) => {
-  if (!deps.cfg.requireApproval) return advance(deps.db, row.weekStart, "approved");
-  const ops = deps.cfg.opsChannelId!;
+  // ⚠️ A posted draft is always decided by its reactions, even after SHOW_REQUIRE_APPROVAL is
+  // turned off: flipping the flag must never make an episode already in review public with no ✅.
+  const draft = row.draftMessageId;
+  if (!draft) {
+    if (!deps.cfg.requireApproval) return advance(deps.db, row.weekStart, "approved");
+    throw new Error("approval is on but no draft was posted");
+  }
+  const ops = deps.cfg.opsChannelId;
+  if (!ops) throw new Error("a draft is awaiting approval but OPS_CHANNEL_ID is unset");
   const me = await deps.discord.me();
   const approvers = new Set(deps.cfg.approverIds);
   // ⚠️ The bot's own reaction (added as a convenience so an approver can click rather than hunt
   // for the emoji) is never a vote, even if the bot's id somehow ends up in approverIds.
-  const by = async (emoji: string) => (await deps.discord.reactionUserIds(ops, row.draftMessageId!, emoji)).filter((u) => u !== me).find((u) => approvers.has(u)) ?? null;
+  const by = async (emoji: string) => (await deps.discord.reactionUserIds(ops, draft, emoji)).filter((u) => u !== me).find((u) => approvers.has(u)) ?? null;
   // ⚠️ ❌ is read first and wins: when two approvers disagree, nothing goes public.
   const rejecter = await by(REJECT);
   if (rejecter) return advance(deps.db, row.weekStart, "rejected", { rejectedByDiscordId: rejecter, rejectedAt: deps.now() });

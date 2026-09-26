@@ -110,10 +110,13 @@ export type ServiceConfig =
     };
 
 const SNOWFLAKE = /^\d{17,20}$/u;
-const flag = (v: string | undefined, dflt: boolean): boolean => {
-  const s = v?.trim().toLowerCase();
+/** ⚠️ Fails closed: only 1/true/0/false. A typo like "on" throws rather than turning approval off. */
+const flag = (env: NodeJS.ProcessEnv, key: string, dflt: boolean): boolean => {
+  const s = env[key]?.trim().toLowerCase();
   if (!s) return dflt;
-  return s === "1" || s === "true";
+  if (s === "1" || s === "true") return true;
+  if (s === "0" || s === "false") return false;
+  throw new Error(`${key} must be 1, true, 0 or false, got "${env[key]}"`);
 };
 function snowflake(env: NodeJS.ProcessEnv, key: string): string {
   const v = required(env, key);
@@ -127,9 +130,9 @@ function snowflake(env: NodeJS.ProcessEnv, key: string): string {
  */
 export function loadServiceConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig {
   const databaseUrl = required(env, "DATABASE_URL");
-  if (!flag(env.SHOW_ENABLED, false)) return { enabled: false, databaseUrl };
+  if (!flag(env, "SHOW_ENABLED", false)) return { enabled: false, databaseUrl };
 
-  const requireApproval = flag(env.SHOW_REQUIRE_APPROVAL, true);
+  const requireApproval = flag(env, "SHOW_REQUIRE_APPROVAL", true);
   const opsRaw = env.OPS_CHANNEL_ID?.trim() || null;
   if (opsRaw !== null && !SNOWFLAKE.test(opsRaw)) throw new Error(`OPS_CHANNEL_ID must be a Discord id, got "${opsRaw}"`);
   // ⚠️ With approval on, the draft has nowhere to go without the ops channel, and no one can approve it without approvers.

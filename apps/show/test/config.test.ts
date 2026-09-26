@@ -138,6 +138,20 @@ describe("loadServiceConfig", () => {
     expect(c.enabled && c.requireApproval).toBe(false);
   });
 
+  it("reads the flags case-insensitively", () => {
+    const c = loadServiceConfig({ ...full, SHOW_ENABLED: "TRUE", SHOW_REQUIRE_APPROVAL: "0", SHOW_APPROVER_DISCORD_IDS: "" });
+    expect(c.enabled && c.requireApproval).toBe(false);
+    const d = loadServiceConfig({ ...full, SHOW_REQUIRE_APPROVAL: "True" });
+    expect(d.enabled && d.requireApproval).toBe(true);
+    expect(loadServiceConfig({ DATABASE_URL: "postgres://db", SHOW_ENABLED: "False" }).enabled).toBe(false);
+  });
+
+  // ⚠️ Fails closed: a typo like "on" must never quietly turn approval off (or the show on).
+  it.each([["on"], ["yes"], ["off"], ["no"], ["2"], ["enabled"]])("refuses %s for SHOW_REQUIRE_APPROVAL and SHOW_ENABLED, naming the key", (v) => {
+    expect(() => loadServiceConfig({ ...full, SHOW_REQUIRE_APPROVAL: v })).toThrow(/SHOW_REQUIRE_APPROVAL/u);
+    expect(() => loadServiceConfig({ ...full, SHOW_ENABLED: v })).toThrow(/SHOW_ENABLED/u);
+  });
+
   it.each([
     ["SHOW_FORUM_CHANNEL_ID"], ["DISCORD_TOKEN"], ["DISCORD_GUILD_ID"], ["YOUTUBE_REFRESH_TOKEN"], ["YOUTUBE_PLAYLIST_ID"], ["ELEVENLABS_API_KEY"],
   ])("fails when enabled without %s", (key) => {
