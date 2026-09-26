@@ -11,6 +11,19 @@ import { peopleForWeek, friendlyFireForWeek, clanBeefsForWeek } from "./people.j
 import { flagEventsForWeek, memberMovesForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "./events.js";
 import { loadPreviousEpisode } from "./previous.js";
 
+const PREV_PLAYER_ALIAS = /REDACTED_PLAYER_\d+/gu;
+const PREV_CLAN_ALIAS = /REDACTED_CLAN_\d+/gu;
+const IS_ALIAS = /^REDACTED_(?:PLAYER|CLAN)_\d+$/u;
+
+/**
+ * ⚠️ Last episode's aliases were numbered for last episode. This episode's redaction numbers
+ * its own from 1, so a surviving `REDACTED_PLAYER_1` would name two different people in one
+ * prompt. Rewritten to prose, they cannot collide and are never screened as gamertags.
+ */
+export function neutralizeAliases(s: string): string {
+  return s.replace(PREV_PLAYER_ALIAS, "a player whose name we cannot say").replace(PREV_CLAN_ALIAS, "a clan we can't name");
+}
+
 /** The rank-1 `alpha_weeks` clan for this season and week, or null when none was crowned yet. */
 async function alphaForWeek(db: Database, a: { seasonId: number; weekStart: Date; texts: PlayerTexts }): Promise<ClanRef | null> {
   const [r] = await rows<{ name: string; tag: string }>(db, sql`
@@ -70,11 +83,13 @@ export async function buildStoryContext(db: Database, opts: {
   // since. Registering them puts them through this week's screen too, and the context
   // carries the capped form registration returns: exactly what screening sees.
   const previous = lastEpisode === null ? null : {
-    ...lastEpisode,
+    title: neutralizeAliases(lastEpisode.title),
     storylines: lastEpisode.storylines.map((s) => ({
-      ...s,
-      players: s.players.map((p) => texts.gamertag(p)),
-      clans: s.clans.map((c) => texts.clanTag(c)),
+      title: neutralizeAliases(s.title),
+      status: neutralizeAliases(s.status),
+      openQuestions: s.openQuestions.map(neutralizeAliases),
+      players: s.players.filter((p) => !IS_ALIAS.test(p)).map((p) => texts.gamertag(p)),
+      clans: s.clans.filter((c) => !IS_ALIAS.test(c)).map((c) => texts.clanTag(c)),
     })),
   };
 
