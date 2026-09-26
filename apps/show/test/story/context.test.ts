@@ -85,4 +85,18 @@ describe("buildStoryContext", () => {
     const { context } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
     expect(context.previous).toBeNull();
   });
+
+  it("rewrites last episode's redaction aliases into prose so they cannot collide with this week's", async () => {
+    const storylines = [{ title: "REDACTED_PLAYER_1 strikes", players: ["REDACTED_PLAYER_1", "GoldSkull588"], clans: ["REDACTED_CLAN_2", "SNA"], status: "REDACTED_CLAN_2 hides", openQuestions: ["Will REDACTED_PLAYER_1 return?"] }];
+    await fx.episode({ weekStart: PREV_MON, episodeNumber: 2, title: "Knives Out", storylines, narrative: "Boris: hi" });
+    const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: "db" });
+    const s = context.previous!.storylines[0]!;
+    expect(s.players).toEqual(["GoldSkull588"]);
+    expect(s.clans).toEqual(["SNA"]);
+    expect(s.title).toBe("a player whose name we cannot say strikes");
+    expect(s.status).toBe("a clan we can't name hides");
+    expect(s.openQuestions).toEqual(["Will a player whose name we cannot say return?"]);
+    expect(JSON.stringify(context)).not.toMatch(/REDACTED_/u);
+    expect(texts.entries().map((e) => e.text).sort()).toEqual(["GoldSkull588", "SNA"]);
+  });
 });

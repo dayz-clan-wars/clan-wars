@@ -24,7 +24,10 @@
     "raid:skip": "tsx scripts/raid-skip.ts",
     "release:sync": "tsx scripts/release-sync.ts",
     "deploy:select": "tsx scripts/deploy-select.ts",
-    "show": "pnpm --filter @factions/show run cli"
+    "show": "pnpm --filter @factions/show run cli",
+    "show:screening": "pnpm --filter @factions/show run screening",
+    "show:backfill-pronunciations": "pnpm --filter @factions/show run backfill-pronunciations",
+    "show:youtube-auth": "pnpm --filter @factions/show run youtube-auth"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

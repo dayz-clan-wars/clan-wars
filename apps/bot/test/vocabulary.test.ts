@@ -128,3 +128,22 @@ describe("packages/copy/src says clan, not faction", () => {
     });
   }
 });
+
+// Spec §15: the weekly show's published text (titles, forum posts, captions, the prompt that
+// writes the script) says clan too. Listed by file, since most of apps/show is not copy.
+const SHOW_SRC_ROOT = resolve(here, "..", "..", "show", "src");
+const SHOW_PLAYER_FACING = [
+  "stages/text.ts",
+  "prompt/system.ts",
+  "engine/publish/youtube/buildVideoMeta.ts",
+  "engine/publish/facebook/buildFacebookCaption.ts",
+  "cards/cards.ts",
+];
+
+describe("apps/show published text says clan, not faction", () => {
+  for (const file of SHOW_PLAYER_FACING) {
+    it(file, () => {
+      expect(offendersIn(readFileSync(join(SHOW_SRC_ROOT, file), "utf8"))).toEqual([]);
+    });
+  }
+});

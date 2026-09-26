@@ -88,3 +88,80 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ShowConfig {
     staffTags: (env.SHOW_STAFF_CLAN_TAGS ?? "ADM").split(",").map((s) => s.trim()).filter((s) => s !== ""),
   };
 }
+
+/** `pg_try_advisory_lock` key for a show run. ⚠️ Never the bot's 8_531_207 (apps/bot/src/instance-lock.ts). */
+export const SHOW_LOCK_KEY = 8_531_208;
+
+export type ServiceConfig =
+  | { enabled: false; databaseUrl: string }
+  | {
+      enabled: true;
+      databaseUrl: string;
+      base: ShowConfig;
+      render: RenderConfig;
+      discordToken: string;
+      guildId: string;
+      opsChannelId: string | null;
+      forumChannelId: string;
+      requireApproval: boolean;
+      approverIds: string[];
+      youtube: { clientId: string; clientSecret: string; refreshToken: string; playlistId: string };
+      facebook: { pageId: string; accessToken: string } | null;
+    };
+
+const SNOWFLAKE = /^\d{17,20}$/u;
+/** ⚠️ Fails closed: only 1/true/0/false. A typo like "on" throws rather than turning approval off. */
+const flag = (env: NodeJS.ProcessEnv, key: string, dflt: boolean): boolean => {
+  const s = env[key]?.trim().toLowerCase();
+  if (!s) return dflt;
+  if (s === "1" || s === "true") return true;
+  if (s === "0" || s === "false") return false;
+  throw new Error(`${key} must be 1, true, 0 or false, got "${env[key]}"`);
+};
+function snowflake(env: NodeJS.ProcessEnv, key: string): string {
+  const v = required(env, key);
+  if (!SNOWFLAKE.test(v)) throw new Error(`${key} must be a Discord id, got "${v}"`);
+  return v;
+}
+
+/**
+ * The scheduled service's config (spec §13). Off unless SHOW_ENABLED, and then it needs
+ * nothing but DATABASE_URL, so the timer can be installed before the keys exist.
+ */
+export function loadServiceConfig(env: NodeJS.ProcessEnv = process.env): ServiceConfig {
+  const databaseUrl = required(env, "DATABASE_URL");
+  if (!flag(env, "SHOW_ENABLED", false)) return { enabled: false, databaseUrl };
+
+  const requireApproval = flag(env, "SHOW_REQUIRE_APPROVAL", true);
+  const opsRaw = env.OPS_CHANNEL_ID?.trim() || null;
+  if (opsRaw !== null && !SNOWFLAKE.test(opsRaw)) throw new Error(`OPS_CHANNEL_ID must be a Discord id, got "${opsRaw}"`);
+  // ⚠️ With approval on, the draft has nowhere to go without the ops channel, and no one can approve it without approvers.
+  if (requireApproval && opsRaw === null) throw new Error("OPS_CHANNEL_ID is required while SHOW_REQUIRE_APPROVAL is on");
+  const approverIds = (env.SHOW_APPROVER_DISCORD_IDS ?? "").split(",").map((s) => s.trim()).filter((s) => s !== "");
+  for (const id of approverIds) if (!SNOWFLAKE.test(id)) throw new Error(`SHOW_APPROVER_DISCORD_IDS: "${id}" is not a Discord id`);
+  if (requireApproval && approverIds.length === 0) throw new Error("SHOW_APPROVER_DISCORD_IDS is required while SHOW_REQUIRE_APPROVAL is on");
+
+  const pageId = env.FACEBOOK_PAGE_ID?.trim() || "";
+  const pageToken = env.FACEBOOK_PAGE_ACCESS_TOKEN?.trim() || "";
+  if (Boolean(pageId) !== Boolean(pageToken)) throw new Error("FACEBOOK_PAGE_ID and FACEBOOK_PAGE_ACCESS_TOKEN go together: set both or neither");
+
+  return {
+    enabled: true,
+    databaseUrl,
+    base: loadConfig(env),
+    render: loadRenderConfig(env),
+    discordToken: required(env, "DISCORD_TOKEN"),
+    guildId: snowflake(env, "DISCORD_GUILD_ID"),
+    opsChannelId: opsRaw,
+    forumChannelId: snowflake(env, "SHOW_FORUM_CHANNEL_ID"),
+    requireApproval,
+    approverIds,
+    youtube: {
+      clientId: required(env, "YOUTUBE_CLIENT_ID"),
+      clientSecret: required(env, "YOUTUBE_CLIENT_SECRET"),
+      refreshToken: required(env, "YOUTUBE_REFRESH_TOKEN"),
+      playlistId: required(env, "YOUTUBE_PLAYLIST_ID"),
+    },
+    facebook: pageId ? { pageId, accessToken: pageToken } : null,
+  };
+}

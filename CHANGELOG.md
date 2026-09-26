@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The Bloodbag and Painkiller Show now airs a weekly Clan Wars episode: posted to
+  YouTube, the show's forum channel and Facebook after an admin approves it in the ops
+  channel.
+
 ### Notes
 
 - Groundwork for a weekly Bloodbag and Painkiller Show episode about Clan Wars: the

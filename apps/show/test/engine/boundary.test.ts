@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 // arrives as parameters), so the ported code stays testable with injected fakes.
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..", "src");
 const ENGINE = path.join(SRC, "engine");
-const FORBIDDEN_DIRS = ["story", "cards", "stores", "produce", "screening", "prompt", "script"].map((d) => path.join(SRC, d));
+const FORBIDDEN_DIRS = ["story", "cards", "stores", "produce", "screening", "prompt", "script", "stages"].map((d) => path.join(SRC, d));
 
 function engineFiles(dir: string): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
