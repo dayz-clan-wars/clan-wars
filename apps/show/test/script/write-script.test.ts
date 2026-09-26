@@ -150,6 +150,7 @@ describe("writeScript fact check", () => {
     expect(fixUser).toContain('"episode":3');
     expect(fixUser).toContain('- "Boris: Line 0.": The Admins killed SNA 17 times');
     expect(fixUser).toContain("===STORYLINES===");
+    expect(fixUser).toMatch(/the first line of your reply is the first dialogue line/u);
     // The checker reads the script against the same data message the writer got.
     expect(factCheck.mock.calls[0]![1]).toBe(generate.mock.calls[0]![1]);
   });

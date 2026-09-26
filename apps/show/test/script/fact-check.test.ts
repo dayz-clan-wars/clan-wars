@@ -10,6 +10,19 @@ describe("factCheck", () => {
     expect(user).toMatch(/^DATA\n\nThe script to check:\nBoris: X\.$/u);
   });
 
+  it("drops an entry the checker cleared itself, and tolerates loose times and rounding", async () => {
+    const reply = '{"errors":[{"line":"a","problem":"This is correct. No error here."},{"line":"b","problem":"two explosions, not three"}]}';
+    expect(await factCheck("s", "d", async () => reply)).toEqual([{ line: "b", problem: "two explosions, not three" }]);
+    expect(FACT_CHECK_SYSTEM).toMatch(/Never list a claim you checked and found correct/u);
+    expect(FACT_CHECK_SYSTEM).toMatch(/within about ten percent/u);
+  });
+
+  it("reads the last errors object when the checker thinks aloud first", async () => {
+    const reply = 'Checking {each} claim.\n```json\n{"errors":[{"line":"b","problem":"reversed"}]}\n```';
+    expect(await factCheck("s", "d", async () => reply)).toEqual([{ line: "b", problem: "reversed" }]);
+    expect(FACT_CHECK_SYSTEM).toMatch(/"A was killed by B 17 times" means B killed A 17 times/u);
+  });
+
   it("passes a clean script", async () => {
     expect(await factCheck("s", "d", async () => '{"errors":[]}')).toEqual([]);
   });
