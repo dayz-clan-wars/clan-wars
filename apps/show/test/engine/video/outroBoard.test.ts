@@ -14,7 +14,7 @@ import { ASSETS } from "../../../src/assets.js";
 // test replace them per the task-8 brief.
 
 const board: OutroBoard = {
-  headline: "CLAN WARS · SEASON 1 · AFTER WEEK 3",
+  headline: "CLAN WARS | SEASON 1 | AFTER WEEK 3",
   rows: [
     { name: "YrJustBad", points: 42, raids: 11 },
     { name: "A&B", points: 7, raids: 2 },
@@ -33,7 +33,7 @@ const svg = (extra: Partial<Parameters<typeof buildOutroBoardSvg>[0]> = {}) =>
 describe("buildOutroBoardSvg", () => {
   it("draws the headline as given and each row's rank, name, points and raids", () => {
     const s = svg();
-    expect(s).toContain("CLAN WARS · SEASON 1 · AFTER WEEK 3");
+    expect(s).toContain("CLAN WARS | SEASON 1 | AFTER WEEK 3");
     expect(s).toContain("YrJustBad");
     expect(s).toContain("42");
     expect(s).toContain("pts");

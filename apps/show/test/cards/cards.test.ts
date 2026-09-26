@@ -1,4 +1,6 @@
 import { describe, it, expect } from "vitest";
+import { Resvg } from "@resvg/resvg-js";
+import { ASSETS } from "../../src/assets.js";
 import { buildCards, buildMarqueeItems, buildOutroBoard } from "../../src/cards/cards.js";
 import type { ClanWeek, StoryContext } from "../../src/story/types.js";
 
@@ -31,7 +33,7 @@ describe("buildCards", () => {
   it("returns exactly 4 cards with the right headers and titles, in order", () => {
     const cards = buildCards(ctx());
     expect(cards).toHaveLength(4);
-    for (const c of cards) expect(c.header).toBe("CLAN WARS · S01E03");
+    for (const c of cards) expect(c.header).toBe("CLAN WARS | S01E03");
     expect(cards.map((c) => c.title)).toEqual(["WEEK STANDINGS", "MOST KILLS", "FRIENDLY FIRE", "LONGEST SHOT"]);
   });
 
@@ -185,7 +187,7 @@ describe("buildOutroBoard", () => {
       clan({ tag: "G", seasonPoints: 5, seasonRaids: 1 }),
     ];
     const board = buildOutroBoard(ctx({ clans }));
-    expect(board.headline).toBe("CLAN WARS · SEASON 1 · AFTER WEEK 3");
+    expect(board.headline).toBe("CLAN WARS | SEASON 1 | AFTER WEEK 3");
     expect(board.rows).toEqual([
       { name: "D", points: 300, raids: 9 },
       { name: "A", points: 100, raids: 2 },
@@ -208,5 +210,35 @@ describe("buildOutroBoard", () => {
   it("no outro board string contains an em dash", () => {
     const board = buildOutroBoard(ctx({ clans: [clan({ tag: "A", seasonPoints: 10 })] }));
     expect(JSON.stringify(board)).not.toContain("—");
+  });
+});
+
+// Ink test (resvg, as in KOTH): every non-space character of a drawn string must have a glyph in
+// the font it is drawn in. A missing glyph (the display font has no U+00B7) draws nothing at all.
+function inkOf(ch: string, font: "display" | "gamertag"): number {
+  const family = font === "display" ? "Animals are like people" : "Patrick Hand";
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="200" height="200"><rect width="200" height="200" fill="#000"/>` +
+    `<text x="50" y="120" font-size="100" fill="#fff" font-family="${family}">${ch.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</text></svg>`;
+  const { pixels } = new Resvg(svg, { font: { fontFiles: [ASSETS.fonts[font]], loadSystemFonts: false } }).render();
+  let ink = 0;
+  for (let i = 0; i < pixels.length; i += 4) if (pixels[i]! > 40) ink++;
+  return ink;
+}
+
+const missingGlyphs = (s: string, font: "display" | "gamertag") =>
+  [...new Set(s.replace(/\s/g, ""))].filter((ch) => inkOf(ch, font) === 0);
+
+describe("drawn glyphs", () => {
+  it("the card header and outro headline draw every character in the display font", () => {
+    const [card] = buildCards(ctx());
+    const board = buildOutroBoard(ctx());
+    expect(missingGlyphs(card!.header, "display")).toEqual([]);
+    expect(missingGlyphs(card!.title, "display")).toEqual([]);
+    expect(missingGlyphs(board.headline, "display")).toEqual([]);
+  });
+
+  it("the outro row separator (drawn in Patrick Hand) has a glyph", () => {
+    expect(missingGlyphs("· pts raids", "gamertag")).toEqual([]);
   });
 });

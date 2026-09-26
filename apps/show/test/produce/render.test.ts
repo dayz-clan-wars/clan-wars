@@ -75,7 +75,7 @@ describe("renderEpisode", () => {
     const h = harness();
     await renderEpisode(h.deps, { voiced: VOICED, context: CONTEXT });
     const all = h.svgs.join("\n");
-    expect(all).toContain("CLAN WARS · S01E03");
+    expect(all).toContain("CLAN WARS | S01E03");
     expect(all).toContain("DAYZCLANWARS.COM");
     expect(all).toContain("discord.gg/TJu4XP25nr");
     expect(all).not.toContain("DISCORD.GG");

@@ -15,8 +15,10 @@ const MAX_OUTRO_ROWS = 5;
 /** A name that reached here as a redacted alias (spec §7.3) draws `[REDACTED]`, never the alias itself. */
 const name = (s: string): string => (isRedactedAlias(s) ? "[REDACTED]" : s);
 
+// Headers are drawn in the display font, which has no U+00B7 (a "·" there draws nothing), so the
+// separator is "|". The outro rows keep "·": they are drawn in Patrick Hand, which has it.
 function header(week: StoryContext["week"]): string {
-  return `CLAN WARS · ${episodeCode(week.season, week.episode)}`;
+  return `CLAN WARS | ${episodeCode(week.season, week.episode)}`;
 }
 
 function weekStandingsCard(ctx: StoryContext): Card {
@@ -75,5 +77,5 @@ export function buildOutroBoard(ctx: StoryContext): OutroBoard {
     .sort((a, b) => b.seasonPoints - a.seasonPoints || a.tag.localeCompare(b.tag))
     .slice(0, MAX_OUTRO_ROWS)
     .map((c) => ({ name: name(c.tag), points: c.seasonPoints, raids: c.seasonRaids }));
-  return { headline: `CLAN WARS · SEASON ${ctx.week.season} · AFTER WEEK ${ctx.week.episode}`, rows };
+  return { headline: `CLAN WARS | SEASON ${ctx.week.season} | AFTER WEEK ${ctx.week.episode}`, rows };
 }
