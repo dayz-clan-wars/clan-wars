@@ -16,7 +16,7 @@ function world() {
       { ...bad, status: "active", isStaff: false, pitch: t.pitch("join us"), members: 1, weekPoints: 0, weekRaids: 0, timesRaidedThisWeek: 0, seasonPoints: 0, seasonRaids: 0, flagDown: false },
       { ...worse, status: "active", isStaff: false, pitch: null, members: 1, weekPoints: 0, weekRaids: 0, timesRaidedThisWeek: 0, seasonPoints: 0, seasonRaids: 0, flagDown: false },
     ],
-    raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [],
+    raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [{ gamertag: t.gamertag("EvilTag"), clan: bad, value: 3 }, { gamertag: t.gamertag("Nice"), clan: null, value: 1 }], mostDeaths: [], longestShots: [], oddDeaths: [] },
     bounties: [{ target: t.gamertag("Nice"), reason: t.bountyReason("a slur"), placedAt: "x", placedWhen: "Monday 00:00 UTC", status: "open", claimer: null, hoursToClaim: null, claimMetres: null }],
     koth: [], airdrops: [],

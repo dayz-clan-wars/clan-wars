@@ -19,7 +19,7 @@ const clan = (a: Partial<ClanWeek> & { tag: string; name: string }): ClanWeek =>
 function ctx(over: Partial<StoryContext> = {}): StoryContext {
   return {
     week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
-    clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [],
+    clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] },
     bounties: [], koth: [], airdrops: [], previous: null,
     ...over,

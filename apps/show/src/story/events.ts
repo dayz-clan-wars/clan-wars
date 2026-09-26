@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
 import type { WeekRead } from "./people.js";
-import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory } from "./types.js";
+import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory, MemberMove } from "./types.js";
 import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
 
 const FLAG_KINDS: FlagEventKind[] = ["founded", "activated", "dormant", "revived", "disbanded"];
@@ -22,6 +22,35 @@ export async function flagEventsForWeek(db: Database, a: WeekRead): Promise<Flag
       and fe.kind in (${sql.join(FLAG_KINDS.map((k) => sql`${k}`), sql`, `)})
     order by fe.occurred_at asc, fe.id asc`);
   return rs.map((r) => ({ clan: a.texts.clan(r.name, r.tag), kind: r.kind, at: iso(r.at), when: whenLabel(r.at) }));
+}
+
+/** Keeps the context bounded when a clan disbands and every member "leaves" at once. */
+const MAX_MEMBER_MOVES = 60;
+
+/**
+ * Who joined or left which clan this week, from `membership_history` (full membership
+ * spans only). A join says whether that player raided the same clan earlier this week,
+ * which is a storyline the hosts cannot otherwise see (week 1: a clanless raider hit
+ * Dead Reckoning in the morning and joined it that evening). A "left" also covers a
+ * kick or a disband; the data cannot tell them apart.
+ */
+export async function memberMovesForWeek(db: Database, a: WeekRead): Promise<MemberMove[]> {
+  const rs = await rows<{ gamertag: string; name: string; tag: string; kind: "joined" | "left"; at: string | Date; raided: boolean }>(db, sql`
+    select * from (
+      select coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as gamertag, f.name, f.tag, 'joined' as kind, mh.joined_at as at, mh.id,
+        exists (select 1 from raids r where r.victim_faction_id = mh.faction_id and r.raider_dayz_id = mh.dayz_id
+          and r.first_lower_at >= ${tsz(a.from)} and r.first_lower_at < mh.joined_at) as raided
+      from membership_history mh join factions f on f.id = mh.faction_id left join players p on p.dayz_id = mh.dayz_id
+      where mh.server_id = ${a.serverId} and ${between("mh.joined_at", a)}
+      union all
+      select coalesce(p.gamertag, ${UNKNOWN_PLAYER}), f.name, f.tag, 'left', mh.left_at, mh.id, false
+      from membership_history mh join factions f on f.id = mh.faction_id left join players p on p.dayz_id = mh.dayz_id
+      where mh.server_id = ${a.serverId} and mh.left_at is not null and ${between("mh.left_at", a)}
+    ) m order by at asc, id asc, kind asc limit ${MAX_MEMBER_MOVES}`);
+  return rs.map((r) => ({
+    gamertag: a.texts.gamertag(r.gamertag), clan: a.texts.clan(r.name, r.tag), kind: r.kind,
+    at: iso(r.at), when: whenLabel(r.at), raidedThisClanEarlier: r.raided,
+  }));
 }
 
 export async function bountiesForWeek(db: Database, a: WeekRead): Promise<BountyStory[]> {

@@ -33,6 +33,8 @@ export type RaidStory = {
 
 export type FlagEventKind = "founded" | "activated" | "dormant" | "revived" | "disbanded";
 export type FlagEvent = { clan: ClanRef; kind: FlagEventKind; at: string; when: string };
+/** A player joining or leaving a clan this week. `raidedThisClanEarlier` is only ever true on a join. */
+export type MemberMove = { gamertag: string; clan: ClanRef; kind: "joined" | "left"; at: string; when: string; raidedThisClanEarlier: boolean };
 
 export type FfPair = {
   clan: ClanRef; killer: string; victim: string; count: number; weapons: string[];
@@ -66,6 +68,7 @@ export type StoryContext = {
   clans: ClanWeek[];
   raids: RaidStory[];
   flagEvents: FlagEvent[];
+  memberMoves: MemberMove[];
   friendlyFire: FfPair[];
   clanBeefs: ClanVsClan[];
   players: { topKillers: PlayerLine[]; mostDeaths: PlayerLine[]; longestShots: ShotLine[]; oddDeaths: OddDeath[] };

@@ -33,6 +33,10 @@ export function collectNames(ctx: StoryContext): { names: string[]; aliases: str
     addClan(r.victimClan);
   }
   for (const e of ctx.flagEvents) addClan(e.clan);
+  for (const m of ctx.memberMoves) {
+    add(m.gamertag);
+    addClan(m.clan);
+  }
   for (const f of ctx.friendlyFire) {
     addClan(f.clan);
     add(f.killer);

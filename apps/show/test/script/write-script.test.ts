@@ -4,7 +4,7 @@ import type { Moderate } from "../../src/screening/moderate.js";
 import type { StoryContext } from "../../src/story/types.js";
 
 const context = {
-  week: { start: "a", end: "b", season: 1, episode: 3, alpha: null }, clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [],
+  week: { start: "a", end: "b", season: 1, episode: 3, alpha: null }, clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
   players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] }, bounties: [], koth: [], airdrops: [], previous: null,
 } satisfies StoryContext;
 

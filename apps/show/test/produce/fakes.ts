@@ -77,7 +77,7 @@ export function memFs(initial: Record<string, Buffer> = {}, readThrough: (p: str
 export function storyContext(over: Partial<StoryContext> = {}): StoryContext {
   return {
     week: { start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3, alpha: null },
-    clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [],
+    clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
     players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] },
     bounties: [], koth: [], airdrops: [], previous: null,
     ...over,

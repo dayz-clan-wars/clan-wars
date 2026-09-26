@@ -11,7 +11,7 @@ describe("buildStoryContext", () => {
   it("builds an empty week: empty lists, S1 E3, no previous", async () => {
     const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: ["ADM"], previous: "db" });
     expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3, alpha: null });
-    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
+    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
     expect(context.players).toEqual({ topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] });
     expect(texts.entries()).toEqual([]);
   });

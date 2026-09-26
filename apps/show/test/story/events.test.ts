@@ -3,7 +3,7 @@ import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, PREV_MON, at, type Fx } from "../fixture.js";
 import { PlayerTexts } from "../../src/story/registry.js";
 import { weekWindow } from "../../src/weeks.js";
-import { flagEventsForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "../../src/story/events.js";
+import { flagEventsForWeek, memberMovesForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "../../src/story/events.js";
 import { loadPreviousEpisode } from "../../src/story/previous.js";
 import { whenLabel } from "../../src/story/sql.js";
 
@@ -24,6 +24,29 @@ describe("events and the previous episode", () => {
       { clan: { name: "SNA", tag: "SNA" }, kind: "revived", at: at(2, 20, 14).toISOString(), when: whenLabel(at(2, 20, 14)) },
     ]);
     expect(JSON.stringify(out)).not.toContain("OLDNAME");
+  });
+
+  it("member moves: joins and leaves this week, and a raider who then joined the clan they raided", async () => {
+    const skull = await fx.clan({ tag: "SKULL", name: "Dead Reckoning" });
+    const cock = await fx.clan({ tag: "COCK", name: "The Cocks" });
+    for (const [id, tag] of [["tide", "TIDEPRIDE113384"], ["ron", "RonaldRaygun552"], ["old", "OldTimer"]] as const) await fx.player(id, tag);
+    await fx.raid({ victim: skull, raider: "tide", raiderClan: null, at: at(2, 5, 58), points: 0 });
+    await fx.member(skull, "tide", at(2, 23, 36));             // joined the clan he raided that morning
+    await fx.member(cock, "ron", at(-5), at(6, 17, 28));        // left this week
+    await fx.member(cock, "old", at(-30), at(-8));              // left last week: not this week's news
+    await fx.member(skull, "old", at(9));                       // joins next week: not this week's news
+    const out = await memberMovesForWeek(db, read());
+    expect(out).toEqual([
+      { gamertag: "TIDEPRIDE113384", clan: { name: "Dead Reckoning", tag: "SKULL" }, kind: "joined", at: at(2, 23, 36).toISOString(), when: whenLabel(at(2, 23, 36)), raidedThisClanEarlier: true },
+      { gamertag: "RonaldRaygun552", clan: { name: "The Cocks", tag: "COCK" }, kind: "left", at: at(6, 17, 28).toISOString(), when: whenLabel(at(6, 17, 28)), raidedThisClanEarlier: false },
+    ]);
+  });
+
+  it("a join with no earlier raid on that clan is not flagged", async () => {
+    const skull = await fx.clan({ tag: "SKULL" });
+    await fx.player("n", "NugzyBudz22");
+    await fx.member(skull, "n", at(1));
+    expect((await memberMovesForWeek(db, read()))[0]?.raidedThisClanEarlier).toBe(false);
   });
 
   it("a claimed bounty reports the reason, the claimer, hours to claim and the kill distance", async () => {

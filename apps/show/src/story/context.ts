@@ -8,7 +8,7 @@ import { seasonForWeek } from "./season.js";
 import { clansForWeek } from "./clans.js";
 import { raidsForWeek } from "./raids.js";
 import { peopleForWeek, friendlyFireForWeek, clanBeefsForWeek } from "./people.js";
-import { flagEventsForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "./events.js";
+import { flagEventsForWeek, memberMovesForWeek, bountiesForWeek, kothForWeek, airdropsForWeek } from "./events.js";
 import { loadPreviousEpisode } from "./previous.js";
 
 /** The rank-1 `alpha_weeks` clan for this season and week, or null when none was crowned yet. */
@@ -37,12 +37,13 @@ export async function buildStoryContext(db: Database, opts: {
   const week = { serverId: season.serverId, from, to, texts };
 
   const clans = await clansForWeek(db, { serverId: season.serverId, seasonId: season.id, weekStart: opts.weekStart, weekEnd: to, staffTags: opts.staffTags, texts });
-  const [raids, players, friendlyFire, clanBeefs, flagEvents, bounties, koth, airdrops, lastEpisode, alpha] = await Promise.all([
+  const [raids, players, friendlyFire, clanBeefs, flagEvents, memberMoves, bounties, koth, airdrops, lastEpisode, alpha] = await Promise.all([
     raidsForWeek(db, { serverId: season.serverId, weekStart: opts.weekStart, texts }),
     peopleForWeek(db, week),
     friendlyFireForWeek(db, week),
     clanBeefsForWeek(db, week),
     flagEventsForWeek(db, week),
+    memberMovesForWeek(db, week),
     bountiesForWeek(db, week),
     kothForWeek(db, week),
     airdropsForWeek(db, week),
@@ -65,7 +66,7 @@ export async function buildStoryContext(db: Database, opts: {
   return {
     context: {
       week: { start: from.toISOString(), end: to.toISOString(), season: season.number, episode: episodeNumber(season.startedAt, opts.weekStart), alpha },
-      clans, raids, flagEvents, friendlyFire, clanBeefs, players, bounties, koth, airdrops, previous,
+      clans, raids, flagEvents, memberMoves, friendlyFire, clanBeefs, players, bounties, koth, airdrops, previous,
     },
     texts,
   };
