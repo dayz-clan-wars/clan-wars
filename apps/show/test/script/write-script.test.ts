@@ -82,13 +82,14 @@ describe("writeScript", () => {
     expect(r).toMatchObject({ ok: true, attempts: 1 });
     expect(generate).toHaveBeenCalledTimes(2);
     const [, trimUser] = generate.mock.calls[1]!;
-    expect(trimUser).toContain("Cut it to under 5,500 characters");
+    expect(trimUser).toContain("Cut it to under 4,800 characters");
     expect(trimUser).toContain('"episode":3');
   });
 
-  it("⚠️ trims again on the second attempt when both the first reply and its trim are too long", async () => {
+  it("⚠️ moves to a second attempt when the first reply and both its trims are too long", async () => {
     const tooLong = reply("\n" + "Boris: " + "a".repeat(6000));
     const generate = vi.fn()
+      .mockResolvedValueOnce(tooLong)
       .mockResolvedValueOnce(tooLong)
       .mockResolvedValueOnce(tooLong)
       .mockResolvedValueOnce(reply());
@@ -96,19 +97,33 @@ describe("writeScript", () => {
     expect(r).toMatchObject({ ok: true, attempts: 2 });
   });
 
-  it("⚠️ holds after both attempts and their trims all come back too long, with all four reasons", async () => {
+  it("⚠️ trims a second time when the first trim is still too long, handing back the trimmed reply", async () => {
+    const tooLong = reply("\n" + "Boris: " + "a".repeat(6000));
+    const stillLong = reply("\n" + "Pavel: " + "b".repeat(5900));
+    const generate = vi.fn().mockResolvedValueOnce(tooLong).mockResolvedValueOnce(stillLong).mockResolvedValueOnce(reply());
+    const r = await writeScript(context, [], { generate, moderate: allow });
+    expect(r).toMatchObject({ ok: true, attempts: 1 });
+    expect(generate).toHaveBeenCalledTimes(3);
+    const [, secondTrim] = generate.mock.calls[2]!;
+    expect(secondTrim).toContain("bbbb");
+    expect(secondTrim).not.toContain("aaaa");
+    if (r.ok) expect(r.reasons).toEqual([expect.stringMatching(/^attempt 1: script is/u), expect.stringMatching(/^attempt 1 \(trimmed\): script is/u)]);
+  });
+
+  it("⚠️ holds after both attempts and both of their trims all come back too long, with all six reasons", async () => {
     const tooLong = reply("\n" + "Boris: " + "a".repeat(6000));
     const generate = vi.fn(async () => tooLong);
     const r = await writeScript(context, [], { generate, moderate: allow });
     expect(r.ok).toBe(false);
-    expect(generate).toHaveBeenCalledTimes(4);
+    expect(generate).toHaveBeenCalledTimes(6);
     if (!r.ok) {
       expect(r.attempts).toBe(2);
-      expect(r.reasons).toHaveLength(4);
+      expect(r.reasons).toHaveLength(6);
       expect(r.reasons[0]).toMatch(/^attempt 1: script is \d+ characters, cap is 6000$/u);
       expect(r.reasons[1]).toMatch(/^attempt 1 \(trimmed\): script is \d+ characters, cap is 6000$/u);
-      expect(r.reasons[2]).toMatch(/^attempt 2: script is \d+ characters, cap is 6000$/u);
-      expect(r.reasons[3]).toMatch(/^attempt 2 \(trimmed\): script is \d+ characters, cap is 6000$/u);
+      expect(r.reasons[2]).toMatch(/^attempt 1 \(trimmed 2\): script is \d+ characters, cap is 6000$/u);
+      expect(r.reasons[3]).toMatch(/^attempt 2: script is \d+ characters, cap is 6000$/u);
+      expect(r.reasons[5]).toMatch(/^attempt 2 \(trimmed 2\): script is \d+ characters, cap is 6000$/u);
     }
   });
 

@@ -6,6 +6,8 @@ import { escapeRe } from "../screening/redact.js";
 import type { Storyline, StoryContext } from "../story/types.js";
 
 export const MAX_SCRIPT_ATTEMPTS = 2;
+export const MAX_TRIMS = 2;
+export const TRIM_TARGET_CHARS = 4800;
 
 export type Generate = (system: string, user: string) => Promise<string>;
 
@@ -40,11 +42,13 @@ export async function screenScript(text: string, blocked: string[], moderate: Mo
  * dry run that only succeeded on attempt 2 still shows why attempt 1 failed instead of
  * hiding it behind a bare `ok: true`. Empty when the very first attempt passed.
  *
- * A model reply that parses as over the character cap gets one trim call within the
- * same attempt, before the attempt counts as failed: the raw reply is handed back with
- * an instruction to cut it under 5,500 characters, keeping every storyline and the
- * format. The trimmed reply is parsed and, if it parses, screened exactly like a first
- * draft. If the trim also fails to parse, the attempt fails with both reasons recorded.
+ * A model reply that parses as over the character cap gets up to MAX_TRIMS trim calls
+ * within the same attempt, before the attempt counts as failed: the latest too-long
+ * reply is handed back with an instruction to cut it under TRIM_TARGET_CHARS, keeping
+ * every storyline and the format. A trimmed reply that parses is screened exactly like a
+ * first draft. ⚠️ The target sits well under the 6,000 cap because the model overshoots
+ * it: a busy week's trims came back at 6,279 and 6,648 against a 5,500 target (S01E02,
+ * held twice on length alone).
  */
 export async function writeScript(context: StoryContext, blocked: string[], deps: { generate: Generate; moderate: Moderate; allowed?: string[] }): Promise<ScriptResult> {
   const { system, user } = buildShowPrompt(context);
@@ -58,15 +62,22 @@ export async function writeScript(context: StoryContext, blocked: string[], deps
       if (!(err instanceof EpisodeParseError)) throw err;
       reasons.push(`attempt ${attempt}: ${err.message}`);
       if (err.reason !== "too_long") continue;
-      const trimUser = `${user}\n\nYour script below is ${err.length} characters. Cut it to under 5,500 characters: drop the weakest jokes and lines, keep every storyline and the format (dialogue lines, then the ===STORYLINES=== line and its JSON). Return the whole episode.\n\n${raw}`;
-      const trimmedRaw = await deps.generate(system, trimUser);
-      try {
-        parsed = parseEpisode(trimmedRaw);
-      } catch (err2) {
-        if (!(err2 instanceof EpisodeParseError)) throw err2;
-        reasons.push(`attempt ${attempt} (trimmed): ${err2.message}`);
-        continue;
+      let longRaw = raw;
+      let longLength = err.length;
+      for (let trim = 1; trim <= MAX_TRIMS && parsed === undefined; trim++) {
+        const trimUser = `${user}\n\nYour script below is ${longLength} characters. Cut it to under ${TRIM_TARGET_CHARS.toLocaleString("en-US")} characters: drop the weakest jokes and lines, keep every storyline and the format (dialogue lines, then the ===STORYLINES=== line and its JSON). Return the whole episode.\n\n${longRaw}`;
+        const trimmedRaw = await deps.generate(system, trimUser);
+        try {
+          parsed = parseEpisode(trimmedRaw);
+        } catch (err2) {
+          if (!(err2 instanceof EpisodeParseError)) throw err2;
+          reasons.push(`attempt ${attempt} (trimmed${trim > 1 ? ` ${trim}` : ""}): ${err2.message}`);
+          if (err2.reason !== "too_long") break;
+          longRaw = trimmedRaw;
+          longLength = err2.length;
+        }
       }
+      if (parsed === undefined) continue;
     }
     const screened = [parsed.narrative, parsed.title, ...parsed.storylines.flatMap((s) => [s.title, s.status, ...s.players, ...s.clans, ...s.openQuestions])].join("\n");
     const failed = await screenScript(screened, blocked, deps.moderate, deps.allowed);

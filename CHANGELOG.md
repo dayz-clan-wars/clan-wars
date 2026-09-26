@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The weekly show no longer mixes up who killed whom, never guesses a player's
+  gender, and writes shorter scripts so a busy week is not held for length.
+
 ## [1.43.0] - 2026-09-26
 
 ### Added

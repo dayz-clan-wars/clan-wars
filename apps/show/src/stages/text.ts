@@ -31,7 +31,7 @@ export const forumThreadName = (code: string, subtitle: string) => `Clan Wars ${
  * Reasons are reduced to their category; anything else has each blocked string masked.
  */
 export function opsSafe(reason: string, blocked: string[]): string {
-  const m = /^(attempt \d+(?: \(trimmed\))?): (.*)$/su.exec(reason);
+  const m = /^(attempt \d+(?: \(trimmed(?: \d+)?\))?): (.*)$/su.exec(reason);
   const [prefix, body] = m ? [`${m[1]}: `, m[2]!] : ["", reason];
   if (body.startsWith("blocklist:")) return `${prefix}blocklist hit`;
   if (body.startsWith("blocked text:")) return `${prefix}a blocked name came back`;
@@ -69,11 +69,16 @@ export function draftMessage(o: { weekStart: Date; code: string; subtitle: strin
   };
 }
 
+const lengthOnly = (reasons: string[]) => reasons.length > 0 && reasons.every((r) => /: script is \d+ characters, cap is \d+$/u.test(r));
+
 export function heldMessage(o: { code: string; weekStart: Date; reasons: string[]; blocked: string[] }): OutMessage {
   const lines = [
-    `⚠️ Clan Wars ${o.code} is held: the script failed screening twice.`,
+    `⚠️ Clan Wars ${o.code} is held: no script passed its checks in two attempts.`,
     ...o.reasons.map((r) => `- ${opsSafe(r, o.blocked)}`),
-    `Change the overrides with \`pnpm show:screening\`, then run \`pnpm run show --week ${day(o.weekStart)} --force\`.`,
+    // A length-only hold needs nothing but another roll; a screening hold needs an override first.
+    lengthOnly(o.reasons)
+      ? `Every attempt was too long. Run \`pnpm run show --week ${day(o.weekStart)} --force\` to try again.`
+      : `Change the overrides with \`pnpm show:screening\`, then run \`pnpm run show --week ${day(o.weekStart)} --force\`.`,
   ];
   return { content: lines.join("\n").slice(0, CONTENT_MAX) };
 }
