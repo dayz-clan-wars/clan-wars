@@ -37,6 +37,12 @@ export type IssueContext = {
   channelId: string | null;
   /** Ask for a different sequence for the SAME character instead of re-showing the live one. */
   newSequence?: boolean;
+  /**
+   * The linked player this one names as their referrer, already vetted by the
+   * caller with `checkReferral`. Recorded only when the challenge completes;
+   * omitted or null keeps whoever an earlier request named.
+   */
+  referrerDiscordId?: string | null;
 };
 
 /**
@@ -70,6 +76,12 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
   // asking for different ones, not for the same ones again.
   const live = await store.findLiveChallenge(ctx.discordId, now);
   if (live && live.targetDayzId === target.dayzId && ctx.newSequence !== true) {
+    // Naming a referrer on the re-show is how a player adds one after the
+    // challenge was issued, so it updates the live row rather than being lost.
+    if (ctx.referrerDiscordId && ctx.referrerDiscordId !== live.referrerDiscordId) {
+      await store.setChallengeReferrer(live.id, ctx.referrerDiscordId);
+      return { kind: "live", challenge: { ...live, referrerDiscordId: ctx.referrerDiscordId }, gamertag: target.gamertag };
+    }
     return { kind: "live", challenge: live, gamertag: target.gamertag };
   }
 
@@ -123,6 +135,9 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
   const challenge = await store.createChallenge({
     discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
     sequence, issuedAt: now, expiresAt, targetDayzId: target.dayzId,
+    // A redraw or a switch keeps the referrer already named: it is about the
+    // person, not the character or the emotes.
+    referrerDiscordId: ctx.referrerDiscordId ?? live?.referrerDiscordId ?? null,
   });
   if (challenge) return { kind: "issued", challenge, gamertag: target.gamertag, switchedFrom };
 

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, players, verificationChallenges, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store";
+import { clearReferrals } from "./clear-referrals";
 import { issueChallenge, MAX_DRAWS_PER_TARGET, type IssueDeps } from "../src/issue";
 
 const URL = requireTestDatabaseUrl();
@@ -14,7 +15,7 @@ describe("issueChallenge", () => {
   let db: Database;
   let store: PgVerificationStore;
   const deps: IssueDeps = { rng: Math.random, now, ttlMs: TTL };
-  const ctx = (targetDayzId = UID_A, extra: Partial<{ newSequence: boolean; discordId: string }> = {}) =>
+  const ctx = (targetDayzId = UID_A, extra: Partial<{ newSequence: boolean; discordId: string; referrerDiscordId: string | null }> = {}) =>
     ({ discordId: "100", targetDayzId, guildId: null, channelId: null, ...extra });
 
   beforeEach(async () => {
@@ -24,6 +25,7 @@ describe("issueChallenge", () => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
     });
+    await clearReferrals(db);
     store = new PgVerificationStore(db);
     await db.insert(players).values([
       { dayzId: UID_A, gamertag: "Ronald", firstSeenAt: now, lastSeenAt: now },
@@ -90,5 +92,36 @@ describe("issueChallenge", () => {
     expect(theirs.kind).toBe("issued");
     const out = await issueChallenge(store, deps, ctx());
     expect(out).toEqual({ kind: "held-by-other", gamertag: "Ronald", expiresAt: new Date(now.getTime() + TTL) });
+  });
+  it("saves the referrer on a new challenge", async () => {
+    const out = await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "900" }));
+    expect(out.kind).toBe("issued");
+    if (out.kind !== "issued") return;
+    expect(out.challenge.referrerDiscordId).toBe("900");
+    const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, out.challenge.id));
+    expect(row!.referrerDiscordId).toBe("900");
+  });
+
+  it("re-showing the live challenge with a new referrer updates it", async () => {
+    const first = await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "900" }));
+    const again = await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "901" }));
+    expect(again.kind).toBe("live");
+    if (first.kind !== "issued" || again.kind !== "live") return;
+    expect(again.challenge.id).toBe(first.challenge.id);
+    expect(again.challenge.referrerDiscordId).toBe("901");
+    const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, first.challenge.id));
+    expect(row!.referrerDiscordId).toBe("901");
+    // Re-showing without naming anyone keeps the one already named.
+    const plain = await issueChallenge(store, deps, ctx());
+    expect(plain.kind === "live" && plain.challenge.referrerDiscordId).toBe("901");
+  });
+
+  it("a redraw without a referrer keeps the one already named", async () => {
+    await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "900" }));
+    const rerolled = await issueChallenge(store, deps, ctx(UID_A, { newSequence: true }));
+    expect(rerolled.kind === "issued" && rerolled.challenge.referrerDiscordId).toBe("900");
+    // So does a switch to another character: the referrer is about the person.
+    const switched = await issueChallenge(store, deps, ctx(UID_B));
+    expect(switched.kind === "issued" && switched.challenge.referrerDiscordId).toBe("900");
   });
 });

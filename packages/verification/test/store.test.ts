@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, verificationChallenges, players, referrals, type Database } from "@factions/db";
 import { sql, and, eq, isNotNull } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store";
+import { clearReferrals } from "./clear-referrals";
 
 const URL = requireTestDatabaseUrl();
 const UID_A = "A".repeat(40);
@@ -26,6 +27,7 @@ describe("PgVerificationStore", () => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players restart identity cascade`);
     });
+    await clearReferrals(db);
     store = new PgVerificationStore(db);
   });
 
@@ -437,5 +439,92 @@ describe("PgVerificationStore", () => {
     const pending = await store.pendingNotifications();
     expect(pending).toHaveLength(1);
     expect(pending[0]).toMatchObject({ id: c.id, outcome: "already-linked", boundDayzId: null });
+  });
+  describe("referrals at link time", () => {
+    const linkReferrer = (discordId = "900", dayzId = UID_B) =>
+      db.insert(identityLinks).values({ discordId, dayzId, gamertag: "Betty", verifiedAt: now });
+    const issueReferred = async (referrerDiscordId: string | null, guildId: string | null = "g") => {
+      const c = await store.createChallenge({
+        discordId: "100", guildId, channelId: guildId ? "c" : null, sequence: SEQ, issuedAt: now, expiresAt: later,
+        targetDayzId: UID_A, referrerDiscordId,
+      });
+      expect(c).not.toBeNull();
+      return c!;
+    };
+
+    it("completeChallenge records the named referrer in the same transaction", async () => {
+      await linkReferrer();
+      const c = await issueReferred("900");
+      expect(c.referrerDiscordId).toBe("900");
+      expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+      expect(await db.select().from(referrals)).toEqual([expect.objectContaining({
+        referredDiscordId: "100", referrerDiscordId: "900", referrerDayzId: UID_B, source: "link_bot",
+      })]);
+      const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, c.id));
+      expect(row!.referralRefused).toBeNull();
+      expect((await store.pendingNotifications())[0]).toMatchObject({
+        outcome: "completed", referrerDiscordId: "900", referralRefused: null,
+      });
+    });
+
+    it("records a site-issued referral as link_site", async () => {
+      await linkReferrer();
+      const c = await issueReferred("900", null);
+      expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+      expect((await db.select().from(referrals))[0]).toMatchObject({ source: "link_site" });
+    });
+
+    it("completeChallenge still links when the referrer unlinked meanwhile, and says why", async () => {
+      const c = await issueReferred("900");
+      expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+      expect(await store.findLinkByDiscord("100")).toMatchObject({ dayzId: UID_A });
+      expect(await db.select().from(referrals)).toEqual([]);
+      const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, c.id));
+      expect(row!.referralRefused).toBe("referrer-not-linked");
+      expect((await store.pendingNotifications())[0]).toMatchObject({
+        outcome: "completed", referrerDiscordId: "900", referralRefused: "referrer-not-linked",
+      });
+    });
+
+    it("carries no referral fields on a completion that named nobody", async () => {
+      const c = await issue();
+      await store.completeChallenge(c.id, UID_A, "Steve", later);
+      expect((await store.pendingNotifications())[0]).toMatchObject({ referrerDiscordId: null, referralRefused: null });
+    });
+
+    it("pendingReferralNotices lists un-notified referrals once; markReferralNotified retires them", async () => {
+      await linkReferrer();
+      const c = await issueReferred("900");
+      await store.completeChallenge(c.id, UID_A, "Steve", later);
+      expect(await store.pendingReferralNotices()).toEqual([
+        { referredDiscordId: "100", referrerDiscordId: "900", referredGamertag: "Steve" },
+      ]);
+      await store.markReferralNotified("100", later);
+      expect(await store.pendingReferralNotices()).toEqual([]);
+      // A second mark is a no-op, not a trigger violation.
+      await store.markReferralNotified("100", new Date(later.getTime() + 1000));
+      const [row] = await db.select().from(referrals);
+      expect(row!.referrerNotifiedAt).toEqual(later);
+    });
+
+    it("pendingReferralNotices names an unlinked referred player as null", async () => {
+      await linkReferrer();
+      const c = await issueReferred("900");
+      await store.completeChallenge(c.id, UID_A, "Steve", later);
+      await store.deleteLinkByDiscord("100");
+      expect(await store.pendingReferralNotices()).toEqual([
+        { referredDiscordId: "100", referrerDiscordId: "900", referredGamertag: null },
+      ]);
+    });
+
+    it("setChallengeReferrer changes an open challenge only", async () => {
+      const c = await issueReferred(null);
+      await store.setChallengeReferrer(c.id, "900");
+      expect((await store.findLiveChallenge("100", now))?.referrerDiscordId).toBe("900");
+      await store.cancelChallenge(c.id, later);
+      await store.setChallengeReferrer(c.id, "901");
+      const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, c.id));
+      expect(row!.referrerDiscordId).toBe("900");
+    });
   });
 });

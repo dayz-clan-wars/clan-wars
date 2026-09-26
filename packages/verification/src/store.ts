@@ -1,7 +1,8 @@
 import type { Database } from "@factions/db";
-import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players } from "@factions/db";
+import { identityLinks, verificationChallenges, challengeAttempts, factions, factionMembers, players, referrals } from "@factions/db";
 import { and, count, desc, eq, gte, ilike, inArray, isNull, isNotNull, lt, or } from "drizzle-orm";
 import { HOLDING_STATUSES } from "@factions/domain";
+import { recordReferralTx, type ReferralRefusal } from "./referral";
 /** A roster role, as `factionMembershipsFor` reports it. The bot's roster-store has the same three. */
 export type Role = "leader" | "officer" | "member";
 
@@ -14,6 +15,8 @@ const HOLDING: string[] = [...HOLDING_STATUSES];
 export type LiveChallenge = {
   id: number; discordId: string; guildId: string | null; channelId: string | null;
   sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
+  /** The linked player this one named as their referrer, recorded when the challenge completes. */
+  referrerDiscordId: string | null;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
 
@@ -42,7 +45,12 @@ export type ChallengeRecord = LiveChallenge & {
 };
 
 export type PendingNotification = LiveChallenge & (
-  | { outcome: "completed"; boundDayzId: string }
+  /**
+   * `referrerDiscordId` is who the challenge named, and `referralRefused` is
+   * why that referral was not recorded, or null when it was (or nobody was
+   * named). The Verified DM explains a refusal; the link stands either way.
+   */
+  | { outcome: "completed"; boundDayzId: string; referrerDiscordId: string | null; referralRefused: ReferralRefusal | null }
   /**
    * `progressIndex` is how far into the sequence the target actually got —
    * the same value `challenge_attempts` holds, or 0 when no attempt row
@@ -91,12 +99,22 @@ export interface VerificationStore {
    */
   countDrawsSince(discordId: string, targetDayzId: string, since: Date): Promise<number>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
-  createChallenge(input: { discordId: string; guildId: string | null; channelId: string | null; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string }): Promise<LiveChallenge | null>;
+  createChallenge(input: { discordId: string; guildId: string | null; channelId: string | null; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string; referrerDiscordId?: string | null }): Promise<LiveChallenge | null>;
+  /** Name (or rename) the referrer on a still-open challenge; a closed one is left alone. */
+  setChallengeReferrer(challengeId: number, referrerDiscordId: string): Promise<void>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
   pendingNotifications(): Promise<PendingNotification[]>;
   markNotified(challengeId: number, at: Date): Promise<void>;
+  /**
+   * Referrals whose referrer has not been told yet, oldest first.
+   * `referredGamertag` is null once the referred player has unlinked: the
+   * referral outlives the link, the name does not.
+   */
+  pendingReferralNotices(): Promise<{ referredDiscordId: string; referrerDiscordId: string; referredGamertag: string | null }[]>;
+  /** Retire one referral notice. A second call is a no-op, which the permanence trigger requires. */
+  markReferralNotified(referredDiscordId: string, at: Date): Promise<void>;
   cancelExpired(now: Date): Promise<number>;
   /**
    * Cancel one still-open challenge, guarded the same way `cancelExpired` is:
@@ -201,12 +219,24 @@ export class PgVerificationStore implements VerificationStore {
    */
   async createChallenge(input: {
     discordId: string; guildId: string | null; channelId: string | null;
-    sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
+    sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string; referrerDiscordId?: string | null;
   }): Promise<LiveChallenge | null> {
     const [row] = await this.db.insert(verificationChallenges).values(input)
       .onConflictDoNothing()
       .returning();
     return row ? toLive(row) : null;
+  }
+
+  async setChallengeReferrer(challengeId: number, referrerDiscordId: string): Promise<void> {
+    // Guarded on open-ness: a completed challenge's referrer has already been
+    // recorded or refused, and rewriting it would make the row lie about which.
+    await this.db.update(verificationChallenges)
+      .set({ referrerDiscordId })
+      .where(and(
+        eq(verificationChallenges.id, challengeId),
+        isNull(verificationChallenges.completedAt),
+        isNull(verificationChallenges.canceledAt),
+      ));
   }
 
   async getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null> {
@@ -337,6 +367,23 @@ export class PgVerificationStore implements VerificationStore {
           .where(eq(identityLinks.dayzId, dayzId));
         return cancel(now_ && now_.discordId !== challenge.discordId ? "already-linked" : null);
       }
+
+      // Recorded here, after the link insert, so the referred player is
+      // linked when `recordReferralTx` checks — and so the referral commits
+      // with the link or not at all.
+      // ⚠️ A refusal must never fail the link: it is written down for the
+      // Verified DM and the completion goes ahead. Only a thrown error rolls
+      // back, the same as any other DB error in this transaction.
+      if (challenge.referrerDiscordId) {
+        const r = await recordReferralTx(tx, {
+          referredDiscordId: challenge.discordId, referrerDiscordId: challenge.referrerDiscordId,
+          source: challenge.guildId === null ? "link_site" : "link_bot", at,
+        });
+        if (r !== "recorded") {
+          await tx.update(verificationChallenges).set({ referralRefused: r })
+            .where(eq(verificationChallenges.id, challengeId));
+        }
+      }
       return complete();
     });
   }
@@ -379,7 +426,10 @@ export class PgVerificationStore implements VerificationStore {
         // A completed row with no bound UID is unrepresentable
         // (verification_challenges_bound_requires_complete is the other half);
         // skip rather than assert so a notifier is never the thing that throws.
-        return r.boundDayzId === null ? [] : [{ ...toLive(r), outcome: "completed" as const, boundDayzId: r.boundDayzId }];
+        return r.boundDayzId === null ? [] : [{
+          ...toLive(r), outcome: "completed" as const, boundDayzId: r.boundDayzId,
+          referralRefused: r.referralRefused as ReferralRefusal | null,
+        }];
       }
       return [{
         ...toLive(r),
@@ -394,6 +444,28 @@ export class PgVerificationStore implements VerificationStore {
     await this.db.update(verificationChallenges)
       .set({ notifiedAt: at })
       .where(eq(verificationChallenges.id, challengeId));
+  }
+
+  async pendingReferralNotices() {
+    // ⚠️ LEFT join: the referral outlives the referred player's link, and an
+    // inner join would leave that referrer untold forever.
+    return this.db.select({
+      referredDiscordId: referrals.referredDiscordId,
+      referrerDiscordId: referrals.referrerDiscordId,
+      referredGamertag: identityLinks.gamertag,
+    })
+      .from(referrals)
+      .leftJoin(identityLinks, eq(identityLinks.discordId, referrals.referredDiscordId))
+      .where(isNull(referrals.referrerNotifiedAt))
+      .orderBy(referrals.createdAt, referrals.referredDiscordId);
+  }
+
+  async markReferralNotified(referredDiscordId: string, at: Date): Promise<void> {
+    // ⚠️ `IS NULL` is load-bearing: the permanence trigger rejects any second
+    // write to referrer_notified_at, so an unguarded retry would throw.
+    await this.db.update(referrals)
+      .set({ referrerNotifiedAt: at })
+      .where(and(eq(referrals.referredDiscordId, referredDiscordId), isNull(referrals.referrerNotifiedAt)));
   }
 
   /**
@@ -480,6 +552,6 @@ function toLive(row: typeof verificationChallenges.$inferSelect): LiveChallenge 
   return {
     id: row.id, discordId: row.discordId, guildId: row.guildId,
     channelId: row.channelId, sequence: row.sequence, issuedAt: row.issuedAt, expiresAt: row.expiresAt,
-    targetDayzId: row.targetDayzId,
+    targetDayzId: row.targetDayzId, referrerDiscordId: row.referrerDiscordId,
   };
 }
