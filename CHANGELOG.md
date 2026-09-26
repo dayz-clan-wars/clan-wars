@@ -5,11 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.43.0] - 2026-09-26
+
 ### Added
 
-- The Bloodbag and Painkiller Show now airs a weekly Clan Wars episode: posted to
-  YouTube, the show's forum channel and Facebook after an admin approves it in the ops
-  channel.
+- The Bloodbag and Painkiller Show is coming to Clan Wars: Boris and Pavel have been
+  reassigned to the clan beat, with a weekly animated episode about the week's raids,
+  grudges and friendly fire. Each episode goes to YouTube, the show's forum channel and
+  Facebook once an admin has approved it. The first episodes follow shortly.
 
 ### Notes
 
