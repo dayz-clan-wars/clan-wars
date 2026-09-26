@@ -30,6 +30,10 @@ function memFs() {
       if (!files.has(p)) throw new Error("ENOENT");
       return files.get(p)!;
     },
+    renameSync: (from: string, to: string) => {
+      files.set(to, files.get(from)!);
+      files.delete(from);
+    },
   };
 }
 
@@ -117,4 +121,95 @@ test("writeEpisodeVideo copies the mp4 in and prunes OTHER keys' videos but keep
   } finally {
     fsreal.rmSync(cacheDir, { recursive: true, force: true });
   }
+});
+
+/**
+ * An fs fake for the atomic-write tests. `failOn(path)` decides which write/copy dies midway:
+ * it leaves the first half of the bytes at that path (a truncated file, as on ENOSPC or a kill)
+ * and then throws.
+ */
+function crashFs(failOn: (p: string) => boolean = () => false) {
+  const files = new Map<string, Buffer>();
+  const dirs = new Set<string>();
+  const ops: string[] = [];
+  const put = (p: string, b: Buffer) => {
+    if (failOn(p)) {
+      files.set(p, b.subarray(0, Math.floor(b.length / 2)));
+      throw new Error(`ENOSPC: no space left on device, write '${p}'`);
+    }
+    files.set(p, b);
+  };
+  return {
+    files,
+    ops,
+    mkdirSync: (d: string) => {
+      dirs.add(d);
+    },
+    existsSync: (p: string) => files.has(p) || dirs.has(p),
+    writeFileSync: (p: string, d: Buffer | string) => {
+      ops.push(`write ${p}`);
+      put(p, Buffer.isBuffer(d) ? Buffer.from(d) : Buffer.from(d));
+    },
+    copyFileSync: (src: string, dest: string) => {
+      ops.push(`copy ${dest}`);
+      put(dest, Buffer.from(files.get(src)!));
+    },
+    renameSync: (from: string, to: string) => {
+      ops.push(`rename ${to}`);
+      const b = files.get(from);
+      if (!b) throw new Error(`ENOENT ${from}`);
+      files.delete(from);
+      files.set(to, b);
+    },
+    rmSync: (p: string) => {
+      files.delete(p);
+    },
+    readFileSync: (p: string) => {
+      if (!files.has(p)) throw new Error("ENOENT");
+      return files.get(p)!;
+    },
+    readdirSync: () => [] as string[],
+    statSync: (p: string) => {
+      const b = files.get(p);
+      if (!b) throw new Error("ENOENT");
+      return { size: b.length };
+    },
+  };
+}
+
+describe("atomic cache writes", () => {
+  test("writeEpisodeCache writes each file to a tmp path and renames it in, spans.json last", () => {
+    const fsImpl = crashFs();
+    writeEpisodeCache({ fsImpl }, { cacheDir: "/c", key: "k", ...artifacts });
+    const finals = ["/c/k/episode.mp3", "/c/k/segA-timeline.json", "/c/k/spans.json"];
+    for (const f of finals) expect(fsImpl.ops).not.toContain(`write ${f}`);
+    expect(fsImpl.ops.filter((o) => o.startsWith("rename "))).toEqual(finals.map((f) => `rename ${f}`));
+    expect([...fsImpl.files.keys()].filter((k) => k.includes(".tmp-"))).toEqual([]);
+    expect(readEpisodeCache({ fsImpl }, { cacheDir: "/c", key: "k" })).not.toBeNull();
+  });
+
+  test("a write that dies midway leaves no hit", () => {
+    for (const name of ["episode.mp3", "segA-timeline", "spans.json"]) {
+      const fsImpl = crashFs((p) => p.includes(name));
+      expect(() => writeEpisodeCache({ fsImpl }, { cacheDir: "/c", key: "k", ...artifacts })).toThrow(/ENOSPC/);
+      expect(readEpisodeCache({ fsImpl }, { cacheDir: "/c", key: "k" })).toBeNull();
+    }
+  });
+
+  test("writeEpisodeVideo: a copy that dies midway leaves no cached video", () => {
+    const fsImpl = crashFs((p) => p.startsWith("/c/k/"));
+    fsImpl.files.set("/work/final.mp4", Buffer.from("FULL-VIDEO-BYTES"));
+    expect(() => writeEpisodeVideo({ fsImpl }, { cacheDir: "/c", key: "k", videoPath: "/work/final.mp4" })).toThrow(/ENOSPC/);
+    expect(readEpisodeVideoPath({ fsImpl }, { cacheDir: "/c", key: "k" })).toBeNull();
+    expect([...fsImpl.files.keys()].filter((k) => k.includes(".tmp-"))).toEqual([]);
+  });
+
+  test("writeEpisodeVideo copies to a tmp path and renames it in", () => {
+    const fsImpl = crashFs();
+    fsImpl.files.set("/work/final.mp4", Buffer.from("FULL-VIDEO-BYTES"));
+    const dest = writeEpisodeVideo({ fsImpl }, { cacheDir: "/c", key: "k", videoPath: "/work/final.mp4" });
+    expect(fsImpl.ops).not.toContain(`copy ${dest}`);
+    expect(fsImpl.ops).toContain(`rename ${dest}`);
+    expect(fsImpl.files.get(dest)!.toString()).toBe("FULL-VIDEO-BYTES");
+  });
 });

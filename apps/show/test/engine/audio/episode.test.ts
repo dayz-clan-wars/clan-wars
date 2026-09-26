@@ -9,6 +9,10 @@ function memFs(initial: Record<string, Buffer> = {}): FsLike {
     readFileSync: (p) => files.get(p) as Buffer,
     writeFileSync: (p, b) => files.set(p, Buffer.from(b)),
     mkdirSync: () => undefined,
+    renameSync: (from, to) => {
+      files.set(to, files.get(from)!);
+      files.delete(from);
+    },
   };
 }
 
@@ -68,6 +72,9 @@ describe("loadOrBuildSegment", () => {
       key: "k1",
       build: async () => Buffer.from([2]),
     });
-    expect(writes).toEqual(["/cache/.jingle-cache/jingle-k1.intro.pcm"]);
+    // Written to a tmp path beside the cache file, then renamed into place (atomic write).
+    expect(writes).toHaveLength(1);
+    expect(writes[0]!.startsWith("/cache/.jingle-cache/jingle-k1.intro.pcm.tmp-")).toBe(true);
+    expect(fsImpl.existsSync("/cache/.jingle-cache/jingle-k1.intro.pcm")).toBe(true);
   });
 });

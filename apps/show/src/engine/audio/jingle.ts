@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
 import { spawnRun, type Run } from "../run.js";
+import { writeFileAtomic, type AtomicFsLike } from "../atomicWrite.js";
 
 const SAMPLE_RATE = 24000;
 
@@ -175,7 +176,7 @@ export function jingleCachePath(o: { cacheDir: string; key: string; kind: string
 }
 
 /** The subset of `node:fs` the audio cache needs, so tests can inject an in-memory fake. */
-export type FsLike = {
+export type FsLike = AtomicFsLike & {
   existsSync: (p: string) => boolean;
   readFileSync: (p: string) => Buffer;
   writeFileSync: (p: string, b: Buffer) => void;
@@ -190,6 +191,7 @@ export async function cachedPcm(o: { file: string; build: () => Promise<Buffer>;
     if (pcm && pcm.length) return pcm;
   }
   const pcm = await build();
-  fsImpl.writeFileSync(file, pcm);
+  // Atomic (tmp + rename): a truncated PCM at `file` would be reused by every later episode.
+  writeFileAtomic(fsImpl, file, pcm);
   return pcm;
 }

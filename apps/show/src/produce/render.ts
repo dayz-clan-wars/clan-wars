@@ -43,6 +43,7 @@ export type RenderFs = {
   copyFileSync: (src: string, dest: string) => void;
   readdirSync: (p: string) => string[];
   rmSync: (p: string, o?: { recursive?: boolean; force?: boolean }) => void;
+  renameSync: (from: string, to: string) => void;
 };
 
 export type RenderDeps = {

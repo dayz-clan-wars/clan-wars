@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import crypto from "node:crypto";
+import { copyFileAtomic, writeFileAtomic, type AtomicFsLike } from "../atomicWrite.js";
 
 // Ported from KOTH bot/src/animation/episodeCache.js at a5ef8e7, typed. `episodeCacheKey` is a
 // named change (global-context.md): KOTH keyed on a numeric `weekStartTs`; this plan keys on the
@@ -9,13 +10,13 @@ import crypto from "node:crypto";
 
 // Each function below takes only the `node:fs` subset it needs (structurally compatible with real
 // `fs`, so the default keeps working, and tests can inject the narrower fake each one requires).
-export type CacheFsLike = {
+export type CacheFsLike = AtomicFsLike & {
   existsSync: (p: string) => boolean;
   readFileSync: (p: string) => Buffer;
   writeFileSync: (p: string, d: Buffer | string) => void;
   mkdirSync: (p: string, o?: { recursive?: boolean }) => void;
 };
-export type VideoWriteFsLike = {
+export type VideoWriteFsLike = AtomicFsLike & {
   existsSync: (p: string) => boolean;
   mkdirSync: (p: string, o?: { recursive?: boolean }) => void;
   copyFileSync: (src: string, dest: string) => void;
@@ -59,9 +60,11 @@ export function writeEpisodeCache(
   const dir = path.join(cacheDir, key);
   fsImpl.mkdirSync(dir, { recursive: true });
   const f = files(dir);
-  fsImpl.writeFileSync(f.mp3, mp3);
-  fsImpl.writeFileSync(f.segA, JSON.stringify(segATimeline));
-  fsImpl.writeFileSync(f.spans, JSON.stringify(spans));
+  // Each file lands atomically (tmp + rename), and spans.json goes LAST: `readEpisodeCache` needs
+  // every file, so a run that dies partway leaves a miss, never a partial hit.
+  writeFileAtomic(fsImpl, f.mp3, mp3);
+  writeFileAtomic(fsImpl, f.segA, JSON.stringify(segATimeline));
+  writeFileAtomic(fsImpl, f.spans, JSON.stringify(spans));
   return dir;
 }
 
@@ -98,7 +101,9 @@ export function writeEpisodeVideo(
   const dir = path.join(cacheDir, key);
   fsImpl.mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, "video.mp4");
-  fsImpl.copyFileSync(videoPath, dest);
+  // Atomic (tmp + rename): a copy that dies midway never leaves a truncated video.mp4 that
+  // `readEpisodeVideoPath` would return as a hit.
+  copyFileAtomic(fsImpl, videoPath, dest);
   // Keep only this episode's ~30MB video; the video is only reused transiently (this episode's
   // YouTube->Facebook, or an immediate re-run), so prune all other keys' videos (leave audio).
   try {

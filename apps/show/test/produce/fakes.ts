@@ -57,6 +57,12 @@ export function memFs(initial: Record<string, Buffer> = {}, readThrough: (p: str
       dirs.delete(p);
       for (const k of [...files.keys()]) if (k.startsWith(p + path.sep)) files.delete(k);
     },
+    renameSync: (from: string, to: string) => {
+      const b = files.get(from);
+      if (!b) throw new Error(`ENOENT ${from}`);
+      files.delete(from);
+      files.set(to, b);
+    },
     unlinkSync: (p: string) => {
       files.delete(p);
     },

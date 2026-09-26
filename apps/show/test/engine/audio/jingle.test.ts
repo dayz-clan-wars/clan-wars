@@ -103,6 +103,10 @@ function memFs(initial: Record<string, Buffer> = {}): FsLike {
       files.set(p, Buffer.from(b));
     },
     mkdirSync: () => undefined,
+    renameSync: (from, to) => {
+      files.set(to, files.get(from)!);
+      files.delete(from);
+    },
   };
 }
 
@@ -139,6 +143,44 @@ describe("cachedPcm", () => {
     const second = await cachedPcm({ file: "/c/x.pcm", build, fsImpl });
     expect([...second]).toEqual([1, 2, 3]);
     expect(builds).toBe(1); // not rebuilt
+  });
+});
+
+describe("cachedPcm atomic write", () => {
+  it("a write that dies midway is not reused: the next call rebuilds", async () => {
+    const files = new Map<string, Buffer>();
+    let crash = true;
+    const fsImpl: FsLike = {
+      existsSync: (p) => files.has(p),
+      readFileSync: (p) => files.get(p) as Buffer,
+      writeFileSync: (p, b) => {
+        if (crash) {
+          files.set(p, Buffer.from(b).subarray(0, 1)); // truncated, as on ENOSPC or a kill
+          throw new Error("ENOSPC");
+        }
+        files.set(p, Buffer.from(b));
+      },
+      mkdirSync: () => undefined,
+      renameSync: (from, to) => {
+        files.set(to, files.get(from)!);
+        files.delete(from);
+      },
+      rmSync: (p) => {
+        files.delete(p);
+      },
+    };
+    let builds = 0;
+    const build = async () => {
+      builds++;
+      return Buffer.from([1, 2, 3, 4]);
+    };
+    await expect(cachedPcm({ file: "/c/x.pcm", build, fsImpl })).rejects.toThrow(/ENOSPC/);
+    expect(files.has("/c/x.pcm")).toBe(false);
+    crash = false;
+    const again = await cachedPcm({ file: "/c/x.pcm", build, fsImpl });
+    expect([...again]).toEqual([1, 2, 3, 4]);
+    expect(builds).toBe(2);
+    expect([...files.keys()]).toEqual(["/c/x.pcm"]);
   });
 });
 
