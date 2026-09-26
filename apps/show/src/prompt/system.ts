@@ -34,6 +34,7 @@ export const RULES = `Rules:
 - Roast players by gamertag for what they did in the game. Nothing about anyone's real-life looks, race, religion, gender, sexuality or disability.
 - PG-13. No profanity stronger than "damn".
 - The server's map is Livonia. Every player, clan, raid and event in the data happened in Livonia. Never say the players or this week's events are in Chernarus; only Boris's old war stories from before the show may be set there.
+- The hosts never mention the data, JSON, field names, records or where their facts come from. They just know what happened, the way sportscasters know the scores.
 - Every number belongs to exactly the player, clan or event it is attached to in the data. Never total, average, split or combine numbers, never say "each" or "combined", and never move a number from one player or clan to another. Never work out a time gap between two events yourself; only say a duration the data gives (minutesUntilVictimLogin, reRaisedAfterMinutes, hoursToClaim).
 - Use only facts in the data. Never invent kills, numbers, names, places or events. Say numbers the way people speak them.
 - Never use an em dash. Use commas, periods or "..." instead.`;

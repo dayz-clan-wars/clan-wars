@@ -23,6 +23,8 @@ describe("the show prompt", () => {
     // The server is Livonia; Boris's KOTH backstory made the model place the show in Chernarus.
     expect(HOSTS).toMatch(/on the Livonia map/u);
     expect(RULES).toMatch(/map is Livonia/u);
+    // A render had Pavel read out "a field literally called raidedThisClanEarlier".
+    expect(RULES).toMatch(/never mention the data, JSON, field names/u);
     // Week 1 said a clan "died nine times each" (one player's number, spread over a clan) and
     // worked out its own "thirty-two minutes before" from two timestamps.
     expect(RULES).toMatch(/Never total, average, split or combine numbers/u);
