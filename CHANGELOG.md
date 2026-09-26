@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.47.0] - 2026-09-26
+
 ### Fixed
 
 - The weekly show's fact check no longer holds an episode over harmless wording like "Wednesday night" for early evening, and it catches kill counts told the wrong way round.
