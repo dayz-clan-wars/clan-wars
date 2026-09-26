@@ -1,6 +1,6 @@
 # apps/show: The Bloodbag and Painkiller Show, Clan Wars edition
 
-Weekly animated recap, hosted by Boris "Bloodbag" Volkov and Pavel "Painkiller" Sidorov.
+Weekly animated recap, hosted by Boris "Bloodbag" Volkov and Pavel "Painkiller" Kozlov.
 Design: `docs/superpowers/specs/2026-09-25-weekly-show-design.md`. Plan 1 writes and
 screens the script. Plan 2 can voice and render an episode locally for review. Plan 3
 (this state of the app) publishes it: a scheduled service picks a week, renders it,
