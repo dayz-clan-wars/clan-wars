@@ -29,6 +29,8 @@ export function opsSafe(reason: string, blocked: string[]): string {
   if (body.startsWith("blocklist:")) return `${prefix}blocklist hit`;
   if (body.startsWith("blocked text:")) return `${prefix}a blocked name came back`;
   if (body.startsWith("moderation:")) return `${prefix}moderation flagged it`;
+  // ⚠️ Unparsed script content quoted after "not a dialogue line:" is never screened; drop the excerpt
+  if (body.startsWith("not a dialogue line:")) return `${prefix}not a dialogue line`;
   const masked = [...blocked].sort((a, b) => b.length - a.length)
     .reduce((acc, b) => acc.replace(new RegExp(escapeRe(b), "giu"), "[blocked text]"), body);
   return prefix + masked;

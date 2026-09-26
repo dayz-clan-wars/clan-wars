@@ -25,6 +25,7 @@ describe("stage text", () => {
       ["attempt 1: blocklist: slurword", "attempt 1: blocklist hit"],
       ['attempt 2: blocked text: "BadName88"', "attempt 2: a blocked name came back"],
       ["attempt 1 (trimmed): moderation: says slurword", "attempt 1 (trimmed): moderation flagged it"],
+      ["attempt 1 (trimmed): not a dialogue line: Boris says slurword", "attempt 1 (trimmed): not a dialogue line"],
       ["attempt 1: too long: BadName88 said 7000 characters", "attempt 1: too long: [blocked text] said 7000 characters"],
     ])("%s", (raw, safe) => {
       expect(opsSafe(raw, blocked)).toBe(safe);
