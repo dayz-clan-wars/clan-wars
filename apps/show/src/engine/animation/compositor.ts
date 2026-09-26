@@ -134,9 +134,14 @@ export type CharacterRig = { svg: string; manifest: RigManifest };
 
 /** Render one silent animated segment: dedup poses -> per-frame PNG sequences -> one ffmpeg composite. */
 export type WriteFileFsLike = { writeFileSync: (p: string, data: Buffer) => void };
+/** What `renderSegment` needs: write each pose once, then hard-link (or copy) frame names to it. */
+export type SegmentFsLike = WriteFileFsLike & {
+  linkSync: (existingPath: string, newPath: string) => void;
+  copyFileSync: (src: string, dest: string) => void;
+};
 
 export async function renderSegment(
-  deps: { ResvgImpl?: ResvgCtor; ffmpegRun?: Run; fsImpl?: WriteFileFsLike } = {},
+  deps: { ResvgImpl?: ResvgCtor; ffmpegRun?: Run; fsImpl?: SegmentFsLike } = {},
   o: {
     boris: CharacterRig;
     pavel: CharacterRig;
@@ -182,21 +187,38 @@ export async function renderSegment(
     idlePeriod = 4,
   } = o;
 
-  const cache = new Map<string, Buffer>();
-  const rasterFor = (who: "boris" | "pavel", char: CharacterRig, state: FramePose): Buffer => {
+  // Each distinct pose is rasterized and written ONCE (`pose-<who>-<n>.png`, outside the frame
+  // pattern); every frame name is then a hard link to it (a copy if linking fails, e.g. EXDEV),
+  // instead of a full PNG per frame (about 1.2 GB for a 7-minute segment). The ffmpeg inputs
+  // (`boris_%04d.png` / `pavel_%04d.png`) are unchanged.
+  const poseFiles = new Map<string, string>();
+  const poseFileFor = (who: "boris" | "pavel", char: CharacterRig, state: FramePose): string => {
     const key = `${who}:${poseKey(state)}`;
-    let png = cache.get(key);
-    if (!png) {
+    let file = poseFiles.get(key);
+    if (!file) {
       const svg = poseCharacter(char.svg, char.manifest, state);
-      png = rasterizePng(svg, { ResvgImpl, transparent: true });
-      cache.set(key, png);
+      file = path.join(workDir, `pose-${who}-${poseFiles.size + 1}.png`);
+      fsImpl.writeFileSync(file, rasterizePng(svg, { ResvgImpl, transparent: true }));
+      poseFiles.set(key, file);
     }
-    return png;
+    return file;
+  };
+  let canLink = true;
+  const place = (poseFile: string, framePath: string) => {
+    if (canLink) {
+      try {
+        fsImpl.linkSync(poseFile, framePath);
+        return;
+      } catch {
+        canLink = false;
+      }
+    }
+    fsImpl.copyFileSync(poseFile, framePath);
   };
   const pad = (i: number) => String(i + 1).padStart(4, "0");
   frames.forEach((fr, i) => {
-    fsImpl.writeFileSync(path.join(workDir, `boris_${pad(i)}.png`), rasterFor("boris", boris, fr.boris));
-    fsImpl.writeFileSync(path.join(workDir, `pavel_${pad(i)}.png`), rasterFor("pavel", pavel, fr.pavel));
+    place(poseFileFor("boris", boris, fr.boris), path.join(workDir, `boris_${pad(i)}.png`));
+    place(poseFileFor("pavel", pavel, fr.pavel), path.join(workDir, `pavel_${pad(i)}.png`));
   });
   const args = buildSegmentComposeArgs({
     backLayerPath,

@@ -44,6 +44,7 @@ export type RenderFs = {
   readdirSync: (p: string) => string[];
   rmSync: (p: string, o?: { recursive?: boolean; force?: boolean }) => void;
   renameSync: (from: string, to: string) => void;
+  linkSync: (existingPath: string, newPath: string) => void;
 };
 
 export type RenderDeps = {

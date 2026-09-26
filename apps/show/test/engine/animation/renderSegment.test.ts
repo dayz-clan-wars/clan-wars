@@ -49,46 +49,87 @@ describe("buildSegmentComposeArgs", () => {
 });
 
 describe("renderSegment", () => {
-  it("poses/dedups frames and runs one ffmpeg", async () => {
+  const rig: RigManifest = {
+    mouths: ["Lip_X", "Lip_A"],
+    eyes: { open: [], closed: [] },
+    pupils: [],
+    eyeGeom: { halfWidth: 0, pupilRest: {} },
+    brows: { neutral: [], raised: [], angry: [], thoughtful: [] },
+  };
+  const pose = (mouth: string) => ({ mouth, eyes: "open", brows: "neutral", gaze: "center" });
+
+  function harness(o: { linkFails?: boolean } = {}) {
     const writes: string[] = [];
-    const fsImpl = { writeFileSync: (p: string) => writes.push(p) };
+    const links: [string, string][] = [];
+    const copies: [string, string][] = [];
+    const fsImpl = {
+      writeFileSync: (p: string) => {
+        writes.push(p);
+      },
+      linkSync: (existing: string, p: string) => {
+        if (o.linkFails) throw new Error("EXDEV");
+        links.push([existing, p]);
+      },
+      copyFileSync: (src: string, dest: string) => {
+        copies.push([src, dest]);
+      },
+    };
     const ResvgImpl = class {
       render() {
         return { asPng: () => Buffer.from([1]) };
       }
     } as unknown as ResvgCtor;
-    let ran: string[] | null = null;
+    const ran: string[][] = [];
     const ffmpegRun: Run = async (_cmd, args) => {
-      ran = args;
+      ran.push(args);
       return Buffer.alloc(0);
     };
-    const frame = {
-      boris: { mouth: "Lip_X", eyes: "open", brows: "neutral", gaze: "center" },
-      pavel: { mouth: "Lip_X", eyes: "open", brows: "neutral", gaze: "center" },
-    };
-    const rig: RigManifest = {
-      mouths: ["Lip_X"],
-      eyes: { open: [], closed: [] },
-      pupils: [],
-      eyeGeom: { halfWidth: 0, pupilRest: {} },
-      brows: { neutral: [], raised: [], angry: [], thoughtful: [] },
-    };
-    const out = await renderSegment(
-      { ResvgImpl, ffmpegRun, fsImpl },
-      {
-        boris: { svg: "<svg/>", manifest: rig },
-        pavel: { svg: "<svg/>", manifest: rig },
-        frames: [frame, frame],
-        fps: 12,
-        durSec: 2,
-        backLayerPath: "/back.png",
-        frontLayerPath: "/front.png",
-        outPath: "/o.mp4",
-        workDir: "/w",
-      },
-    );
+    return { writes, links, copies, ran, deps: { ResvgImpl, ffmpegRun, fsImpl } };
+  }
+
+  const input = (frames: { boris: ReturnType<typeof pose>; pavel: ReturnType<typeof pose> }[]) => ({
+    boris: { svg: "<svg/>", manifest: rig },
+    pavel: { svg: "<svg/>", manifest: rig },
+    frames,
+    fps: 12,
+    durSec: 2,
+    backLayerPath: "/back.png",
+    frontLayerPath: "/front.png",
+    outPath: "/o.mp4",
+    workDir: "/w",
+  });
+
+  it("writes each distinct pose PNG once and hard-links every frame name to it", async () => {
+    const h = harness();
+    const f1 = { boris: pose("Lip_X"), pavel: pose("Lip_X") };
+    const f2 = { boris: pose("Lip_A"), pavel: pose("Lip_X") };
+    const out = await renderSegment(h.deps, input([f1, f1, f2]));
     expect(out).toBe("/o.mp4");
-    expect(writes.length).toBe(4); // 2 frames x 2 hosts
-    expect(ran![ran!.length - 1]).toBe("/o.mp4");
+    // 2 distinct boris poses + 1 distinct pavel pose, each written once.
+    expect(h.writes).toHaveLength(3);
+    expect(new Set(h.writes).size).toBe(3);
+    for (const w of h.writes) expect(w).not.toMatch(/\/(boris|pavel)_\d{4}\.png$/);
+    // Every frame name exists as a link to its pose file.
+    const linked = h.links.map(([, p]) => p).sort();
+    expect(linked).toEqual(
+      ["/w/boris_0001.png", "/w/boris_0002.png", "/w/boris_0003.png", "/w/pavel_0001.png", "/w/pavel_0002.png", "/w/pavel_0003.png"],
+    );
+    const target = new Map(h.links.map(([e, p]) => [p, e]));
+    expect(target.get("/w/boris_0001.png")).toBe(target.get("/w/boris_0002.png"));
+    expect(target.get("/w/boris_0003.png")).not.toBe(target.get("/w/boris_0001.png"));
+    expect(target.get("/w/pavel_0001.png")).toBe(target.get("/w/pavel_0003.png"));
+    // The ffmpeg inputs are unchanged: the same frame patterns.
+    expect(h.ran).toHaveLength(1);
+    expect(h.ran[0]).toContain("/w/boris_%04d.png");
+    expect(h.ran[0]).toContain("/w/pavel_%04d.png");
+    expect(h.ran[0]![h.ran[0]!.length - 1]).toBe("/o.mp4");
+  });
+
+  it("falls back to a copy when a hard link fails", async () => {
+    const h = harness({ linkFails: true });
+    const f1 = { boris: pose("Lip_X"), pavel: pose("Lip_X") };
+    await renderSegment(h.deps, input([f1, f1]));
+    expect(h.writes).toHaveLength(2);
+    expect(h.copies.map(([, d]) => d).sort()).toEqual(["/w/boris_0001.png", "/w/boris_0002.png", "/w/pavel_0001.png", "/w/pavel_0002.png"]);
   });
 });
