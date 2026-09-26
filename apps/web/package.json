@@ -17,7 +17,7 @@
     "@factions/domain": "workspace:*",
     "@factions/roster": "workspace:*",
     "arctic": "3.7.0",
-    "jose": "6.2.10",
+    "jose": "6.2.12",
     "leaflet": "1.9.4",
     "next": "^16.3.4",
     "react": "^19.0.0",
