@@ -27,6 +27,14 @@ adding it to PATH.
 in the unit file creates it, owned by `acab`, the first time the service runs. It is
 `SHOW_CACHE_DIR`'s default.
 
+**Running a command by hand.** Every `pnpm` command in this runbook runs on the host as
+`acab`, from `/opt/clan-wars`, with the env file loaded, the same way the unit runs it:
+
+    sudo -u acab bash -c 'cd /opt/clan-wars && set -a && . ./.env && set +a && pnpm run show ...'
+
+Substitute the command for `pnpm run show ...`. The short forms below leave that wrapper
+out.
+
 ## 3. Mint the YouTube token
 
 The Google Cloud OAuth client is the KOTH show's existing Desktop client. Clan Wars needs
@@ -34,7 +42,14 @@ its own refresh token on the same channel, because the KOTH bot's token only has
 `youtube.upload` and `youtube.readonly` scopes and this show also needs `youtube` (to
 set a video public and add it to a playlist).
 
-    set -a && . ./.env && set +a
+First put the client's id and secret in `/opt/clan-wars/.env`; the auth script reads them
+from there:
+
+    YOUTUBE_CLIENT_ID=<the KOTH Desktop client's id>
+    YOUTUBE_CLIENT_SECRET=<its secret>
+
+Then, as `acab` with the env loaded (the wrapper in section 2):
+
     pnpm show:youtube-auth
 
 Approve in a browser signed in to the show's channel, not any other Google account. Put
@@ -60,6 +75,10 @@ The full table is in `apps/show/README.md`. This deploy's specific values:
 
 - `SHOW_FORUM_CHANNEL_ID=1553136654808784986` (`#🩸-the-bloodbag-and-painkiller-show`).
 - `SHOW_APPROVER_DISCORD_IDS`: the admins, comma-separated Discord ids.
+- `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET` (set in step 3), `YOUTUBE_REFRESH_TOKEN`
+  (step 3) and `YOUTUBE_PLAYLIST_ID` (step 4).
+- `SHOW_ENABLED` and `SHOW_REQUIRE_APPROVAL` take only `1`, `true`, `0` or `false`. Any
+  other value (`on`, `yes`) stops the service with an error naming the key.
 - The ElevenLabs key and voice ids, and the Facebook page id and token: copy the same
   values already in `/opt/deathmatch-bot/.env`.
 - `SHOW_ENABLED` stays unset for now — set it in step 10, after everything else here is
@@ -125,6 +144,15 @@ stuck episode.
 The plan is to keep approval on for the first four episodes, then set
 `SHOW_REQUIRE_APPROVAL=0`.
 
+⚠️ Flip it off only when no episode is waiting for approval. A draft that was already
+posted is still decided by its ✅ or ❌ after the flip, so an episode caught mid-review
+simply keeps waiting; check first with this read-only query and approve or reject
+anything it lists:
+
+    docker exec clan-wars-postgres-1 psql -U factions -d factions_live -X -c "select week_start, stage from show_episodes where stage = 'awaiting_approval'"
+
+It must return no rows before you set `SHOW_REQUIRE_APPROVAL=0`.
+
 ## 12. When something goes wrong
 
 **A held episode:** the ops channel post never carries the raw blocked text — only counts
@@ -142,17 +170,42 @@ And re-run the week:
     pnpm run show --week <date> --force
 
 **A stuck stage:** the ops channel gets one alert at exactly 3 attempts on a stage, not
-repeated after. Read the reason with a read-only query:
+repeated after. If Discord itself is down at that moment the alert is lost (it is never
+retried, by design); the journal still has every failure:
 
-    select stage, attempts, last_error from show_episodes order by week_start desc limit 3;
+    journalctl -u clan-wars-show --since today
+
+Read the stage and the last error for a week:
+
+    pnpm show:screening --show <date>
+
+A run that hangs is killed after 90 minutes (`TimeoutStartSec` in the unit), and the next
+tick resumes from the stage it reached.
+
+**A rejected episode:** ❌ leaves the row at `rejected`, and every later week waits behind
+it. Make a new cut:
+
+    pnpm run show --week <date> --force
+
+The new cut gets its own draft; the old draft's reactions do not count for it. The
+rejected video stays unlisted on YouTube; delete it by hand if you like.
+
+**A deleted draft:** if the ops-channel draft was deleted before anyone reacted, every run
+fails reading its reactions and the week stays stuck. The same command recovers it: it
+makes a new cut and posts a new draft.
+
+    pnpm run show --week <date> --force
 
 **A public episode that needs a redo:** `--force` alone refuses on a week that is already
 public. Use both:
 
     pnpm run show --week <date> --force --repost
 
-The old YouTube video is not deleted automatically; delete it by hand if it should not
-stay up.
+The new cut is uploaded as a new video, drafted for approval again, and posted in a new
+forum thread. The old YouTube video and old thread are not deleted automatically; delete
+them by hand if they should not stay up.
+
+`--week` refuses a week that has not ended yet (exit 2), with or without `--force`.
 
 **A Facebook failure:** it shows up as `last_error` on a row that is otherwise `done`. It
 is never retried; Facebook posting is best-effort.

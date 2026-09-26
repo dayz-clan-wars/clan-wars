@@ -62,6 +62,16 @@ missing binary if either does not. The CLI creates `<dir>` if it does not exist.
 (`SHOW_LOCK_KEY`) so a manual run and a timer run can never overlap, picks the earliest
 week that needs work, and does nothing if `SHOW_ENABLED` is not set.
 
+On the host, run it as `acab` with the env loaded:
+`sudo -u acab bash -c 'cd /opt/clan-wars && set -a && . ./.env && set +a && pnpm run show'`.
+`--week <date>` refuses a week that has not ended yet.
+
+A stage that fails 3 times posts one alert to the ops channel and never repeats it. If
+Discord is down at that moment the alert is lost; the journal (`journalctl -u
+clan-wars-show`) and `pnpm show:screening --show <date>` still have the error. A rejected
+episode or a deleted draft is recovered with `pnpm run show --week <date> --force`, which
+makes a new cut with its own draft.
+
 ## Operator commands
 
 | Command | Does |
@@ -110,12 +120,12 @@ additionally needs:
 
 | Key | Required | Notes |
 |---|---|---|
-| `SHOW_ENABLED` | | `1`/`true` to run; default off, and everything below is unread until it is set |
+| `SHOW_ENABLED` | | `1`/`true` to run, `0`/`false` or unset for off; any other value is an error. Everything below is unread until it is on |
 | `DISCORD_TOKEN` | yes | the existing bot token |
 | `DISCORD_GUILD_ID` | yes | used to find the ops-channel forum thread again after a crash, not to post — the bot already knows the guild from its channel ids |
 | `OPS_CHANNEL_ID` | when approval is on | the existing ops channel; config load fails without it while `SHOW_REQUIRE_APPROVAL` is on |
 | `SHOW_FORUM_CHANNEL_ID` | yes | the show's Discord forum channel |
-| `SHOW_REQUIRE_APPROVAL` | | default on |
+| `SHOW_REQUIRE_APPROVAL` | | `1`/`true`/`0`/`false`, default on; any other value is an error. Turn it off only when no row is `awaiting_approval` (see the runbook) |
 | `SHOW_APPROVER_DISCORD_IDS` | when approval is on | comma-separated Discord ids |
 | `YOUTUBE_CLIENT_ID`, `YOUTUBE_CLIENT_SECRET`, `YOUTUBE_REFRESH_TOKEN`, `YOUTUBE_PLAYLIST_ID` | yes | the Clan Wars token, minted by `pnpm show:youtube-auth` — never the KOTH bot's token |
 | `FACEBOOK_PAGE_ID`, `FACEBOOK_PAGE_ACCESS_TOKEN` | | both or neither; neither skips Facebook, which is always best-effort |
