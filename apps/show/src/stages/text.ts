@@ -36,6 +36,10 @@ export function opsSafe(reason: string, blocked: string[]): string {
   if (body.startsWith("blocklist:")) return `${prefix}blocklist hit`;
   if (body.startsWith("blocked text:")) return `${prefix}a blocked name came back`;
   if (body.startsWith("moderation:")) return `${prefix}moderation flagged it`;
+  // ⚠️ OpenRouter's error body (engine/llm/openrouter.ts: `openrouter <status>: <body>`) can quote
+  // flagged model output; only the status goes to the ops channel.
+  const or = /^openrouter (\d{3}): /u.exec(body);
+  if (or) return `${prefix}openrouter ${or[1]}`;
   // ⚠️ Unparsed script content quoted after "not a dialogue line:" is never screened; drop the excerpt
   if (body.startsWith("not a dialogue line:")) return `${prefix}not a dialogue line`;
   const masked = [...blocked].sort((a, b) => b.length - a.length)

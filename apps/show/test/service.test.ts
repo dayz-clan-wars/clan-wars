@@ -61,6 +61,16 @@ describe("serviceMain", () => {
     expect((await getEpisode(db, MON))!.stage).toBe("awaiting_approval");
   });
 
+  it("--week refuses a week that has not ended yet, exit 2, no row (with or without --force)", async () => {
+    const i = io({ now: () => at(6, 23, 59) });
+    expect(await serviceMain({ week: MON, force: false, repost: false }, ENV, i)).toBe(2);
+    expect(i.lines.join("\n")).toMatch(/has not ended/u);
+    expect(await serviceMain({ week: MON, force: true, repost: false }, ENV, i)).toBe(2);
+    expect(await getEpisode(db, MON)).toBeNull();
+    // The moment the week ends it is allowed.
+    expect(await serviceMain({ week: MON, force: false, repost: false }, ENV, io({ now: () => at(7) }))).toBe(0);
+  });
+
   it("exits 1 when a stage fails", async () => {
     const i = io({ buildDeps: (d) => fakeDeps(d, { render: async () => { throw new Error("x"); } }).deps });
     expect(await serviceMain({ week: MON, force: false, repost: false }, ENV, i)).toBe(1);

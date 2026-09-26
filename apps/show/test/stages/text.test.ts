@@ -36,6 +36,14 @@ describe("stage text", () => {
     ])("%s", (raw, safe) => {
       expect(opsSafe(raw, blocked)).toBe(safe);
     });
+    // ⚠️ An OpenRouter error body can quote flagged model output; only the status reaches ops.
+    it.each([
+      ['openrouter 400: {"error":{"message":"flagged: slurword in output"}}', "openrouter 400"],
+      ["attempt 2: openrouter 502: upstream said slurword", "attempt 2: openrouter 502"],
+      ["openrouter reply had no content", "openrouter reply had no content"],
+    ])("reduces an OpenRouter error to its status: %s", (raw, safe) => {
+      expect(opsSafe(raw, [])).toBe(safe);
+    });
     it("masks a blocked string in any case", () => {
       expect(opsSafe("error near badname88", blocked)).toBe("error near [blocked text]");
     });

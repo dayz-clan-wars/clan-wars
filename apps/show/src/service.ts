@@ -16,6 +16,7 @@ import { forceWeek } from "./stages/store.js";
 import { pickWeek } from "./stages/pick.js";
 import { runStages, type StageDeps } from "./stages/run.js";
 import { PgPronunciationStore } from "./stores/pronunciations.js";
+import { WEEK_MS } from "./weeks.js";
 
 type On = Extract<ServiceConfig, { enabled: true }>;
 export type ServiceArgs = { week?: Date; force: boolean; repost: boolean };
@@ -88,6 +89,12 @@ const REAL_IO: ServiceIo = {
 export async function serviceMain(args: ServiceArgs, env: NodeJS.ProcessEnv = process.env, io: ServiceIo = REAL_IO): Promise<number> {
   if (args.force && !args.week) { io.log("--force needs --week <date>"); return 2; }
   if (args.repost && !args.force) { io.log("--repost only goes with --force"); return 2; }
+  // ⚠️ `--week` skips the picker's readiness check, so without this the current, unfinished week
+  // could be scripted and published from half a week of events.
+  if (args.week && args.week.getTime() + WEEK_MS > io.now().getTime()) {
+    io.log(`the week of ${args.week.toISOString().slice(0, 10)} has not ended yet; run it once it has`);
+    return 2;
+  }
   const cfg = loadServiceConfig(env);
   // ⚠️ The same lock for timer and manual runs, so the two can never overlap (spec §2.5).
   const lock = await io.lock(cfg.databaseUrl, SHOW_LOCK_KEY);
