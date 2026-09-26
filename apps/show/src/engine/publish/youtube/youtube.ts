@@ -44,7 +44,7 @@ export async function uploadVideo(o: {
   const bytes = fsImpl.readFileSync(o.filePath);
   const metadata = {
     snippet: { title: o.title, description: o.description, categoryId: GAMING_CATEGORY_ID },
-    status: { privacyStatus: o.privacy },
+    status: statusOf(o.privacy),
   };
   // 1) open the resumable session
   const init = await fetchImpl(UPLOAD_URL, {
@@ -125,10 +125,19 @@ async function ytJson(fetchImpl: typeof fetch, what: string, url: string, init: 
 const auth = (accessToken: string, withBody = false): Record<string, string> =>
   withBody ? { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json; charset=UTF-8" } : { Authorization: `Bearer ${accessToken}` };
 
-/** Needs the `youtube` scope (spec §9.1). ⚠️ videos.update replaces the whole `status` part; only privacy is set. */
+/**
+ * ⚠️ videos.update replaces the whole `status` part, and an omitted `embeddable` comes back
+ * false: S01E01 went public with "Playback on other websites has been disabled" in its Discord
+ * embed. Every status write sends the full set.
+ */
+function statusOf(privacy: Privacy) {
+  return { privacyStatus: privacy, embeddable: true, selfDeclaredMadeForKids: false };
+}
+
+/** Needs the `youtube` scope (spec §9.1). */
 export async function setPrivacy(o: { accessToken: string; videoId: string; privacy: Privacy; fetchImpl?: typeof fetch }): Promise<void> {
   await ytJson(o.fetchImpl ?? fetch, "videos.update", `${API}/videos?part=status`, {
-    method: "PUT", headers: auth(o.accessToken, true), body: JSON.stringify({ id: o.videoId, status: { privacyStatus: o.privacy } }),
+    method: "PUT", headers: auth(o.accessToken, true), body: JSON.stringify({ id: o.videoId, status: statusOf(o.privacy) }),
   });
 }
 

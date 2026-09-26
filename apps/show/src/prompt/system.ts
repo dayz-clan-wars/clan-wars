@@ -49,6 +49,7 @@ export const DATA_DICTIONARY = `What the data means:
 - flagEvents: clans founded, activated, going dormant, revived or disbanded this week.
 - memberMoves: players who joined or left a clan this week. "left" can also mean they were kicked or the clan disbanded; do not claim which. raidedThisClanEarlier true means that player raided the same clan earlier this week and then joined it.
 - friendlyFire: clan-mates killing clan-mates this week, with the weapons and the first and last time. Friendly fire scores nothing.
+- friendlyFireByClan: each clan's friendly-fire total for the week and how many killer-and-victim pairings it came from. Any total of a clan's friendly fire comes from here, word for word.
 - clanBeefs: kills between two different clans this week.
 - players.topKillers and players.mostDeaths: player-versus-player kills and deaths this week, friendly fire not counted. longestShots: the longest kills, in metres. oddDeaths: deaths to wolves, bears, drowning, falls, dehydration, starvation, vehicles and explosions.
 - bounties: bounties placed or closed this week. target is who it was on. reason is what the admin wrote. status is "open" (still running), "claimed" (someone collected it), "expired" (it ran out) or "revoked" (an admin cancelled it). claimer, hoursToClaim and claimMetres describe the kill that collected it.

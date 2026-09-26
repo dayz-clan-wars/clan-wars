@@ -38,7 +38,7 @@ describe("uploadVideo (KOTH)", () => {
     const id = await uploadVideo({ accessToken: "AT", filePath: "/x.mp4", title: "T", description: "D", privacy: "unlisted", fetchImpl, fsImpl: { readFileSync: () => Buffer.from("MP4") } });
     expect(id).toBe("VID");
     const meta = JSON.parse(calls[0]!.init.body as string);
-    expect(meta).toEqual({ snippet: { title: "T", description: "D", categoryId: "20" }, status: { privacyStatus: "unlisted" } });
+    expect(meta).toEqual({ snippet: { title: "T", description: "D", categoryId: "20" }, status: { privacyStatus: "unlisted", embeddable: true, selfDeclaredMadeForKids: false } });
     expect(calls[1]!.url).toBe("https://upload.session/uri");
   });
   it("throws when the session init has no Location header", async () => {
@@ -108,12 +108,12 @@ describe("waitForVideoProcessed (KOTH)", () => {
 });
 
 describe("setPrivacy", () => {
-  it("updates status.privacyStatus with part=status", async () => {
+  it("updates privacy with part=status and keeps the video embeddable", async () => {
     const { calls, fetchImpl } = fake([json(200, { id: "VID" })]);
     await setPrivacy({ accessToken: "AT", videoId: "VID", privacy: "public", fetchImpl });
     expect(calls[0]!.url).toBe("https://www.googleapis.com/youtube/v3/videos?part=status");
     expect(calls[0]!.init.method).toBe("PUT");
-    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ id: "VID", status: { privacyStatus: "public" } });
+    expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ id: "VID", status: { privacyStatus: "public", embeddable: true, selfDeclaredMadeForKids: false } });
   });
   it("throws on failure", async () => {
     const { fetchImpl } = fake([json(403, { error: { message: "insufficientPermissions" } })]);
