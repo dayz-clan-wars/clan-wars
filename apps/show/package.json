@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "cli": "tsx src/cli.ts",
+    "start": "tsx src/cli.ts",
     "youtube-auth": "tsx scripts/youtube-auth.ts"
   },
   "dependencies": {
