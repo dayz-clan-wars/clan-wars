@@ -2,8 +2,9 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, type Fx } from "../fixture.js";
 import { runStages } from "../../src/stages/run.js";
-import { advance, getEpisode, setFields } from "../../src/stages/store.js";
-import { transcriptMessages } from "../../src/stages/text.js";
+import { advance, forceWeek, getEpisode, setFields } from "../../src/stages/store.js";
+import { draftMarker, transcriptMessages } from "../../src/stages/text.js";
+import { buildVideoMeta } from "../../src/engine/publish/youtube/buildVideoMeta.js";
 import { collectNames } from "../../src/produce/names.js";
 import type { StoryContext } from "../../src/story/types.js";
 import { fakeDeps } from "./deps.js";
@@ -211,17 +212,89 @@ describe("runStages: publishing", () => {
     expect(f.posted.some((p) => p.msg.content?.includes("ready for review"))).toBe(false);
   });
 
+  const NARRATIVE = "Boris: Hello.\nPavel: Hi.";
+  const TITLE = "The Bloodbag and Painkiller Show: Clan Wars S01E03 · The Curse";
+
   it("crash window: an upload with no row write is adopted, not repeated", async () => {
     const f = fakeDeps(db);
-    f.uploads.push({ id: "ytORPHAN", title: "The Bloodbag and Painkiller Show: Clan Wars S01E03 · The Curse", description: "" });
+    const { description } = buildVideoMeta({ code: "S01E03", subtitle: "The Curse", transcript: NARRATIVE });
+    f.uploads.push({ id: "ytORPHAN", title: TITLE, description });
     const { row } = await runStages(f.deps, MON);
     expect(row.youtubeVideoId).toBe("ytORPHAN");
     expect(f.uploads).toHaveLength(1);
   });
 
+  it("an older cut's upload with the same title but another transcript is never adopted", async () => {
+    const f = fakeDeps(db);
+    f.uploads.push({ id: "ytOLDCUT", title: TITLE, description: "Boris: The old cut." });
+    const { row } = await runStages(f.deps, MON);
+    expect(row.youtubeVideoId).not.toBe("ytOLDCUT");
+    expect(f.uploads).toHaveLength(2);
+  });
+
+  // A new narrative per call, as a real model at temperature 0.9 writes: each --force is a new cut.
+  const cuts = () => { let n = 0; return { writeScript: async () => ({ ok: true as const, narrative: `Boris: Cut ${++n}.`, title: "The Curse", storylines: [], attempts: 1, reasons: [] }) }; };
+  const drafts = (f: ReturnType<typeof fakeDeps>) => f.posted.filter((p) => p.channelId === "OPS" && p.msg.content?.includes("ready for review"));
+
+  it("after --force, a rejected cut's ❌ does not reject the new cut: a new draft is posted and waits", async () => {
+    const f = fakeDeps(db, cuts());
+    await runStages(f.deps, MON);
+    const d1 = draftOf(f);
+    f.reactions.set(`${d1.id}:❌`, ["ADMIN1"]);
+    const first = await runStages(f.deps, MON);
+    expect(first.row.stage).toBe("rejected");
+    await forceWeek(db, MON, { repost: false });
+    const { outcome, row } = await runStages(f.deps, MON);
+    expect(outcome).toBe("waiting");
+    expect(row.stage).toBe("awaiting_approval");
+    expect(drafts(f)).toHaveLength(2);
+    expect(row.draftMessageId).toBe(drafts(f)[1]!.id);
+    // The new draft links the new cut's video, not the rejected one.
+    expect(row.youtubeVideoId).not.toBe(first.row.youtubeVideoId);
+    expect(drafts(f)[1]!.msg.content).toContain(`https://youtu.be/${row.youtubeVideoId}`);
+  });
+
+  it("after --force --repost, the old cut's ✅ does not approve the new cut, and the new cut gets its own video and thread", async () => {
+    const f = fakeDeps(db, cuts());
+    await runStages(f.deps, MON);
+    const d1 = draftOf(f);
+    f.reactions.set(`${d1.id}:✅`, ["ADMIN1"]);
+    const first = await runStages(f.deps, MON);
+    expect(first.row.stage).toBe("done");
+    expect(await forceWeek(db, MON, { repost: true })).toBe("reset");
+    const waiting = await runStages(f.deps, MON);
+    expect(waiting).toMatchObject({ outcome: "waiting", row: { stage: "awaiting_approval" } });
+    expect(drafts(f)).toHaveLength(2);
+    expect(waiting.row.draftMessageId).not.toBe(d1.id);
+    expect(waiting.row.youtubeVideoId).not.toBe(first.row.youtubeVideoId);
+    f.reactions.set(`${waiting.row.draftMessageId}:✅`, ["ADMIN1"]);
+    const { row } = await runStages(f.deps, MON);
+    expect(row.stage).toBe("done");
+    // Discord allows duplicate thread names: the old thread (starter = the old link) is not reused.
+    expect(f.threads).toHaveLength(2);
+    expect(row.forumThreadId).toBe(f.threads[1]!.id);
+    expect(f.threads[1]!.first.content).toBe(`https://youtu.be/${row.youtubeVideoId}`);
+    expect(f.posted.filter((p) => p.channelId === f.threads[1]!.id)).toHaveLength(2);
+  });
+
+  it("crash window: a forum thread created with no row write is adopted by its starter link", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    f.deps.facebook = null;
+    const realCreate = f.deps.discord.createForumThread;
+    let crash = true;
+    f.deps.discord.createForumThread = async (a, b, c) => { const r = await realCreate(a, b, c); if (crash) { crash = false; throw new Error("crashed after creating the thread"); } return r; };
+    expect((await runStages(f.deps, MON)).row.forumThreadId).toBeNull();
+    const { row } = await runStages(f.deps, MON);
+    expect(row.stage).toBe("done");
+    expect(f.threads).toHaveLength(1);
+    expect(row.forumThreadId).toBe(f.threads[0]!.id);
+    expect(f.posted.filter((p) => p.channelId === f.threads[0]!.id)).toHaveLength(2);
+  });
+
   it("crash window: a draft with no row write is adopted by its marker", async () => {
     const f = fakeDeps(db);
-    await f.deps.discord.post("OPS", { content: "**Clan Wars S01E03** is ready for review\n-# show:2026-09-21" });
+    await f.deps.discord.post("OPS", { content: `**Clan Wars S01E03** is ready for review\n-# ${draftMarker(MON, NARRATIVE)}` });
     const { row } = await runStages(f.deps, MON);
     expect(row.draftMessageId).toBe("m1");
     expect(f.posted.filter((p) => p.msg.content?.includes("ready for review"))).toHaveLength(1);

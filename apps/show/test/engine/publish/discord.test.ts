@@ -73,18 +73,30 @@ describe("createDiscord", () => {
     expect(JSON.parse(calls[0]!.init.body as string)).toEqual({ name: "Clan Wars S01E03 · T", message: { content: "https://youtu.be/v", allowed_mentions: { parse: [] } } });
   });
 
-  it("finds a forum thread by exact name among active, then archived, threads", async () => {
+  it("finds every forum thread with the exact name among active, then archived, threads", async () => {
     const { calls, fetchImpl } = fakeFetch([
-      { status: 200, body: { threads: [{ id: "x", parent_id: "other", name: "N" }] } },
-      { status: 200, body: { threads: [{ id: "t9", parent_id: "f", name: "N" }], has_more: false } },
+      { status: 200, body: { threads: [{ id: "x", parent_id: "other", name: "N" }, { id: "t1", parent_id: "f", name: "N" }] } },
+      { status: 200, body: { threads: [{ id: "t9", parent_id: "f", name: "N" }, { id: "t8", parent_id: "f", name: "M" }], has_more: false } },
     ]);
-    expect(await createDiscord({ token: "T", fetchImpl }).findForumThread("g", "f", "N")).toBe("t9");
+    expect(await createDiscord({ token: "T", fetchImpl }).findForumThreads("g", "f", "N")).toEqual(["t1", "t9"]);
     expect(calls[0]!.url).toBe("https://discord.com/api/v10/guilds/g/threads/active");
     expect(calls[1]!.url).toBe("https://discord.com/api/v10/channels/f/threads/archived/public?limit=100");
   });
 
-  it("returns null when no thread has the name", async () => {
+  it("returns no threads when none has the name", async () => {
     const { fetchImpl } = fakeFetch([{ status: 200, body: { threads: [] } }, { status: 200, body: { threads: [], has_more: false } }]);
-    expect(await createDiscord({ token: "T", fetchImpl }).findForumThread("g", "f", "N")).toBeNull();
+    expect(await createDiscord({ token: "T", fetchImpl }).findForumThreads("g", "f", "N")).toEqual([]);
   });
+
+  it("reads one message; a deleted one is null, not an error", async () => {
+    const { calls, fetchImpl } = fakeFetch([
+      { status: 200, body: { id: "th1", content: "https://youtu.be/v", author: { id: "bot" } } },
+      { status: 404, body: { message: "Unknown Message", code: 10008 } },
+    ]);
+    const d = createDiscord({ token: "T", fetchImpl });
+    expect(await d.message("th1", "th1")).toEqual({ id: "th1", content: "https://youtu.be/v", authorId: "bot", embeds: 0, attachments: 0 });
+    expect(calls[0]!.url).toBe("https://discord.com/api/v10/channels/th1/messages/th1");
+    expect(await d.message("th1", "th1")).toBeNull();
+  });
+
 });

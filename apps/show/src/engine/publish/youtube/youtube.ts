@@ -147,15 +147,18 @@ export async function addToPlaylist(o: { accessToken: string; playlistId: string
 
 /**
  * The upload that a crash between `uploadVideo` and the row write left behind (spec §8.3):
- * the newest 50 uploads, which include unlisted ones, matched on the exact title.
+ * the newest 50 uploads, which include unlisted ones, matched on the exact title AND
+ * description. ⚠️ The title alone is not enough: a `--force` cut often keeps the subtitle, and
+ * adopting the old cut's video would publish what nobody reviewed. The description is the
+ * transcript, so it tells two cuts apart with no visible marker in public text.
  */
-export async function findUploadByTitle(o: { accessToken: string; title: string; fetchImpl?: typeof fetch }): Promise<string | null> {
+export async function findUploadByTitle(o: { accessToken: string; title: string; description: string; fetchImpl?: typeof fetch }): Promise<string | null> {
   const fetchImpl = o.fetchImpl ?? fetch;
   const ch = await ytJson(fetchImpl, "channels.list", `${API}/channels?part=contentDetails&mine=true`, { headers: auth(o.accessToken) });
   const uploads: string | undefined = ch?.items?.[0]?.contentDetails?.relatedPlaylists?.uploads;
   if (!uploads) throw new Error("YouTube channels.list: no uploads playlist for this token's channel");
   const q = new URLSearchParams({ part: "snippet", maxResults: "50", playlistId: uploads });
   const items = await ytJson(fetchImpl, "playlistItems.list", `${API}/playlistItems?${q}`, { headers: auth(o.accessToken) });
-  const hit = (items?.items ?? []).find((i: any) => i?.snippet?.title === o.title);
+  const hit = (items?.items ?? []).find((i: any) => i?.snippet?.title === o.title && i?.snippet?.description === o.description);
   return hit?.snippet?.resourceId?.videoId ?? null;
 }

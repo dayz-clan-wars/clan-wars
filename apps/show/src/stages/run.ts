@@ -4,7 +4,7 @@ import type { Discord } from "../engine/publish/discord.js";
 import type { VoicedEpisode } from "../produce/voice.js";
 import type { ScriptResult } from "../script/write-script.js";
 import { buildFacebookCaption } from "../engine/publish/facebook/buildFacebookCaption.js";
-import { buildVideoMeta, videoTitle } from "../engine/publish/youtube/buildVideoMeta.js";
+import { buildVideoMeta } from "../engine/publish/youtube/buildVideoMeta.js";
 import { collectNames } from "../produce/names.js";
 import { redactContext, type Redaction } from "../screening/redact.js";
 import type { Verdict } from "../screening/store.js";
@@ -15,7 +15,8 @@ import { advance, createEpisode, getEpisode, recordFailure, setFields, TERMINAL_
 import { alertMessage, draftMarker, draftMessage, forumThreadName, heldMessage, publicCopy, transcriptMessages } from "./text.js";
 
 export type YouTubeOps = {
-  findUpload(title: string): Promise<string | null>;
+  /** An earlier upload of THIS cut: exact title and exact description. */
+  findUpload(title: string, description: string): Promise<string | null>;
   upload(o: { filePath: string; title: string; description: string }): Promise<string>; // always unlisted
   ensureInPlaylist(videoId: string): Promise<void>;
   setPublic(videoId: string): Promise<void>;
@@ -102,12 +103,12 @@ const watchUrl = (id: string) => `https://youtu.be/${id}`;
 const uploaded: Step = async (deps, row) => {
   // ⚠️ The dash net applies to every string that leaves this process (global constraint): the
   // title, and below the description and transcript that feed it, all go through publicCopy.
-  const title = videoTitle(codeOf(row), publicCopy(row.title!));
-  // ⚠️ Post first, row second (spec §8.3); an upload a crash left unrecorded is found by its exact title.
-  let id = row.youtubeVideoId ?? (await deps.youtube.findUpload(title));
+  const meta = buildVideoMeta({ code: codeOf(row), subtitle: publicCopy(row.title!), transcript: publicCopy(row.narrative!) });
+  // ⚠️ Post first, row second (spec §8.3); an upload a crash left unrecorded is found by its exact
+  // title and description, so an older cut of the same week (after --force) is never adopted.
+  let id = row.youtubeVideoId ?? (await deps.youtube.findUpload(meta.title, meta.description));
   if (!id) {
     const filePath = await deps.render({ voiced: await deps.voice(voiceIn(row)), context: ctxOf(row) });
-    const meta = buildVideoMeta({ code: codeOf(row), subtitle: publicCopy(row.title!), transcript: publicCopy(row.narrative!) });
     id = await deps.youtube.upload({ filePath, title: meta.title, description: meta.description });
   }
   if (row.youtubeVideoId !== id) await setFields(deps.db, row.weekStart, { youtubeVideoId: id });
@@ -120,7 +121,7 @@ const awaitingApproval: Step = async (deps, row) => {
   let id = row.draftMessageId;
   if (!id) {
     const me = await deps.discord.me();
-    const marker = draftMarker(row.weekStart);
+    const marker = draftMarker(row.weekStart, row.narrative!);
     id = (await deps.discord.recentMessages(ops, 50)).find((m) => m.authorId === me && m.content.includes(marker))?.id ?? null;
   }
   if (!id) {
@@ -167,7 +168,15 @@ const posted: Step = async (deps, row) => {
   // Spec §9.1: a thread posted before processing embeds a "processing" card forever.
   if (!(await deps.youtube.waitProcessed(vid))) throw new Error("YouTube has not finished processing the video yet");
   const name = forumThreadName(codeOf(row), row.title!);
-  let thread = row.forumThreadId ?? (await deps.discord.findForumThread(deps.cfg.guildId, deps.cfg.forumChannelId, name));
+  let thread = row.forumThreadId;
+  if (!thread) {
+    // ⚠️ A name match alone is not this cut's thread: after --repost the old cut's thread has the
+    // same name, and its messages would count as this transcript. Only a thread whose starter is
+    // THIS video's link is adopted; in a forum the starter message's id is the thread's id.
+    for (const t of await deps.discord.findForumThreads(deps.cfg.guildId, deps.cfg.forumChannelId, name)) {
+      if ((await deps.discord.message(t, t))?.content === watchUrl(vid)) { thread = t; break; }
+    }
+  }
   if (!thread) thread = (await deps.discord.createForumThread(deps.cfg.forumChannelId, name, { content: watchUrl(vid) })).threadId;
   if (row.forumThreadId !== thread) await setFields(deps.db, row.weekStart, { forumThreadId: thread });
   const v = await deps.voice(voiceIn(row));
@@ -178,7 +187,8 @@ const posted: Step = async (deps, row) => {
   // 1 + messages.length (never a flat 2) so a crash partway through a multi-message transcript
   // resumes at the right message instead of skipping one or re-posting the mp3.
   if (mine.length < 1 + messages.length) {
-    for (const msg of messages.slice(mine.length - 1)) {
+    // Math.max: a thread whose starter was deleted has no link message to skip (slice(-1) would re-post only the last).
+    for (const msg of messages.slice(Math.max(0, mine.length - 1))) {
       await deps.discord.post(thread, msg);
     }
   }

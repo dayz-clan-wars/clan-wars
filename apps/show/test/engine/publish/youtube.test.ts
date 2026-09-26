@@ -137,17 +137,25 @@ describe("playlists", () => {
 });
 
 describe("findUploadByTitle", () => {
-  it("looks through the channel's uploads playlist for the exact title", async () => {
+  const channel = () => json(200, { items: [{ contentDetails: { relatedPlaylists: { uploads: "UU1" } } }] });
+  it("looks through the channel's uploads playlist for the exact title and description", async () => {
     const { calls, fetchImpl } = fake([
-      json(200, { items: [{ contentDetails: { relatedPlaylists: { uploads: "UU1" } } }] }),
-      json(200, { items: [{ snippet: { title: "Other", resourceId: { videoId: "a" } } }, { snippet: { title: "Wanted", resourceId: { videoId: "b" } } }] }),
+      channel(),
+      json(200, { items: [
+        { snippet: { title: "Other", description: "D", resourceId: { videoId: "a" } } },
+        { snippet: { title: "Wanted", description: "D", resourceId: { videoId: "b" } } },
+      ] }),
     ]);
-    expect(await findUploadByTitle({ accessToken: "AT", title: "Wanted", fetchImpl })).toBe("b");
+    expect(await findUploadByTitle({ accessToken: "AT", title: "Wanted", description: "D", fetchImpl })).toBe("b");
     expect(calls[0]!.url).toBe("https://www.googleapis.com/youtube/v3/channels?part=contentDetails&mine=true");
     expect(calls[1]!.url).toBe("https://www.googleapis.com/youtube/v3/playlistItems?part=snippet&maxResults=50&playlistId=UU1");
   });
+  it("never matches an older cut with the same title but another description", async () => {
+    const { fetchImpl } = fake([channel(), json(200, { items: [{ snippet: { title: "Wanted", description: "old cut", resourceId: { videoId: "old" } } }] })]);
+    expect(await findUploadByTitle({ accessToken: "AT", title: "Wanted", description: "new cut", fetchImpl })).toBeNull();
+  });
   it("returns null when no upload has the title", async () => {
-    const { fetchImpl } = fake([json(200, { items: [{ contentDetails: { relatedPlaylists: { uploads: "UU1" } } }] }), json(200, { items: [] })]);
-    expect(await findUploadByTitle({ accessToken: "AT", title: "Wanted", fetchImpl })).toBeNull();
+    const { fetchImpl } = fake([channel(), json(200, { items: [] })]);
+    expect(await findUploadByTitle({ accessToken: "AT", title: "Wanted", description: "D", fetchImpl })).toBeNull();
   });
 });

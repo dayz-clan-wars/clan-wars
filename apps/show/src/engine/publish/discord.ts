@@ -13,8 +13,18 @@ export type Discord = {
   reactionUserIds(channelId: string, messageId: string, emoji: string): Promise<string[]>;
   recentMessages(channelId: string, limit?: number): Promise<SeenMessage[]>;
   createForumThread(forumId: string, name: string, msg: OutMessage): Promise<{ threadId: string }>;
-  findForumThread(guildId: string, forumId: string, name: string): Promise<string | null>;
+  /** Every thread with the name: Discord allows duplicates, and a `--repost` makes one. */
+  findForumThreads(guildId: string, forumId: string, name: string): Promise<string[]>;
+  /** One message, or null when it is gone (404). */
+  message(channelId: string, messageId: string): Promise<SeenMessage | null>;
 };
+
+export class DiscordHttpError extends Error {
+  constructor(message: string, readonly status: number) { super(message); }
+}
+
+type RawMessage = { id: string; content: string; author: { id: string }; embeds?: unknown[]; attachments?: unknown[] };
+const seen = (m: RawMessage): SeenMessage => ({ id: m.id, content: m.content, authorId: m.author.id, embeds: m.embeds?.length ?? 0, attachments: m.attachments?.length ?? 0 });
 
 // ⚠️ Gamertags and clan names are player-controlled; a message must never ping anyone.
 const NO_MENTIONS = { parse: [] as string[] };
@@ -34,7 +44,7 @@ export function createDiscord(deps: { token: string; fetchImpl?: typeof fetch; s
         await sleep(Math.ceil(Number(j.retry_after ?? 1) * 1000) + 250);
         continue;
       }
-      if (!res.ok) throw new Error(`Discord ${method} ${path} failed ${res.status}: ${(await res.text()).slice(0, 300)}`);
+      if (!res.ok) throw new DiscordHttpError(`Discord ${method} ${path} failed ${res.status}: ${(await res.text()).slice(0, 300)}`, res.status);
       return (res.status === 204 ? undefined : await res.json()) as T;
     }
   }
@@ -64,20 +74,27 @@ export function createDiscord(deps: { token: string; fetchImpl?: typeof fetch; s
       return users.map((u) => u.id);
     },
     async recentMessages(channelId, limit = 50) {
-      const ms = await call<{ id: string; content: string; author: { id: string }; embeds?: unknown[]; attachments?: unknown[] }[]>("GET", `/channels/${channelId}/messages?limit=${limit}`);
-      return ms.map((m) => ({ id: m.id, content: m.content, authorId: m.author.id, embeds: m.embeds?.length ?? 0, attachments: m.attachments?.length ?? 0 }));
+      const ms = await call<RawMessage[]>("GET", `/channels/${channelId}/messages?limit=${limit}`);
+      return ms.map(seen);
+    },
+    async message(channelId, messageId) {
+      try {
+        return seen(await call<RawMessage>("GET", `/channels/${channelId}/messages/${messageId}`));
+      } catch (e) {
+        if (e instanceof DiscordHttpError && e.status === 404) return null;
+        throw e;
+      }
     },
     async createForumThread(forumId, name, msg) {
       const t = await call<{ id: string }>("POST", `/channels/${forumId}/threads`, { name, message: payload(msg) });
       return { threadId: t.id };
     },
-    async findForumThread(guildId, forumId, name) {
+    async findForumThreads(guildId, forumId, name) {
       type Threads = { threads: { id: string; parent_id: string; name: string }[] };
-      const pick = (t: Threads) => t.threads.find((x) => x.parent_id === forumId && x.name === name)?.id ?? null;
+      const pick = (t: Threads) => t.threads.filter((x) => x.parent_id === forumId && x.name === name).map((x) => x.id);
       const active = pick(await call<Threads>("GET", `/guilds/${guildId}/threads/active`));
-      if (active) return active;
       // One page of archived threads is ample: the show posts one thread a week.
-      return pick(await call<Threads>("GET", `/channels/${forumId}/threads/archived/public?limit=100`));
+      return [...active, ...pick(await call<Threads>("GET", `/channels/${forumId}/threads/archived/public?limit=100`))];
     },
   };
 }

@@ -54,7 +54,7 @@ export function realDeps(db: Database, cfg: On): StageDeps {
     render: (ep) => renderEpisode({ cacheDir: cfg.render.cacheDir, discordInvite: cfg.render.discordInvite, runImpl }, ep),
     readFile: (p) => fs.readFileSync(p),
     youtube: {
-      findUpload: async (title) => findUploadByTitle({ accessToken: await token(), title }),
+      findUpload: async (title, description) => findUploadByTitle({ accessToken: await token(), title, description }),
       upload: async ({ filePath, title, description }) => uploadVideo({ accessToken: await token(), filePath, title, description, privacy: "unlisted" }),
       ensureInPlaylist: async (videoId) => {
         const accessToken = await token();

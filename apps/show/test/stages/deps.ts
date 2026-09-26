@@ -23,7 +23,8 @@ export function fakeDeps(db: Database, over: Partial<StageDeps> = {}) {
     reactionUserIds: async (_c, m, e) => reactions.get(`${m}:${e}`) ?? [],
     recentMessages: async (channelId) => posted.filter((p) => p.channelId === channelId).map((p) => ({ id: p.id, content: p.msg.content ?? "", authorId: "BOT", embeds: p.msg.embeds?.length ?? 0, attachments: p.msg.files?.length ?? 0 })),
     createForumThread: async (forumId, name, first) => { const id = `t${++n}`; threads.push({ id, forumId, name, first }); posted.push({ channelId: id, msg: first, id }); return { threadId: id }; },
-    findForumThread: async (_g, forumId, name) => threads.find((t) => t.forumId === forumId && t.name === name)?.id ?? null,
+    findForumThreads: async (_g, forumId, name) => threads.filter((t) => t.forumId === forumId && t.name === name).map((t) => t.id),
+    message: async (channelId, id) => { const p = posted.find((x) => x.channelId === channelId && x.id === id); return p ? { id: p.id, content: p.msg.content ?? "", authorId: "BOT", embeds: p.msg.embeds?.length ?? 0, attachments: p.msg.files?.length ?? 0 } : null; },
   };
   const deps: StageDeps = {
     db,
@@ -35,7 +36,7 @@ export function fakeDeps(db: Database, over: Partial<StageDeps> = {}) {
     render: async () => { calls.render++; return "/cache/k/video.mp4"; },
     readFile: () => Buffer.from("BYTES"),
     youtube: {
-      findUpload: async (title) => uploads.find((u) => u.title === title)?.id ?? null,
+      findUpload: async (title, description) => uploads.find((u) => u.title === title && u.description === description)?.id ?? null,
       upload: async ({ title, description }) => { const id = `yt${++n}`; uploads.push({ id, title, description }); return id; },
       ensureInPlaylist: async (id) => { playlist.add(id); },
       setPublic: async (id) => { publicIds.add(id); },

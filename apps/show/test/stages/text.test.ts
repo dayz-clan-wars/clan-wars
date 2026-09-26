@@ -1,4 +1,6 @@
+import crypto from "node:crypto";
 import { describe, it, expect } from "vitest";
+import { episodeCacheKey } from "../../src/engine/animation/episodeCache.js";
 import { alertMessage, draftMarker, draftMessage, forumThreadName, heldMessage, opsSafe, publicText, transcriptMessages } from "../../src/stages/text.js";
 
 const MON = new Date("2026-09-21T00:00:00Z");
@@ -6,8 +8,12 @@ const allText = (m: { content?: string; embeds?: { description: string }[]; file
   [m.content ?? "", ...(m.embeds ?? []).map((e) => e.description), ...(m.files ?? []).map((f) => f.data.toString("utf8"))].join("\n");
 
 describe("stage text", () => {
-  it("marks a draft by week", () => {
-    expect(draftMarker(MON)).toBe("show:2026-09-21");
+  it("marks a draft by week and by cut, with the episode cache's 12-hex narrative hash", () => {
+    const h = crypto.createHash("sha1").update("Boris: Hello.").digest("hex").slice(0, 12);
+    expect(draftMarker(MON, "Boris: Hello.")).toBe(`show:2026-09-21:${h}`);
+    expect(episodeCacheKey({ weekStart: "2026-09-21", narrative: "Boris: Hello." }).endsWith(h)).toBe(true);
+    // ⚠️ A new cut after --force must never adopt the old cut's draft (and its reactions).
+    expect(draftMarker(MON, "Boris: Other.")).not.toBe(draftMarker(MON, "Boris: Hello."));
   });
 
   it("writes redaction aliases as [REDACTED] in anything public", () => {
@@ -42,7 +48,7 @@ describe("stage text", () => {
       redactions: [{ text: "BadName88", kinds: ["gamertag"], replacement: "REDACTED_PLAYER_1", reason: "blocklist: x", source: "blocklist" }],
     });
     expect(m.content).toContain("https://youtu.be/V1");
-    expect(m.content).toContain("show:2026-09-21");
+    expect(m.content).toContain(draftMarker(MON, "Boris: REDACTED_PLAYER_1 again."));
     expect(m.content).toContain("1 name redacted");
     expect(m.content).toContain("attempt 2");
     expect(m.content!.length).toBeLessThanOrEqual(2000);

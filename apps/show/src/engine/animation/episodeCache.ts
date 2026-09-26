@@ -28,16 +28,19 @@ export type VideoReadFsLike = {
   statSync: (p: string) => { size: number };
 };
 
+/**
+ * The 12-hex cut id: sha1(narrative)[0:12]. One definition, shared by the cache key and the ops
+ * draft marker, so "the same cut" means the same thing everywhere (spec §8.3).
+ */
+export function cutHash(narrative: string): string {
+  return crypto.createHash("sha1").update(String(narrative ?? "")).digest("hex").slice(0, 12);
+}
+
 /** Cache key = weekStart + a short hash of the narrative (audio is a pure function of the narrative). */
 export function episodeCacheKey(o: { weekStart: string; narrative: string }): string {
   const { weekStart, narrative } = o;
-  const h = crypto
-    .createHash("sha1")
-    .update(String(narrative ?? ""))
-    .digest("hex")
-    .slice(0, 12);
   const safeWeekStart = weekStart.replace(/[:.]/g, "-");
-  return `${safeWeekStart}-${h}`;
+  return `${safeWeekStart}-${cutHash(narrative)}`;
 }
 
 function files(dir: string) {

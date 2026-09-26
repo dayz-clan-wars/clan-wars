@@ -1,3 +1,4 @@
+import { cutHash } from "../engine/animation/episodeCache.js";
 import { formatBanter } from "../engine/llm/formatBanter.js";
 import type { DiscordEmbed, OutMessage } from "../engine/publish/discord.js";
 import type { Redaction } from "../screening/redact.js";
@@ -9,7 +10,11 @@ const MESSAGE_EMBED_TOTAL = 6000;
 const CONTENT_MAX = 2000;
 
 const day = (d: Date) => d.toISOString().slice(0, 10);
-export const draftMarker = (weekStart: Date) => `${DRAFT_MARKER_PREFIX}${day(weekStart)}`;
+/**
+ * ⚠️ Keyed on the cut, not only the week: after `--force` the new cut must never adopt the old
+ * cut's draft, whose ❌ would re-reject it silently or whose ✅ would publish an unreviewed cut.
+ */
+export const draftMarker = (weekStart: Date, narrative: string) => `${DRAFT_MARKER_PREFIX}${day(weekStart)}:${cutHash(narrative)}`;
 
 /** Spec §7.3: a redacted name is drawn as `[REDACTED]`; the same goes for every published string. */
 export const publicText = (s: string) => s.replace(/REDACTED_(?:PLAYER|CLAN)_\d+/gu, "[REDACTED]");
@@ -52,7 +57,7 @@ export function draftMessage(o: { weekStart: Date; code: string; subtitle: strin
     "React ✅ to publish or ❌ to reject. Only approvers count.",
     redactionSummary(o.redactions),
     `Script passed on attempt ${o.scriptAttempts}.`,
-    `-# ${draftMarker(o.weekStart)}`,
+    `-# ${draftMarker(o.weekStart, o.narrative)}`,
   ].join("\n");
   return {
     content: content.slice(0, CONTENT_MAX),
