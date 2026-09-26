@@ -110,7 +110,7 @@ export async function writeScript(context: StoryContext, blocked: string[], deps
       if (wrong.length === 0) return { ok: true, ...parsed, attempts: attempt, reasons: [...reasons] };
       reasons.push(`${tag}: fact check: ${wrong.length} wrong: ${wrong.map((w) => `"${w.line}" (${w.problem})`).join("; ")}`);
       if (fix === MAX_FACT_FIXES) break;
-      const fixUser = `${user}\n\nA fact check against the data found these mistakes in your script below:\n${wrong.map((w) => `- "${w.line}": ${w.problem}`).join("\n")}\n\nFix each one so it matches the data exactly, and change nothing else. Return the whole episode in the same format.\n\n${lastRaw}`;
+      const fixUser = `${user}\n\nA fact check against the data found these mistakes in your script below:\n${wrong.map((w) => `- "${w.line}": ${w.problem}`).join("\n")}\n\nFix each one so it matches the data exactly, and change nothing else. Reply with the whole corrected episode in the same format and nothing else: the first line of your reply is the first dialogue line, with no note or preface before it.\n\n${lastRaw}`;
       const fixedRaw = await deps.generate(system, fixUser);
       try {
         parsed = parseEpisode(fixedRaw);
