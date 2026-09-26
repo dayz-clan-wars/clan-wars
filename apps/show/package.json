@@ -9,7 +9,9 @@
     "test": "vitest run",
     "cli": "tsx src/cli.ts",
     "start": "tsx src/cli.ts",
-    "youtube-auth": "tsx scripts/youtube-auth.ts"
+    "youtube-auth": "tsx scripts/youtube-auth.ts",
+    "screening": "tsx src/ops/screening-cli.ts",
+    "backfill-pronunciations": "tsx src/ops/backfill-cli.ts"
   },
   "dependencies": {
     "@factions/db": "workspace:*",
