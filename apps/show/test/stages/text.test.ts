@@ -73,6 +73,15 @@ describe("stage text", () => {
     expect(m.content).not.toContain("slurword");
   });
 
+  it("says a length-only hold needs just another --force, and a second trim's reasons stay safe", () => {
+    const m = heldMessage({ code: "S01E02", weekStart: MON, reasons: ["attempt 1: script is 7939 characters, cap is 6000", "attempt 1 (trimmed 2): script is 6279 characters, cap is 6000"], blocked: [] });
+    expect(m.content).toContain("no script passed its checks");
+    expect(m.content).not.toContain("screening");
+    expect(m.content).toContain("Every attempt was too long");
+    expect(m.content).not.toContain("show:screening");
+    expect(opsSafe("attempt 2 (trimmed 2): not a dialogue line: Boris says slurword", [])).toBe("attempt 2 (trimmed 2): not a dialogue line");
+  });
+
   it("alerts with the stage, count and a masked, capped error", () => {
     const m = alertMessage({ code: "S01E03", stage: "uploaded", attempts: 3, error: `BadName88 ${"e".repeat(1000)}`, blocked: ["BadName88"] });
     expect(m.content).toContain("uploaded");

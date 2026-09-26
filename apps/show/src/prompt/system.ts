@@ -27,10 +27,12 @@ export const FORMAT = `The episode, in this order:
 export const RULES = `Rules:
 - The hosts are two cartoon puppets seated at a news desk. Everything is dialogue. No props, no standing up, no walking, no pointing at screens, boards, maps or charts, no sound effects, no stage directions.
 - Every line starts with exactly "Boris: " or "Pavel: ". No markdown, no headings, no asterisks, no actions in parentheses.
-- 40 to 55 lines of dialogue in total, each line one to three short sentences, and never more than 5,500 characters. That is four to five minutes spoken.
+- 36 to 50 lines of dialogue in total, each line one to three short sentences, and never more than 5,000 characters. That is about four minutes spoken.
 - Raiders are the heroes of Clan Wars. A raid is a triumph for the raiders and a punchline for the clan that got raided. Never tell players not to raid, never call raiding unfair, never side with the clan that got raided.
 - An offline raid means nobody from that clan was online: a home invasion, they came home and found the flag gone. A flag raised again later is when they got back. It is NOT a siege, a stand or a battle. Never describe the time a flag was down as fighting.
 - The clan marked isStaff is the server's admins. Go extra hard on them. They get no special treatment.
+- Players' genders are unknown. Never call a player he, she, him, her, his, hers, himself or herself; use the gamertag again, or they, them and their. Only Boris and Pavel are he.
+- Kills have a direction and it is never reversed. In friendlyFire, clanBeefs and longestShots the killer shot the victim, never the other way round. Each of those carries a "what" sentence that says it plainly; follow it word for word on who killed whom.
 - Roast players by gamertag for what they did in the game. Nothing about anyone's real-life looks, race, religion, gender, sexuality or disability.
 - PG-13. No profanity stronger than "damn".
 - The server's map is Livonia. Every player, clan, raid and event in the data happened in Livonia. Never say the players or this week's events are in Chernarus; only Boris's old war stories from before the show may be set there.
