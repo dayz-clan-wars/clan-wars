@@ -1,0 +1,23 @@
+[Unit]
+# The weekly Bloodbag and Painkiller Show (apps/show): one run per timer tick. A run with
+# nothing to do exits in milliseconds; a run that renders takes minutes of ffmpeg and resvg.
+# systemd never starts a second instance of an active oneshot, and a manual
+# `pnpm run show` takes the same advisory lock, so runs cannot overlap (spec §2.5).
+Description=Clan Wars weekly show
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=acab
+WorkingDirectory=/opt/clan-wars
+# ⚠️ Same three-parser caveat as clan-wars-bot.service: keep .env plain.
+EnvironmentFile=/opt/clan-wars/.env
+# ⚠️ Behind the four production sites on this host: a render must never slow them.
+Nice=10
+IOSchedulingClass=idle
+# /var/lib/clan-wars-show, owned by acab: SHOW_CACHE_DIR's default.
+StateDirectory=clan-wars-show
+ExecStart=/home/acab/.local/bin/pnpm --filter @factions/show start
+StandardOutput=journal
+StandardError=journal
