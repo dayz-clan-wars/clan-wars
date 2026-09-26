@@ -3,18 +3,22 @@ import { factions, factionMembers, identityLinks, servers } from "@factions/db";
 import { HOLDING_STATUSES, LINK_TTL_MS, emoteLabel } from "@factions/domain";
 import { lockDeclarations, releaseTx } from "@factions/declarations";
 import {
-  PgVerificationStore, issueChallenge, DRAW_WINDOW_MS, MAX_DRAWS_PER_TARGET,
+  PgVerificationStore, issueChallenge, checkReferral, DRAW_WINDOW_MS, MAX_DRAWS_PER_TARGET,
   type IssueOutcome, type CancelReason,
 } from "@factions/verification";
 import { and, asc, eq, inArray } from "drizzle-orm";
+import { resolveReferrer, referredByFor, type ReferrerRefusal } from "./referral";
 
 export type LinkStep = { token: string; label: string; confirmed: boolean };
 export type LinkStatus = {
   link: { dayzId: string; gamertag: string; verifiedAt: Date } | null;
+  /** Who this player was referred by, permanently, or null if nobody. */
+  referredBy: { gamertag: string } | null;
   challenge: { id: number; targetDayzId: string; gamertag: string; steps: LinkStep[]; confirmed: number; expiresAt: Date; drawsLeft: number } | null;
   /** How the newest challenge ended when the player did not end it themselves; null otherwise. */
   ended: "expired" | CancelReason | null;
 };
+export type StartLinkOutcome = IssueOutcome | { kind: "referrer-refused"; reason: ReferrerRefusal };
 export type UnlinkOutcome =
   | { ok: true; releasedBase: boolean }
   | { ok: false; reason: "not-linked" }
@@ -35,6 +39,7 @@ const SEARCH_LIMIT = 10;
 export async function linkStatusDb(db: Database, discordId: string, now: Date): Promise<LinkStatus> {
   const store = new PgVerificationStore(db);
   const link = await store.findLinkByDiscord(discordId);
+  const referredBy = await referredByFor(db, discordId);
   const live = await store.findLiveChallenge(discordId, now);
   if (live) {
     const [attempt, gamertag, drawn] = await Promise.all([
@@ -44,7 +49,7 @@ export async function linkStatusDb(db: Database, discordId: string, now: Date): 
     ]);
     const confirmed = attempt?.progressIndex ?? 0;
     return {
-      link, ended: null,
+      link, referredBy, ended: null,
       challenge: {
         id: live.id, targetDayzId: live.targetDayzId, gamertag, confirmed, expiresAt: live.expiresAt,
         steps: live.sequence.map((token, i) => ({ token, label: emoteLabel(token) ?? token, confirmed: i < confirmed })),
@@ -58,16 +63,32 @@ export async function linkStatusDb(db: Database, discordId: string, now: Date): 
     if (latest.cancelReason) ended = latest.cancelReason;
     else if (latest.canceledAt === null && latest.expiresAt < now) ended = "expired";
   }
-  return { link, challenge: null, ended };
+  return { link, referredBy, challenge: null, ended };
 }
 
+/**
+ * `referrerGamertag`, when given, is resolved and checked BEFORE any
+ * challenge is issued — a bad referrer refuses with no
+ * `verification_challenges` row ever written. A good one is passed through as
+ * `referrerDiscordId`, recorded only if the challenge later completes (spec
+ * §4: link-time referrals commit inside the same transaction as the link).
+ */
 export async function startLinkDb(db: Database, a: {
-  discordId: string; targetDayzId: string; newSequence?: boolean; now: Date; rng: () => number;
-}): Promise<IssueOutcome> {
+  discordId: string; targetDayzId: string; newSequence?: boolean; referrerGamertag?: string; now: Date; rng: () => number;
+}): Promise<StartLinkOutcome> {
+  let referrerDiscordId: string | null = null;
+  if (a.referrerGamertag) {
+    const ref = await resolveReferrer(db, a.referrerGamertag);
+    if (typeof ref === "string") return { kind: "referrer-refused", reason: ref };
+    const refusal = await checkReferral(db, { referredDiscordId: a.discordId, referrerDiscordId: ref.discordId });
+    if (refusal) return { kind: "referrer-refused", reason: refusal };
+    referrerDiscordId = ref.discordId;
+  }
   // ⚠️ LINK_TTL_MS, the guide's 24 hours (raised from ten minutes on
   // 2026-09-08: a player who starts on the site need not already be in game).
   return issueChallenge(new PgVerificationStore(db), { rng: a.rng, now: a.now, ttlMs: LINK_TTL_MS }, {
     discordId: a.discordId, targetDayzId: a.targetDayzId, guildId: null, channelId: null, newSequence: a.newSequence,
+    referrerDiscordId,
   });
 }
 

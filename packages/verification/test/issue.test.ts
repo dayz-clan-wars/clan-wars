@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, players, verificationChallenges, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, players, verificationChallenges, clearReferrals, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { PgVerificationStore } from "../src/store";
-import { clearReferrals } from "./clear-referrals";
 import { issueChallenge, MAX_DRAWS_PER_TARGET, type IssueDeps } from "../src/issue";
 
 const URL = requireTestDatabaseUrl();

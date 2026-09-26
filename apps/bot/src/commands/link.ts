@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
-import { ISSUE_COPY, UNLINK_COPY, rel, when } from "@factions/copy";
+import { ISSUE_COPY, REFERRAL_COPY, UNLINK_COPY, rel, when } from "@factions/copy";
 import { linkStatusEmbed } from "./embeds/link.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
@@ -23,6 +23,12 @@ const start: Handler = async (ctx, input) => {
   const outcome = await ctx.roster.startLink(input.actorDiscordId, target, { newSequence: input.boolean("redraw") === true });
   if (outcome.kind === "issued" || outcome.kind === "live") {
     return { embeds: [linkStatusEmbed(await ctx.roster.linkStatus(input.actorDiscordId), ctx.now, ctx.siteBaseUrl)], ephemeral: true };
+  }
+  // `/link start` never names a referrer itself (that lands in a later
+  // increment), so this kind cannot come back from the call above today —
+  // this guard only keeps the type honest against `StartLinkOutcome`'s union.
+  if (outcome.kind === "referrer-refused") {
+    return { content: REFERRAL_COPY[outcome.reason]({}), ephemeral: true };
   }
   const endsWhen = outcome.kind === "held-by-other" ? (rel(outcome.expiresAt) ?? when(outcome.expiresAt)) : undefined;
   return { content: ISSUE_COPY[outcome.kind](outcome, endsWhen), ephemeral: true };

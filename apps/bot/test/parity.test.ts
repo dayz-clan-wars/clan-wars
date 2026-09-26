@@ -84,6 +84,11 @@ const PENDING: Record<string, string> = {
   saveAwardPick: "award pick",
   startAwardPlacement: "award place",
   cancelAwardPlacement: "award cancel",
+
+  // 2026-09-26 referrals (docs/superpowers/plans/2026-09-26-referrals.md). Task 3
+  // ships the roster export; the command (`/link referrer`) is Task 4's, still
+  // to come in the same plan.
+  addReferrer: "link referrer",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */
@@ -124,6 +129,8 @@ describe("Discord parity with the site", () => {
       // Discord command — putting them here (rather than a phantom COMMANDS
       // entry) is what "accounted for" means for this pair.
       "markAllNoticesRead", "markNoticeRead",
+      // Referral reads (2026-09-26): who referred you, and who you brought in.
+      "referralsFor", "referralsForGamertag",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

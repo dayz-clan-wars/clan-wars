@@ -23,7 +23,8 @@ export { makeRoster, type Roster } from "./api";
 
 export type { Viewer, Role } from "./api";
 export type { MapState, MapFix, DropPinOutcome } from "./api";
-export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind } from "./api";
+export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind, StartLinkOutcome } from "./api";
+export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView } from "./api";
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason } from "./api";
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
@@ -46,12 +47,12 @@ export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKi
 export type { AwardSummary, AwardView, AwardWriteOutcome } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, castVote,
+  acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
   markAllNoticesRead, markNoticeRead,
-  myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, releaseSolo, rename,
+  myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, referralsFor, referralsForGamertag, releaseSolo, rename,
   reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveAwardPick, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
   setRecruitingPost, startAwardPlacement, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);

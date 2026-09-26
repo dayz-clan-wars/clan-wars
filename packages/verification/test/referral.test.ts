@@ -1,8 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, referrals, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, identityLinks, referrals, clearReferrals, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { recordReferralTx, checkReferral } from "../src/referral";
-import { clearReferrals } from "./clear-referrals";
 
 const URL = requireTestDatabaseUrl();
 const at = new Date("2026-09-26T12:00:00Z");
