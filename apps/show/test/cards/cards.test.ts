@@ -126,34 +126,34 @@ describe("buildCards", () => {
 });
 
 describe("buildMarqueeItems", () => {
-  const invite = "discord.gg/abc123";
+  const invite = "discord.gg/TJu4XP25nr";
 
   it("has the fixed items when there is no data", () => {
-    expect(buildMarqueeItems(ctx(), { discordInvite: invite })).toEqual(["DAYZCLANWARS.COM", invite.toUpperCase()]);
+    expect(buildMarqueeItems(ctx(), { discordInvite: invite })).toEqual(["DAYZCLANWARS.COM", "discord.gg/TJu4XP25nr"]);
   });
 
-  it("adds top killer, longest shot and alpha, in order, upper-cased, when present", () => {
-    const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Z2" } };
+  it("adds top killer, longest shot and alpha, in order, with caps labels and names drawn exactly as given", () => {
+    const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Zz2" } };
     const players = {
       topKillers: [{ gamertag: "chaandlr", clan: null, value: 12 }],
       mostDeaths: [],
-      longestShots: [{ gamertag: "sniper", clan: null, victim: "v", metres: 412.6, weapon: null }],
+      longestShots: [{ gamertag: "Fade Fishy69", clan: null, victim: "v", metres: 412.6, weapon: null }],
       oddDeaths: [],
     };
     const items = buildMarqueeItems(ctx({ week, players }), { discordInvite: invite });
     expect(items).toEqual([
       "DAYZCLANWARS.COM",
-      invite.toUpperCase(),
-      "TOP KILLER: CHAANDLR (12)",
-      "LONGEST SHOT: SNIPER 413M",
-      "ALPHA: Z2",
+      "discord.gg/TJu4XP25nr",
+      "TOP KILLER: chaandlr (12)",
+      "LONGEST SHOT: Fade Fishy69 413m",
+      "ALPHA: Zz2",
     ]);
   });
 
   it("omits top killer, longest shot and alpha independently when their data is missing", () => {
     const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Z2" } };
     const items = buildMarqueeItems(ctx({ week }), { discordInvite: invite });
-    expect(items).toEqual(["DAYZCLANWARS.COM", invite.toUpperCase(), "ALPHA: Z2"]);
+    expect(items).toEqual(["DAYZCLANWARS.COM", "discord.gg/TJu4XP25nr", "ALPHA: Z2"]);
   });
 
   it("draws [REDACTED] for a redacted name", () => {

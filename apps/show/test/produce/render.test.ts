@@ -48,7 +48,7 @@ function harness() {
     fsImpl.writeFileSync(args[args.length - 1]!, Buffer.from("VIDEO"));
     return Buffer.alloc(0);
   };
-  const deps: RenderDeps = { cacheDir: CACHE, discordInvite: "discord.gg/clanwars", runImpl, ResvgImpl, fsImpl };
+  const deps: RenderDeps = { cacheDir: CACHE, discordInvite: "discord.gg/TJu4XP25nr", runImpl, ResvgImpl, fsImpl };
   return { deps, fsImpl, svgs, runs };
 }
 
@@ -77,8 +77,9 @@ describe("renderEpisode", () => {
     const all = h.svgs.join("\n");
     expect(all).toContain("CLAN WARS · S01E03");
     expect(all).toContain("DAYZCLANWARS.COM");
-    expect(all).toContain("DISCORD.GG/CLANWARS");
-    expect(all).toContain("KILLER&lt;&amp;&gt;");
+    expect(all).toContain("discord.gg/TJu4XP25nr");
+    expect(all).not.toContain("DISCORD.GG");
+    expect(all).toContain("killer&lt;&amp;&gt;");
     expect(all).not.toContain("killer<&>");
     // The outro board headline.
     expect(all).toContain("AFTER WEEK 3");

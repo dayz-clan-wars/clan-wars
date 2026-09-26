@@ -55,8 +55,8 @@ export function buildCards(ctx: StoryContext): Card[] {
 
 /**
  * Ordered ticker strings: the site, the Discord invite, then this week's highlights (each
- * omitted when its data is empty/null). Every item is upper-cased (KOTH `marquee.js`'s items are
- * already written in caps; this project builds them from data, so it upper-cases the whole line).
+ * omitted when its data is empty/null). As in KOTH `marquee.js`, the fixed labels are written in
+ * caps and the invite and every name are drawn exactly as given (invite codes are case-sensitive).
  */
 export function buildMarqueeItems(ctx: StoryContext, o: { discordInvite: string }): string[] {
   const items: string[] = ["DAYZCLANWARS.COM", o.discordInvite];
@@ -65,7 +65,7 @@ export function buildMarqueeItems(ctx: StoryContext, o: { discordInvite: string 
   const longestShot = ctx.players.longestShots[0];
   if (longestShot) items.push(`LONGEST SHOT: ${name(longestShot.gamertag)} ${Math.round(longestShot.metres)}m`);
   if (ctx.week.alpha) items.push(`ALPHA: ${name(ctx.week.alpha.tag)}`);
-  return items.map((s) => s.toUpperCase());
+  return items;
 }
 
 /** Top 5 clans by season points (desc, then tag asc), only those with points, "<rank>. <tag>  <n> pts". */
