@@ -538,7 +538,7 @@ real API. `rigManifest` keeps reading the real rig SVGs.
 
 - **Intro:** `intro-screen.png` held for the length of the intro jingle
 - **Stat cards** (four, 742×494, crossfading on the desk screen). Header
-  `CLAN WARS · S01E03`:
+  `CLAN WARS | S01E03` (the display font has no `·`):
   - **WEEK STANDINGS**: clans by points this week. A week with no raids shows `NO RAIDS`
   - **MOST KILLS**: top 3 by `scoringKill`
   - **FRIENDLY FIRE**: top 3 clan-mate killers
@@ -547,7 +547,7 @@ real API. `rigManifest` keeps reading the real rig SVGs.
   `discord.gg/TJu4XP25nr`), `TOP KILLER: <tag> (<n>)`, `LONGEST SHOT: <tag> <n>m`,
   `ALPHA: <tag>` (the week's first clan)
 - **Outro board:** the season's top 5 clans by points with raid counts, as of the week's
-  end, over `outro-screen.png`. Headline `CLAN WARS · SEASON 1 · AFTER WEEK 3`
+  end, over `outro-screen.png`. Headline `CLAN WARS | SEASON 1 | AFTER WEEK 3`
 - Every name drawn is XML-escaped. Stat-card rows keep the single-font rule from the KOTH
   fix `b954fe3`, so a gamertag containing a ligature pair such as "fi" does not render blank.
   Redacted names draw as `[REDACTED]`
