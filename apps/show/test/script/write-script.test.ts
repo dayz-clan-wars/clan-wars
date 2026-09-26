@@ -5,7 +5,7 @@ import type { StoryContext } from "../../src/story/types.js";
 
 const context = {
   week: { start: "a", end: "b", season: 1, episode: 3, alpha: null }, clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
-  players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] }, bounties: [], koth: [], airdrops: [], previous: null,
+  players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] }, bounties: [], koth: [], airdrops: [], previous: null,
 } satisfies StoryContext;
 
 const dialogue = (extra = "") => Array.from({ length: 12 }, (_, i) => (i % 2 === 0 ? `Boris: Line ${i}.` : `Pavel: Line ${i}.`)).join("\n") + extra;

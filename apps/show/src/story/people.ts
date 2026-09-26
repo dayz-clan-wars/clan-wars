@@ -36,7 +36,7 @@ const line = (texts: PlayerTexts, r: LineRow): PlayerLine => ({
   value: r.value,
 });
 
-export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryContext["players"]> {
+export async function peopleForWeek(db: Database, a: WeekRead): Promise<Omit<StoryContext["players"], "raidsByPlayer">> {
   const board = (col: SQL) => rows<LineRow>(db, sql`
     with cur as (${weekClan(a)})
     select coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as gamertag, cur.name as clan_name, cur.tag as clan_tag, count(*)::int as value

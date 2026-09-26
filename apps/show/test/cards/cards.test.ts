@@ -24,7 +24,7 @@ function ctx(over: Partial<StoryContext> = {}): StoryContext {
   return {
     week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
     clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
-    players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] },
+    players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] },
     bounties: [], koth: [], airdrops: [], previous: null,
     ...over,
   };
@@ -70,7 +70,7 @@ describe("buildCards", () => {
       { gamertag: "three", clan: null, value: 5 },
       { gamertag: "four", clan: null, value: 3 },
     ];
-    const [, mostKills] = buildCards(ctx({ players: { topKillers, mostDeaths: [], longestShots: [], oddDeaths: [] } }));
+    const [, mostKills] = buildCards(ctx({ players: { topKillers, mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] } }));
     expect(mostKills!.rows).toEqual([
       { name: "one", value: "9" },
       { name: "two", value: "7" },
@@ -96,7 +96,7 @@ describe("buildCards", () => {
       { gamertag: "sniper", clan: null, victim: "v", metres: 412.6, weapon: "SVD" },
       { gamertag: "sniper2", clan: null, victim: "v", metres: 300.2, weapon: null },
     ];
-    const [, , , shots] = buildCards(ctx({ players: { topKillers: [], mostDeaths: [], longestShots, oddDeaths: [] } }));
+    const [, , , shots] = buildCards(ctx({ players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots, oddDeaths: [] } }));
     expect(shots!.rows).toEqual([
       { name: "sniper", value: "413m" },
       { name: "sniper2", value: "300m" },
@@ -107,7 +107,7 @@ describe("buildCards", () => {
     const clans = [clan({ tag: "REDACTED_CLAN_1", weekPoints: 10 })];
     const players = {
       topKillers: [{ gamertag: "REDACTED_PLAYER_1", clan: null, value: 4 }],
-      mostDeaths: [],
+      mostDeaths: [], raidsByPlayer: [],
       longestShots: [{ gamertag: "REDACTED_PLAYER_2", clan: null, victim: "v", metres: 100, weapon: null }],
       oddDeaths: [],
     };
@@ -139,7 +139,7 @@ describe("buildMarqueeItems", () => {
     const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Zz2" } };
     const players = {
       topKillers: [{ gamertag: "chaandlr", clan: null, value: 12 }],
-      mostDeaths: [],
+      mostDeaths: [], raidsByPlayer: [],
       longestShots: [{ gamertag: "Fade Fishy69", clan: null, victim: "v", metres: 412.6, weapon: null }],
       oddDeaths: [],
     };
@@ -163,7 +163,7 @@ describe("buildMarqueeItems", () => {
     const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "x", tag: "REDACTED_CLAN_1" } };
     const players = {
       topKillers: [{ gamertag: "REDACTED_PLAYER_1", clan: null, value: 1 }],
-      mostDeaths: [], longestShots: [], oddDeaths: [],
+      mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [],
     };
     const items = buildMarqueeItems(ctx({ week, players }), { discordInvite: invite });
     expect(items).toContain("TOP KILLER: [REDACTED] (1)");

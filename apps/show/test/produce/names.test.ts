@@ -20,7 +20,7 @@ function ctx(over: Partial<StoryContext> = {}): StoryContext {
   return {
     week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
     clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [],
-    players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] },
+    players: { topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] },
     bounties: [], koth: [], airdrops: [], previous: null,
     ...over,
   };
@@ -56,6 +56,7 @@ describe("collectNames", () => {
         players: {
           topKillers: [{ gamertag: "topK", clan: null, value: 3 }],
           mostDeaths: [{ gamertag: "deadGuy", clan: null, value: 3 }],
+          raidsByPlayer: [],
           longestShots: [{ gamertag: "sniper", clan: null, victim: "shotGuy", metres: 400, weapon: null }],
           oddDeaths: [{ gamertag: "oddGuy", cause: "fell", at: "", when: "" }],
         },
@@ -86,6 +87,7 @@ describe("collectNames", () => {
         players: {
           topKillers: [{ gamertag: "dup", clan: { name: "WLF", tag: "WLF" }, value: 3 }],
           mostDeaths: [{ gamertag: "dup", clan: null, value: 1 }],
+          raidsByPlayer: [],
           longestShots: [],
           oddDeaths: [],
         },
@@ -104,6 +106,7 @@ describe("collectNames", () => {
             { gamertag: "cleanName", clan: null, value: 2 },
           ],
           mostDeaths: [{ gamertag: "REDACTED_PLAYER_2", clan: null, value: 1 }],
+          raidsByPlayer: [],
           longestShots: [],
           oddDeaths: [],
         },

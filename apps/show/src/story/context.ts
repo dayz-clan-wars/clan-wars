@@ -3,7 +3,7 @@ import type { Database } from "@factions/db";
 import { episodeNumber, weekWindow } from "../weeks.js";
 import { PlayerTexts } from "./registry.js";
 import { rows, tsz } from "./sql.js";
-import type { ClanRef, StoryContext } from "./types.js";
+import type { ClanRef, PlayerLine, RaidStory, StoryContext } from "./types.js";
 import { seasonForWeek } from "./season.js";
 import { clansForWeek } from "./clans.js";
 import { raidsForWeek } from "./raids.js";
@@ -18,6 +18,21 @@ async function alphaForWeek(db: Database, a: { seasonId: number; weekStart: Date
     join factions f on f.id = aw.faction_id
     where aw.season_id = ${a.seasonId} and aw.week_start = ${tsz(a.weekStart)} and aw.rank = 1`);
   return r ? a.texts.clan(r.name, r.tag) : null;
+}
+
+/**
+ * How many raids each raider made this week, most first. The model miscounted a player's
+ * raids from the raid list (week 1: "GoldSkull588 has two raids" when he had one), so it
+ * gets the count ready-made. Built from `raids`, so it can never disagree with it.
+ */
+function raidsByPlayer(raids: RaidStory[]): PlayerLine[] {
+  const by = new Map<string, PlayerLine>();
+  for (const r of raids) {
+    const cur = by.get(r.raider);
+    if (cur) cur.value += 1;
+    else by.set(r.raider, { gamertag: r.raider, clan: r.raiderClan, value: 1 });
+  }
+  return [...by.values()].sort((a, b) => b.value - a.value || a.gamertag.localeCompare(b.gamertag));
 }
 
 /**
@@ -66,7 +81,7 @@ export async function buildStoryContext(db: Database, opts: {
   return {
     context: {
       week: { start: from.toISOString(), end: to.toISOString(), season: season.number, episode: episodeNumber(season.startedAt, opts.weekStart), alpha },
-      clans, raids, flagEvents, memberMoves, friendlyFire, clanBeefs, players, bounties, koth, airdrops, previous,
+      clans, raids, flagEvents, memberMoves, friendlyFire, clanBeefs, players: { ...players, raidsByPlayer: raidsByPlayer(raids) }, bounties, koth, airdrops, previous,
     },
     texts,
   };

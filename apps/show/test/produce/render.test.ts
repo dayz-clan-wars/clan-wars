@@ -24,7 +24,7 @@ const VOICED: VoicedEpisode = {
 const CONTEXT = storyContext({
   players: {
     topKillers: [{ gamertag: "killer<&>", clan: null, value: 9 }],
-    mostDeaths: [],
+    mostDeaths: [], raidsByPlayer: [],
     longestShots: [],
     oddDeaths: [],
   },

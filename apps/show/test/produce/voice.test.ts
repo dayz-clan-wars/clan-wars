@@ -25,7 +25,7 @@ const CONTEXT = storyContext({
       { gamertag: "Xx5n1perXx", clan: null, value: 9 },
       { gamertag: "REDACTED_PLAYER_1", clan: null, value: 4 },
     ],
-    mostDeaths: [],
+    mostDeaths: [], raidsByPlayer: [],
     longestShots: [],
     oddDeaths: [],
   },

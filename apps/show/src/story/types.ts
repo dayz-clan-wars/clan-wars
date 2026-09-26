@@ -71,7 +71,7 @@ export type StoryContext = {
   memberMoves: MemberMove[];
   friendlyFire: FfPair[];
   clanBeefs: ClanVsClan[];
-  players: { topKillers: PlayerLine[]; mostDeaths: PlayerLine[]; longestShots: ShotLine[]; oddDeaths: OddDeath[] };
+  players: { topKillers: PlayerLine[]; mostDeaths: PlayerLine[]; raidsByPlayer: PlayerLine[]; longestShots: ShotLine[]; oddDeaths: OddDeath[] };
   bounties: BountyStory[];
   koth: KothStory[];
   airdrops: AirdropStory[];
