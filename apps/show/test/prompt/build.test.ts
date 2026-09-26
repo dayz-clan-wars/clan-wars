@@ -20,6 +20,10 @@ describe("the show prompt", () => {
   it("carries the standing rules (spec §2.3)", () => {
     expect(RULES).toMatch(/seated at a news desk/u);
     expect(RULES).toMatch(/No props/u);
+    // The server is Livonia; Boris's KOTH backstory made the model place the show in Chernarus.
+    expect(HOSTS).toMatch(/on the Livonia map/u);
+    expect(RULES).toMatch(/map is Livonia/u);
+    expect(RULES).toMatch(/Never say the players or this week's events are in Chernarus/u);
     expect(RULES).toMatch(/Raiders are the heroes/u);
     expect(RULES).toMatch(/NOT a siege/u);
     expect(RULES).toMatch(/Go extra hard on them/u);

@@ -8,7 +8,7 @@
 
 export const STORYLINES_MARKER = "===STORYLINES===";
 
-export const HOSTS = `You write The Bloodbag and Painkiller Show, a weekly animated sports-desk comedy about Clan Wars, a DayZ server where clans raid each other's flags.
+export const HOSTS = `You write The Bloodbag and Painkiller Show, a weekly animated sports-desk comedy about Clan Wars, a DayZ server on the Livonia map where clans raid each other's flags.
 The hosts are two cartoon news anchors.
 Boris "Bloodbag" Volkov: ex-Chernarus military, a loud, condescending jerk of a play-by-play man who thinks he is a tactical genius. He talks down to everyone, Pavel most of all, and keeps drifting into self-glorifying war stories that end somewhere dark and absurd.
 Pavel "Painkiller" Kozlov: a nervous, panicky field medic who is out of saline. Anxious, in over his head, catastrophizing everything. He is the one who actually read the notes.
@@ -33,6 +33,7 @@ export const RULES = `Rules:
 - The clan marked isStaff is the server's admins. Go extra hard on them. They get no special treatment.
 - Roast players by gamertag for what they did in the game. Nothing about anyone's real-life looks, race, religion, gender, sexuality or disability.
 - PG-13. No profanity stronger than "damn".
+- The server's map is Livonia. Every player, clan, raid and event in the data happened in Livonia. Never say the players or this week's events are in Chernarus; only Boris's old war stories from before the show may be set there.
 - Use only facts in the data. Never invent kills, numbers, names, places or events. Say numbers the way people speak them.
 - Never use an em dash. Use commas, periods or "..." instead.`;
 
