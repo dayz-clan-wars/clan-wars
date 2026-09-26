@@ -55,4 +55,19 @@ describe("loadOrBuildSegment", () => {
     });
     expect(r).toBeNull();
   });
+
+  it("cacheDir overrides the default .jingle-cache next to the source file", async () => {
+    const fsImpl = memFs({ "/assets/intro.mp3": Buffer.from([9]) });
+    const writes: string[] = [];
+    const spy: FsLike = { ...fsImpl, writeFileSync: (p, b) => { writes.push(p); fsImpl.writeFileSync(p, b); } };
+    await loadOrBuildSegment({
+      srcPath: "/assets/intro.mp3",
+      cacheDir: "/cache/.jingle-cache",
+      fsImpl: spy,
+      kind: "intro",
+      key: "k1",
+      build: async () => Buffer.from([2]),
+    });
+    expect(writes).toEqual(["/cache/.jingle-cache/jingle-k1.intro.pcm"]);
+  });
 });
