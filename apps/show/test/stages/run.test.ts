@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, type Fx } from "../fixture.js";
 import { runStages } from "../../src/stages/run.js";
-import { advance, createEpisode, getEpisode, setFields } from "../../src/stages/store.js";
+import { advance, getEpisode, setFields } from "../../src/stages/store.js";
 import { fakeDeps } from "./deps.js";
 
 describe("runStages: production", () => {
@@ -10,20 +10,16 @@ describe("runStages: production", () => {
   beforeAll(async () => { db = await openDb(); });
   beforeEach(async () => { fx = await makeFixture(db); });
 
-  // Task 9 fills in PUBLISH_STEPS; until then a run stops at "uploaded" (see the interim
-  // test below), so the walk-to-approval-wait outcome doesn't exist yet.
-  it.todo("walks a new week through to the approval wait, persisting context, screening and script");
-
-  it("walks a new week through context, screening and script, then fails at the missing uploaded step", async () => {
+  it("walks a new week through to the approval wait, persisting context, screening and script", async () => {
     const f = fakeDeps(db);
     const { outcome, row } = await runStages(f.deps, MON);
-    expect(outcome).toBe("failed");
-    expect(row.stage).toBe("rendered");
-    expect(row.lastError).toMatch(/no step for stage uploaded/u);
+    expect(outcome).toBe("waiting");
+    expect(row.stage).toBe("awaiting_approval");
     expect(row).toMatchObject({ narrative: "Boris: Hello.\nPavel: Hi.", title: "The Curse", seasonNumber: 1, episodeNumber: 3 });
     expect(row.context).toMatchObject({ week: { season: 1, episode: 3 } });
     expect(row.screeningReport).toMatchObject({ redactions: [], blocked: [], allowed: [], scriptReasons: [], scriptAttempts: 1 });
-    expect(f.calls).toMatchObject({ script: 1, render: 1 });
+    expect(f.calls.script).toBe(1);
+    expect(f.calls.render).toBeGreaterThanOrEqual(1);
   });
 
   it("persists the blocked list at the context stage and hands it to the script stage", async () => {
@@ -87,12 +83,8 @@ describe("runStages: production", () => {
     const f = fakeDeps(db, { render: async () => { if (fail) throw new Error("x"); return "/v.mp4"; } });
     await runStages(f.deps, MON);
     fail = false;
-    // PUBLISH_STEPS is empty in this task, so once render succeeds and the row advances to
-    // "rendered", the very next step ("uploaded") has none registered and the run fails
-    // immediately at that stage; row.stage stays at "rendered" either way. Task 9 restores
-    // this to asserting "awaiting_approval" with attempts: 0 once the publish steps exist.
     const { row } = await runStages(f.deps, MON);
-    expect(row).toMatchObject({ stage: "rendered", attempts: 1, lastError: expect.stringMatching(/no step for stage uploaded/u) });
+    expect(row).toMatchObject({ stage: "awaiting_approval", attempts: 0, lastError: null });
   });
 
   it("an alert that cannot be posted does not mask the stage failure", async () => {
@@ -100,5 +92,149 @@ describe("runStages: production", () => {
     f.deps.discord.post = async () => { throw new Error("discord down"); };
     for (let i = 0; i < 3; i++) await runStages(f.deps, MON);
     expect((await getEpisode(db, MON))!.attempts).toBe(3);
+  });
+
+  it("a screen that throws leaves the row at stage new, fails closed", async () => {
+    const f = fakeDeps(db, { screen: async () => { throw new Error("screen down"); } });
+    const { outcome, row } = await runStages(f.deps, MON);
+    expect(outcome).toBe("failed");
+    expect(row.stage).toBe("new");
+    expect(row.context).toBeNull();
+    expect(row.lastError).toBeTruthy();
+  });
+
+  it("scrubs the error text from the ops alert when the failing stage is context", async () => {
+    const f = fakeDeps(db, { screen: async () => { throw new Error("some sensitive raw text"); } });
+    for (let i = 0; i < 3; i++) await runStages(f.deps, MON);
+    const alert = f.posted.find((p) => p.channelId === "OPS" && p.msg.content?.includes("has failed"))!;
+    expect(alert.msg.content).not.toContain("some sensitive raw text");
+    expect(alert.msg.content).toContain("see last_error on the host");
+  });
+});
+
+describe("runStages: publishing", () => {
+  let db: Database;
+  beforeAll(async () => { db = await openDb(); });
+  beforeEach(async () => { await makeFixture(db); });
+
+  const draftOf = (f: ReturnType<typeof fakeDeps>) => f.posted.find((p) => p.channelId === "OPS" && p.msg.content?.includes("ready for review"))!;
+
+  it("uploads unlisted with the spec title, adds to the playlist and drafts once", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    expect(f.uploads).toEqual([{ id: expect.any(String), title: "The Bloodbag and Painkiller Show: Clan Wars S01E03 · The Curse" }]);
+    expect(f.playlist.has(f.uploads[0]!.id)).toBe(true);
+    expect(f.publicIds.size).toBe(0);
+    const d = draftOf(f);
+    expect(d.msg.content).toContain("show:2026-09-21");
+    expect(f.reactions.get(`${d.id}:✅`)).toEqual(["BOT"]);
+    await runStages(f.deps, MON); // a second run with no reactions only waits
+    expect(f.posted.filter((p) => p.msg.content?.includes("ready for review"))).toHaveLength(1);
+  });
+
+  it("an approver's ✅ publishes: public, forum thread with the link, transcript with mp3, Facebook, done", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    const d = draftOf(f);
+    f.reactions.set(`${d.id}:✅`, ["BOT", "ADMIN1"]);
+    const { outcome, row } = await runStages(f.deps, MON);
+    expect(outcome).toBe("done");
+    expect(row).toMatchObject({ stage: "done", approvedByDiscordId: "ADMIN1", forumThreadId: f.threads[0]!.id, facebookVideoId: f.fbVideos[0]!.id });
+    expect(row.youtubePublicAt).not.toBeNull();
+    expect(f.publicIds.has(row.youtubeVideoId!)).toBe(true);
+    expect(f.threads[0]).toMatchObject({ forumId: "FORUM", name: "Clan Wars S01E03 · The Curse", first: { content: `https://youtu.be/${row.youtubeVideoId}` } });
+    const inThread = f.posted.filter((p) => p.channelId === f.threads[0]!.id);
+    expect(inThread).toHaveLength(2);
+    expect(inThread[1]!.msg.files![0]!.name).toBe("episode.mp3");
+    expect(f.fbVideos[0]!.description).toContain(`https://youtu.be/${row.youtubeVideoId}`);
+  });
+
+  it("ignores ✅ from a non-approver and from the bot", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    f.reactions.set(`${draftOf(f).id}:✅`, ["BOT", "RANDOM"]);
+    expect((await runStages(f.deps, MON)).row.stage).toBe("awaiting_approval");
+  });
+
+  it("an approver's ❌ rejects, and beats a ✅; the video stays unlisted", async () => {
+    const f = fakeDeps(db);
+    await runStages(f.deps, MON);
+    const d = draftOf(f);
+    f.reactions.set(`${d.id}:✅`, ["ADMIN1"]);
+    f.reactions.set(`${d.id}:❌`, ["ADMIN1"]);
+    const { outcome, row } = await runStages(f.deps, MON);
+    expect(outcome).toBe("terminal");
+    expect(row).toMatchObject({ stage: "rejected", rejectedByDiscordId: "ADMIN1", youtubePublicAt: null });
+    expect(f.publicIds.size).toBe(0);
+  });
+
+  it("with approval off goes from upload straight to public and posted", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    const { row } = await runStages(f.deps, MON);
+    expect(row.stage).toBe("done");
+    expect(row.draftMessageId).toBeNull();
+    expect(f.posted.some((p) => p.msg.content?.includes("ready for review"))).toBe(false);
+  });
+
+  it("crash window: an upload with no row write is adopted, not repeated", async () => {
+    const f = fakeDeps(db);
+    f.uploads.push({ id: "ytORPHAN", title: "The Bloodbag and Painkiller Show: Clan Wars S01E03 · The Curse" });
+    const { row } = await runStages(f.deps, MON);
+    expect(row.youtubeVideoId).toBe("ytORPHAN");
+    expect(f.uploads).toHaveLength(1);
+  });
+
+  it("crash window: a draft with no row write is adopted by its marker", async () => {
+    const f = fakeDeps(db);
+    await f.deps.discord.post("OPS", { content: "**Clan Wars S01E03** is ready for review\n-# show:2026-09-21" });
+    const { row } = await runStages(f.deps, MON);
+    expect(row.draftMessageId).toBe("m1");
+    expect(f.posted.filter((p) => p.msg.content?.includes("ready for review"))).toHaveLength(1);
+  });
+
+  it("crash window: a forum thread and transcript already posted are not posted again", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    f.deps.facebook = null;
+    let crash = true;
+    const realAdvance = f.deps.discord.post;
+    f.deps.discord.post = async (c, m) => { const r = await realAdvance(c, m); if (crash && m.files?.[0]?.name === "episode.mp3") { crash = false; throw new Error("crashed after posting"); } return r; };
+    await runStages(f.deps, MON); // posts thread + transcript, then "crashes"
+    const { row } = await runStages(f.deps, MON);
+    expect(row.stage).toBe("done");
+    expect(f.threads).toHaveLength(1);
+    expect(f.posted.filter((p) => p.channelId === f.threads[0]!.id)).toHaveLength(2);
+  });
+
+  it("crash window: a Facebook video with no row write is adopted by its link", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    await runStages({ ...f.deps, facebook: null }, MON).catch(() => {});
+    await setFields(db, MON, { stage: "posted" as never });
+    const row0 = (await getEpisode(db, MON))!;
+    f.fbVideos.push({ id: "fbORPHAN", description: `watch https://youtu.be/${row0.youtubeVideoId}` });
+    const { row } = await runStages(f.deps, MON);
+    expect(row.facebookVideoId).toBe("fbORPHAN");
+  });
+
+  it("a Facebook failure is logged in the row and does not hold the episode", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    f.deps.facebook = { find: async () => null, upload: async () => { throw new Error("token expired"); } };
+    const { outcome, row } = await runStages(f.deps, MON);
+    expect(outcome).toBe("done");
+    expect(row).toMatchObject({ stage: "done", facebookVideoId: null, lastError: "facebook: token expired" });
+  });
+
+  it("waits for YouTube processing by failing the posted stage, then posts on a later run", async () => {
+    const f = fakeDeps(db);
+    f.deps.cfg = { ...f.deps.cfg, requireApproval: false };
+    let processed = false;
+    f.deps.youtube.waitProcessed = async () => processed;
+    const first = await runStages(f.deps, MON);
+    expect(first).toMatchObject({ outcome: "failed", row: { stage: "public", lastError: "YouTube has not finished processing the video yet" } });
+    processed = true;
+    expect((await runStages(f.deps, MON)).row.stage).toBe("done");
   });
 });

@@ -3,13 +3,16 @@ import type { ShowStage } from "@factions/domain";
 import type { Discord } from "../engine/publish/discord.js";
 import type { VoicedEpisode } from "../produce/voice.js";
 import type { ScriptResult } from "../script/write-script.js";
+import { buildFacebookCaption } from "../engine/publish/facebook/buildFacebookCaption.js";
+import { buildVideoMeta, videoTitle } from "../engine/publish/youtube/buildVideoMeta.js";
+import { collectNames } from "../produce/names.js";
 import { redactContext, type Redaction } from "../screening/redact.js";
 import type { Verdict } from "../screening/store.js";
 import { buildStoryContext } from "../story/context.js";
 import type { StoryContext } from "../story/types.js";
 import { episodeCode } from "../weeks.js";
-import { advance, createEpisode, getEpisode, recordFailure, TERMINAL_STAGES, type EpisodeRow } from "./store.js";
-import { alertMessage, heldMessage } from "./text.js";
+import { advance, createEpisode, getEpisode, recordFailure, setFields, TERMINAL_STAGES, type EpisodeRow } from "./store.js";
+import { alertMessage, draftMarker, draftMessage, forumThreadName, heldMessage, publicText, transcriptMessages } from "./text.js";
 
 export type YouTubeOps = {
   findUpload(title: string): Promise<string | null>;
@@ -54,7 +57,11 @@ export async function notifyOps(deps: StageDeps, msg: Parameters<Discord["post"]
 const context: Step = async (deps, row) => {
   const { context: raw, texts } = await buildStoryContext(deps.db, { weekStart: row.weekStart, staffTags: deps.staffTags, previous: "db" });
   // ⚠️ Fails closed: a screen that throws fails the stage; nothing unscreened is ever stored.
-  const verdicts = await deps.screen(texts.entries().map((e) => e.text));
+  const entries = texts.entries();
+  const verdicts = await deps.screen(entries.map((e) => e.text));
+  // ⚠️ Fails closed regardless of which screen is injected: a verdict missing for any
+  // registered text must never be treated as silently allowed.
+  for (const e of entries) if (!verdicts.has(e.text)) throw new Error(`screen returned no verdict for "${e.text}"`);
   const allowed = [...verdicts].filter(([, v]) => v.verdict === "allow" && v.source === "operator").map(([t]) => t);
   const { context: screened, report, blocked } = redactContext(raw, texts.entries(), verdicts);
   // The blocked list is persisted here: the script stage may run in a later process (plan 2 parked item).
@@ -88,8 +95,104 @@ const rendered: Step = async (deps, row) => {
   return advance(deps.db, row.weekStart, "rendered");
 };
 
-// Task 9 fills these in.
-const PUBLISH_STEPS: Partial<Record<ShowStage, Step>> = {};
+export const APPROVE = "✅";
+export const REJECT = "❌";
+const watchUrl = (id: string) => `https://youtu.be/${id}`;
+
+const uploaded: Step = async (deps, row) => {
+  const title = videoTitle(codeOf(row), publicText(row.title!));
+  // ⚠️ Post first, row second (spec §8.3); an upload a crash left unrecorded is found by its exact title.
+  let id = row.youtubeVideoId ?? (await deps.youtube.findUpload(title));
+  if (!id) {
+    const filePath = await deps.render({ voiced: await deps.voice(voiceIn(row)), context: ctxOf(row) });
+    const meta = buildVideoMeta({ code: codeOf(row), subtitle: publicText(row.title!), transcript: publicText(row.narrative!) });
+    id = await deps.youtube.upload({ filePath, title: meta.title, description: meta.description });
+  }
+  if (row.youtubeVideoId !== id) await setFields(deps.db, row.weekStart, { youtubeVideoId: id });
+  await deps.youtube.ensureInPlaylist(id);
+  return advance(deps.db, row.weekStart, "uploaded", { youtubeVideoId: id });
+};
+
+const awaitingApproval: Step = async (deps, row) => {
+  const ops = deps.cfg.opsChannelId;
+  if (!ops) throw new Error("approval is on but OPS_CHANNEL_ID is unset");
+  let id = row.draftMessageId;
+  if (!id) {
+    const me = await deps.discord.me();
+    const marker = draftMarker(row.weekStart);
+    id = (await deps.discord.recentMessages(ops, 50)).find((m) => m.authorId === me && m.content.includes(marker))?.id ?? null;
+  }
+  if (!id) {
+    const rep = reportOf(row);
+    const posted = await deps.discord.post(ops, draftMessage({
+      weekStart: row.weekStart, code: codeOf(row), subtitle: row.title!, youtubeVideoId: row.youtubeVideoId!,
+      narrative: row.narrative!, redactions: rep.redactions, scriptAttempts: rep.scriptAttempts ?? 1,
+    }));
+    id = posted.id;
+    await setFields(deps.db, row.weekStart, { draftMessageId: id });
+    // Convenience only: the approver clicks rather than hunts for the emoji. Not counted (the bot is no approver).
+    try { await deps.discord.react(ops, id, APPROVE); await deps.discord.react(ops, id, REJECT); } catch (e) { deps.log(`draft reactions: ${(e as Error).message}`); }
+  }
+  return advance(deps.db, row.weekStart, "awaiting_approval", { draftMessageId: id });
+};
+
+const approved: Step = async (deps, row) => {
+  if (!deps.cfg.requireApproval) return advance(deps.db, row.weekStart, "approved");
+  const ops = deps.cfg.opsChannelId!;
+  const approvers = new Set(deps.cfg.approverIds);
+  const by = async (emoji: string) => (await deps.discord.reactionUserIds(ops, row.draftMessageId!, emoji)).find((u) => approvers.has(u)) ?? null;
+  // ⚠️ ❌ is read first and wins: when two approvers disagree, nothing goes public.
+  const rejecter = await by(REJECT);
+  if (rejecter) return advance(deps.db, row.weekStart, "rejected", { rejectedByDiscordId: rejecter, rejectedAt: deps.now() });
+  const approver = await by(APPROVE);
+  if (approver) return advance(deps.db, row.weekStart, "approved", { approvedByDiscordId: approver, approvedAt: deps.now() });
+  return "wait";
+};
+
+const makePublic: Step = async (deps, row) => {
+  await deps.youtube.setPublic(row.youtubeVideoId!);
+  return advance(deps.db, row.weekStart, "public", { youtubePublicAt: deps.now() });
+};
+
+const posted: Step = async (deps, row) => {
+  const vid = row.youtubeVideoId!;
+  // Spec §9.1: a thread posted before processing embeds a "processing" card forever.
+  if (!(await deps.youtube.waitProcessed(vid))) throw new Error("YouTube has not finished processing the video yet");
+  const name = forumThreadName(codeOf(row), row.title!);
+  let thread = row.forumThreadId ?? (await deps.discord.findForumThread(deps.cfg.guildId, deps.cfg.forumChannelId, name));
+  if (!thread) thread = (await deps.discord.createForumThread(deps.cfg.forumChannelId, name, { content: watchUrl(vid) })).threadId;
+  if (row.forumThreadId !== thread) await setFields(deps.db, row.weekStart, { forumThreadId: thread });
+  const me = await deps.discord.me();
+  const mine = (await deps.discord.recentMessages(thread, 20)).filter((m) => m.authorId === me);
+  // The first message is the link; anything after it means the transcript already went out.
+  if (mine.length < 2) {
+    const v = await deps.voice(voiceIn(row));
+    for (const msg of transcriptMessages({ narrative: row.narrative!, names: collectNames(ctxOf(row)).names, mp3: deps.readFile(v.mp3Path) })) {
+      await deps.discord.post(thread, msg);
+    }
+  }
+  return advance(deps.db, row.weekStart, "posted", { forumThreadId: thread, discordPostedAt: deps.now() });
+};
+
+const done: Step = async (deps, row) => {
+  if (!deps.facebook) return advance(deps.db, row.weekStart, "done");
+  const link = watchUrl(row.youtubeVideoId!);
+  try {
+    let id = row.facebookVideoId ?? (await deps.facebook.find(link));
+    if (!id) {
+      const filePath = await deps.render({ voiced: await deps.voice(voiceIn(row)), context: ctxOf(row) });
+      id = await deps.facebook.upload({ filePath, description: buildFacebookCaption({ code: codeOf(row), subtitle: publicText(row.title!), youtubeVideoId: row.youtubeVideoId!, discordInvite: deps.cfg.discordInvite }) });
+    }
+    return advance(deps.db, row.weekStart, "done", { facebookVideoId: id, facebookPostedAt: deps.now() });
+  } catch (e) {
+    // Spec §8.3: best-effort, as in the KOTH show. Logged in the row, never holds the episode.
+    return advance(deps.db, row.weekStart, "done", { lastError: `facebook: ${(e as Error).message}` });
+  }
+};
+
+const PUBLISH_STEPS: Partial<Record<ShowStage, Step>> = {
+  uploaded, awaiting_approval: awaitingApproval, approved, public: makePublic, posted, done,
+};
 
 const STEPS: Partial<Record<ShowStage, Step>> = { context, scripted, voiced, rendered };
 
@@ -117,8 +220,6 @@ export async function runStages(deps: StageDeps, weekStart: Date): Promise<{ out
     if (TERMINAL_STAGES.includes(row.stage)) return { outcome: "terminal", row };
     const next = nextStage(row, deps.cfg)!;
     try {
-      // ⚠️ Task 9 fills in PUBLISH_STEPS; until then this throws at "uploaded" and is
-      // recorded as an ordinary stage failure, same as any other step's error.
       const step = STEPS[next] ?? PUBLISH_STEPS[next];
       if (!step) throw new Error(`no step for stage ${next}`);
       const r = await step(deps, row);
@@ -126,12 +227,16 @@ export async function runStages(deps: StageDeps, weekStart: Date): Promise<{ out
       deps.log(`${codeOf(row)}: ${row.stage} -> ${r.stage}`);
       row = r;
     } catch (e) {
-      const msg = (e as Error).message ?? String(e);
+      const msg = e instanceof Error ? e.message : String(e);
       const attempts = await recordFailure(deps.db, weekStart, msg);
       deps.log(`${codeOf(row)}: stage "${next}" failed (attempt ${attempts}): ${msg}`);
       // ⚠️ Exactly at 3, so the alert is not repeated by every later timer run (spec §8.3).
       if (attempts === ALERT_AT_ATTEMPTS) {
-        await notifyOps(deps, alertMessage({ code: codeOf(row), stage: next, attempts, error: msg, blocked: reportOf(row).blocked }));
+        // ⚠️ At the "context" stage there is no blocked list yet to scrub the raw error
+        // against (it is produced BY this stage), so a screen/context failure must never
+        // put its error text in the ops channel: a fixed placeholder stands in for it.
+        const errForOps = next === "context" ? "see last_error on the host" : msg;
+        await notifyOps(deps, alertMessage({ code: codeOf(row), stage: next, attempts, error: errForOps, blocked: reportOf(row).blocked }));
       }
       return { outcome: "failed", row: (await getEpisode(deps.db, weekStart))! };
     }
