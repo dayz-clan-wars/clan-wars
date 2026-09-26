@@ -38,16 +38,16 @@ describe("writeScript", () => {
   it("returns the first script that parses and passes", async () => {
     const generate = vi.fn(async (_system: string, _user: string) => reply());
     const r = await writeScript(context, [], { generate, moderate: allow });
-    expect(r).toMatchObject({ ok: true, title: "The Curse", attempts: 1 });
+    expect(r).toMatchObject({ ok: true, title: "The Curse", attempts: 1, reasons: [] });
     const [system, user] = generate.mock.calls[0]!;
     expect(system).toMatch(/Bloodbag/u);
     expect(user).toContain('"episode":3');
   });
 
-  it("regenerates once after a script that fails the screen", async () => {
+  it("⚠️ a success on attempt 2 still reports why attempt 1 failed", async () => {
     const generate = vi.fn().mockResolvedValueOnce(reply("\nBoris: EvilTag again.")).mockResolvedValueOnce(reply());
     const r = await writeScript(context, ["EvilTag"], { generate, moderate: allow });
-    expect(r).toMatchObject({ ok: true, attempts: 2 });
+    expect(r).toEqual({ ok: true, narrative: expect.any(String), title: "The Curse", storylines: expect.any(Array), attempts: 2, reasons: ['attempt 1: blocked text: "EvilTag"'] });
   });
 
   it("passes an operator-allowed name the blocklist would hit, and fails it without the allow", async () => {

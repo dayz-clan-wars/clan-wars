@@ -25,7 +25,7 @@ export async function buildStoryContext(db: Database, opts: {
   const texts = new PlayerTexts();
   const week = { serverId: season.serverId, from, to, texts };
 
-  const clans = await clansForWeek(db, { serverId: season.serverId, seasonId: season.id, weekStart: opts.weekStart, staffTags: opts.staffTags, texts });
+  const clans = await clansForWeek(db, { serverId: season.serverId, seasonId: season.id, weekStart: opts.weekStart, weekEnd: to, staffTags: opts.staffTags, texts });
   const [raids, players, friendlyFire, clanBeefs, flagEvents, bounties, koth, airdrops, lastEpisode] = await Promise.all([
     raidsForWeek(db, { serverId: season.serverId, weekStart: opts.weekStart, texts }),
     peopleForWeek(db, week),

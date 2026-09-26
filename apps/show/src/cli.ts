@@ -64,6 +64,7 @@ try {
     section("HELD", result.reasons.join("\n"));
     process.exitCode = 1;
   } else {
+    if (result.reasons.length > 0) section("EARLIER ATTEMPTS", result.reasons.join("\n"));
     section(`SCRIPT: ${result.title} (${result.narrative.length} characters, attempt ${result.attempts})`, result.narrative);
     section("STORYLINES", JSON.stringify(result.storylines, null, 2));
   }

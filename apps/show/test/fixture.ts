@@ -51,13 +51,34 @@ export async function makeFixture(db: Database) {
     player: async (dayzId: string, gamertag: string) => {
       await db.insert(players).values({ dayzId, gamertag, firstSeenAt: at(-30), lastSeenAt: at(0) }).onConflictDoNothing();
     },
-    clan: async (a: { tag: string; name?: string; status?: string; pitch?: string | null }) => {
+    /**
+     * ⚠️ Also writes the `faction_events` row a real transition would have produced,
+     * because `clansForWeek` now derives its as-of-week-end status purely from that
+     * table (never from `factions.status`, which only reflects today). Pass `eventAt`
+     * to move that event's `occurred_at` — e.g. to simulate a clan whose activation (or
+     * dormancy, etc.) happened after the week under test ended.
+     */
+    clan: async (a: { tag: string; name?: string; status?: string; pitch?: string | null; eventAt?: Date }) => {
       const [row] = await db.insert(factions).values({
         serverId, name: a.name ?? a.tag, tag: a.tag, texture: TEXTURES[nextTexture++]!, status: a.status ?? "active",
         leaderDiscordId: `lead-${a.tag}`, createdAt: at(-20), activatedAt: at(-20), pitch: a.pitch ?? null,
         dormantSince: a.status === "dormant" ? at(-1) : null,
       }).returning();
-      return row!.id;
+      const id = row!.id;
+      const STATUS_EVENT: Record<string, { kind: string; at: Date }> = {
+        active: { kind: "activated", at: at(-20) },
+        dormant: { kind: "dormant", at: at(-1) },
+        lapsed: { kind: "lapsed", at: at(-1) },
+        disbanded: { kind: "disbanded", at: at(-1) },
+        reserved: { kind: "founded", at: at(-20) },
+      };
+      const ev = STATUS_EVENT[a.status ?? "active"];
+      if (ev) {
+        await db.insert(factionEvents).values({
+          serverId, factionId: id, kind: ev.kind as never, occurredAt: a.eventAt ?? ev.at, payload: {},
+        });
+      }
+      return id;
     },
     /** A membership span; an open span (no `leftAt`) is also a full `faction_members` row. */
     member: async (factionId: number, dayzId: string, joinedAt = at(-20), leftAt: Date | null = null) => {
