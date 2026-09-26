@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { Resvg } from "@resvg/resvg-js";
 import { ASSETS } from "../../src/assets.js";
+import { buildCardSvg } from "../../src/engine/animation/screenWall.js";
 import { buildCards, buildMarqueeItems, buildOutroBoard } from "../../src/cards/cards.js";
 import type { ClanWeek, StoryContext } from "../../src/story/types.js";
 
@@ -240,5 +241,26 @@ describe("drawn glyphs", () => {
 
   it("the outro row separator (drawn in Patrick Hand) has a glyph", () => {
     expect(missingGlyphs("· pts raids", "gamertag")).toEqual([]);
+  });
+});
+
+// Pins today's behaviour for empty cards (final review finding 10): an empty stat card draws its
+// header, its title and the placeholder row "no data yet"; the standings card never goes empty,
+// it draws "NO RAIDS".
+describe("empty cards", () => {
+  const fonts = { displayFamily: "Animals are like people", gamertagFamily: "Patrick Hand" };
+  const texts = (svg: string) => [...svg.matchAll(/<(?:text|tspan)[^>]*>([^<]*)(?=<)/g)].map((m) => m[1]).filter((t) => t);
+
+  it("an empty MOST KILLS card draws the header, the title and the placeholder line", () => {
+    const [, mostKills] = buildCards(ctx());
+    expect(mostKills!.rows).toEqual([]);
+    const svg = buildCardSvg({ ...mostKills!, ...fonts });
+    expect(texts(svg)).toEqual(["CLAN WARS | S01E03", "MOST KILLS", "no data yet"]);
+  });
+
+  it("the WEEK STANDINGS card with no raids draws NO RAIDS", () => {
+    const [standings] = buildCards(ctx());
+    const svg = buildCardSvg({ ...standings!, ...fonts });
+    expect(texts(svg)).toEqual(["CLAN WARS | S01E03", "WEEK STANDINGS", "NO RAIDS"]);
   });
 });
