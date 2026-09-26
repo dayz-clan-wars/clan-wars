@@ -33,7 +33,10 @@ describe("the show prompt", () => {
     // Week 1 read "Tuesday twenty-three forty-six" and "seven hundred and twenty-five minutes" aloud.
     expect(DATA_DICTIONARY).toMatch(/longer ones rounded to hours/u);
     expect(DATA_DICTIONARY).toMatch(/raidsByPlayer/u);
-    expect(RULES).toMatch(/Never say the players or this week's events are in Chernarus/u);
+    expect(RULES).toMatch(/Boris's old war stories included, is in Livonia/u);
+    expect(RULES).toMatch(/Never name Chernarus or a Chernarus place \(Elektrozavodsk/u);
+    expect(HOSTS).toMatch(/ex-Livonian military/u);
+    expect(HOSTS).not.toMatch(/Chernarus/u);
     expect(RULES).toMatch(/Raiders are the heroes/u);
     expect(RULES).toMatch(/NOT a siege/u);
     expect(RULES).toMatch(/Go extra hard on them/u);

@@ -12,6 +12,7 @@ import { screenTexts } from "./screening/screen.js";
 import { redactContext } from "./screening/redact.js";
 import { buildShowPrompt } from "./prompt/build.js";
 import { writeScript } from "./script/write-script.js";
+import { factCheck } from "./script/fact-check.js";
 import { PgPronunciationStore, ReadThroughPronunciationStore } from "./stores/pronunciations.js";
 import { MemoryPronunciationStore } from "./engine/audio/pronunciationStore.js";
 import type { Run } from "./engine/run.js";
@@ -70,6 +71,8 @@ export async function runDryRun(opts: { week?: string; printPrompt: boolean; ren
 
     const result = await writeScript(screened, blocked, {
       generate: (system, user) => chat({ model: cfg.scriptModel, temperature: 0.9, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+      // Temperature 0: the check should give the same answer every time it reads the same script.
+      factCheck: (narrative, data) => factCheck(narrative, data, (system, user) => chat({ model: cfg.scriptModel, temperature: 0, messages: [{ role: "system", content: system }, { role: "user", content: user }] })),
       moderate,
       allowed,
     });

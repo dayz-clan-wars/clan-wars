@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Every weekly show script is now fact-checked against the week's data before it is voiced, so who killed whom, the numbers and the "longest" and "most" claims match what happened. The hosts also stick to Livonia place names.
+
 ## [1.45.0] - 2026-09-26
 
 ### Fixed

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from "vitest";
-import { writeScript, screenScript } from "../../src/script/write-script.js";
+import { writeScript, screenScript, MAX_FACT_FIXES } from "../../src/script/write-script.js";
+import { FactCheckError } from "../../src/script/fact-check.js";
 import type { Moderate } from "../../src/screening/moderate.js";
 import type { StoryContext } from "../../src/story/types.js";
 
@@ -134,3 +135,51 @@ describe("writeScript", () => {
     expect(r).toEqual({ ok: false, attempts: 2, reasons: ['attempt 1: blocked text: "EvilTag"', 'attempt 2: blocked text: "EvilTag"'] });
   });
 });
+
+describe("writeScript fact check", () => {
+  const wrong = [{ line: "Boris: Line 0.", problem: "The Admins killed SNA 17 times, not the other way round" }];
+
+  it("sends wrong claims back to the writer and keeps the fixed script once it checks out", async () => {
+    const generate = vi.fn().mockResolvedValueOnce(reply()).mockResolvedValueOnce(reply("\nPavel: Fixed."));
+    const factCheck = vi.fn().mockResolvedValueOnce(wrong).mockResolvedValueOnce([]);
+    const r = await writeScript(context, [], { generate, moderate: allow, factCheck });
+    expect(r).toMatchObject({ ok: true, attempts: 1, reasons: [expect.stringMatching(/^attempt 1: fact check: 1 wrong: "Boris: Line 0\." \(The Admins killed SNA 17 times/u)] });
+    expect(r.ok && r.narrative).toContain("Pavel: Fixed.");
+    // The fix call carries the data, every mistake and the script it is fixing.
+    const fixUser = generate.mock.calls[1]![1] as string;
+    expect(fixUser).toContain('"episode":3');
+    expect(fixUser).toContain('- "Boris: Line 0.": The Admins killed SNA 17 times');
+    expect(fixUser).toContain("===STORYLINES===");
+    // The checker reads the script against the same data message the writer got.
+    expect(factCheck.mock.calls[0]![1]).toBe(generate.mock.calls[0]![1]);
+  });
+
+  it("fails the attempt when claims are still wrong after every fix, then tries a fresh script", async () => {
+    const generate = vi.fn(async () => reply());
+    const factCheck = vi.fn().mockResolvedValue(wrong);
+    const r = await writeScript(context, [], { generate, moderate: allow, factCheck });
+    expect(r.ok).toBe(false);
+    // Per attempt: one draft plus MAX_FACT_FIXES fixes, each checked.
+    expect(generate).toHaveBeenCalledTimes(2 * (1 + MAX_FACT_FIXES));
+    expect(factCheck).toHaveBeenCalledTimes(2 * (1 + MAX_FACT_FIXES));
+    expect(r.reasons.map((x) => x.split(": fact check")[0])).toEqual([
+      "attempt 1", "attempt 1 (fact fix 1)", "attempt 1 (fact fix 2)", "attempt 2", "attempt 2 (fact fix 1)", "attempt 2 (fact fix 2)",
+    ]);
+  });
+
+  it("screens a fixed script again, like a first draft", async () => {
+    const generate = vi.fn().mockResolvedValueOnce(reply()).mockResolvedValueOnce(reply("\nBoris: EvilTag again.")).mockResolvedValue(reply());
+    const factCheck = vi.fn().mockResolvedValueOnce(wrong).mockResolvedValue([]);
+    const r = await writeScript(context, ["EvilTag"], { generate, moderate: allow, factCheck });
+    expect(r).toMatchObject({ ok: true, attempts: 2, reasons: [expect.stringMatching(/^attempt 1: fact check: 1 wrong/u), 'attempt 1 (fact fix 1): blocked text: "EvilTag"'] });
+  });
+
+  it("an unreadable fact-check reply fails the attempt; any other error propagates", async () => {
+    const unreadable = vi.fn().mockRejectedValueOnce(new FactCheckError("fact check reply was not JSON")).mockResolvedValue([]);
+    const r = await writeScript(context, [], { generate: async () => reply(), moderate: allow, factCheck: unreadable });
+    expect(r).toMatchObject({ ok: true, attempts: 2, reasons: ["attempt 1: fact check: fact check reply was not JSON"] });
+    const down = vi.fn().mockRejectedValue(new Error("openrouter 503: down"));
+    await expect(writeScript(context, [], { generate: async () => reply(), moderate: allow, factCheck: down })).rejects.toThrow("openrouter 503");
+  });
+});
+

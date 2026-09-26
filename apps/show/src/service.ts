@@ -12,6 +12,7 @@ import { createModerator } from "./screening/moderate.js";
 import { screenTexts } from "./screening/screen.js";
 import { PgScreeningStore } from "./screening/store.js";
 import { writeScript } from "./script/write-script.js";
+import { factCheck } from "./script/fact-check.js";
 import { forceWeek } from "./stages/store.js";
 import { pickWeek } from "./stages/pick.js";
 import { runStages, type StageDeps } from "./stages/run.js";
@@ -45,6 +46,8 @@ export function realDeps(db: Database, cfg: On): StageDeps {
     screen: (texts) => screenTexts(texts, { store: screeningStore, moderate }),
     writeScript: (ctx, blocked, allowed) => writeScript(ctx, blocked, {
       generate: (system, user) => chat({ model: cfg.base.scriptModel, temperature: 0.9, messages: [{ role: "system", content: system }, { role: "user", content: user }] }),
+      // Temperature 0: the check should give the same answer every time it reads the same script.
+      factCheck: (narrative, data) => factCheck(narrative, data, (system, user) => chat({ model: cfg.base.scriptModel, temperature: 0, messages: [{ role: "system", content: system }, { role: "user", content: user }] })),
       moderate, allowed,
     }),
     voice: (ep) => voiceEpisode({

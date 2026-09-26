@@ -33,6 +33,10 @@ describe("stage text", () => {
       ["attempt 1 (trimmed): moderation: says slurword", "attempt 1 (trimmed): moderation flagged it"],
       ["attempt 1 (trimmed): not a dialogue line: Boris says slurword", "attempt 1 (trimmed): not a dialogue line"],
       ["attempt 1: too long: BadName88 said 7000 characters", "attempt 1: too long: [blocked text] said 7000 characters"],
+      // The checker quotes unscreened script lines; only the count reaches ops.
+      ['attempt 1: fact check: 2 wrong: "Boris: slurword" (x); "Pavel: y" (z)', "attempt 1: fact check: 2 claims did not match the data"],
+      ['attempt 2 (fact fix 2): fact check: 1 wrong: "Boris: slurword" (x)', "attempt 2 (fact fix 2): fact check: 1 claim did not match the data"],
+      ["attempt 1 (fact fix 1): not a dialogue line: slurword", "attempt 1 (fact fix 1): not a dialogue line"],
     ])("%s", (raw, safe) => {
       expect(opsSafe(raw, blocked)).toBe(safe);
     });

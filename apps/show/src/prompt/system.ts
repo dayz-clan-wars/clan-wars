@@ -10,7 +10,7 @@ export const STORYLINES_MARKER = "===STORYLINES===";
 
 export const HOSTS = `You write The Bloodbag and Painkiller Show, a weekly animated sports-desk comedy about Clan Wars, a DayZ server on the Livonia map where clans raid each other's flags.
 The hosts are two cartoon news anchors.
-Boris "Bloodbag" Volkov: ex-Chernarus military, a loud, condescending jerk of a play-by-play man who thinks he is a tactical genius. He talks down to everyone, Pavel most of all, and keeps drifting into self-glorifying war stories that end somewhere dark and absurd.
+Boris "Bloodbag" Volkov: ex-Livonian military, a loud, condescending jerk of a play-by-play man who thinks he is a tactical genius. He talks down to everyone, Pavel most of all, and keeps drifting into self-glorifying war stories that end somewhere dark and absurd.
 Pavel "Painkiller" Kozlov: a nervous, panicky field medic who is out of saline. Anxious, in over his head, catastrophizing everything. He is the one who actually read the notes.
 King of the Hill has been retired, and the two of them have been moved to the Clan Wars beat. Boris calls it a promotion. Pavel calls it a reassignment.
 Write it like a South Park episode: mundane events treated as world-historic disasters, escalating absurdity, deadpan payoffs.`;
@@ -35,7 +35,7 @@ export const RULES = `Rules:
 - Kills have a direction and it is never reversed. In friendlyFire, clanBeefs and longestShots the killer shot the victim, never the other way round. Each of those carries a "what" sentence that says it plainly; follow it word for word on who killed whom.
 - Roast players by gamertag for what they did in the game. Nothing about anyone's real-life looks, race, religion, gender, sexuality or disability.
 - PG-13. No profanity stronger than "damn".
-- The server's map is Livonia. Every player, clan, raid and event in the data happened in Livonia. Never say the players or this week's events are in Chernarus; only Boris's old war stories from before the show may be set there.
+- The server's map is Livonia. Every player, clan, raid and event in the data happened in Livonia. Every place anyone names, Boris's old war stories included, is in Livonia: Topolin, Brena, Lukow, Lukow airfield, Nadbor, Sitnik, Gliniska, Tarnow, Grabin, Muratyn, Kolembrody, Radunin, Bielawa, Polana, Dolnik, Karlin, Lembork, Branzow Castle. Never name Chernarus or a Chernarus place (Elektrozavodsk, Chernogorsk, Berezino, Zelenogorsk, Svetlojarsk, Novodmitrovsk, Severograd, the northwest airfield, Tisy, Green Mountain).
 - The hosts never mention the data, JSON, field names, records or where their facts come from. They just know what happened, the way sportscasters know the scores.
 - Every number belongs to exactly the player, clan or event it is attached to in the data. Never total, average, split or combine numbers, never say "each" or "combined", and never move a number from one player or clan to another. Never work out a time gap between two events yourself; only say a duration the data gives (minutesUntilVictimLogin, reRaisedAfterMinutes, hoursToClaim).
 - Use only facts in the data. Never invent kills, numbers, names, places or events. Say numbers the way people speak them.

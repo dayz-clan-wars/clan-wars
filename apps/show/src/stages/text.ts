@@ -31,7 +31,7 @@ export const forumThreadName = (code: string, subtitle: string) => `Clan Wars ${
  * Reasons are reduced to their category; anything else has each blocked string masked.
  */
 export function opsSafe(reason: string, blocked: string[]): string {
-  const m = /^(attempt \d+(?: \(trimmed(?: \d+)?\))?): (.*)$/su.exec(reason);
+  const m = /^(attempt \d+(?: \((?:trimmed|fact fix)(?: \d+)?\))?): (.*)$/su.exec(reason);
   const [prefix, body] = m ? [`${m[1]}: `, m[2]!] : ["", reason];
   if (body.startsWith("blocklist:")) return `${prefix}blocklist hit`;
   if (body.startsWith("blocked text:")) return `${prefix}a blocked name came back`;
@@ -42,6 +42,9 @@ export function opsSafe(reason: string, blocked: string[]): string {
   if (or) return `${prefix}openrouter ${or[1]}`;
   // ⚠️ Unparsed script content quoted after "not a dialogue line:" is never screened; drop the excerpt
   if (body.startsWith("not a dialogue line:")) return `${prefix}not a dialogue line`;
+  // The checker quotes script lines and its own wording, neither screened: only the count goes out.
+  const fc = /^fact check: (\d+) wrong: /u.exec(body);
+  if (fc) return `${prefix}fact check: ${fc[1]} ${fc[1] === "1" ? "claim" : "claims"} did not match the data`;
   const masked = [...blocked].sort((a, b) => b.length - a.length)
     .reduce((acc, b) => acc.replace(new RegExp(escapeRe(b), "giu"), "[blocked text]"), body);
   return prefix + masked;
