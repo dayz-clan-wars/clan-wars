@@ -62,7 +62,7 @@ export type Storyline = { title: string; players: string[]; clans: string[]; sta
 export type PreviousEpisode = { title: string; storylines: Storyline[] };
 
 export type StoryContext = {
-  week: { start: string; end: string; season: number; episode: number };
+  week: { start: string; end: string; season: number; episode: number; alpha: ClanRef | null };
   clans: ClanWeek[];
   raids: RaidStory[];
   flagEvents: FlagEvent[];

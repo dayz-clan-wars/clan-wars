@@ -28,6 +28,17 @@ describe("clansForWeek", () => {
     expect(clans.find((c) => c.tag === "SNA")).toMatchObject({ weekPoints: 0, timesRaidedThisWeek: 1 });
   });
 
+  it("season totals count raids from this week and earlier weeks of the season, never a later week", async () => {
+    const sna = await fx.clan({ tag: "SNA" });
+    const z2 = await fx.clan({ tag: "Z2" });
+    await fx.player("p-cha", "chaandlr");
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(-3), points: 50, weekStart: PREV_MON }); // earlier week: counts
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(1), points: 100 }); // this week: counts
+    await fx.raid({ victim: sna, raider: "p-cha", raiderClan: z2, at: at(8), points: 999, weekStart: at(7) }); // later week: does not count
+    const clans = await read();
+    expect(clans.find((c) => c.tag === "Z2")).toMatchObject({ seasonPoints: 150, seasonRaids: 2 });
+  });
+
   it("marks staff by the configured tag, never by the clan name", async () => {
     await fx.clan({ tag: "ADM", name: "The Admins" });
     await fx.clan({ tag: "FAKE", name: "ADM" });

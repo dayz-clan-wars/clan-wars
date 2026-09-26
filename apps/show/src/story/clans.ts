@@ -76,9 +76,9 @@ export async function clansForWeek(db: Database, a: {
       (select coalesce(sum(r.points), 0)::int from raids r where r.raider_faction_id = f.id and r.week_start = ${w}) as week_points,
       (select count(*)::int from raids r where r.raider_faction_id = f.id and r.week_start = ${w}) as week_raids,
       (select count(*)::int from raids r where r.victim_faction_id = f.id and r.week_start = ${w}) as times_raided,
-      coalesce(ss.points, 0)::int as season_points, coalesce(ss.raids, 0)::int as season_raids
+      (select coalesce(sum(r.points), 0)::int from raids r where r.raider_faction_id = f.id and r.season_id = ${a.seasonId} and r.week_start <= ${w}) as season_points,
+      (select count(*)::int from raids r where r.raider_faction_id = f.id and r.season_id = ${a.seasonId} and r.week_start <= ${w}) as season_raids
     from factions f
-    left join season_standings ss on ss.faction_id = f.id and ss.season_id = ${a.seasonId}
     where f.server_id = ${a.serverId}
     order by week_points desc, season_points desc, f.tag asc`);
   const staff = new Set(a.staffTags);

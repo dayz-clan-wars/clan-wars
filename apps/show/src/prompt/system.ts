@@ -37,7 +37,7 @@ export const RULES = `Rules:
 - Never use an em dash. Use commas, periods or "..." instead.`;
 
 export const DATA_DICTIONARY = `What the data means:
-- week: the Monday-to-Monday UTC week this episode covers, with its season and episode numbers.
+- week: the Monday-to-Monday UTC week this episode covers, with its season and episode numbers. alpha is the clan ranked #1 for the week, or null if none was crowned yet.
 - clans: every clan. weekPoints and weekRaids are raid points and raids scored this week. timesRaidedThisWeek is how often they were raided. seasonPoints and seasonRaids are season totals. status "dormant" means the clan has lapsed until it raises its flag again. flagDown true means its flag is down right now. members counts full members. isStaff marks the server's admins. pitch is the clan's recruiting pitch in its own words.
 - raids: each raid this week. kind "offline": nobody from the raided clan was online when the flag came down. kind "online": victimsOnline of them were on the server. minutesUntilVictimLogin: how long until anyone from the raided clan logged in afterwards. reRaisedAfterMinutes: how long until they raised their flag again; null means they never did. points are the raiders' reward; raiding the top clan pays more.
 - flagEvents: clans founded, activated, going dormant, revived or disbanded this week.

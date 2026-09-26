@@ -10,7 +10,7 @@ describe("buildStoryContext", () => {
 
   it("builds an empty week: empty lists, S1 E3, no previous", async () => {
     const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: ["ADM"], previous: "db" });
-    expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3 });
+    expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3, alpha: null });
     expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
     expect(context.players).toEqual({ topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] });
     expect(texts.entries()).toEqual([]);
@@ -51,6 +51,18 @@ describe("buildStoryContext", () => {
     expect(context.previous!.storylines[0]!.players).toEqual(["L".repeat(32)]);
     expect(context.previous!.storylines[0]!.clans).toEqual(["C".repeat(12)]);
     expect(texts.entries().map((e) => e.text).sort()).toEqual(["C".repeat(12), "L".repeat(32)]);
+  });
+
+  it("week.alpha is the rank-1 alpha_weeks clan for that season and week, or null when no row", async () => {
+    const { context: empty } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
+    expect(empty.week.alpha).toBeNull();
+
+    const z2 = await fx.clan({ tag: "Z2", name: "Zone 2" });
+    await fx.clan({ tag: "SNA" });
+    await fx.alpha({ weekStart: MON, rank: 1, factionId: z2, points: 500 });
+    const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
+    expect(context.week.alpha).toEqual({ name: "Zone 2", tag: "Z2" });
+    expect(texts.entries().map((e) => e.text)).toContain("Zone 2");
   });
 
   it("previous: null skips the lookup (a database without show_episodes yet)", async () => {

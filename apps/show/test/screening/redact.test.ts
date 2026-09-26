@@ -11,7 +11,7 @@ function world() {
   const bad = t.clan("Bad Name", "BN");
   const worse = t.clan("Worse", "WRS");
   const context: StoryContext = {
-    week: { start: "a", end: "b", season: 1, episode: 3 },
+    week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
     clans: [
       { ...bad, status: "active", isStaff: false, pitch: t.pitch("join us"), members: 1, weekPoints: 0, weekRaids: 0, timesRaidedThisWeek: 0, seasonPoints: 0, seasonRaids: 0, flagDown: false },
       { ...worse, status: "active", isStaff: false, pitch: null, members: 1, weekPoints: 0, weekRaids: 0, timesRaidedThisWeek: 0, seasonPoints: 0, seasonRaids: 0, flagDown: false },
