@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.45.0] - 2026-09-26
+
 ### Fixed
 
 - Weekly show videos can be played inside Discord and on other sites again, and the show gets each clan's friendly-fire total right.
