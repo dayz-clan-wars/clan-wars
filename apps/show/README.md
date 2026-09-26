@@ -42,9 +42,11 @@ Set the ElevenLabs keys below, then:
     set -a && . ./.env && set +a
     pnpm run show --week 2026-09-21 --render ./out
 
-The default `SHOW_CACHE_DIR` (`/var/lib/clan-wars-show`) is a production path that
-will not exist on a Mac; set `SHOW_CACHE_DIR` to something local (e.g. `./cache`)
-first. The CLI creates both the cache directory and `<dir>` if they do not exist.
+Unless `SHOW_CACHE_DIR` is set, `--render` caches under `<dir>/.cache`, so a local
+render never needs the production path and never shares (or prunes) the scheduled
+pipeline's cache. Before any LLM call it creates the cache directory and checks that
+`ffmpeg -version` and `rhubarb --version` run, and stops with a message naming the
+missing binary if either does not. The CLI creates `<dir>` if it does not exist.
 
 ## Environment
 
@@ -67,6 +69,6 @@ first. The CLI creates both the cache directory and `<dir>` if they do not exist
 | `SHOW_PRONUNCIATION_MODEL` | | default `anthropic/claude-sonnet-4.6` |
 | `RHUBARB_PATH` | | default `rhubarb` (must be on PATH) |
 | `FFMPEG_PATH` | | default `ffmpeg` (must be on PATH) |
-| `SHOW_CACHE_DIR` | | default `/var/lib/clan-wars-show`; set this locally, see above |
+| `SHOW_CACHE_DIR` | | `--render` default `<dir>/.cache`; the service default is `/var/lib/clan-wars-show` |
 | `SHOW_DISCORD_INVITE` | | default `discord.gg/TJu4XP25nr` |
 | `PRONUNCIATIONS_PATH` | | optional JSON file of `{"<name>": "<spoken>"}` overrides |

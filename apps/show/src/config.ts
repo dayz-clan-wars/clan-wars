@@ -26,7 +26,10 @@ export type RenderConfig = {
   pronunciationModel: string;
   rhubarbPath: string;
   ffmpegPath: string;
+  /** Default `/var/lib/clan-wars-show`, the plan-3 service's path. */
   cacheDir: string;
+  /** True when SHOW_CACHE_DIR was set, so `--render` can use its own cache when it was not. */
+  cacheDirSet: boolean;
   discordInvite: string;
   /** `{ "<name>": "<spoken>" }`. Missing key -> `{}`. */
   pronunciationOverrides: Record<string, string>;
@@ -69,6 +72,7 @@ export function loadRenderConfig(env: NodeJS.ProcessEnv = process.env): RenderCo
     rhubarbPath: env.RHUBARB_PATH?.trim() || "rhubarb",
     ffmpegPath: env.FFMPEG_PATH?.trim() || "ffmpeg",
     cacheDir: env.SHOW_CACHE_DIR?.trim() || "/var/lib/clan-wars-show",
+    cacheDirSet: Boolean(env.SHOW_CACHE_DIR?.trim()),
     discordInvite: env.SHOW_DISCORD_INVITE?.trim() || "discord.gg/TJu4XP25nr",
     pronunciationOverrides: loadPronunciationOverrides(env),
   };

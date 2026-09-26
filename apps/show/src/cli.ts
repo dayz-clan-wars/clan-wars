@@ -19,6 +19,7 @@ import type { Run } from "./engine/run.js";
 import { spawnRun } from "./engine/run.js";
 import { voiceEpisode } from "./produce/voice.js";
 import { renderEpisode } from "./produce/render.js";
+import { preflightRender, renderCacheDir } from "./produce/preflight.js";
 
 const { values } = parseArgs({
   options: {
@@ -41,6 +42,9 @@ const cfg = loadConfig();
 const renderCfg = renderDir ? loadRenderConfig() : null;
 // `ffmpegPath` must reach every ffmpeg spawn; every other command (the rhubarb path,
 // via VoiceDeps.rhubarbPath) passes through unchanged (task-10-report.md).
+// `--render` keeps its own cache under `<dir>/.cache` unless SHOW_CACHE_DIR is set: the default
+// is the plan-3 service's path, which a Mac cannot create and which the host's pipeline prunes.
+const cacheDir = renderCfg ? renderCacheDir(renderCfg, renderDir!) : null;
 const runImpl: Run | undefined = renderCfg
   ? (cmd, args, opts) => spawnRun(cmd === "ffmpeg" ? renderCfg.ffmpegPath : cmd, args, opts)
   : undefined;
@@ -50,6 +54,8 @@ const db = createClient(cfg.databaseUrl, { readOnly: true });
 const section = (title: string, body: string) => console.log(`\n===== ${title} =====\n${body}`);
 
 try {
+  // Fail fast, before any LLM call is paid for: a writable cache dir and both binaries.
+  if (renderCfg) await preflightRender({ cacheDir: cacheDir!, ffmpegPath: renderCfg.ffmpegPath, rhubarbPath: renderCfg.rhubarbPath });
   const weekStart = values.week ? parseWeekArg(values.week) : lastEndedWeek(new Date());
   // The show's migration may not have reached this database yet.
   const [probe] = (await db.execute(sql`select to_regclass('public.show_episodes') is not null as ok`)) as unknown as { ok: boolean }[];
@@ -94,8 +100,6 @@ try {
         ? new ReadThroughPronunciationStore(new PgPronunciationStore(db), new MemoryPronunciationStore())
         : new MemoryPronunciationStore();
 
-      fs.mkdirSync(renderCfg.cacheDir, { recursive: true });
-
       const voiced = await voiceEpisode(
         {
           chat,
@@ -106,14 +110,14 @@ try {
           elevenModel: renderCfg.elevenModel,
           borisVoiceId: renderCfg.borisVoiceId,
           pavelVoiceId: renderCfg.pavelVoiceId,
-          cacheDir: renderCfg.cacheDir,
+          cacheDir: cacheDir!,
           rhubarbPath: renderCfg.rhubarbPath,
           runImpl,
         },
         { weekStart: weekStart.toISOString(), narrative: result.narrative, context: screened },
       );
       const videoPath = await renderEpisode(
-        { cacheDir: renderCfg.cacheDir, discordInvite: renderCfg.discordInvite, runImpl },
+        { cacheDir: cacheDir!, discordInvite: renderCfg.discordInvite, runImpl },
         { voiced, context: screened },
       );
 

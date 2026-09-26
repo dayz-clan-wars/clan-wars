@@ -54,6 +54,7 @@ describe("loadRenderConfig", () => {
       rhubarbPath: "rhubarb",
       ffmpegPath: "ffmpeg",
       cacheDir: "/var/lib/clan-wars-show",
+      cacheDirSet: false,
       discordInvite: "discord.gg/TJu4XP25nr",
       pronunciationOverrides: {},
     });
@@ -81,6 +82,7 @@ describe("loadRenderConfig", () => {
       rhubarbPath: "/opt/rhubarb/rhubarb",
       ffmpegPath: "/opt/ffmpeg/ffmpeg",
       cacheDir: "/tmp/show-cache",
+      cacheDirSet: true,
       discordInvite: "discord.gg/other",
     });
   });
