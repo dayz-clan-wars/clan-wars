@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.44.0] - 2026-09-26
+
 ### Fixed
 
 - The weekly show no longer mixes up who killed whom, never guesses a player's
