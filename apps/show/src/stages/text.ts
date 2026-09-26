@@ -14,9 +14,11 @@ export const draftMarker = (weekStart: Date) => `${DRAFT_MARKER_PREFIX}${day(wee
 /** Spec §7.3: a redacted name is drawn as `[REDACTED]`; the same goes for every published string. */
 export const publicText = (s: string) => s.replace(/REDACTED_(?:PLAYER|CLAN)_\d+/gu, "[REDACTED]");
 // ⚠️ Player-facing copy carries no em or en dash (standing rule); the model's are normalized in parse, this is the net.
-const noDashes = (s: string) => s.replace(/\s*[–—]\s*/gu, ", ");
+export const noDashes = (s: string) => s.replace(/\s*[–—]\s*/gu, ", ");
+/** The same net applied everywhere published copy leaves this process: YouTube, Discord, Facebook. */
+export const publicCopy = (s: string) => noDashes(publicText(s));
 
-export const forumThreadName = (code: string, subtitle: string) => `Clan Wars ${code} · ${publicText(subtitle)}`.slice(0, 100);
+export const forumThreadName = (code: string, subtitle: string) => `Clan Wars ${code} · ${publicCopy(subtitle)}`.slice(0, 100);
 
 /**
  * ⚠️ The ops channel is a Discord channel, not the operator's terminal: a held reason or an

@@ -10,7 +10,7 @@ export function fakeDeps(db: Database, over: Partial<StageDeps> = {}) {
   const posted: Posted[] = [];
   const reactions = new Map<string, string[]>(); // `${messageId}:${emoji}` -> user ids
   const threads: { id: string; forumId: string; name: string; first: OutMessage }[] = [];
-  const uploads: { id: string; title: string }[] = [];
+  const uploads: { id: string; title: string; description: string }[] = [];
   const playlist = new Set<string>();
   const publicIds = new Set<string>();
   const fbVideos: { id: string; description: string }[] = [];
@@ -36,7 +36,7 @@ export function fakeDeps(db: Database, over: Partial<StageDeps> = {}) {
     readFile: () => Buffer.from("BYTES"),
     youtube: {
       findUpload: async (title) => uploads.find((u) => u.title === title)?.id ?? null,
-      upload: async ({ title }) => { const id = `yt${++n}`; uploads.push({ id, title }); return id; },
+      upload: async ({ title, description }) => { const id = `yt${++n}`; uploads.push({ id, title, description }); return id; },
       ensureInPlaylist: async (id) => { playlist.add(id); },
       setPublic: async (id) => { publicIds.add(id); },
       waitProcessed: async () => true,
