@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, admFiles, events, players, factions, factionMembers, factionEvents, seasons, seasonStandings,
-  kills, playerSessions, membershipHistory, raids, defenses, bounties, kothEvents, airdropEvents, showEpisodes,
+  kills, playerSessions, membershipHistory, raids, defenses, bounties, kothEvents, airdropEvents, showEpisodes, alphaWeeks,
   type Database,
 } from "@factions/db";
 
@@ -27,7 +27,7 @@ export type Fx = Awaited<ReturnType<typeof makeFixture>>;
 export async function makeFixture(db: Database) {
   await db.transaction(async (tx) => {
     await tx.execute(sql`set local client_min_messages = warning`);
-    await tx.execute(sql`truncate table show_episodes, show_text_screening, show_pronunciations, airdrop_events, koth_events, bounties, kills, player_sessions, membership_history, defenses, season_standings, raids, faction_events, faction_members, seasons, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
+    await tx.execute(sql`truncate table show_episodes, show_text_screening, show_pronunciations, airdrop_events, koth_events, bounties, kills, player_sessions, membership_history, defenses, alpha_weeks, season_standings, raids, faction_events, faction_members, seasons, events, raw_lines, adm_files, factions, players, servers restart identity cascade`);
   });
   const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
   const serverId = s!.id;
@@ -111,6 +111,9 @@ export async function makeFixture(db: Database) {
     },
     standing: async (factionId: number, a: { points: number; raids: number }) => {
       await db.insert(seasonStandings).values({ seasonId, factionId, points: a.points, raids: a.raids });
+    },
+    alpha: async (a: { weekStart: Date; rank: number; factionId: number; points: number }) => {
+      await db.insert(alphaWeeks).values({ seasonId, weekStart: a.weekStart, rank: a.rank, factionId: a.factionId, points: a.points });
     },
     kill: async (a: {
       at: Date; victim: string; killer: string | null; cause?: string; weapon?: string; distanceM?: number;

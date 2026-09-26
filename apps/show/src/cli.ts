@@ -1,7 +1,9 @@
+import fs from "node:fs";
+import path from "node:path";
 import { parseArgs } from "node:util";
 import { sql } from "drizzle-orm";
 import { createClient } from "@factions/db";
-import { loadConfig } from "./config.js";
+import { loadConfig, loadRenderConfig } from "./config.js";
 import { episodeCode, lastEndedWeek, parseWeekArg } from "./weeks.js";
 import { buildStoryContext } from "./story/context.js";
 import { createChat } from "./engine/llm/openrouter.js";
@@ -11,27 +13,49 @@ import { screenTexts } from "./screening/screen.js";
 import { redactContext } from "./screening/redact.js";
 import { buildShowPrompt } from "./prompt/build.js";
 import { writeScript } from "./script/write-script.js";
+import { PgPronunciationStore, ReadThroughPronunciationStore } from "./stores/pronunciations.js";
+import { MemoryPronunciationStore } from "./engine/audio/pronunciationStore.js";
+import type { Run } from "./engine/run.js";
+import { spawnRun } from "./engine/run.js";
+import { voiceEpisode } from "./produce/voice.js";
+import { renderEpisode } from "./produce/render.js";
+import { preflightRender, renderCacheDir } from "./produce/preflight.js";
 
 const { values } = parseArgs({
   options: {
     week: { type: "string" },
     "dry-run": { type: "boolean", default: false },
     "print-prompt": { type: "boolean", default: false },
+    render: { type: "string" },
   },
 });
 
-if (!values["dry-run"]) {
-  console.error("Only --dry-run exists so far. The pipeline that voices, renders and publishes arrives with plan 3.");
+const renderDir = values.render;
+if (!values["dry-run"] && !renderDir) {
+  console.error("Neither --dry-run nor --render <dir> was given. The scheduled pipeline arrives with plan 3.");
   process.exit(2);
 }
 
 const cfg = loadConfig();
+// Only loaded (and thus only required) when actually rendering, so a dry run needs no
+// ElevenLabs key or binaries (Task 11 brief).
+const renderCfg = renderDir ? loadRenderConfig() : null;
+// `ffmpegPath` must reach every ffmpeg spawn; every other command (the rhubarb path,
+// via VoiceDeps.rhubarbPath) passes through unchanged (task-10-report.md).
+// `--render` keeps its own cache under `<dir>/.cache` unless SHOW_CACHE_DIR is set: the default
+// is the plan-3 service's path, which a Mac cannot create and which the host's pipeline prunes.
+const cacheDir = renderCfg ? renderCacheDir(renderCfg, renderDir!) : null;
+const runImpl: Run | undefined = renderCfg
+  ? (cmd, args, opts) => spawnRun(cmd === "ffmpeg" ? renderCfg.ffmpegPath : cmd, args, opts)
+  : undefined;
 // ⚠️ Read-only at the connection level: a dry run may be pointed at factions_live, and
 // CLAUDE.md allows nothing there but a migration or a read-only check.
 const db = createClient(cfg.databaseUrl, { readOnly: true });
 const section = (title: string, body: string) => console.log(`\n===== ${title} =====\n${body}`);
 
 try {
+  // Fail fast, before any LLM call is paid for: a writable cache dir and both binaries.
+  if (renderCfg) await preflightRender({ cacheDir: cacheDir!, ffmpegPath: renderCfg.ffmpegPath, rhubarbPath: renderCfg.rhubarbPath });
   const weekStart = values.week ? parseWeekArg(values.week) : lastEndedWeek(new Date());
   // The show's migration may not have reached this database yet.
   const [probe] = (await db.execute(sql`select to_regclass('public.show_episodes') is not null as ok`)) as unknown as { ok: boolean }[];
@@ -67,6 +91,43 @@ try {
     if (result.reasons.length > 0) section("EARLIER ATTEMPTS", result.reasons.join("\n"));
     section(`SCRIPT: ${result.title} (${result.narrative.length} characters, attempt ${result.attempts})`, result.narrative);
     section("STORYLINES", JSON.stringify(result.storylines, null, 2));
+
+    if (renderCfg) {
+      // Same read-through pattern as the screening store above: Postgres read when
+      // show_pronunciations exists, memory write. Never writes to the read side, so it
+      // stays safe on the read-only connection (global constraints).
+      const pronunciationStore = probe?.ok
+        ? new ReadThroughPronunciationStore(new PgPronunciationStore(db), new MemoryPronunciationStore())
+        : new MemoryPronunciationStore();
+
+      const voiced = await voiceEpisode(
+        {
+          chat,
+          pronunciationModel: renderCfg.pronunciationModel,
+          store: pronunciationStore,
+          overrides: renderCfg.pronunciationOverrides,
+          elevenApiKey: renderCfg.elevenApiKey,
+          elevenModel: renderCfg.elevenModel,
+          borisVoiceId: renderCfg.borisVoiceId,
+          pavelVoiceId: renderCfg.pavelVoiceId,
+          cacheDir: cacheDir!,
+          rhubarbPath: renderCfg.rhubarbPath,
+          runImpl,
+        },
+        { weekStart: weekStart.toISOString(), narrative: result.narrative, context: screened },
+      );
+      const videoPath = await renderEpisode(
+        { cacheDir: cacheDir!, discordInvite: renderCfg.discordInvite, runImpl },
+        { voiced, context: screened },
+      );
+
+      fs.mkdirSync(renderDir!, { recursive: true });
+      const outMp3 = path.join(renderDir!, "episode.mp3");
+      const outMp4 = path.join(renderDir!, "video.mp4");
+      fs.copyFileSync(voiced.mp3Path, outMp3);
+      fs.copyFileSync(videoPath, outMp4);
+      section("RENDERED", `${outMp3}\n${outMp4}\nduration: ${voiced.totalSec.toFixed(1)}s`);
+    }
   }
 } finally {
   await db.$client.end();

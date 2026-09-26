@@ -30,5 +30,9 @@ const pad2 = (n: number): string => String(n).padStart(2, "0");
  */
 export function whenLabel(v: Date | string): string {
   const d = v instanceof Date ? v : new Date(v);
-  return `${WEEKDAYS[d.getUTCDay()]} ${pad2(d.getUTCHours())}:${pad2(d.getUTCMinutes())} UTC`;
+  // 12-hour clock: the model reads a label out loud, and "twenty-three forty-six" is not
+  // how anyone talks (week 1 render). Midnight is 12 am, noon is 12 pm.
+  const h = d.getUTCHours();
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${WEEKDAYS[d.getUTCDay()]} ${h12}:${pad2(d.getUTCMinutes())} ${h < 12 ? "am" : "pm"} UTC`;
 }

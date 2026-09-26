@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
+import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
 import { openDb, makeFixture, MON, at, type Fx } from "../fixture.js";
 import { PlayerTexts } from "../../src/story/registry.js";
@@ -41,6 +42,17 @@ describe("people, friendly fire and beefs", () => {
       { gamertag: "GoldSkull588", clan: { name: "SNA", tag: "SNA" }, value: 2 },
       { gamertag: "Bubba211558", clan: null, value: 1 },
     ]);
+  });
+
+  it("⚠️ tags each player with their clan DURING the week, never today's roster", async () => {
+    // Bubba joins SNA only after the week ends: no tag this week.
+    await fx.member(sna, "bub", at(9));
+    // chaandlr leaves Zone 2 mid-week for good: still Zone 2 this week.
+    await db.execute(sql`update membership_history set left_at = ${at(3).toISOString()}::timestamptz where dayz_id = 'cha'`);
+    await db.execute(sql`delete from faction_members where dayz_id = 'cha'`);
+    const p = await peopleForWeek(db, read());
+    expect(p.topKillers.find((x) => x.gamertag === "chaandlr")?.clan).toEqual({ name: "Zone 2", tag: "Z2" });
+    expect(p.mostDeaths.find((x) => x.gamertag === "Bubba211558")?.clan).toBeNull();
   });
 
   it("longest shots in whole metres, with the victim", async () => {

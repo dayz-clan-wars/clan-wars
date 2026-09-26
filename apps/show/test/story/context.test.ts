@@ -10,10 +10,26 @@ describe("buildStoryContext", () => {
 
   it("builds an empty week: empty lists, S1 E3, no previous", async () => {
     const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: ["ADM"], previous: "db" });
-    expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3 });
-    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
-    expect(context.players).toEqual({ topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] });
+    expect(context.week).toEqual({ start: "2026-09-21T00:00:00.000Z", end: "2026-09-28T00:00:00.000Z", season: 1, episode: 3, alpha: null });
+    expect(context).toMatchObject({ clans: [], raids: [], flagEvents: [], memberMoves: [], friendlyFire: [], clanBeefs: [], bounties: [], koth: [], airdrops: [], previous: null });
+    expect(context.players).toEqual({ topKillers: [], mostDeaths: [], raidsByPlayer: [], longestShots: [], oddDeaths: [] });
     expect(texts.entries()).toEqual([]);
+  });
+
+  it("counts raids per raider, most first, with the raider's clan", async () => {
+    const skull = await fx.clan({ tag: "SKULL" });
+    const cock = await fx.clan({ tag: "COCK", name: "The Cocks" });
+    await fx.player("gold", "GoldSkull588"); await fx.player("tide", "TIDEPRIDE113384"); await fx.player("ron", "RonaldRaygun552");
+    await fx.raid({ victim: skull, raider: "tide", raiderClan: null, at: at(2, 5), points: 0 });
+    await fx.raid({ victim: skull, raider: "gold", raiderClan: null, at: at(3, 5), points: 0 });
+    await fx.raid({ victim: skull, raider: "ron", raiderClan: cock, at: at(4, 5), points: 100 });
+    await fx.raid({ victim: skull, raider: "ron", raiderClan: cock, at: at(5, 5), points: 100 });
+    const { context } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
+    expect(context.players.raidsByPlayer).toEqual([
+      { gamertag: "RonaldRaygun552", clan: { name: "The Cocks", tag: "COCK" }, value: 2 },
+      { gamertag: "GoldSkull588", clan: null, value: 1 },
+      { gamertag: "TIDEPRIDE113384", clan: null, value: 1 },
+    ]);
   });
 
   it("⚠️ no faction_events payload string, coordinate or id reaches the context", async () => {
@@ -51,6 +67,18 @@ describe("buildStoryContext", () => {
     expect(context.previous!.storylines[0]!.players).toEqual(["L".repeat(32)]);
     expect(context.previous!.storylines[0]!.clans).toEqual(["C".repeat(12)]);
     expect(texts.entries().map((e) => e.text).sort()).toEqual(["C".repeat(12), "L".repeat(32)]);
+  });
+
+  it("week.alpha is the rank-1 alpha_weeks clan for that season and week, or null when no row", async () => {
+    const { context: empty } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
+    expect(empty.week.alpha).toBeNull();
+
+    const z2 = await fx.clan({ tag: "Z2", name: "Zone 2" });
+    await fx.clan({ tag: "SNA" });
+    await fx.alpha({ weekStart: MON, rank: 1, factionId: z2, points: 500 });
+    const { context, texts } = await buildStoryContext(db, { weekStart: MON, staffTags: [], previous: null });
+    expect(context.week.alpha).toEqual({ name: "Zone 2", tag: "Z2" });
+    expect(texts.entries().map((e) => e.text)).toContain("Zone 2");
   });
 
   it("previous: null skips the lookup (a database without show_episodes yet)", async () => {

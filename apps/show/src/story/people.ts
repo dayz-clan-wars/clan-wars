@@ -11,10 +11,18 @@ export type WeekRead = { serverId: number; from: Date; to: Date; texts: PlayerTe
 /** Deaths worth a joke. `died` (cause unknown) and `bled_out` are not. */
 const ODD_CAUSES = ["wolf", "bear", "animal", "mauled", "drowned", "fall", "dehydration", "starvation", "vehicle", "explosion"] satisfies readonly DeathCauseWord[];
 
-/** Each player's CURRENT full clan, for the tag beside their name. */
-const currentClan = (serverId: number): SQL => sql`
-  select m.dayz_id, f.name, f.tag from faction_members m join factions f on f.id = m.faction_id
-  where m.server_id = ${serverId} and m.status = 'full' and f.status in ('active', 'dormant')`;
+/**
+ * Each player's clan DURING the week, for the tag beside their name: the latest
+ * `membership_history` span (full membership only) that overlaps the week.
+ *
+ * ⚠️ Never today's `faction_members`: a past week's episode would pin players to clans
+ * that did not exist yet (week 1 showed SNA and ADM tags before either was founded).
+ */
+const weekClan = (a: WeekRead): SQL => sql`
+  select distinct on (mh.dayz_id) mh.dayz_id, f.name, f.tag
+  from membership_history mh join factions f on f.id = mh.faction_id
+  where mh.server_id = ${a.serverId} and mh.joined_at < ${tsz(a.to)} and (mh.left_at is null or mh.left_at > ${tsz(a.from)})
+  order by mh.dayz_id, mh.joined_at desc`;
 
 // ⚠️ `scoringKill` renders against the unaliased `kills` table. Every query that uses
 // it reads `from kills` with no alias, or the predicate names a table that is not there.
@@ -28,9 +36,9 @@ const line = (texts: PlayerTexts, r: LineRow): PlayerLine => ({
   value: r.value,
 });
 
-export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryContext["players"]> {
+export async function peopleForWeek(db: Database, a: WeekRead): Promise<Omit<StoryContext["players"], "raidsByPlayer">> {
   const board = (col: SQL) => rows<LineRow>(db, sql`
-    with cur as (${currentClan(a.serverId)})
+    with cur as (${weekClan(a)})
     select coalesce(p.gamertag, ${UNKNOWN_PLAYER}) as gamertag, cur.name as clan_name, cur.tag as clan_tag, count(*)::int as value
     from kills
     left join players p on p.dayz_id = ${col}
@@ -41,7 +49,7 @@ export async function peopleForWeek(db: Database, a: WeekRead): Promise<StoryCon
     board(sql`kills.killer_dayz_id`),
     board(sql`kills.victim_dayz_id`),
     rows<{ gamertag: string; clan_name: string | null; clan_tag: string | null; victim: string; metres: number; weapon: string | null }>(db, sql`
-      with cur as (${currentClan(a.serverId)})
+      with cur as (${weekClan(a)})
       select coalesce(pk.gamertag, ${UNKNOWN_PLAYER}) as gamertag, cur.name as clan_name, cur.tag as clan_tag,
         coalesce(pv.gamertag, ${UNKNOWN_PLAYER}) as victim, kills.distance_m::float8 as metres, kills.weapon
       from kills

@@ -13,6 +13,7 @@
     "@factions/db": "workspace:*",
     "@factions/domain": "workspace:*",
     "@factions/roster": "workspace:*",
+    "@resvg/resvg-js": "^2.6.2",
     "drizzle-orm": "^0.36.0"
   },
   "devDependencies": {

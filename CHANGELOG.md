@@ -10,6 +10,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Groundwork for a weekly Bloodbag and Painkiller Show episode about Clan Wars: the
   story, screening and script stages, runnable only as a read-only dry run. Adds three
   empty tables. No player-facing behaviour change.
+- The show can now voice and render an episode locally for review; still nothing is
+  published.
 
 ## [1.42.0] - 2026-09-25
 
