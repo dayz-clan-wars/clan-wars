@@ -42,11 +42,31 @@ describe("replaceNames", () => {
 });
 
 describe("replaceNamesForSpeech", () => {
-    test("converts every occurrence — any case, backticked, or emphasized — to the spoken form", () => {
-        const text = "Plain XxBE4zyxX, caps XXBE4ZYXX, lower xxbe4zyxx, ticked `XxBE4zyxX`, bold **XxBE4zyxX**.";
+    test("converts the exact-case and ALL-CAPS forms, backticked or emphasized, to the spoken form", () => {
+        const text = "Plain XxBE4zyxX, caps XXBE4ZYXX, ticked `XxBE4zyxX`, bold **XxBE4zyxX**.";
         const out = replaceNamesForSpeech(text, ["XxBE4zyxX"], () => "BEEZY");
         expect(out).not.toMatch(/be4zyx/i);                  // no raw-tag variant reaches the TTS
-        expect((out.match(/BEEZY/g) || []).length).toBe(5);  // all five mentions converted
+        expect((out.match(/BEEZY/g) || []).length).toBe(4);  // all four mentions converted
+    });
+
+    test("a tag only matches its exact case or ALL-CAPS form, never an ordinary word", () => {
+        const out = replaceNamesForSpeech("he raided us. Us? US did it, and Us again", ["US"], () => "U S");
+        expect(out).toBe("he raided us. Us? U S did it, and Us again");
+        expect(replaceNamesForSpeech("Fishy and FISHY but not fishy", ["Fishy"], () => "Fish")).toBe("Fish and Fish but not fishy");
+    });
+
+    test("replaces in one pass: a spoken form is never rescanned for a shorter name", () => {
+        const spoken: Record<string, string> = {
+            REDACTED_CLAN_1: "a clan WE can't NAME on this network",
+            WE: "double u ee",
+            NAME: "N A M E",
+        };
+        const out = replaceNamesForSpeech("REDACTED_CLAN_1 raided WE", ["WE", "NAME", "REDACTED_CLAN_1"], (g) => spoken[g]!);
+        expect(out).toBe("a clan WE can't NAME on this network raided double u ee");
+        expect(replaceNamesForSpeech("the player whose name we cannot say", ["WE", "we"], () => "X"))
+            .toBe("the player whose name X cannot say"); // exact-case "we" as a name still matches
+        expect(replaceNamesForSpeech("the player whose name we cannot say", ["WE"], () => "X"))
+            .toBe("the player whose name we cannot say");
     });
 
     test("render is always given the canonical name, even for a CAPS/backtick variant", () => {

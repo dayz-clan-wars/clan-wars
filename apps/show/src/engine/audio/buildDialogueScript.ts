@@ -6,7 +6,7 @@ export type TtsInput = { text: string; voice_id: string };
 
 /**
  * Map parsed dialogue turns to audio inputs: each turn's text with every name rendered via
- * `pronounce` (default `speakableName`) — caught in any case/emphasis form via
+ * `pronounce` (default `speakableName`), caught in its exact or ALL-CAPS form and any emphasis via
  * `replaceNamesForSpeech`, since the TTS must never read a raw tag — and a voice chosen by speaker
  * (Pavel -> pavelVoiceId, else borisVoiceId). Leftover markdown (backticks/asterisks) is stripped so
  * it isn't vocalized. Empty turns are dropped. Cumulative text is capped at `maxChars` so the audio

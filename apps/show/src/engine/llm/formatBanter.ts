@@ -27,23 +27,27 @@ export function replaceNames(text: string, names: string[], render: (name: strin
 }
 
 /**
- * Speech variant of `replaceNames`: replace EVERY occurrence of each known name with
- * `render(name)`, matching **case-insensitively** and regardless of surrounding backticks,
- * asterisks, or ALL-CAPS emphasis — because the TTS must never receive a raw gamertag, and a
- * host may repeat a name LOUDER or in `code` for emphasis. Boundaries are alphanumeric (so
- * punctuation/backticks/markdown don't block a match); still longest-first and partial-word-safe.
- * `render` always receives the CANONICAL name, so the spoken form stays the one frozen for that tag.
+ * Speech variant of `replaceNames`: replace every occurrence of each known name with
+ * `render(name)`, regardless of surrounding backticks, asterisks or other markdown, because the
+ * TTS must never receive a raw gamertag. A name matches in its exact case or in its ALL-CAPS form
+ * (a host may shout a name for emphasis), never in any other case, so a clan tag like `US` or `WE`
+ * does not swallow the ordinary words "us" or "we". Boundaries are alphanumeric (so punctuation/
+ * backticks/markdown don't block a match). All names are replaced in ONE pass with a single
+ * longest-first alternation, so a spoken form that was just inserted is never rescanned for a
+ * shorter name. `render` always receives the CANONICAL name, so the spoken form stays the one
+ * frozen for that tag.
  */
 export function replaceNamesForSpeech(text: string, names: string[], render: (name: string) => string): string {
-  let out = text ?? "";
-  const list = [...new Set((names ?? []).filter((g) => typeof g === "string" && g.length))].sort(
-    (a, b) => b.length - a.length
-  );
-  for (const g of list) {
-    const re = new RegExp(`(?<![A-Za-z0-9])${escapeRe(g)}(?![A-Za-z0-9])`, "gi");
-    out = out.replace(re, () => render(g));
-  }
-  return out;
+  const src = text ?? "";
+  const list = [...new Set((names ?? []).filter((g) => typeof g === "string" && g.length))];
+  if (!list.length) return src;
+  // Variant -> canonical name. Exact forms first, so a name's own spelling beats another name's caps form.
+  const canonical = new Map<string, string>();
+  for (const g of list) canonical.set(g, g);
+  for (const g of list) if (!canonical.has(g.toUpperCase())) canonical.set(g.toUpperCase(), g);
+  const variants = [...canonical.keys()].sort((a, b) => b.length - a.length);
+  const re = new RegExp(`(?<![A-Za-z0-9])(?:${variants.map(escapeRe).join("|")})(?![A-Za-z0-9])`, "g");
+  return src.replace(re, (m) => render(canonical.get(m)!));
 }
 
 /**
