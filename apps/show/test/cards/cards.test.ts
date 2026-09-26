@@ -1,0 +1,212 @@
+import { describe, it, expect } from "vitest";
+import { buildCards, buildMarqueeItems, buildOutroBoard } from "../../src/cards/cards.js";
+import type { ClanWeek, StoryContext } from "../../src/story/types.js";
+
+const clan = (a: Partial<ClanWeek> & { tag: string }): ClanWeek => ({
+  name: a.tag,
+  status: "active",
+  isStaff: false,
+  pitch: null,
+  members: 1,
+  weekPoints: 0,
+  weekRaids: 0,
+  timesRaidedThisWeek: 0,
+  seasonPoints: 0,
+  seasonRaids: 0,
+  flagDown: false,
+  ...a,
+});
+
+function ctx(over: Partial<StoryContext> = {}): StoryContext {
+  return {
+    week: { start: "a", end: "b", season: 1, episode: 3, alpha: null },
+    clans: [], raids: [], flagEvents: [], friendlyFire: [], clanBeefs: [],
+    players: { topKillers: [], mostDeaths: [], longestShots: [], oddDeaths: [] },
+    bounties: [], koth: [], airdrops: [], previous: null,
+    ...over,
+  };
+}
+
+describe("buildCards", () => {
+  it("returns exactly 4 cards with the right headers and titles, in order", () => {
+    const cards = buildCards(ctx());
+    expect(cards).toHaveLength(4);
+    for (const c of cards) expect(c.header).toBe("CLAN WARS · S01E03");
+    expect(cards.map((c) => c.title)).toEqual(["WEEK STANDINGS", "MOST KILLS", "FRIENDLY FIRE", "LONGEST SHOT"]);
+  });
+
+  it("week standings: clans with weekPoints > 0 by points descending, tag as name, at most 5 rows", () => {
+    const clans = [
+      clan({ tag: "A", weekPoints: 100 }),
+      clan({ tag: "B", weekPoints: 300 }),
+      clan({ tag: "C", weekPoints: 0 }),
+      clan({ tag: "D", weekPoints: 50 }),
+      clan({ tag: "E", weekPoints: 20 }),
+      clan({ tag: "F", weekPoints: 10 }),
+      clan({ tag: "G", weekPoints: 5 }),
+    ];
+    const [standings] = buildCards(ctx({ clans }));
+    expect(standings!.rows).toEqual([
+      { name: "B", value: "300 pts" },
+      { name: "A", value: "100 pts" },
+      { name: "D", value: "50 pts" },
+      { name: "E", value: "20 pts" },
+      { name: "F", value: "10 pts" },
+    ]);
+  });
+
+  it("week standings: no raids draws one NO RAIDS row", () => {
+    const [standings] = buildCards(ctx({ clans: [clan({ tag: "A", weekPoints: 0 })] }));
+    expect(standings!.rows).toEqual([{ name: "NO RAIDS", value: "" }]);
+  });
+
+  it("most kills: top 3 players.topKillers, value is the kill count", () => {
+    const topKillers = [
+      { gamertag: "one", clan: null, value: 9 },
+      { gamertag: "two", clan: null, value: 7 },
+      { gamertag: "three", clan: null, value: 5 },
+      { gamertag: "four", clan: null, value: 3 },
+    ];
+    const [, mostKills] = buildCards(ctx({ players: { topKillers, mostDeaths: [], longestShots: [], oddDeaths: [] } }));
+    expect(mostKills!.rows).toEqual([
+      { name: "one", value: "9" },
+      { name: "two", value: "7" },
+      { name: "three", value: "5" },
+    ]);
+  });
+
+  it("friendly fire: top 3 killers by summed friendlyFire count across victims", () => {
+    const friendlyFire: StoryContext["friendlyFire"] = [
+      { clan: { name: "Z", tag: "Z" }, killer: "kilr", victim: "v1", count: 2, weapons: [], first: "a", firstWhen: "a", last: "a", lastWhen: "a" },
+      { clan: { name: "Z", tag: "Z" }, killer: "kilr", victim: "v2", count: 3, weapons: [], first: "a", firstWhen: "a", last: "a", lastWhen: "a" },
+      { clan: { name: "Z", tag: "Z" }, killer: "other", victim: "v3", count: 1, weapons: [], first: "a", firstWhen: "a", last: "a", lastWhen: "a" },
+    ];
+    const [, , ff] = buildCards(ctx({ friendlyFire }));
+    expect(ff!.rows).toEqual([
+      { name: "kilr", value: "5" },
+      { name: "other", value: "1" },
+    ]);
+  });
+
+  it("longest shot: top 3 players.longestShots, value rounded to whole metres", () => {
+    const longestShots = [
+      { gamertag: "sniper", clan: null, victim: "v", metres: 412.6, weapon: "SVD" },
+      { gamertag: "sniper2", clan: null, victim: "v", metres: 300.2, weapon: null },
+    ];
+    const [, , , shots] = buildCards(ctx({ players: { topKillers: [], mostDeaths: [], longestShots, oddDeaths: [] } }));
+    expect(shots!.rows).toEqual([
+      { name: "sniper", value: "413m" },
+      { name: "sniper2", value: "300m" },
+    ]);
+  });
+
+  it("a redacted alias draws [REDACTED] on every card", () => {
+    const clans = [clan({ tag: "REDACTED_CLAN_1", weekPoints: 10 })];
+    const players = {
+      topKillers: [{ gamertag: "REDACTED_PLAYER_1", clan: null, value: 4 }],
+      mostDeaths: [],
+      longestShots: [{ gamertag: "REDACTED_PLAYER_2", clan: null, victim: "v", metres: 100, weapon: null }],
+      oddDeaths: [],
+    };
+    const friendlyFire: StoryContext["friendlyFire"] = [
+      { clan: { name: "Z", tag: "Z" }, killer: "REDACTED_PLAYER_3", victim: "v", count: 1, weapons: [], first: "a", firstWhen: "a", last: "a", lastWhen: "a" },
+    ];
+    const [standings, mostKills, ff, shots] = buildCards(ctx({ clans, players, friendlyFire }));
+    expect(standings!.rows[0]!.name).toBe("[REDACTED]");
+    expect(mostKills!.rows[0]!.name).toBe("[REDACTED]");
+    expect(ff!.rows[0]!.name).toBe("[REDACTED]");
+    expect(shots!.rows[0]!.name).toBe("[REDACTED]");
+  });
+
+  it("no card string contains an em dash", () => {
+    const cards = buildCards(ctx({ clans: [clan({ tag: "A", weekPoints: 10 })] }));
+    const json = JSON.stringify(cards);
+    expect(json).not.toContain("—");
+  });
+});
+
+describe("buildMarqueeItems", () => {
+  const invite = "discord.gg/abc123";
+
+  it("has the fixed items when there is no data", () => {
+    expect(buildMarqueeItems(ctx(), { discordInvite: invite })).toEqual(["DAYZCLANWARS.COM", invite.toUpperCase()]);
+  });
+
+  it("adds top killer, longest shot and alpha, in order, upper-cased, when present", () => {
+    const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Z2" } };
+    const players = {
+      topKillers: [{ gamertag: "chaandlr", clan: null, value: 12 }],
+      mostDeaths: [],
+      longestShots: [{ gamertag: "sniper", clan: null, victim: "v", metres: 412.6, weapon: null }],
+      oddDeaths: [],
+    };
+    const items = buildMarqueeItems(ctx({ week, players }), { discordInvite: invite });
+    expect(items).toEqual([
+      "DAYZCLANWARS.COM",
+      invite.toUpperCase(),
+      "TOP KILLER: CHAANDLR (12)",
+      "LONGEST SHOT: SNIPER 413M",
+      "ALPHA: Z2",
+    ]);
+  });
+
+  it("omits top killer, longest shot and alpha independently when their data is missing", () => {
+    const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "Zone 2", tag: "Z2" } };
+    const items = buildMarqueeItems(ctx({ week }), { discordInvite: invite });
+    expect(items).toEqual(["DAYZCLANWARS.COM", invite.toUpperCase(), "ALPHA: Z2"]);
+  });
+
+  it("draws [REDACTED] for a redacted name", () => {
+    const week: StoryContext["week"] = { start: "a", end: "b", season: 1, episode: 3, alpha: { name: "x", tag: "REDACTED_CLAN_1" } };
+    const players = {
+      topKillers: [{ gamertag: "REDACTED_PLAYER_1", clan: null, value: 1 }],
+      mostDeaths: [], longestShots: [], oddDeaths: [],
+    };
+    const items = buildMarqueeItems(ctx({ week, players }), { discordInvite: invite });
+    expect(items).toContain("TOP KILLER: [REDACTED] (1)");
+    expect(items).toContain("ALPHA: [REDACTED]");
+  });
+
+  it("no marquee item contains an em dash", () => {
+    const items = buildMarqueeItems(ctx(), { discordInvite: invite });
+    expect(items.join("")).not.toContain("—");
+  });
+});
+
+describe("buildOutroBoard", () => {
+  it("headline, top 5 by seasonPoints desc then tag asc, only clans with points > 0", () => {
+    const clans = [
+      clan({ tag: "A", seasonPoints: 100, seasonRaids: 2 }),
+      clan({ tag: "B", seasonPoints: 100, seasonRaids: 5 }),
+      clan({ tag: "C", seasonPoints: 0, seasonRaids: 0 }),
+      clan({ tag: "D", seasonPoints: 300, seasonRaids: 9 }),
+      clan({ tag: "E", seasonPoints: 20, seasonRaids: 1 }),
+      clan({ tag: "F", seasonPoints: 10, seasonRaids: 1 }),
+      clan({ tag: "G", seasonPoints: 5, seasonRaids: 1 }),
+    ];
+    const board = buildOutroBoard(ctx({ clans }));
+    expect(board.headline).toBe("CLAN WARS · SEASON 1 · AFTER WEEK 3");
+    expect(board.rows).toEqual([
+      { name: "D", points: 300, raids: 9 },
+      { name: "A", points: 100, raids: 2 },
+      { name: "B", points: 100, raids: 5 },
+      { name: "E", points: 20, raids: 1 },
+      { name: "F", points: 10, raids: 1 },
+    ]);
+  });
+
+  it("draws with zero rows when no clan has season points", () => {
+    const board = buildOutroBoard(ctx({ clans: [clan({ tag: "A", seasonPoints: 0 })] }));
+    expect(board.rows).toEqual([]);
+  });
+
+  it("redacts a clan tag", () => {
+    const board = buildOutroBoard(ctx({ clans: [clan({ tag: "REDACTED_CLAN_1", seasonPoints: 10, seasonRaids: 1 })] }));
+    expect(board.rows[0]!.name).toBe("[REDACTED]");
+  });
+
+  it("no outro board string contains an em dash", () => {
+    const board = buildOutroBoard(ctx({ clans: [clan({ tag: "A", seasonPoints: 10 })] }));
+    expect(JSON.stringify(board)).not.toContain("—");
+  });
+});
