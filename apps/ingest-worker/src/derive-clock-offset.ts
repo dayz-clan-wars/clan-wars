@@ -5,27 +5,44 @@ export type OffsetCandidate = { localTimestampMs: number; modifiedAtMs: number }
 const GRID_MS = 900_000;
 
 /**
+ * How far BELOW the true offset a candidate may read and still snap to it.
+ *
+ * ⚠️ Without it a bare floor is wrong in the commonest case. A file the server
+ * created and never wrote to again has zero write-lag, so its candidate sits
+ * EXACTLY on the grid; the filename comes from the game server's clock and the
+ * mtime from Nitrado's, and one second of disagreement between them floored
+ * Livonia to 6h45m on 2026-09-26. Retention (tick.ts) only ever lowers the
+ * stored value, so that one reading stood for a day and a half — every event
+ * stamped 15 minutes early, and a King of the Hill scored over the wrong window.
+ *
+ * The cost is at the other end: a smallest lag between `GRID_MS - TOLERANCE_MS`
+ * and `GRID_MS` now derives one step HIGH. Retention discards a high reading, so
+ * that edge costs nothing; a low one is permanent, so this is the side to pad.
+ */
+const TOLERANCE_MS = 5 * 60_000;
+
+/**
  * Derive `clockOffsetMs` such that `UTC = server-local + offset`.
  *
  * Each file's mtime is at or after its creation instant, so every candidate
  * over-estimates by however long that file was still being written. The
  * MINIMUM is therefore the tightest available bound.
  *
- * The minimum is then snapped DOWN to the 15-minute grid. Every candidate is
- * `trueOffset + writeLag` with `writeLag >= 0`, so the minimum is
+ * The minimum, plus `TOLERANCE_MS`, is then snapped DOWN to the 15-minute grid.
+ * Every candidate is `trueOffset + writeLag` with `writeLag >= 0` in principle
+ * (but see `TOLERANCE_MS` — the two clocks disagree), so the minimum is
  * `trueOffset + smallestLag`. Every real timezone offset is a whole number of
- * 15-minute units, so `Math.floor(min / 900_000) * 900_000` recovers
- * `trueOffset` EXACTLY whenever the smallest listed write-lag is under 15
- * minutes — which removes the estimate's dependence on which files Nitrado
- * happens to be listing this tick. Without it the derived value drifts upward
- * over a session and the same ADM file's lines get stamped hours apart.
+ * 15-minute units, so `Math.floor((min + TOLERANCE_MS) / 900_000) * 900_000`
+ * recovers `trueOffset` EXACTLY whenever the smallest listed write-lag lies in
+ * [-5 min, 10 min) — which removes the estimate's dependence on which files
+ * Nitrado happens to be listing this tick. Without it the derived value drifts
+ * upward over a session and the same ADM file's lines get stamped hours apart.
  *
  * `Math.floor` is correct for negative offsets too: it floors toward negative
  * infinity, which still lands on a grid point at or below the estimate. For a
- * true offset of -4h and a 43s lag, `min = -14_357_000`, `min / 900_000 =
- * -15.95…`, `Math.floor` gives -16, and `-16 * 900_000 = -14_400_000` — exactly
- * -4h. The lag pushes the minimum ABOVE the grid point, so flooring returns to
- * it rather than overshooting a step past it.
+ * true offset of -4h and a 43s lag, `min + TOLERANCE_MS = -14_057_000`,
+ * `/ 900_000 = -15.62…`, `Math.floor` gives -16, and `-16 * 900_000 =
+ * -14_400_000` — exactly -4h.
  *
  * ⚠️ Returns null, never 0, when nothing qualifies. A zero offset is invisible
  * to every count-based check in this system — every row lands, every
@@ -46,5 +63,5 @@ export function deriveClockOffsetMs(candidates: OffsetCandidate[]): number | nul
     if (offset < min) min = offset;
   }
   if (!Number.isFinite(min)) return null;
-  return Math.floor(min / GRID_MS) * GRID_MS;
+  return Math.floor((min + TOLERANCE_MS) / GRID_MS) * GRID_MS;
 }
