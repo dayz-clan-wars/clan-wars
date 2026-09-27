@@ -15,7 +15,7 @@ Spec `docs/superpowers/specs/2026-09-27-referral-leaderboard-design.md`.
    `SERVER_EVENTS_CHANNEL_ID`). The first payout is the first week that ends after
    three conditions are all met: `now >= end + 30 min` (REFERRAL_CLOSE_GRACE_MS),
    ingest has queued an event with `occurred_at > end`, and the `sessions-projector`
-   consumer's cursor has reached those events—check this with
+   consumer's cursor has reached those events. Check this with
    `select last_event_id from consumer_cursors where consumer_name = 'sessions-projector'`
    vs. `select max(id) from events where occurred_at < '<boundary>'` (verify these
    column names in `packages/db/src/schema.ts` and `packages/event-log` if uncertain).
