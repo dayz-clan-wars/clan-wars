@@ -22,6 +22,17 @@ describe("referral_qualifications", () => {
     await expect(db.execute(sql`truncate referral_qualifications`)).rejects.toThrow(/permanent/);
   });
 
+  it("permanence trigger blocks truncate cascade and multi-table truncate", async () => {
+    // ⚠️ The FK check on bare TRUNCATE referrals is answered by Postgres before
+    // the trigger fires. This test verifies that paths which pass the FK check
+    // (CASCADE, or multi-table form) are still refused by the permanence trigger.
+    await expect(db.execute(sql`TRUNCATE referrals CASCADE`)).rejects.toThrow(/permanent/);
+    await expect(db.execute(sql`TRUNCATE referral_qualifications, referrals`)).rejects.toThrow(/permanent/);
+    // Both tables still hold their rows.
+    expect((await db.select().from(referrals)).length).toBe(1);
+    expect((await db.select().from(referralQualifications)).length).toBe(1);
+  });
+
   it("refuses a second qualification for the same referral", async () => {
     await expect(db.insert(referralQualifications).values({ referredDiscordId: "A", referrerDiscordId: "B", qualifiedAt: now })).rejects.toThrow();
   });
