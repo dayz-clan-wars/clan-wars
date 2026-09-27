@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.50.1] - 2026-09-27
+
 ### Fixed
 
 - Server times could slip 15 minutes behind after a quiet restart, which made King of the Hill score the wrong window and post its results late. Times now stay correct.
