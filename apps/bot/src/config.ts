@@ -316,6 +316,8 @@ const CROWN_ROLE_ENV: Record<BoardKind, string> = {
   playTime: "CROWN_PLAYTIME_ROLE_ID",
   deaths: "CROWN_DEATHS_ROLE_ID",
   friendlyFire: "CROWN_FRIENDLY_FIRE_ROLE_ID",
+  referrers: "CROWN_REFERRERS_ROLE_ID",
+  referrersWeek: "CROWN_REFERRERS_WEEK_ROLE_ID",
 };
 
 /**

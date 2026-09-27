@@ -5,7 +5,7 @@ import { currentSession } from "@/lib/viewer";
 import { REFUSAL } from "@/lib/clan-copy";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { BOARD_SLUGS, boardKindFromSlug, parsePageParam } from "@/lib/board-page";
-import { BOARD_LABELS } from "@/lib/stats-copy";
+import { BOARD_LABELS, REFERRERS_WEEK_NOTE } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { FullBoard } from "@/app/components/full-board";
 import { guideLinkFor } from "@/lib/guide-links";
@@ -49,7 +49,7 @@ export default async function ClanFullBoardPage({ params, searchParams }: Params
       <Body>
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3 lg:mb-6">
           <h2 className="font-display text-sm uppercase tracking-[0.06em] text-ink">{BOARD_LABELS[kind]}</h2>
-          <ScopePicker seasons={page.seasons} basePath={`${basePath}/${BOARD_SLUGS[kind]}`} current={page.scope} />
+          {kind === "referrersWeek" ? <span className="text-[11px]">{REFERRERS_WEEK_NOTE}</span> : <ScopePicker seasons={page.seasons} basePath={`${basePath}/${BOARD_SLUGS[kind]}`} current={page.scope} />}
         </div>
         <div className="max-w-[48rem]">
           <FullBoard page={page} basePath={basePath} />

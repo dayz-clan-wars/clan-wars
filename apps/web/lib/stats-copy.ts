@@ -12,6 +12,9 @@ export { BOARD_LABELS, EMPTY_BOARD, NO_PROFILE, playTime, scopeLabel, boardValue
 /** Under the streaks board: what ends one. */
 export const STREAK_NOTE = "Ends on a PvP death";
 
+/** Under the weekly referrers board: it ignores the season picker. */
+export const REFERRERS_WEEK_NOTE = "This week, from Monday 10:00 UTC";
+
 /** Under the builders board: what a point is. */
 export const BUILD_NOTE = "1 point per build step";
 

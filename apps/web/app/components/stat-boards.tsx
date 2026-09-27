@@ -1,6 +1,6 @@
 import { BOARD_KINDS, type BoardKind, type Boards, type BoardRow, type KdRow, type LongestKillRow, type RowClans } from "@factions/roster";
 import { flagThumbPath } from "@/src/flag-images";
-import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, SEE_ALL, STREAK_NOTE, boardValue, scopeLabel } from "@/lib/stats-copy";
+import { BOARD_LABELS, BUILD_NOTE, EMPTY_BOARD, KD_NOTE, REFERRERS_WEEK_NOTE, SEE_ALL, STREAK_NOTE, boardValue, scopeLabel } from "@/lib/stats-copy";
 import { BOARD_SLUGS, seasonQuery } from "@/lib/board-page";
 import { Panel, Rank, SegNav, linkMono } from "./ui";
 
@@ -20,7 +20,7 @@ export function ScopePicker({ seasons, basePath, current }: { seasons: number[];
 type Kind = BoardKind;
 /** The panel numbers follow `BOARD_KINDS`' order. */
 const NUM = Object.fromEntries(BOARD_KINDS.map((k, i) => [k, String(i + 1).padStart(2, "0")])) as Record<Kind, string>;
-const NOTE: Partial<Record<Kind, string>> = { kd: KD_NOTE, builders: BUILD_NOTE, streaks: STREAK_NOTE };
+const NOTE: Partial<Record<Kind, string>> = { kd: KD_NOTE, builders: BUILD_NOTE, streaks: STREAK_NOTE, referrersWeek: REFERRERS_WEEK_NOTE };
 export { NUM as BOARD_NUM, NOTE as BOARD_NOTE };
 
 /** The row's clan flag, or a blank of the same size so names line up. The tag is the alt text and the tooltip. */

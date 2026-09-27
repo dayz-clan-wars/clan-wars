@@ -7,6 +7,7 @@ const SITE = "https://dayzclanwars.com";
 const empty = (): Boards => ({
   clans: {}, scope: { kind: "season", number: 2 }, seasons: [2, 1],
   raiders: [], killers: [], deaths: [], kd: [], playTime: [], friendlyFire: [], builders: [], streaks: [], longestKills: [], bountyKills: [],
+  referrers: [], referrersWeek: [],
 });
 
 describe("leaderboardEmbed", () => {

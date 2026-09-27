@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
 import {
-  bounties, events, factionMembers, factions, identityLinks, kills, membershipHistory, playerSessions, players, raids, seasons,
+  bounties, events, factionMembers, factions, identityLinks, kills, membershipHistory, playerSessions, players, raids, referralQualifications, referrals, seasons,
 } from "@factions/db";
-import { KD_MIN_KILLS } from "@factions/domain";
+import { KD_MIN_KILLS, referralWeekFor } from "@factions/domain";
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
 import type { PgColumn, PgTable } from "drizzle-orm/pg-core";
 import { activeServerId } from "./server";
@@ -50,7 +50,7 @@ export type RowClan = { tag: string; texture: string };
 export type RowClans = Record<string, RowClan>;
 
 export type Boards = {
-  /** The clan behind each row's `dayzId`, across all ten boards. */
+  /** The clan behind each row's `dayzId`, across every board. */
   clans: RowClans;
   /** ⚠️ The RESOLVED scope: a `"current"` request comes back as the season (or all-time) it named. */
   scope: ResolvedScope;
@@ -86,14 +86,23 @@ export type Boards = {
    * bounty closed, so this counts claims and nothing else. Windowed on the kill's time.
    */
   bountyKills: BoardRow[];
+  /**
+   * Qualified referrals (spec 2026-09-27-referral-leaderboard): players this
+   * referrer brought in who then reached two hours of play, windowed on when
+   * each qualified. Rows are the referrer's current character, else the one the
+   * referral snapshotted.
+   */
+  referrers: BoardRow[];
+  /** The same count for the current referral week only. ⚠️ Ignores the scope: always this week. */
+  referrersWeek: BoardRow[];
 };
 /**
- * The ten board names, in display order: raiding first, then offensive PvP
+ * The twelve board names, in display order: raiding first, then offensive PvP
  * (kills, K/D, streak, range), bounty kills, then building, play time, and
- * last the two shameful boards (deaths, friendly fire). The URL segment of a
- * full-board page is one of these.
+ * last the two shameful boards (deaths, friendly fire), then the two referral boards.
+ * The URL segment of a full-board page is one of these.
  */
-export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire"] as const;
+export const BOARD_KINDS = ["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire", "referrers", "referrersWeek"] as const;
 export type BoardKind = (typeof BOARD_KINDS)[number];
 /** Rows per page on a full-board page. */
 export const BOARD_PAGE_SIZE = 50;
@@ -437,6 +446,35 @@ async function kdBoard(db: Database, serverId: number, w: Window, roster: string
     .slice(offset, offset + limit);
 }
 
+/**
+ * Referrers by qualified referrals in `w` (spec 2026-09-27-referral-leaderboard §5).
+ * Grouped by the referrer's Discord account; shown as their current character,
+ * else the character the referral snapshotted (never a Discord id).
+ * Ties: whoever reached the count first, then name.
+ */
+async function referrersBoard(db: Database, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<BoardRow[]> {
+  const counted = sql`
+    select ${referrals.referrerDiscordId} as discord_id, max(${referrals.referrerDayzId}) as snap,
+           count(*)::int as value, max(${referralQualifications.qualifiedAt}) as reached_at
+    from ${referralQualifications}
+    join ${referrals} on ${referrals.referredDiscordId} = ${referralQualifications.referredDiscordId}
+    where ${inWindow(referralQualifications.qualifiedAt, w)}
+    group by ${referrals.referrerDiscordId}`;
+  const shown = sql`coalesce(l.dayz_id, c.snap)`;
+  const rosterWhere = roster === null ? sql``
+    : roster.length === 0 ? sql`where false`
+    : sql`where ${shown} = any(array[${sql.join(roster.map((id) => sql`${id}`), sql`, `)}]::text[])`;
+  const rows = await db.execute<{ dayzId: string; gamertag: string; value: number }>(sql`
+    select ${shown} as "dayzId", coalesce(l.gamertag, p.gamertag, c.snap) as gamertag, c.value
+    from (${counted}) c
+    left join identity_links l on l.discord_id = c.discord_id
+    left join players p on p.dayz_id = ${shown}
+    ${rosterWhere}
+    order by c.value desc, c.reached_at asc, 2 asc
+    limit ${limit} offset ${offset}`);
+  return [...rows].map((r) => ({ dayzId: r.dayzId, gamertag: r.gamertag, value: Number(r.value) }));
+}
+
 /** One board's rows, by kind, in its own order, from `offset`. Every kind carries the same window and roster predicate. */
 function boardRows(
   db: Database, kind: BoardKind, serverId: number, w: Window, now: Date, roster: string[] | null, limit: number, offset = 0,
@@ -467,6 +505,12 @@ function boardRows(
       eq(bounties.serverId, serverId), eq(bounties.status, "claimed"),
       inWindow(bounties.claimedAt, w), inRoster(bounties.claimedByDayzId, roster),
     )!, limit, offset);
+    case "referrers": return referrersBoard(db, w, roster, limit, offset);
+    // ⚠️ Not `w`: the weekly board is always the current referral week, whatever the scope picker says.
+    case "referrersWeek": {
+      const week = referralWeekFor(now);
+      return referrersBoard(db, { from: week.start, to: week.end, seasonId: null }, roster, limit, offset);
+    }
   }
 }
 
@@ -492,17 +536,21 @@ async function scopeWindow(db: Database, scope: StatScope, now: Date) {
   return { serverId, seasonList, resolved, w };
 }
 
-/** The ten boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
+/** The twelve boards, optionally narrowed to one clan's roster. `roster === null` is the public board. */
 async function boardsFor(db: Database, scope: StatScope, limit: number, now: Date, roster: string[] | null): Promise<Boards> {
   const { serverId, seasonList, resolved, w } = await scopeWindow(db, scope, now);
   const rows = (kind: BoardKind) => boardRows(db, kind, serverId, w, now, roster, limit);
-  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills] = await Promise.all([
+  const [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills, referrers, referrersWeek] = await Promise.all([
     rows("raiders"), rows("killers"), rows("deaths"), kdBoard(db, serverId, w, roster, limit), rows("playTime"),
     rows("friendlyFire"), rows("builders"), rows("streaks"), longestKillBoard(db, serverId, w, roster, limit), rows("bountyKills"),
+    rows("referrers"), rows("referrersWeek"),
   ]);
-  const all = [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills];
+  const all = [raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills, referrers, referrersWeek];
   const clans = await clansOf(db, all.flatMap((rows) => rows.map((r) => r.dayzId)));
-  return { scope: resolved, seasons: seasonList, clans, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills };
+  return {
+    scope: resolved, seasons: seasonList, clans, raiders, killers, deaths, kd, playTime, friendlyFire, builders, streaks, longestKills, bountyKills,
+    referrers, referrersWeek,
+  };
 }
 
 /**

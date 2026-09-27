@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { boardPage } from "@factions/roster";
 import { parseSeasonParam } from "@/lib/stat-scope";
 import { BOARD_SLUGS, boardKindFromSlug, parsePageParam } from "@/lib/board-page";
-import { BOARD_LABELS } from "@/lib/stats-copy";
+import { BOARD_LABELS, REFERRERS_WEEK_NOTE } from "@/lib/stats-copy";
 import { ScopePicker } from "@/app/components/stat-boards";
 import { FullBoard } from "@/app/components/full-board";
 import { Page, PageHead, Body, BackLine } from "@/app/components/ui";
@@ -30,7 +30,7 @@ export default async function PublicBoardPage({ params, searchParams }: Params) 
   return (
     <Page wide>
       <PageHead guide={guideLinkFor("/players/boards/[board]")} kicker="Players" title={BOARD_LABELS[kind]}
-        aside={<ScopePicker seasons={page.seasons} basePath={`${basePath}/${BOARD_SLUGS[kind]}`} current={page.scope} />} />
+        aside={kind === "referrersWeek" ? <span className="text-[11px]">{REFERRERS_WEEK_NOTE}</span> : <ScopePicker seasons={page.seasons} basePath={`${basePath}/${BOARD_SLUGS[kind]}`} current={page.scope} />} />
       <Body className="max-w-[48rem]">
         <FullBoard page={page} basePath={basePath} />
         <BackLine href="/players">Player boards</BackLine>
