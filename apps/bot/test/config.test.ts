@@ -420,6 +420,15 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("REFERRAL_AWARD_TICK", () => {
+    it("refuses REFERRAL_AWARD_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
+      expect(() => loadConfig({ ...OK, REFERRAL_AWARD_TICK: "1" })).toThrow(/REFERRAL_AWARD_TICK/u);
+    });
+    it("defaults the referral award off, every five minutes", () => {
+      expect(loadConfig(OK).referralAward).toEqual({ enabled: false, intervalMs: 300_000 });
+    });
+  });
+
   describe("OPS_CHANNEL_ID", () => {
     it("is optional, off by default", () => {
       expect(loadConfig(OK).opsChannelId).toBeUndefined();

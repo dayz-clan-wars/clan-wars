@@ -21,7 +21,7 @@ export function assertTestDatabaseName(name: string): void {
 }
 
 /**
- * Empty `referrals` between tests. Shared across every suite that writes a
+ * Empty `referrals` and `referral_qualifications` between tests. Shared across every suite that writes a
  * referral (verification, roster, and later the bot and web) so there is one
  * copy of this workaround, not one per package.
  *
@@ -43,6 +43,10 @@ export async function clearReferrals(db: Database): Promise<void> {
     const rows = await tx.execute(sql`SELECT current_database()`);
     const name = (rows[0] as { current_database?: string } | undefined)?.current_database ?? "";
     assertTestDatabaseName(name);
+    // ⚠️ Qualifications first: they reference `referrals`, and both are permanent.
+    await tx.execute(sql`ALTER TABLE referral_qualifications DISABLE TRIGGER USER`);
+    await tx.execute(sql`DELETE FROM referral_qualifications`);
+    await tx.execute(sql`ALTER TABLE referral_qualifications ENABLE TRIGGER USER`);
     await tx.execute(sql`ALTER TABLE referrals DISABLE TRIGGER USER`);
     await tx.execute(sql`DELETE FROM referrals`);
     await tx.execute(sql`ALTER TABLE referrals ENABLE TRIGGER USER`);

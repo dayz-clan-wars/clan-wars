@@ -36,7 +36,9 @@ in-game verification tick confirms it.
 | `CROWN_PLAYTIME_ROLE_ID` | no | Same, for the play-time board. |
 | `CROWN_DEATHS_ROLE_ID` | no | Same, for the most-PvP-deaths board. |
 | `CROWN_FRIENDLY_FIRE_ROLE_ID` | no | Same, for the friendly-fire board. |
-| `CROWN_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the ten crowns reconcile. Each pass is ten leaderboard queries, so this is deliberately not every tick. |
+| `CROWN_REFERRERS_ROLE_ID` | no | Same, for the top-referrers board. |
+| `CROWN_REFERRERS_WEEK_ROLE_ID` | no | Same, for the referrers-this-week board — moves holder to holder every Monday, and empties until someone qualifies that week. |
+| `CROWN_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the twelve crowns reconcile. Each pass is twelve leaderboard queries, so this is deliberately not every tick. |
 | `BOOSTER_TICK_INTERVAL_MS` | no (default `900000`, 15 minutes) | How often the booster tick re-fetches the guild's member list to mirror who is currently boosting into `discord_boosters` — the table the ingest worker's booster-kit spawner reads. Not gated by any feature flag; it always runs. `guild.members.fetch()` is a heavy full-cache call, so this is deliberately not every tick — a stale read is bounded by the next server restart anyway (a kit only reappears then). Runbook `docs/deploy/2026-09-19-booster-kits.md`. |
 | `ACHIEVEMENTS_CHANNEL_ID` | no (unset means the achievements wall is off) | The Discord channel id the public achievements wall posts to, alongside the normal clan-channel/DM notice for every unlock. Unset by default: unlocks still happen, nothing posts there. |
 | `ACHIEVEMENTS_TICK` | no (default off; `"1"`/`"true"` = on) | Gates the achievements tick itself. **Leave ACHIEVEMENTS_TICK unset until the backfill runbook has run** — turning it on before the backfill races its watermarks and can skip or duplicate unlocks. |
@@ -62,6 +64,8 @@ in-game verification tick confirms it.
 | `KOTH_WEEKLY_CAP` | no (default `2`) | How many automatic King of the Hill sessions (`origin = 'auto'`) may start per ISO week (Monday 00:00 UTC through the following Sunday), not a rolling 7 days. |
 | `KOTH_AUTO_MIN_POP` | no (default `10`) | The population floor an automatic King of the Hill decision must clear, beside the high-water mark. |
 | `KOTH_VOTE` | no (default off; `"1"`/`"true"` = on; requires `KOTH_TICK`) | Enables `/kothvote`, letting linked in-game players call a King of the Hill session by two-thirds vote. Prize-less. |
+| `REFERRAL_AWARD_TICK` | no (default off; `"1"`/`"true"` = on) | Closes referral weeks and grants the weekly plate-carrier prize. Requires `SERVER_EVENTS_CHANNEL_ID`; config load fails without it, because the winner announcement is the player-facing point of the feature. |
+| `REFERRAL_AWARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the referral award tick runs and checks for closed weeks. Runbook `docs/deploy/2026-09-27-referral-leaderboard.md`. |
 
 Example `.env` (placeholders only — never commit real values):
 

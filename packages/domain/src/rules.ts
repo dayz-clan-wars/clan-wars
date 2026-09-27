@@ -436,3 +436,14 @@ export const KOTH_VOTE_PASS_NUM = 2;
 export const KOTH_VOTE_PASS_DEN = 3;
 /** The shortest a vote may be open before it closes (§4). */
 export const KOTH_VOTE_MIN_OPEN_MS = 10 * 60_000;
+
+// ─── Referral leaderboards (spec 2026-09-27-referral-leaderboard) ──────────
+/** Referral leaderboards (spec 2026-09-27-referral-leaderboard §2, §3). */
+/** Play a referred player needs before their referral counts. Total play, including play before they were named. */
+export const REFERRAL_QUALIFY_MS = 2 * 60 * 60_000;
+/** A referral week starts Monday at this hour, UTC. Its own constant: moving the vehicle wipe's `offHour` must not move the contest. */
+export const REFERRAL_WEEK_START_HOUR_UTC = 10;
+/** How long after a week ends before it may close, on top of the sessions-cursor check. */
+export const REFERRAL_CLOSE_GRACE_MS = 30 * 60_000;
+/** The prize. A key in `assets/awards.json`. */
+export const REFERRAL_AWARD_KEY = "plate-carrier";

@@ -1,0 +1,2 @@
+ALTER TABLE "referral_qualifications" ADD COLUMN "referred_dayz_id" text;--> statement-breakpoint
+CREATE UNIQUE INDEX IF NOT EXISTS "referral_qualifications_dayz_uniq" ON "referral_qualifications" USING btree ("referred_dayz_id") WHERE "referral_qualifications"."referred_dayz_id" IS NOT NULL;

@@ -28,6 +28,9 @@ export * from "./incidents";
 // — two copies of a challenge rule is exactly what this package exists to stop.
 export * from "./kit-placement-issue";
 
+// Record referral qualifications: when a referred player reaches the required play time.
+export * from "./referral-qualify";
+
 // The leaderboards themselves, for the bot's crown reconciler (apps/bot/src/crown-store.ts).
 // Read-only, and the same query the public /players boards run — the bot must
 // never compute a second, drifting idea of who is #1.

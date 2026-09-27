@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Two new leaderboards: Top referrers and Top referrers this week. A player you bring in counts once they've played for two hours.
+- Every Monday, whoever brought in the most players that week gets a plate carrier for a week. If it's a tie, everyone tied gets one.
+
 ## [1.48.0] - 2026-09-26
 
 ### Added

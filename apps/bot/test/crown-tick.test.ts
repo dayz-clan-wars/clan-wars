@@ -15,6 +15,8 @@ const ALL_ROLES = {
   playTime: "r-playTime",
   deaths: "r-deaths",
   friendlyFire: "r-friendlyFire",
+  referrers: "r-referrers",
+  referrersWeek: "r-referrersWeek",
 } as const satisfies Record<BoardKind, string>;
 
 /** A store that answers with exactly what a test hands it. */

@@ -11,10 +11,10 @@ export const BOUNTY_STATUSES = ["open", "claimed", "expired", "revoked"] as cons
 export type BountyStatus = (typeof BOUNTY_STATUSES)[number];
 
 /** One `player_sessions` row: connect to disconnect, `to = null` while still connected. */
-export type SessionSpan = { from: Date; to: Date | null };
+export type OnlineSessionSpan = { from: Date; to: Date | null };
 
 /** Spans clipped to [start, until], sorted, overlaps merged away — so nothing is counted twice. */
-function clipped(spans: SessionSpan[], start: Date, until: Date): { from: number; to: number }[] {
+function clipped(spans: OnlineSessionSpan[], start: Date, until: Date): { from: number; to: number }[] {
   const out: { from: number; to: number }[] = [];
   const sorted = [...spans].sort((a, b) => a.from.getTime() - b.from.getTime());
   let floor = start.getTime();
@@ -29,12 +29,12 @@ function clipped(spans: SessionSpan[], start: Date, until: Date): { from: number
 }
 
 /** Time connected inside [start, until]. An open session runs to `until`. */
-export function onlineMs(spans: SessionSpan[], start: Date, until: Date): number {
+export function onlineMs(spans: OnlineSessionSpan[], start: Date, until: Date): number {
   return clipped(spans, start, until).reduce((sum, s) => sum + (s.to - s.from), 0);
 }
 
 /** The instant the online budget was used up, or null while some remains. */
-export function budgetRunOutAt(spans: SessionSpan[], start: Date, budgetMs: number, until: Date): Date | null {
+export function budgetRunOutAt(spans: OnlineSessionSpan[], start: Date, budgetMs: number, until: Date): Date | null {
   let used = 0;
   for (const s of clipped(spans, start, until)) {
     const len = s.to - s.from;
@@ -60,7 +60,7 @@ export type BountyOutcome = { kind: "open" } | { kind: "claimed" } | { kind: "ex
  */
 export function bountyOutcome(
   b: { placedAt: Date; onlineBudgetMs: number; deadlineAt: Date },
-  spans: SessionSpan[],
+  spans: OnlineSessionSpan[],
   firstKillAt: Date | null,
   now: Date,
 ): BountyOutcome {

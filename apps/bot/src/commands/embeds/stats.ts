@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { AchievementWall, BoardPage, PlayerProfile } from "@factions/roster";
-import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, playTime, scopeLabel } from "@factions/copy";
+import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, boardHeading, playTime, scopeLabel } from "@factions/copy";
 import { budget } from "./budget.js";
 import { clanLink, playerLink } from "../../site-links.js";
 
@@ -46,11 +46,12 @@ export function playerEmbed(p: PlayerProfile, siteBaseUrl: string): EmbedBuilder
  *
  * ⚠️ R7: prints `page.scope` — the RESOLVED scope, not whatever the player
  * typed — so a mistyped or unrecognised `scope:` shows up as the wrong
- * season on the card instead of silently returning different numbers.
+ * season on the card instead of silently returning different numbers. The
+ * weekly referrers board ignores the scope, so it prints the week note instead.
  */
 export function boardEmbed(page: BoardPage, siteBaseUrl: string): EmbedBuilder {
   const title = `${BOARD_LABELS[page.kind]} — page ${page.page}`;
-  const description = scopeLabel(page.scope);
+  const description = boardHeading(page.kind, page.scope);
   const footerText = page.hasNext ? "More on the site." : "That is the whole board.";
   const embed = new EmbedBuilder()
     .setColor(GOLD)

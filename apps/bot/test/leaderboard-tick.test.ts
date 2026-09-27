@@ -8,12 +8,13 @@ const SITE = "https://dayzclanwars.com";
 const boardsOf = (over: Partial<Boards> = {}): Boards => ({
   clans: {}, scope: { kind: "season", number: 2 }, seasons: [2, 1],
   raiders: [], killers: [], deaths: [], kd: [], playTime: [], friendlyFire: [], builders: [], streaks: [], longestKills: [], bountyKills: [],
+  referrers: [], referrersWeek: [],
   ...over,
 });
 
 const storeOf = (boards: Boards): LeaderboardStore => ({ read: async () => boards });
 
-/** An in-memory leaderboards channel: ten standing messages, in the order they were sent. */
+/** An in-memory leaderboards channel: twelve standing messages, in the order they were sent. */
 class FakeChannel implements LeaderboardChannel {
   posted: { kind: BoardKind; embed: APIEmbed }[] = [];
   /** Messages the bot believes exist, keyed by the id it handed out. */
@@ -64,9 +65,9 @@ describe("leaderboardTick", () => {
     state = freshState();
   });
 
-  it("posts all ten on an empty channel, in the site's order", async () => {
+  it("posts all twelve on an empty channel, in the site's order", async () => {
     const r = await leaderboardTick(storeOf(boardsOf()), channel, state, SITE);
-    expect(r).toMatchObject({ posted: 10, edited: 0, errors: 0 });
+    expect(r).toMatchObject({ posted: 12, edited: 0, errors: 0 });
     expect(channel.posted.map((p) => p.kind)).toEqual([...BOARD_KINDS]);
   });
 
@@ -88,7 +89,7 @@ describe("leaderboardTick", () => {
     expect(channel.calls.filter((c) => c.startsWith("edit:"))).toHaveLength(1);
   });
 
-  it("⚠️ rebuilds the whole channel when a message has gone missing, so the ten stay in order", async () => {
+  it("⚠️ rebuilds the whole channel when a message has gone missing, so all twelve stay in order", async () => {
     await leaderboardTick(storeOf(boardsOf()), channel, state, SITE);
     // Someone deleted the killers message by hand.
     const killersId = [...channel.live].find(([, m]) => m.kind === "killers")![0];
@@ -97,12 +98,12 @@ describe("leaderboardTick", () => {
 
     channel.posted.length = 0;
     const r = await leaderboardTick(storeOf(boardsOf()), channel, state, SITE);
-    expect(r).toMatchObject({ posted: 10, rebuilt: true, errors: 0 });
+    expect(r).toMatchObject({ posted: 12, rebuilt: true, errors: 0 });
     expect(channel.calls).toContain("purgeMine");
     expect(channel.posted.map((p) => p.kind)).toEqual([...BOARD_KINDS]);
   });
 
-  it("adopts the ten it already posted after a restart, editing rather than reposting", async () => {
+  it("adopts the twelve it already posted after a restart, editing rather than reposting", async () => {
     await leaderboardTick(storeOf(boardsOf()), channel, state, SITE);
     state = freshState(); // restart: ids and keys are gone, the channel is not
     channel.calls.length = 0; // the first pass's own build is not what is under test
@@ -111,7 +112,7 @@ describe("leaderboardTick", () => {
     const r = await leaderboardTick(storeOf(moved), channel, state, SITE);
     expect(r).toMatchObject({ posted: 0, rebuilt: false, errors: 0 });
     // A restart has no remembered keys, so every board is redrawn once.
-    expect(r.edited).toBe(10);
+    expect(r.edited).toBe(12);
     expect(channel.calls).not.toContain("purgeMine");
   });
 
@@ -141,7 +142,7 @@ describe("leaderboardTick", () => {
     expect(errors).toEqual(["raiders"]);
   });
 
-  it("⚠️ writes nothing when the board read fails, rather than blanking ten messages", async () => {
+  it("⚠️ writes nothing when the board read fails, rather than blanking every message", async () => {
     await leaderboardTick(storeOf(boardsOf({ killers: [{ dayzId: "A", gamertag: "Alpha", value: 9 }] })), channel, state, SITE);
     channel.calls.length = 0;
     const throwing: LeaderboardStore = { read: async () => { throw new Error("boards unavailable"); } };

@@ -1,11 +1,12 @@
 import { describe, it, expect } from "vitest";
 import { KD_MIN_KILLS } from "@factions/domain";
 import { BOARD_KINDS } from "@factions/roster";
-import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, SEE_ALL, PAGER, playTime, scopeLabel } from "../lib/stats-copy";
+import * as copy from "@factions/copy";
+import { BOARD_LABELS, BUILD_NOTE, STREAK_NOTE, KD_NOTE, EMPTY_BOARD, NO_PROFILE, SEE_ALL, PAGER, playTime, scopeLabel, REFERRERS_WEEK_NOTE } from "../lib/stats-copy";
 
 describe("board order", () => {
   it("is raiding, offensive PvP, building, play time, then the shameful two", () => {
-    expect([...BOARD_KINDS]).toEqual(["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire"]);
+    expect([...BOARD_KINDS]).toEqual(["raiders", "killers", "kd", "streaks", "longestKills", "bountyKills", "builders", "playTime", "deaths", "friendlyFire", "referrers", "referrersWeek"]);
   });
   it("BOARD_LABELS is written in the same order", () => {
     expect(Object.keys(BOARD_LABELS)).toEqual([...BOARD_KINDS]);
@@ -13,7 +14,7 @@ describe("board order", () => {
 });
 
 describe("BOARD_LABELS", () => {
-  it("names all ten boards", () => {
+  it("names every board", () => {
     expect(BOARD_LABELS).toEqual({
       raiders: "Top raiders",
       killers: "Top killers",
@@ -25,6 +26,8 @@ describe("BOARD_LABELS", () => {
       playTime: "Most play time",
       deaths: "Most PvP deaths",
       friendlyFire: "Most friendly fire",
+      referrers: "Top referrers",
+      referrersWeek: "Top referrers this week",
     });
   });
 });
@@ -79,5 +82,11 @@ describe("scopeLabel", () => {
   });
   it("labels a season", () => {
     expect(scopeLabel({ kind: "season", number: 3 })).toBe("Season 3");
+  });
+});
+
+describe("REFERRERS_WEEK_NOTE", () => {
+  it("is the shared note the bot's weekly referrers board prints, not a copy of it", () => {
+    expect(REFERRERS_WEEK_NOTE).toBe(copy.REFERRERS_WEEK_NOTE);
   });
 });
