@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.50.0] - 2026-09-27
+
 ### Changed
 
 - During King of the Hill, dead players' bodies now disappear after 30 seconds and dead infected after 10, so the hill doesn't fill up with corpses. Both go back to normal when the event ends.
