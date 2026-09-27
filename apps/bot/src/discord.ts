@@ -35,6 +35,7 @@ import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
 import { airdropTick } from "./airdrop-tick.js";
 import { kothTick } from "./koth-tick.js";
+import { referralAwardTick } from "./referral-award-tick.js";
 import { kothVoteTick } from "./koth-vote-tick.js";
 import { kothDecideTick } from "./koth-decide-tick.js";
 import { voteButtons, type KothVoteChannel } from "./koth-vote-channel.js";
@@ -679,6 +680,12 @@ export async function start(cfg: BotConfig): Promise<void> {
   // ⚠️ Built whenever the channel exists, not only with KOTH_VOTE on: a vote open
   // when the flag goes off must still be closed and its message edited.
   const kothVoteChannel = cfg.koth.enabled && cfg.serverEventsChannelId ? createKothVoteChannel(client, cfg.serverEventsChannelId) : null;
+  // ⚠️ A separate poster on the same channel, with mentions off: the winners post
+  // carries a gamertag. See createChannelPoster's comment.
+  const referralPoster = cfg.referralAward.enabled && cfg.serverEventsChannelId
+    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
+    : null;
+  let lastReferralAt = 0;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
     db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
@@ -1745,6 +1752,23 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // ⚠️ After the restart tick, like every server-events poster. Qualification runs
+    // whether or not REFERRAL_AWARD_TICK is on (the boards need it); only the payout
+    // is gated. Config refuses the payout without SERVER_EVENTS_CHANNEL_ID, so
+    // referralPoster is non-null whenever payout is true.
+    if (Date.now() - lastReferralAt >= cfg.referralAward.intervalMs && client.user) {
+      lastReferralAt = Date.now();
+      try {
+        const opsPoster = opsChannelPoster ?? (async (content: string) => { console.error(content); });
+        const r = await referralAwardTick(db,
+          { announce: referralPoster ?? (async () => {}), ops: opsPoster },
+          { now: new Date(), siteBaseUrl: cfg.siteBaseUrl, grantedByDiscordId: client.user.id, payout: cfg.referralAward.enabled });
+        if (r.qualified + r.closed + r.posted > 0) console.log(`referrals: ${r.qualified} qualified, ${r.closed} closed, ${r.posted} posted`);
+      } catch (err) {
+        console.error("referral tick failed", err);
+      }
+    }
+
     // ⚠️ After the restart tick, for the same reason the restart tick runs last: a slow
     // Discord call must not delay a due restart. Its own try/catch, like every step.
     // ⚠️ Gated on the flag alone — config load refuses WEEKLY_VEHICLE_WIPE without
@@ -1820,6 +1844,9 @@ export async function start(cfg: BotConfig): Promise<void> {
     else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");
     if (cfg.koth.auto.enabled) console.log(`king of the hill automation on (cap ${cfg.koth.auto.weeklyCap}/week, floor ${cfg.koth.auto.minPop})`);
     if (cfg.koth.vote.enabled) console.log("king of the hill voting on");
+
+    if (!cfg.referralAward.enabled) console.warn("REFERRAL_AWARD_TICK is off: referrals still qualify, but no weekly plate carrier is granted or announced.");
+    else console.log("referral award on: the weekly plate carrier is granted and announced");
 
     if (!cfg.warLogChannelId) {
       void countUnpostedWarLog(db)

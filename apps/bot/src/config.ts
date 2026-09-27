@@ -173,6 +173,11 @@ export type BotConfig = {
    */
   koth: { enabled: boolean; auto: { enabled: boolean; weeklyCap: number; minPop: number }; vote: { enabled: boolean } };
   /**
+   * Referral qualification always runs (the boards need it); `enabled` gates only
+   * the weekly plate carrier payout (`referral-award-tick.ts`).
+   */
+  referralAward: { enabled: boolean; intervalMs: number };
+  /**
    * Where the airdrop tick announces a drop's location. Fatal when the tick
    * is on and this is unset — see the load-time check below.
    */
@@ -500,6 +505,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       },
       vote: { enabled: ["1", "true"].includes((env.KOTH_VOTE ?? "").trim().toLowerCase()) },
     },
+    referralAward: {
+      enabled: ["1", "true"].includes((env.REFERRAL_AWARD_TICK ?? "").trim().toLowerCase()),
+      intervalMs: positiveInt(env, "REFERRAL_AWARD_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
+    },
     serverEventsChannelId: optionalSnowflake(env, "SERVER_EVENTS_CHANNEL_ID"),
     opsChannelId: optionalSnowflake(env, "OPS_CHANNEL_ID"),
     // ⚠️ Trimmed and lowercased before the comparison. Without that, an operator
@@ -610,6 +619,11 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   }
   if (config.koth.vote.enabled && !config.koth.enabled) {
     throw new Error("KOTH_VOTE is on but KOTH_TICK is off — a passed vote would announce an event nothing ever opens.");
+  }
+  // ⚠️ Fatal, like KOTH_TICK/AIRDROP_TICK: the weekly winner is a public announcement,
+  // and with no channel to post it the payout would run silently forever.
+  if (config.referralAward.enabled && !config.serverEventsChannelId) {
+    throw new Error("REFERRAL_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly winner would never be announced.");
   }
   // ⚠️ Validated even when the wipe is off, so a typo surfaces at boot rather than
   // the morning someone finally sets TRUCK_WIPE_EVENTS.
