@@ -34,6 +34,9 @@ const COMMANDS: Record<string, string> = {
   addLock: "vault add", editLock: "vault edit", deleteLock: "vault delete",
   revealLock: "vault reveal", confirmLock: "vault confirm", rotateLocks: "vault rotate",
   dropPin: "map pin", deletePin: "map unpin",
+  // 2026-09-26 referrals (docs/superpowers/plans/2026-09-26-referrals.md), Task 4:
+  // `/link start referrer` and `/link referrer` both call this.
+  addReferrer: "link referrer",
 };
 
 /**
@@ -84,11 +87,6 @@ const PENDING: Record<string, string> = {
   saveAwardPick: "award pick",
   startAwardPlacement: "award place",
   cancelAwardPlacement: "award cancel",
-
-  // 2026-09-26 referrals (docs/superpowers/plans/2026-09-26-referrals.md). Task 3
-  // ships the roster export; the command (`/link referrer`) is Task 4's, still
-  // to come in the same plan.
-  addReferrer: "link referrer",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */

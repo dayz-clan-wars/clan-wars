@@ -23,6 +23,10 @@ export function linkStatusEmbed(status: LinkStatus, now: Date, siteBaseUrl: stri
     embed.setDescription("No character linked yet. Run `/link start` and pick your character to draw a challenge.");
   }
 
+  if (status.referredBy) {
+    embed.addFields({ name: "Referred by", value: status.referredBy.gamertag, inline: false });
+  }
+
   if (status.challenge) {
     const c = status.challenge;
     const steps = c.steps.map((s, n) => `${s.confirmed ? "✅" : `${n + 1}.`} ${s.label}`).join("\n");

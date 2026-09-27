@@ -1,8 +1,12 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, players, identityLinks, type Database } from "@factions/db";
+import {
+  createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
+  players, identityLinks, referrals, type Database,
+} from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PermissionFlagsBits, type Client } from "discord.js";
 import { PgVerificationStore } from "@factions/verification";
+import { REFERRAL_COPY } from "@factions/copy";
 import {
   buildCommands, notifyCompleted, guardedRunner, step,
   createNicknameApplier, createChannelPoster, type NicknameClientLike, type RealGuildLike,
@@ -36,6 +40,7 @@ describe("discord wiring", () => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(sql`truncate table challenge_attempts, verification_challenges, identity_links, players, faction_members, factions, servers restart identity cascade`);
     });
+    await clearReferrals(db);
     store = new PgVerificationStore(db);
     deps = { store, now: () => now };
     // Fixture clock, not new Date(): the whole suite reasons about `now`.
@@ -309,6 +314,59 @@ describe("discord wiring", () => {
       expect(sent[0]!.content).toContain("already linked to another Discord account");
       expect(sent[0]!.channelId).toBeNull();
       expect(await notifyCompleted(deps, send)).toBe(0);
+    });
+
+    it("explains a referrer that could not be recorded", async () => {
+      // Naming yourself as your own referrer is the simplest refusal to
+      // trigger at COMPLETION time (rather than /link's own pre-check): pass
+      // a referrer id equal to the discord id straight into the store, below
+      // the pre-check `startLinkDb` would otherwise apply.
+      const c = await store.createChallenge({
+        discordId: "100", guildId: "g", channelId: "c",
+        sequence: ["EmoteSalute"], issuedAt: now, expiresAt: new Date(now.getTime() + 1000),
+        targetDayzId: UID_A, referrerDiscordId: "100",
+      });
+      expect(c).not.toBeNull();
+      await store.completeChallenge(c!.id, UID_A, "Ronald", now);
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      const content = send.mock.calls[0]?.[0]?.content as string;
+      expect(content).toBe(
+        `Verified — your Discord account is now linked to your character. Your referrer could not be recorded: `
+        + `${REFERRAL_COPY.self({})} You can add one with \`/link referrer\` or on your profile.`,
+      );
+    });
+  });
+
+  describe("notifyCompleted referral notices", () => {
+    const referral = (referredDiscordId: string, referrerDiscordId: string, referrerDayzId: string) =>
+      db.insert(referrals).values({ referredDiscordId, referrerDiscordId, referrerDayzId, source: "later_bot", createdAt: now });
+
+    it("DMs the referrer once, and a failed send retries next pass", async () => {
+      await db.insert(identityLinks).values({ discordId: "A", dayzId: "A".repeat(40), gamertag: "Ronald", verifiedAt: now });
+      await referral("A", "B", "B".repeat(40));
+
+      const failing = vi.fn().mockRejectedValue(new Error("DMs closed"));
+      const logged = vi.spyOn(console, "error").mockImplementation(() => {});
+      expect(await notifyCompleted(deps, failing)).toBe(0);
+      expect(logged).toHaveBeenCalled();
+      logged.mockRestore();
+
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      expect(send).toHaveBeenCalledWith({ discordId: "B", channelId: null, content: "Ronald named you as the player who brought them to Clan Wars." });
+      // Notified: a third pass sends nothing more.
+      expect(await notifyCompleted(deps, vi.fn().mockResolvedValue(undefined))).toBe(0);
+    });
+
+    it("names an unlinked referred player as 'A player'", async () => {
+      // The referred player was never linked here (or has since unlinked) —
+      // the referral survives either way, keyed by Discord id alone.
+      await referral("A", "B", "B".repeat(40));
+
+      const send = vi.fn().mockResolvedValue(undefined);
+      expect(await notifyCompleted(deps, send)).toBe(1);
+      expect(send).toHaveBeenCalledWith({ discordId: "B", channelId: null, content: "A player named you as the player who brought them to Clan Wars." });
     });
   });
 

@@ -1,6 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
-import { ISSUE_COPY, REFERRAL_COPY, UNLINK_COPY, rel, when } from "@factions/copy";
+import { ISSUE_COPY, REFERRAL_COPY, REFERRAL_RECORDED, UNLINK_COPY, rel, when } from "@factions/copy";
 import { linkStatusEmbed } from "./embeds/link.js";
+import { linkedPlayers } from "./roster.js";
 import type { AutocompleteSource, CommandGroup, Handler } from "./types.js";
 
 const status: Handler = async (ctx, input) => ({
@@ -20,18 +21,28 @@ const start: Handler = async (ctx, input) => {
   const target = input.string("character");
   if (!target) return { content: "Pick a character from the list.", ephemeral: true };
 
-  const outcome = await ctx.roster.startLink(input.actorDiscordId, target, { newSequence: input.boolean("redraw") === true });
+  const referrer = input.string("referrer")?.trim() || undefined;
+  const outcome = await ctx.roster.startLink(input.actorDiscordId, target, {
+    newSequence: input.boolean("redraw") === true, referrerGamertag: referrer,
+  });
   if (outcome.kind === "issued" || outcome.kind === "live") {
     return { embeds: [linkStatusEmbed(await ctx.roster.linkStatus(input.actorDiscordId), ctx.now, ctx.siteBaseUrl)], ephemeral: true };
   }
-  // `/link start` never names a referrer itself (that lands in a later
-  // increment), so this kind cannot come back from the call above today —
-  // this guard only keeps the type honest against `StartLinkOutcome`'s union.
+  // Only reachable when the `referrer` option above named someone who could
+  // not be recorded — a bad referrer refuses before any challenge is issued.
   if (outcome.kind === "referrer-refused") {
     return { content: REFERRAL_COPY[outcome.reason]({}), ephemeral: true };
   }
   const endsWhen = outcome.kind === "held-by-other" ? (rel(outcome.expiresAt) ?? when(outcome.expiresAt)) : undefined;
   return { content: ISSUE_COPY[outcome.kind](outcome, endsWhen), ephemeral: true };
+};
+
+/** `/link referrer`: name the player who brought you in, once and for good. */
+const referrer: Handler = async (ctx, input) => {
+  const name = input.string("gamertag")?.trim();
+  if (!name) return { content: "Pick your referrer from the list.", ephemeral: true };
+  const r = await ctx.roster.addReferrer(input.actorDiscordId, name, "later_bot");
+  return { content: r.kind === "recorded" ? REFERRAL_RECORDED(r.referrerGamertag) : REFERRAL_COPY[r.reason](r), ephemeral: true };
 };
 
 const cancel: Handler = async (ctx, input) => {
@@ -62,13 +73,17 @@ export const linkGroup: CommandGroup = {
       .setName("start")
       .setDescription("Draw a challenge for one of your characters")
       .addStringOption((o) => o.setName("character").setDescription("Your in-game name").setRequired(true).setAutocomplete(true))
-      .addBooleanOption((o) => o.setName("redraw").setDescription("Draw a different sequence")))
+      .addBooleanOption((o) => o.setName("redraw").setDescription("Draw a different sequence"))
+      .addStringOption((o) => o.setName("referrer").setDescription("The linked player who brought you here (optional, permanent)").setAutocomplete(true)))
     .addSubcommand((s) => s.setName("cancel").setDescription("Drop your open challenge"))
-    .addSubcommand((s) => s.setName("unlink").setDescription("Unbind your character")),
+    .addSubcommand((s) => s.setName("unlink").setDescription("Unbind your character"))
+    .addSubcommand((s) => s.setName("referrer").setDescription("Name the player who brought you here (permanent)")
+      .addStringOption((o) => o.setName("gamertag").setDescription("Their gamertag").setRequired(true).setAutocomplete(true))),
   specs: [
     { path: "link status", handler: status },
-    { path: "link start", handler: start, autocomplete: { character: characters } },
+    { path: "link start", handler: start, autocomplete: { character: characters, referrer: linkedPlayers } },
     { path: "link cancel", handler: cancel },
     { path: "link unlink", handler: unlink },
+    { path: "link referrer", handler: referrer, autocomplete: { gamertag: linkedPlayers } },
   ],
 };
