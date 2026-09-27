@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { LinkStatus } from "@factions/roster";
-import { ENDED_COPY, formatRemaining } from "@factions/copy";
+import { ENDED_COPY, REFERRER_UNNAMED, formatRemaining } from "@factions/copy";
 
 /** The site's ink. Kept here rather than per-embed so every card matches. */
 const GOLD = 0xc8a34a;
@@ -24,7 +24,7 @@ export function linkStatusEmbed(status: LinkStatus, now: Date, siteBaseUrl: stri
   }
 
   if (status.referredBy) {
-    embed.addFields({ name: "Referred by", value: status.referredBy.gamertag, inline: false });
+    embed.addFields({ name: "Referred by", value: status.referredBy.gamertag ?? REFERRER_UNNAMED, inline: false });
   }
 
   if (status.challenge) {

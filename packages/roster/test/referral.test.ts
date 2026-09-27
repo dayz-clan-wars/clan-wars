@@ -5,8 +5,10 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { addReferrerDb, referralsForDb, referralsForGamertagDb } from "../src/referral";
+import { addReferrerDb, referralsForDb, referralsForDayzIdDb } from "../src/referral";
+import { linkStatusDb } from "../src/link";
 import { startLinkDb } from "../src/link";
+import { PgVerificationStore } from "@factions/verification";
 
 const URL = requireTestDatabaseUrl();
 const now = new Date("2026-09-26T12:00:00Z");
@@ -62,7 +64,7 @@ describe("referral", () => {
   it("startLink with a bad referrer refuses before issuing a challenge", async () => {
     await link("A", uid("A"), "Ronald");
     await seedPlayer(uid("T"), "Target");
-    const out = await startLinkDb(db, { discordId: "A", targetDayzId: uid("T"), referrerGamertag: "Ronald", now, rng: Math.random });
+    const out = await startLinkDb(db, { discordId: "A", targetDayzId: uid("T"), referrerGamertag: "Ronald", surface: "site", now, rng: Math.random });
     expect(out).toEqual({ kind: "referrer-refused", reason: "self" });
     expect(await db.select().from(verificationChallenges)).toEqual([]);
   });
@@ -70,11 +72,24 @@ describe("referral", () => {
   it("startLink with a good referrer saves it on the challenge", async () => {
     await link("B", uid("B"), "Otto");
     await seedPlayer(uid("T"), "Target");
-    const out = await startLinkDb(db, { discordId: "A", targetDayzId: uid("T"), referrerGamertag: "Otto", now, rng: Math.random });
+    const out = await startLinkDb(db, { discordId: "A", targetDayzId: uid("T"), referrerGamertag: "Otto", surface: "site", now, rng: Math.random });
     expect(out.kind).toBe("issued");
     if (out.kind !== "issued") throw new Error(out.kind);
     expect(out.challenge.referrerDiscordId).toBe("B");
   });
+
+  it.each([["bot", "link_bot"], ["site", "link_site"]] as const)(
+    "startLink from the %s writes %s on the challenge, and completing it records that source",
+    async (surface, source) => {
+      await link("B", uid("B"), "Otto");
+      await seedPlayer(uid("T"), "Target");
+      const out = await startLinkDb(db, { discordId: "A", targetDayzId: uid("T"), referrerGamertag: "Otto", surface, now, rng: Math.random });
+      if (out.kind !== "issued") throw new Error(out.kind);
+      expect(out.challenge).toMatchObject({ guildId: null, referralSource: source });
+      expect(await new PgVerificationStore(db).completeChallenge(out.challenge.id, uid("T"), "Target", now)).toBe(true);
+      expect(await db.select().from(referrals)).toEqual([expect.objectContaining({ referredDiscordId: "A", referrerDiscordId: "B", source })]);
+    },
+  );
 
   it("referralsFor shows the referrer by current gamertag, falling back to the player's last seen gamertag", async () => {
     await link("A", uid("A"), "Ronald");
@@ -121,13 +136,54 @@ describe("referral", () => {
     });
   });
 
-  it("referralsForGamertag resolves the profile's link, null when unlinked", async () => {
+  it("an unlinked referrer shows the character named in THAT referral, not another referral's", async () => {
+    await link("A", uid("A"), "Ronald");
+    await link("C", uid("C"), "Carl");
+    await link("B", uid("B"), "Otto");
+    await seedPlayer(uid("B"), "Otto");
+    await seedPlayer(uid("Q"), "Quinn");
+    expect(await addReferrerDb(db, now, "A", "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
+    // B moves to another character, refers C from it, then unlinks.
+    await db.delete(identityLinks).where(eq(identityLinks.discordId, "B"));
+    await link("B", uid("Q"), "Quinn");
+    expect(await addReferrerDb(db, now, "C", "Quinn", "later_bot")).toMatchObject({ kind: "recorded" });
+    await db.delete(identityLinks).where(eq(identityLinks.discordId, "B"));
+
+    expect((await referralsForDb(db, "A")).referredBy).toEqual({ gamertag: "Otto" });
+    expect((await referralsForDb(db, "C")).referredBy).toEqual({ gamertag: "Quinn" });
+  });
+
+  it("an unlinked referrer with no known character has a null gamertag, never their Discord id", async () => {
+    await link("A", uid("A"), "Ronald");
+    await link("B", uid("B"), "Otto");
+    expect(await addReferrerDb(db, now, "A", "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
+    await db.delete(identityLinks).where(eq(identityLinks.discordId, "B"));
+
+    expect((await referralsForDb(db, "A")).referredBy).toEqual({ gamertag: null });
+    expect((await linkStatusDb(db, "A", now)).referredBy).toEqual({ gamertag: null });
+    await link("D", uid("D"), "Dana");
+    const again = await addReferrerDb(db, now, "A", "Dana", "later_bot");
+    expect(again).toMatchObject({ kind: "refused", reason: "already-referred" });
+    expect(JSON.stringify(again)).not.toContain('"B"');
+  });
+
+  it("referralsForDayzId resolves the profile's character, null when unlinked", async () => {
     await link("A", uid("A"), "Ronald");
     await link("B", uid("B"), "Otto");
     await seedPlayer(uid("Z"), "Zed");
     expect(await addReferrerDb(db, now, "A", "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
 
-    expect(await referralsForGamertagDb(db, "Ronald")).toEqual({ referredBy: { gamertag: "Otto" }, brought: [] });
-    expect(await referralsForGamertagDb(db, "Zed")).toBeNull();
+    expect(await referralsForDayzIdDb(db, uid("A"))).toEqual({ referredBy: { gamertag: "Otto" }, brought: [] });
+    expect(await referralsForDayzIdDb(db, uid("Z"))).toBeNull();
+  });
+
+  it("referralsForDayzId answers for a gamertag two links share case-insensitively, like the profile does", async () => {
+    await link("A", uid("A"), "Ronald");
+    await db.insert(identityLinks).values({ discordId: "R2", dayzId: uid("R"), gamertag: "ronald", verifiedAt: new Date(now.getTime() + 1000) });
+    await link("B", uid("B"), "Otto");
+    expect(await addReferrerDb(db, now, "R2", "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
+
+    expect(await referralsForDayzIdDb(db, uid("R"))).toEqual({ referredBy: { gamertag: "Otto" }, brought: [] });
+    expect(await referralsForDayzIdDb(db, uid("A"))).toEqual({ referredBy: null, brought: [] });
   });
 });

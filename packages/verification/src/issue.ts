@@ -43,6 +43,13 @@ export type IssueContext = {
    * omitted or null keeps whoever an earlier request named.
    */
   referrerDiscordId?: string | null;
+  /**
+   * Which surface is issuing: the `referrals.source` a link-time referral
+   * records if this challenge completes. `guildId` cannot stand in for it,
+   * because roster's `startLinkDb` issues the bot's challenges with a NULL
+   * guild too.
+   */
+  referralSource?: "link_bot" | "link_site" | null;
 };
 
 /**
@@ -79,8 +86,9 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
     // Naming a referrer on the re-show is how a player adds one after the
     // challenge was issued, so it updates the live row rather than being lost.
     if (ctx.referrerDiscordId && ctx.referrerDiscordId !== live.referrerDiscordId) {
-      await store.setChallengeReferrer(live.id, ctx.referrerDiscordId);
-      return { kind: "live", challenge: { ...live, referrerDiscordId: ctx.referrerDiscordId }, gamertag: target.gamertag };
+      const referralSource = ctx.referralSource ?? null;
+      await store.setChallengeReferrer(live.id, ctx.referrerDiscordId, referralSource);
+      return { kind: "live", challenge: { ...live, referrerDiscordId: ctx.referrerDiscordId, referralSource }, gamertag: target.gamertag };
     }
     return { kind: "live", challenge: live, gamertag: target.gamertag };
   }
@@ -138,6 +146,11 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
     // A redraw or a switch keeps the referrer already named: it is about the
     // person, not the character or the emotes.
     referrerDiscordId: ctx.referrerDiscordId ?? live?.referrerDiscordId ?? null,
+    // The source travels with the referrer: it names the surface the referrer
+    // was named on, so a redraw that keeps an earlier referrer keeps its source.
+    referralSource: !ctx.referrerDiscordId && live?.referrerDiscordId
+      ? live.referralSource
+      : ctx.referralSource ?? null,
   });
   if (challenge) return { kind: "issued", challenge, gamertag: target.gamertag, switchedFrom };
 

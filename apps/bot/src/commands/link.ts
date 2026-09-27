@@ -23,7 +23,7 @@ const start: Handler = async (ctx, input) => {
 
   const referrer = input.string("referrer")?.trim() || undefined;
   const outcome = await ctx.roster.startLink(input.actorDiscordId, target, {
-    newSequence: input.boolean("redraw") === true, referrerGamertag: referrer,
+    newSequence: input.boolean("redraw") === true, referrerGamertag: referrer, surface: "bot",
   });
   if (outcome.kind === "issued" || outcome.kind === "live") {
     return { embeds: [linkStatusEmbed(await ctx.roster.linkStatus(input.actorDiscordId), ctx.now, ctx.siteBaseUrl)], ephemeral: true };

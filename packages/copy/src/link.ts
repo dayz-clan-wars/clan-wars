@@ -80,6 +80,13 @@ export const REFERRAL_COPY: Record<ReferrerRefusal, (a: { referrerGamertag?: str
 export const REFERRAL_RECORDED = (gamertag?: string) =>
   gamertag ? `${gamertag} is now your referrer. This is permanent.` : "Your referrer is recorded. This is permanent.";
 
+/**
+ * Stands in for a referrer's name when none is known any more: they unlinked
+ * and the log has no gamertag for the character they referred from. Never a
+ * Discord id in its place, and never a link.
+ */
+export const REFERRER_UNNAMED = "a player no longer linked";
+
 function name(o: IssueOutcome): string {
   return "gamertag" in o ? o.gamertag : "that character";
 }

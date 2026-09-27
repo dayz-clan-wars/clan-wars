@@ -12,12 +12,14 @@ import { resolveReferrer, referredByFor, type ReferrerRefusal } from "./referral
 export type LinkStep = { token: string; label: string; confirmed: boolean };
 export type LinkStatus = {
   link: { dayzId: string; gamertag: string; verifiedAt: Date } | null;
-  /** Who this player was referred by, permanently, or null if nobody. */
-  referredBy: { gamertag: string } | null;
+  /** Who this player was referred by, permanently, or null if nobody. A null gamertag: referred, but no name is known any more. */
+  referredBy: { gamertag: string | null } | null;
   challenge: { id: number; targetDayzId: string; gamertag: string; steps: LinkStep[]; confirmed: number; expiresAt: Date; drawsLeft: number } | null;
   /** How the newest challenge ended when the player did not end it themselves; null otherwise. */
   ended: "expired" | CancelReason | null;
 };
+/** Which surface is starting a link: the bot's `/link start` or the site's link page. */
+export type LinkSurface = "bot" | "site";
 export type StartLinkOutcome = IssueOutcome | { kind: "referrer-refused"; reason: ReferrerRefusal };
 export type UnlinkOutcome =
   | { ok: true; releasedBase: boolean }
@@ -72,9 +74,15 @@ export async function linkStatusDb(db: Database, discordId: string, now: Date): 
  * `verification_challenges` row ever written. A good one is passed through as
  * `referrerDiscordId`, recorded only if the challenge later completes (spec
  * §4: link-time referrals commit inside the same transaction as the link).
+ *
+ * ⚠️ `surface` is required, and is the ONLY thing that tells the bot's
+ * `/link start` from the site's link page: both issue here with a NULL guild,
+ * so the referral's `link_bot`/`link_site` source is written onto the
+ * challenge now and read back by `completeChallenge`.
  */
 export async function startLinkDb(db: Database, a: {
-  discordId: string; targetDayzId: string; newSequence?: boolean; referrerGamertag?: string; now: Date; rng: () => number;
+  discordId: string; targetDayzId: string; newSequence?: boolean; referrerGamertag?: string; surface: LinkSurface;
+  now: Date; rng: () => number;
 }): Promise<StartLinkOutcome> {
   let referrerDiscordId: string | null = null;
   if (a.referrerGamertag) {
@@ -88,7 +96,7 @@ export async function startLinkDb(db: Database, a: {
   // 2026-09-08: a player who starts on the site need not already be in game).
   return issueChallenge(new PgVerificationStore(db), { rng: a.rng, now: a.now, ttlMs: LINK_TTL_MS }, {
     discordId: a.discordId, targetDayzId: a.targetDayzId, guildId: null, channelId: null, newSequence: a.newSequence,
-    referrerDiscordId,
+    referrerDiscordId, referralSource: a.surface === "bot" ? "link_bot" : "link_site",
   });
 }
 

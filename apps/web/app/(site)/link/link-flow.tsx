@@ -9,6 +9,7 @@ import { visiblePoll } from "@/lib/visible-poll";
 import { when } from "@/lib/format";
 import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { btnCta, btnQuiet, btnSecondary, field } from "@/app/components/ui";
+import { GamertagField } from "@/app/components/gamertag-field";
 
 /** `LinkStatus` after a trip through JSON: every Date is an ISO string. */
 type Wire<T> = T extends Date ? string : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;
@@ -109,7 +110,6 @@ function currentTarget(status: Status): string {
 // directly with the same `REFERRAL_COPY[...]({})` strings `start()` above passes it.
 export function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string, referrer?: string) => void }) {
   const [query, setQuery] = useState("");
-  const [referrer, setReferrer] = useState("");
   /** The list on screen AND the text it was fetched for — without `q`, a stale list reads as a verdict (H5). */
   const [shown, setShown] = useState<{ q: string; matches: Match[] }>({ q: "", matches: [] });
   const [denial, setDenial] = useState<string | null>(null);
@@ -141,11 +141,16 @@ export function ChooseCharacter({ notice, busy, onClaim }: { notice: string | nu
    */
   const claim = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    // Read before any await: `currentTarget` is gone once the event returns.
+    // The referrer box is GamertagField, an uncontrolled island whose value
+    // rides the form under its `name`, the same as on the profile panel.
+    const typed = new FormData(e.currentTarget).get("referrer");
+    const referrer = typeof typed === "string" ? typed.trim() : "";
     if (busy || checking || !query.trim()) return;
     setChecking(true);
     try {
       const r = await resolveTyped(query, shown, search);
-      if (r.kind === "found") { setDenial(null); onClaim(r.dayzId, referrer.trim() || undefined); }
+      if (r.kind === "found") { setDenial(null); onClaim(r.dayzId, referrer || undefined); }
       else setDenial(r.kind === "unseen" ? LINK_UNSEEN : LINK_FAILED);
     } finally { setChecking(false); }
   };
@@ -183,7 +188,8 @@ export function ChooseCharacter({ notice, busy, onClaim }: { notice: string | nu
         )}
         <label className="mt-4 block">
           <span className={label}>Who referred you? (optional)</span>
-          <input className={field} value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="Gamertag" aria-label="Who referred you" autoComplete="off" spellCheck={false} maxLength={GAMERTAG_MAX} />
+          {/* The shared autocomplete over linked players: the refusal copy tells a player to "pick one from the list", so there has to be one. */}
+          <GamertagField scope="linked" name="referrer" aria-label="Who referred you" maxLength={GAMERTAG_MAX} />
         </label>
         <p className="mt-1 font-mono text-[11px] text-muted">Permanent once your link completes.</p>
         {/* ⚠️ aria-disabled while checking, not disabled: a disabled button drops the focus it was just pressed with. */}

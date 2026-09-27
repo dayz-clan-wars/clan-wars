@@ -1,4 +1,5 @@
 import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, awards, referralsFor, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall, type ReferralsView } from "@factions/roster";
+import { REFERRER_UNNAMED } from "@factions/copy";
 import type { Session } from "@/lib/auth/session";
 import { nextStepFor, type NextStep } from "@/lib/next-step";
 import { when, ago } from "@/lib/format";
@@ -196,9 +197,10 @@ export function AwardsPanel({ owner }: { owner: Owner }) {
  */
 function ReferralBlock({ referrals, keptReferrer }: { referrals: ReferralsView; keptReferrer?: string }) {
   if (referrals.referredBy) {
+    const g = referrals.referredBy.gamertag;
     return (
       <p className="mt-4 text-sm leading-relaxed text-ink-2">
-        Referred by <a className={link} href={`/players/${encodeURIComponent(referrals.referredBy.gamertag)}`}>{referrals.referredBy.gamertag}</a>.
+        Referred by {g ? <a className={link} href={`/players/${encodeURIComponent(g)}`}>{g}</a> : REFERRER_UNNAMED}.
       </p>
     );
   }

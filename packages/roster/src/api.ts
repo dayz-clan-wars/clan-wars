@@ -3,10 +3,10 @@ import type { ClanNoticeKind } from "@factions/domain";
 import { viewerForDb, type Viewer, type Role } from "./viewer";
 import {
   linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb,
-  type LinkStatus, type LinkStep, type UnlinkOutcome, type StartLinkOutcome,
+  type LinkStatus, type LinkStep, type UnlinkOutcome, type StartLinkOutcome, type LinkSurface,
 } from "./link";
 import {
-  addReferrerDb, referralsForDb, referralsForGamertagDb,
+  addReferrerDb, referralsForDb, referralsForDayzIdDb,
   type AddReferrerOutcome, type ReferrerRefusal, type ReferralsView,
 } from "./referral";
 import { suggestGamertagsDb, type SuggestScope } from "./suggest";
@@ -71,7 +71,7 @@ import {
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
-export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind, StartLinkOutcome };
+export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind, StartLinkOutcome, LinkSurface };
 export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
@@ -134,10 +134,11 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /**
      * Issue (or re-show) a link challenge for a character the log has seen.
      * `referrerGamertag`, when given, is vetted before anything is issued —
-     * see `startLinkDb`'s own comment.
+     * see `startLinkDb`'s own comment. `surface` is which caller this is,
+     * and becomes a link-time referral's `link_bot`/`link_site` source.
      */
-    startLink: (discordId: string, targetDayzId: string, opts: { newSequence?: boolean; referrerGamertag?: string } = {}): Promise<StartLinkOutcome> =>
-      startLinkDb(getDb(), { discordId, targetDayzId, newSequence: opts.newSequence, referrerGamertag: opts.referrerGamertag, now: getNow(), rng: Math.random }),
+    startLink: (discordId: string, targetDayzId: string, opts: { newSequence?: boolean; referrerGamertag?: string; surface: LinkSurface }): Promise<StartLinkOutcome> =>
+      startLinkDb(getDb(), { discordId, targetDayzId, newSequence: opts.newSequence, referrerGamertag: opts.referrerGamertag, surface: opts.surface, now: getNow(), rng: Math.random }),
     cancelLink: (discordId: string): Promise<{ canceled: boolean }> => cancelLinkDb(getDb(), discordId, getNow()),
     /** Refused while in a clan; releases a solo base. */
     unlink: (discordId: string): Promise<UnlinkOutcome> => unlinkDb(getDb(), discordId, getNow()),
@@ -149,8 +150,8 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
       addReferrerDb(getDb(), getNow(), discordId, referrerGamertag, source),
     /** Who referred you, and who you brought in. */
     referralsFor: (discordId: string): Promise<ReferralsView> => referralsForDb(getDb(), discordId),
-    /** Same, by the profile's gamertag. Null when that player is not currently linked. */
-    referralsForGamertag: (gamertag: string): Promise<ReferralsView | null> => referralsForGamertagDb(getDb(), gamertag),
+    /** Same, for the character a public profile shows, by its `dayzId`. Null when that character is not currently linked. */
+    referralsForDayzId: (dayzId: string): Promise<ReferralsView | null> => referralsForDayzIdDb(getDb(), dayzId),
 
     /** /base's one read: your raises, your declaration. */
     baseFor: (discordId: string): Promise<BaseView> => baseForDb(getDb(), discordId),

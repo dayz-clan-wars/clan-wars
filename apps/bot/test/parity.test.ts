@@ -128,7 +128,7 @@ describe("Discord parity with the site", () => {
       // entry) is what "accounted for" means for this pair.
       "markAllNoticesRead", "markNoticeRead",
       // Referral reads (2026-09-26): who referred you, and who you brought in.
-      "referralsFor", "referralsForGamertag",
+      "referralsFor", "referralsForDayzId",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { ReferralsView } from "@factions/roster";
+import { REFERRER_UNNAMED } from "@factions/copy";
 import { link } from "@/app/components/ui";
 
 /**
@@ -31,7 +32,12 @@ export function referralFactRows(view: ReferralsView | null): [ReactNode, ReactN
   if (!view) return [];
   const rows: [ReactNode, ReactNode][] = [];
   if (view.referredBy) {
-    rows.push(["Referred by", <a key="referred-by" className={link} href={`/players/${encodeURIComponent(view.referredBy.gamertag)}`}>{view.referredBy.gamertag}</a>]);
+    // A null gamertag: the referrer unlinked and no name is known. Said in
+    // words, never linked, since there is no profile to point at.
+    const g = view.referredBy.gamertag;
+    rows.push(["Referred by", g
+      ? <a key="referred-by" className={link} href={`/players/${encodeURIComponent(g)}`}>{g}</a>
+      : REFERRER_UNNAMED]);
   }
   if (view.brought.length > 0) {
     rows.push(["Brought in", broughtLine(view.brought)]);

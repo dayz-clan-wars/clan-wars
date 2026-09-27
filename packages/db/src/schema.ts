@@ -325,6 +325,15 @@ export const verificationChallenges = pgTable("verification_challenges", {
   /** Set by completeChallenge when the named referrer could not be recorded; the Verified DM explains it. */
   referralRefused: text("referral_refused"),
   /**
+   * Which surface issued this challenge, as the `referrals.source` a
+   * link-time referral records: 'link_bot' for `/link start`, 'link_site' for
+   * the site's link page. Written at issue time because `guild_id` cannot
+   * tell them apart (roster's `startLinkDb` issues both with a NULL guild).
+   * NULL on rows issued before migration 0055; a completion then records
+   * 'link_site', the one surface that existed for NULL-guild challenges.
+   */
+  referralSource: text("referral_source").$type<"link_bot" | "link_site">(),
+  /**
    * Why the challenge was canceled, when the player needs to be told.
    *
    * ⚠️ NULL is not "unknown", it is "say nothing". Only cancels the player
@@ -367,6 +376,10 @@ export const verificationChallenges = pgTable("verification_challenges", {
   reasonOnlyWhenCanceled: check(
     "verification_challenges_reason_requires_cancel",
     sql`${t.cancelReason} IS NULL OR ${t.canceledAt} IS NOT NULL`,
+  ),
+  referralSourceValid: check(
+    "verification_challenges_referral_source_valid",
+    sql`${t.referralSource} IS NULL OR ${t.referralSource} IN ('link_bot','link_site')`,
   ),
   notBothOutcomes: check(
     "verification_challenges_single_outcome",

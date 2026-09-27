@@ -12,7 +12,8 @@ export type AddReferrerOutcome =
   /** `referrerGamertag` on "already-referred" is the EXISTING referrer's, not the one just typed. */
   | { kind: "refused"; reason: ReferrerRefusal; referrerGamertag?: string };
 
-export type ReferralsView = { referredBy: { gamertag: string } | null; brought: { gamertag: string | null }[] };
+/** `referredBy.gamertag` and `brought[].gamertag` are null when no name is known any more; never a Discord id. */
+export type ReferralsView = { referredBy: { gamertag: string | null } | null; brought: { gamertag: string | null }[] };
 
 /** Resolve a typed gamertag to a linked player, for naming a referrer. */
 export async function resolveReferrer(
@@ -24,23 +25,19 @@ export async function resolveReferrer(
 }
 
 /**
- * The gamertag to show for a Discord id that may have unlinked since a
- * referral naming them was recorded: the current link's gamertag, else the
- * player's own last-seen gamertag from the referral's own snapshot
+ * The gamertag to show for a referrer who may have unlinked since the
+ * referral naming them was recorded: their current link's gamertag, else the
+ * last-seen gamertag of the character THIS referral snapshotted
  * (`referrer_dayz_id`) — a referral has no foreign key to `identity_links`
- * and outlives it.
+ * and outlives it. Null when neither is known: a Discord id is never shown in
+ * its place, since it is not a name and `/players/{it}` is a 404.
  */
-async function currentGamertag(db: Database, discordId: string): Promise<string> {
+async function currentGamertag(db: Database, discordId: string, referrerDayzId: string): Promise<string | null> {
   const [link] = await db.select({ gamertag: identityLinks.gamertag }).from(identityLinks)
     .where(eq(identityLinks.discordId, discordId));
   if (link) return link.gamertag;
-  const [row] = await db.select({ dayzId: referrals.referrerDayzId }).from(referrals)
-    .where(eq(referrals.referrerDiscordId, discordId)).limit(1);
-  if (row) {
-    const [player] = await db.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, row.dayzId));
-    if (player) return player.gamertag;
-  }
-  return discordId;
+  const [player] = await db.select({ gamertag: players.gamertag }).from(players).where(eq(players.dayzId, referrerDayzId));
+  return player?.gamertag ?? null;
 }
 
 /** Add a referrer to an already-linked (or not-yet-linked-but-known) player, by gamertag. */
@@ -52,18 +49,25 @@ export async function addReferrerDb(
   const r = await db.transaction((tx) => recordReferralTx(tx, {
     referredDiscordId: discordId, referrerDiscordId: ref.discordId, source, at: now,
   }));
-  if (r === "recorded") return { kind: "recorded", referrerGamertag: await currentGamertag(db, ref.discordId) };
+  // The referrer was linked a moment ago (recordReferralTx checked), so this
+  // is their link's gamertag; the typed name is the fallback, never an id.
+  if (r === "recorded") return { kind: "recorded", referrerGamertag: (await referredByFor(db, discordId))?.gamertag ?? gamertag.trim() };
   if (r === "already-referred") {
-    return { kind: "refused", reason: r, referrerGamertag: (await referralsForDb(db, discordId)).referredBy?.gamertag };
+    return { kind: "refused", reason: r, referrerGamertag: (await referredByFor(db, discordId))?.gamertag ?? undefined };
   }
   return { kind: "refused", reason: r };
 }
 
-/** Who this player was referred by (current gamertag, falling back to the last seen one), null if nobody. */
-export async function referredByFor(db: Database, discordId: string): Promise<{ gamertag: string } | null> {
-  const [row] = await db.select({ referrerDiscordId: referrals.referrerDiscordId }).from(referrals)
-    .where(eq(referrals.referredDiscordId, discordId));
-  return row ? { gamertag: await currentGamertag(db, row.referrerDiscordId) } : null;
+/**
+ * Who this player was referred by (current gamertag, falling back to the last
+ * seen one), null if nobody. `gamertag` is null when the referrer has
+ * unlinked and no name for them is known: callers show the referral but
+ * name and link nobody.
+ */
+export async function referredByFor(db: Database, discordId: string): Promise<{ gamertag: string | null } | null> {
+  const [row] = await db.select({ referrerDiscordId: referrals.referrerDiscordId, referrerDayzId: referrals.referrerDayzId })
+    .from(referrals).where(eq(referrals.referredDiscordId, discordId));
+  return row ? { gamertag: await currentGamertag(db, row.referrerDiscordId, row.referrerDayzId) } : null;
 }
 
 /** Who this player referred, and who referred them (spec §2). */
@@ -79,9 +83,14 @@ export async function referralsForDb(db: Database, discordId: string): Promise<R
   return { referredBy, brought };
 }
 
-/** Same as `referralsForDb`, but by the profile's gamertag. Null when that player is not currently linked. */
-export async function referralsForGamertagDb(db: Database, gamertag: string): Promise<ReferralsView | null> {
-  const link = await resolveGamertagLink(db, gamertag.trim());
-  if (!link || link === "ambiguous-gamertag") return null;
-  return referralsForDb(db, link.discordId);
+/**
+ * Same as `referralsForDb`, but for the character a public profile shows.
+ * Keyed by the profile's own `dayzId`, not its gamertag: two links can share
+ * a gamertag case-insensitively, and the profile (`resolvePlayer`) has
+ * already chosen between them. Null when that character is not linked now.
+ */
+export async function referralsForDayzIdDb(db: Database, dayzId: string): Promise<ReferralsView | null> {
+  const [link] = await db.select({ discordId: identityLinks.discordId }).from(identityLinks)
+    .where(eq(identityLinks.dayzId, dayzId));
+  return link ? referralsForDb(db, link.discordId) : null;
 }

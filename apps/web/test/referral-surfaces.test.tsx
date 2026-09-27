@@ -38,6 +38,14 @@ describe("AccountPanel's referral block", () => {
     expect(html).not.toContain('action="/api/referral"');
   });
 
+  it("names nobody and links nowhere when the referrer's name is no longer known", () => {
+    const owner: Owner = { ...baseOwner(), referrals: { referredBy: { gamertag: null }, brought: [] } };
+    const html = renderToStaticMarkup(createElement(AccountPanel, { owner }));
+    expect(html).toContain("Referred by a player no longer linked.");
+    expect(html).not.toContain("/players/");
+    expect(html).not.toContain('action="/api/referral"');
+  });
+
   it("shows the form with the permanence warning when no referrer is set", () => {
     const html = renderToStaticMarkup(createElement(AccountPanel, { owner: baseOwner() }));
     expect(html).toContain('action="/api/referral"');
@@ -80,6 +88,10 @@ describe("referralFactRows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]![0]).toBe("Referred by");
   });
+  it("says 'a player no longer linked', unlinked, when the referrer's name is not known", () => {
+    const rows = referralFactRows({ referredBy: { gamertag: null }, brought: [] });
+    expect(rows).toEqual([["Referred by", "a player no longer linked"]]);
+  });
   it("adds a 'Brought in' row only when someone was brought in", () => {
     const rows = referralFactRows({ referredBy: null, brought: [{ gamertag: "A" }] });
     expect(rows).toHaveLength(1);
@@ -101,6 +113,9 @@ describe("the /api/link/start route", () => {
   it("passes a typed referrer through to startLink as referrerGamertag", () => {
     expect(src).toContain("referrerGamertag");
     expect(src).toContain("startLink(");
+  });
+  it("tells startLink the site is the surface, so a link-time referral records link_site", () => {
+    expect(src).toContain(`surface: "site"`);
   });
   it("rejects a referrer over the gamertag length with bad-referrer, before calling startLink", () => {
     expect(src).toContain("GAMERTAG_MAX");
@@ -135,9 +150,10 @@ describe("the /api/referral route", () => {
 
 describe("the public profile shows referrals", () => {
   const src = read("(site)", "players", "[gamertag]", "page.tsx");
-  it("reads referralsForGamertag, wrapped in .catch(() => null) like achievementsFor", () => {
-    expect(src).toContain("referralsForGamertag(");
-    expect(src).toMatch(/referralsForGamertag\([^)]*\)\.catch\(/u);
+  it("reads referralsForDayzId by the profile's own dayzId, wrapped in .catch(() => null) like achievementsFor", () => {
+    expect(src).toContain("referralsForDayzId(profile.dayzId)");
+    expect(src).not.toContain("referralsForGamertag");
+    expect(src).toMatch(/referralsForDayzId\([^)]*\)\.catch\(/u);
   });
   it("renders the referral rows in the Activity panel", () => {
     expect(src).toContain("referralFactRows(referrals)");

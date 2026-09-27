@@ -25,6 +25,6 @@ export async function POST(req: NextRequest) {
     if (typeof body.referrer !== "string" || body.referrer.length === 0 || body.referrer.length > GAMERTAG_MAX) return json({ error: "bad-referrer" }, 400);
     referrerGamertag = body.referrer;
   }
-  const outcome = await startLink(s.session.sub, body.dayzId, { newSequence: body.newSequence === true, referrerGamertag });
+  const outcome = await startLink(s.session.sub, body.dayzId, { newSequence: body.newSequence === true, referrerGamertag, surface: "site" });
   return json({ outcome });
 }

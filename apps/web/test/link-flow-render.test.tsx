@@ -1,5 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { LinkFlow, ChooseCharacter } from "../app/(site)/link/link-flow";
 import LoginPage from "../app/(site)/login/page";
 import JoinPage from "../app/(site)/join/page";
@@ -62,10 +64,22 @@ describe("referrals: naming one while linking", () => {
     const html = chooseCharacter();
     expect(html).toContain("Who referred you? (optional)");
     expect(html).toContain('aria-label="Who referred you"');
-    expect(html).toContain(`maxLength="${GAMERTAG_MAX}"`);
-    // The referrer input, not the gamertag search input above it, carries the shared `field` class.
+    // The referrer input, not the gamertag search input above it, carries the shared `field` class and the cap.
     const referrerInput = html.match(/<input[^>]*aria-label="Who referred you"[^>]*>/u)?.[0] ?? "";
+    expect(referrerInput).toContain(`maxLength="${GAMERTAG_MAX}"`);
     for (const cls of field.split(" ")) expect(referrerInput).toContain(cls);
+  });
+
+  it("is the shared GamertagField over linked players, so there is a list to pick from as the refusal copy says", () => {
+    const referrerInput = chooseCharacter().match(/<input[^>]*aria-label="Who referred you"[^>]*>/u)?.[0] ?? "";
+    expect(referrerInput).toContain('name="referrer"');
+    expect(referrerInput).toContain('role="combobox"');
+    expect(referrerInput).toContain('aria-autocomplete="list"');
+    // GamertagField fetches `/api/players/suggest?scope=…`; the page must ask for linked players.
+    const src = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "link", "link-flow.tsx"), "utf8");
+    expect(src).toMatch(/<GamertagField[^>]*scope="linked"[^>]*name="referrer"/u);
+    // The value is read off the submitted form, the field's own `name`.
+    expect(src).toContain('.get("referrer")');
   });
 
   it("says the referrer becomes permanent once the link completes", () => {

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile, playerFeed, viewerFor, achievementsFor, referralsForGamertag, type PlayerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, viewerFor, achievementsFor, referralsForDayzId, type PlayerProfile } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
@@ -86,17 +86,19 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
   // The profile and its feed page are the two reads, side by side.
   // ⚠️ The wall is lifetime, never scoped, and `.catch(() => null)` on purpose:
   // an achievement read that fails must cost the page its wall, never the profile.
-  // ⚠️ `referrals` is `.catch(() => null)` too, same reasoning: a failed read
-  // costs the page its "Referred by"/"Brought in" line, never the profile.
-  const [profile, feed, session, wall, referrals] = await Promise.all([
+  const [profile, feed, session, wall] = await Promise.all([
     profileFor(gamertag, typeof season === "string" ? season : undefined),
     playerFeed(gamertag, scope, parsePageParam(rawPage)),
     currentSession(),
     achievementsFor({ gamertag }).catch(() => null),
-    referralsForGamertag(gamertag).catch(() => null),
   ]);
 
   if (!profile || !feed) notFound();
+  // ⚠️ By the profile's own dayzId, never the URL gamertag: two links can share
+  // a gamertag case-insensitively, and the profile has already chosen one.
+  // `.catch(() => null)` like the wall: a failed read costs the page its
+  // "Referred by"/"Brought in" line, never the profile.
+  const referrals = await referralsForDayzId(profile.dayzId).catch(() => null);
   // The viewer's link decides ownership; the rest of the owner's state is only read once it does.
   const viewer = session ? await viewerFor(session.sub) : null;
   const owner = session && viewer && isOwnPage(viewer.link?.gamertag, profile.gamertag) ? await loadOwner(session, viewer) : null;
@@ -105,7 +107,7 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
   // result code is never built from what the player typed), but the owner's own referrer
   // is already in hand from `owner.referrals.referredBy`, so that renders the named
   // REFERRAL_RECORDED the bot also uses instead of the code's nameless fallback text.
-  const referralRecordedText = result === "referral.recorded" && owner?.referrals.referredBy
+  const referralRecordedText = result === "referral.recorded" && owner?.referrals.referredBy?.gamertag
     ? REFERRAL_RECORDED(owner.referrals.referredBy.gamertag)
     : result ? lookupCopy(RESULT_COPY, result) : undefined;
   const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, referralRecordedText] : [];

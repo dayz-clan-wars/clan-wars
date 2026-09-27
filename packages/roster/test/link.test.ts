@@ -30,7 +30,7 @@ describe("roster link writes", () => {
   });
 
   const start = (discordId = "d1", extra: { newSequence?: boolean } = {}) =>
-    startLinkDb(db, { discordId, targetDayzId: UID_A, now, rng: Math.random, ...extra });
+    startLinkDb(db, { discordId, targetDayzId: UID_A, surface: "site", now, rng: Math.random, ...extra });
 
   it("startLink issues the site's challenge: no channel, LINK_TTL_MS, LINK_EMOTES steps", async () => {
     const out = await start();

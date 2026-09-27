@@ -17,6 +17,8 @@ export type LiveChallenge = {
   sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string;
   /** The linked player this one named as their referrer, recorded when the challenge completes. */
   referrerDiscordId: string | null;
+  /** The surface that issued this challenge; the source a link-time referral records. Null on pre-0055 rows. */
+  referralSource: "link_bot" | "link_site" | null;
 };
 export type Attempt = { id: number; progressIndex: number; lastMatchedEventId: number; seenCount: number };
 
@@ -99,9 +101,9 @@ export interface VerificationStore {
    */
   countDrawsSince(discordId: string, targetDayzId: string, since: Date): Promise<number>;
   liveChallenges(now: Date): Promise<LiveChallenge[]>;
-  createChallenge(input: { discordId: string; guildId: string | null; channelId: string | null; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string; referrerDiscordId?: string | null }): Promise<LiveChallenge | null>;
+  createChallenge(input: { discordId: string; guildId: string | null; channelId: string | null; sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string; referrerDiscordId?: string | null; referralSource?: "link_bot" | "link_site" | null }): Promise<LiveChallenge | null>;
   /** Name (or rename) the referrer on a still-open challenge; a closed one is left alone. */
-  setChallengeReferrer(challengeId: number, referrerDiscordId: string): Promise<void>;
+  setChallengeReferrer(challengeId: number, referrerDiscordId: string, referralSource: "link_bot" | "link_site" | null): Promise<void>;
   getAttempt(challengeId: number, dayzId: string): Promise<Attempt | null>;
   upsertAttempt(challengeId: number, dayzId: string, progressIndex: number, lastMatchedEventId: number, seenCount: number): Promise<void>;
   completeChallenge(challengeId: number, dayzId: string, gamertag: string, at: Date): Promise<boolean>;
@@ -220,6 +222,7 @@ export class PgVerificationStore implements VerificationStore {
   async createChallenge(input: {
     discordId: string; guildId: string | null; channelId: string | null;
     sequence: string[]; issuedAt: Date; expiresAt: Date; targetDayzId: string; referrerDiscordId?: string | null;
+    referralSource?: "link_bot" | "link_site" | null;
   }): Promise<LiveChallenge | null> {
     const [row] = await this.db.insert(verificationChallenges).values(input)
       .onConflictDoNothing()
@@ -227,11 +230,11 @@ export class PgVerificationStore implements VerificationStore {
     return row ? toLive(row) : null;
   }
 
-  async setChallengeReferrer(challengeId: number, referrerDiscordId: string): Promise<void> {
+  async setChallengeReferrer(challengeId: number, referrerDiscordId: string, referralSource: "link_bot" | "link_site" | null): Promise<void> {
     // Guarded on open-ness: a completed challenge's referrer has already been
     // recorded or refused, and rewriting it would make the row lie about which.
     await this.db.update(verificationChallenges)
-      .set({ referrerDiscordId })
+      .set({ referrerDiscordId, referralSource })
       .where(and(
         eq(verificationChallenges.id, challengeId),
         isNull(verificationChallenges.completedAt),
@@ -377,7 +380,11 @@ export class PgVerificationStore implements VerificationStore {
       if (challenge.referrerDiscordId) {
         const r = await recordReferralTx(tx, {
           referredDiscordId: challenge.discordId, referrerDiscordId: challenge.referrerDiscordId,
-          source: challenge.guildId === null ? "link_site" : "link_bot", at,
+          // ⚠️ From the column the issuing surface wrote, never inferred from
+          // guild_id: both surfaces issue through roster's startLinkDb with a
+          // NULL guild. A pre-0055 row has no source; the site was the only
+          // NULL-guild issuer then.
+          source: challenge.referralSource ?? "link_site", at,
         });
         if (r !== "recorded") {
           await tx.update(verificationChallenges).set({ referralRefused: r })
@@ -553,5 +560,6 @@ function toLive(row: typeof verificationChallenges.$inferSelect): LiveChallenge 
     id: row.id, discordId: row.discordId, guildId: row.guildId,
     channelId: row.channelId, sequence: row.sequence, issuedAt: row.issuedAt, expiresAt: row.expiresAt,
     targetDayzId: row.targetDayzId, referrerDiscordId: row.referrerDiscordId,
+    referralSource: row.referralSource ?? null,
   };
 }

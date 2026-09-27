@@ -1,0 +1,2 @@
+ALTER TABLE "verification_challenges" ADD COLUMN "referral_source" text;--> statement-breakpoint
+ALTER TABLE "verification_challenges" ADD CONSTRAINT "verification_challenges_referral_source_valid" CHECK ("verification_challenges"."referral_source" IS NULL OR "verification_challenges"."referral_source" IN ('link_bot','link_site'));

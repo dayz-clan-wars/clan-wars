@@ -442,10 +442,13 @@ describe("PgVerificationStore", () => {
   describe("referrals at link time", () => {
     const linkReferrer = (discordId = "900", dayzId = UID_B) =>
       db.insert(identityLinks).values({ discordId, dayzId, gamertag: "Betty", verifiedAt: now });
-    const issueReferred = async (referrerDiscordId: string | null, guildId: string | null = "g") => {
+    // ⚠️ guildId is NULL for both surfaces: roster's startLinkDb issues the
+    // bot's `/link start` and the site's link page alike with no guild, so the
+    // surface travels only in referral_source.
+    const issueReferred = async (referrerDiscordId: string | null, referralSource: "link_bot" | "link_site" | null = "link_bot") => {
       const c = await store.createChallenge({
-        discordId: "100", guildId, channelId: guildId ? "c" : null, sequence: SEQ, issuedAt: now, expiresAt: later,
-        targetDayzId: UID_A, referrerDiscordId,
+        discordId: "100", guildId: null, channelId: null, sequence: SEQ, issuedAt: now, expiresAt: later,
+        targetDayzId: UID_A, referrerDiscordId, referralSource,
       });
       expect(c).not.toBeNull();
       return c!;
@@ -468,9 +471,32 @@ describe("PgVerificationStore", () => {
 
     it("records a site-issued referral as link_site", async () => {
       await linkReferrer();
+      const c = await issueReferred("900", "link_site");
+      expect(c.referralSource).toBe("link_site");
+      expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+      expect((await db.select().from(referrals))[0]).toMatchObject({ source: "link_site" });
+    });
+
+    it("records a bot-issued referral as link_bot, though its guild is null too", async () => {
+      await linkReferrer();
+      const c = await issueReferred("900", "link_bot");
+      expect(c).toMatchObject({ guildId: null, referralSource: "link_bot" });
+      expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
+      expect((await db.select().from(referrals))[0]).toMatchObject({ source: "link_bot" });
+    });
+
+    it("records a challenge issued before referral_source existed as link_site", async () => {
+      await linkReferrer();
       const c = await issueReferred("900", null);
       expect(await store.completeChallenge(c.id, UID_A, "Steve", later)).toBe(true);
       expect((await db.select().from(referrals))[0]).toMatchObject({ source: "link_site" });
+    });
+
+    it("rejects a referral_source that is not a link surface", async () => {
+      await expect(db.insert(verificationChallenges).values({
+        discordId: "100", guildId: null, channelId: null, sequence: SEQ, issuedAt: now, expiresAt: later,
+        targetDayzId: UID_A, referralSource: "later_bot" as "link_bot",
+      })).rejects.toThrow();
     });
 
     it("completeChallenge still links when the referrer unlinked meanwhile, and says why", async () => {
@@ -518,12 +544,12 @@ describe("PgVerificationStore", () => {
 
     it("setChallengeReferrer changes an open challenge only", async () => {
       const c = await issueReferred(null);
-      await store.setChallengeReferrer(c.id, "900");
+      await store.setChallengeReferrer(c.id, "900", "link_bot");
       expect((await store.findLiveChallenge("100", now))?.referrerDiscordId).toBe("900");
       await store.cancelChallenge(c.id, later);
-      await store.setChallengeReferrer(c.id, "901");
+      await store.setChallengeReferrer(c.id, "901", "link_site");
       const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.id, c.id));
-      expect(row!.referrerDiscordId).toBe("900");
+      expect(row).toMatchObject({ referrerDiscordId: "900", referralSource: "link_bot" });
     });
   });
 });

@@ -14,7 +14,7 @@ describe("issueChallenge", () => {
   let db: Database;
   let store: PgVerificationStore;
   const deps: IssueDeps = { rng: Math.random, now, ttlMs: TTL };
-  const ctx = (targetDayzId = UID_A, extra: Partial<{ newSequence: boolean; discordId: string; referrerDiscordId: string | null }> = {}) =>
+  const ctx = (targetDayzId = UID_A, extra: Partial<{ newSequence: boolean; discordId: string; referrerDiscordId: string | null; referralSource: "link_bot" | "link_site" | null }> = {}) =>
     ({ discordId: "100", targetDayzId, guildId: null, channelId: null, ...extra });
 
   beforeEach(async () => {
@@ -113,6 +113,21 @@ describe("issueChallenge", () => {
     // Re-showing without naming anyone keeps the one already named.
     const plain = await issueChallenge(store, deps, ctx());
     expect(plain.kind === "live" && plain.challenge.referrerDiscordId).toBe("901");
+  });
+
+  it("saves the issuing surface with the referrer, and a re-show naming a new referrer takes its surface", async () => {
+    const out = await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "900", referralSource: "link_site" }));
+    expect(out.kind === "issued" && out.challenge.referralSource).toBe("link_site");
+    const again = await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "901", referralSource: "link_bot" }));
+    expect(again.kind === "live" && again.challenge.referralSource).toBe("link_bot");
+    const [row] = await db.select().from(verificationChallenges).where(eq(verificationChallenges.discordId, "100"));
+    expect(row).toMatchObject({ referrerDiscordId: "901", referralSource: "link_bot" });
+  });
+
+  it("a redraw from the other surface keeps the referrer's surface when it names nobody", async () => {
+    await issueChallenge(store, deps, ctx(UID_A, { referrerDiscordId: "900", referralSource: "link_site" }));
+    const rerolled = await issueChallenge(store, deps, ctx(UID_A, { newSequence: true, referralSource: "link_bot" }));
+    expect(rerolled.kind === "issued" && rerolled.challenge).toMatchObject({ referrerDiscordId: "900", referralSource: "link_site" });
   });
 
   it("a redraw without a referrer keeps the one already named", async () => {
