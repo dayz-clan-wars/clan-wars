@@ -42,9 +42,10 @@ describe("deriveClockOffsetMs", () => {
     const missing = { localTimestampMs: 1000, modifiedAtMs: 0 };
     const result = deriveClockOffsetMs([realistic, missing]);
     // modifiedAtMs: 0, localTimestampMs: 1000 → offset = -1000, which the
-    // 15-minute grid snap then floors to -900_000. Still a wildly wrong
-    // offset; the snapping does not rescue a poisoned candidate.
-    expect(result).toBe(-900_000);
+    // tolerance lifts to 299_000 and the 15-minute grid snap floors to 0 —
+    // the silent zero itself, seven hours wrong. The snapping does not rescue
+    // a poisoned candidate; only the caller's filter does.
+    expect(result).toBe(0);
   });
 
   it("snaps the minimum DOWN to the 15-minute grid", () => {
@@ -56,6 +57,18 @@ describe("deriveClockOffsetMs", () => {
     expect(deriveClockOffsetMs([
       { localTimestampMs: 0, modifiedAtMs: min },
       { localTimestampMs: 0, modifiedAtMs: 9 * HOUR },
+    ])).toBe(7 * HOUR);
+  });
+
+  it("recovers the true offset when a never-written file's mtime reads a second early", () => {
+    // The 2026-09-26 incident: a file the server created and never wrote to again
+    // has zero write-lag, so its candidate sits EXACTLY on the grid — and the game
+    // server's clock (filename) and Nitrado's (mtime) need only disagree by one
+    // second for a bare floor to drop a whole step. Livonia ran at 6h45m for a
+    // day and a half, and King of the Hill scored a window 15 minutes late.
+    expect(deriveClockOffsetMs([
+      { localTimestampMs: 0, modifiedAtMs: 7 * HOUR - 1_000 },
+      { localTimestampMs: 0, modifiedAtMs: 7 * HOUR + 118 * 60_000 },
     ])).toBe(7 * HOUR);
   });
 
