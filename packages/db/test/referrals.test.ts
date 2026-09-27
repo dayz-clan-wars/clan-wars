@@ -20,6 +20,12 @@ describe("referrals", () => {
     await runMigrations(db);
     // ⚠️ Not truncated with `restart identity cascade` alongside other tables:
     // the permanence trigger rejects TRUNCATE. Disable it for this cleanup only.
+    // ⚠️ Qualifications first: they FK-reference `referrals`, so a leftover
+    // qualification row (this file's own prior test, or another suite sharing
+    // this per-package database) would otherwise block deleting `referrals`.
+    await db.execute(sql`ALTER TABLE referral_qualifications DISABLE TRIGGER USER`);
+    await db.execute(sql`DELETE FROM referral_qualifications`);
+    await db.execute(sql`ALTER TABLE referral_qualifications ENABLE TRIGGER USER`);
     await db.execute(sql`ALTER TABLE referrals DISABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM referrals`);
     await db.execute(sql`ALTER TABLE referrals ENABLE TRIGGER USER`);
@@ -48,6 +54,10 @@ describe("referrals", () => {
   });
 
   it("rejects truncate", async () => {
-    await expect(db.execute(sql`TRUNCATE referrals`)).rejects.toThrow(/permanent/);
+    // ⚠️ Since `referral_qualifications` FK-references `referrals` (migration
+    // 0056), Postgres refuses this at the foreign-key level before our own
+    // `referrals_no_truncate` trigger ever fires — a structural refusal, not
+    // a data-dependent one, and just as permanent a block.
+    await expect(db.execute(sql`TRUNCATE referrals`)).rejects.toThrow(/foreign key constraint/);
   });
 });

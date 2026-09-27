@@ -268,6 +268,52 @@ export const referrals = pgTable("referrals", {
 }));
 
 /**
+ * When a referral QUALIFIED: the referred player reached `REFERRAL_QUALIFY_MS`
+ * of play (spec 2026-09-27-referral-leaderboard §2). Written once by
+ * `qualifyReferralsDb`; both referral boards and the weekly payout count these.
+ *
+ * ⚠️ Permanent like `referrals` (trigger `referral_qualifications_permanent`):
+ * a qualification must survive the referred player unlinking, which is why it
+ * is recorded rather than derived. `clearReferrals` is the only clearing path.
+ */
+export const referralQualifications = pgTable("referral_qualifications", {
+  referredDiscordId: text("referred_discord_id").primaryKey().references(() => referrals.referredDiscordId),
+  /** Copied from `referrals` so the weekly count needs no join. */
+  referrerDiscordId: text("referrer_discord_id").notNull(),
+  qualifiedAt: timestamp("qualified_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  byWeek: index("referral_qualifications_week_idx").on(t.qualifiedAt, t.referrerDiscordId),
+}));
+
+export type ReferralWeekDetail = { failure?: string; skipped?: string[]; opsAlerted?: boolean };
+
+/**
+ * One row per CLOSED referral week. ⚠️ The insert of this row is the payout's
+ * idempotency guard: `ON CONFLICT DO NOTHING` returning nothing means the week
+ * was already paid. Lock order `referral_weeks` → `award_grants` → `clan_notices`.
+ */
+export const referralWeeks = pgTable("referral_weeks", {
+  weekStart: timestamp("week_start", { withTimezone: true }).primaryKey(),
+  closedAt: timestamp("closed_at", { withTimezone: true }).notNull(),
+  /** The winning count; 0 for a week with no winner. */
+  topCount: integer("top_count").notNull(),
+  /** Set once the public post succeeds. */
+  announcedAt: timestamp("announced_at", { withTimezone: true }),
+  detail: jsonb("detail").$type<ReferralWeekDetail>().notNull().default({}),
+});
+
+export const referralWeekWinners = pgTable("referral_week_winners", {
+  weekStart: timestamp("week_start", { withTimezone: true }).notNull().references(() => referralWeeks.weekStart),
+  discordId: text("discord_id").notNull(),
+  /** Their character at payout, for the announcement. */
+  dayzId: text("dayz_id").notNull(),
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).notNull().references(() => awardGrants.id),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.weekStart, t.discordId] }),
+}));
+
+/**
  * Every character the event log has ever seen.
  *
  * Keyed on the UID, not the display name: a rename is then a column update

@@ -29,6 +29,12 @@ describe("clearReferrals", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
+    // ⚠️ Qualifications first: they FK-reference `referrals`, so a leftover
+    // qualification row (this file's own prior test, or another suite sharing
+    // this per-package database) would otherwise block deleting `referrals`.
+    await db.execute(sql`ALTER TABLE referral_qualifications DISABLE TRIGGER USER`);
+    await db.execute(sql`DELETE FROM referral_qualifications`);
+    await db.execute(sql`ALTER TABLE referral_qualifications ENABLE TRIGGER USER`);
     await db.execute(sql`ALTER TABLE referrals DISABLE TRIGGER USER`);
     await db.execute(sql`DELETE FROM referrals`);
     await db.execute(sql`ALTER TABLE referrals ENABLE TRIGGER USER`);
