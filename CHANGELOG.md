@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.49.0] - 2026-09-27
+
 ### Added
 
 - Two new leaderboards: Top referrers and Top referrers this week. A player you bring in counts once they've played for two hours.
