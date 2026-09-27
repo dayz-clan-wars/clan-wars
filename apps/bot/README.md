@@ -64,6 +64,8 @@ in-game verification tick confirms it.
 | `KOTH_WEEKLY_CAP` | no (default `2`) | How many automatic King of the Hill sessions (`origin = 'auto'`) may start per ISO week (Monday 00:00 UTC through the following Sunday), not a rolling 7 days. |
 | `KOTH_AUTO_MIN_POP` | no (default `10`) | The population floor an automatic King of the Hill decision must clear, beside the high-water mark. |
 | `KOTH_VOTE` | no (default off; `"1"`/`"true"` = on; requires `KOTH_TICK`) | Enables `/kothvote`, letting linked in-game players call a King of the Hill session by two-thirds vote. Prize-less. |
+| `REFERRAL_AWARD_TICK` | no (default off; `"1"`/`"true"` = on) | Closes referral weeks and grants the weekly plate-carrier prize. Requires `SERVER_EVENTS_CHANNEL_ID`; config load fails without it, because the winner announcement is the player-facing point of the feature. |
+| `REFERRAL_AWARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the referral award tick runs and checks for closed weeks. Runbook `docs/deploy/2026-09-27-referral-leaderboard.md`. |
 
 Example `.env` (placeholders only — never commit real values):
 
