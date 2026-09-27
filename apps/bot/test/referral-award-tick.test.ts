@@ -1,5 +1,5 @@
 // apps/bot/test/referral-award-tick.test.ts
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { sql } from "drizzle-orm";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
@@ -8,6 +8,20 @@ import {
 import { writeCursor } from "@factions/event-log";
 import { SESSIONS_CONSUMER } from "../src/sessions-tick.js";
 import { referralAwardTick } from "../src/referral-award-tick.js";
+
+// ⚠️ Forces `qualifyReferralsDb` to throw for one tick. `vi.mock`'s factory is hoisted
+// above the imports, so the switch is declared with `vi.hoisted` and flipped per test.
+const failQualify = vi.hoisted(() => ({ on: false }));
+vi.mock("@factions/roster/internal", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@factions/roster/internal")>();
+  return {
+    ...actual,
+    qualifyReferralsDb: async (...args: Parameters<typeof actual.qualifyReferralsDb>) => {
+      if (failQualify.on) throw new Error("referrals: forced qualification failure for test");
+      return actual.qualifyReferralsDb(...args);
+    },
+  };
+});
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -28,7 +42,7 @@ describe("referralAwardTick", () => {
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
     serverId = s!.id;
     const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: at("2026-09-01T00:00:00Z"), linesIngested: 0, complete: true }).returning();
-    fileId = f!.id; line = 0; announced = []; ops = []; failAnnounce = false;
+    fileId = f!.id; line = 0; announced = []; ops = []; failAnnounce = false; failQualify.on = false;
     for (const [d, g] of [["A", "Otto"], ["N", "Newbie"]] as const) {
       await db.insert(players).values({ dayzId: `dz-${d}`, gamertag: g, firstSeenAt: at("2026-09-01T00:00:00Z"), lastSeenAt: at("2026-09-01T00:00:00Z") });
       await db.insert(identityLinks).values({ discordId: d, dayzId: `dz-${d}`, gamertag: g, verifiedAt: at("2026-09-01T00:00:00Z") });
@@ -95,5 +109,16 @@ describe("referralAwardTick", () => {
     expect(ops).toHaveLength(1);
     expect(ops[0]).toContain("A");
     expect(announced).toEqual([]);
+  });
+  // ⚠️ A close on stale qualifications would record the week without this week's
+  // late qualifiers and, being idempotent, never pay them. Skip the close instead.
+  it("does not close the week on a tick whose qualification failed, and closes it on the next healthy tick", async () => {
+    await playedAndIngested();
+    failQualify.on = true;
+    expect(await tick("2026-09-28T11:00:00Z")).toEqual({ qualified: 0, closed: 0, posted: 0 });
+    expect(await db.select().from(referralWeeks)).toEqual([]);
+    failQualify.on = false;
+    expect(await tick("2026-09-28T11:05:00Z")).toEqual({ qualified: 1, closed: 1, posted: 1 });
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
   });
 });

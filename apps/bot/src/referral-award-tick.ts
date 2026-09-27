@@ -18,27 +18,34 @@ export type ReferralPosters = { announce: (c: string) => Promise<void>; ops: (c:
  * 4. Ops notes for skipped referrers or a missing prize, once each.
  *
  * Each step has its own try/catch: a failing step must not starve the others.
+ * ⚠️ Except that a failed qualify SKIPS the close (not the announce or ops steps):
+ * a close on stale qualifications records the week without its late qualifiers,
+ * and the week-row guard then makes that underpayment permanent.
  */
 export async function referralAwardTick(
   db: Database, posters: ReferralPosters,
   opts: { now: Date; siteBaseUrl: string; grantedByDiscordId: string; payout: boolean },
 ): Promise<{ qualified: number; closed: number; posted: number }> {
   const out = { qualified: 0, closed: 0, posted: 0 };
+  let qualifiedOk = false;
   try {
     out.qualified = await qualifyReferralsDb(db, opts.now);
+    qualifiedOk = true;
   } catch (err) {
-    console.error("referrals: qualification failed; retrying next tick", err);
+    console.error("referrals: qualification failed; retrying next tick, and not closing a week this tick", err);
   }
   if (!opts.payout) return out;
 
-  try {
-    const week = previousReferralWeek(opts.now);
-    if (await referralWeekReady(db, week, opts.now)) {
-      const r = await closeReferralWeek(db, week, opts);
-      if (r.status === "closed") out.closed = 1;
+  if (qualifiedOk) {
+    try {
+      const week = previousReferralWeek(opts.now);
+      if (await referralWeekReady(db, week, opts.now)) {
+        const r = await closeReferralWeek(db, week, opts);
+        if (r.status === "closed") out.closed = 1;
+      }
+    } catch (err) {
+      console.error("referrals: closing the week failed; retrying next tick", err);
     }
-  } catch (err) {
-    console.error("referrals: closing the week failed; retrying next tick", err);
   }
 
   const weeks = await db.select().from(referralWeeks).where(gt(referralWeeks.topCount, 0));
