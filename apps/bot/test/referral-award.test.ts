@@ -1,0 +1,101 @@
+// apps/bot/test/referral-award.test.ts
+import { describe, it, expect, beforeEach } from "vitest";
+import { eq, sql } from "drizzle-orm";
+import {
+  createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
+  servers, admFiles, events, identityLinks, referrals, referralQualifications, referralWeeks, referralWeekWinners, awardGrants, clanNotices,
+  type Database,
+} from "@factions/db";
+import { writeCursor } from "@factions/event-log";
+import { SESSIONS_CONSUMER } from "../src/sessions-tick.js";
+import { closeReferralWeek, referralWeekReady } from "../src/referral-award.js";
+
+const URL = requireTestDatabaseUrl();
+const at = (iso: string) => new Date(iso);
+const WEEK = { start: at("2026-09-21T10:00:00Z"), end: at("2026-09-28T10:00:00Z") };
+const IN_WEEK = at("2026-09-24T12:00:00Z");
+const CLOSE_AT = at("2026-09-28T11:00:00Z");
+const opts = { now: CLOSE_AT, siteBaseUrl: "https://site.test", grantedByDiscordId: "bot" };
+
+describe("closing a referral week", () => {
+  let db: Database; let serverId = 0; let fileId = 0; let line = 0; let n = 0;
+  beforeEach(async () => {
+    db = createClient(URL); await runMigrations(db);
+    await db.execute(sql`truncate table referral_week_winners, referral_weeks, award_grants, clan_notices, events, adm_files, identity_links, consumer_cursors, servers restart identity cascade`);
+    await clearReferrals(db);
+    const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true }).returning();
+    serverId = s!.id;
+    const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: WEEK.start, linesIngested: 0, complete: true }).returning();
+    fileId = f!.id; line = 0; n = 0;
+  });
+
+  const link = (discordId: string) => db.insert(identityLinks).values({ discordId, dayzId: `dz-${discordId}`, gamertag: `gt-${discordId}`, verifiedAt: WEEK.start });
+  /** `count` qualified referrals for `referrer`, each qualifying at `when`. */
+  async function brought(referrer: string, count: number, when = IN_WEEK) {
+    for (let i = 0; i < count; i++) {
+      const referred = `r${n++}`;
+      await db.insert(referrals).values({ referredDiscordId: referred, referrerDiscordId: referrer, referrerDayzId: `dz-${referrer}`, source: "later_bot", createdAt: when });
+      await db.insert(referralQualifications).values({ referredDiscordId: referred, referrerDiscordId: referrer, qualifiedAt: when });
+    }
+  }
+  const event = async (iso: string) =>
+    (await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.connected", occurredAt: at(iso), payload: {} }).returning())[0]!.id;
+
+  it("grants the plate carrier to the top linked referrer, with its DM, once", async () => {
+    await link("A"); await link("B");
+    await brought("A", 3); await brought("B", 1);
+    const out = await closeReferralWeek(db, WEEK, opts);
+    expect(out).toEqual({ status: "closed", winners: ["A"], topCount: 3, skipped: [] });
+    const grants = await db.select().from(awardGrants);
+    expect(grants).toEqual([expect.objectContaining({ awardKey: "plate-carrier", discordId: "A", grantedByDiscordId: "bot" })]);
+    expect(await db.select().from(clanNotices)).toEqual([expect.objectContaining({ kind: "award_granted", discordTargetId: "A" })]);
+    expect(await db.select().from(referralWeekWinners)).toEqual([expect.objectContaining({ discordId: "A", dayzId: "dz-A", awardGrantId: grants[0]!.id })]);
+    expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "already" });
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
+  });
+
+  it("grants every referrer tied at the top", async () => {
+    await link("A"); await link("B");
+    await brought("A", 2); await brought("B", 2);
+    expect(await closeReferralWeek(db, WEEK, opts)).toMatchObject({ winners: ["A", "B"], topCount: 2 });
+    expect(await db.select().from(awardGrants)).toHaveLength(2);
+  });
+
+  it("skips an unlinked top referrer and records it for ops", async () => {
+    await link("B");
+    await brought("X", 5); await brought("B", 1);
+    expect(await closeReferralWeek(db, WEEK, opts)).toMatchObject({ winners: ["B"], topCount: 1, skipped: ["X"] });
+    expect((await db.select().from(referralWeeks))[0]!.detail).toEqual({ skipped: ["X"] });
+  });
+
+  it("counts a referral qualifying one second before the end, not one at the end", async () => {
+    await link("A"); await link("B");
+    await brought("A", 1, at("2026-09-28T09:59:59Z"));
+    await brought("B", 2, WEEK.end);
+    expect(await closeReferralWeek(db, WEEK, opts)).toMatchObject({ winners: ["A"], topCount: 1 });
+  });
+
+  it("closes a week with no qualified referrals with no grant", async () => {
+    expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "closed", winners: [], topCount: 0, skipped: [] });
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(await db.select().from(referralWeeks)).toEqual([expect.objectContaining({ topCount: 0, announcedAt: null })]);
+  });
+
+  describe("readiness", () => {
+    it("waits for the grace period", async () => {
+      const last = await event("2026-09-28T09:00:00Z"); await event("2026-09-28T10:05:00Z");
+      await writeCursor(db, SESSIONS_CONSUMER, last + 1);
+      expect(await referralWeekReady(db, WEEK, at("2026-09-28T10:20:00Z"))).toBe(false);
+      expect(await referralWeekReady(db, WEEK, at("2026-09-28T10:30:00Z"))).toBe(true);
+    });
+    it("waits for ingest to pass the boundary, and for the sessions cursor to catch up", async () => {
+      const last = await event("2026-09-28T09:00:00Z");
+      expect(await referralWeekReady(db, WEEK, CLOSE_AT)).toBe(false);         // nothing after the end yet
+      await event("2026-09-28T10:05:00Z");
+      await writeCursor(db, SESSIONS_CONSUMER, last - 1);
+      expect(await referralWeekReady(db, WEEK, CLOSE_AT)).toBe(false);         // cursor behind
+      await writeCursor(db, SESSIONS_CONSUMER, last);
+      expect(await referralWeekReady(db, WEEK, CLOSE_AT)).toBe(true);
+    });
+  });
+});

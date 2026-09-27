@@ -86,6 +86,7 @@ New table `referral_weeks`:
 | `closed_at` | timestamptz, not null | when the payout ran |
 | `top_count` | integer, not null | the winning count; 0 for a week with no winner |
 | `announced_at` | timestamptz | set once the public post succeeds |
+| `detail` | jsonb, not null, default '{}' | `{ failure?, skipped?, opsAlerted? }` for ops alerts |
 
 New table `referral_week_winners`:
 
@@ -137,7 +138,9 @@ Each run, in order:
    gated on `REFERRAL_AWARD_TICK`: it always runs, so the boards fill before the
    prize is switched on. Only step 2 is gated.
 2. **Close the week that just ended**, only once `now >= end + 30 min`
-   (`REFERRAL_CLOSE_GRACE_MS`), giving ingest time to deliver the last sessions.
+   (`REFERRAL_CLOSE_GRACE_MS`) AND ingest has seen an event after `end` AND the
+   `sessions-projector` cursor has passed every event before `end` (the same
+   two-part test as KotH's `scoringReady`).
    Only the most recently ended week is ever considered: **never a backlog.**
    Enabling the tick, or a bot down for two weeks, pays at most the latest
    completed week.
@@ -166,7 +169,8 @@ because a throwing close would retry forever.
 
 **Announcement.** After commit, if the week has winners and `announced_at` is null,
 post to `SERVER_EVENTS_CHANNEL_ID`, then set `announced_at`. A failed post is
-retried on the next run. Copy (in `packages/copy`, no em dashes):
+retried on the next run. Copy (in `apps/bot/src/referral-award-text.ts`, beside
+`koth-text.ts`; no em dashes):
 
 - One winner: "Top referrer this week: **{gamertag}**, who brought in {n} new
   player(s). They get a plate carrier for a week."
