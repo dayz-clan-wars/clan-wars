@@ -413,6 +413,19 @@ export const KOTH_WHOLE_FILES: readonly { dir: "root" | "env"; name: string }[] 
   { dir: "env", name: "bear_territories.xml" },
   { dir: "env", name: "zombie_territories.xml" },
 ];
+/**
+ * The db/globals.xml `<var>` values a KotH session runs with: bodies clear fast so
+ * a busy hill does not fill with corpses and loot piles. Spliced in place, never a
+ * whole-file copy.
+ * ⚠️ There is deliberately no "normal" value here. The restore reads each one from
+ * the mission's koth/default/globals.xml (staged from db/globals.xml by the livonia
+ * deploy), so the livonia repo stays the only statement of the defaults and a
+ * retune there is never reverted by the bot.
+ */
+export const KOTH_GLOBALS: Readonly<Record<string, number>> = {
+  CleanupLifetimeDeadPlayer: 30,
+  CleanupLifetimeDeadInfected: 10,
+};
 
 // ─── KotH automatic trigger and vote (spec 2026-09-24-koth-auto-and-vote) ───
 /** Every KotH, whatever started it, is at least this long after the last one's slot (§2.2). */

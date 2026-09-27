@@ -1,11 +1,12 @@
 import { kothEvents, type Database } from "@factions/db";
 import {
-  KOTH_INFECTED_EVENTS, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_WHOLE_FILES,
+  KOTH_GLOBALS, KOTH_INFECTED_EVENTS, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_WHOLE_FILES,
   kothWanted, restoredPresets,
 } from "@factions/domain";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { readSpawnGearPresets } from "./cfggameplay.js";
 import { readEventActive } from "./events-xml.js";
+import { readGlobalVar, setGlobalVar } from "./globals-xml.js";
 import type { RestartTarget } from "./restart-tick.js";
 
 export type KothRow = typeof kothEvents.$inferSelect;
@@ -28,6 +29,7 @@ export type KothPlan = {
 
 const GAMEPLAY = "cfggameplay.json";
 const EVENTS = "events.xml";
+const GLOBALS = "globals.xml";
 const isKoth = (p: string) => p.includes(`/${KOTH_PRESET_PREFIX}`);
 
 function targetDir(root: string, dir: "root" | "env"): string {
@@ -45,6 +47,21 @@ async function readNonEmpty(nitrado: RestartTarget, path: string): Promise<strin
   // over a live spawn file would leave a server nobody can spawn on.
   if (body.trim() === "") throw new Error(`${path} is empty`);
   return body;
+}
+
+/**
+ * db/globals.xml with every `KOTH_GLOBALS` var set to `wanted(name)`, as an edit —
+ * or none when the live file already carries those values.
+ *
+ * ⚠️ A splice of the live file, not a whole-file copy like the four spawn files:
+ * a copy would need a globals.xml in every town's directory, each one a stale
+ * mirror of every OTHER var in the file.
+ */
+async function globalsEdit(nitrado: RestartTarget, dbDir: string, wanted: (name: string) => number): Promise<FileEdit[]> {
+  const live = await readNonEmpty(nitrado, `${dbDir}/${GLOBALS}`);
+  let next = live;
+  for (const name of Object.keys(KOTH_GLOBALS)) next = setGlobalVar(next, name, wanted(name)).xml;
+  return next === live ? [] : [{ dir: dbDir, name: GLOBALS, content: next }];
 }
 
 /**
@@ -88,6 +105,12 @@ export async function planKoth(
         await readNonEmpty(nitrado, `${root}/koth/default/${f.name}`);
         town.push({ dir: targetDir(root, f.dir), name: f.name, content: await readNonEmpty(nitrado, `${root}/koth/locations/${opening.location}/${f.name}`) });
       }
+      // ⚠️ The default is proved readable, var by var, BEFORE the session opens —
+      // the same rule as the four files above: without it the restore could never
+      // put the cleanup timers back, and bodies would vanish in 30 s for good.
+      const globalsDefault = await readNonEmpty(nitrado, `${root}/koth/default/${GLOBALS}`);
+      for (const name of Object.keys(KOTH_GLOBALS)) readGlobalVar(globalsDefault, name);
+      const globals = await globalsEdit(nitrado, dbDir, (name) => KOTH_GLOBALS[name]!);
       // Snapshots, BEFORE any upload (spec §2.5). Read-only downloads here; the
       // single upload of each file stays in applyGameplay/applyEvents.
       const presetsNow = readSpawnGearPresets(await nitrado.downloadFile(`${root}/${GAMEPLAY}`));
@@ -102,7 +125,7 @@ export async function planKoth(
       return {
         opening, presets: [...KOTH_PRESET_FILES],
         infected: Object.fromEntries(KOTH_INFECTED_EVENTS.map((n) => [n, 1])) as Record<string, 0 | 1>,
-        infectedRestoreRowId: null, files: await differing(nitrado, town), failure: null,
+        infectedRestoreRowId: null, files: [...await differing(nitrado, town), ...globals], failure: null,
       };
     } catch (err) {
       failure = err instanceof Error ? err.message : String(err);
@@ -144,6 +167,14 @@ export async function planKoth(
       problems.push(err instanceof Error ? err.message : String(err));
     }
   }
+  let globals: FileEdit[] = [];
+  try {
+    const globalsDefault = await readNonEmpty(nitrado, `${root}/koth/default/${GLOBALS}`);
+    globals = await globalsEdit(nitrado, dbDir, (name) => readGlobalVar(globalsDefault, name));
+  } catch (err) {
+    // ⚠️ Skip, never guess: a default we cannot read leaves the live values alone.
+    problems.push(err instanceof Error ? err.message : String(err));
+  }
   // ⚠️ One write for every restore problem this slot: two separate `||` merges of
   // the same `restoreError` key would leave only whichever landed last.
   if (problems.length > 0) {
@@ -156,7 +187,7 @@ export async function planKoth(
     opening: null, presets,
     infected: unrestored?.infectedSnapshot ?? null,
     infectedRestoreRowId: unrestored?.id ?? null,
-    files: await differing(nitrado, defaults), failure,
+    files: [...await differing(nitrado, defaults), ...globals], failure,
   };
 }
 
