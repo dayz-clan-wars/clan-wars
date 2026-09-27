@@ -163,9 +163,11 @@ Closing a week is one transaction, in lock order
    `referral_week_winners` row.
 6. Set `top_count` (0 if no winner).
 
-If `plate-carrier` has left the catalogue, `grantAwardTx` returns `unknown-award`:
-the week closes with no winners and an ops alert, never a throw, mirroring KotH,
-because a throwing close would retry forever.
+Before granting, the catalogue is checked for `plate-carrier`. If it has left the
+catalogue, the week closes with no winners and an ops alert, never a throw,
+mirroring KotH, because a throwing close would retry forever. A refused grant
+(`grantAwardTx` returning `!ok` for any other reason) is different: it throws, so
+the whole transaction rolls back and the next tick retries.
 
 **Announcement.** After commit, if the week has winners and `announced_at` is null,
 post to `SERVER_EVENTS_CHANNEL_ID`, then set `announced_at`. A failed post is

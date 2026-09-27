@@ -1,5 +1,5 @@
 // apps/bot/test/referral-award.test.ts
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { eq, sql } from "drizzle-orm";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
@@ -9,6 +9,17 @@ import {
 import { writeCursor } from "@factions/event-log";
 import { SESSIONS_CONSUMER } from "../src/sessions-tick.js";
 import { closeReferralWeek, referralWeekReady } from "../src/referral-award.js";
+
+/**
+ * A mutable override for `awardsCatalogue()`, set by name so `vi.mock`'s factory
+ * (hoisted above every import) can close over it. `null` means "use the real
+ * catalogue" — every test but the missing-catalogue one below leaves it alone.
+ */
+const awardsOverride = vi.hoisted(() => ({ current: null as Record<string, unknown> | null }));
+vi.mock("@factions/domain/awards", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@factions/domain/awards")>();
+  return { ...actual, awardsCatalogue: () => awardsOverride.current ?? actual.awardsCatalogue() };
+});
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
@@ -28,6 +39,7 @@ describe("closing a referral week", () => {
     const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: WEEK.start, linesIngested: 0, complete: true }).returning();
     fileId = f!.id; line = 0; n = 0;
   });
+  afterEach(() => { awardsOverride.current = null; });
 
   const link = (discordId: string) => db.insert(identityLinks).values({ discordId, dayzId: `dz-${discordId}`, gamertag: `gt-${discordId}`, verifiedAt: WEEK.start });
   /** `count` qualified referrals for `referrer`, each qualifying at `when`. */
@@ -79,6 +91,29 @@ describe("closing a referral week", () => {
     expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "closed", winners: [], topCount: 0, skipped: [] });
     expect(await db.select().from(awardGrants)).toEqual([]);
     expect(await db.select().from(referralWeeks)).toEqual([expect.objectContaining({ topCount: 0, announcedAt: null })]);
+  });
+
+  it("closes with a failure and no grant when plate-carrier has left the catalogue", async () => {
+    await link("A");
+    await brought("A", 2);
+    awardsOverride.current = {};
+    const out = await closeReferralWeek(db, WEEK, opts);
+    expect(out).toMatchObject({ status: "closed", winners: [], topCount: 2, skipped: [] });
+    expect((out as { failure?: string }).failure).toEqual(expect.any(String));
+    expect((await db.select().from(referralWeeks))[0]!.detail).toMatchObject({ failure: expect.any(String) });
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(await db.select().from(referralWeekWinners)).toEqual([]);
+  });
+
+  it("rolls back everything when there is no active server, so the next tick retries", async () => {
+    await link("A");
+    await brought("A", 2);
+    await db.update(servers).set({ active: false }).where(eq(servers.id, serverId));
+    await expect(closeReferralWeek(db, WEEK, opts)).rejects.toThrow();
+    expect(await db.select().from(referralWeeks)).toEqual([]);
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+    expect(await db.select().from(referralWeekWinners)).toEqual([]);
   });
 
   describe("readiness", () => {
