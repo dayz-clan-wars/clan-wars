@@ -70,8 +70,15 @@ export const REFERRAL_COPY: Record<ReferrerRefusal, (a: { referrerGamertag?: str
   "not-linked": () => "Link your character first, then you can name a referrer.",
 };
 
-/** That the referral is permanent, spelled out at the moment it is recorded. */
-export const REFERRAL_RECORDED = (gamertag: string) => `${gamertag} is now your referrer. This is permanent.`;
+/**
+ * That the referral is permanent, spelled out at the moment it is recorded.
+ * The bot always has the gamertag to hand and passes it; the site's generic
+ * result-code table (`apps/web/lib/clan-copy.ts`, which flattens every
+ * outcome to a fixed string ahead of time) has no argument to pass, so it
+ * calls this with none — the one place both surfaces draw this wording from.
+ */
+export const REFERRAL_RECORDED = (gamertag?: string) =>
+  gamertag ? `${gamertag} is now your referrer. This is permanent.` : "Your referrer is recorded. This is permanent.";
 
 function name(o: IssueOutcome): string {
   return "gamertag" in o ? o.gamertag : "that character";

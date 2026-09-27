@@ -1,4 +1,4 @@
-import { TABLES, type Action, REFERRAL_COPY } from "@factions/copy";
+import { TABLES, type Action, REFERRAL_COPY, REFERRAL_RECORDED } from "@factions/copy";
 import type { ReferrerRefusal } from "@factions/roster";
 export { REFUSAL, DISBAND_WARNING, TABLES, type Action } from "@factions/copy";
 
@@ -9,11 +9,21 @@ export { REFUSAL, DISBAND_WARNING, TABLES, type Action } from "@factions/copy";
  * they are flattened to plain strings here (called with `{}`) the same way
  * every other result code is a fixed sentence, never one built from what a
  * player typed.
+ *
+ * `recorded` is the same wording the bot uses (`REFERRAL_RECORDED`), called
+ * with no gamertag: this table is flattened to a fixed string ahead of time
+ * and a result code is looked up by code, never rendered with the player's
+ * own request in hand, so it can't name who the referrer was. The profile
+ * page (`app/(site)/players/[gamertag]/page.tsx`) already knows the
+ * owner's referrer from `owner.referrals.referredBy` and renders
+ * `REFERRAL_RECORDED(owner.referrals.referredBy.gamertag)` directly for this
+ * code instead of looking it up here — this entry is only the fallback for
+ * the rare case that read comes back empty.
  */
 const REFERRAL_TABLE: Record<"input" | "recorded" | ReferrerRefusal, string> = {
   ...(Object.fromEntries(Object.entries(REFERRAL_COPY).map(([outcome, copy]) => [outcome, copy({})])) as Record<ReferrerRefusal, string>),
   input: "Type a gamertag.",
-  recorded: "Saved. This can't be changed.",
+  recorded: REFERRAL_RECORDED(),
 };
 
 export function code<A extends Action>(action: A, outcome: keyof (typeof TABLES)[A] & string): string;

@@ -102,7 +102,12 @@ function currentTarget(status: Status): string {
   return status.challenge?.targetDayzId ?? "";
 }
 
-function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string, referrer?: string) => void }) {
+// Exported for apps/web/test/link-flow-render.test.tsx: `notice` and the
+// referrer field cannot be reached through `LinkFlow`'s `initial` prop alone
+// (the referrer-refused notice only ever arrives from a client fetch
+// response, which a static render never runs), so the test renders this
+// directly with the same `REFERRAL_COPY[...]({})` strings `start()` above passes it.
+export function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string, referrer?: string) => void }) {
   const [query, setQuery] = useState("");
   const [referrer, setReferrer] = useState("");
   /** The list on screen AND the text it was fetched for — without `q`, a stale list reads as a verdict (H5). */

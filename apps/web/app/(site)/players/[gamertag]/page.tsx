@@ -7,6 +7,7 @@ import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
+import { REFERRAL_RECORDED } from "@factions/copy";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { readKept } from "@/lib/form";
 import { referralFactRows } from "@/lib/referral-view";
@@ -100,7 +101,14 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
   const viewer = session ? await viewerFor(session.sub) : null;
   const owner = session && viewer && isOwnPage(viewer.link?.gamertag, profile.gamertag) ? await loadOwner(session, viewer) : null;
   // ⚠️ Looked up, never echoed: ?unlink= and ?result= are attacker-supplied (see lib/copy-lookup.ts). Only the owner's notices, on the owner's page.
-  const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, result ? lookupCopy(RESULT_COPY, result) : undefined] : [];
+  // "referral.recorded" is the one exception: the code carries no gamertag (it can't — a
+  // result code is never built from what the player typed), but the owner's own referrer
+  // is already in hand from `owner.referrals.referredBy`, so that renders the named
+  // REFERRAL_RECORDED the bot also uses instead of the code's nameless fallback text.
+  const referralRecordedText = result === "referral.recorded" && owner?.referrals.referredBy
+    ? REFERRAL_RECORDED(owner.referrals.referredBy.gamertag)
+    : result ? lookupCopy(RESULT_COPY, result) : undefined;
+  const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, referralRecordedText] : [];
   const basePath = `/players/${encodeURIComponent(profile.gamertag)}`;
 
   const guide = guideLinkFor("/players/[gamertag]");

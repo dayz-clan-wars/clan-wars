@@ -1,9 +1,11 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LinkFlow } from "../app/(site)/link/link-flow";
+import { LinkFlow, ChooseCharacter } from "../app/(site)/link/link-flow";
 import LoginPage from "../app/(site)/login/page";
 import JoinPage from "../app/(site)/join/page";
-import { btnSecondary } from "../app/components/ui";
+import { btnSecondary, field } from "../app/components/ui";
+import { REFERRAL_COPY } from "../lib/link-copy";
+import { GAMERTAG_MAX } from "../lib/clan-limits";
 
 type Initial = Parameters<typeof LinkFlow>[0]["initial"];
 const flow = (initial: Initial) => renderToStaticMarkup(<LinkFlow initial={initial} />);
@@ -49,5 +51,33 @@ describe("L5: one numbering, sign-in to proof", () => {
     const html = flow(OPEN);
     expect(html).toContain("Step 3 of 3 — prove it");
     expect(html).not.toContain("one step left");
+  });
+});
+
+describe("referrals: naming one while linking", () => {
+  const chooseCharacter = (notice: string | null = null) =>
+    renderToStaticMarkup(<ChooseCharacter notice={notice} busy={false} onClaim={() => {}} />);
+
+  it("has the optional referrer field, with the shared field style and the gamertag cap", () => {
+    const html = chooseCharacter();
+    expect(html).toContain("Who referred you? (optional)");
+    expect(html).toContain('aria-label="Who referred you"');
+    expect(html).toContain(`maxLength="${GAMERTAG_MAX}"`);
+    // The referrer input, not the gamertag search input above it, carries the shared `field` class.
+    const referrerInput = html.match(/<input[^>]*aria-label="Who referred you"[^>]*>/u)?.[0] ?? "";
+    for (const cls of field.split(" ")) expect(referrerInput).toContain(cls);
+  });
+
+  it("says the referrer becomes permanent once the link completes", () => {
+    expect(chooseCharacter()).toContain("Permanent once your link completes.");
+  });
+
+  it("shows a referrer-refused notice with the shared REFERRAL_COPY wording, same as LinkFlow's start()", () => {
+    const notice = REFERRAL_COPY.self({});
+    const html = chooseCharacter(notice);
+    expect(html).toContain("Not issued");
+    // React escapes the apostrophe in server-rendered text.
+    expect(html).toContain(notice.replace("'", "&#x27;"));
+    expect(notice).not.toContain("—");
   });
 });
