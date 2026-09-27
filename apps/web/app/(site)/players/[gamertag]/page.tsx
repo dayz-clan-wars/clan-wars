@@ -2,12 +2,14 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile, playerFeed, viewerFor, achievementsFor, type PlayerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, viewerFor, achievementsFor, referralsForGamertag, type PlayerProfile } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { readKept } from "@/lib/form";
+import { referralFactRows } from "@/lib/referral-view";
 import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, BoosterKitPanel, AwardsPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
@@ -73,7 +75,9 @@ function OpponentList({ items, encounters, me, side }: {
 export default async function PlayerProfilePage({ params, searchParams }: Params) {
   // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
   const gamertag = decodeParam((await params).gamertag);
-  const { season, page: rawPage, unlink: unlinkCode, result } = await searchParams;
+  const rawSearchParams = await searchParams;
+  const { season, page: rawPage, unlink: unlinkCode, result } = rawSearchParams;
+  const kept = readKept(rawSearchParams);
   const parsed = parseSeasonParam(season);
   const scope = parsed === "default" ? { kind: "current" as const } : parsed;
 
@@ -81,7 +85,15 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
   // The profile and its feed page are the two reads, side by side.
   // ⚠️ The wall is lifetime, never scoped, and `.catch(() => null)` on purpose:
   // an achievement read that fails must cost the page its wall, never the profile.
-  const [profile, feed, session, wall] = await Promise.all([profileFor(gamertag, typeof season === "string" ? season : undefined), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession(), achievementsFor({ gamertag }).catch(() => null)]);
+  // ⚠️ `referrals` is `.catch(() => null)` too, same reasoning: a failed read
+  // costs the page its "Referred by"/"Brought in" line, never the profile.
+  const [profile, feed, session, wall, referrals] = await Promise.all([
+    profileFor(gamertag, typeof season === "string" ? season : undefined),
+    playerFeed(gamertag, scope, parsePageParam(rawPage)),
+    currentSession(),
+    achievementsFor({ gamertag }).catch(() => null),
+    referralsForGamertag(gamertag).catch(() => null),
+  ]);
 
   if (!profile || !feed) notFound();
   // The viewer's link decides ownership; the rest of the owner's state is only read once it does.
@@ -118,14 +130,14 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
         {owner && <div className="mb-4 empty:hidden lg:mb-6"><OwnerStrip owner={owner} notices={notices} /></div>}
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col gap-4 lg:gap-6">
-            {owner && <AccountPanel owner={owner} />}
+            {owner && <AccountPanel owner={owner} keptReferrer={kept.get("referrer")} />}
             {/* ⚠️ Directly under the account panel on purpose. In OwnerPanels it
                 landed in the right column below invites and ceremonies, which
                 buried the one control a booster opens this page for. */}
             {owner && <BoosterKitPanel owner={owner} />}
             {owner && <AwardsPanel owner={owner} />}
             <Panel title="Activity"><PanelBody>
-              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
+              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"], ...referralFactRows(referrals)]} />
             </PanelBody></Panel>
             <Panel title="PvP"><PanelBody>
               <Facts items={[["Kills", profile.pvpKills], ["Deaths", profile.pvpDeaths], ["K/D", profile.kd ?? "—"], ["Best streak", profile.bestStreak], ["Longest kill", profile.longestKill ? <>{profile.longestKill.distanceM} m{profile.longestKill.weapon && <span className="text-muted"> · {profile.longestKill.weapon}</span>}</> : "—"]]} />

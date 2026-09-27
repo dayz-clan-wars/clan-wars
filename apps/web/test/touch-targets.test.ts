@@ -11,7 +11,7 @@ import NotFound from "../app/not-found";
 const SESSION: Session = { sub: "1", name: "Test", avatar: null, guild: true, nextCheckAt: 0, authAt: 0 };
 const owner = (o: Partial<Owner> = {}): Owner => ({
   session: SESSION, viewer: { link: null, clan: null, pending: null }, invites: [], requests: [], claim: null,
-  next: null, showInvites: false, boosting: true, openAwards: 1, ...o,
+  next: null, showInvites: false, boosting: true, openAwards: 1, referrals: { referredBy: null, brought: [] }, ...o,
 });
 
 describe("the install strip's close (M8)", () => {

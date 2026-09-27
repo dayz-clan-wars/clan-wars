@@ -2,17 +2,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import { LINK_EMOTES } from "@factions/domain";
-import type { IssueOutcome, LinkStatus } from "@factions/roster";
-import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, formatRemaining } from "@/lib/link-copy";
+import type { IssueOutcome, LinkStatus, StartLinkOutcome } from "@factions/roster";
+import { ENDED_COPY, ISSUE_COPY, LINK_FAILED, LINK_UNSEEN, REFERRAL_COPY, formatRemaining } from "@/lib/link-copy";
 import { readJson, resolveTyped, type Match } from "@/lib/link-claim";
 import { visiblePoll } from "@/lib/visible-poll";
 import { when } from "@/lib/format";
+import { GAMERTAG_MAX } from "@/lib/clan-limits";
 import { btnCta, btnQuiet, btnSecondary, field } from "@/app/components/ui";
 
 /** `LinkStatus` after a trip through JSON: every Date is an ISO string. */
 type Wire<T> = T extends Date ? string : T extends object ? { [K in keyof T]: Wire<T[K]> } : T;
 type Status = Wire<LinkStatus>;
-type Outcome = Wire<IssueOutcome>;
+type Outcome = Wire<StartLinkOutcome>;
 
 const POLL_MS = 5_000;
 
@@ -54,10 +55,10 @@ export function LinkFlow({ initial }: { initial: Status }) {
     return visiblePoll(document, () => { void refresh(); }, POLL_MS);
   }, [status.challenge?.id]);
 
-  const start = async (dayzId: string, newSequence = false) => {
+  const start = async (dayzId: string, newSequence = false, referrer?: string) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/link/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayzId, newSequence }) }).catch(() => null);
+      const res = await fetch("/api/link/start", { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ dayzId, newSequence, ...(referrer ? { referrer } : {}) }) }).catch(() => null);
       if (res?.status === 401) { window.location.assign("/login?next=/link"); return; }
       const data = await readJson<{ outcome: Outcome }>(res);
       if (!data) { setNotice(LINK_FAILED); return; }
@@ -67,6 +68,8 @@ export function LinkFlow({ initial }: { initial: Status }) {
           ? `Canceled your challenge for ${outcome.switchedFrom} — that sequence no longer works. Here is the new one.`
           : null);
         await refresh();
+      } else if (outcome.kind === "referrer-refused") {
+        setNotice(REFERRAL_COPY[outcome.reason]({}));
       } else {
         const endsWhen = outcome.kind === "held-by-other" ? when(new Date(outcome.expiresAt)) : undefined;
         setNotice(ISSUE_COPY[outcome.kind](outcome as unknown as IssueOutcome, endsWhen));
@@ -91,7 +94,7 @@ export function LinkFlow({ initial }: { initial: Status }) {
     return <ProveIt challenge={status.challenge} notice={notice} busy={busy}
       onDraw={() => start(currentTarget(status), true)} onCancel={cancel} />;
   }
-  return <ChooseCharacter notice={notice} busy={busy} onClaim={(dayzId) => start(dayzId)} />;
+  return <ChooseCharacter notice={notice} busy={busy} onClaim={(dayzId, referrer) => start(dayzId, false, referrer)} />;
 }
 
 /** The open challenge's target, for the re-roll. Read from status so the client never guesses a UID. */
@@ -99,8 +102,9 @@ function currentTarget(status: Status): string {
   return status.challenge?.targetDayzId ?? "";
 }
 
-function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string) => void }) {
+function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; busy: boolean; onClaim: (dayzId: string, referrer?: string) => void }) {
   const [query, setQuery] = useState("");
+  const [referrer, setReferrer] = useState("");
   /** The list on screen AND the text it was fetched for — without `q`, a stale list reads as a verdict (H5). */
   const [shown, setShown] = useState<{ q: string; matches: Match[] }>({ q: "", matches: [] });
   const [denial, setDenial] = useState<string | null>(null);
@@ -136,7 +140,7 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
     setChecking(true);
     try {
       const r = await resolveTyped(query, shown, search);
-      if (r.kind === "found") { setDenial(null); onClaim(r.dayzId); }
+      if (r.kind === "found") { setDenial(null); onClaim(r.dayzId, referrer.trim() || undefined); }
       else setDenial(r.kind === "unseen" ? LINK_UNSEEN : LINK_FAILED);
     } finally { setChecking(false); }
   };
@@ -172,6 +176,11 @@ function ChooseCharacter({ notice, busy, onClaim }: { notice: string | null; bus
             })}
           </ul>
         )}
+        <label className="mt-4 block">
+          <span className={label}>Who referred you? (optional)</span>
+          <input className={field} value={referrer} onChange={(e) => setReferrer(e.target.value)} placeholder="Gamertag" aria-label="Who referred you" autoComplete="off" spellCheck={false} maxLength={GAMERTAG_MAX} />
+        </label>
+        <p className="mt-1 font-mono text-[11px] text-muted">Permanent once your link completes.</p>
         {/* ⚠️ aria-disabled while checking, not disabled: a disabled button drops the focus it was just pressed with. */}
         <button className={`mt-5 ${button} aria-disabled:opacity-40`} type="submit" disabled={busy || !query.trim()} aria-disabled={checking || undefined} aria-busy={checking || undefined}>
           {checking ? "Checking…" : <>Claim it <span className="font-mono normal-case">→</span></>}

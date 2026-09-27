@@ -19,6 +19,7 @@ const baseOwner = (boosting: boolean): Owner => ({
   showInvites: false,
   boosting,
   openAwards: 0,
+  referrals: { referredBy: null, brought: [] },
 });
 
 const render = (owner: Owner) => renderToStaticMarkup(createElement(BoosterKitPanel, { owner }));
