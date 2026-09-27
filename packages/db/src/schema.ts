@@ -275,15 +275,29 @@ export const referrals = pgTable("referrals", {
  * ⚠️ Permanent like `referrals` (trigger `referral_qualifications_permanent`):
  * a qualification must survive the referred player unlinking, which is why it
  * is recorded rather than derived. `clearReferrals` is the only clearing path.
+ *
+ * ⚠️ One character backs at most one qualification (`referred_dayz_id`, partial
+ * unique index, migration 0057). Play time is summed per CHARACTER, so without
+ * it one 2h+ character linked, unlinked and relinked across several Discord
+ * alts, each naming the same referrer, qualified a referral every cycle.
  */
 export const referralQualifications = pgTable("referral_qualifications", {
   referredDiscordId: text("referred_discord_id").primaryKey().references(() => referrals.referredDiscordId),
   /** Copied from `referrals` so the weekly count needs no join. */
   referrerDiscordId: text("referrer_discord_id").notNull(),
+  /**
+   * The referred player's character whose play qualified this referral. NULL only
+   * on rows written before migration 0057; `qualifyReferralsDb` always sets it.
+   */
+  referredDayzId: text("referred_dayz_id"),
   qualifiedAt: timestamp("qualified_at", { withTimezone: true }).notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byWeek: index("referral_qualifications_week_idx").on(t.qualifiedAt, t.referrerDiscordId),
+  // ⚠️ The race guard for "one character, one qualification": two runs that both
+  // pass the pending query's NOT EXISTS still insert only one row per character.
+  uniqDayz: uniqueIndex("referral_qualifications_dayz_uniq").on(t.referredDayzId)
+    .where(sql`${t.referredDayzId} IS NOT NULL`),
 }));
 
 export type ReferralWeekDetail = { failure?: string; skipped?: string[]; opsAlerted?: boolean };

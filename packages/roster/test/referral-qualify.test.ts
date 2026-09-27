@@ -66,4 +66,40 @@ describe("qualifyReferralsDb", () => {
     await session("dz-A", "2026-09-29T10:00:00Z", "2026-09-29T13:00:00Z");
     expect(await qualifyReferralsDb(db, at("2026-09-29T14:00:00Z"))).toBe(0);
   });
+  it("records the character that backed the qualification", async () => {
+    await link("A", "dz-A"); await link("B", "dz-B");
+    await refer("A", "B", "2026-09-28T12:00:00Z");
+    await session("dz-A", "2026-09-29T10:00:00Z", "2026-09-29T13:00:00Z");
+    await qualifyReferralsDb(db, at("2026-09-29T14:00:00Z"));
+    expect((await quals())[0]!.referredDayzId).toBe("dz-A");
+  });
+
+  // ⚠️ The alt-farming cycle: one 2h+ character relinked across Discord alts, each
+  // naming the same referrer, must qualify ONE referral, not one per alt.
+  it("does not qualify a second Discord account on a character that already backs a qualification", async () => {
+    await link("R", "dz-R"); await link("A", "dz-X");
+    await refer("A", "R", "2026-09-28T12:00:00Z");
+    await session("dz-X", "2026-09-29T10:00:00Z", "2026-09-29T13:00:00Z");
+    expect(await qualifyReferralsDb(db, at("2026-09-29T14:00:00Z"))).toBe(1);
+    await db.delete(identityLinks).where(sql`discord_id = 'A'`);
+    await link("B", "dz-X");
+    await refer("B", "R", "2026-09-29T15:00:00Z");
+    expect(await qualifyReferralsDb(db, at("2026-09-29T16:00:00Z"))).toBe(0);
+    expect((await quals()).map((q) => q.referredDiscordId)).toEqual(["A"]);
+  });
+
+  it("in one call, qualifies a fresh character and skips one that already backs a qualification", async () => {
+    await link("R", "dz-R"); await link("A", "dz-X");
+    await refer("A", "R", "2026-09-28T12:00:00Z");
+    await session("dz-X", "2026-09-29T10:00:00Z", "2026-09-29T13:00:00Z");
+    await qualifyReferralsDb(db, at("2026-09-29T14:00:00Z"));
+    await db.delete(identityLinks).where(sql`discord_id = 'A'`);
+    await link("B", "dz-X"); await link("C", "dz-Y");
+    await refer("B", "R", "2026-09-29T15:00:00Z");
+    await refer("C", "R", "2026-09-29T15:00:00Z");
+    await session("dz-Y", "2026-09-29T15:00:00Z", "2026-09-29T18:00:00Z");
+    expect(await qualifyReferralsDb(db, at("2026-09-29T19:00:00Z"))).toBe(1);
+    expect((await quals()).map((q) => [q.referredDiscordId, q.referredDayzId]).sort())
+      .toEqual([["A", "dz-X"], ["C", "dz-Y"]]);
+  });
 });

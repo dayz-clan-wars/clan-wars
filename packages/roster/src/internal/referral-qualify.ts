@@ -1,4 +1,5 @@
-import { asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, notExists } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { identityLinks, playerSessions, referralQualifications, referrals, type Database } from "@factions/db";
 import { qualifiedAt, type SessionSpan } from "@factions/domain";
 
@@ -10,15 +11,26 @@ import { qualifiedAt, type SessionSpan } from "@factions/domain";
  * player cannot qualify, but one who already has is kept (the table is permanent).
  * Each qualification is its own insert, `ON CONFLICT DO NOTHING`, so a run that
  * fails partway, or two runs racing, write each row at most once.
+ *
+ * ⚠️ One character, one qualification: a referral whose referred player's current
+ * character already backs a qualification (through any Discord account) is never
+ * qualified. Without this, one 2h+ character relinked across Discord alts, each
+ * naming the same referrer, farmed a referral per cycle. The NOT EXISTS below is
+ * the check; the partial unique index on `referred_dayz_id` plus ON CONFLICT DO
+ * NOTHING is the race guard when two runs pass it at once.
  */
 export async function qualifyReferralsDb(db: Database, now: Date): Promise<number> {
+  const backed = alias(referralQualifications, "backed");
   const pending = await db.select({
     referredDiscordId: referrals.referredDiscordId, referrerDiscordId: referrals.referrerDiscordId,
     createdAt: referrals.createdAt, dayzId: identityLinks.dayzId,
   }).from(referrals)
     .innerJoin(identityLinks, eq(identityLinks.discordId, referrals.referredDiscordId))
     .leftJoin(referralQualifications, eq(referralQualifications.referredDiscordId, referrals.referredDiscordId))
-    .where(isNull(referralQualifications.referredDiscordId));
+    .where(and(
+      isNull(referralQualifications.referredDiscordId),
+      notExists(db.select({ one: backed.referredDiscordId }).from(backed).where(eq(backed.referredDayzId, identityLinks.dayzId))),
+    ));
   if (pending.length === 0) return 0;
 
   const sessions = await db.select({ dayzId: playerSessions.dayzId, connectedAt: playerSessions.connectedAt, disconnectedAt: playerSessions.disconnectedAt })
@@ -37,7 +49,7 @@ export async function qualifyReferralsDb(db: Database, now: Date): Promise<numbe
     const when = qualifiedAt(byPlayer.get(p.dayzId) ?? [], p.createdAt, now);
     if (when === null) continue;
     const rows = await db.insert(referralQualifications)
-      .values({ referredDiscordId: p.referredDiscordId, referrerDiscordId: p.referrerDiscordId, qualifiedAt: when })
+      .values({ referredDiscordId: p.referredDiscordId, referrerDiscordId: p.referrerDiscordId, referredDayzId: p.dayzId, qualifiedAt: when })
       .onConflictDoNothing().returning({ id: referralQualifications.referredDiscordId });
     written += rows.length;
   }
