@@ -14,6 +14,7 @@ export type ReferralPosters = { announce: (c: string) => Promise<void>; ops: (c:
  * 1. Qualify: always, so the boards fill before the prize is on.
  * 2. Close the most recently ended week: only when `payout`, and only once ready.
  *    ⚠️ Never an older week: turning this on, or a long outage, pays no backlog.
+ *    ⚠️ The first-ever close records that week unpaid (`closeReferralWeek`).
  * 3. Announce any closed week with winners and no `announced_at`. Post, THEN stamp.
  * 4. Ops notes for skipped referrers or a missing prize, once each.
  *
@@ -41,7 +42,11 @@ export async function referralAwardTick(
       const week = previousReferralWeek(opts.now);
       if (await referralWeekReady(db, week, opts.now)) {
         const r = await closeReferralWeek(db, week, opts);
-        if (r.status === "closed") out.closed = 1;
+        // A first-ever close is a closed week too, just unpaid (closeReferralWeek).
+        if (r.status === "closed" || r.status === "skipped-first") out.closed = 1;
+        if (r.status === "skipped-first") {
+          console.log(`referrals: first close; week of ${week.start.toISOString().slice(0, 10)} recorded unpaid, the week in progress is the first paid`);
+        }
       }
     } catch (err) {
       console.error("referrals: closing the week failed; retrying next tick", err);

@@ -27,6 +27,8 @@ const WEEK = { start: at("2026-09-21T10:00:00Z"), end: at("2026-09-28T10:00:00Z"
 const IN_WEEK = at("2026-09-24T12:00:00Z");
 const CLOSE_AT = at("2026-09-28T11:00:00Z");
 const opts = { now: CLOSE_AT, siteBaseUrl: "https://site.test", grantedByDiscordId: "bot" };
+/** A week closed before WEEK, so WEEK is not the first-ever close (which is recorded unpaid, spec §6). */
+const PRIOR_WEEK_START = at("2026-09-14T10:00:00Z");
 
 describe("closing a referral week", () => {
   let db: Database; let serverId = 0; let fileId = 0; let line = 0; let n = 0;
@@ -38,6 +40,7 @@ describe("closing a referral week", () => {
     serverId = s!.id;
     const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: WEEK.start, linesIngested: 0, complete: true }).returning();
     fileId = f!.id; line = 0; n = 0;
+    await db.insert(referralWeeks).values({ weekStart: PRIOR_WEEK_START, closedAt: WEEK.start, topCount: 0 });
   });
   afterEach(() => { awardsOverride.current = null; });
 
@@ -50,6 +53,8 @@ describe("closing a referral week", () => {
       await db.insert(referralQualifications).values({ referredDiscordId: referred, referrerDiscordId: referrer, qualifiedAt: when });
     }
   }
+  /** WEEK's own row (the prior week's seeded row is always there too). */
+  const weekRows = () => db.select().from(referralWeeks).where(eq(referralWeeks.weekStart, WEEK.start));
   const event = async (iso: string) =>
     (await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.connected", occurredAt: at(iso), payload: {} }).returning())[0]!.id;
 
@@ -77,7 +82,7 @@ describe("closing a referral week", () => {
     await link("B");
     await brought("X", 5); await brought("B", 1);
     expect(await closeReferralWeek(db, WEEK, opts)).toMatchObject({ winners: ["B"], topCount: 1, skipped: ["X"] });
-    expect((await db.select().from(referralWeeks))[0]!.detail).toEqual({ skipped: ["X"] });
+    expect((await weekRows())[0]!.detail).toEqual({ skipped: ["X"] });
   });
 
   it("counts a referral qualifying one second before the end, not one at the end", async () => {
@@ -90,7 +95,7 @@ describe("closing a referral week", () => {
   it("closes a week with no qualified referrals with no grant", async () => {
     expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "closed", winners: [], topCount: 0, skipped: [] });
     expect(await db.select().from(awardGrants)).toEqual([]);
-    expect(await db.select().from(referralWeeks)).toEqual([expect.objectContaining({ topCount: 0, announcedAt: null })]);
+    expect(await weekRows()).toEqual([expect.objectContaining({ topCount: 0, announcedAt: null })]);
   });
 
   it("closes with a failure and no grant when plate-carrier has left the catalogue", async () => {
@@ -100,7 +105,7 @@ describe("closing a referral week", () => {
     const out = await closeReferralWeek(db, WEEK, opts);
     expect(out).toMatchObject({ status: "closed", winners: [], topCount: 2, skipped: [] });
     expect((out as { failure?: string }).failure).toEqual(expect.any(String));
-    expect((await db.select().from(referralWeeks))[0]!.detail).toMatchObject({ failure: expect.any(String) });
+    expect((await weekRows())[0]!.detail).toMatchObject({ failure: expect.any(String) });
     expect(await db.select().from(awardGrants)).toEqual([]);
     expect(await db.select().from(referralWeekWinners)).toEqual([]);
   });
@@ -110,10 +115,33 @@ describe("closing a referral week", () => {
     await brought("A", 2);
     await db.update(servers).set({ active: false }).where(eq(servers.id, serverId));
     await expect(closeReferralWeek(db, WEEK, opts)).rejects.toThrow();
-    expect(await db.select().from(referralWeeks)).toEqual([]);
+    expect(await weekRows()).toEqual([]);
     expect(await db.select().from(awardGrants)).toEqual([]);
     expect(await db.select().from(clanNotices)).toEqual([]);
     expect(await db.select().from(referralWeekWinners)).toEqual([]);
+  });
+
+  // ⚠️ Spec §1: no retroactive payouts. The week that had already ended when the
+  // payout was switched on is recorded unpaid; the first paid week is the next.
+  it("records the first-ever close unpaid, with no grant, DM, winner or ops note, then pays the next week", async () => {
+    await db.delete(referralWeeks);
+    await link("A");
+    await brought("A", 2);
+    expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "skipped-first" });
+    expect(await weekRows()).toEqual([expect.objectContaining({
+      topCount: 0, announcedAt: null,
+      detail: { failure: "payout was not enabled during this week", opsAlerted: true },
+    })]);
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+    expect(await db.select().from(referralWeekWinners)).toEqual([]);
+    expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "already" });
+
+    const NEXT = { start: WEEK.end, end: at("2026-10-05T10:00:00Z") };
+    await brought("A", 1, at("2026-09-30T12:00:00Z"));
+    expect(await closeReferralWeek(db, NEXT, { ...opts, now: at("2026-10-05T11:00:00Z") }))
+      .toEqual({ status: "closed", winners: ["A"], topCount: 1, skipped: [] });
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
   });
 
   describe("readiness", () => {

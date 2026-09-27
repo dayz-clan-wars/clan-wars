@@ -23,7 +23,14 @@ export async function referralWeekReady(db: Database, week: ReferralWeek, now: D
 
 export type CloseOutcome =
   | { status: "already" }
+  | { status: "skipped-first" }
   | { status: "closed"; winners: string[]; topCount: number; skipped: string[]; failure?: string };
+
+/**
+ * The `detail.failure` of the first-ever close. Ops-facing only: `opsAlerted` is
+ * preset beside it, so no ops note ever posts it.
+ */
+export const FIRST_CLOSE_UNPAID = "payout was not enabled during this week";
 
 const reasonFor = (week: ReferralWeek) => `Top referrer, week of ${week.start.toISOString().slice(0, 10)}`;
 
@@ -36,9 +43,26 @@ const reasonFor = (week: ReferralWeek) => `Top referrer, week of ${week.start.to
  * paid. A refused grant THROWS so the whole week rolls back and the next tick
  * retries; a prize missing from the catalogue is NOT a refusal, it closes the
  * week with a `failure` for ops, because it would refuse forever.
+ *
+ * ⚠️ The first-ever close (no `referral_weeks` row at all) pays NOTHING: that week
+ * ended before the payout was switched on, and spec §1 excludes retroactive
+ * payouts. It is recorded closed and unpaid (`top_count` 0, `opsAlerted` preset so
+ * no ops note fires, no grant, no winner, no post), so the first paid week is the
+ * one in progress when `REFERRAL_AWARD_TICK` is switched on. The check is inside
+ * this transaction, before the week-row insert: two racing closes of the same
+ * week both see an empty table, and the insert's conflict still lets one through.
  */
 export async function closeReferralWeek(db: Database, week: ReferralWeek, opts: { now: Date; siteBaseUrl: string; grantedByDiscordId: string }): Promise<CloseOutcome> {
   return db.transaction(async (tx) => {
+    const [anyWeek] = await tx.select({ weekStart: referralWeeks.weekStart }).from(referralWeeks).limit(1);
+    if (!anyWeek) {
+      const first = await tx.insert(referralWeeks).values({
+        weekStart: week.start, closedAt: opts.now, topCount: 0,
+        detail: { failure: FIRST_CLOSE_UNPAID, opsAlerted: true },
+      }).onConflictDoNothing().returning({ weekStart: referralWeeks.weekStart });
+      return first.length === 0 ? { status: "already" } as const : { status: "skipped-first" } as const;
+    }
+
     const claimed = await tx.insert(referralWeeks).values({ weekStart: week.start, closedAt: opts.now, topCount: 0 })
       .onConflictDoNothing().returning({ weekStart: referralWeeks.weekStart });
     if (claimed.length === 0) return { status: "already" } as const;

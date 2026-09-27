@@ -25,6 +25,7 @@ vi.mock("@factions/roster/internal", async (importOriginal) => {
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
+const PRIOR_WEEK_START = at("2026-09-14T10:00:00Z");
 
 describe("referralAwardTick", () => {
   let db: Database; let serverId = 0; let fileId = 0; let line = 0;
@@ -48,7 +49,12 @@ describe("referralAwardTick", () => {
       await db.insert(identityLinks).values({ discordId: d, dayzId: `dz-${d}`, gamertag: g, verifiedAt: at("2026-09-01T00:00:00Z") });
     }
     await db.insert(referrals).values({ referredDiscordId: "N", referrerDiscordId: "A", referrerDayzId: "dz-A", source: "link_bot", createdAt: at("2026-09-22T12:00:00Z") });
+    // A week closed before the one under test, so these tests exercise a normal payout,
+    // not the first-ever close (recorded unpaid, spec §6).
+    await db.insert(referralWeeks).values({ weekStart: PRIOR_WEEK_START, closedAt: at("2026-09-21T11:00:00Z"), topCount: 0 });
   });
+  /** Every week row but the seeded prior week. */
+  const weekRows = async () => (await db.select().from(referralWeeks)).filter((w) => w.weekStart.getTime() !== PRIOR_WEEK_START.getTime());
 
   async function event(iso: string) {
     return (await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.connected", occurredAt: at(iso), payload: {} }).returning())[0]!.id;
@@ -65,7 +71,7 @@ describe("referralAwardTick", () => {
   it("qualifies even with the payout off, and pays nothing", async () => {
     await playedAndIngested();
     expect(await tick("2026-09-28T11:00:00Z", false)).toEqual({ qualified: 1, closed: 0, posted: 0 });
-    expect(await db.select().from(referralWeeks)).toEqual([]);
+    expect(await weekRows()).toEqual([]);
   });
 
   it("closes the ended week, grants, and announces once", async () => {
@@ -97,7 +103,7 @@ describe("referralAwardTick", () => {
     await event("2026-10-05T10:10:00Z");
     await writeCursor(db, SESSIONS_CONSUMER, 1_000_000);
     expect((await tick("2026-10-05T11:00:00Z")).closed).toBe(1);
-    expect((await db.select().from(referralWeeks)).map((w) => w.weekStart)).toEqual([at("2026-09-28T10:00:00Z")]);
+    expect((await weekRows()).map((w) => w.weekStart)).toEqual([at("2026-09-28T10:00:00Z")]);
     expect(await db.select().from(awardGrants)).toEqual([]);
   });
 
@@ -116,9 +122,30 @@ describe("referralAwardTick", () => {
     await playedAndIngested();
     failQualify.on = true;
     expect(await tick("2026-09-28T11:00:00Z")).toEqual({ qualified: 0, closed: 0, posted: 0 });
-    expect(await db.select().from(referralWeeks)).toEqual([]);
+    expect(await weekRows()).toEqual([]);
     failQualify.on = false;
     expect(await tick("2026-09-28T11:05:00Z")).toEqual({ qualified: 1, closed: 1, posted: 1 });
     expect(await db.select().from(awardGrants)).toHaveLength(1);
+  });
+  it("switched on for the first time, records the ended week unpaid, silently, and pays the week in progress", async () => {
+    await db.delete(referralWeeks);
+    await playedAndIngested();
+    expect(await tick("2026-09-28T11:00:00Z")).toEqual({ qualified: 1, closed: 1, posted: 0 });
+    expect(await tick("2026-09-28T11:05:00Z")).toEqual({ qualified: 0, closed: 0, posted: 0 });
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(announced).toEqual([]);
+    expect(ops).toEqual([]);
+
+    // A second referral qualifies in the week in progress, which then pays normally.
+    await db.insert(players).values({ dayzId: "dz-M", gamertag: "Mo", firstSeenAt: at("2026-09-28T12:00:00Z"), lastSeenAt: at("2026-09-28T12:00:00Z") });
+    await db.insert(identityLinks).values({ discordId: "M", dayzId: "dz-M", gamertag: "Mo", verifiedAt: at("2026-09-28T12:00:00Z") });
+    await db.insert(referrals).values({ referredDiscordId: "M", referrerDiscordId: "A", referrerDayzId: "dz-A", source: "link_bot", createdAt: at("2026-09-29T12:00:00Z") });
+    const e = await event("2026-09-30T18:00:00Z");
+    await db.insert(playerSessions).values({ serverId, dayzId: "dz-M", connectedAt: at("2026-09-30T18:00:00Z"), connectEventId: e, disconnectedAt: at("2026-09-30T21:00:00Z"), closeReason: "disconnect" });
+    await event("2026-10-05T10:10:00Z");
+    await writeCursor(db, SESSIONS_CONSUMER, 1_000_000);
+    expect(await tick("2026-10-05T11:00:00Z")).toEqual({ qualified: 1, closed: 1, posted: 1 });
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
+    expect(announced).toHaveLength(1);
   });
 });

@@ -144,6 +144,9 @@ Each run, in order:
    Only the most recently ended week is ever considered: **never a backlog.**
    Enabling the tick, or a bot down for two weeks, pays at most the latest
    completed week.
+   **First run:** when `referral_weeks` holds no rows at all, that week is recorded
+   closed and unpaid (`top_count` 0, no grants, no post, no ops note), so the first
+   paid week is the one in progress when `REFERRAL_AWARD_TICK` is switched on.
 
 Closing a week is one transaction, in lock order
 `referral_weeks` → `award_grants` → `clan_notices`:
