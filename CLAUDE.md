@@ -389,7 +389,17 @@ anything.
   (self, already referred, referrer not linked, or a loop) never blocks the link
   itself — it sets `referral_refused` on the challenge and the Verified DM explains
   why. The referrer gets their own DM once, queued through `pendingReferralNotices` in
-  `notify.ts`'s `notifyCompleted`.
+  `notifyCompleted` (`apps/bot/src/discord.ts`).
+  ⚠️ A link-time referral's `source` (`link_bot`/`link_site`) comes from
+  `verification_challenges.referral_source` (migration 0055), written at issue time
+  from the `surface` every `startLink` caller must pass (`"bot"` from `/link start`,
+  `"site"` from `/api/link/start`) and kept, like the referrer, across a redraw or
+  switch. Never infer it from `guild_id`: roster's `startLinkDb` issues both surfaces'
+  challenges with a NULL guild. A pre-0055 row with no source records `link_site`.
+  A referrer who has unlinked is shown by the gamertag of the character that
+  referral snapshotted (`referrer_dayz_id`), else as `REFERRER_UNNAMED` with no
+  link, never by Discord id; the public profile reads referrals by its own
+  `dayzId` (`referralsForDayzId`), not the URL gamertag.
   ⚠️ Every command reply is ephemeral, always: `apps/bot/src/commands.ts` says why,
   and `command-registration.test.ts` enforces it. A page may never
   reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`
