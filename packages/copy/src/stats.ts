@@ -1,4 +1,5 @@
 import type { BoardKind, ResolvedScope } from "@factions/roster";
+import { REFERRAL_WEEK_START_HOUR_UTC } from "@factions/domain";
 
 /**
  * Player/board/achievement copy shared between the site and the bot.
@@ -126,4 +127,23 @@ export function boardValue(kind: BoardKind, value: number): string {
  */
 export function scopeLabel(scope: ResolvedScope): string {
   return scope.kind === "all" ? "All-time" : `Season ${scope.number}`;
+}
+
+/**
+ * Under (or heading) the weekly referrers board, which ignores the scope picker
+ * and always counts the current week (spec 2026-09-27-referral-leaderboard §5).
+ *
+ * ⚠️ Built from `REFERRAL_WEEK_START_HOUR_UTC`, the constant `referralWeekFor`
+ * starts the week at: a hand-typed hour here would keep promising the old time
+ * after the contest moved. Moved from `apps/web/lib/stats-copy.ts` (2026-09-27)
+ * once the bot's leaderboard channel and `/board` needed the identical words.
+ */
+export const REFERRERS_WEEK_NOTE = `This week, from Monday ${String(REFERRAL_WEEK_START_HOUR_UTC).padStart(2, "0")}:00 UTC`;
+
+/**
+ * What a board's Discord card is headed with: the scope it was read at, except
+ * the weekly referrers board, which is always this week whatever the scope.
+ */
+export function boardHeading(kind: BoardKind, scope: ResolvedScope): string {
+  return kind === "referrersWeek" ? REFERRERS_WEEK_NOTE : scopeLabel(scope);
 }
