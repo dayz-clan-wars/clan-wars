@@ -26,6 +26,7 @@ Then verify on the server, through the Nitrado file browser or a read-only
 
 - `koth/default/` holds four non-empty files: `cfgplayerspawnpoints.xml`,
   `env/wolf_territories.xml`, `env/bear_territories.xml`, `env/zombie_territories.xml`
+  — and, since 2026-09-27, a fifth: `globals.xml` (see §1a)
 - `custom/` holds all 44 `koth-*.json` files (`KOTH_PRESET_FILES` in
   `packages/domain/src/koth.ts` names them)
 - `koth/locations/lembork/` holds four files (spot-check; every other town's
@@ -35,6 +36,22 @@ Then verify on the server, through the Nitrado file browser or a read-only
 — and touches nothing — if any of these is missing (spec §5.1), but there is no
 value in exercising that refusal path against a fresh deploy when a five-minute check
 avoids it.
+
+## 1a. The cleanup timers (since 2026-09-27)
+
+For the session, `db/globals.xml`'s `CleanupLifetimeDeadPlayer` is set to 30 and
+`CleanupLifetimeDeadInfected` to 10 (`KOTH_GLOBALS` in `packages/domain/src/rules.ts`),
+so a busy hill does not fill with bodies. It is a splice of those two `<var>` values
+in the live file; nothing else in `globals.xml` is touched. At the closing restart
+both go back to whatever `koth/default/globals.xml` says — the livonia deploy copies
+`db/globals.xml` there on every Release, so the livonia repo is the only statement
+of the normal values (3600 and 330 today). Retune them there, never in the bot.
+
+⚠️ The livonia workflow's staging step must copy `db/globals.xml` into
+`koth/default/` BEFORE this bot change deploys. Until `koth/default/globals.xml`
+exists on the server, `planKoth` refuses every opening — the same rule as the four
+spawn files, because a session whose timers could not be put back would leave
+bodies vanishing in 30 s for good. The restore arm only logs and skips it.
 
 ## 2. Migrate
 
@@ -112,6 +129,8 @@ the slot.
 
 - all four whole files (`cfgplayerspawnpoints.xml`,
   `env/{wolf,bear,zombie}_territories.xml`) equal `koth/default/`'s copies
+- `db/globals.xml`'s `CleanupLifetimeDeadPlayer` and `CleanupLifetimeDeadInfected`
+  equal `koth/default/globals.xml`'s (3600 and 330 today), not 30 and 10
 - `cfggameplay.json`'s `spawnGearPresetFiles` lists `./custom/loadout.json` (the
   ordinary default), not a `koth-` entry
 - `events.xml`'s `Infected*` values match the row's `infected_snapshot`, not `1`

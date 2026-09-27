@@ -1,7 +1,7 @@
 import type { ActiveFlag } from "@factions/domain";
 
 /** Escape a literal for safe interpolation into a RegExp. */
-function escapeRe(s: string): string {
+export function escapeRe(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
@@ -15,7 +15,7 @@ function escapeRe(s: string): string {
  * matching it would rewrite the comment, report a successful wipe, and change
  * nothing the game reads.
  */
-function maskComments(xml: string): string {
+export function maskComments(xml: string): string {
   return xml.replace(/<!--[\s\S]*?-->/g, (c) => " ".repeat(c.length));
 }
 

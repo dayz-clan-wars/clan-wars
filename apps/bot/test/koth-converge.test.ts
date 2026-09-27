@@ -13,12 +13,19 @@ const NEXT = at("2026-10-03T22:00:00Z");
 const GAMEPLAY = `{\n\t"PlayerData": {\n\t\t"spawnGearPresetFiles": [\n\t\t\t"./custom/loadout.json"\n\t\t]\n\t}\n}`;
 const EVENTS = `<events>${["InfectedCity", "InfectedVillage", "InfectedArmy", "InfectedPolice", "InfectedMedic"]
   .map((n, i) => `<event name="${n}"><active>${i === 0 ? 1 : 0}</active></event>`).join("")}</events>`;
+const GLOBALS = (player: number, infected: number) => `<variables>
+    <var name="CleanupLifetimeDeadInfected" type="0" value="${infected}"/>
+    <var name="CleanupLifetimeDeadPlayer" type="0" value="${player}"/>
+    <var name="ZombieMaxCount" type="0" value="1000"/>
+</variables>`;
 
 /** A mission on a fake Nitrado: every KotH source and default present unless `over` removes it. */
 function mission(over: Record<string, string | undefined> = {}) {
   const files: Record<string, string> = {
     "/m/cfggameplay.json": GAMEPLAY,
     "/m/db/events.xml": EVENTS,
+    "/m/db/globals.xml": GLOBALS(3600, 330),
+    "/m/koth/default/globals.xml": GLOBALS(3600, 330),
     ...Object.fromEntries(KOTH_PRESET_FILES.map((p) => [`/m/custom/${p.slice("./custom/".length)}`, "{}"])),
   };
   for (const f of KOTH_WHOLE_FILES) {
@@ -64,7 +71,8 @@ describe("planKoth", () => {
     expect(p.opening?.id).toBe(row.id);
     expect(p.presets).toEqual([...KOTH_PRESET_FILES]);
     expect(p.infected).toEqual({ InfectedCity: 1, InfectedVillage: 1, InfectedArmy: 1, InfectedPolice: 1, InfectedMedic: 1 });
-    expect(p.files.map((f) => f.content)).toEqual(KOTH_WHOLE_FILES.map((f) => `lembork ${f.name}`));
+    expect(p.files.map((f) => f.content)).toEqual([...KOTH_WHOLE_FILES.map((f) => `lembork ${f.name}`), GLOBALS(30, 10)]);
+    expect(p.files.at(-1)).toMatchObject({ dir: "/m/db", name: "globals.xml" });
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.loadoutSnapshot).toEqual(["./custom/loadout.json"]);
     expect(saved!.infectedSnapshot).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
@@ -84,6 +92,23 @@ describe("planKoth", () => {
     expect(saved!.state).toBe("failed");
     expect(saved!.loadoutSnapshot).toBeNull();
     expect(m.uploadFile).not.toHaveBeenCalled();
+  });
+
+  it("a missing koth/default/globals.xml refuses: its two values could never be put back", async () => {
+    await schedule();
+    const m = mission({ "/m/koth/default/globals.xml": undefined });
+    const p = (await planKoth(db, m.target, serverId, SLOT, { allowOpen: true }))!;
+    expect(p.failure).toMatch(/koth\/default\/globals\.xml/);
+    expect(p.opening).toBeNull();
+    expect(p.files).toEqual([]);
+  });
+
+  it("a default globals.xml missing one of the vars refuses too", async () => {
+    await schedule();
+    const m = mission({ "/m/koth/default/globals.xml": GLOBALS(3600, 330).replace(/.*CleanupLifetimeDeadPlayer.*\n/, "") });
+    const p = (await planKoth(db, m.target, serverId, SLOT, { allowOpen: true }))!;
+    expect(p.failure).toMatch(/CleanupLifetimeDeadPlayer/);
+    expect(p.opening).toBeNull();
   });
 
   it("an empty town source refuses too — an empty spawn file is never uploaded", async () => {
@@ -132,6 +157,22 @@ describe("planKoth", () => {
     expect(p.infected).toEqual({ InfectedCity: 1, InfectedVillage: 0, InfectedArmy: 0, InfectedPolice: 0, InfectedMedic: 0 });
     expect(p.infectedRestoreRowId).toBe(row.id);
     expect(p.files.map((f) => f.content)).toEqual(KOTH_WHOLE_FILES.map((f) => `default ${f.name}`));
+  });
+
+  it("restores globals.xml from koth/default, including a default retuned since the session opened", async () => {
+    await schedule({ state: "live", openedAt: SLOT });
+    const m = mission({ "/m/db/globals.xml": GLOBALS(30, 10), "/m/koth/default/globals.xml": GLOBALS(1800, 330) });
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
+    expect(p.files).toEqual([{ dir: "/m/db", name: "globals.xml", content: GLOBALS(1800, 330) }]);
+  });
+
+  it("a missing default globals.xml at restore skips it and records why", async () => {
+    const row = await schedule({ state: "live", openedAt: SLOT });
+    const m = mission({ "/m/db/globals.xml": GLOBALS(30, 10), "/m/koth/default/globals.xml": undefined });
+    const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
+    expect(p.files).toEqual([]);
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(String(saved!.detail.restoreError)).toMatch(/koth\/default\/globals\.xml/);
   });
 
   // ⚠️ Skip, never blank (spec §5.3).
@@ -218,6 +259,7 @@ describe("restartTick with KotH", () => {
     expect(m.read("/m/env/zombie_territories.xml")).toBe("lembork zombie_territories.xml");
     expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
     expect(m.read("/m/db/events.xml")).not.toContain("<active>0</active>");
+    expect(m.read("/m/db/globals.xml")).toBe(GLOBALS(30, 10));
     let [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("live");
     expect(saved!.openedAt).not.toBeNull();
@@ -228,6 +270,7 @@ describe("restartTick with KotH", () => {
     expect(m.read("/m/env/zombie_territories.xml")).toBe("default zombie_territories.xml");
     expect(m.read("/m/cfggameplay.json")).toBe(GAMEPLAY);
     expect(m.read("/m/db/events.xml")).toBe(EVENTS);
+    expect(m.read("/m/db/globals.xml")).toBe(GLOBALS(3600, 330));
     [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.restoredAt).not.toBeNull();
   });
