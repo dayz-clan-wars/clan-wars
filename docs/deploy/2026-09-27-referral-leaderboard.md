@@ -2,8 +2,11 @@
 
 Spec `docs/superpowers/specs/2026-09-27-referral-leaderboard-design.md`.
 
-1. **Migrate.** `packages/db/migrations/0056_goofy_sphinx.sql` only adds tables; nothing running selects a dropped column, so
-   the bot may stay up. Apply it the usual way (`docs/deploy/2026-09-10-launch.md`).
+1. **Migrate.** `packages/db/migrations/0056_goofy_sphinx.sql` only adds tables, and
+   `0057_aberrant_william_stryker.sql` only adds the nullable
+   `referral_qualifications.referred_dayz_id` and its partial unique index (one
+   character backs at most one qualification); nothing running selects a dropped
+   column, so the bot may stay up. Apply it the usual way (`docs/deploy/2026-09-10-launch.md`).
 2. **Deploy web and bot.** The leaderboards channel sees two boards it has no message
    for and rebuilds itself once, to twelve messages. Expected; nothing to do.
 3. **Boards fill.** Qualification runs every `REFERRAL_AWARD_TICK_INTERVAL_MS`

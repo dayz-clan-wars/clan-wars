@@ -37,6 +37,20 @@ describe("referral_qualifications", () => {
     await expect(db.insert(referralQualifications).values({ referredDiscordId: "A", referrerDiscordId: "B", qualifiedAt: now })).rejects.toThrow();
   });
 
+  // ⚠️ The race guard for qualifyReferralsDb's "one character, one qualification"
+  // (migration 0057): partial, so pre-0057 rows with no character never collide.
+  it("allows one qualification per referred character, and any number without one", async () => {
+    for (const d of ["C", "D", "E"]) {
+      await db.insert(referrals).values({ referredDiscordId: d, referrerDiscordId: "B", referrerDayzId: "dz-B", source: "later_bot", createdAt: now });
+    }
+    await db.insert(referralQualifications).values({ referredDiscordId: "C", referrerDiscordId: "B", referredDayzId: "dz-X", qualifiedAt: now });
+    const dup = await db.insert(referralQualifications).values({ referredDiscordId: "D", referrerDiscordId: "B", referredDayzId: "dz-X", qualifiedAt: now })
+      .onConflictDoNothing().returning();
+    expect(dup).toEqual([]);
+    await db.insert(referralQualifications).values({ referredDiscordId: "E", referrerDiscordId: "B", qualifiedAt: now });
+    expect((await db.select().from(referralQualifications)).map((q) => q.referredDiscordId).sort()).toEqual(["A", "C", "E"]);
+  });
+
   it("clearReferrals clears qualifications before referrals", async () => {
     await clearReferrals(db);
     expect(await db.select().from(referralQualifications)).toEqual([]);
