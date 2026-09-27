@@ -1,4 +1,5 @@
 import { describe, it, expect } from "vitest";
+import { REFERRERS_WEEK_NOTE } from "@factions/copy";
 import type { AchievementTile, AchievementWall, BoardPage, PlayerProfile, StatScope } from "@factions/roster";
 import { achievementsGroup, boardGroup, playerGroup } from "../src/commands/stats.js";
 import { ctxWith, input, sourceOf, specOf } from "./command-fakes.js";
@@ -130,6 +131,14 @@ describe("/board", () => {
     const ctx = ctxWith({ boardPage: async () => page({ scope: { kind: "season", number: 5 } }) });
     const reply = await specOf(boardGroup, "board").handler(ctx, input({ kind: "raiders", scope: "9" }));
     expect(JSON.stringify(reply.embeds![0]!.toJSON())).toContain("Season 5");
+  });
+
+  it("heads the weekly referrers board with the week note, not the season", async () => {
+    const ctx = ctxWith({ boardPage: async () => page({ kind: "referrersWeek", scope: { kind: "season", number: 5 } }) });
+    const reply = await specOf(boardGroup, "board").handler(ctx, input({ kind: "referrersWeek" }));
+    const j = reply.embeds![0]!.toJSON();
+    expect(j.description).toBe(REFERRERS_WEEK_NOTE);
+    expect(JSON.stringify(j)).not.toContain("Season 5");
   });
 
   it("says so plainly when the page has no rows, rather than an empty card", async () => {

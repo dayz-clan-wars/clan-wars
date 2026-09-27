@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import type { Boards } from "@factions/roster";
+import { REFERRERS_WEEK_NOTE } from "@factions/copy";
 import { leaderboardEmbed, leaderboardKey, boardKindOfEmbedUrl } from "../src/leaderboard-embed.js";
 
 const SITE = "https://dayzclanwars.com";
@@ -67,6 +68,29 @@ describe("leaderboardEmbed", () => {
     const boards = { ...empty(), killers: [{ dayzId: "A", gamertag: "a*b_c", value: 1 }] };
     const e = leaderboardEmbed("killers", boards, SITE);
     expect(e.description).toContain("a\\*b\\_c");
+  });
+});
+
+describe("the weekly referrers board", () => {
+  it("is headed with the week note the site shows, not the season it was read at", () => {
+    const boards = { ...empty(), referrersWeek: [{ dayzId: "A", gamertag: "Alpha", value: 2 }] };
+    const d = leaderboardEmbed("referrersWeek", boards, SITE).description!;
+    expect(d.split("\n")[0]).toBe(REFERRERS_WEEK_NOTE);
+    expect(d).not.toContain("Season 2");
+  });
+
+  it("still redraws when its rows change", () => {
+    const base = { ...empty(), referrersWeek: [{ dayzId: "A", gamertag: "Alpha", value: 2 }] };
+    const k = leaderboardKey("referrersWeek", base);
+    expect(leaderboardKey("referrersWeek", { ...base, referrersWeek: [{ dayzId: "A", gamertag: "Alpha", value: 3 }] })).not.toBe(k);
+    expect(leaderboardKey("referrersWeek", { ...base, referrersWeek: [] })).not.toBe(k);
+    expect(leaderboardKey("referrersWeek", structuredClone(base))).toBe(k);
+  });
+
+  it("keys on the heading it prints: a scope change alone does not redraw it", () => {
+    const base = { ...empty(), referrersWeek: [{ dayzId: "A", gamertag: "Alpha", value: 2 }] };
+    expect(leaderboardKey("referrersWeek", { ...base, scope: { kind: "all" } })).toBe(leaderboardKey("referrersWeek", base));
+    expect(leaderboardKey("referrersWeek", base)).toContain(REFERRERS_WEEK_NOTE);
   });
 });
 
