@@ -1,4 +1,4 @@
-import type { IssueOutcome, IssueOutcomeKind, LinkStatus } from "@factions/roster";
+import type { IssueOutcome, IssueOutcomeKind, LinkStatus, ReferrerRefusal } from "@factions/roster";
 import { LINK_EMOTES } from "@factions/domain";
 
 /** What /link says for each refusal. "issued" and "live" render the challenge card instead of a line. */
@@ -51,6 +51,41 @@ export const UNLINK_COPY: Record<"ok" | "in-clan" | "not-linked", string> = {
 export function unlinkCopy(code: string): string | undefined {
   return Object.hasOwn(UNLINK_COPY, code) ? UNLINK_COPY[code as keyof typeof UNLINK_COPY] : undefined;
 }
+
+/**
+ * Why naming a referrer was refused, from `AddReferrerOutcome`/`StartLinkOutcome`.
+ * `referrerGamertag` on "already-referred" is the EXISTING referrer's name, if
+ * known — it may be absent for a very old referral whose referrer has since
+ * left no trace, so the fallback line still has to read on its own.
+ */
+export const REFERRAL_COPY: Record<ReferrerRefusal, (a: { referrerGamertag?: string }) => string> = {
+  "already-referred": (a) => a.referrerGamertag
+    ? `You already named ${a.referrerGamertag} as your referrer, and that can't be changed.`
+    : "You already have a referrer, and that can't be changed.",
+  self: () => "You can't name yourself as your referrer.",
+  "referrer-not-linked": () => "Your referrer has to be a linked player.",
+  "unknown-referrer": () => "No linked player goes by that name. Pick one from the list.",
+  "ambiguous-referrer": () => "More than one linked player matches that name. Type it exactly as it appears in the list.",
+  loop: () => "That player was brought in by you, or by someone you brought in, so they can't be your referrer.",
+  "not-linked": () => "Link your character first, then you can name a referrer.",
+};
+
+/**
+ * That the referral is permanent, spelled out at the moment it is recorded.
+ * The bot always has the gamertag to hand and passes it; the site's generic
+ * result-code table (`apps/web/lib/clan-copy.ts`, which flattens every
+ * outcome to a fixed string ahead of time) has no argument to pass, so it
+ * calls this with none — the one place both surfaces draw this wording from.
+ */
+export const REFERRAL_RECORDED = (gamertag?: string) =>
+  gamertag ? `${gamertag} is now your referrer. This is permanent.` : "Your referrer is recorded. This is permanent.";
+
+/**
+ * Stands in for a referrer's name when none is known any more: they unlinked
+ * and the log has no gamertag for the character they referred from. Never a
+ * Discord id in its place, and never a link.
+ */
+export const REFERRER_UNNAMED = "a player no longer linked";
 
 function name(o: IssueOutcome): string {
   return "gamertag" in o ? o.gamertag : "that character";

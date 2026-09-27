@@ -1,6 +1,6 @@
 import { EmbedBuilder } from "discord.js";
 import type { LinkStatus } from "@factions/roster";
-import { ENDED_COPY, formatRemaining } from "@factions/copy";
+import { ENDED_COPY, REFERRER_UNNAMED, formatRemaining } from "@factions/copy";
 
 /** The site's ink. Kept here rather than per-embed so every card matches. */
 const GOLD = 0xc8a34a;
@@ -21,6 +21,10 @@ export function linkStatusEmbed(status: LinkStatus, now: Date, siteBaseUrl: stri
     embed.addFields({ name: "Unlink", value: "`/link unlink` — refused while you are in a clan.", inline: false });
   } else if (!status.challenge) {
     embed.setDescription("No character linked yet. Run `/link start` and pick your character to draw a challenge.");
+  }
+
+  if (status.referredBy) {
+    embed.addFields({ name: "Referred by", value: status.referredBy.gamertag ?? REFERRER_UNNAMED, inline: false });
   }
 
   if (status.challenge) {

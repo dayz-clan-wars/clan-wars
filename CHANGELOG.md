@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- When you link your gamertag, you can now name the player who brought you to Clan Wars, with `/link start` or on the website, or later with `/link referrer` or on your profile. It can't be changed once set. Your referrer gets a DM, and both your profiles show it.
+
 ## [1.47.0] - 2026-09-26
 
 ### Fixed

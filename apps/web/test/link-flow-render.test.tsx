@@ -1,9 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
-import { LinkFlow } from "../app/(site)/link/link-flow";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { LinkFlow, ChooseCharacter } from "../app/(site)/link/link-flow";
 import LoginPage from "../app/(site)/login/page";
 import JoinPage from "../app/(site)/join/page";
-import { btnSecondary } from "../app/components/ui";
+import { btnSecondary, field } from "../app/components/ui";
+import { REFERRAL_COPY } from "../lib/link-copy";
+import { GAMERTAG_MAX } from "../lib/clan-limits";
 
 type Initial = Parameters<typeof LinkFlow>[0]["initial"];
 const flow = (initial: Initial) => renderToStaticMarkup(<LinkFlow initial={initial} />);
@@ -49,5 +53,45 @@ describe("L5: one numbering, sign-in to proof", () => {
     const html = flow(OPEN);
     expect(html).toContain("Step 3 of 3 — prove it");
     expect(html).not.toContain("one step left");
+  });
+});
+
+describe("referrals: naming one while linking", () => {
+  const chooseCharacter = (notice: string | null = null) =>
+    renderToStaticMarkup(<ChooseCharacter notice={notice} busy={false} onClaim={() => {}} />);
+
+  it("has the optional referrer field, with the shared field style and the gamertag cap", () => {
+    const html = chooseCharacter();
+    expect(html).toContain("Who referred you? (optional)");
+    expect(html).toContain('aria-label="Who referred you"');
+    // The referrer input, not the gamertag search input above it, carries the shared `field` class and the cap.
+    const referrerInput = html.match(/<input[^>]*aria-label="Who referred you"[^>]*>/u)?.[0] ?? "";
+    expect(referrerInput).toContain(`maxLength="${GAMERTAG_MAX}"`);
+    for (const cls of field.split(" ")) expect(referrerInput).toContain(cls);
+  });
+
+  it("is the shared GamertagField over linked players, so there is a list to pick from as the refusal copy says", () => {
+    const referrerInput = chooseCharacter().match(/<input[^>]*aria-label="Who referred you"[^>]*>/u)?.[0] ?? "";
+    expect(referrerInput).toContain('name="referrer"');
+    expect(referrerInput).toContain('role="combobox"');
+    expect(referrerInput).toContain('aria-autocomplete="list"');
+    // GamertagField fetches `/api/players/suggest?scope=…`; the page must ask for linked players.
+    const src = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "link", "link-flow.tsx"), "utf8");
+    expect(src).toMatch(/<GamertagField[^>]*scope="linked"[^>]*name="referrer"/u);
+    // The value is read off the submitted form, the field's own `name`.
+    expect(src).toContain('.get("referrer")');
+  });
+
+  it("says the referrer becomes permanent once the link completes", () => {
+    expect(chooseCharacter()).toContain("Permanent once your link completes.");
+  });
+
+  it("shows a referrer-refused notice with the shared REFERRAL_COPY wording, same as LinkFlow's start()", () => {
+    const notice = REFERRAL_COPY.self({});
+    const html = chooseCharacter(notice);
+    expect(html).toContain("Not issued");
+    // React escapes the apostrophe in server-rendered text.
+    expect(html).toContain(notice.replace("'", "&#x27;"));
+    expect(notice).not.toContain("—");
   });
 });

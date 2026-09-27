@@ -10,5 +10,9 @@ export type Sender = (n: Notification) => Promise<void>;
 // by every bot instance in the process AND by every test file in one module
 // registry — and since challenge ids restart at 1 after a truncate, one
 // suite's logged id silently suppresses another's expected log.
-export type NotifyFailureLog = Set<number>;
-export const createNotifyFailureLog = (): NotifyFailureLog => new Set<number>();
+// Widened from Set<number> (2026-09-26 referrals): the challenge loop keys on
+// a numeric challenge id, but the referral-notice loop below has no such id —
+// it keys on the referred player's Discord id instead — so the log now takes
+// either, one shared `Set` across both loops.
+export type NotifyFailureLog = Set<number | string>;
+export const createNotifyFailureLog = (): NotifyFailureLog => new Set<number | string>();

@@ -6,7 +6,8 @@ import { createClient, servers } from "@factions/db";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
 import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
-import { PgVerificationStore } from "@factions/verification";
+import { PgVerificationStore, type ReferralRefusal } from "@factions/verification";
+import { REFERRAL_COPY } from "@factions/copy";
 import { verificationTick } from "./tick.js";
 import { kitPlacementTick } from "./kit-placement-tick.js";
 import { runPlayerProjection } from "./player-tick.js";
@@ -185,7 +186,8 @@ export async function notifyCompleted(
       await send({
         discordId: c.discordId,
         channelId: c.channelId,
-        content: "Verified — your Discord account is now linked to your character." + nicknameOutcomeSuffix(outcome),
+        content: "Verified — your Discord account is now linked to your character." + nicknameOutcomeSuffix(outcome)
+          + referralRefusedSuffix(c.referralRefused),
       });
       await deps.store.markNotified(c.id, deps.now());
       // A challenge that got through stops being a candidate for suppression:
@@ -200,7 +202,36 @@ export async function notifyCompleted(
       }
     }
   }
+
+  // A second, unrelated queue: players who were NAMED as someone else's
+  // referrer, told once each. Keyed on the referred player's Discord id
+  // (not a numeric challenge id), so it shares `loggedFailures` with the
+  // loop above rather than a log of its own — `NotifyFailureLog`'s key type
+  // was widened for exactly this.
+  for (const r of await deps.store.pendingReferralNotices()) {
+    try {
+      await send({
+        discordId: r.referrerDiscordId, channelId: null,
+        content: `${r.referredGamertag ?? "A player"} named you as the player who brought them to Clan Wars.`,
+      });
+      await deps.store.markReferralNotified(r.referredDiscordId, deps.now());
+      loggedFailures.delete(`ref:${r.referredDiscordId}`);
+      sent++;
+    } catch (err) {
+      const key = `ref:${r.referredDiscordId}`;
+      if (!loggedFailures.has(key)) {
+        console.error(`referral notify failed for ${r.referredDiscordId}`, err);
+        loggedFailures.add(key);
+      }
+    }
+  }
   return sent;
+}
+
+/** What the Verified DM adds when a named referrer could not be recorded. The link stands either way. */
+function referralRefusedSuffix(reason: ReferralRefusal | null): string {
+  if (!reason) return "";
+  return ` Your referrer could not be recorded: ${REFERRAL_COPY[reason]({})} You can add one with \`/link referrer\` or on your profile.`;
 }
 
 /**

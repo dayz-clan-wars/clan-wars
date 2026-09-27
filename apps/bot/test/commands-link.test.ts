@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, servers, identityLinks, players, type Database } from "@factions/db";
-import { sql } from "drizzle-orm";
+import {
+  createClient, runMigrations, requireTestDatabaseUrl, clearReferrals,
+  servers, identityLinks, players, referrals, verificationChallenges, type Database,
+} from "@factions/db";
+import { PgVerificationStore } from "@factions/verification";
+import { sql, eq } from "drizzle-orm";
 import { makeRoster } from "@factions/roster";
+import { REFERRAL_COPY, REFERRAL_RECORDED } from "@factions/copy";
 import { SPECS } from "../src/commands/index.js";
+import { ctxWith } from "./command-fakes.js";
 import type { Ctx, CommandInput } from "../src/commands/types.js";
 
 const URL = requireTestDatabaseUrl();
@@ -24,6 +30,7 @@ describe("/link status", () => {
     db = createClient(URL);
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
+    await clearReferrals(db);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
     ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
@@ -49,6 +56,25 @@ describe("/link status", () => {
     const reply = await run(input(D));
     expect(JSON.stringify(reply).toLowerCase()).not.toContain("faction");
   });
+
+  it("shows the referrer", async () => {
+    await db.insert(identityLinks).values({ discordId: D, dayzId: UID, gamertag: "Ada", verifiedAt: NOW });
+    await db.insert(identityLinks).values({ discordId: "discord-otto", dayzId: "B".repeat(40), gamertag: "Otto", verifiedAt: NOW });
+    expect(await ctx.roster.addReferrer(D, "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
+    const reply = await run(input(D));
+    const embed = reply.embeds![0]!.toJSON();
+    expect(JSON.stringify(embed)).toContain("Otto");
+  });
+
+  it("shows a referrer whose name is no longer known in words, never their Discord id", async () => {
+    await db.insert(identityLinks).values({ discordId: D, dayzId: UID, gamertag: "Ada", verifiedAt: NOW });
+    await db.insert(identityLinks).values({ discordId: "discord-otto", dayzId: "B".repeat(40), gamertag: "Otto", verifiedAt: NOW });
+    expect(await ctx.roster.addReferrer(D, "Otto", "later_bot")).toMatchObject({ kind: "recorded" });
+    await db.delete(identityLinks).where(eq(identityLinks.discordId, "discord-otto"));
+    const embed = JSON.stringify((await run(input(D))).embeds![0]!.toJSON());
+    expect(embed).toContain("a player no longer linked");
+    expect(embed).not.toContain("discord-otto");
+  });
 });
 
 describe("/link start", () => {
@@ -60,11 +86,31 @@ describe("/link start", () => {
     await runMigrations(db);
     await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
+    await clearReferrals(db);
     await db.insert(players).values({ dayzId: UID, gamertag: "Ada", firstSeenAt: NOW, lastSeenAt: NOW });
     ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
   });
 
   const spec = () => SPECS.get("link start")!;
+
+  it("tells startLink the bot is the surface, with the referrer typed", async () => {
+    const calls: unknown[][] = [];
+    const real = ctx.roster.startLink;
+    ctx = { ...ctx, roster: { ...ctx.roster, startLink: (...args: Parameters<typeof real>) => { calls.push(args); return real(...args); } } };
+    await spec().handler(ctx, input(D, { string: (n) => (n === "character" ? UID : n === "referrer" ? " Otto " : null) }));
+    expect(calls).toEqual([[D, UID, { newSequence: false, referrerGamertag: "Otto", surface: "bot" }]]);
+  });
+
+  it("a referral named with /link start records source link_bot when the link completes", async () => {
+    await db.insert(identityLinks).values({ discordId: "discord-otto", dayzId: "O".repeat(40), gamertag: "Otto", verifiedAt: NOW });
+    await spec().handler(ctx, input(D, { string: (n) => (n === "character" ? UID : n === "referrer" ? "Otto" : null) }));
+    const [challenge] = await db.select().from(verificationChallenges);
+    expect(challenge).toMatchObject({ guildId: null, referrerDiscordId: "discord-otto", referralSource: "link_bot" });
+    expect(await new PgVerificationStore(db).completeChallenge(challenge!.id, UID, "Ada", NOW)).toBe(true);
+    expect(await db.select().from(referrals)).toEqual([expect.objectContaining({
+      referredDiscordId: D, referrerDiscordId: "discord-otto", source: "link_bot",
+    })]);
+  });
 
   it("issues a challenge and shows the sequence", async () => {
     const reply = await spec().handler(ctx, input(D, { string: (n) => (n === "character" ? UID : null) }));
@@ -80,6 +126,14 @@ describe("/link start", () => {
   it("autocompletes characters the log has seen", async () => {
     const choices = await spec().autocomplete!.character!(ctx, { actorDiscordId: D, value: "Ad" });
     expect(choices).toEqual([{ name: "Ada", value: UID }]);
+  });
+
+  it("passes the referrer and shows the refusal when it is refused", async () => {
+    const reply = await spec().handler(ctx, input(D, {
+      string: (n) => (n === "character" ? UID : n === "referrer" ? "Nobody" : null),
+    }));
+    expect(reply.content).toBe(REFERRAL_COPY["unknown-referrer"]({}));
+    expect(await ctx.roster.linkStatus(D)).toMatchObject({ challenge: null });
   });
 
   it("returns no more than 25 choices", async () => {
@@ -118,5 +172,49 @@ describe("/link cancel and /link unlink", () => {
   it("tells a player who was never linked", async () => {
     const reply = await SPECS.get("link unlink")!.handler(ctx, input(D));
     expect(reply.content).toBe("You were not linked to a character.");
+  });
+});
+
+describe("/link referrer", () => {
+  let db: Database;
+  let ctx: Ctx;
+
+  beforeEach(async () => {
+    db = createClient(URL);
+    await runMigrations(db);
+    await db.execute(sql`truncate table identity_links, verification_challenges, players, servers restart identity cascade`);
+    await clearReferrals(db);
+    await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 });
+    ctx = { roster: makeRoster(() => db, () => NOW), now: NOW, siteBaseUrl: "https://example.test", db, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null };
+  });
+
+  const spec = () => SPECS.get("link referrer")!;
+
+  it("records and says it is permanent", async () => {
+    await db.insert(identityLinks).values({ discordId: D, dayzId: UID, gamertag: "Ada", verifiedAt: NOW });
+    await db.insert(identityLinks).values({ discordId: "discord-otto", dayzId: "B".repeat(40), gamertag: "Otto", verifiedAt: NOW });
+    const reply = await spec().handler(ctx, input(D, { string: (n) => (n === "gamertag" ? "Otto" : null) }));
+    expect(reply.content).toBe(REFERRAL_RECORDED("Otto"));
+  });
+
+  it("says so when nothing was picked from the list", async () => {
+    const reply = await spec().handler(ctx, input(D));
+    expect(reply.content).toBe("Pick your referrer from the list.");
+  });
+
+  it.each(Object.keys(REFERRAL_COPY) as (keyof typeof REFERRAL_COPY)[])("shows %s's copy", async (reason) => {
+    const fakeCtx = ctxWith({ addReferrer: async () => ({ kind: "refused", reason }) });
+    const reply = await spec().handler(fakeCtx, input(D, { string: (n) => (n === "gamertag" ? "Whoever" : null) }));
+    expect(reply.content).toBe(REFERRAL_COPY[reason]({}));
+  });
+
+  it("autocomplete offers linked players only", async () => {
+    const seen: unknown[] = [];
+    const fakeCtx = ctxWith({
+      suggestGamertags: async (q: string, scope: string) => { seen.push([q, scope]); return ["Ada"]; },
+    });
+    const choices = await spec().autocomplete!.gamertag!(fakeCtx, { actorDiscordId: D, value: "Ad" });
+    expect(seen).toEqual([["Ad", "linked"]]);
+    expect(choices).toEqual([{ name: "Ada", value: "Ada" }]);
   });
 });

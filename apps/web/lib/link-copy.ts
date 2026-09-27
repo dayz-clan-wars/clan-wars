@@ -1,4 +1,4 @@
-export { ISSUE_COPY, ENDED_COPY, UNLINK_COPY, unlinkCopy, formatRemaining } from "@factions/copy";
+export { ISSUE_COPY, ENDED_COPY, UNLINK_COPY, unlinkCopy, formatRemaining, REFERRAL_COPY } from "@factions/copy";
 
 /** Said only after a search for exactly the typed text agrees (lib/link-claim.ts resolveTyped). */
 export const LINK_UNSEEN = "The server has not seen that character. Pick one from the list — only characters the event log has seen can be linked.";

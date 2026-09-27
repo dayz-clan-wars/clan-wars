@@ -34,6 +34,9 @@ const COMMANDS: Record<string, string> = {
   addLock: "vault add", editLock: "vault edit", deleteLock: "vault delete",
   revealLock: "vault reveal", confirmLock: "vault confirm", rotateLocks: "vault rotate",
   dropPin: "map pin", deletePin: "map unpin",
+  // 2026-09-26 referrals (docs/superpowers/plans/2026-09-26-referrals.md), Task 4:
+  // `/link start referrer` and `/link referrer` both call this.
+  addReferrer: "link referrer",
 };
 
 /**
@@ -124,6 +127,8 @@ describe("Discord parity with the site", () => {
       // Discord command — putting them here (rather than a phantom COMMANDS
       // entry) is what "accounted for" means for this pair.
       "markAllNoticesRead", "markNoticeRead",
+      // Referral reads (2026-09-26): who referred you, and who you brought in.
+      "referralsFor", "referralsForDayzId",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

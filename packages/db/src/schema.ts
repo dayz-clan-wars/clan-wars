@@ -240,6 +240,33 @@ export const identityLinks = pgTable("identity_links", {
   byGamertagLower: index("identity_links_gamertag_lower_idx").on(sql`lower(${t.gamertag})`),
 }));
 
+export const REFERRAL_SOURCES = ["link_bot", "link_site", "later_bot", "later_site"] as const;
+export type ReferralSource = (typeof REFERRAL_SOURCES)[number];
+
+/**
+ * Who referred whom. One row per referred player, forever (spec 2026-09-26).
+ *
+ * ⚠️ Keyed by Discord id with NO foreign key to identity_links: link rows are
+ * deleted on unlink and guild removal, and a referral must outlive both.
+ * ⚠️ Permanent: a trigger (migration 0054) rejects DELETE and every UPDATE
+ * except setting referrer_notified_at from NULL. There is no code path that
+ * edits a referral; a deliberate operator correction drops the trigger by hand.
+ */
+export const referrals = pgTable("referrals", {
+  referredDiscordId: text("referred_discord_id").primaryKey(),
+  referrerDiscordId: text("referrer_discord_id").notNull(),
+  /** The referrer's character when named, for display after they unlink. */
+  referrerDayzId: text("referrer_dayz_id").notNull(),
+  source: text("source").$type<ReferralSource>().notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  /** Set once the referrer has been DMed; the only column that may ever change. */
+  referrerNotifiedAt: timestamp("referrer_notified_at", { withTimezone: true }),
+}, (t) => ({
+  byReferrer: index("referrals_referrer_idx").on(t.referrerDiscordId),
+  notSelf: check("referrals_not_self", sql`${t.referredDiscordId} <> ${t.referrerDiscordId}`),
+  sourceValid: check("referrals_source_valid", sql`${t.source} IN ('link_bot','link_site','later_bot','later_site')`),
+}));
+
 /**
  * Every character the event log has ever seen.
  *
@@ -293,6 +320,19 @@ export const verificationChallenges = pgTable("verification_challenges", {
    * and what retired the open-sequence unique index below.
    */
   targetDayzId: text("target_dayz_id").notNull(),
+  /** The referrer named at /link start or on the site's link page, recorded when this challenge completes. */
+  referrerDiscordId: text("referrer_discord_id"),
+  /** Set by completeChallenge when the named referrer could not be recorded; the Verified DM explains it. */
+  referralRefused: text("referral_refused"),
+  /**
+   * Which surface issued this challenge, as the `referrals.source` a
+   * link-time referral records: 'link_bot' for `/link start`, 'link_site' for
+   * the site's link page. Written at issue time because `guild_id` cannot
+   * tell them apart (roster's `startLinkDb` issues both with a NULL guild).
+   * NULL on rows issued before migration 0055; a completion then records
+   * 'link_site', the one surface that existed for NULL-guild challenges.
+   */
+  referralSource: text("referral_source").$type<"link_bot" | "link_site">(),
   /**
    * Why the challenge was canceled, when the player needs to be told.
    *
@@ -336,6 +376,10 @@ export const verificationChallenges = pgTable("verification_challenges", {
   reasonOnlyWhenCanceled: check(
     "verification_challenges_reason_requires_cancel",
     sql`${t.cancelReason} IS NULL OR ${t.canceledAt} IS NOT NULL`,
+  ),
+  referralSourceValid: check(
+    "verification_challenges_referral_source_valid",
+    sql`${t.referralSource} IS NULL OR ${t.referralSource} IN ('link_bot','link_site')`,
   ),
   notBothOutcomes: check(
     "verification_challenges_single_outcome",

@@ -3,8 +3,12 @@ import type { ClanNoticeKind } from "@factions/domain";
 import { viewerForDb, type Viewer, type Role } from "./viewer";
 import {
   linkStatusDb, startLinkDb, cancelLinkDb, unlinkDb, searchGamertagsDb,
-  type LinkStatus, type LinkStep, type UnlinkOutcome,
+  type LinkStatus, type LinkStep, type UnlinkOutcome, type StartLinkOutcome, type LinkSurface,
 } from "./link";
+import {
+  addReferrerDb, referralsForDb, referralsForDayzIdDb,
+  type AddReferrerOutcome, type ReferrerRefusal, type ReferralsView,
+} from "./referral";
 import { suggestGamertagsDb, type SuggestScope } from "./suggest";
 import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSoloOutcome, type DeclareSoloReason } from "./base";
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
@@ -67,7 +71,8 @@ import {
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
-export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind };
+export type { LinkStatus, LinkStep, UnlinkOutcome, IssueOutcome, IssueOutcomeKind, StartLinkOutcome, LinkSurface };
+export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
@@ -126,15 +131,27 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
 
     /** /link's one read: your link, your open challenge, how the last one ended. */
     linkStatus: (discordId: string): Promise<LinkStatus> => linkStatusDb(getDb(), discordId, getNow()),
-    /** Issue (or re-show) a link challenge for a character the log has seen. */
-    startLink: (discordId: string, targetDayzId: string, opts: { newSequence?: boolean } = {}): Promise<IssueOutcome> =>
-      startLinkDb(getDb(), { discordId, targetDayzId, newSequence: opts.newSequence, now: getNow(), rng: Math.random }),
+    /**
+     * Issue (or re-show) a link challenge for a character the log has seen.
+     * `referrerGamertag`, when given, is vetted before anything is issued —
+     * see `startLinkDb`'s own comment. `surface` is which caller this is,
+     * and becomes a link-time referral's `link_bot`/`link_site` source.
+     */
+    startLink: (discordId: string, targetDayzId: string, opts: { newSequence?: boolean; referrerGamertag?: string; surface: LinkSurface }): Promise<StartLinkOutcome> =>
+      startLinkDb(getDb(), { discordId, targetDayzId, newSequence: opts.newSequence, referrerGamertag: opts.referrerGamertag, surface: opts.surface, now: getNow(), rng: Math.random }),
     cancelLink: (discordId: string): Promise<{ canceled: boolean }> => cancelLinkDb(getDb(), discordId, getNow()),
     /** Refused while in a clan; releases a solo base. */
     unlink: (discordId: string): Promise<UnlinkOutcome> => unlinkDb(getDb(), discordId, getNow()),
     searchGamertags: (prefix: string): Promise<{ dayzId: string; gamertag: string }[]> => searchGamertagsDb(getDb(), prefix),
     /** Autocomplete names for a gamertag box: `seen` for the public player search, `linked` for invites and guest passes. */
     suggestGamertags: (prefix: string, scope: SuggestScope): Promise<string[]> => suggestGamertagsDb(getDb(), prefix, scope),
+    /** Name your referrer after the fact — only ever works once; the write is permanent. */
+    addReferrer: (discordId: string, referrerGamertag: string, source: "later_bot" | "later_site"): Promise<AddReferrerOutcome> =>
+      addReferrerDb(getDb(), getNow(), discordId, referrerGamertag, source),
+    /** Who referred you, and who you brought in. */
+    referralsFor: (discordId: string): Promise<ReferralsView> => referralsForDb(getDb(), discordId),
+    /** Same, for the character a public profile shows, by its `dayzId`. Null when that character is not currently linked. */
+    referralsForDayzId: (dayzId: string): Promise<ReferralsView | null> => referralsForDayzIdDb(getDb(), dayzId),
 
     /** /base's one read: your raises, your declaration. */
     baseFor: (discordId: string): Promise<BaseView> => baseForDb(getDb(), discordId),

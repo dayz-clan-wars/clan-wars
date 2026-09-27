@@ -1,8 +1,11 @@
-import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, awards, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall } from "@factions/roster";
+import { viewerFor, myInvites, myRequests, claimContext, linkStatus, boosterKit, awards, referralsFor, type Viewer, type MyInvite, type MyRequest, type ClaimContext, type AchievementWall, type ReferralsView } from "@factions/roster";
+import { REFERRER_UNNAMED } from "@factions/copy";
 import type { Session } from "@/lib/auth/session";
 import { nextStepFor, type NextStep } from "@/lib/next-step";
 import { when, ago } from "@/lib/format";
-import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm, link } from "./ui";
+import { GAMERTAG_MAX } from "@/lib/clan-limits";
+import { GamertagField } from "./gamertag-field";
+import { Panel, PanelBody, Notice, btnCta, btnPrimary, btnSecondary, btnQuiet, kickerSm, fieldLabel, link } from "./ui";
 import { NextStepStrip } from "./next-step";
 import { ClosestPanel } from "./achievement-wall";
 import { AchievementToast } from "./achievement-toast";
@@ -31,15 +34,18 @@ export type Owner = {
   boosting: boolean;
   /** Open award grants — the /awards entry point shows only when there is one. */
   openAwards: number;
+  /** Who referred this player, and who they brought in — a referral is permanent, spec §2. */
+  referrals: ReferralsView;
 };
 
 export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owner> {
   viewer ??= await viewerFor(session.sub);
-  const [invites, requests, claim, linkState, kit, won] = await Promise.all([
+  const [invites, requests, claim, linkState, kit, won, referrals] = await Promise.all([
     myInvites(session.sub), myRequests(session.sub), claimContext(session.sub),
     viewer.link ? null : linkStatus(session.sub),
     boosterKit(session.sub),
     awards(session.sub),
+    referralsFor(session.sub),
   ]);
   const showInvites = invites.length > 0 && viewer.clan === null && viewer.pending === null;
   const next = nextStepFor({
@@ -50,6 +56,7 @@ export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owne
   return {
     session, viewer, invites, requests, claim, next, showInvites, boosting: kit.boosting,
     openAwards: won.filter((a) => a.state === "unplaced" || a.state === "waiting" || a.state === "live").length,
+    referrals,
   };
 }
 
@@ -181,7 +188,35 @@ export function AwardsPanel({ owner }: { owner: Owner }) {
   );
 }
 
-export function AccountPanel({ owner }: { owner: Owner }) {
+/**
+ * The referral block on a player's own account panel: the name of whoever
+ * referred them, once set, and never a form again after that — a referral
+ * is permanent (global constraint), so this renders one or the other, never
+ * both. `keptReferrer` is the typed name a refused `/api/referral` post kept
+ * (H2), so the player does not retype it.
+ */
+function ReferralBlock({ referrals, keptReferrer }: { referrals: ReferralsView; keptReferrer?: string }) {
+  if (referrals.referredBy) {
+    const g = referrals.referredBy.gamertag;
+    return (
+      <p className="mt-4 text-sm leading-relaxed text-ink-2">
+        Referred by {g ? <a className={link} href={`/players/${encodeURIComponent(g)}`}>{g}</a> : REFERRER_UNNAMED}.
+      </p>
+    );
+  }
+  return (
+    <form className="mt-4 flex flex-col gap-2 border-t border-rule-2 pt-4" action="/api/referral" method="post">
+      <label className="block">
+        <span className={fieldLabel}>Who referred you?</span>
+        <GamertagField scope="linked" name="referrer" maxLength={GAMERTAG_MAX} defaultValue={keptReferrer} />
+      </label>
+      <p className="font-mono text-[11px] text-muted">This can&rsquo;t be changed later.</p>
+      <button className={`${btnQuiet} self-start`} type="submit">Save referrer</button>
+    </form>
+  );
+}
+
+export function AccountPanel({ owner, keptReferrer }: { owner: Owner; keptReferrer?: string }) {
   const { session, viewer } = owner;
   return (
     <Panel title="Your account" aside={<span className="text-olive">Linked</span>}>
@@ -199,6 +234,7 @@ export function AccountPanel({ owner }: { owner: Owner }) {
         <form className="mt-3" action="/api/link/unlink" method="post">
           <button className={`${btnQuiet} ${viewer.clan ? "!text-dim" : ""}`} type="submit" disabled={viewer.clan !== null}>Unlink</button>
         </form>
+        <ReferralBlock referrals={owner.referrals} keptReferrer={keptReferrer} />
       </PanelBody>
       {viewer.clan ? (
         <div className="grid grid-cols-2 border-t border-rule-2">

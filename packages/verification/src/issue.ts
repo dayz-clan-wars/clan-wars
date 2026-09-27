@@ -37,6 +37,19 @@ export type IssueContext = {
   channelId: string | null;
   /** Ask for a different sequence for the SAME character instead of re-showing the live one. */
   newSequence?: boolean;
+  /**
+   * The linked player this one names as their referrer, already vetted by the
+   * caller with `checkReferral`. Recorded only when the challenge completes;
+   * omitted or null keeps whoever an earlier request named.
+   */
+  referrerDiscordId?: string | null;
+  /**
+   * Which surface is issuing: the `referrals.source` a link-time referral
+   * records if this challenge completes. `guildId` cannot stand in for it,
+   * because roster's `startLinkDb` issues the bot's challenges with a NULL
+   * guild too.
+   */
+  referralSource?: "link_bot" | "link_site" | null;
 };
 
 /**
@@ -70,6 +83,13 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
   // asking for different ones, not for the same ones again.
   const live = await store.findLiveChallenge(ctx.discordId, now);
   if (live && live.targetDayzId === target.dayzId && ctx.newSequence !== true) {
+    // Naming a referrer on the re-show is how a player adds one after the
+    // challenge was issued, so it updates the live row rather than being lost.
+    if (ctx.referrerDiscordId && ctx.referrerDiscordId !== live.referrerDiscordId) {
+      const referralSource = ctx.referralSource ?? null;
+      await store.setChallengeReferrer(live.id, ctx.referrerDiscordId, referralSource);
+      return { kind: "live", challenge: { ...live, referrerDiscordId: ctx.referrerDiscordId, referralSource }, gamertag: target.gamertag };
+    }
     return { kind: "live", challenge: live, gamertag: target.gamertag };
   }
 
@@ -123,6 +143,14 @@ export async function issueChallenge(store: VerificationStore, deps: IssueDeps, 
   const challenge = await store.createChallenge({
     discordId: ctx.discordId, guildId: ctx.guildId, channelId: ctx.channelId,
     sequence, issuedAt: now, expiresAt, targetDayzId: target.dayzId,
+    // A redraw or a switch keeps the referrer already named: it is about the
+    // person, not the character or the emotes.
+    referrerDiscordId: ctx.referrerDiscordId ?? live?.referrerDiscordId ?? null,
+    // The source travels with the referrer: it names the surface the referrer
+    // was named on, so a redraw that keeps an earlier referrer keeps its source.
+    referralSource: !ctx.referrerDiscordId && live?.referrerDiscordId
+      ? live.referralSource
+      : ctx.referralSource ?? null,
   });
   if (challenge) return { kind: "issued", challenge, gamertag: target.gamertag, switchedFrom };
 

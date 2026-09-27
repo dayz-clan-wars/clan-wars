@@ -2,12 +2,15 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { decodeParam } from "@/lib/route-param";
 import { notFound } from "next/navigation";
-import { playerProfile, playerFeed, viewerFor, achievementsFor, type PlayerProfile } from "@factions/roster";
+import { playerProfile, playerFeed, viewerFor, achievementsFor, referralsForDayzId, type PlayerProfile } from "@factions/roster";
 import { currentSession } from "@/lib/viewer";
 import { isOwnPage } from "@/lib/own-page";
 import { unlinkCopy } from "@/lib/link-copy";
 import { RESULT_COPY } from "@/lib/clan-copy";
+import { REFERRAL_RECORDED } from "@factions/copy";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { readKept } from "@/lib/form";
+import { referralFactRows } from "@/lib/referral-view";
 import { loadOwner, OwnerStrip, OwnerPanels, AccountPanel, BoosterKitPanel, AwardsPanel, SignOut } from "@/app/components/owner";
 import { parsePageParam } from "@/lib/board-page";
 import { PlayerFeedPanel, OpponentRows } from "@/app/components/player-feed";
@@ -73,7 +76,9 @@ function OpponentList({ items, encounters, me, side }: {
 export default async function PlayerProfilePage({ params, searchParams }: Params) {
   // ⚠️ Decoded: a gamertag with a space arrives as `IGC%20slide`, and the raw value finds nobody.
   const gamertag = decodeParam((await params).gamertag);
-  const { season, page: rawPage, unlink: unlinkCode, result } = await searchParams;
+  const rawSearchParams = await searchParams;
+  const { season, page: rawPage, unlink: unlinkCode, result } = rawSearchParams;
+  const kept = readKept(rawSearchParams);
   const parsed = parseSeasonParam(season);
   const scope = parsed === "default" ? { kind: "current" as const } : parsed;
 
@@ -81,14 +86,31 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
   // The profile and its feed page are the two reads, side by side.
   // ⚠️ The wall is lifetime, never scoped, and `.catch(() => null)` on purpose:
   // an achievement read that fails must cost the page its wall, never the profile.
-  const [profile, feed, session, wall] = await Promise.all([profileFor(gamertag, typeof season === "string" ? season : undefined), playerFeed(gamertag, scope, parsePageParam(rawPage)), currentSession(), achievementsFor({ gamertag }).catch(() => null)]);
+  const [profile, feed, session, wall] = await Promise.all([
+    profileFor(gamertag, typeof season === "string" ? season : undefined),
+    playerFeed(gamertag, scope, parsePageParam(rawPage)),
+    currentSession(),
+    achievementsFor({ gamertag }).catch(() => null),
+  ]);
 
   if (!profile || !feed) notFound();
+  // ⚠️ By the profile's own dayzId, never the URL gamertag: two links can share
+  // a gamertag case-insensitively, and the profile has already chosen one.
+  // `.catch(() => null)` like the wall: a failed read costs the page its
+  // "Referred by"/"Brought in" line, never the profile.
+  const referrals = await referralsForDayzId(profile.dayzId).catch(() => null);
   // The viewer's link decides ownership; the rest of the owner's state is only read once it does.
   const viewer = session ? await viewerFor(session.sub) : null;
   const owner = session && viewer && isOwnPage(viewer.link?.gamertag, profile.gamertag) ? await loadOwner(session, viewer) : null;
   // ⚠️ Looked up, never echoed: ?unlink= and ?result= are attacker-supplied (see lib/copy-lookup.ts). Only the owner's notices, on the owner's page.
-  const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, result ? lookupCopy(RESULT_COPY, result) : undefined] : [];
+  // "referral.recorded" is the one exception: the code carries no gamertag (it can't — a
+  // result code is never built from what the player typed), but the owner's own referrer
+  // is already in hand from `owner.referrals.referredBy`, so that renders the named
+  // REFERRAL_RECORDED the bot also uses instead of the code's nameless fallback text.
+  const referralRecordedText = result === "referral.recorded" && owner?.referrals.referredBy?.gamertag
+    ? REFERRAL_RECORDED(owner.referrals.referredBy.gamertag)
+    : result ? lookupCopy(RESULT_COPY, result) : undefined;
+  const notices = owner ? [unlinkCode ? unlinkCopy(unlinkCode) : undefined, referralRecordedText] : [];
   const basePath = `/players/${encodeURIComponent(profile.gamertag)}`;
 
   const guide = guideLinkFor("/players/[gamertag]");
@@ -118,14 +140,14 @@ export default async function PlayerProfilePage({ params, searchParams }: Params
         {owner && <div className="mb-4 empty:hidden lg:mb-6"><OwnerStrip owner={owner} notices={notices} /></div>}
         <div className="grid gap-4 lg:grid-cols-2 lg:gap-6">
           <div className="flex flex-col gap-4 lg:gap-6">
-            {owner && <AccountPanel owner={owner} />}
+            {owner && <AccountPanel owner={owner} keptReferrer={kept.get("referrer")} />}
             {/* ⚠️ Directly under the account panel on purpose. In OwnerPanels it
                 landed in the right column below invites and ceremonies, which
                 buried the one control a booster opens this page for. */}
             {owner && <BoosterKitPanel owner={owner} />}
             {owner && <AwardsPanel owner={owner} />}
             <Panel title="Activity"><PanelBody>
-              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"]]} />
+              <Facts items={[["Play time", playTime(profile.playTimeSeconds)], ["Sessions", profile.sessions], ["Last seen", profile.lastSeenAt ? ago(profile.lastSeenAt) : "—"], ...referralFactRows(referrals)]} />
             </PanelBody></Panel>
             <Panel title="PvP"><PanelBody>
               <Facts items={[["Kills", profile.pvpKills], ["Deaths", profile.pvpDeaths], ["K/D", profile.kd ?? "—"], ["Best streak", profile.bestStreak], ["Longest kill", profile.longestKill ? <>{profile.longestKill.distanceM} m{profile.longestKill.weapon && <span className="text-muted"> · {profile.longestKill.weapon}</span>}</> : "—"]]} />

@@ -376,6 +376,30 @@ anything.
   (a stale command name, or a button on a message the pre-plan-1 bot posted) now gets
   one branch in `discord.ts` that answers with `commands/route.ts`'s `UNKNOWN` sentence
   plus the site link, rather than a per-command pointer.
+  Since 2026-09-26 `/link start referrer:` and `/link referrer gamertag:` (and the
+  site's link page and own-profile panel) let a player name who brought them to Clan
+  Wars. It is recorded once, by `recordReferralTx` (`packages/verification/src/referral.ts`)
+  in the same transaction as `completeChallenge` at link time, or by roster's
+  `addReferrerDb` for a referrer named later — no third writer exists. The `referrals`
+  table (migration 0054) is keyed by Discord id with no FK to `identity_links`, so a
+  referral outlives an unlink or a guild removal, and its `referrals_permanent` trigger
+  rejects every DELETE/TRUNCATE and every UPDATE except setting `referrer_notified_at`
+  once; `clearReferrals` (`packages/db/src/clear-referrals.ts`) is the only thing that
+  may disable it, and only against a `factions_test_`-prefixed database. A refusal
+  (self, already referred, referrer not linked, or a loop) never blocks the link
+  itself — it sets `referral_refused` on the challenge and the Verified DM explains
+  why. The referrer gets their own DM once, queued through `pendingReferralNotices` in
+  `notifyCompleted` (`apps/bot/src/discord.ts`).
+  ⚠️ A link-time referral's `source` (`link_bot`/`link_site`) comes from
+  `verification_challenges.referral_source` (migration 0055), written at issue time
+  from the `surface` every `startLink` caller must pass (`"bot"` from `/link start`,
+  `"site"` from `/api/link/start`) and kept, like the referrer, across a redraw or
+  switch. Never infer it from `guild_id`: roster's `startLinkDb` issues both surfaces'
+  challenges with a NULL guild. A pre-0055 row with no source records `link_site`.
+  A referrer who has unlinked is shown by the gamertag of the character that
+  referral snapshotted (`referrer_dayz_id`), else as `REFERRER_UNNAMED` with no
+  link, never by Discord id; the public profile reads referrals by its own
+  `dayzId` (`referralsForDayzId`), not the URL gamertag.
   ⚠️ Every command reply is ephemeral, always: `apps/bot/src/commands.ts` says why,
   and `command-registration.test.ts` enforces it. A page may never
   reference an identifier containing "faction" (`apps/web/test/copy-vocabulary.test.ts`
@@ -566,7 +590,9 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   check, and for the same reason: `FOR SHARE` would not bar a second reader from taking
   the same shared lock and reading the same stale count), `presenceTick`
   (`lockDeclarations → releaseTx → faction_members`), `writeHoldsTx` (right after the
-  `factions` write). `lockIdentity(tx, serverId)` — `pg_advisory_xact_lock(hashtext('identity'), serverId)`
+  `factions` write), and since 2026-09-26 `addReferrerDb` (naming a referrer after
+  linking, over the same `recordReferralTx` the bot's `completeChallenge` calls at
+  link time). `lockIdentity(tx, serverId)` — `pg_advisory_xact_lock(hashtext('identity'), serverId)`
   — serialises name/tag uniqueness in `rename` and `reserve`, since names have no unique
   index.
 - **`declarations` is written by `declareTx` and nothing else.** The 200 m rule is a
