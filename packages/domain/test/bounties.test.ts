@@ -1,12 +1,12 @@
 import { describe, it, expect } from "vitest";
 import {
-  BOUNTY_EXPIRY_SETTLE_MS, BOUNTY_STATUSES, budgetRunOutAt, bountyOutcome, onlineMs, type SessionSpan,
+  BOUNTY_EXPIRY_SETTLE_MS, BOUNTY_STATUSES, budgetRunOutAt, bountyOutcome, onlineMs, type OnlineSessionSpan,
 } from "../src/index";
 
 const H = 3_600_000;
 const t0 = new Date("2026-09-23T00:00:00Z");
 const at = (h: number) => new Date(t0.getTime() + h * H);
-const span = (from: number, to: number | null): SessionSpan => ({ from: at(from), to: to === null ? null : at(to) });
+const span = (from: number, to: number | null): OnlineSessionSpan => ({ from: at(from), to: to === null ? null : at(to) });
 
 describe("onlineMs", () => {
   it("clips a session that started before the bounty to placed_at", () => {

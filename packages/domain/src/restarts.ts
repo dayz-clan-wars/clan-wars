@@ -75,7 +75,7 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 export type WipeVehicle = { event: string; name: string };
 
 /** UTC midnight of the Monday of `d`'s week. */
-function mondayMidnightUtc(d: Date): number {
+export function mondayMidnightUtc(d: Date): number {
   const utc = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
   const dow = new Date(utc).getUTCDay(); // 0=Sun
   const backToMonday = (dow + 6) % 7;    // Mon->0, Sun->6
