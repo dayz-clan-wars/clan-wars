@@ -658,6 +658,10 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   streak term and not a K/D term, on EITHER side — the killer gains nothing and the
   victim loses nothing. It is recorded only on the `friendlyFire` board and the
   profile's `friendlyFireKills`/`friendlyFireDeaths`.
+  ⚠️ One exception since 2026-09-29: King of the Hill's standings (`kothKills` in
+  `apps/bot/src/koth-score.ts`) use `scoringKillAnyTeam` — `scoringKill` minus the
+  friendly-fire half — so a teamkill on the hill counts toward the event and nowhere
+  else. Use it for nothing but the KotH standings.
   ⚠️ Route new reads through `scoringKill` rather than respelling the predicate. It had
   already drifted THREE ways before this: `bestStreaks` reset a run on a friendly death,
   `packages/domain/src/streaks.ts` (the achievements' streak) did the same, and

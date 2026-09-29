@@ -32,7 +32,7 @@ function prizeLine(prize: KothPrize): string {
   return `Most kills wins ${d === 7 ? "a week" : `${d} day${d === 1 ? "" : "s"}`} of the ${prize.label}.`;
 }
 const rules = (prize: KothPrize) =>
-  `Fresh spawns start on the hill with a KotH kit. A kill counts when the victim is within ${KOTH_ZONE_RADIUS_M} m of the centre. ${prizeLine(prize)}`;
+  `Fresh spawns start on the hill with a KotH kit. A kill counts when the victim is within ${KOTH_ZONE_RADIUS_M} m of the centre. Friendly fire counts on the hill. ${prizeLine(prize)}`;
 
 export function scheduledText(town: string, slotAt: Date, prize: KothPrize): string {
   return [`**KING OF THE HILL: ${town.toUpperCase()}**`, `Starts at the restart ${atRel(slotAt) ?? ""}.`, rules(prize)].join("\n");
