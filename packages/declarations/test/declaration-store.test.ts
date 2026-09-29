@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, declarations, poles, events, admFiles, ceremonies, zoneIncidents, bans, type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS, HUB_POSITION } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, HUB_POSITION, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
 import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/store";
 
@@ -41,11 +41,11 @@ describe("declaration store", () => {
     ceremonyId = c!.id;
   });
 
-  const seedPole = (x: number, z: number, o: { texture?: string; raised?: boolean; graceUntil?: Date } = {}) =>
+  const seedPole = (x: number, z: number, o: { texture?: string; raised?: boolean; graceUntil?: Date; lastSeenAt?: Date } = {}) =>
     db.insert(poles).values({
       serverId, map: "livonia", poleKey: key(x, z), x: x.toFixed(2), y: "100.00", z: z.toFixed(2),
       currentTexture: o.texture ?? "Flag_White", flagRaised: o.raised ?? true,
-      firstSeenAt: now, lastSeenAt: now, graceUntil: o.graceUntil ?? new Date(now.getTime() - 1),
+      firstSeenAt: o.lastSeenAt ?? now, lastSeenAt: o.lastSeenAt ?? now, graceUntil: o.graceUntil ?? new Date(now.getTime() - 1),
     });
 
   const solo = (x: number, z: number, dayzId = "A") => db.transaction((tx) => declareTx(tx, {
@@ -200,6 +200,20 @@ describe("declaration store", () => {
       await clan(3200, 4100, factionId, ceremonyId);
       await seedPole(3187.4, 4113.2);
       expect(await publicPoles(db, serverId, now)).toEqual([]);
+    });
+
+    it("⚠️ hides a pole whose flag was last raised longer ago than the despawn window — the base is gone", async () => {
+      await seedPole(5000, 5000, { lastSeenAt: new Date(now.getTime() - PUBLIC_BASE_DESPAWN_MS - 1) });
+      await seedPole(6000, 6000, { lastSeenAt: new Date(now.getTime() - PUBLIC_BASE_DESPAWN_MS + 60_000) });
+      expect((await publicPoles(db, serverId, now)).map((p) => p.poleKey)).toEqual([key(6000, 6000)]);
+    });
+
+    it("a despawned pole comes back the moment its flag is raised again", async () => {
+      await seedPole(5000, 5000, { lastSeenAt: new Date(now.getTime() - PUBLIC_BASE_DESPAWN_MS - 1) });
+      expect(await publicPoles(db, serverId, now)).toEqual([]);
+      // What pole-tick's upsert does on a fresh flag.raised.
+      await db.update(poles).set({ lastSeenAt: now, flagRaised: true }).where(eq(poles.poleKey, key(5000, 5000)));
+      expect(await publicPoles(db, serverId, now)).toHaveLength(1);
     });
 
     it("still publishes a stale raised pole well outside every declaration's 100 m watch zone", async () => {

@@ -34,6 +34,15 @@ export const MIN_BASE_SPACING_M = 200;
 export const WATCH_ZONE_RADIUS_M = 100;
 export const SOLO_LAPSE_MS = 7 * DAY;
 /**
+ * An undeclared pole whose flag has not been raised for this long has
+ * despawned in game, so it drops off the public-bases layer.
+ * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the livonia repo's
+ * `db/globals.xml` — a different repo, so no test can hold the two together.
+ * Retune one and the map either keeps drawing bases that are gone or drops
+ * ones that are still standing.
+ */
+export const PUBLIC_BASE_DESPAWN_MS = 14 * DAY;
+/**
  * The Fast Travel Hub's arrival point (fast-travel-points.json, `hub`). The
  * 200 m rule treats it as a declaration that always exists and is never
  * published, so no base can sit inside the one place every traveller lands.
