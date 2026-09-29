@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { kills, events } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { atHub, classifyDeath, finishedBy, hubKillDiscredited, readVec3, RECENT_HIT_WINDOW_S, type RecentHit, type RecentUnconscious } from "@factions/domain";
-import { and, eq, gte, lte, inArray, sql } from "drizzle-orm";
+import { and, eq, gt, gte, lte, ne, inArray, max, sql } from "drizzle-orm";
 import { membershipAt } from "./membership-tick.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
@@ -56,14 +56,30 @@ type Verdict = { cause: string; finisher: RecentHit | null };
  * ⚠️ Evidence is matched by occurred_at and the victim's id, never by event
  * id order: a reparse backfills hit events at the head of the log with
  * their true occurred_at, and a rebuild after it must still find them.
+ *
+ * ⚠️ Evidence starts AFTER the victim's previous death inside the window, never
+ * at the window's edge alone. A player killed, respawned and dead again within
+ * RECENT_HIT_WINDOW_S (a fresh spawn killing itself to respawn elsewhere) would
+ * otherwise have the previous life's hits read as this death's, crediting the
+ * same killer twice — 54 phantom kills in factions_live before 2026-09-29. A
+ * previous death in the same second as this one is the same death logged twice,
+ * and leaves no evidence at all: no credit.
  */
-async function verdictOf(db: Database, serverId: number, payload: DiedPayload, at: Date): Promise<Verdict> {
+async function verdictOf(db: Database, serverId: number, eventId: number, payload: DiedPayload, at: Date): Promise<Verdict> {
   if (payload.cause !== "died") return { cause: payload.cause, finisher: null };
-  const from = new Date(at.getTime() - RECENT_HIT_WINDOW_S * 1000);
+  const windowStart = new Date(at.getTime() - RECENT_HIT_WINDOW_S * 1000);
+  const [prev] = await db.select({ at: max(events.occurredAt) }).from(events).where(and(
+    eq(events.serverId, serverId),
+    inArray(events.type, ["player.killed", "player.died"]),
+    ne(events.id, eventId),
+    gte(events.occurredAt, windowStart), lte(events.occurredAt, at),
+    sql`${events.payload}->>'victimDayzId' = ${payload.victimDayzId}`,
+  ));
+  const after = prev?.at ?? null;
   const rows = await db.select({ type: events.type, occurredAt: events.occurredAt, payload: events.payload }).from(events).where(and(
     eq(events.serverId, serverId),
     inArray(events.type, ["player.hit", "player.unconscious"]),
-    gte(events.occurredAt, from), lte(events.occurredAt, at),
+    after === null ? gte(events.occurredAt, windowStart) : gt(events.occurredAt, after), lte(events.occurredAt, at),
     sql`coalesce(${events.payload}->>'victimDayzId', ${events.payload}->>'dayzId') = ${payload.victimDayzId}`,
   ));
   const secondsBefore = (t: Date) => Math.round((at.getTime() - t.getTime()) / 1000);
@@ -160,7 +176,7 @@ export async function killsTick(db: Database, opts: { batchSize?: number } = {})
 
         const [victimFactionId, { cause, finisher }] = await Promise.all([
           membershipAt(db, ev.serverId, payload.victimDayzId, ev.occurredAt),
-          verdictOf(db, ev.serverId, payload, ev.occurredAt),
+          verdictOf(db, ev.serverId, ev.id, payload, ev.occurredAt),
         ]);
         // A credited kill is a kill: killer set, faction and friendly fire resolved exactly as for a
         // `player.killed` line. The stats and the kill feed key on `killer_dayz_id`, so it counts.

@@ -196,6 +196,39 @@ describe("killsTick", () => {
     ]);
   });
 
+  // ⚠️ Production, 2026-09-29: a victim shot to 15.7 HP and killed respawned, then killed their fresh
+  // spawn 78 s later. The bare `died` looked back two minutes, found the previous life's hits and
+  // credited the same killer a second time — 54 phantom kills in factions_live before this fix.
+  it("3d. a bare `died` never reads hits from before the victim's previous death in the window", async () => {
+    const t = (s: number) => new Date(t1.getTime() + s * 1000);
+    const shot = (victim: string, killer: string, hp: number, at: Date) =>
+      ev("player.hit", { victimDayzId: victim, victimGamertag: victim, victimHp: hp, attackerType: "player", attackerDayzId: killer, attackerGamertag: killer, attackerLabel: null, damage: 28, bodyPart: "Torso", weapon: "M4-A1", distanceM: 25.2 }, at);
+    const fresh = (victim: string, at: Date) => ev("player.died", { victimDayzId: victim, victimGamertag: victim, cause: "died", entity: null, water: 566.4, energy: 566.4, bleedSources: 0 }, at);
+    // R: shot to 15.7 HP by A, knocked out, killed by A; respawns and dies bare 78 s later.
+    await shot(R, A, 15.7, t(0));
+    await ev("player.unconscious", { dayzId: R, gamertag: "R", disconnecting: false }, t(1));
+    await ev("player.killed", { victimDayzId: R, victimGamertag: "R", killerDayzId: A, killerGamertag: "A", weapon: "M4-A1", distanceM: 1.5 }, t(9));
+    await fresh(R, t(87));
+    // S: shot to 10 HP by A, dies bare (A's credited kill); respawns, shot to 12 HP by B, dies bare again —
+    // the second death is B's, judged on the new life's hit alone.
+    await shot(S, A, 10, t(200)); await fresh(S, t(205));
+    await shot(S, B, 12, t(260)); await fresh(S, t(265));
+    // B: one death logged twice in the same second — the `killed` line counts, the bare `died` does not.
+    await shot(B, A, 20, t(400));
+    await ev("player.killed", { victimDayzId: B, victimGamertag: "B", killerDayzId: A, killerGamertag: "A", weapon: "M4-A1", distanceM: 25.2 }, t(401));
+    await fresh(B, t(401));
+    await killsTick(db);
+    const rows = await db.select({ victim: kills.victimDayzId, killer: kills.killerDayzId, cause: kills.cause }).from(kills).orderBy(kills.occurredAt, kills.id);
+    expect(rows).toEqual([
+      { victim: R, killer: A, cause: "pvp" },
+      { victim: R, killer: null, cause: "died" },
+      { victim: S, killer: A, cause: "finished" },
+      { victim: S, killer: B, cause: "finished" },
+      { victim: B, killer: A, cause: "pvp" },
+      { victim: B, killer: null, cause: "died" },
+    ]);
+  });
+
   it("4. a stranger with no membership history on both sides: both faction ids null", async () => {
     await ev("player.killed", { victimDayzId: S, victimGamertag: "S", killerDayzId: "X".repeat(40), killerGamertag: "X", weapon: null, distanceM: null }, t1);
     await killsTick(db);

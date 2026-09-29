@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- A player who respawned and died again within two minutes of being killed could be counted as killed a second time by the same player. Those extra kills and deaths are removed from the boards, K/D and streaks.
+
 ## [1.52.0] - 2026-09-29
 
 ### Changed
