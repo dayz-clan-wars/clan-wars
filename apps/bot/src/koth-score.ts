@@ -4,7 +4,7 @@ import {
   readVec3, type KothKill,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
-import { grantAwardTx, scoringKill } from "@factions/roster/internal";
+import { grantAwardTx, scoringKillAnyTeam } from "@factions/roster/internal";
 import { readCursor } from "@factions/event-log";
 import { and, eq, gt, gte, lt, max, sql } from "drizzle-orm";
 import { KILLS_CONSUMER } from "./kills-tick.js";
@@ -53,7 +53,12 @@ export async function scoringReady(db: Database, row: KothRow, now: Date): Promi
   return (last?.id ?? 0) <= await readCursor(db, KILLS_CONSUMER);
 }
 
-/** The window's scoring kills whose victim was on the hill, and how many could not be placed. */
+/**
+ * The window's scoring kills whose victim was on the hill, and how many could not be placed.
+ * ⚠️ `scoringKillAnyTeam`, not `scoringKill`: friendly fire on the hill counts toward
+ * the event (spec §2.8, amended 2026-09-29) and still nowhere else. Both the final
+ * score and `/koth status` come through here, so the two cannot disagree about it.
+ */
 export async function kothKills(db: Db, row: KothRow, w: { from: Date; to: Date }): Promise<{ kills: KothKill[]; dropped: number }> {
   const rows = await db.select({
     killer: kills.killerDayzId, occurredAt: kills.occurredAt, payload: events.payload,
@@ -61,7 +66,7 @@ export async function kothKills(db: Db, row: KothRow, w: { from: Date; to: Date 
   }).from(kills)
     .innerJoin(events, eq(events.id, kills.eventId))
     .leftJoin(players, eq(players.dayzId, kills.killerDayzId))
-    .where(and(eq(kills.serverId, row.serverId), scoringKill, gte(kills.occurredAt, w.from), lt(kills.occurredAt, w.to)));
+    .where(and(eq(kills.serverId, row.serverId), scoringKillAnyTeam, gte(kills.occurredAt, w.from), lt(kills.occurredAt, w.to)));
   const centre = { x: Number(row.centreX), z: Number(row.centreZ) };
   const out: KothKill[] = [];
   let dropped = 0;

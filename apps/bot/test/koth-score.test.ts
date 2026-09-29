@@ -60,16 +60,24 @@ describe("koth scoring", () => {
     expect(await scoringReady(db, await row(), at("2026-10-03T22:30:00Z"))).toBe(true);
   });
 
-  it("counts victim-in-zone kills by out-of-zone killers; drops friendly fire, Hub and unplaced kills", async () => {
+  it("counts victim-in-zone kills by out-of-zone killers; drops Hub and unplaced kills", async () => {
     await kill("a", "v1", "2026-10-03T20:10:00Z", { x: HILL.x + 499, z: HILL.z });
     await kill("a", "v2", "2026-10-03T20:11:00Z", { x: HILL.x + 501, z: HILL.z });
-    await kill("b", "v3", "2026-10-03T20:12:00Z", HILL, { friendlyFire: true });
     await kill("b", "v4", "2026-10-03T20:13:00Z", HILL, { atHub: true });
     await kill("c", "v5", "2026-10-03T20:14:00Z", null);
     await kill("d", "v6", "2026-10-03T19:59:00Z", HILL); // before the window
     const r = await kothKills(db, await row(), await kothWindow(db, await row()));
     expect(r.kills.map((k) => k.killerDayzId)).toEqual(["a"]);
     expect(r.dropped).toBe(1);
+  });
+
+  // ⚠️ The hill's one exception to the 2026-09-21 friendly-fire rule (spec §2.8
+  // amendment): a teamkill on the hill scores here, and still nowhere else.
+  it("counts friendly fire on the hill, but not off it", async () => {
+    await kill("b", "v3", "2026-10-03T20:12:00Z", HILL, { friendlyFire: true });
+    await kill("e", "v7", "2026-10-03T20:13:00Z", { x: HILL.x + 501, z: HILL.z }, { friendlyFire: true });
+    const r = await kothKills(db, await row(), await kothWindow(db, await row()));
+    expect(r.kills.map((k) => k.killerDayzId)).toEqual(["b"]);
   });
 
   // ⚠️ A credited kill cites the bare `player.died` event, never a `player.killed` one;

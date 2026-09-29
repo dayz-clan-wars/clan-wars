@@ -16,6 +16,7 @@ describe("koth text", () => {
     for (const t of [scheduledText("Lembork", SLOT, PC), reminderText("Lembork", SLOT, PC)]) {
       expect(t).toContain("LEMBORK");
       expect(t).toContain(`${KOTH_ZONE_RADIUS_M} m`);
+      expect(t).toContain("Friendly fire counts on the hill.");
       expect(t).toMatch(/Plate Carrier/);
       expect(t).toContain("<t:");
     }

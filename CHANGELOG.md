@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- King of the Hill: killing a clanmate on the hill now counts toward the event's standings. It still counts as friendly fire everywhere else, so it doesn't add to your kills, K/D or streaks.
+
 ## [1.51.0] - 2026-09-28
 
 ### Changed

@@ -47,4 +47,4 @@ export {
   placeBountyDb, revokeBountyDb, openBountiesDb, searchBountyTargetsDb,
   type PlaceBountyOutcome, type OpenBounty,
 } from "./bounty-admin";
-export { scoringKill } from "../stats";
+export { scoringKill, scoringKillAnyTeam } from "../stats";

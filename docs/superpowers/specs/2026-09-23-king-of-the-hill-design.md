@@ -156,8 +156,14 @@ into the generator, and every town is regenerated.
 A kill counts if **all** of these hold:
 
 - it is in the `kills` table
-- `scoringKill` holds for it (player-on-player, not friendly fire, not at the Hub),
-  imported and never re-spelled
+- `scoringKillAnyTeam` holds for it (player-on-player, not at the Hub — friendly fire
+  included), imported and never re-spelled. **Amended 2026-09-29:** this was
+  `scoringKill`, which also drops friendly fire. On the hill everyone is fair game, so a
+  teamkill there now counts toward the standings. It is still friendly fire everywhere
+  else (boards, profile, streaks, achievements, bounties): `scoringKillAnyTeam` is
+  `scoringKill` minus its friendly-fire half, both in `packages/roster/src/stats.ts`.
+  No per-pair cap on kills — a clan trading kills on the hill was considered and
+  accepted.
 - `kills.occurred_at` is inside the window (§2.9)
 - the **victim's** position (`victimPos` on the source event's payload) is within
   `KOTH_ZONE_RADIUS_M` (500 m, 2-D) of the town's centre
@@ -199,7 +205,8 @@ would be refused on every tick and the results would never post.
 ### 2.11 KotH kills count everywhere
 
 KotH kills are ordinary PvP. They feed the boards, streaks, achievements and crowns
-like any other kill. There is no `at_koth` flag and no change to `scoringKill`. This
+like any other kill. There is no `at_koth` flag and no change to `scoringKill` (so a
+teamkill on the hill counts for the event, §2.8, but stays friendly fire here). This
 was chosen deliberately: the event is part of the season.
 
 ### 2.12 Clashes
