@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { declarations, events, factionMembers, identityLinks, poles } from "@factions/db";
-import { tooClose, distance2d, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { and, desc, eq, isNotNull, isNull, lt, sql } from "drizzle-orm";
+import { tooClose, distance2d, PUBLIC_BASE_DESPAWN_MS, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { and, desc, eq, gt, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
@@ -325,6 +325,12 @@ export async function lapseSolos(
  * `HUB_POSITION`, which is right for deciding where a base may be declared
  * but would suppress genuinely abandoned poles near the Hub here, for a
  * reason that has nothing to do with anyone's base.
+ *
+ * A pole whose flag has not gone up for `PUBLIC_BASE_DESPAWN_MS` has
+ * despawned in game and is left off. `last_seen_at` is the last raise here:
+ * pole-tick moves it on every raise and lower, never backwards, and a pole
+ * whose last event was a lower is already excluded by `flag_raised`. A read,
+ * not a delete, so a fresh raise at the same pole publishes it again.
  */
 export async function publicPoles(db: Database | Tx, serverId: number, now: Date) {
   const candidates = await db.select({ poleKey: poles.poleKey, x: poles.x, y: poles.y, z: poles.z, texture: poles.currentTexture })
@@ -335,6 +341,7 @@ export async function publicPoles(db: Database | Tx, serverId: number, now: Date
       eq(poles.flagRaised, true),
       isNull(declarations.id),
       lt(poles.graceUntil, now),
+      gt(poles.lastSeenAt, new Date(now.getTime() - PUBLIC_BASE_DESPAWN_MS)),
     ))
     .orderBy(poles.poleKey);
 
