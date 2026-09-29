@@ -223,7 +223,9 @@ anything.
   A bare `died` after a player's hit that left the victim at `FINISH_HP_MAX` (25) or below, or
   a knockout after it, with nothing but a player hurting them since, is a credited kill
   (`finishedBy`): killer, weapon and range from the hit, `cause = 'finished'`, and it counts
-  as a kill everywhere `killer_dayz_id` does. ⚠️ A reparse never corrects a misparsed line —
+  as a kill everywhere `killer_dayz_id` does. ⚠️ The hits it reads stop at the victim's previous death inside the window —
+  a respawn that dies again within two minutes once credited the same killer twice (65 phantom
+  kills, fixed 2026-09-29: `docs/deploy/2026-09-29-phantom-credited-kills.md`). ⚠️ A reparse never corrects a misparsed line —
   the idempotency index is on file + line, not type — delete the wrong events first
   (`docs/deploy/2026-09-10-credited-kills.md`). ⚠️ `pnpm rebuild:kills` fails from the
   workspace root (`drizzle-orm` unresolvable, pre-existing); the runbook shows the bot-package
