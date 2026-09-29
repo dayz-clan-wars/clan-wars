@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.51.0] - 2026-09-28
+
 ### Changed
 
 - Public bases now drop off the map once nobody has raised a flag there for 14 days, because by then the base has despawned in game. Raise a flag there again and it comes back.
