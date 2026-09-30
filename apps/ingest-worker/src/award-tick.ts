@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { awardGrants, identityLinks } from "@factions/db";
-import { awardClock, inAwardFile, picksComplete } from "@factions/domain";
+import { awardClockMs, awardTimeLeftMs, inAwardFile, picksComplete } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { and, asc, eq, isNotNull, isNull } from "drizzle-orm";
 import { generateBoosterKits, type BoosterKit } from "./booster-kits.js";
@@ -42,6 +42,7 @@ export async function awardTick(db: Database, deps: {
     id: awardGrants.id, awardKey: awardGrants.awardKey, discordId: awardGrants.discordId, picks: awardGrants.picks,
     posX: awardGrants.posX, posY: awardGrants.posY, posZ: awardGrants.posZ,
     placeBy: awardGrants.placeBy, placedAt: awardGrants.placedAt, liveFrom: awardGrants.liveFrom, durationDays: awardGrants.durationDays,
+    remainingMs: awardGrants.remainingMs,
     expiresAt: awardGrants.expiresAt, revokedAt: awardGrants.revokedAt,
     gamertag: identityLinks.gamertag,
   }).from(awardGrants)
@@ -101,12 +102,22 @@ export async function awardTick(db: Database, deps: {
   if (stored && stored.contentHash === projectionHash(content)) {
     for (const r of included) {
       if (r.liveFrom !== null) continue;
-      // ⚠️ The grant's own length, never the catalogue's: `/award grant days:`
-      // writes it there, and the catalogue default was copied in at grant time.
-      const { liveFrom, expiresAt } = awardClock(stored.uploadedAt, r.durationDays);
+      // ⚠️ The grant's own length, never the catalogue's: `duration_days` from
+      // the row (`/award grant days:` or the default copied in at grant time),
+      // or, for a transferred award, the time it had left (`remaining_ms`).
+      // `live_from` is null here, so `expires_at` is too, and awardTimeLeftMs
+      // reads exactly those two stored lengths.
+      const { liveFrom, expiresAt } = awardClockMs(stored.uploadedAt, awardTimeLeftMs(r, deps.now));
       // ⚠️ `live_from IS NULL` in the WHERE: a grant's clock is set once.
+      // ⚠️ And the SAME owner and placement this sweep read and uploaded: a
+      // transfer during the upload clears `live_from` too, and without these
+      // the stamp would start the recipient's clock on an award with no spot,
+      // at the length read before the transfer, losing the pause for good.
       const done = await db.update(awardGrants).set({ liveFrom, expiresAt })
-        .where(and(eq(awardGrants.id, r.id), isNull(awardGrants.liveFrom)))
+        .where(and(
+          eq(awardGrants.id, r.id), isNull(awardGrants.liveFrom),
+          eq(awardGrants.discordId, r.discordId), eq(awardGrants.placedAt, r.placedAt!),
+        ))
         .returning({ id: awardGrants.id });
       stamped += done.length;
     }

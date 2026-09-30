@@ -22,6 +22,10 @@ export const RESULT_COPY: Record<string, string> = {
   "bad-pick": "That item is not on the list for this piece.",
   incomplete: "Pick every piece before you mark the spot.",
   "not-linked": "Link your character first. The spot is marked in game.",
+  "recipient-not-linked": "No linked player has that gamertag. They need to link their character first.",
+  "recipient-is-you": "That is you. Pick another player.",
+  "ambiguous-gamertag": "More than one linked player has that gamertag. Ask them for the exact spelling.",
+  "no-server": "That did not save. Try again in a moment.",
   failed: "That did not save. Try again in a moment.",
 };
 

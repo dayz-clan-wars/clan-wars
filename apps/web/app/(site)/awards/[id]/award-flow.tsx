@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { AwardDef, AwardItem } from "@factions/domain";
+import { timeLeftText, type AwardDef, type AwardItem } from "@factions/domain";
 import { comesWith } from "@/lib/award-parts";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when as whenUtc } from "@/lib/format";
@@ -10,6 +10,7 @@ import type { AwardPageView } from "@/lib/award-view";
 import { BackLine, Page, PageHead, btnCta, btnPrimary } from "@/app/components/ui";
 import { PickSheet } from "../../kit/pick-sheet";
 import { SequenceCard } from "../../kit/sequence-card";
+import { GiveAward } from "./give-award";
 
 const POLL_MS = 5_000;
 const OPEN = new Set(["unplaced", "waiting", "live"]);
@@ -100,7 +101,9 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
               {state.line}{" "}
               {view.state === "unplaced" && <>Place it by {when(view.placeBy)}. </>}
               {view.state === "waiting" && <>Next restart: {when(view.nextRestartAt)}. </>}
-              {(view.state === "unplaced" || view.state === "waiting") && <>{runsFor(view.durationDays)}</>}
+              {(view.state === "unplaced" || view.state === "waiting") && (
+                <>{view.remainingMs !== null ? `It has ${timeLeftText(view.remainingMs)} left once it spawns.` : runsFor(view.durationDays)}</>
+              )}
               {view.state === "live" && view.expiresAt && <>Live until {when(view.expiresAt)}.</>}
             </p>
             {view.spot && (
@@ -158,6 +161,8 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
               {view.spot ? "Move it in game" : "Place in game"}
             </button>
           )}
+
+          {isOpen && !view.challenge && <GiveAward grantId={view.id} label={view.label} />}
 
           <ul className="mt-6 flex max-w-[34rem] flex-col gap-2 text-[13px] leading-relaxed text-ink-2">
             {GROUND_RULES.map((line) => <li key={line}>{line}</li>)}

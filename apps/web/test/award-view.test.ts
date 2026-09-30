@@ -5,7 +5,7 @@ import { STATE_COPY, RESULT_COPY } from "@/lib/award-copy";
 
 const base: AwardView = {
   id: 12, awardKey: "plate-carrier", label: "Plate Carrier", reason: "Won", state: "unplaced",
-  placeBy: new Date("2026-09-29T12:00:00Z"), liveFrom: null, expiresAt: null, durationDays: 7,
+  placeBy: new Date("2026-09-29T12:00:00Z"), liveFrom: null, expiresAt: null, durationDays: 7, remainingMs: null,
   picks: {}, spot: null, linked: { gamertag: "Ron" }, challenge: null,
 };
 

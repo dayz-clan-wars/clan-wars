@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, awardGrants, clanNotices, servers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, awardGrants, awardTransfers, clanNotices, servers, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { awardGroup } from "../src/commands/award.js";
 import type { Ctx, CommandInput } from "../src/commands/types.js";
@@ -13,7 +13,7 @@ describe("/award", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table award_grants, clan_notices, servers restart identity cascade`);
+    await db.execute(sql`truncate table award_transfers, award_grants, clan_notices, servers restart identity cascade`);
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true });
   });
 
@@ -92,6 +92,14 @@ describe("/award", () => {
     const r = await spec("award list").handler(ctx(), input({ user: null }));
     expect(r.content).toMatch(/#\d+ Plate Carrier/);
     expect(r.content).toMatch(/<@1>/);
+  });
+
+  it("list names who gave an award away", async () => {
+    await spec("award grant").handler(ctx(), input());
+    const [g] = await db.select().from(awardGrants);
+    await db.insert(awardTransfers).values({ awardGrantId: g!.id, fromDiscordId: "7", toDiscordId: "1", transferredAt: NOW, remainingMs: 1 });
+    const r = await spec("award list").handler(ctx(), input({ user: null }));
+    expect(r.content).toContain("given by <@7>");
   });
 
   it("list says so when there is nothing open", async () => {

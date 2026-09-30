@@ -29,7 +29,8 @@ function summarize(r: AwardListRow, mention: boolean): string {
   const until = r.state === "live" && r.expiresAt
     ? ` until <t:${Math.floor(r.expiresAt.getTime() / 1000)}:f>`
     : r.state === "unplaced" ? ` (place by <t:${Math.floor(r.placeBy.getTime() / 1000)}:f>)` : "";
-  return `#${r.id} ${r.label} (${days(r.durationDays)}): ${who}, ${STATE[r.state]}${mention ? until : ""}`;
+  const given = mention && r.givenBy ? `, given by <@${r.givenBy}>` : "";
+  return `#${r.id} ${r.label} (${days(r.durationDays)}): ${who}, ${STATE[r.state]}${mention ? until : ""}${given}`;
 }
 
 /**

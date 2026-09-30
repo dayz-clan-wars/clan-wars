@@ -320,6 +320,18 @@ describe("kitPlacementTick", () => {
       expect((await db.select().from(boosterKitChallenges))[0]!.closedAt).toEqual(now);
     });
 
+    it("⚠️ closes and never places from a sequence the award's old owner still holds", async () => {
+      // Given away while the old owner's Place click was still issuing this
+      // sequence: the grant is someone else's now.
+      const [g] = await seedGrant({ discordId: "2" });
+      await seedChallenge({ awardGrantId: g!.id });
+      await seedEmote({ emote: "EmoteSalute" });
+      await seedEmote({ emote: "EmoteClap" });
+      expect(await tick()).toMatchObject({ placed: 0 });
+      expect((await db.select().from(awardGrants))[0]!.posX).toBeNull();
+      expect((await db.select().from(boosterKitChallenges))[0]!.closedAt).toEqual(now);
+    });
+
     it("⚠️ refuses a grant that expired before the last emote", async () => {
       const [g] = await seedGrant({ placedAt: issuedAt, liveFrom: issuedAt, expiresAt: new Date("2026-09-19T12:04:00Z") });
       await seedChallenge({ awardGrantId: g!.id });

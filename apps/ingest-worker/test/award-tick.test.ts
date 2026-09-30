@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, awardGrants, awardUploads, identityLinks, type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { awardTick } from "../src/award-tick.js";
 
 const DB_URL = requireTestDatabaseUrl();
@@ -178,5 +178,36 @@ describe("awardTick", () => {
     const client = fakeUploader();
     await tick(client);
     expect(objects(client.uploaded[0]!).map((o) => o.name)).toEqual([FULL.vest, FULL.pouches, FULL.holster]);
+  });
+
+  it("⚠️ resumes a transferred award with the time it had left, not its full length", async () => {
+    const [g] = await seed({ remainingMs: 5 * 3_600_000 });
+    await tick();
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row!.expiresAt!.getTime() - row!.liveFrom!.getTime()).toBe(5 * 3_600_000);
+  });
+
+  it("runs an award never transferred for its full length, as before", async () => {
+    const [g] = await seed({ durationDays: 7 });
+    await tick();
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row!.expiresAt!.getTime() - row!.liveFrom!.getTime()).toBe(7 * 86_400_000);
+  });
+
+  it("⚠️ never starts the clock on an award given away while its file was uploading", async () => {
+    const [g] = await seed({ remainingMs: 5 * 3_600_000 });
+    // The transfer lands between the worker's read and its stamp, as a give
+    // from the site can during the upload's network round trip.
+    const client = {
+      uploadFile: async () => {
+        await db.update(awardGrants).set({
+          discordId: "2", posX: null, posY: null, posZ: null, placedAt: null, liveFrom: null, expiresAt: null,
+        }).where(eq(awardGrants.id, g!.id));
+      },
+      statFile: async () => null,
+    };
+    await tick(client as never);
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row).toMatchObject({ liveFrom: null, expiresAt: null, remainingMs: 5 * 3_600_000 });
   });
 });

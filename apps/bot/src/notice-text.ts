@@ -1,4 +1,4 @@
-import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, timeLeftText } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
 import { rel, at, atRel } from "@factions/copy";
@@ -236,6 +236,15 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       + `Choose your gear and mark where it spawns${by ? ` by ${by}` : ""}. `
       + `It respawns there every restart ${awardLength(p.durationDays)}.`;
   },
+  award_received: (p) => {
+    // ⚠️ The deadline clause is dropped on an unparseable date, as award_granted's is.
+    const by = atToken(p.placeBy);
+    const left = typeof p.remainingMs === "number"
+      ? ` It has ${timeLeftText(p.remainingMs)} left, and the clock starts once it spawns.` : "";
+    return `🎁 ${p.fromName ? String(p.fromName) : "Another player"} gave you **${p.label ? String(p.label) : "an award"}**. `
+      + `Choose your gear and mark where it spawns${by ? ` by ${by}` : ""}.${left}`;
+  },
+  award_given: (p) => `You gave your **${p.label ? String(p.label) : "award"}** to ${p.toName ? String(p.toName) : "another player"}.`,
   bounty_placed: (p) => {
     const hours = typeof p.hours === "number" ? `${p.hours} h` : "a while";
     return `🎯 An admin has put a bounty on you${p.reason ? ` for ${String(p.reason)}` : ""}. `
@@ -289,4 +298,5 @@ export function noticeComponents(n: { kind: ClanNoticeKind; payload: NoticePaylo
 const LINK_BUTTONS: Partial<Record<ClanNoticeKind, { label: string; field: string }>> = {
   booster_kit_unchosen: { label: "Choose your kit", field: "kitUrl" },
   award_granted: { label: "Configure your award", field: "awardUrl" },
+  award_received: { label: "Configure your award", field: "awardUrl" },
 };

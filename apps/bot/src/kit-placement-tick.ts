@@ -262,6 +262,12 @@ export async function kitPlacementTick(
               // however late the tick got round to it. A revoke wins whenever
               // it landed — `awardState` checks it before any time.
               if (!grant || !isOpenAward(awardState(grant, ev.occurredAt))) return "award-ended" as const;
+              // ⚠️ The grant must still be the challenger's. An award given
+              // away (giveAwardDb) while its old owner's Place click was
+              // issuing this sequence would otherwise be placed where the OLD
+              // owner stands, over the new owner's own spot. Closed above,
+              // so it cannot complete again.
+              if (grant.discordId !== challenge.discordId) return "stale" as const;
               // ⚠️ Position and placed_at ONLY. `live_from`/`expires_at`
               // belong to the worker; a move never resets the clock (awards
               // spec §4.4).

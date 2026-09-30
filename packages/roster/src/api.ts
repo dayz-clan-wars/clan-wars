@@ -65,9 +65,10 @@ import {
 } from "./booster-kit";
 import type { KitSlot } from "@factions/domain";
 import {
-  awardsForDb, awardForDb, saveAwardPickDb, startAwardPlacementDb, cancelAwardPlacementDb,
-  type AwardSummary, type AwardView, type AwardWriteOutcome,
+  awardsForDb, awardForDb, saveAwardPickDb, startAwardPlacementDb, cancelAwardPlacementDb, giveAwardDb,
+  type AwardSummary, type AwardView, type AwardWriteOutcome, type GiveAwardOutcome,
 } from "./awards";
+import { siteBaseUrl } from "./internal/site-url";
 
 export type { Viewer, Role };
 export type { MapState, MapFix, DropPinOutcome };
@@ -91,7 +92,7 @@ export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
 export type { NotificationsPage, NoticeRow };
 export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKitOutcome };
-export type { AwardSummary, AwardView, AwardWriteOutcome };
+export type { AwardSummary, AwardView, AwardWriteOutcome, GiveAwardOutcome };
 export type { NoticePayload } from "./internal/notices";
 export { NOTIFICATIONS_PAGE_SIZE };
 export { SUGGEST_SCOPES, type SuggestScope } from "./suggest";
@@ -328,6 +329,9 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /** Close the caller's open sequence for this grant. True when there was one. */
     cancelAwardPlacement: (discordId: string, grantId: number): Promise<boolean> =>
       cancelAwardPlacementDb(getDb(), { discordId, grantId, now: getNow() }),
+    /** Give an award to another linked player. Refusals are an outcome. */
+    giveAward: (discordId: string, grantId: number, toGamertag: string): Promise<GiveAwardOutcome> =>
+      giveAwardDb(getDb(), { discordId, grantId, toGamertag, siteBaseUrl: siteBaseUrl(), now: getNow() }),
   };
 }
 

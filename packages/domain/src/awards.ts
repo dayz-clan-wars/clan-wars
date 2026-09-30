@@ -2,6 +2,7 @@ import { AWARD_MAX_DAYS, AWARD_REMOVAL_LEAD_MS } from "./rules";
 import { nextRestartAt } from "./restarts";
 
 const DAY_MS = 86_400_000;
+const HOUR_MS = 3_600_000;
 
 export type AwardItem = { className: string; label: string; image?: string; extras?: string[] };
 export type AwardSlot = { label: string; items: AwardItem[] };
@@ -117,8 +118,44 @@ export function isOpenAward(s: AwardState): boolean {
  * restart slot, and the week is exactly a week of sessions.
  */
 export function awardClock(uploadedAt: Date, durationDays: number): { liveFrom: Date; expiresAt: Date } {
+  return awardClockMs(uploadedAt, durationDays * DAY_MS);
+}
+
+/**
+ * `awardClock` for a length in milliseconds: a transferred award resumes with
+ * the time it had left, which is rarely a whole number of days.
+ */
+export function awardClockMs(uploadedAt: Date, lengthMs: number): { liveFrom: Date; expiresAt: Date } {
   const liveFrom = nextRestartAt(uploadedAt);
-  return { liveFrom, expiresAt: new Date(liveFrom.getTime() + durationDays * DAY_MS) };
+  return { liveFrom, expiresAt: new Date(liveFrom.getTime() + lengthMs) };
+}
+
+/**
+ * How long an award has left to run (transfers spec §3): what a transfer
+ * saves into `remaining_ms`, and what the worker's stamp runs for.
+ *
+ * ⚠️ Once stamped, counted from `max(now, live_from)`: time before it went
+ * live was never spent. ⚠️ Never negative, so an award given away in its last
+ * minute hands over a sliver, not a clock that ends before it starts.
+ */
+export function awardTimeLeftMs(
+  g: { liveFrom: Date | null; expiresAt: Date | null; remainingMs: number | null; durationDays: number }, now: Date,
+): number {
+  if (g.expiresAt) {
+    const from = Math.max(now.getTime(), g.liveFrom?.getTime() ?? now.getTime());
+    return Math.max(0, g.expiresAt.getTime() - from);
+  }
+  return g.remainingMs ?? g.durationDays * DAY_MS;
+}
+
+/** "2 days 5 hours", "1 day", "5 hours", "less than an hour": whole hours, rounded down. */
+export function timeLeftText(ms: number): string {
+  const hours = Math.floor(ms / HOUR_MS);
+  if (hours < 1) return "less than an hour";
+  const d = Math.floor(hours / 24);
+  const h = hours % 24;
+  const part = (n: number, unit: string) => `${n} ${unit}${n === 1 ? "" : "s"}`;
+  return [d > 0 ? part(d, "day") : "", h > 0 ? part(h, "hour") : ""].filter(Boolean).join(" ");
 }
 
 /**

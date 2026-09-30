@@ -1441,11 +1441,32 @@ export const awardGrants = pgTable("award_grants", {
   durationDays: integer("duration_days").notNull(),
   liveFrom: timestamp("live_from", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
+  /**
+   * The time left when the award was last given away (transfers spec §3).
+   * Null means never transferred: the worker then runs it for `duration_days`.
+   * ⚠️ Written only by a transfer, read only by the worker's stamp.
+   */
+  remainingMs: bigint("remaining_ms", { mode: "number" }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byOwner: index("award_grants_discord_idx").on(t.discordId),
   durationPositive: check("award_grants_duration_positive", sql`${t.durationDays} > 0`),
+}));
+
+/**
+ * One row per award transfer (transfers spec §4). Insert-only history, read
+ * only by `/award list`; nothing decides anything from it.
+ */
+export const awardTransfers = pgTable("award_transfers", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).notNull().references(() => awardGrants.id),
+  fromDiscordId: text("from_discord_id").notNull(),
+  toDiscordId: text("to_discord_id").notNull(),
+  transferredAt: timestamp("transferred_at", { withTimezone: true }).notNull(),
+  remainingMs: bigint("remaining_ms", { mode: "number" }).notNull(),
+}, (t) => ({
+  byGrant: index("award_transfers_grant_idx").on(t.awardGrantId),
 }));
 
 /** Same columns as supply_uploads, so storeFor() serves it. Its own table so the award file's hash and baseline cannot cross the booster file's. */

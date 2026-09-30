@@ -43,3 +43,31 @@ describe("award_granted", () => {
       .toEqual([{ type: 1, components: [{ type: 2, style: 5, label: "Choose your kit", url: "https://x/kit" }] }]);
   });
 });
+
+describe("award_received and award_given", () => {
+  const received = {
+    kind: "award_received" as const, target: "dm" as const, occurredAt: new Date("2026-09-30T12:00:00Z"),
+    payload: {
+      grantId: 12, awardKey: "weapon-kit", label: "Weapon Kit", fromName: "Ron",
+      placeBy: "2026-10-07T12:00:00.000Z", remainingMs: 2 * 86_400_000 + 5 * 3_600_000,
+      awardUrl: "https://dayzclanwars.com/awards/12",
+    },
+  };
+
+  it("names the giver, the award, the deadline and the time left", () => {
+    const t = noticeText(received, "https://dayzclanwars.com", 1);
+    expect(t).toContain("Ron gave you **Weapon Kit**");
+    expect(t).toContain("<t:1791374400:F>");
+    expect(t).toContain("It has 2 days 5 hours left, and the clock starts once it spawns.");
+    expect(t).not.toMatch(/—|NaN|undefined/u);
+  });
+
+  it("links to the award page", () => {
+    expect(JSON.stringify(noticeComponents(received))).toContain("https://dayzclanwars.com/awards/12");
+  });
+
+  it("gives the receipt to the giver", () => {
+    const t = noticeText({ ...received, kind: "award_given", payload: { grantId: 12, awardKey: "weapon-kit", label: "Weapon Kit", toName: "Ann" } }, "https://x", 1);
+    expect(t).toBe("You gave your **Weapon Kit** to Ann.");
+  });
+});

@@ -15,6 +15,8 @@ export type AwardPageView = {
   placeBy: string; liveFrom: string | null; expiresAt: string | null;
   /** How long it runs once live, fixed at grant. */
   durationDays: number;
+  /** Time left when it was last given away; null when never transferred. */
+  remainingMs: number | null;
   /** When a placed-but-waiting award will first appear. */
   nextRestartAt: string;
   gamertag: string | null;
@@ -30,6 +32,7 @@ export function awardPageView(v: AwardView, now: Date): AwardPageView {
     liveFrom: v.liveFrom?.toISOString() ?? null,
     expiresAt: v.expiresAt?.toISOString() ?? null,
     durationDays: v.durationDays,
+    remainingMs: v.remainingMs,
     nextRestartAt: nextRestartAt(now).toISOString(),
     gamertag: v.linked?.gamertag ?? null,
     picks: v.picks,

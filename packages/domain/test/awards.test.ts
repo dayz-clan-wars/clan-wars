@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   loadAwards, isAwardPick, picksComplete, awardState, isOpenAward, awardClock, inAwardFile, type AwardTimes,
+  awardTimeLeftMs, awardClockMs, timeLeftText,
 } from "../src/awards";
 import { AWARD_REMOVAL_LEAD_MS } from "../src/rules";
 import raw from "../assets/awards.json";
@@ -189,5 +190,52 @@ describe("the weapon kit award", () => {
 
   it("has art for every gun", () => {
     for (const i of kit.slots.weapon!.items) expect(i.image).toBe(`items/${i.className}.webp`);
+  });
+});
+
+describe("awardTimeLeftMs", () => {
+  const H = 3_600_000; const D = 24 * H;
+  const at = new Date("2026-09-30T12:00:00Z");
+  const g = (o: Partial<{ liveFrom: Date | null; expiresAt: Date | null; remainingMs: number | null; durationDays: number }>) =>
+    ({ liveFrom: null, expiresAt: null, remainingMs: null, durationDays: 3, ...o });
+
+  it("is the full length before any clock or transfer", () => {
+    expect(awardTimeLeftMs(g({}), at)).toBe(3 * D);
+  });
+  it("is a previous transfer's time left, unchanged, until the clock starts again", () => {
+    expect(awardTimeLeftMs(g({ remainingMs: 5 * H }), at)).toBe(5 * H);
+  });
+  it("is the whole length when stamped but not live yet", () => {
+    const liveFrom = new Date(at.getTime() + H);
+    expect(awardTimeLeftMs(g({ liveFrom, expiresAt: new Date(liveFrom.getTime() + 3 * D) }), at)).toBe(3 * D);
+  });
+  it("counts down from now once live", () => {
+    expect(awardTimeLeftMs(g({ liveFrom: new Date(at.getTime() - D), expiresAt: new Date(at.getTime() + 2 * D) }), at)).toBe(2 * D);
+  });
+  it("⚠️ never goes below zero", () => {
+    expect(awardTimeLeftMs(g({ liveFrom: new Date(at.getTime() - D), expiresAt: new Date(at.getTime() - 1) }), at)).toBe(0);
+  });
+});
+
+describe("awardClockMs", () => {
+  it("runs a given length from the next restart, and awardClock is its day form", () => {
+    const up = new Date("2026-09-30T13:10:00Z");
+    const c = awardClockMs(up, 5 * 3_600_000);
+    expect(c.liveFrom.toISOString()).toBe("2026-09-30T14:00:00.000Z");
+    expect(c.expiresAt.getTime() - c.liveFrom.getTime()).toBe(5 * 3_600_000);
+    expect(awardClock(up, 2)).toEqual(awardClockMs(up, 2 * 86_400_000));
+  });
+});
+
+describe("timeLeftText", () => {
+  it.each([
+    [2 * 86_400_000 + 5 * 3_600_000, "2 days 5 hours"],
+    [86_400_000, "1 day"],
+    [3 * 86_400_000 + 3_600_000, "3 days 1 hour"],
+    [5 * 3_600_000 + 59 * 60_000, "5 hours"],
+    [59 * 60_000, "less than an hour"],
+    [0, "less than an hour"],
+  ])("%d ms reads %s", (ms, text) => {
+    expect(timeLeftText(ms)).toBe(text);
   });
 });

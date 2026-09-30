@@ -10,7 +10,7 @@ const def = awardsCatalogue()["plate-carrier"]!;
 const view = (over: Partial<AwardPageView> = {}): AwardPageView => ({
   id: 12, label: "Plate Carrier", reason: "Winner, Sept KOTH", state: "unplaced",
   placeBy: "2026-09-29T12:00:00.000Z", liveFrom: null, expiresAt: null, nextRestartAt: "2026-09-22T14:00:00.000Z", durationDays: 7,
-  gamertag: "Ron", picks: {}, spot: null, challenge: null, ...over,
+  gamertag: "Ron", picks: {}, spot: null, challenge: null, remainingMs: null, ...over,
 });
 const render = (v: AwardPageView) => renderToStaticMarkup(createElement(AwardFlow, { initial: v, def }));
 
@@ -51,6 +51,18 @@ describe("the award page", () => {
     const kit = awardsCatalogue()["weapon-kit"]!;
     const html = renderToStaticMarkup(createElement(AwardFlow, { initial: view({ picks: { weapon: "AKM" } }), def: kit }));
     expect(html).not.toMatch(/aria-hidden="true">\+</u);
+  });
+
+  it("offers to give an open award away, and not an ended one", () => {
+    expect(render(view())).toContain("Give to another player");
+    expect(render(view({ state: "live", expiresAt: "2026-09-29T14:00:00.000Z" }))).toContain("Give to another player");
+    expect(render(view({ state: "expired" }))).not.toContain("Give to another player");
+  });
+
+  it("says the time left on a transferred award instead of its full length", () => {
+    const html = render(view({ remainingMs: 2 * 86_400_000 + 5 * 3_600_000 }));
+    expect(html).toContain("It has 2 days 5 hours left once it spawns.");
+    expect(html).not.toContain("It runs for");
   });
 
   it("sends an unlinked winner to /link", () => {
