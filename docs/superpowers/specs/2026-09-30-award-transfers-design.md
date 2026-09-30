@@ -85,8 +85,7 @@ future.
 
 - `award_grants.remaining_ms` — `bigint`, nullable (migration).
 - `award_transfers` — `id`, `award_grant_id` (FK), `from_discord_id`,
-  `to_discord_id`, `transferred_at`, `remaining_ms` (the value written, null
-  when no clock had started). Insert-only; read only by `/award list`.
+  `to_discord_id`, `transferred_at`, `remaining_ms` (the value written). Insert-only; read only by `/award list`.
 - Lock order: `award_grants` → `booster_kit_challenges` (the existing rule for
   any transaction touching both) → `award_transfers` → `clan_notices`.
   `award_transfers` sits immediately after `award_grants` in the CLAUDE.md order
@@ -98,13 +97,13 @@ Two new `clan_notices` kinds, DMs, rendered by both `apps/bot/src/notice-text.ts
 and `apps/web/lib/notice-copy.ts`:
 
 - `award_received` (to the recipient): "🎁 Ron gave you a **Weapon Kit**. Choose
-  your gear and mark where it spawns by <deadline>." When `remaining_ms` is set,
-  add: "It has 2 days 5 hours left, and the clock starts again once it spawns."
+  your gear and mark where it spawns by <deadline>. It has 2 days 5 hours left,
+  and the clock starts once it spawns." (A transfer always sets `remaining_ms`.)
   Action link: the award page.
 - `award_given` (to the giver): "You gave your **Weapon Kit** to Ron."
 
-The giver's name is the giver's gamertag when linked, else their Discord display
-name as the site shows it.
+The giver's name is the giver's gamertag when linked, else "Another player"
+(the roster stores no Discord display names).
 
 ## 6. Page
 
@@ -113,7 +112,7 @@ name as the site shows it.
   your Weapon Kit to Ron? You can't undo this."
 - After the transfer the giver is sent to `/awards`; the old id now answers
   not-found for them, as any award that isn't theirs does.
-- When `remaining_ms` is set, the length line reads "It has 2 days 5 hours left
+- When `remaining_ms` is set (every transferred award), the length line reads "It has 2 days 5 hours left
   once it spawns." instead of "It runs for 3 days once it spawns."
 - Refusals get copy in `award-copy.ts`: not yours, recipient not linked,
   recipient is you, award has ended.
