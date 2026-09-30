@@ -54,5 +54,28 @@
         ]
       }
     }
+  },
+  "weapon-kit": {
+    "label": "Weapon Kit",
+    "durationDays": 3,
+    "slots": {
+      "weapon": {
+        "label": "Weapon",
+        "items": [
+          { "className": "M4A1_Green", "label": "M4A1 (Green)", "extras": ["M4_OEBttstck", "M4_RISHndgrd_Green", "ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"] },
+          { "className": "M16A2", "label": "M16A2", "extras": ["M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"] },
+          { "className": "AKM", "label": "AKM", "extras": ["AK_PlasticBttstck", "AK_PlasticHndgrd", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AKM_Drum75Rnd", "Mag_AKM_Drum75Rnd"] },
+          { "className": "AK101_Green", "label": "AK101 (Green)", "extras": ["AK_FoldingBttstck_Green", "AK_RailHndgrd_Green", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AK101_30Rnd", "Mag_AK101_30Rnd"] },
+          { "className": "AK74_Green", "label": "AK74 (Green)", "extras": ["AK_PlasticBttstck_Green", "AK_RailHndgrd_Green", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AK74_45Rnd", "Mag_AK74_45Rnd"] },
+          { "className": "FAL", "label": "FAL", "extras": ["Fal_OeBttstck", "ACOGOptic_6x", "Mag_FAL_20Rnd", "Mag_FAL_20Rnd"] },
+          { "className": "SCARH", "label": "SCAR-H", "extras": ["SCAR_PrecisionBttstck", "ACOGOptic_6x", "Mag_SCARH_20Rnd", "Mag_SCARH_20Rnd"] },
+          { "className": "Aug", "label": "AUG", "extras": ["ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"] },
+          { "className": "ASVAL", "label": "AS VAL", "extras": ["ACOGOptic_6x", "Mag_Vikhr_30Rnd", "Mag_Vikhr_30Rnd"] },
+          { "className": "SVD", "label": "SVD", "extras": ["PSO6Optic", "Battery9V", "AK_Suppressor", "Mag_SVD_10Rnd", "Mag_SVD_10Rnd"] },
+          { "className": "M14", "label": "M14", "extras": ["MK4Optic_black", "Mag_M14_20Rnd", "Mag_M14_20Rnd"] },
+          { "className": "SV98", "label": "SV98", "extras": ["MK4Optic_black", "Mag_SV98_10Rnd", "Mag_SV98_10Rnd"] }
+        ]
+      }
+    }
   }
 }
