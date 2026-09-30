@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.57.0] - 2026-09-30
+
 ### Added
 
 - You can now give an award to another player from its page. It's theirs straight away, with a fresh week to place it. If it was already spawning, it stops at your spot, and its clock pauses until the new owner places it.
