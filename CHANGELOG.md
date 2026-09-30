@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A new event award: the Dead Rooster. It runs for 2 weeks by default, and there is nothing to pick, so the winner just marks where it spawns.
+- Admins can now put a prize on a bounty. The wanted post names the prize, and whoever collects the bounty wins it. If their character isn't linked yet, the prize waits for them until they link.
+
 ## [1.54.0] - 2026-09-30
 
 ### Added

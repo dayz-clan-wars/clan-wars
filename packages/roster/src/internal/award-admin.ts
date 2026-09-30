@@ -23,23 +23,52 @@ type GrantValidation =
  * call this rather than each re-checking the catalogue and the trimmed reason.
  */
 function validateAwardGrant(a: { awardKey: string; reason: string; durationDays?: number | null }): GrantValidation {
-  const def = awardsCatalogue()[a.awardKey];
-  if (!def) return { ok: false, reason: "unknown-award" };
+  const choice = awardChoice(a.awardKey, a.durationDays);
+  if (!choice.ok) return choice;
   const reason = a.reason.trim();
   if (!reason) return { ok: false, reason: "no-reason" };
-  // No `days:` is the catalogue's default, not "forever": a grant always
-  // carries a length, and the worker reads it from the row.
-  const durationDays = a.durationDays ?? def.durationDays;
+  return { ok: true, def: choice.def, reason, durationDays: choice.durationDays };
+}
+
+export type AwardChoice =
+  | { ok: true; def: AwardDef; durationDays: number }
+  | { ok: false; reason: "unknown-award" | "bad-duration" };
+
+/**
+ * An award key and an optional length, resolved to the length a grant will
+ * carry. `/bounty place` checks its prize with this at placement, so a bad
+ * prize is refused there rather than on the claim, long after the admin left.
+ *
+ * No `days` is the catalogue's default, not "forever": a grant always carries
+ * a length, and the worker reads it from the row.
+ */
+export function awardChoice(awardKey: string, days?: number | null): AwardChoice {
+  const def = awardsCatalogue()[awardKey];
+  if (!def) return { ok: false, reason: "unknown-award" };
+  const durationDays = days ?? def.durationDays;
   if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > AWARD_MAX_DAYS) {
     return { ok: false, reason: "bad-duration" };
   }
-  return { ok: true, def, reason, durationDays };
+  return { ok: true, def, durationDays };
+}
+
+/**
+ * The picks a grant starts with: every slot that offers exactly one item,
+ * already chosen. A choice of one is no choice, and without this a Dead
+ * Rooster winner would have to open a picker to tap the only thing in it
+ * before they could place it.
+ */
+function presetPicks(def: AwardDef): Record<string, string> {
+  return Object.fromEntries(Object.entries(def.slots)
+    .filter(([, s]) => s.items.length === 1)
+    .map(([slot, s]) => [slot, s.items[0]!.className]));
 }
 
 /**
  * The grant and its DM, inside a caller's transaction — for King of the Hill,
  * which must lock its own row first so a retry cannot grant twice (lock order:
- * koth_events → award_grants → clan_notices).
+ * koth_events → award_grants → clan_notices), and for a bounty's prize
+ * (bounties → award_grants → clan_notices).
  */
 export async function grantAwardTx(tx: Tx, a: {
   awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date; serverId: number;
@@ -52,7 +81,7 @@ export async function grantAwardTx(tx: Tx, a: {
   const placeBy = new Date(a.now.getTime() + AWARD_PLACE_BY_MS);
   const [row] = await tx.insert(awardGrants).values({
     awardKey: def.key, discordId: a.winnerDiscordId, grantedByDiscordId: a.grantedByDiscordId,
-    reason, grantedAt: a.now, placeBy, durationDays, updatedAt: a.now,
+    reason, grantedAt: a.now, placeBy, durationDays, picks: presetPicks(def), updatedAt: a.now,
   }).returning({ id: awardGrants.id });
   await appendClanNoticeTx(tx, {
     serverId: a.serverId, factionId: null, target: "dm", discordTargetId: a.winnerDiscordId,

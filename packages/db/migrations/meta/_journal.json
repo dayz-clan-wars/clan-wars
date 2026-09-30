@@ -414,6 +414,13 @@
       "when": 1790783339149,
       "tag": "0058_special_lady_bullseye",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "7",
+      "when": 1790795656199,
+      "tag": "0059_wealthy_wallop",
+      "breakpoints": true
     }
   ]
 }

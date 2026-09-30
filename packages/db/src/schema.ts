@@ -2105,8 +2105,10 @@ export const playerDevices = pgTable("player_devices", {
  * ⚠️ NO foreign key from `claim_event_id` to `kills`: `rebuild:kills` deletes and
  * reinserts every kill, and a claim is a record frozen when written (§2.7).
  *
- * ⚠️ Lock order: `bounties` sits immediately before `clan_notices` — the store and
- * the tick write the bounty, then its DM, and touch no roster table.
+ * ⚠️ Lock order: `bounties` sits immediately before `award_grants` — the store and
+ * the tick write the bounty, then (for a prize) the grant, then its DM, and touch
+ * no roster table. Moved up from just before `clan_notices` when bounties gained
+ * prizes: nothing between the two positions is written with a bounty.
  */
 export const bounties = pgTable("bounties", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
@@ -2127,7 +2129,32 @@ export const bounties = pgTable("bounties", {
   /** ⚠️ Stamped only after the post succeeds — the poster's whole retry mechanism. */
   placedAnnouncedAt: timestamp("placed_announced_at", { withTimezone: true }),
   closedAnnouncedAt: timestamp("closed_announced_at", { withTimezone: true }),
+  /**
+   * The prize for collecting it, an `awards.json` key, chosen at `/bounty place`.
+   * Null is no prize. `award_days` is the length resolved AT PLACEMENT, so the
+   * prize the wanted post named is the prize that is paid.
+   */
+  awardKey: text("award_key"),
+  awardDays: integer("award_days"),
+  /**
+   * The grant the prize became. Null on a claimed prize bounty means it is still
+   * owed: the killer was not linked, and the tick grants it once that character is.
+   *
+   * ⚠️ This column IS the payment record, as `referral_weeks` is for referrals:
+   * the payout locks the bounty, checks it is null, grants, and sets it, in one
+   * transaction. Clearing it pays the prize again.
+   */
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id),
+  /** Why a prize could not be paid (it left the catalogue), so the tick stops retrying and ops can grant it by hand. */
+  awardFailure: text("award_failure"),
 }, (t) => ({
+  awardHasDays: check("bounties_award_has_days", sql`(${t.awardKey} IS NULL) = (${t.awardDays} IS NULL)`),
+  awardDaysPositive: check("bounties_award_days_positive", sql`${t.awardDays} IS NULL OR ${t.awardDays} > 0`),
+  // A grant only for a claimed bounty with a prize: an expired or revoked one pays nothing.
+  awardGrantOnClaim: check("bounties_award_grant_on_claim", sql`${t.awardGrantId} IS NULL OR (${t.status} = 'claimed' AND ${t.awardKey} IS NOT NULL)`),
+  // Owed prizes, for the payout pass: claimed, with a prize, not yet paid or failed.
+  owed: index("bounties_award_owed_idx").on(t.claimedByDayzId)
+    .where(sql`${t.status} = 'claimed' AND ${t.awardKey} IS NOT NULL AND ${t.awardGrantId} IS NULL AND ${t.awardFailure} IS NULL`),
   statusValid: check("bounties_status_valid", sql`${t.status} IN ('open','claimed','expired','revoked')`),
   closedIffNotOpen: check("bounties_closed_iff_not_open", sql`(${t.status} = 'open') = (${t.closedAt} IS NULL)`),
   claimComplete: check("bounties_claim_complete", sql`(${t.status} = 'claimed') = (${t.claimedByDayzId} IS NOT NULL AND ${t.claimEventId} IS NOT NULL AND ${t.claimedAt} IS NOT NULL)`),

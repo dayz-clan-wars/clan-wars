@@ -42,6 +42,34 @@ describe("bounty administration", () => {
     expect(n!.payload).toEqual({ bountyId: expect.any(Number), reason: "Combat logging", hours: 24 });
   });
 
+  it("stores a prize with the days resolved at placement: the award's default, or the admin's", async () => {
+    expect(await place({ awardKey: "dead-rooster" })).toMatchObject({ ok: true, award: { label: "Dead Rooster", days: 14 } });
+    expect((await db.select().from(bounties))[0]).toMatchObject({ awardKey: "dead-rooster", awardDays: 14 });
+    await db.execute(sql`truncate table bounties restart identity cascade`);
+    expect(await place({ awardKey: "dead-rooster", awardDays: 2 })).toMatchObject({ ok: true, award: { days: 2 } });
+    expect((await db.select().from(bounties))[0]).toMatchObject({ awardDays: 2 });
+  });
+
+  it("places no prize by default", async () => {
+    expect(await place()).toMatchObject({ ok: true, award: null });
+    expect((await db.select().from(bounties))[0]).toMatchObject({ awardKey: null, awardDays: null });
+  });
+
+  it.each([
+    [{ awardKey: "golden-shovel" }, "unknown-award"],
+    [{ awardKey: "dead-rooster", awardDays: 0 }, "bad-award-days"],
+    [{ awardKey: "dead-rooster", awardDays: 91 }, "bad-award-days"],
+    [{ awardDays: 3 }, "award-days-without-award"],
+  ] as const)("refuses a bad prize %o as %s, and writes nothing", async (over, reason) => {
+    expect(await place(over)).toEqual({ ok: false, reason });
+    expect(await db.select().from(bounties)).toEqual([]);
+  });
+
+  it("lists a bounty's prize", async () => {
+    await place({ awardKey: "dead-rooster" });
+    expect((await openBountiesDb(db, now))[0]!.awardLabel).toBe("Dead Rooster");
+  });
+
   it("refuses a second open bounty on the same player", async () => {
     await place();
     expect(await place()).toEqual({ ok: false, reason: "already-open" });

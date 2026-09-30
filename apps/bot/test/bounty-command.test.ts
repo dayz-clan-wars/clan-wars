@@ -67,6 +67,19 @@ describe("/bounty", () => {
     expect(revoked.content).toMatch(/lifted/u);
   });
 
+  it("places a bounty with a prize, and lists it", async () => {
+    const r = await handler("bounty place")(ctx(), input({ strings: { player: T, reason: "Combat logging", award: "dead-rooster" }, integers: { "award-days": 3 } }));
+    expect(r.content).toMatch(/wins \*\*Dead Rooster\*\* for 3 days\. If they aren't linked, it waits until they link\./u);
+    expect((await db.select().from(bounties))[0]).toMatchObject({ awardKey: "dead-rooster", awardDays: 3 });
+    expect((await handler("bounty list")(ctx(), input())).content).toMatch(/Prize: Dead Rooster\./u);
+  });
+
+  it("refuses award days with no award, writing nothing", async () => {
+    const r = await handler("bounty place")(ctx(), input({ strings: { player: T, reason: "x" }, integers: { "award-days": 3 } }));
+    expect(r.content).toMatch(/needs an award/u);
+    expect(await db.select().from(bounties)).toHaveLength(0);
+  });
+
   it("says so when the player already has one open", async () => {
     await handler("bounty place")(ctx(), input({ isAdmin: true, strings: { player: T, reason: "x" } }));
     const r = await handler("bounty place")(ctx(), input({ isAdmin: true, strings: { player: T, reason: "x" } }));

@@ -72,6 +72,7 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   CoyoteBag_Brown: { file: "CoyoteBackpack Brown.png", wiki: "wiki.gg" },
   CoyoteBag_Green: { file: "CoyoteBackpack Green.png", wiki: "wiki.gg" },
   CoyoteBag_Winter: { file: "CoyoteBag Winter.png", wiki: "wiki.gg" },
+  DeadRooster: { file: "Rooster.png", wiki: "wiki.gg" },
   DesignerGlasses: { file: "Designer Sunglasses New.png", wiki: "wiki.gg" },
   DownJacket_Blue: { file: "DownJacketBlue.png", wiki: "wiki.gg" },
   DownJacket_Green: { file: "DownJacketGreen.png", wiki: "wiki.gg" },

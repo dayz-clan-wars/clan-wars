@@ -42,5 +42,17 @@
     "label": "Booster Kit",
     "durationDays": 7,
     "slotsFrom": "booster-catalogue"
+  },
+  "dead-rooster": {
+    "label": "Dead Rooster",
+    "durationDays": 14,
+    "slots": {
+      "rooster": {
+        "label": "Rooster",
+        "items": [
+          { "className": "DeadRooster", "label": "Dead Rooster", "image": "items/DeadRooster.webp" }
+        ]
+      }
+    }
   }
 }

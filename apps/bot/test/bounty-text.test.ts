@@ -4,13 +4,28 @@ import { bountyPostText } from "../src/bounty-text.js";
 const SITE = "https://dayzclanwars.com";
 describe("bountyPostText", () => {
   it("announces a wanted player with the reason, the hours and the map link", () => {
-    const t = bountyPostText({ kind: "placed", target: "Bob", reason: "Combat logging", hours: 72 }, SITE);
+    const t = bountyPostText({ kind: "placed", target: "Bob", reason: "Combat logging", hours: 72, prize: null }, SITE);
     expect(t).toContain("**Bob**"); expect(t).toContain("Combat logging"); expect(t).toContain("72 h"); expect(t).toContain(`${SITE}/map`);
     expect(t).toMatch(/friendly fire/iu);
   });
   it("credits the killer, with the weapon when known", () => {
-    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: "M4-A1" }, SITE)).toBe("💀 **Ann** collected the bounty on **Bob** with M4-A1.");
-    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: null }, SITE)).toBe("💀 **Ann** collected the bounty on **Bob**.");
+    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: "M4-A1", prize: null, prizeState: "unlinked" as const }, SITE)).toBe("💀 **Ann** collected the bounty on **Bob** with M4-A1.");
+    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: null, prize: null, prizeState: "unlinked" as const }, SITE)).toBe("💀 **Ann** collected the bounty on **Bob**.");
+  });
+  it("names the prize on the wanted post, and leaves the line out with none", () => {
+    const t = bountyPostText({ kind: "placed", target: "Bob", reason: "r", hours: 72, prize: { label: "Dead Rooster", days: 14 } }, SITE);
+    expect(t).toContain("🏆 Reward: **Dead Rooster**, respawning every restart at a spot the winner picks for 14 days.");
+    expect(bountyPostText({ kind: "placed", target: "Bob", reason: "r", hours: 72, prize: null }, SITE)).not.toContain("Reward");
+  });
+  it("tells a linked killer they won the prize, and an unlinked one how to claim it", () => {
+    const prize = { label: "Dead Rooster", days: 14 };
+    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: null, prize, prizeState: "granted" as const }, SITE))
+      .toBe("💀 **Ann** collected the bounty on **Bob**. They win **Dead Rooster**.");
+    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: null, prize, prizeState: "unlinked" as const }, SITE))
+      .toBe(`💀 **Ann** collected the bounty on **Bob**. Their **Dead Rooster** is waiting for them. Link your character at ${SITE}/link to claim it.`);
+    // ⚠️ Linked but not granted (a retry, or ops granting by hand): never "they win".
+    expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: null, prize, prizeState: "pending" }, SITE))
+      .toBe("💀 **Ann** collected the bounty on **Bob**. Their **Dead Rooster** is on its way.");
   });
   it("escapes markdown in player-controlled names and reasons", () => {
     expect(bountyPostText({ kind: "expired", target: "**x**" }, SITE)).toContain("\\*\\*x\\*\\*");
@@ -26,8 +41,8 @@ describe("bountyPostText", () => {
   });
   it("⚠️ never carries a coordinate", () => {
     const all = [
-      bountyPostText({ kind: "placed", target: "B", reason: "r", hours: 1 }, SITE),
-      bountyPostText({ kind: "claimed", target: "B", killer: "A", weapon: "AKM" }, SITE),
+      bountyPostText({ kind: "placed", target: "B", reason: "r", hours: 1, prize: null }, SITE),
+      bountyPostText({ kind: "claimed", target: "B", killer: "A", weapon: "AKM", prize: null, prizeState: "unlinked" as const }, SITE),
       bountyPostText({ kind: "expired", target: "B" }, SITE),
       bountyPostText({ kind: "revoked", target: "B" }, SITE),
     ].join(" ");
