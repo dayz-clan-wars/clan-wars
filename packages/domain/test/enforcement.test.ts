@@ -109,6 +109,7 @@ describe("BAN_REASON_TEXT", () => {
     for (const r of BAN_REASONS) expect(BAN_REASON_TEXT[r]).toMatch(/\S/u);
     expect(BAN_REASON_TEXT.zone).toBe("base-zone enforcement");
     expect(BAN_REASON_TEXT.hub_combat).toBe("combat at the Fast Travel Hub");
+    expect(BAN_REASON_TEXT.conduct).toBe("conduct toward other players");
   });
 });
 

@@ -6,6 +6,10 @@ describe("banAnnouncementText", () => {
     expect(banAnnouncementText({ kind: "applied", gamertag: "Ay", reason: "hub_combat", expiresAt: "2026-09-22T13:00:00Z" }))
       .toMatch(/^🔨 \*\*Ay\*\* banned until .+ — combat at the Fast Travel Hub\.$/u);
   });
+  it("applied / conduct, permanent", () => {
+    expect(banAnnouncementText({ kind: "applied", gamertag: "Ay", reason: "conduct", expiresAt: null }))
+      .toBe("🔨 **Ay** banned permanently — conduct toward other players.");
+  });
   it("applied / unlinked_pc: playing on PC without a linked account", () => {
     const a: BanAnnouncement = { kind: "applied", gamertag: "Wolfie", reason: "unlinked_pc", expiresAt: null };
     expect(banAnnouncementText(a))
