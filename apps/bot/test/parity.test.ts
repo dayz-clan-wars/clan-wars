@@ -87,6 +87,10 @@ const PENDING: Record<string, string> = {
   saveAwardPick: "award pick",
   startAwardPlacement: "award place",
   cancelAwardPlacement: "award cancel",
+  // 2026-09-30 award transfers: site-only like the other award actions (spec
+  // "Out of scope"). `/awards give award: to:` is the shape if it is wanted;
+  // `/award` itself is admin-only, so it cannot be a subcommand there.
+  giveAward: "awards give",
 };
 
 /** Every roster export that WRITES. Reads are excluded by name, on purpose, and reviewed when this list changes. */

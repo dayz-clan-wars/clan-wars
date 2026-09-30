@@ -1,17 +1,21 @@
 import type { Database } from "@factions/db";
-import { awardGrants, boosterKitChallenges } from "@factions/db";
+import { awardGrants, awardTransfers, boosterKitChallenges, identityLinks, servers } from "@factions/db";
 import {
-  KIT_PLACEMENT_TTL_MS, awardState, emoteLabel, isAwardPick, isOpenAward, picksComplete, type AwardState,
+  AWARD_PLACE_BY_MS, KIT_PLACEMENT_TTL_MS, awardState, awardTimeLeftMs, emoteLabel, isAwardPick, isOpenAward, picksComplete, type AwardState,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { viewerForDb } from "./viewer";
 import { issuePlacementChallenge } from "./internal/kit-placement-issue";
+import { appendClanNoticeTx } from "./internal/notices";
+import { resolveGamertagLink } from "./writes";
 import type { KitChallenge, KitSpot } from "./booster-kit";
 
 export type AwardSummary = {
   id: number; awardKey: string; label: string; reason: string; state: AwardState;
   placeBy: Date; liveFrom: Date | null; expiresAt: Date | null; durationDays: number;
+  /** Time left when it was last given away; null when never transferred. */
+  remainingMs: number | null;
 };
 export type AwardView = AwardSummary & {
   picks: Record<string, string>;
@@ -34,7 +38,7 @@ function summary(g: Row, now: Date): AwardSummary {
   return {
     id: g.id, awardKey: g.awardKey, label: awardsCatalogue()[g.awardKey]?.label ?? g.awardKey,
     reason: g.reason, state: awardState(g, now), placeBy: g.placeBy, liveFrom: g.liveFrom, expiresAt: g.expiresAt,
-    durationDays: g.durationDays,
+    durationDays: g.durationDays, remainingMs: g.remainingMs,
   };
 }
 
@@ -152,4 +156,69 @@ export async function cancelAwardPlacementDb(db: Database, a: { discordId: strin
     ))
     .returning({ id: boosterKitChallenges.id });
   return closed.length > 0;
+}
+
+export type GiveAwardOutcome =
+  | { ok: true; toGamertag: string }
+  | { ok: false; reason: "not-found" | "ended" | "recipient-not-linked" | "recipient-is-you" | "ambiguous-gamertag" | "no-server" };
+
+/**
+ * Give an award to another linked player (transfers spec §2, §3).
+ *
+ * The award restarts its life with the new owner: a fresh week to place it,
+ * no spot, and its clock paused into `remaining_ms` until the new spot's
+ * first upload stamps it again. Picks carry over.
+ *
+ * ⚠️ `award_grants` FOR UPDATE, then the challenge: the order revoke and
+ * `kitPlacementTick` take them in (CLAUDE.md lock order). The opposite order
+ * deadlocks against the giver's last emote.
+ * ⚠️ Ownership is in the locking WHERE, so another player's grant and a
+ * missing one are the same answer.
+ */
+export async function giveAwardDb(db: Database, a: {
+  discordId: string; grantId: number; toGamertag: string; siteBaseUrl: string; now: Date;
+}): Promise<GiveAwardOutcome> {
+  const name = a.toGamertag.trim();
+  if (!name) return { ok: false, reason: "recipient-not-linked" };
+  const to = await resolveGamertagLink(db, name);
+  if (to === "ambiguous-gamertag") return { ok: false, reason: to };
+  if (!to) return { ok: false, reason: "recipient-not-linked" };
+  if (to.discordId === a.discordId) return { ok: false, reason: "recipient-is-you" };
+  // ⚠️ `clan_notices.server_id` is NOT NULL: the one active server, as grantAwardDb picks it.
+  const [server] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
+  if (!server) return { ok: false, reason: "no-server" };
+  const names = await db.select({ discordId: identityLinks.discordId, gamertag: identityLinks.gamertag })
+    .from(identityLinks).where(inArray(identityLinks.discordId, [a.discordId, to.discordId]));
+  const toGamertag = names.find((n) => n.discordId === to.discordId)?.gamertag ?? name;
+  const fromName = names.find((n) => n.discordId === a.discordId)?.gamertag ?? "Another player";
+
+  return db.transaction(async (tx) => {
+    const [g] = await tx.select().from(awardGrants)
+      .where(and(eq(awardGrants.id, a.grantId), eq(awardGrants.discordId, a.discordId))).for("update");
+    if (!g) return { ok: false, reason: "not-found" } as const;
+    if (!isOpenAward(awardState(g, a.now))) return { ok: false, reason: "ended" } as const;
+    const remainingMs = awardTimeLeftMs(g, a.now);
+    const placeBy = new Date(a.now.getTime() + AWARD_PLACE_BY_MS);
+    await tx.update(awardGrants).set({
+      discordId: to.discordId, placeBy, remainingMs,
+      posX: null, posY: null, posZ: null, placedAt: null, liveFrom: null, expiresAt: null, updatedAt: a.now,
+    }).where(eq(awardGrants.id, g.id));
+    await tx.update(boosterKitChallenges).set({ closedAt: a.now })
+      .where(and(eq(boosterKitChallenges.awardGrantId, g.id), isNull(boosterKitChallenges.closedAt)));
+    await tx.insert(awardTransfers).values({
+      awardGrantId: g.id, fromDiscordId: a.discordId, toDiscordId: to.discordId, transferredAt: a.now, remainingMs,
+    });
+    const label = awardsCatalogue()[g.awardKey]?.label ?? g.awardKey;
+    await appendClanNoticeTx(tx, {
+      serverId: server.id, factionId: null, target: "dm", discordTargetId: to.discordId,
+      kind: "award_received", occurredAt: a.now,
+      payload: { grantId: g.id, awardKey: g.awardKey, label, fromName, placeBy: placeBy.toISOString(), remainingMs, awardUrl: `${a.siteBaseUrl}/awards/${g.id}` },
+    });
+    await appendClanNoticeTx(tx, {
+      serverId: server.id, factionId: null, target: "dm", discordTargetId: a.discordId,
+      kind: "award_given", occurredAt: a.now,
+      payload: { grantId: g.id, awardKey: g.awardKey, label, toName: toGamertag },
+    });
+    return { ok: true, toGamertag } as const;
+  });
 }
