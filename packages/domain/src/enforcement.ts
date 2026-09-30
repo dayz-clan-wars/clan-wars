@@ -93,8 +93,13 @@ export const BAN_MAX_ATTEMPTS = 3;
  * Why a ban exists. ⚠️ Load-bearing: the PC-gate tick lifts a ban when the
  * player starts linking, and without this column it would also lift a ban
  * somebody earned by griefing inside another clan's base.
+ *
+ * `conduct` is an admin's moderation ban (hate speech, doxxing, harassment),
+ * written by hand — no tick produces one. ⚠️ Its wording is public (#bans)
+ * and deliberately says nothing specific: naming the offence can point at
+ * whoever it was aimed at.
  */
-export const BAN_REASONS = ["zone", "unlinked_pc", "hub_combat"] as const;
+export const BAN_REASONS = ["zone", "unlinked_pc", "hub_combat", "conduct"] as const;
 export type BanReason = (typeof BAN_REASONS)[number];
 /**
  * What a ban is FOR, in words a player reads — the ban DM and #bans both use
@@ -104,6 +109,7 @@ export const BAN_REASON_TEXT: Record<BanReason, string> = {
   zone: "base-zone enforcement",
   unlinked_pc: "playing on PC without a linked account",
   hub_combat: "combat at the Fast Travel Hub",
+  conduct: "conduct toward other players",
 };
 
 /**
