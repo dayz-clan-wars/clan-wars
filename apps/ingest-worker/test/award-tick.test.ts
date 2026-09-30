@@ -153,4 +153,30 @@ describe("awardTick", () => {
     await tick(client);
     expect(objects(client.uploaded[0]!).map((o) => o.customString)).toEqual(["Ann", "Ann", "Ann", "Ron", "Ron", "Ron"]);
   });
+
+  it("spawns a weapon kit as the gun, then each extra in order, repeats included", async () => {
+    await seed({ awardKey: "weapon-kit", durationDays: 3, picks: { weapon: "AKM" } });
+    const client = fakeUploader();
+    await tick(client);
+    const objs = objects(client.uploaded[0]!);
+    expect(objs.map((o) => o.name)).toEqual([
+      "AKM", "AK_PlasticBttstck", "AK_PlasticHndgrd", "KobraOptic", "Battery9V", "AK_Suppressor",
+      "Mag_AKM_Drum75Rnd", "Mag_AKM_Drum75Rnd",
+    ]);
+    for (const o of objs) expect(o).toMatchObject({ pos: [100, 5.25, 200], enableCEPersistency: 0, customString: "Ron" });
+  });
+
+  it("drops a weapon kit whose gun left the catalogue, whole, extras and all", async () => {
+    const [g] = await seed({ awardKey: "weapon-kit", durationDays: 3, picks: { weapon: "Retired_Gun" } });
+    const client = fakeUploader();
+    expect(await tick(client)).toMatchObject({ awards: 0, dropped: [g!.id] });
+    expect(client.uploaded).toEqual(['{"Objects":[]}']);
+  });
+
+  it("writes a plate carrier exactly as before: one object per pick, in slot order", async () => {
+    await seed();
+    const client = fakeUploader();
+    await tick(client);
+    expect(objects(client.uploaded[0]!).map((o) => o.name)).toEqual([FULL.vest, FULL.pouches, FULL.holster]);
+  });
 });
