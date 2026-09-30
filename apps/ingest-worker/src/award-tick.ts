@@ -109,8 +109,15 @@ export async function awardTick(db: Database, deps: {
       // reads exactly those two stored lengths.
       const { liveFrom, expiresAt } = awardClockMs(stored.uploadedAt, awardTimeLeftMs(r, deps.now));
       // ⚠️ `live_from IS NULL` in the WHERE: a grant's clock is set once.
+      // ⚠️ And the SAME owner and placement this sweep read and uploaded: a
+      // transfer during the upload clears `live_from` too, and without these
+      // the stamp would start the recipient's clock on an award with no spot,
+      // at the length read before the transfer, losing the pause for good.
       const done = await db.update(awardGrants).set({ liveFrom, expiresAt })
-        .where(and(eq(awardGrants.id, r.id), isNull(awardGrants.liveFrom)))
+        .where(and(
+          eq(awardGrants.id, r.id), isNull(awardGrants.liveFrom),
+          eq(awardGrants.discordId, r.discordId), eq(awardGrants.placedAt, r.placedAt!),
+        ))
         .returning({ id: awardGrants.id });
       stamped += done.length;
     }

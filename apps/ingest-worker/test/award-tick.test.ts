@@ -193,4 +193,21 @@ describe("awardTick", () => {
     const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
     expect(row!.expiresAt!.getTime() - row!.liveFrom!.getTime()).toBe(7 * 86_400_000);
   });
+
+  it("⚠️ never starts the clock on an award given away while its file was uploading", async () => {
+    const [g] = await seed({ remainingMs: 5 * 3_600_000 });
+    // The transfer lands between the worker's read and its stamp, as a give
+    // from the site can during the upload's network round trip.
+    const client = {
+      uploadFile: async () => {
+        await db.update(awardGrants).set({
+          discordId: "2", posX: null, posY: null, posZ: null, placedAt: null, liveFrom: null, expiresAt: null,
+        }).where(eq(awardGrants.id, g!.id));
+      },
+      statFile: async () => null,
+    };
+    await tick(client as never);
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row).toMatchObject({ liveFrom: null, expiresAt: null, remainingMs: 5 * 3_600_000 });
+  });
 });
