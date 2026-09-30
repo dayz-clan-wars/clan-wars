@@ -13,6 +13,8 @@ import { kitSpotView, type KitChallengeView, type KitSpotView } from "./kit-view
 export type AwardPageView = {
   id: number; label: string; reason: string; state: AwardState;
   placeBy: string; liveFrom: string | null; expiresAt: string | null;
+  /** How long it runs once live, fixed at grant. */
+  durationDays: number;
   /** When a placed-but-waiting award will first appear. */
   nextRestartAt: string;
   gamertag: string | null;
@@ -27,6 +29,7 @@ export function awardPageView(v: AwardView, now: Date): AwardPageView {
     placeBy: v.placeBy.toISOString(),
     liveFrom: v.liveFrom?.toISOString() ?? null,
     expiresAt: v.expiresAt?.toISOString() ?? null,
+    durationDays: v.durationDays,
     nextRestartAt: nextRestartAt(now).toISOString(),
     gamertag: v.linked?.gamertag ?? null,
     picks: v.picks,

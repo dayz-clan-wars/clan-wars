@@ -37,5 +37,10 @@
         ]
       }
     }
+  },
+  "booster-kit": {
+    "label": "Booster Kit",
+    "durationDays": 7,
+    "slotsFrom": "booster-catalogue"
   }
 }

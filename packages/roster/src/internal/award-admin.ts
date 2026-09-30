@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { awardGrants, boosterKitChallenges, servers } from "@factions/db";
-import { AWARD_PLACE_BY_MS, awardState, isOpenAward, type AwardDef, type AwardState } from "@factions/domain";
+import { AWARD_MAX_DAYS, AWARD_PLACE_BY_MS, awardState, isOpenAward, type AwardDef, type AwardState } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { and, desc, eq, isNull } from "drizzle-orm";
 import { appendClanNoticeTx } from "./notices";
@@ -8,26 +8,32 @@ import { appendClanNoticeTx } from "./notices";
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 
 export type GrantAwardOutcome =
-  | { ok: true; grantId: number; placeBy: Date }
-  | { ok: false; reason: "unknown-award" | "no-reason" | "no-server" };
+  | { ok: true; grantId: number; placeBy: Date; durationDays: number }
+  | { ok: false; reason: "unknown-award" | "no-reason" | "bad-duration" | "no-server" };
 
 type GrantValidation =
-  | { ok: true; def: AwardDef; reason: string }
-  | { ok: false; reason: "unknown-award" | "no-reason" };
+  | { ok: true; def: AwardDef; reason: string; durationDays: number }
+  | { ok: false; reason: "unknown-award" | "no-reason" | "bad-duration" };
 
 /**
- * The key-and-reason rule stated ONCE (finding I1/I2 of task 10's review): both
+ * The key, reason and duration rule stated ONCE (finding I1/I2 of task 10's review): both
  * `grantAwardDb` (validates before it ever opens a transaction, so a bad key from
  * `/award grant` reports without a server lookup) and `grantAwardTx` (the KotH
  * scorer's own transaction, which has no separate validation step to run first)
  * call this rather than each re-checking the catalogue and the trimmed reason.
  */
-function validateAwardGrant(a: { awardKey: string; reason: string }): GrantValidation {
+function validateAwardGrant(a: { awardKey: string; reason: string; durationDays?: number | null }): GrantValidation {
   const def = awardsCatalogue()[a.awardKey];
   if (!def) return { ok: false, reason: "unknown-award" };
   const reason = a.reason.trim();
   if (!reason) return { ok: false, reason: "no-reason" };
-  return { ok: true, def, reason };
+  // No `days:` is the catalogue's default, not "forever": a grant always
+  // carries a length, and the worker reads it from the row.
+  const durationDays = a.durationDays ?? def.durationDays;
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > AWARD_MAX_DAYS) {
+    return { ok: false, reason: "bad-duration" };
+  }
+  return { ok: true, def, reason, durationDays };
 }
 
 /**
@@ -37,21 +43,23 @@ function validateAwardGrant(a: { awardKey: string; reason: string }): GrantValid
  */
 export async function grantAwardTx(tx: Tx, a: {
   awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date; serverId: number;
+  /** Omitted or null: the catalogue's `durationDays`. */
+  durationDays?: number | null;
 }): Promise<GrantAwardOutcome> {
   const v = validateAwardGrant(a);
   if (!v.ok) return v;
-  const { def, reason } = v;
+  const { def, reason, durationDays } = v;
   const placeBy = new Date(a.now.getTime() + AWARD_PLACE_BY_MS);
   const [row] = await tx.insert(awardGrants).values({
     awardKey: def.key, discordId: a.winnerDiscordId, grantedByDiscordId: a.grantedByDiscordId,
-    reason, grantedAt: a.now, placeBy, updatedAt: a.now,
+    reason, grantedAt: a.now, placeBy, durationDays, updatedAt: a.now,
   }).returning({ id: awardGrants.id });
   await appendClanNoticeTx(tx, {
     serverId: a.serverId, factionId: null, target: "dm", discordTargetId: a.winnerDiscordId,
     kind: "award_granted", occurredAt: a.now,
-    payload: { grantId: row!.id, awardKey: def.key, label: def.label, reason, placeBy: placeBy.toISOString(), awardUrl: `${a.siteBaseUrl}/awards/${row!.id}` },
+    payload: { grantId: row!.id, awardKey: def.key, label: def.label, reason, placeBy: placeBy.toISOString(), durationDays, awardUrl: `${a.siteBaseUrl}/awards/${row!.id}` },
   });
-  return { ok: true, grantId: row!.id, placeBy };
+  return { ok: true, grantId: row!.id, placeBy, durationDays };
 }
 
 /**
@@ -70,6 +78,7 @@ export async function grantAwardTx(tx: Tx, a: {
  */
 export async function grantAwardDb(db: Database, a: {
   awardKey: string; winnerDiscordId: string; grantedByDiscordId: string; reason: string; siteBaseUrl: string; now: Date;
+  durationDays?: number | null;
 }): Promise<GrantAwardOutcome> {
   const v = validateAwardGrant(a);
   if (!v.ok) return v;
@@ -105,7 +114,7 @@ export async function revokeAwardDb(db: Database, a: { grantId: number; now: Dat
 
 export type AwardListRow = {
   id: number; awardKey: string; label: string; discordId: string; reason: string;
-  state: AwardState; placeBy: Date; expiresAt: Date | null;
+  state: AwardState; placeBy: Date; expiresAt: Date | null; durationDays: number;
 };
 
 /**
@@ -123,7 +132,7 @@ export async function listAwardsDb(db: Database, a: { discordId: string | null; 
   return rows
     .map((g) => ({
       id: g.id, awardKey: g.awardKey, label: catalogue[g.awardKey]?.label ?? g.awardKey, discordId: g.discordId,
-      reason: g.reason, state: awardState(g, a.now), placeBy: g.placeBy, expiresAt: g.expiresAt,
+      reason: g.reason, state: awardState(g, a.now), placeBy: g.placeBy, expiresAt: g.expiresAt, durationDays: g.durationDays,
     }))
     .filter((r) => isOpenAward(r.state))
     .slice(0, 25);

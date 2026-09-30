@@ -16,7 +16,7 @@ describe("award tables", () => {
   });
 
   const grant = () => db.insert(awardGrants).values({
-    awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+    awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won", durationDays: 7,
     grantedAt: now, placeBy: new Date("2026-09-29T12:00:00Z"),
   }).returning();
 

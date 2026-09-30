@@ -9,12 +9,25 @@ import { when } from "@/lib/format";
 const def = awardsCatalogue()["plate-carrier"]!;
 const view = (over: Partial<AwardPageView> = {}): AwardPageView => ({
   id: 12, label: "Plate Carrier", reason: "Winner, Sept KOTH", state: "unplaced",
-  placeBy: "2026-09-29T12:00:00.000Z", liveFrom: null, expiresAt: null, nextRestartAt: "2026-09-22T14:00:00.000Z",
+  placeBy: "2026-09-29T12:00:00.000Z", liveFrom: null, expiresAt: null, nextRestartAt: "2026-09-22T14:00:00.000Z", durationDays: 7,
   gamertag: "Ron", picks: {}, spot: null, challenge: null, ...over,
 });
 const render = (v: AwardPageView) => renderToStaticMarkup(createElement(AwardFlow, { initial: v, def }));
 
 describe("the award page", () => {
+  it("says how long the award runs until it goes live, and not after", () => {
+    expect(render(view({ durationDays: 3 }))).toContain("It runs for 3 days once it spawns.");
+    expect(render(view({ state: "waiting", durationDays: 1 }))).toContain("It runs for 1 day once it spawns.");
+    expect(render(view({ state: "live", expiresAt: "2026-09-29T14:00:00.000Z" }))).not.toContain("It runs for");
+  });
+
+  it("lays the booster kit award out as the kit page's nine slots", () => {
+    const kit = awardsCatalogue()["booster-kit"]!;
+    const html = renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Booster Kit" }), def: kit }));
+    for (const s of Object.values(kit.slots)) expect(html).toContain(s.label);
+    expect(Object.keys(kit.slots)).toHaveLength(9);
+  });
+
   it("shows one tile per slot, and holds Place until every slot is picked", () => {
     const html = render(view());
     for (const s of Object.values(def.slots)) expect(html).toContain(s.label);

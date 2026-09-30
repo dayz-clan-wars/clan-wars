@@ -31,6 +31,18 @@ function windowText(ms: number): string {
   return `${h} ${h === 1 ? "hour" : "hours"}`;
 }
 
+/**
+ * How long an award runs, as the tail of the DM's last sentence. The web's
+ * notice-copy.ts has the same phrase; read both when you change either.
+ *
+ * ⚠️ Grants from before `duration_days` carry no length in their payload, and
+ * a queued DM renders from its payload, so the old wording stays the fallback.
+ */
+function awardLength(d: unknown): string {
+  if (typeof d !== "number" || !Number.isInteger(d) || d < 1) return "until the award runs out";
+  return `for ${d === 1 ? "1 day" : `${d} days`} from the first restart it spawns`;
+}
+
 /** "3h 15m" from a count of seconds. */
 export function duration(seconds: number): string {
   const hours = Math.floor(seconds / 3600);
@@ -222,7 +234,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     const reason = typeof p.reason === "string" && p.reason ? ` (${p.reason})` : "";
     return `🏆 You won **${p.label ? String(p.label) : "an award"}**${reason}. `
       + `Choose your gear and mark where it spawns${by ? ` by ${by}` : ""}. `
-      + "It respawns there every restart until the award runs out.";
+      + `It respawns there every restart ${awardLength(p.durationDays)}.`;
   },
   bounty_placed: (p) => {
     const hours = typeof p.hours === "number" ? `${p.hours} h` : "a while";

@@ -45,7 +45,7 @@ describe("the booster kit page's reads and writes", () => {
   it("⚠️ ignores an open AWARD sequence on the same account", async () => {
     await link(); await boost();
     const [g] = await db.insert(awardGrants).values({
-      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won", durationDays: 7,
       grantedAt: now, placeBy: new Date(now.getTime() + 86_400_000),
     }).returning();
     await db.insert(boosterKitChallenges).values({

@@ -11,7 +11,7 @@ import type { KitChallenge, KitSpot } from "./booster-kit";
 
 export type AwardSummary = {
   id: number; awardKey: string; label: string; reason: string; state: AwardState;
-  placeBy: Date; liveFrom: Date | null; expiresAt: Date | null;
+  placeBy: Date; liveFrom: Date | null; expiresAt: Date | null; durationDays: number;
 };
 export type AwardView = AwardSummary & {
   picks: Record<string, string>;
@@ -34,6 +34,7 @@ function summary(g: Row, now: Date): AwardSummary {
   return {
     id: g.id, awardKey: g.awardKey, label: awardsCatalogue()[g.awardKey]?.label ?? g.awardKey,
     reason: g.reason, state: awardState(g, now), placeBy: g.placeBy, liveFrom: g.liveFrom, expiresAt: g.expiresAt,
+    durationDays: g.durationDays,
   };
 }
 

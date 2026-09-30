@@ -1,4 +1,4 @@
-import { KIT_SLOTS, type KitSlot } from "@factions/domain";
+import { KIT_SLOTS, KIT_SLOT_LABELS as SLOT_LABELS, type KitSlot } from "@factions/domain";
 
 /**
  * The booster kit page's copy, in one place, the way base-copy.ts and
@@ -11,35 +11,12 @@ import { KIT_SLOTS, type KitSlot } from "@factions/domain";
  * is defended will pick a worse one.
  */
 
-/** What each of the nine slots is called on the page. Keyed by KIT_SLOTS. */
-export const SLOT_LABELS: Record<KitSlot, string> = {
-  mask: "Mask",
-  eyewear: "Eyewear",
-  hat: "Headgear",
-  jacket: "Jacket",
-  pants: "Pants",
-  boots: "Boots",
-  gloves: "Gloves",
-  hipPack: "Hip pack",
-  backpack: "Backpack",
-};
-
 /**
- * The nine tiles' reading order, which is NOT `KIT_SLOTS`.
- *
- * ⚠️ A separate list on purpose. `KIT_SLOTS` is the write layer's order (the
- * columns on `booster_kits`, the loop every save and every catalogue check
- * runs) and reordering it to suit a grid would silently reorder them all.
- * This is the 3x3 the design lays out: the pieces that decide whether a kit
- * is worth walking to on the top row, the small ones last. kit.test.ts pins
- * it as a permutation of KIT_SLOTS, so a slot can never be dropped from the
- * page by editing only this line.
+ * The slot names and the 3x3 reading order live in `@factions/domain` since the
+ * booster kit became an award too: the award page lays the same nine slots out
+ * from the catalogue, and one statement of each keeps the two pages the same.
  */
-export const KIT_GRID_ORDER = [
-  "jacket", "pants", "backpack",
-  "hipPack", "boots", "gloves",
-  "hat", "mask", "eyewear",
-] as const satisfies readonly KitSlot[];
+export { KIT_SLOT_LABELS as SLOT_LABELS, KIT_GRID_ORDER } from "@factions/domain";
 
 /** The three sentences the page must say plainly, wherever the kit is described. */
 export const GROUND_RULES = [

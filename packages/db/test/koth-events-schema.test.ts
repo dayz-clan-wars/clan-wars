@@ -47,7 +47,7 @@ describe("koth_events", () => {
   // ⚠️ Migration 0051: `awarded` means a prize was granted, so it needs one.
   it("refuses an awarded row with no prize, and allows a finished one", async () => {
     const [g] = await db.insert(awardGrants).values({
-      awardKey: "plate-carrier", discordId: "5", grantedByDiscordId: "1", reason: "t", grantedAt: SLOT, placeBy: SLOT,
+      awardKey: "plate-carrier", discordId: "5", grantedByDiscordId: "1", reason: "t", durationDays: 7, grantedAt: SLOT, placeBy: SLOT,
     }).returning();
     await expect(db.insert(kothEvents).values(row({ state: "awarded", awardGrantId: g!.id, awardKey: null })))
       .rejects.toThrow(/koth_events_awarded_has_prize/u);

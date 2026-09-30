@@ -331,6 +331,15 @@ export const KIT_PLACEMENT_TTL_MS = 1 * HOUR;
  */
 export const AWARD_PLACE_BY_MS = 7 * DAY;
 
+/**
+ * The longest an admin may set an award to run with `/award grant days:`.
+ * Without a `days:` the award's own `durationDays` from awards.json applies.
+ *
+ * ⚠️ A ceiling against a typo, not a design number: `days: 700` for `70`
+ * would hand out a prize that respawns every restart for two years.
+ */
+export const AWARD_MAX_DAYS = 90;
+
 /** A bounty's online time to serve, unless the admin passes `hours:` (spec 2026-09-23-bounties §2.4). */
 export const BOUNTY_DEFAULT_MS = 72 * HOUR;
 /** The most an admin can set. `/bounty place hours:` is capped here. */

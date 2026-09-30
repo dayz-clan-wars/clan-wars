@@ -19,6 +19,8 @@ const OPEN = new Set(["unplaced", "waiting", "live"]);
  * other deadline on the site says.
  */
 const when = (iso: string) => whenUtc(new Date(iso));
+/** Only before it goes live: once it is, "Live until" says the same thing as a date. */
+const runsFor = (days: number) => `It runs for ${days === 1 ? "1 day" : `${days} days`} once it spawns.`;
 
 /**
  * One award's page.
@@ -95,8 +97,9 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
             <div className="font-mono text-[11px] uppercase tracking-[0.14em] text-ink">{state.title}</div>
             <p className="mt-1 text-[13px] leading-relaxed text-ink-2">
               {state.line}{" "}
-              {view.state === "unplaced" && <>Place it by {when(view.placeBy)}.</>}
-              {view.state === "waiting" && <>Next restart: {when(view.nextRestartAt)}.</>}
+              {view.state === "unplaced" && <>Place it by {when(view.placeBy)}. </>}
+              {view.state === "waiting" && <>Next restart: {when(view.nextRestartAt)}. </>}
+              {(view.state === "unplaced" || view.state === "waiting") && <>{runsFor(view.durationDays)}</>}
               {view.state === "live" && view.expiresAt && <>Live until {when(view.expiresAt)}.</>}
             </p>
             {view.spot && (

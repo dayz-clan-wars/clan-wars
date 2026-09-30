@@ -1,4 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
+import { AWARD_MAX_DAYS } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { grantAwardDb, revokeAwardDb, listAwardsDb, type AwardListRow } from "@factions/roster/internal";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
@@ -17,13 +18,18 @@ const STATE: Record<AwardListRow["state"], string> = {
   lapsed: "lapsed", expired: "expired", revoked: "revoked",
 };
 
-/** "#12 Plate Carrier — <@1> — live until <t:…:f>". The `<@…>` renders only in the reply, not in autocomplete. */
+/** Room for the list, leaving space under 2000 for the "and N more" line. */
+const LIST_BUDGET = 1900;
+
+const days = (n: number) => (n === 1 ? "1 day" : `${n} days`);
+
+/** "#12 Plate Carrier (7 days): <@1>, live until <t:…:f>". The `<@…>` renders only in the reply, not in autocomplete. */
 function summarize(r: AwardListRow, mention: boolean): string {
   const who = mention ? `<@${r.discordId}>` : r.discordId;
   const until = r.state === "live" && r.expiresAt
     ? ` until <t:${Math.floor(r.expiresAt.getTime() / 1000)}:f>`
     : r.state === "unplaced" ? ` (place by <t:${Math.floor(r.placeBy.getTime() / 1000)}:f>)` : "";
-  return `#${r.id} ${r.label}: ${who}, ${STATE[r.state]}${mention ? until : ""}`;
+  return `#${r.id} ${r.label} (${days(r.durationDays)}): ${who}, ${STATE[r.state]}${mention ? until : ""}`;
 }
 
 /**
@@ -41,17 +47,20 @@ async function grant(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const out = await grantAwardDb(ctx.db, {
     awardKey: input.string("award") ?? "", winnerDiscordId: winner, grantedByDiscordId: input.actorDiscordId,
     reason: input.string("reason") ?? "", siteBaseUrl: ctx.siteBaseUrl, now: ctx.now,
+    // Null when the admin left `days:` out: the award's own default applies.
+    durationDays: input.integer("days"),
   });
   if (!out.ok) {
     return reply({
       "unknown-award": `${input.string("award") ?? "That"} is not an award. Pick one from the list.`,
       "no-reason": "Say what they won it for. It goes in their DM.",
+      "bad-duration": `Days must be a whole number from 1 to ${AWARD_MAX_DAYS}.`,
       "no-server": "There is no active server to spawn it on.",
     }[out.reason]);
   }
   console.log(`award: ${input.actorDiscordId} granted #${out.grantId} ${input.string("award")} to ${winner}`);
   return reply([
-    `Granted **${AWARDS[input.string("award")!]!.label}** to <@${winner}> as #${out.grantId}.`,
+    `Granted **${AWARDS[input.string("award")!]!.label}** to <@${winner}> as #${out.grantId}, for ${days(out.durationDays)} once it spawns.`,
     `They have until <t:${Math.floor(out.placeBy.getTime() / 1000)}:f> to place it. A DM with the link is on its way.`,
   ].join("\n"));
 }
@@ -70,7 +79,18 @@ async function list(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (!input.isAdmin) return ADMIN_ONLY;
   const rows = await listAwardsDb(ctx.db, { discordId: input.user("user"), now: ctx.now });
   if (rows.length === 0) return reply("There are no open awards.");
-  return reply(rows.map((r) => summarize(r, true)).join("\n"));
+  // ⚠️ Discord refuses a reply over 2000 characters, and 25 rows can pass it.
+  // Whole lines only, with a count of what was cut, never a line cut in half.
+  const lines = rows.map((r) => summarize(r, true));
+  const shown: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    if (length + line.length + 1 > LIST_BUDGET) break;
+    shown.push(line);
+    length += line.length + 1;
+  }
+  if (shown.length < lines.length) shown.push(`…and ${lines.length - shown.length} more. Narrow it with user:.`);
+  return reply(shown.join("\n"));
 }
 
 /** Discord gives autocomplete 3 seconds and 25 choices; `listAwardsDb` is one indexed read capped at 25. */
@@ -95,7 +115,12 @@ export const awardGroup: CommandGroup = {
         .setName("award").setDescription("Which award").setRequired(true)
         .addChoices(...Object.values(AWARDS).map((d) => ({ name: d.label, value: d.key }))))
       .addStringOption((o) => o
-        .setName("reason").setDescription("What they won it for; shown in their DM").setRequired(true).setMaxLength(200)))
+        .setName("reason").setDescription("What they won it for; shown in their DM").setRequired(true).setMaxLength(200))
+      // ⚠️ Optional, and optional options must follow required ones or
+      // Discord rejects the whole command at registration.
+      .addIntegerOption((o) => o
+        .setName("days").setDescription("How many days it runs once it spawns (default: the award's own)")
+        .setRequired(false).setMinValue(1).setMaxValue(AWARD_MAX_DAYS)))
     .addSubcommand((c) => c
       .setName("revoke").setDescription("Take an award back")
       .addStringOption((o) => o.setName("grant").setDescription("Which grant").setRequired(true).setAutocomplete(true)))
