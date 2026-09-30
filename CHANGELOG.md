@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.53.0] - 2026-09-30
+
 ### Added
 
 - Admins can now ban a player for their conduct toward other players, such as hate speech or harassment. These bans are posted in #bans like any other.
