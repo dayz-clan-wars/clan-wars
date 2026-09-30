@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { awardGrants, boosterKitChallenges, servers } from "@factions/db";
+import { awardGrants, awardTransfers, boosterKitChallenges, servers } from "@factions/db";
 import { AWARD_MAX_DAYS, AWARD_PLACE_BY_MS, awardState, isOpenAward, type AwardDef, type AwardState } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull } from "drizzle-orm";
 import { appendClanNoticeTx } from "./notices";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -144,6 +144,8 @@ export async function revokeAwardDb(db: Database, a: { grantId: number; now: Dat
 export type AwardListRow = {
   id: number; awardKey: string; label: string; discordId: string; reason: string;
   state: AwardState; placeBy: Date; expiresAt: Date | null; durationDays: number;
+  /** Who last gave it away, by Discord id; null when never transferred. */
+  givenBy: string | null;
 };
 
 /**
@@ -158,13 +160,20 @@ export async function listAwardsDb(db: Database, a: { discordId: string | null; 
     .where(and(isNull(awardGrants.revokedAt), a.discordId ? eq(awardGrants.discordId, a.discordId) : undefined))
     .orderBy(desc(awardGrants.id)).limit(200);
   const catalogue = awardsCatalogue();
-  return rows
+  const open = rows
     .map((g) => ({
       id: g.id, awardKey: g.awardKey, label: catalogue[g.awardKey]?.label ?? g.awardKey, discordId: g.discordId,
       reason: g.reason, state: awardState(g, a.now), placeBy: g.placeBy, expiresAt: g.expiresAt, durationDays: g.durationDays,
     }))
     .filter((r) => isOpenAward(r.state))
     .slice(0, 25);
+  if (open.length === 0) return [];
+  // Newest transfer per grant wins: ordered by id, the last write for a grant
+  // overwrites the earlier ones in the map.
+  const transfers = await db.select({ grantId: awardTransfers.awardGrantId, from: awardTransfers.fromDiscordId })
+    .from(awardTransfers).where(inArray(awardTransfers.awardGrantId, open.map((r) => r.id))).orderBy(awardTransfers.id);
+  const givenBy = new Map(transfers.map((t) => [t.grantId, t.from]));
+  return open.map((r) => ({ ...r, givenBy: givenBy.get(r.id) ?? null }));
 }
 
 /**

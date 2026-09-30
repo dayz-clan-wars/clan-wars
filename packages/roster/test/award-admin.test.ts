@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, awardGrants, clanNotices, boosterKitChallenges, identityLinks, players, type Database,
+  servers, awardGrants, awardTransfers, clanNotices, boosterKitChallenges, identityLinks, players, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { grantAwardDb, revokeAwardDb, listAwardsDb, removeFromGuildDb } from "../src/internal/index";
@@ -17,7 +17,7 @@ describe("award administration", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table award_grants, booster_kit_challenges, clan_notices, identity_links, players, servers restart identity cascade`);
+      await tx.execute(sql`truncate table award_transfers, award_grants, booster_kit_challenges, clan_notices, identity_links, players, servers restart identity cascade`);
     });
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true });
   });
@@ -25,6 +25,22 @@ describe("award administration", () => {
   const grant = (over: Partial<Parameters<typeof grantAwardDb>[1]> = {}) => grantAwardDb(db, {
     awardKey: "plate-carrier", winnerDiscordId: "1", grantedByDiscordId: "9",
     reason: "Winner, Sept king-of-the-hill", siteBaseUrl: "https://dayzclanwars.com", now, ...over,
+  });
+
+  it("lists who last gave each award away", async () => {
+    const out = await grant();
+    if (!out.ok) throw new Error("grant failed");
+    await db.insert(awardTransfers).values([
+      { awardGrantId: out.grantId, fromDiscordId: "5", toDiscordId: "6", transferredAt: now, remainingMs: 1 },
+      { awardGrantId: out.grantId, fromDiscordId: "6", toDiscordId: "1", transferredAt: new Date(now.getTime() + 1), remainingMs: 1 },
+    ]);
+    const [r] = await listAwardsDb(db, { discordId: null, now });
+    expect(r!.givenBy).toBe("6");
+  });
+
+  it("lists givenBy as null for an award never transferred", async () => {
+    await grant();
+    expect((await listAwardsDb(db, { discordId: null, now }))[0]!.givenBy).toBeNull();
   });
 
   it("writes the grant and its DM in one go, with a 7-day placement deadline", async () => {
