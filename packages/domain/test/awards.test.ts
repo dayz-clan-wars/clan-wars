@@ -44,10 +44,21 @@ describe("loadAwards", () => {
     ["a duplicate label in a slot", (j: any) => { j["plate-carrier"].slots.vest.items.push({ className: "PlateCarrierVest", label: "Plate Carrier (Black)" }); }, /label/],
     ["an image path not named after the class", (j: any) => { j["plate-carrier"].slots.vest.items[0].image = "items/Other.webp"; }, /PlateCarrierVest_Black/],
     ["a missing label on the award", (j: any) => { delete j["plate-carrier"].label; }, /label/],
+    ["extras that is not an array", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = "Mag_STANAG_30Rnd"; }, /extras/],
+    ["an empty extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = []; }, /extras/],
+    ["a non-string in extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = [7]; }, /extras/],
+    ["an empty string in extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = [""]; }, /extras/],
   ])("throws on %s", (_name, mutate, pattern) => {
     const j = clone();
     mutate(j);
     expect(() => loadAwards(j)).toThrow(pattern);
+  });
+
+  it("keeps extras, repeats included, and does not count them as duplicate class names", () => {
+    const j = clone();
+    j["plate-carrier"].slots.vest.items[0].extras = ["Mag_STANAG_30Rnd", "Mag_STANAG_30Rnd", "PlateCarrierHolster_Black"];
+    const item = loadAwards(j)["plate-carrier"]!.slots.vest!.items[0]!;
+    expect(item.extras).toEqual(["Mag_STANAG_30Rnd", "Mag_STANAG_30Rnd", "PlateCarrierHolster_Black"]);
   });
 });
 

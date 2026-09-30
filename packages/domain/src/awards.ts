@@ -3,7 +3,7 @@ import { nextRestartAt } from "./restarts";
 
 const DAY_MS = 86_400_000;
 
-export type AwardItem = { className: string; label: string; image?: string };
+export type AwardItem = { className: string; label: string; image?: string; extras?: string[] };
 export type AwardSlot = { label: string; items: AwardItem[] };
 export type AwardDef = { key: string; label: string; durationDays: number; slots: Record<string, AwardSlot> };
 export type Awards = Record<string, AwardDef>;
@@ -58,6 +58,15 @@ export function loadAwards(json: unknown): Awards {
         labels.add(item.label);
         if (item.image !== undefined && item.image !== `items/${item.className}.webp`) {
           throw new Error(`awards: ${item.className} has image ${String(item.image)}, expected items/${item.className}.webp`);
+        }
+        // Class names spawned beside the pick (a gun's mags and parts). Repeats
+        // are how a loadout gets two mags, so they are allowed here and never
+        // added to `names`. ⚠️ Empty is refused rather than read as "none":
+        // leave the field out instead, so there is one way to say it.
+        if (item.extras !== undefined
+          && (!Array.isArray(item.extras) || item.extras.length === 0
+            || !item.extras.every((x: unknown) => typeof x === "string" && x !== ""))) {
+          throw new Error(`awards: ${item.className} extras must be a non-empty list of class names`);
         }
       }
     }
