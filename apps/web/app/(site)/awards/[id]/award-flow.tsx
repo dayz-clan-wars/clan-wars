@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AwardDef, AwardItem } from "@factions/domain";
+import { comesWith } from "@/lib/award-parts";
 import { lookupCopy } from "@/lib/copy-lookup";
 import { when as whenUtc } from "@/lib/format";
 import { GROUND_RULES, RESULT_COPY, STATE_COPY } from "@/lib/award-copy";
@@ -134,12 +135,20 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
                   <span className="font-mono text-[11px] uppercase tracking-[0.1em] text-muted">{s.label}</span>
                   {e?.image
                     ? <img src={`/${e.image}`} alt="" className="my-1.5 h-[62px] w-full object-contain lg:h-24" />
-                    : <span className="my-1.5 flex h-[62px] items-center justify-center text-xl text-rule-3 lg:h-24" aria-hidden="true">+</span>}
+                    // ⚠️ "+" means empty. A picked item with no art (the weapon
+                    // kit's guns) keeps the tile's height but shows no "+".
+                    : <span className="my-1.5 flex h-[62px] items-center justify-center text-xl text-rule-3 lg:h-24" aria-hidden="true">{e ? "" : "+"}</span>}
                   <span className={`mt-auto block text-[11px] leading-tight lg:text-[13px] ${e ? "text-ink" : "text-dim"}`}>{e ? e.label : "Pick one"}</span>
                 </button>
               );
             })}
           </div>
+          {slots.map(([slot]) => {
+            const e = entry(slot);
+            return e?.extras
+              ? <p key={slot} className="mt-3 max-w-[34rem] text-[13px] leading-relaxed text-ink-2">Comes with: {comesWith(e.extras)}</p>
+              : null;
+          })}
 
           {isOpen && view.gamertag !== null && !view.challenge && (
             // ⚠️ Disabled, not hidden, until every piece is picked: the button

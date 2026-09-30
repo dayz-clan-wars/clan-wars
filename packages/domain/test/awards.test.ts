@@ -44,10 +44,21 @@ describe("loadAwards", () => {
     ["a duplicate label in a slot", (j: any) => { j["plate-carrier"].slots.vest.items.push({ className: "PlateCarrierVest", label: "Plate Carrier (Black)" }); }, /label/],
     ["an image path not named after the class", (j: any) => { j["plate-carrier"].slots.vest.items[0].image = "items/Other.webp"; }, /PlateCarrierVest_Black/],
     ["a missing label on the award", (j: any) => { delete j["plate-carrier"].label; }, /label/],
+    ["extras that is not an array", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = "Mag_STANAG_30Rnd"; }, /extras/],
+    ["an empty extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = []; }, /extras/],
+    ["a non-string in extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = [7]; }, /extras/],
+    ["an empty string in extras", (j: any) => { j["plate-carrier"].slots.vest.items[0].extras = [""]; }, /extras/],
   ])("throws on %s", (_name, mutate, pattern) => {
     const j = clone();
     mutate(j);
     expect(() => loadAwards(j)).toThrow(pattern);
+  });
+
+  it("keeps extras, repeats included, and does not count them as duplicate class names", () => {
+    const j = clone();
+    j["plate-carrier"].slots.vest.items[0].extras = ["Mag_STANAG_30Rnd", "Mag_STANAG_30Rnd", "PlateCarrierHolster_Black"];
+    const item = loadAwards(j)["plate-carrier"]!.slots.vest!.items[0]!;
+    expect(item.extras).toEqual(["Mag_STANAG_30Rnd", "Mag_STANAG_30Rnd", "PlateCarrierHolster_Black"]);
   });
 });
 
@@ -143,5 +154,40 @@ describe("inAwardFile", () => {
     const g = { ...placed, liveFrom: t("2026-09-22T14:00:00Z"), expiresAt };
     expect(inAwardFile(g, new Date(expiresAt.getTime() - AWARD_REMOVAL_LEAD_MS - 1))).toBe(true);
     expect(inAwardFile(g, new Date(expiresAt.getTime() - AWARD_REMOVAL_LEAD_MS))).toBe(false);
+  });
+});
+
+describe("the weapon kit award", () => {
+  const kit = awardsCatalogue()["weapon-kit"]!;
+
+  it("is one Weapon slot, 3 days by default", () => {
+    expect(kit.label).toBe("Weapon Kit");
+    expect(kit.durationDays).toBe(3);
+    expect(Object.keys(kit.slots)).toEqual(["weapon"]);
+    expect(kit.slots.weapon!.label).toBe("Weapon");
+  });
+
+  // ⚠️ The loadouts the owner signed off on one by one (spec §3). A change
+  // here is a balance change, so it has to be made on purpose.
+  it("has the twelve signed-off loadouts", () => {
+    const loadouts = Object.fromEntries(kit.slots.weapon!.items.map((i) => [i.className, i.extras]));
+    expect(loadouts).toEqual({
+      M4A1_Green: ["M4_OEBttstck", "M4_RISHndgrd_Green", "ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
+      M16A2: ["M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
+      AKM: ["AK_PlasticBttstck", "AK_PlasticHndgrd", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AKM_Drum75Rnd", "Mag_AKM_Drum75Rnd"],
+      AK101_Green: ["AK_FoldingBttstck_Green", "AK_RailHndgrd_Green", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AK101_30Rnd", "Mag_AK101_30Rnd"],
+      AK74_Green: ["AK_PlasticBttstck_Green", "AK_RailHndgrd_Green", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AK74_45Rnd", "Mag_AK74_45Rnd"],
+      FAL: ["Fal_OeBttstck", "ACOGOptic_6x", "Mag_FAL_20Rnd", "Mag_FAL_20Rnd"],
+      SCARH: ["SCAR_PrecisionBttstck", "ACOGOptic_6x", "Mag_SCARH_20Rnd", "Mag_SCARH_20Rnd"],
+      Aug: ["ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
+      ASVAL: ["ACOGOptic_6x", "Mag_Vikhr_30Rnd", "Mag_Vikhr_30Rnd"],
+      SVD: ["PSO6Optic", "Battery9V", "AK_Suppressor", "Mag_SVD_10Rnd", "Mag_SVD_10Rnd"],
+      M14: ["MK4Optic_black", "Mag_M14_20Rnd", "Mag_M14_20Rnd"],
+      SV98: ["MK4Optic_black", "Mag_SV98_10Rnd", "Mag_SV98_10Rnd"],
+    });
+  });
+
+  it("has art for every gun", () => {
+    for (const i of kit.slots.weapon!.items) expect(i.image).toBe(`items/${i.className}.webp`);
   });
 });

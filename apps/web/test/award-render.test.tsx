@@ -39,6 +39,20 @@ describe("the award page", () => {
     expect(html).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
   });
 
+  it("says what a picked weapon comes with, and nothing before a pick", () => {
+    const kit = awardsCatalogue()["weapon-kit"]!;
+    const at = (picks: Record<string, string>) =>
+      renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Weapon Kit", durationDays: 3, picks }), def: kit }));
+    expect(at({ weapon: "AKM" })).toContain("Comes with: AK plastic buttstock, AK plastic handguard, Kobra sight, 9V battery, AK suppressor, 2× 75-round AKM drum");
+    expect(at({})).not.toContain("Comes with");
+  });
+
+  it("does not show the empty-slot + on a picked item with no art", () => {
+    const kit = awardsCatalogue()["weapon-kit"]!;
+    const html = renderToStaticMarkup(createElement(AwardFlow, { initial: view({ picks: { weapon: "AKM" } }), def: kit }));
+    expect(html).not.toMatch(/aria-hidden="true">\+</u);
+  });
+
   it("sends an unlinked winner to /link", () => {
     expect(render(view({ gamertag: null }))).toContain('href="/link"');
   });

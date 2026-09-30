@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A new event award: the Weapon Kit. The winner picks one of twelve guns, and it spawns fully kitted with two full mags. It runs for 3 days by default.
+
 ## [1.55.0] - 2026-09-30
 
 ### Added

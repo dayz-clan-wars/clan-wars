@@ -76,7 +76,14 @@ export async function awardTick(db: Database, deps: {
   const list: BoosterKit[] = included.map((r) => ({
     discordId: r.discordId, gamertag: r.gamertag, texture: null,
     x: Number(r.posX), y: Number(r.posY), z: Number(r.posZ),
-    items: Object.keys(AWARDS[r.awardKey]!.slots).map((slot) => r.picks[slot]!),
+    // Each pick spawns with its extras (a gun's parts and mags), gun first.
+    // `complete` has already checked every pick is in the catalogue, so the
+    // lookups cannot miss. An item with no extras writes exactly one object,
+    // so every award before the weapon kit produces the same bytes as before.
+    items: Object.entries(AWARDS[r.awardKey]!.slots).flatMap(([slot, s]) => {
+      const pick = r.picks[slot]!;
+      return [pick, ...(s.items.find((i) => i.className === pick)!.extras ?? [])];
+    }),
   }));
   const content = generateBoosterKits(list);
 
