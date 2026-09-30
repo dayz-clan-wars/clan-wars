@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, awardGrants, awardUploads, identityLinks, type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { awardTick } from "../src/award-tick.js";
 
 const DB_URL = requireTestDatabaseUrl();
@@ -178,5 +178,19 @@ describe("awardTick", () => {
     const client = fakeUploader();
     await tick(client);
     expect(objects(client.uploaded[0]!).map((o) => o.name)).toEqual([FULL.vest, FULL.pouches, FULL.holster]);
+  });
+
+  it("⚠️ resumes a transferred award with the time it had left, not its full length", async () => {
+    const [g] = await seed({ remainingMs: 5 * 3_600_000 });
+    await tick();
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row!.expiresAt!.getTime() - row!.liveFrom!.getTime()).toBe(5 * 3_600_000);
+  });
+
+  it("runs an award never transferred for its full length, as before", async () => {
+    const [g] = await seed({ durationDays: 7 });
+    await tick();
+    const [row] = await db.select().from(awardGrants).where(eq(awardGrants.id, g!.id));
+    expect(row!.expiresAt!.getTime() - row!.liveFrom!.getTime()).toBe(7 * 86_400_000);
   });
 });
