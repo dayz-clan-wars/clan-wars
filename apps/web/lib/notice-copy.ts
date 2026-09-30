@@ -1,4 +1,4 @@
-import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
+import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
 
 /**
@@ -280,6 +280,19 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
     // ⚠️ The grant id, never the payload's absolute URL: the page renders its
     // own links, and a bare URL in notice copy is banned (notice-copy.test).
     cta: { label: "Configure your award", href: typeof p.grantId === "number" ? `/awards/${p.grantId}` : "/awards" },
+  }) },
+  award_received: { group: "Roster", render: (p) => ({
+    kicker: "Award",
+    title: `${p.fromName ? String(p.fromName) : "Another player"} gave you ${p.label ? String(p.label) : "an award"}`,
+    body: `Choose your gear and mark where it spawns${dateOf(p.placeBy) ? ` by ${dateOf(p.placeBy)}` : ""}.`
+      + (typeof p.remainingMs === "number" ? ` It has ${timeLeftText(p.remainingMs)} left, and the clock starts once it spawns.` : ""),
+    // ⚠️ The grant id, never the payload's URL: see award_granted.
+    cta: { label: "Configure your award", href: typeof p.grantId === "number" ? `/awards/${p.grantId}` : "/awards" },
+  }) },
+  award_given: { group: "Roster", render: (p) => ({
+    kicker: "Award",
+    title: `You gave away ${p.label ? String(p.label) : "an award"}`,
+    body: `It belongs to ${p.toName ? String(p.toName) : "another player"} now.`,
   }) },
   ban_applied: { group: "Enforcement", render: (p) => ({
     kicker: "Ban",

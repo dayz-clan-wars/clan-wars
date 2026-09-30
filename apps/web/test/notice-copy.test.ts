@@ -150,6 +150,19 @@ describe("notice copy", () => {
     expect(c.cta).toEqual({ label: "Configure your award", href: "/awards/12" });
   });
 
+  it("award_received names the giver and the time left, and links to the award", () => {
+    const c = noticeCopy("award_received", { grantId: 12, label: "Weapon Kit", fromName: "Ron", placeBy: "2026-10-07T12:00:00.000Z", remainingMs: 5 * 3_600_000 }, "dm");
+    expect(c.title).toBe("Ron gave you Weapon Kit");
+    expect(c.body).toContain("It has 5 hours left, and the clock starts once it spawns.");
+    expect(c.cta).toEqual({ label: "Configure your award", href: "/awards/12" });
+  });
+
+  it("award_given says who has it now", () => {
+    const c = noticeCopy("award_given", { grantId: 12, label: "Weapon Kit", toName: "Ann" }, "dm");
+    expect(c.title).toBe("You gave away Weapon Kit");
+    expect(c.body).toBe("It belongs to Ann now.");
+  });
+
   it("award_granted says how long it runs, and keeps the old wording without a length", () => {
     expect(noticeCopy("award_granted", { grantId: 1, durationDays: 5 }, "dm").body).toContain("every restart for 5 days from the first restart it spawns.");
     expect(noticeCopy("award_granted", { grantId: 1 }, "dm").body).toContain("every restart until the award runs out.");
