@@ -40,6 +40,30 @@ describe("award administration", () => {
     });
   });
 
+  it("stores the catalogue's duration when no days are given, and puts it in the DM", async () => {
+    expect(await grant()).toMatchObject({ ok: true, durationDays: 7 });
+    const [g] = await db.select().from(awardGrants);
+    expect(g!.durationDays).toBe(7);
+    expect((await db.select().from(clanNotices))[0]!.payload).toMatchObject({ durationDays: 7 });
+  });
+
+  it("stores an admin's days instead of the default", async () => {
+    expect(await grant({ durationDays: 3 })).toMatchObject({ ok: true, durationDays: 3 });
+    expect((await db.select().from(awardGrants))[0]!.durationDays).toBe(3);
+    expect(await grant({ durationDays: null })).toMatchObject({ ok: true, durationDays: 7 });
+  });
+
+  it.each([0, -1, 1.5, 91])("refuses %s days, and writes nothing", async (d) => {
+    expect(await grant({ durationDays: d })).toEqual({ ok: false, reason: "bad-duration" });
+    expect(await db.select().from(awardGrants)).toEqual([]);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+  });
+
+  it("grants the booster kit as an award", async () => {
+    expect(await grant({ awardKey: "booster-kit" })).toMatchObject({ ok: true, durationDays: 7 });
+    expect((await db.select().from(clanNotices))[0]!.payload).toMatchObject({ awardKey: "booster-kit", label: "Booster Kit" });
+  });
+
   it("refuses an award key that is not in the catalogue, and writes nothing", async () => {
     expect(await grant({ awardKey: "golden-shovel" })).toEqual({ ok: false, reason: "unknown-award" });
     expect(await db.select().from(awardGrants)).toEqual([]);

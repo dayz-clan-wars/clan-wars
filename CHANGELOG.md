@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The Booster Kit can now be won as an event award. The winner picks all nine pieces, just like on the kit page, and it respawns at their spot every restart while the award runs.
+- Admins can now set how many days an award runs when they grant it. If they don't, it runs for the award's usual length, which is 7 days for both the Plate Carrier and the Booster Kit. Your award DM and award page now say how long it runs.
+
 ## [1.53.0] - 2026-09-30
 
 ### Added

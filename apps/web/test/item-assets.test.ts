@@ -44,7 +44,9 @@ describe("item images match the catalogue", () => {
   });
 
   it("there is one per catalogue entry", () => {
-    expect(files).toHaveLength(entries.length);
+    // By class name: the booster-kit award lists the kit's own items, so a
+    // file serves both entries.
+    expect(files).toHaveLength(new Set(entries.map((e) => e.className)).size);
   });
 
   it("⚠️ every image was actually normalised, not committed raw", () => {

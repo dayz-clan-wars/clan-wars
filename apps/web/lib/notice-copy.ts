@@ -18,6 +18,16 @@ import type { NoticePayload } from "@factions/roster";
  * renderers are what keep them out of the page.
  */
 
+/**
+ * How long an award runs. The bot's notice-text.ts has the same phrase; read
+ * both when you change either. A notice from before `duration_days` has no
+ * length in its payload, so it keeps the old wording.
+ */
+function awardLength(d: unknown): string {
+  if (typeof d !== "number" || !Number.isInteger(d) || d < 1) return "until the award runs out";
+  return `for ${d === 1 ? "1 day" : `${d} days`} from the first restart it spawns`;
+}
+
 export const NOTICE_GROUPS = ["Roster", "Raid", "Base", "Leadership", "Achievement", "Enforcement", "Dormancy", "Rebind"] as const;
 export type NoticeGroup = (typeof NOTICE_GROUPS)[number];
 
@@ -266,7 +276,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   award_granted: { group: "Roster", render: (p) => ({
     kicker: "Award",
     title: `You won ${p.label ? String(p.label) : "an award"}`,
-    body: `${p.reason ? `${String(p.reason)}. ` : ""}Choose your gear and mark where it spawns${dateOf(p.placeBy) ? ` by ${dateOf(p.placeBy)}` : ""}. It respawns there every restart until the award runs out.`,
+    body: `${p.reason ? `${String(p.reason)}. ` : ""}Choose your gear and mark where it spawns${dateOf(p.placeBy) ? ` by ${dateOf(p.placeBy)}` : ""}. It respawns there every restart ${awardLength(p.durationDays)}.`,
     // ⚠️ The grant id, never the payload's absolute URL: the page renders its
     // own links, and a bare URL in notice copy is banned (notice-copy.test).
     cta: { label: "Configure your award", href: typeof p.grantId === "number" ? `/awards/${p.grantId}` : "/awards" },

@@ -1430,12 +1430,22 @@ export const awardGrants = pgTable("award_grants", {
   placedAt: timestamp("placed_at", { withTimezone: true }),
   grantedAt: timestamp("granted_at", { withTimezone: true }).notNull(),
   placeBy: timestamp("place_by", { withTimezone: true }).notNull(),
+  /**
+   * How long the award runs once live, fixed at grant: the admin's `days:`, or
+   * the catalogue's `durationDays` when they gave none.
+   *
+   * ⚠️ Stored, never re-read from awards.json at stamping time: changing an
+   * award's default must not change a prize someone has already been told
+   * about, and a `days:` override has nowhere else to live.
+   */
+  durationDays: integer("duration_days").notNull(),
   liveFrom: timestamp("live_from", { withTimezone: true }),
   expiresAt: timestamp("expires_at", { withTimezone: true }),
   revokedAt: timestamp("revoked_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   byOwner: index("award_grants_discord_idx").on(t.discordId),
+  durationPositive: check("award_grants_duration_positive", sql`${t.durationDays} > 0`),
 }));
 
 /** Same columns as supply_uploads, so storeFor() serves it. Its own table so the award file's hash and baseline cannot cross the booster file's. */

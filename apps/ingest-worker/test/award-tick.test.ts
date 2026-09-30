@@ -35,7 +35,7 @@ describe("awardTick", () => {
   });
 
   const seed = (over: Record<string, unknown> = {}) => db.insert(awardGrants).values({
-    awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+    awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won", durationDays: 7,
     grantedAt: now, placeBy: new Date("2026-09-29T00:00:00Z"), picks: FULL,
     posX: "100.00", posY: "5.00", posZ: "200.00", placedAt: now, ...over,
   }).returning();
@@ -64,6 +64,16 @@ describe("awardTick", () => {
     const [g] = await db.select().from(awardGrants);
     expect(g!.liveFrom!.toISOString()).toBe("2026-09-22T14:00:00.000Z");
     expect(g!.expiresAt!.toISOString()).toBe("2026-09-29T14:00:00.000Z");
+  });
+
+  // ⚠️ The row's length, not the catalogue's: a `/award grant days:` override
+  // would otherwise be written and then ignored.
+  it("stamps the grant's own duration, not the catalogue default", async () => {
+    await seed({ durationDays: 3 });
+    await tick();
+    const [g] = await db.select().from(awardGrants);
+    expect(g!.liveFrom!.toISOString()).toBe("2026-09-22T14:00:00.000Z");
+    expect(g!.expiresAt!.toISOString()).toBe("2026-09-25T14:00:00.000Z");
   });
 
   it("⚠️ does not stamp when the upload throws", async () => {

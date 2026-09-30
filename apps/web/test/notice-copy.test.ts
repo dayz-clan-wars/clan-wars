@@ -150,6 +150,11 @@ describe("notice copy", () => {
     expect(c.cta).toEqual({ label: "Configure your award", href: "/awards/12" });
   });
 
+  it("award_granted says how long it runs, and keeps the old wording without a length", () => {
+    expect(noticeCopy("award_granted", { grantId: 1, durationDays: 5 }, "dm").body).toContain("every restart for 5 days from the first restart it spawns.");
+    expect(noticeCopy("award_granted", { grantId: 1 }, "dm").body).toContain("every restart until the award runs out.");
+  });
+
   it("falls back to the awards list when the payload has no grant id", () => {
     expect(noticeCopy("award_granted", {}, "dm").cta).toEqual({ label: "Configure your award", href: "/awards" });
   });

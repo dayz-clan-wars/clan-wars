@@ -7,6 +7,36 @@
 export const KIT_SLOTS = ["mask", "eyewear", "hat", "jacket", "pants", "boots", "gloves", "hipPack", "backpack"] as const;
 export type KitSlot = (typeof KIT_SLOTS)[number];
 
+/** What each of the nine slots is called on the page. Keyed by KIT_SLOTS. */
+export const KIT_SLOT_LABELS: Record<KitSlot, string> = {
+  mask: "Mask",
+  eyewear: "Eyewear",
+  hat: "Headgear",
+  jacket: "Jacket",
+  pants: "Pants",
+  boots: "Boots",
+  gloves: "Gloves",
+  hipPack: "Hip pack",
+  backpack: "Backpack",
+};
+
+/**
+ * The nine tiles' reading order, which is NOT `KIT_SLOTS`.
+ *
+ * ⚠️ A separate list on purpose. `KIT_SLOTS` is the write layer's order (the
+ * columns on `booster_kits`, the loop every save and every catalogue check
+ * runs) and reordering it to suit a grid would silently reorder them all.
+ * This is the 3x3 the design lays out: the pieces that decide whether a kit
+ * is worth walking to on the top row, the small ones last. apps/web/test/kit.test.ts pins
+ * it as a permutation of KIT_SLOTS, so a slot can never be dropped from the
+ * page by editing only this line.
+ */
+export const KIT_GRID_ORDER = [
+  "jacket", "pants", "backpack",
+  "hipPack", "boots", "gloves",
+  "hat", "mask", "eyewear",
+] as const satisfies readonly KitSlot[];
+
 export type CatalogueEntry = { className: string; label: string; image?: string };
 export type Catalogue = Record<KitSlot, CatalogueEntry[]>;
 

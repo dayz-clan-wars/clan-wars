@@ -4,6 +4,9 @@ import {
 } from "../src/awards";
 import { AWARD_REMOVAL_LEAD_MS } from "../src/rules";
 import raw from "../assets/awards.json";
+import { awardsCatalogue, expandAwardSlots } from "../src/awards-catalogue";
+import { boosterCatalogue } from "../src/booster-catalogue";
+import { KIT_GRID_ORDER, KIT_SLOTS, KIT_SLOT_LABELS } from "../src/booster-kit";
 
 const GOOD = {
   "plate-carrier": {
@@ -25,7 +28,7 @@ describe("loadAwards", () => {
   });
 
   it("the committed catalogue is valid, and the plate carrier has six of each piece", () => {
-    const pc = loadAwards(raw)["plate-carrier"]!;
+    const pc = awardsCatalogue()["plate-carrier"]!;
     expect(pc.durationDays).toBe(7);
     for (const slot of ["vest", "pouches", "holster"]) expect(pc.slots[slot]!.items).toHaveLength(6);
   });
@@ -44,6 +47,35 @@ describe("loadAwards", () => {
     const j = clone();
     mutate(j);
     expect(() => loadAwards(j)).toThrow(pattern);
+  });
+});
+
+describe("the booster kit award", () => {
+  const kit = awardsCatalogue()["booster-kit"]!;
+  const booster = boosterCatalogue();
+
+  it("is in the catalogue, 7 days by default", () => {
+    expect(kit.label).toBe("Booster Kit");
+    expect(kit.durationDays).toBe(7);
+  });
+
+  // ⚠️ Derived, not copied: a jacket added to the booster catalogue must be
+  // pickable in the award too, with no second edit.
+  it("has the booster catalogue's nine slots, in the kit page's order, with the same items", () => {
+    expect(Object.keys(kit.slots)).toEqual([...KIT_GRID_ORDER]);
+    for (const slot of KIT_SLOTS) {
+      expect(kit.slots[slot]!.label).toBe(KIT_SLOT_LABELS[slot]);
+      expect(kit.slots[slot]!.items).toEqual(booster[slot]);
+    }
+  });
+
+  it("the plate carrier is unchanged by the expansion", () => {
+    expect(awardsCatalogue()["plate-carrier"]).toEqual(loadAwards({ "plate-carrier": raw["plate-carrier"] })["plate-carrier"]);
+  });
+
+  it("refuses an unknown slotsFrom, and slotsFrom beside slots", () => {
+    expect(() => expandAwardSlots({ x: { label: "X", durationDays: 1, slotsFrom: "nope" } })).toThrow(/slotsFrom nope/u);
+    expect(() => expandAwardSlots({ x: { label: "X", durationDays: 1, slotsFrom: "booster-catalogue", slots: {} } })).toThrow(/both/u);
   });
 });
 

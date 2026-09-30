@@ -291,7 +291,7 @@ describe("kitPlacementTick", () => {
   });
   describe("an award grant", () => {
     const seedGrant = (over: Record<string, unknown> = {}) => db.insert(awardGrants).values({
-      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won", durationDays: 7,
       grantedAt: issuedAt, placeBy: new Date("2026-09-26T12:00:00Z"),
       picks: { vest: "PlateCarrierVest_Black", pouches: "PlateCarrierPouches_Black", holster: "PlateCarrierHolster_Black" },
       ...over,

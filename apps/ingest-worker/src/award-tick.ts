@@ -41,7 +41,7 @@ export async function awardTick(db: Database, deps: {
   const rows = await db.select({
     id: awardGrants.id, awardKey: awardGrants.awardKey, discordId: awardGrants.discordId, picks: awardGrants.picks,
     posX: awardGrants.posX, posY: awardGrants.posY, posZ: awardGrants.posZ,
-    placeBy: awardGrants.placeBy, placedAt: awardGrants.placedAt, liveFrom: awardGrants.liveFrom,
+    placeBy: awardGrants.placeBy, placedAt: awardGrants.placedAt, liveFrom: awardGrants.liveFrom, durationDays: awardGrants.durationDays,
     expiresAt: awardGrants.expiresAt, revokedAt: awardGrants.revokedAt,
     gamertag: identityLinks.gamertag,
   }).from(awardGrants)
@@ -94,7 +94,9 @@ export async function awardTick(db: Database, deps: {
   if (stored && stored.contentHash === projectionHash(content)) {
     for (const r of included) {
       if (r.liveFrom !== null) continue;
-      const { liveFrom, expiresAt } = awardClock(stored.uploadedAt, AWARDS[r.awardKey]!.durationDays);
+      // ⚠️ The grant's own length, never the catalogue's: `/award grant days:`
+      // writes it there, and the catalogue default was copied in at grant time.
+      const { liveFrom, expiresAt } = awardClock(stored.uploadedAt, r.durationDays);
       // ⚠️ `live_from IS NULL` in the WHERE: a grant's clock is set once.
       const done = await db.update(awardGrants).set({ liveFrom, expiresAt })
         .where(and(eq(awardGrants.id, r.id), isNull(awardGrants.liveFrom)))

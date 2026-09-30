@@ -27,7 +27,7 @@ describe("the award page's reads and writes", () => {
     await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0, active: true });
     await db.insert(players).values({ dayzId: UID, gamertag: "Ron", firstSeenAt: now, lastSeenAt: now });
     const [g] = await db.insert(awardGrants).values({
-      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won",
+      awardKey: "plate-carrier", discordId: "1", grantedByDiscordId: "9", reason: "Won", durationDays: 7,
       grantedAt: now, placeBy: new Date("2026-09-29T12:00:00Z"),
     }).returning();
     grantId = g!.id;

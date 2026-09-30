@@ -15,6 +15,16 @@ describe("award_granted", () => {
     expect(t).toContain("<t:1790683200:F>");
   });
 
+  it("says how long the award runs when the payload carries it", () => {
+    expect(noticeText({ ...n, payload: { ...payload, durationDays: 3 } }, "https://x", 1))
+      .toContain("every restart for 3 days from the first restart it spawns.");
+    expect(noticeText({ ...n, payload: { ...payload, durationDays: 1 } }, "https://x", 1)).toContain("for 1 day from");
+  });
+
+  it("keeps the old wording for a notice queued before grants had a length", () => {
+    expect(noticeText(n, "https://x", 1)).toContain("every restart until the award runs out.");
+  });
+
   it("drops the deadline clause rather than print a broken date", () => {
     const t = noticeText({ ...n, payload: { ...payload, placeBy: "not a date" } }, "https://x", 1);
     expect(t).not.toMatch(/NaN|undefined|Invalid/u);
