@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
-import { BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS, BOUNTY_REASON_MAX } from "@factions/domain";
+import { AWARD_MAX_DAYS, BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS, BOUNTY_REASON_MAX } from "@factions/domain";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { openBountiesDb, placeBountyDb, revokeBountyDb, searchBountyTargetsDb, type OpenBounty } from "@factions/roster/internal";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
@@ -18,7 +19,8 @@ function truncateReason(reason: string): string {
 }
 
 function summarize(b: OpenBounty): string {
-  return `#${b.id} ${b.gamertag}: ${hours(b.servedMs)} of ${hours(b.budgetMs)} h served. ${truncateReason(b.reason)}`;
+  const prize = b.awardLabel ? ` Prize: ${b.awardLabel}.` : "";
+  return `#${b.id} ${b.gamertag}: ${hours(b.servedMs)} of ${hours(b.budgetMs)} h served.${prize} ${truncateReason(b.reason)}`;
 }
 
 /** Joins rows under Discord's 2,000-char reply limit, dropping trailing rows behind an "…and N more" line rather than overflowing. */
@@ -53,6 +55,7 @@ async function place(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const out = await placeBountyDb(ctx.db, {
     target, reason: input.string("reason") ?? "", hours: input.integer("hours"),
     adminDiscordId: input.actorDiscordId, now: ctx.now,
+    awardKey: input.string("award"), awardDays: input.integer("award-days"),
   });
   if (!out.ok) {
     return reply({
@@ -62,10 +65,16 @@ async function place(ctx: Ctx, input: CommandInput): Promise<Reply> {
       "bad-hours": `Hours must be between 1 and ${hours(BOUNTY_MAX_MS)}.`,
       "no-reason": "Say why. It is posted publicly and sent to them.",
       "reason-too-long": `Keep the reason under ${BOUNTY_REASON_MAX} characters.`,
+      "unknown-award": `${input.string("award") ?? "That"} is not an award. Pick one from the list.`,
+      "bad-award-days": `Award days must be a whole number from 1 to ${AWARD_MAX_DAYS}.`,
+      "award-days-without-award": "Award days needs an award. Pick one, or leave award days out.",
     }[out.reason]);
   }
-  console.log(`bounty: ${input.actorDiscordId} placed #${out.bountyId} on ${target}`);
-  return reply(`Bounty #${out.bountyId} on **${out.gamertag}** for ${hours(out.budgetMs)} h online. It will be announced in the server events channel within a tick.`);
+  console.log(`bounty: ${input.actorDiscordId} placed #${out.bountyId} on ${target}${out.award ? ` for ${input.string("award")}` : ""}`);
+  const prize = out.award
+    ? ` Whoever collects it wins **${out.award.label}** for ${out.award.days === 1 ? "1 day" : `${out.award.days} days`}. If they aren't linked, it waits until they link.`
+    : "";
+  return reply(`Bounty #${out.bountyId} on **${out.gamertag}** for ${hours(out.budgetMs)} h online.${prize} It will be announced in the server events channel within a tick.`);
 }
 
 async function revoke(ctx: Ctx, input: CommandInput): Promise<Reply> {
@@ -113,7 +122,12 @@ export const bountyGroup: CommandGroup = {
       .setName("place").setDescription("Put a bounty on a player")
       .addStringOption((o) => o.setName("player").setDescription("Their in-game name").setRequired(true).setAutocomplete(true))
       .addStringOption((o) => o.setName("reason").setDescription("Why; posted publicly and sent to them").setRequired(true).setMaxLength(BOUNTY_REASON_MAX))
-      .addIntegerOption((o) => o.setName("hours").setDescription(`Online hours to serve (default ${hours(BOUNTY_DEFAULT_MS)})`).setMinValue(1).setMaxValue(hours(BOUNTY_MAX_MS))))
+      .addIntegerOption((o) => o.setName("hours").setDescription(`Online hours to serve (default ${hours(BOUNTY_DEFAULT_MS)})`).setMinValue(1).setMaxValue(hours(BOUNTY_MAX_MS)))
+      // Choices from the award catalogue, so a new award shows up here without a code change.
+      .addStringOption((o) => o.setName("award").setDescription("A prize for whoever collects it (default: none)")
+        .addChoices(...Object.values(awardsCatalogue()).map((d) => ({ name: d.label, value: d.key }))))
+      .addIntegerOption((o) => o.setName("award-days").setDescription("How many days the prize runs (default: the award's own)")
+        .setMinValue(1).setMaxValue(AWARD_MAX_DAYS)))
     .addSubcommand((c) => c
       .setName("revoke").setDescription("Lift a bounty")
       .addStringOption((o) => o.setName("bounty").setDescription("Which bounty").setRequired(true).setAutocomplete(true)))

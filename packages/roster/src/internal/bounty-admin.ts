@@ -3,15 +3,18 @@ import { bounties, identityLinks, playerSessions, players } from "@factions/db";
 import {
   BOUNTY_DEADLINE_MS, BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS, BOUNTY_REASON_MAX, onlineMs,
 } from "@factions/domain";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { and, asc, desc, eq, gt, ilike, inArray, isNull, or, sql } from "drizzle-orm";
 import { activeServerId } from "../server";
 import { appendClanNoticeTx } from "./notices";
+import { awardChoice } from "./award-admin";
 
 const HOUR = 3_600_000;
 
 export type PlaceBountyOutcome =
-  | { ok: true; bountyId: number; gamertag: string; budgetMs: number }
-  | { ok: false; reason: "unknown-player" | "ambiguous-player" | "already-open" | "bad-hours" | "no-reason" | "reason-too-long" };
+  | { ok: true; bountyId: number; gamertag: string; budgetMs: number; award: { label: string; days: number } | null }
+  | { ok: false; reason: "unknown-player" | "ambiguous-player" | "already-open" | "bad-hours" | "no-reason" | "reason-too-long"
+    | "unknown-award" | "bad-award-days" | "award-days-without-award" };
 
 /** Discord's choice limit: an autocomplete answer longer than this is rejected whole. */
 const TARGET_SEARCH_LIMIT = 25;
@@ -73,12 +76,27 @@ function violatesConstraint(err: unknown, name: string): boolean {
 export async function placeBountyDb(db: Database, a: {
   /** A DayZ id from the autocomplete, or a gamertag typed in full. */
   target: string; reason: string; hours: number | null; adminDiscordId: string; now: Date;
+  /** The prize for collecting it, an awards.json key, or null for none. */
+  awardKey?: string | null;
+  /** How long the prize runs; null is the award's own default. */
+  awardDays?: number | null;
 }): Promise<PlaceBountyOutcome> {
   const reason = a.reason.trim();
   if (!reason) return { ok: false, reason: "no-reason" };
   if (reason.length > BOUNTY_REASON_MAX) return { ok: false, reason: "reason-too-long" };
   const budgetMs = a.hours === null ? BOUNTY_DEFAULT_MS : a.hours * HOUR;
   if (!Number.isInteger(a.hours ?? 1) || budgetMs < HOUR || budgetMs > BOUNTY_MAX_MS) return { ok: false, reason: "bad-hours" };
+  // ⚠️ Checked and RESOLVED here, not at the claim: the wanted post names the
+  // prize, so a prize that cannot be paid must be refused while the admin is
+  // still looking, and a later catalogue change must not change what is paid.
+  const awardKey = a.awardKey ?? null;
+  if (awardKey === null && a.awardDays != null) return { ok: false, reason: "award-days-without-award" };
+  let award: { label: string; days: number } | null = null;
+  if (awardKey !== null) {
+    const choice = awardChoice(awardKey, a.awardDays);
+    if (!choice.ok) return { ok: false, reason: choice.reason === "unknown-award" ? "unknown-award" : "bad-award-days" };
+    award = { label: choice.def.label, days: choice.durationDays };
+  }
 
   const target = await resolveTarget(db, a.target);
   if (typeof target === "string") return { ok: false, reason: target };
@@ -90,6 +108,7 @@ export async function placeBountyDb(db: Database, a: {
       const [row] = await tx.insert(bounties).values({
         serverId, targetDayzId: target.dayzId, reason, placedByDiscordId: a.adminDiscordId,
         placedAt: a.now, onlineBudgetMs: budgetMs, deadlineAt: new Date(a.now.getTime() + BOUNTY_DEADLINE_MS),
+        awardKey, awardDays: award?.days ?? null,
       }).returning({ id: bounties.id });
       if (link) {
         await appendClanNoticeTx(tx, {
@@ -100,7 +119,7 @@ export async function placeBountyDb(db: Database, a: {
       }
       return row!.id;
     });
-    return { ok: true, bountyId, gamertag: target.gamertag, budgetMs };
+    return { ok: true, bountyId, gamertag: target.gamertag, budgetMs, award };
   } catch (err) {
     // ⚠️ The partial unique index is the one-open-bounty rule; a pre-check would race it.
     // postgres.js can surface the violation either directly or nested in `.cause` —
@@ -138,6 +157,8 @@ export async function revokeBountyDb(db: Database, a: { bountyId: number; adminD
 export type OpenBounty = {
   id: number; targetDayzId: string; gamertag: string; reason: string;
   placedAt: Date; deadlineAt: Date; budgetMs: number; servedMs: number;
+  /** The prize's label, or null for none. */
+  awardLabel: string | null;
 };
 
 /** Open bounties, oldest first, for `/bounty list` and revoke's autocomplete. At most 25, Discord's choice limit. */
@@ -153,6 +174,7 @@ export async function openBountiesDb(db: Database, now: Date): Promise<OpenBount
   return rows.map(({ b, gamertag }) => ({
     id: b.id, targetDayzId: b.targetDayzId, gamertag: gamertag ?? b.targetDayzId, reason: b.reason,
     placedAt: b.placedAt, deadlineAt: b.deadlineAt, budgetMs: b.onlineBudgetMs,
+    awardLabel: b.awardKey === null ? null : awardsCatalogue()[b.awardKey]?.label ?? b.awardKey,
     servedMs: onlineMs(
       sessions.filter((s) => s.serverId === b.serverId && s.dayzId === b.targetDayzId).map((s) => ({ from: s.connectedAt, to: s.disconnectedAt })),
       b.placedAt, now,

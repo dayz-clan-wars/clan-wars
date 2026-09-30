@@ -1,7 +1,14 @@
 import { and, asc, eq, isNotNull, isNull, ne } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
-import { bounties, kills, players, type Database } from "@factions/db";
-import { bountyPostText, type BountyPost } from "./bounty-text.js";
+import { bounties, identityLinks, kills, players, type Database } from "@factions/db";
+import { awardsCatalogue } from "@factions/domain/awards";
+import { bountyPostText, type BountyPost, type BountyPrize } from "./bounty-text.js";
+
+/** The prize as posted. A key the catalogue lost still posts, by its key: the post must not block. */
+function prizeOf(b: { awardKey: string | null; awardDays: number | null }): BountyPrize | null {
+  if (b.awardKey === null || b.awardDays === null) return null;
+  return { label: awardsCatalogue()[b.awardKey]?.label ?? b.awardKey, days: b.awardDays };
+}
 
 const HOUR = 3_600_000;
 const BATCH = 20;
@@ -29,13 +36,19 @@ export async function bountyAnnounceTick(
     .leftJoin(target, eq(target.dayzId, bounties.targetDayzId))
     .where(isNull(bounties.placedAnnouncedAt)).orderBy(asc(bounties.id)).limit(BATCH);
   for (const r of placed) {
-    const p: BountyPost = { kind: "placed", target: r.target ?? "someone", reason: r.b.reason, hours: Math.round(r.b.onlineBudgetMs / HOUR) };
+    const p: BountyPost = { kind: "placed", target: r.target ?? "someone", reason: r.b.reason, hours: Math.round(r.b.onlineBudgetMs / HOUR), prize: prizeOf(r.b) };
     if (!(await send(r.b.id, p, { placedAnnouncedAt: opts.now }))) return out;
   }
 
-  const closed = await db.select({ b: bounties, target: target.gamertag, killer: killer.gamertag, weapon: kills.weapon }).from(bounties)
+  const closed = await db.select({
+    b: bounties, target: target.gamertag, killer: killer.gamertag, weapon: kills.weapon, killerLink: identityLinks.discordId,
+  }).from(bounties)
     .leftJoin(target, eq(target.dayzId, bounties.targetDayzId))
     .leftJoin(killer, eq(killer.dayzId, bounties.claimedByDayzId))
+    // Linked at POST time, which is what the post's advice is about. The payout runs in
+    // the bounty tick before this, so a linked killer has usually been paid already;
+    // one who has not is "pending", never "won".
+    .leftJoin(identityLinks, eq(identityLinks.dayzId, bounties.claimedByDayzId))
     // The kill may have been rebuilt away (spec §2.7); the post then just drops the weapon.
     .leftJoin(kills, eq(kills.eventId, bounties.claimEventId))
     .where(and(ne(bounties.status, "open"), isNotNull(bounties.placedAnnouncedAt), isNull(bounties.closedAnnouncedAt)))
@@ -43,7 +56,12 @@ export async function bountyAnnounceTick(
   for (const r of closed) {
     const who = r.target ?? "someone";
     const p: BountyPost = r.b.status === "claimed"
-      ? { kind: "claimed", target: who, killer: r.killer ?? "someone", weapon: r.weapon }
+      ? {
+          kind: "claimed", target: who, killer: r.killer ?? "someone", weapon: r.weapon, prize: prizeOf(r.b),
+          // ⚠️ From the grant, never from the link alone: a linked killer whose grant
+          // failed must not be told they won.
+          prizeState: r.b.awardGrantId !== null ? "granted" : r.killerLink === null ? "unlinked" : "pending",
+        }
       : { kind: r.b.status === "expired" ? "expired" : "revoked", target: who };
     if (!(await send(r.b.id, p, { closedAnnouncedAt: opts.now }))) return out;
   }

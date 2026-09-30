@@ -1054,8 +1054,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     // is seen before a bounty is judged. Its own try/catch.
     if (cfg.bounties.enabled) {
       try {
-        const b = await bountyTick(db, { now: new Date() });
-        if (b.claimed + b.expired > 0) console.log(`bounties: ${b.claimed} claimed, ${b.expired} expired`);
+        const b = await bountyTick(db, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl });
+        if (b.claimed + b.expired + b.paid > 0) console.log(`bounties: ${b.claimed} claimed, ${b.expired} expired, ${b.paid} prize(s) paid`);
       } catch (err) {
         console.error("bounty tick failed", err);
       }

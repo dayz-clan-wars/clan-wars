@@ -59,6 +59,14 @@ describe("award administration", () => {
     expect(await db.select().from(clanNotices)).toEqual([]);
   });
 
+  it("⚠️ pre-picks a slot with only one item, and leaves real choices empty", async () => {
+    await grant({ awardKey: "dead-rooster" });
+    await grant();
+    const [rooster, plate] = await db.select().from(awardGrants).orderBy(awardGrants.id);
+    expect(rooster).toMatchObject({ picks: { rooster: "DeadRooster" }, durationDays: 14 });
+    expect(plate!.picks).toEqual({});
+  });
+
   it("grants the booster kit as an award", async () => {
     expect(await grant({ awardKey: "booster-kit" })).toMatchObject({ ok: true, durationDays: 7 });
     expect((await db.select().from(clanNotices))[0]!.payload).toMatchObject({ awardKey: "booster-kit", label: "Booster Kit" });
