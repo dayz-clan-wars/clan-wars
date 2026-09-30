@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.54.0] - 2026-09-30
+
 ### Added
 
 - The Booster Kit can now be won as an event award. The winner picks all nine pieces, just like on the kit page, and it respawns at their spot every restart while the award runs.
