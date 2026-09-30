@@ -43,11 +43,10 @@ describe("item images match the catalogue", () => {
     expect(orphans).toEqual([]);
   });
 
-  it("there is one per catalogue entry that has art", () => {
+  it("there is one per catalogue entry", () => {
     // By class name: the booster-kit award lists the kit's own items, so a
-    // file serves both entries. ⚠️ Only entries that set `image`: the weapon
-    // kit's guns have no art yet (spec §1), and a tile without art is allowed.
-    expect(files).toHaveLength(new Set(entries.filter((e) => e.image).map((e) => e.className)).size);
+    // file serves both entries.
+    expect(files).toHaveLength(new Set(entries.map((e) => e.className)).size);
   });
 
   it("⚠️ every image was actually normalised, not committed raw", () => {

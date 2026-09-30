@@ -187,7 +187,7 @@ describe("the weapon kit award", () => {
     });
   });
 
-  it("has no art yet", () => {
-    for (const i of kit.slots.weapon!.items) expect(i.image).toBeUndefined();
+  it("has art for every gun", () => {
+    for (const i of kit.slots.weapon!.items) expect(i.image).toBe(`items/${i.className}.webp`);
   });
 });

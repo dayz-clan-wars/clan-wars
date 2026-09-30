@@ -13,8 +13,16 @@
  * wrong; `wiki: "local"` means the image was trimmed out of a photo and has no
  * wiki source to re-fetch. Neither can be refreshed by the fetch script
  * without a human.
+ *
+ * ⚠️ Two weapon kit guns have no image of their own variant on either wiki:
+ * `AK74_Green` shows the plain AK74, and `M4A1_Green` uses an older green M4
+ * render. Swap them if the wikis ever add the real variants.
  */
 export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string }>> = {
+  AK101_Green: { file: "AK101_Green.png", wiki: "wiki.gg" },
+  AK74_Green: { file: "AK74.png", wiki: "wiki.gg" },
+  AKM: { file: "AKM.png", wiki: "wiki.gg" },
+  ASVAL: { file: "ASVAL.png", wiki: "wiki.gg" },
   AliceBag_Black: { file: "ALICE Backpack Black.png", wiki: "wiki.gg" },
   AliceBag_Camo: { file: "AliceBackpack Camo.png", wiki: "wiki.gg" },
   AliceBag_Green: { file: "AliceBackpack Green.png", wiki: "wiki.gg" },
@@ -22,6 +30,7 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   Attack2Bag_Green: { file: "Attack2Bag Green.png", wiki: "wiki.gg" },
   Attack2Bag_Ttsko: { file: "Attack2Bag Ttsko.png", wiki: "wiki.gg" },
   Attack2Bag_Yeger: { file: "Attack2Bag Yeger.png", wiki: "wiki.gg" },
+  Aug: { file: "Aug.png", wiki: "wiki.gg" },
   AviatorGlasses: { file: "Rocket Aviators.png", wiki: "wiki.gg" },
   BDUJacket: { file: "BDUJacket.png", wiki: "wiki.gg" },
   BDUPants: { file: "BDU_Pants_Model.png", wiki: "wiki.gg" },
@@ -86,6 +95,7 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   EyeMask_Red: { file: "CarnivalMask Red.png", wiki: "wiki.gg" },
   EyeMask_Valentines: { file: "CarnivalMask Valentines.png", wiki: "wiki.gg" },
   EyeMask_Yellow: { file: "CarnivalMask Yellow.png", wiki: "wiki.gg" },
+  FAL: { file: "FAL.png", wiki: "wiki.gg" },
   GorkaEJacket_Autumn: { file: "GorkaEJacket Autumn.png", wiki: "wiki.gg" },
   GorkaEJacket_Flat: { file: "GorkaEJacket Flat.png", wiki: "wiki.gg" },
   GorkaEJacket_PautRev: { file: "GorkaEJacket PautRev.png", wiki: "wiki.gg" },
@@ -129,6 +139,9 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   LeafCrown_Spring: { file: "LeafCrown Spring.png", wiki: "wiki.gg" },
   LeafCrown_Summer: { file: "LeafCrown Summer.png", wiki: "wiki.gg" },
   LeafCrown_Winter: { file: "LeafCrown Winter.png", wiki: "wiki.gg" },
+  M14: { file: "M14.png", wiki: "wiki.gg" },
+  M16A2: { file: "M16A2.png", wiki: "wiki.gg" },
+  M4A1_Green: { file: "M4A1 wScope green.png", wiki: "wiki.gg" },
   M65Jacket_Black: { file: "M65Jacket Black.png", wiki: "wiki.gg" },
   M65Jacket_Khaki: { file: "M65Jacket Khaki.png", wiki: "wiki.gg" },
   M65Jacket_Olive: { file: "M65FieldJacketOlive.png", wiki: "wiki.gg" },
@@ -187,6 +200,9 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   QuiltedJacket_Violet: { file: "QuiltedJacketViolet.png", wiki: "wiki.gg" },
   QuiltedJacket_Yellow: { file: "QuiltedJacketYellow.png", wiki: "wiki.gg" },
   RidersJacket_Black: { file: "RidersJacket Black.png", wiki: "wiki.gg" },
+  SCARH: { file: "SCARH.png", wiki: "wiki.gg" },
+  SV98: { file: "SV98.png", wiki: "wiki.gg" },
+  SVD: { file: "SVD.png", wiki: "wiki.gg" },
   SantasBeard: { file: "SantasBeard.png", wiki: "wiki.gg" },
   SantasHat: { file: "SantasHat.png", wiki: "wiki.gg" },
   SkiGloves_90s: { file: "SkiGloves 90s.png", wiki: "wiki.gg" },

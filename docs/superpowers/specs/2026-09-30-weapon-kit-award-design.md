@@ -26,11 +26,13 @@ carry a fixed list of parts that spawn beside it.
 - The `weapon-kit` award with the twelve loadouts in §3
 - The award tick expanding a pick into the gun plus its extras
 - Showing the parts on the award pages
+- Item art for the twelve guns, from the DayZ wiki via `fetch-item-images.ts`.
+  No wiki has a green AK74, so `AK74_Green` shows the plain AK74, and
+  `M4A1_Green` uses an older green M4 render
 
 ### Out of scope
 
 - Letting the player choose attachments (considered, see §5)
-- Item art for the twelve guns: `image` stays unset until art exists
 - Loose ammunition: every gun in §3 is magazine-fed, and object-spawner mags
   spawn full (confirmed by the owner from the bunker enhancements on Livonia)
 
@@ -111,10 +113,7 @@ lists its extras, with repeats collapsed ("2× 60-round STANAG mag"). The shared
 pick sheet (`kit/pick-sheet.tsx`, also the booster kit page's) is not changed.
 Part labels come from a map of class name to readable label in
 `apps/web/lib/award-parts.ts`; a test requires a label for every extra in the
-catalogue, so there is no fallback. No image is shown for guns until art exists,
-and a picked tile with no art shows no "+" (the "+" means empty). The
-item-images test that expects one file per catalogue entry counts only entries
-that set `image`.
+catalogue, so there is no fallback. A picked tile with no art shows no "+" (the "+" means empty).
 
 ## 5. Alternatives considered
 
