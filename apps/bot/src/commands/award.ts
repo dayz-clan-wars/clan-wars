@@ -18,6 +18,9 @@ const STATE: Record<AwardListRow["state"], string> = {
   lapsed: "lapsed", expired: "expired", revoked: "revoked",
 };
 
+/** Room for the list, leaving space under 2000 for the "and N more" line. */
+const LIST_BUDGET = 1900;
+
 const days = (n: number) => (n === 1 ? "1 day" : `${n} days`);
 
 /** "#12 Plate Carrier (7 days): <@1>, live until <t:…:f>". The `<@…>` renders only in the reply, not in autocomplete. */
@@ -76,7 +79,18 @@ async function list(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (!input.isAdmin) return ADMIN_ONLY;
   const rows = await listAwardsDb(ctx.db, { discordId: input.user("user"), now: ctx.now });
   if (rows.length === 0) return reply("There are no open awards.");
-  return reply(rows.map((r) => summarize(r, true)).join("\n"));
+  // ⚠️ Discord refuses a reply over 2000 characters, and 25 rows can pass it.
+  // Whole lines only, with a count of what was cut, never a line cut in half.
+  const lines = rows.map((r) => summarize(r, true));
+  const shown: string[] = [];
+  let length = 0;
+  for (const line of lines) {
+    if (length + line.length + 1 > LIST_BUDGET) break;
+    shown.push(line);
+    length += line.length + 1;
+  }
+  if (shown.length < lines.length) shown.push(`…and ${lines.length - shown.length} more. Narrow it with user:.`);
+  return reply(shown.join("\n"));
 }
 
 /** Discord gives autocomplete 3 seconds and 25 choices; `listAwardsDb` is one indexed read capped at 25. */

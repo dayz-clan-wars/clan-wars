@@ -37,6 +37,7 @@ describe("loadAwards", () => {
     ["an award key that is not kebab-case", (j: any) => { j["Plate_Carrier"] = j["plate-carrier"]; delete j["plate-carrier"]; }, /Plate_Carrier/],
     ["a non-integer duration", (j: any) => { j["plate-carrier"].durationDays = 1.5; }, /durationDays/],
     ["a zero duration", (j: any) => { j["plate-carrier"].durationDays = 0; }, /durationDays/],
+    ["a duration past AWARD_MAX_DAYS", (j: any) => { j["plate-carrier"].durationDays = 91; }, /durationDays/],
     ["an award with no slots", (j: any) => { j["plate-carrier"].slots = {}; }, /no slots/],
     ["a slot with no items", (j: any) => { j["plate-carrier"].slots.vest.items = []; }, /vest/],
     ["a duplicate class name in a slot", (j: any) => { j["plate-carrier"].slots.vest.items.push({ className: "PlateCarrierVest_Black", label: "Other" }); }, /PlateCarrierVest_Black/],

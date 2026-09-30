@@ -18,10 +18,10 @@ describe("/award", () => {
   });
 
   const ctx = () => ({ db, now: NOW, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: null, roster: {} as never, siteBaseUrl: "https://dayzclanwars.com" }) as unknown as Ctx;
-  const input = (o: { isAdmin?: boolean; user?: string | null; award?: string; reason?: string; grant?: string } = {}) => ({
+  const input = (o: { isAdmin?: boolean; user?: string | null; award?: string; reason?: string; grant?: string; days?: number } = {}) => ({
     actorDiscordId: "9", isAdmin: o.isAdmin ?? true,
     string: (n: string) => (n === "award" ? o.award ?? "plate-carrier" : n === "reason" ? o.reason ?? "Winner, Sept KOTH" : n === "grant" ? o.grant ?? null : null),
-    integer: () => null, boolean: () => null,
+    integer: (n: string) => (n === "days" ? o.days ?? null : null), boolean: () => null,
     user: (n: string) => (n === "user" ? (o.user === undefined ? "1" : o.user) : null),
   }) as unknown as CommandInput;
 
@@ -39,6 +39,34 @@ describe("/award", () => {
       expect(r.content, p).toMatch(/admin/i);
     }
     expect(await db.select().from(awardGrants)).toEqual([]);
+  });
+
+  it("grants for the admin's days, and says how long in the reply", async () => {
+    const r = await spec("award grant").handler(ctx(), input({ days: 3 }));
+    expect(r.content).toMatch(/for 3 days once it spawns/);
+    expect((await db.select().from(awardGrants))[0]!.durationDays).toBe(3);
+  });
+
+  it("without days, grants for the award's own length", async () => {
+    const r = await spec("award grant").handler(ctx(), input({ award: "booster-kit" }));
+    expect(r.content).toMatch(/Booster Kit.*for 7 days/);
+    expect((await db.select().from(awardGrants))[0]!.durationDays).toBe(7);
+  });
+
+  it("refuses days out of range, and writes nothing", async () => {
+    const r = await spec("award grant").handler(ctx(), input({ days: 91 }));
+    expect(r.content).toMatch(/1 to 90/);
+    expect(await db.select().from(awardGrants)).toEqual([]);
+  });
+
+  it("⚠️ keeps the list under Discord's 2000 characters, cutting whole lines", async () => {
+    for (let i = 0; i < 25; i++) {
+      await spec("award grant").handler(ctx(), input({ user: "123456789012345678" + (i % 10), days: 90 }));
+    }
+    const content = (await spec("award list").handler(ctx(), input({ user: null }))).content ?? "";
+    expect(content.length).toBeLessThanOrEqual(2000);
+    expect(content).toMatch(/and \d+ more/);
+    for (const line of content.split("\n").slice(0, -1)) expect(line).toMatch(/^#\d+ Plate Carrier \(90 days\): <@\d+>, not placed yet \(place by <t:\d+:f>\)$/);
   });
 
   it("refuses an unknown award key", async () => {

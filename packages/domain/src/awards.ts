@@ -1,4 +1,4 @@
-import { AWARD_REMOVAL_LEAD_MS } from "./rules";
+import { AWARD_MAX_DAYS, AWARD_REMOVAL_LEAD_MS } from "./rules";
 import { nextRestartAt } from "./restarts";
 
 const DAY_MS = 86_400_000;
@@ -29,8 +29,11 @@ export function loadAwards(json: unknown): Awards {
     if (!AWARD_KEY.test(key)) throw new Error(`awards: key ${key} is not lowercase kebab-case`);
     const v = value as Partial<AwardDef> | null;
     if (typeof v?.label !== "string" || v.label === "") throw new Error(`awards: ${key} has no label`);
-    if (!Number.isInteger(v.durationDays) || (v.durationDays as number) <= 0) {
-      throw new Error(`awards: ${key} durationDays must be a positive whole number`);
+    // ⚠️ The same ceiling `/award grant days:` has. The grant checks its
+    // length against it, so a default above it would be refused on every
+    // grant, and KotH and the referral payout retry a refused grant forever.
+    if (!Number.isInteger(v.durationDays) || (v.durationDays as number) <= 0 || (v.durationDays as number) > AWARD_MAX_DAYS) {
+      throw new Error(`awards: ${key} durationDays must be a whole number from 1 to ${AWARD_MAX_DAYS}`);
     }
     const slots = v.slots;
     if (typeof slots !== "object" || slots === null || Object.keys(slots).length === 0) {

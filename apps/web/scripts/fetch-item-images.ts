@@ -72,10 +72,12 @@ async function main(): Promise<void> {
   // catalogue re-encodes 200 committed images and churns the diff for nothing.
   const only = process.argv.includes("--only") ? process.argv[process.argv.indexOf("--only") + 1] ?? "" : "";
   // Award items share public/items/ with the kit, so both catalogues feed it.
-  const entries = [
+  // By class name: the booster-kit award lists the kit's own items again.
+  const byClass = new Map([
     ...KIT_SLOTS.flatMap((s) => boosterCatalogue()[s]),
     ...Object.values(awardsCatalogue()).flatMap((a) => Object.values(a.slots).flatMap((s) => s.items)),
-  ].filter((e) => !only || e.className.startsWith(only));
+  ].map((e) => [e.className, e] as const));
+  const entries = [...byClass.values()].filter((e) => !only || e.className.startsWith(only));
   let written = 0;
   const skipped: string[] = [];
 
