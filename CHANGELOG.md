@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.55.0] - 2026-09-30
+
 ### Added
 
 - A new event award: the Dead Rooster. It runs for 2 weeks by default, and there is nothing to pick, so the winner just marks where it spawns.
