@@ -15,4 +15,6 @@ export {
 export {
   type Seg, type Line, type LiveCard, DETAIL_LINE_CAP, playerPath, clanPath,
   who, howLine, detailLine, cappedLines, killCard, hitCard, streakCard, longRangeCard,
+  type ClanFeedPayload, clanFeedCard, flagLabel, warLogLine, banLine, achievementLine, onlineLine,
+  ONLINE_TITLE, ONLINE_EMPTY, flagDownDuration,
 } from "./live-feed";
