@@ -26,7 +26,7 @@ Each recorder takes 100 rows per tick. On the first tick after the bot restarts,
 and long range backfill from the start of history. The hit recorder seeds at the head and logs
 `live recorder: hit cursor seeded at the head` once, so hit history starts at deploy.
 
-Each backfill tick adds roughly 1-2 s of sequential queries. `guardedRunner` turns any overrun into
+Each backfill tick adds an estimated 1-2 s of sequential queries (a code-review estimate, not a measurement). `guardedRunner` turns any overrun into
 skipped firings, never overlapping runs. The killstreak recorder resolves names and runs for every
 kill before dropping non-milestones, so it is the slowest and will finish last. Discord posting is
 unaffected.
@@ -35,16 +35,21 @@ unaffected.
 
 Bot logs (`journalctl -u clan-wars-bot -f`):
 
-- `live recorder: N kills` (and hits, streaks, long range) while backfill runs. They stop when caught up.
-- `live recorder blocked at event N` means a recorder is stuck on one event and nothing behind it
-  records until it succeeds. Investigate that event.
+- `live recorder: N kill`, `live recorder: N hit`, `live recorder: N killstreak` and
+  `live recorder: N long_range` (for example `live recorder: 100 kill`) while backfill runs. They
+  stop when caught up.
+- `live recorder: <kind> cursor seeded at the head` once per recorder that seeds (expected for
+  `hit`, for example `live recorder: hit cursor seeded at the head`).
+- `live recorder blocked at event N (<kind>); nothing behind it will record until this one
+  succeeds.` means that recorder is stuck on one event. Investigate that event.
 
 Read-only progress check:
 
     select kind, count(*) from feed_entries group by kind;
     select consumer_name, last_event_id from consumer_cursors where consumer_name like '%-feed-recorder';
 
-The four cursors should advance toward the head of `events` / `kills`, then hold.
+The four cursors should advance toward the head of the log, then hold. All four hold an `events.id` in
+`consumer_cursors.last_event_id`.
 
 ## Web
 
