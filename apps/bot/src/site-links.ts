@@ -1,3 +1,4 @@
+import { at, rel, type Line, type Seg } from "@factions/copy";
 import type { KillFeedSide } from "./kill-feed-embed.js";
 
 /** Discord markdown in a gamertag would restyle the line; a name is text, never markup. */
@@ -45,4 +46,20 @@ export function clanLink(siteBaseUrl: string, tag: string, name?: string): strin
 export function who(side: KillFeedSide, siteBaseUrl: string): string {
   const name = `**${playerLink(siteBaseUrl, side.gamertag)}**`;
   return side.tag ? `${name} [${clanLink(siteBaseUrl, side.tag)}]` : name;
+}
+
+/** A shared copy Line as Discord markdown (spec 2026-09-30-website-live-feeds). */
+export function lineMarkdown(line: Line, siteBaseUrl: string): string {
+  return line.map((s) => segMarkdown(s, siteBaseUrl)).join("");
+}
+
+function segMarkdown(s: Seg, site: string): string {
+  if (typeof s === "string") return s;
+  if ("text" in s) return escapeMarkdown(s.text);
+  if ("raw" in s) return s.raw;
+  if ("bold" in s) return `**${lineMarkdown(s.bold, site)}**`;
+  if ("player" in s) return playerLink(site, s.player);
+  if ("clan" in s) return clanLink(site, s.clan, s.name);
+  if ("time" in s) return (s.style === "at" ? at : rel)(new Date(s.time)) ?? "";
+  return `[${s.label}](<${site}${s.page}>)`;
 }

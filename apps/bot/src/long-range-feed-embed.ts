@@ -1,7 +1,10 @@
 import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
-import { escapeMarkdown, profileUrl, who, type KillFeedSide } from "./kill-feed-embed.js";
+import { longRangeCard } from "@factions/copy";
+import type { KillFeedSide } from "./kill-feed-embed.js";
+import { toLiveLongRange } from "./live-payload.js";
+import { lineMarkdown } from "./site-links.js";
 
 /** One long-range kill, ready to render. `distanceM` null means the log did not say — the render declines it. */
 export type LongRangeFeedItem = {
@@ -25,41 +28,16 @@ export type LongRangeFeedItem = {
 const STEEL = 0x4a708b;
 const AMBER = 0xe67e22;
 
-function ordinal(n: number): string {
-  const rem100 = n % 100;
-  if (rem100 >= 11 && rem100 <= 13) return `${n}th`;
-  return `${n}${["th", "st", "nd", "rd"][n % 10] ?? "th"}`;
-}
-
 /** One long-range kill, one embed. Pure — no client, no I/O, no clock. */
 export function longRangeFeedEmbed(i: LongRangeFeedItem, siteBaseUrl: string, flagImage: FlagImageResolver = () => null): APIEmbed {
   const image = i.killer.texture ? flagImage(i.killer.texture) : null;
-  const tag = i.killer.tag ? ` [${escapeMarkdown(i.killer.tag)}]` : "";
-
-  const kill = [`killed ${who(i.victim, siteBaseUrl)}`];
-  if (i.weapon) kill.push(escapeMarkdown(i.weapon));
-
-  const records: string[] = [];
-  if (i.personalBest) records.push(`${escapeMarkdown(i.killer.gamertag)}'s longest yet`);
-  if (i.seasonRank !== null) {
-    const scope = i.season === null ? "all-time" : "this season";
-    records.push(i.seasonRank === 1 ? `longest ${scope}` : `${ordinal(i.seasonRank)} longest ${scope}`);
-  }
-
-  const lines = [
-    `🎯 **${i.distanceM === null ? "—" : Math.round(i.distanceM)} m**`,
-    kill.join(" · "),
-    ...(records.length > 0 ? [records.join(" · ")] : []),
-  ];
+  const card = longRangeCard(toLiveLongRange(i));
 
   return {
-    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
-    // Discord renders no markdown in an embed title, so an escape is not
-    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
-    // Same rule as `kill-feed-embed.ts`.
-    title: `${i.friendlyFire ? "Friendly fire — " : ""}${i.killer.gamertag}${tag}`,
-    url: profileUrl(siteBaseUrl, i.killer.gamertag),
-    description: lines.join("\n"),
+    // The card's title carries the gamertag as `raw`: Discord renders no markdown in an embed title.
+    title: lineMarkdown(card.title, siteBaseUrl),
+    url: `${siteBaseUrl}${card.href}`,
+    description: card.lines.map((l) => lineMarkdown(l, siteBaseUrl)).join("\n"),
     color: i.friendlyFire ? AMBER : STEEL,
     // ⚠️ The kill's time, not the post's.
     timestamp: i.occurredAt.toISOString(),

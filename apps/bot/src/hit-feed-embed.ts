@@ -1,7 +1,10 @@
 import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
-import { cappedLines, detailLine, escapeMarkdown, profileUrl, who, type HitDetail, type KillFeedSide } from "./kill-feed-embed.js";
+import { hitCard } from "@factions/copy";
+import type { HitDetail, KillFeedSide } from "./kill-feed-embed.js";
+import { toLiveHitRun } from "./live-payload.js";
+import { lineMarkdown } from "./site-links.js";
 
 /**
  * One engagement, ready to render. Built by `PgHitFeedStore`; never carries a
@@ -31,11 +34,6 @@ export type HitFeedItem = {
 const EMBER = 0x8c5a3c;
 const AMBER = 0xe67e22;
 
-/** `once`, `2 times`, `9 times`. "1 times" is not a sentence. */
-function times(n: number): string {
-  return n === 1 ? "once" : `${n} times`;
-}
-
 /**
  * One engagement, one embed. Pure — no client, no I/O, no clock.
  *
@@ -45,28 +43,14 @@ function times(n: number): string {
  */
 export function hitFeedEmbed(i: HitFeedItem, siteBaseUrl: string, flagImage: FlagImageResolver = () => null): APIEmbed {
   const image = i.attacker.texture ? flagImage(i.attacker.texture) : null;
-  const attackerTag = i.attacker.tag ? ` [${escapeMarkdown(i.attacker.tag)}]` : "";
-
-  const head = [`hit ${who(i.victim, siteBaseUrl)} ${times(i.hits.length)}`];
-  if (i.weapon) head.push(escapeMarkdown(i.weapon));
-
-  const summary: string[] = [];
-  if (i.totalDamage !== null && Number.isFinite(i.totalDamage)) summary.push(`${Math.round(i.totalDamage)} damage`);
-  if (i.victimHpAfter !== null && Number.isFinite(i.victimHpAfter)) summary.push(`left them at ${Math.round(i.victimHpAfter)} HP`);
-
-  // The weapon is deliberately not repeated per line: an engagement is keyed
-  // on one weapon and the header above already named it.
-  const detail = cappedLines(i.hits.map((h) => detailLine(h)).filter((l) => l !== ""), "hits");
-
-  const lines = [head.join(" · "), ...(summary.length > 0 ? [summary.join(" · ")] : []), ...(detail.length > 0 ? ["", ...detail] : [])];
+  const card = hitCard(toLiveHitRun(i));
+  const lines = card.lines.map((l) => lineMarkdown(l, siteBaseUrl));
+  if (card.detail.length > 0) lines.push("", ...card.detail.map((l) => lineMarkdown(l, siteBaseUrl)));
 
   return {
-    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
-    // Discord renders no markdown in an embed title, so an escape is not
-    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
-    // Same rule as `kill-feed-embed.ts`.
-    title: `${i.friendlyFire ? "Friendly fire — " : ""}${i.attacker.gamertag}${attackerTag}`,
-    url: profileUrl(siteBaseUrl, i.attacker.gamertag),
+    // The card's title carries the gamertag as `raw`: Discord renders no markdown in an embed title.
+    title: lineMarkdown(card.title, siteBaseUrl),
+    url: `${siteBaseUrl}${card.href}`,
     description: lines.join("\n"),
     color: i.friendlyFire ? AMBER : EMBER,
     // ⚠️ The last hit's time, not the post's: a delayed post still reads as when it happened.
