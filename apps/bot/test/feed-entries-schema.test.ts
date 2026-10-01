@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, feedEntries, type Database } from "@factions/db";
+import { LIVE_ENTRY_KINDS } from "@factions/domain";
 import { sql } from "drizzle-orm";
 
 const URL = requireTestDatabaseUrl();
@@ -40,6 +41,18 @@ describe("feed_entries", () => {
   it("does not trip on a gamertag that merely spells a key", async () => {
     await db.insert(feedEntries).values(row({ killer: { gamertag: "\"x\": 1", tag: "x", texture: null } }));
     expect(await db.select().from(feedEntries)).toHaveLength(1);
+  });
+
+  // ⚠️ LIVE_ENTRY_KINDS and the CHECK's SQL literal are two statements of one
+  // fact. A kind added to the TypeScript list but not the constraint compiles,
+  // passes every unit test, and fails at runtime on the first insert.
+  it("the kind CHECK enumerates exactly LIVE_ENTRY_KINDS", async () => {
+    const rows = await db.execute(sql`select pg_get_constraintdef(oid) as def from pg_constraint where conname = 'feed_entries_kind_valid'`);
+    const def = (rows as unknown as { def: string }[])[0]?.def;
+    expect(def).toBeDefined();
+    const kinds = [...def!.matchAll(/'([a-z_]+)'/gu)].map((m) => m[1]);
+    expect(new Set(kinds)).toEqual(new Set(LIVE_ENTRY_KINDS));
+    expect(kinds).toHaveLength(LIVE_ENTRY_KINDS.length);
   });
 
   it("rejects an unknown kind", async () => {

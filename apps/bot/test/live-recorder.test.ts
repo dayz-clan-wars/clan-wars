@@ -1,11 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, kills, players, feedEntries, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { readCursor } from "@factions/event-log";
+import { readCursor, writeCursor } from "@factions/event-log";
 import { PgKillFeedStore, KILL_FEED_CONSUMER } from "../src/kill-feed-tick.js";
 import { PgKillstreakFeedStore } from "../src/killstreak-feed-tick.js";
 import { PgHitFeedStore } from "../src/hit-feed-tick.js";
-import { recordKills, recordKillstreaks, recordHits, insertFeedEntry, LIVE_RECORDER_CONSUMERS } from "../src/live-recorder.js";
+import { PgLongRangeFeedStore } from "../src/long-range-feed-tick.js";
+import { KILLS_CONSUMER } from "../src/kills-tick.js";
+import { recordKills, recordKillstreaks, recordHits, recordLongRange, insertFeedEntry, LIVE_RECORDER_CONSUMERS } from "../src/live-recorder.js";
 
 const URL = requireTestDatabaseUrl();
 const A = "A".repeat(40); const B = "B".repeat(40); const R = "R".repeat(40);
@@ -17,12 +19,12 @@ describe("live recorders", () => {
   let serverId: number;
   const ids: number[] = [];
 
-  async function mkKill(a: { at: Date; victim: string; killer: string | null }) {
+  async function mkKill(a: { at: Date; victim: string; killer: string | null; distanceM?: string }) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
     const [ev] = await db.insert(events).values({ serverId, admFileId: file!.id, lineIndex: ids.length, type: "player.killed" as never, occurredAt: a.at, payload: {} }).returning({ id: events.id });
     await db.insert(kills).values({
       serverId, eventId: ev!.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
-      weapon: null, distanceM: null, cause: a.killer ? "pvp" : "died", victimFactionId: null, killerFactionId: null, friendlyFire: false, atHub: false,
+      weapon: null, distanceM: a.distanceM ?? null, cause: a.killer ? "pvp" : "died", victimFactionId: null, killerFactionId: null, friendlyFire: false, atHub: false,
     });
     ids.push(ev!.id);
     return ev!.id;
@@ -41,6 +43,16 @@ describe("live recorders", () => {
       },
     });
     ids.push(0);
+  }
+
+  /**
+   * Moves the ingest frontier past every hit and tells the kills projector it has caught up, so
+   * the hit store treats the engagements before it as closed (PgHitFeedStore.frontier).
+   */
+  async function closeEngagements(at: Date) {
+    const [file] = await db.select({ id: admFiles.id }).from(admFiles).where(sql`filename = 'f.ADM'`);
+    const [ev] = await db.insert(events).values({ serverId, admFileId: file!.id, lineIndex: 90000 + ids.length, type: "player.connected" as never, occurredAt: at, payload: {} }).returning({ id: events.id });
+    await writeCursor(db, KILLS_CONSUMER, ev!.id);
   }
 
   beforeEach(async () => {
@@ -116,5 +128,43 @@ describe("live recorders", () => {
     const json = JSON.stringify(row!.payload);
     expect(json).not.toMatch(/Pos"|"x"|"y"|"z"/u);
     expect(json).not.toContain("7000.5");
+  });
+
+  describe("the hit recorder, once seeded", () => {
+    const seed = async () => {
+      const store = new PgHitFeedStore(db, { consumer: LIVE_RECORDER_CONSUMERS.hit });
+      expect((await recordHits(db, store)).seeded).toBe(true);
+      return store;
+    };
+
+    it("records a closed engagement no kill claimed", async () => {
+      const store = await seed();
+      await mkHit({ at: h(1), attacker: A, victim: B, damage: 38 });
+      await mkHit({ at: new Date(h(1).getTime() + 4000), attacker: A, victim: B, damage: 22 });
+      await closeEngagements(h(2));
+      await recordHits(db, store);
+      const rows = await db.select().from(feedEntries);
+      expect(rows.map((r) => r.kind)).toEqual(["hit"]);
+      expect((rows[0]!.payload as { hits: unknown[] }).hits).toHaveLength(2);
+    });
+
+    it("does not record an engagement a kill claimed, but still moves its cursor past it", async () => {
+      const store = await seed();
+      await mkHit({ at: h(1), attacker: A, victim: R, damage: 38 });
+      await mkKill({ at: new Date(h(1).getTime() + 2000), killer: A, victim: R });
+      await closeEngagements(h(2));
+      await recordHits(db, store);
+      expect(await db.select().from(feedEntries)).toHaveLength(0);
+      expect(await readCursor(db, LIVE_RECORDER_CONSUMERS.hit)).toBeGreaterThan(0);
+    });
+  });
+
+  it("records a long-range kill and not a short one", async () => {
+    await mkKill({ at: h(1), killer: A, victim: B, distanceM: "41.0" });
+    await mkKill({ at: h(2), killer: A, victim: R, distanceM: "212.5" });
+    await recordLongRange(db, new PgLongRangeFeedStore(db, { consumer: LIVE_RECORDER_CONSUMERS.long_range }));
+    const rows = await db.select().from(feedEntries);
+    expect(rows.map((r) => r.kind)).toEqual(["long_range"]);
+    expect((rows[0]!.payload as { distanceM: number }).distanceM).toBe(212.5);
   });
 });
