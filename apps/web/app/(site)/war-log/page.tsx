@@ -42,6 +42,7 @@ export default async function WarLogPage({ searchParams }: { searchParams: Promi
               <WarLogDays entries={entries} />
             </Panel>
             <p className="mt-4 font-mono text-[11px] text-muted">The last 200 {kind === "raid" ? "raids" : kind === "defense" ? "defenses" : "entries"}{rawTag ? ` involving ${clanName ?? rawTag}` : ""}. Older action lives in the season records.</p>
+            <p className="mt-2 font-mono text-[11px] text-muted">Every war log post, including week and season closes, is on <a className="text-gold underline-offset-4 hover:underline" href="/live/war-log">Live</a>.</p>
           </>
         )}
       </Body>
