@@ -6,7 +6,9 @@ import {
 } from "@factions/db";
 import type { LiveEntryKind } from "@factions/domain";
 import { sql } from "drizzle-orm";
-import { liveFeedDb, onlineNowDb } from "../src/live";
+import { liveFeedDb, onlineNowDb, allowWarLogPayload } from "../src/live";
+// Relative, not "@factions/copy": copy already dev-depends on roster, and the reverse edge would be a cycle in the turbo graph.
+import { warLogLine } from "../../copy/src/live-feed";
 import { seedFaction } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -150,6 +152,15 @@ describe("roster live reads", () => {
     expect(row!.payload).toEqual({ name: "Bears", tag: "BEAR", texture: "Flag_Bear", previousName: "Cubs" });
   });
 
+  it("clans give a missing or non-string texture as an empty string, never the text undefined", async () => {
+    await db.insert(factionEvents).values({
+      serverId, factionId: clanId, kind: "founded", occurredAt: now,
+      payload: { name: "Bears", tag: "BEAR" },
+    } as never);
+    const [row] = await liveFeedDb(db, "clans");
+    expect((row!.payload as { texture: string }).texture).toBe("");
+  });
+
   it("war log carries only the keys the line reads, nulls kept", async () => {
     await db.insert(warLogEvents).values({
       serverId, kind: "season_closed", occurredAt: now,
@@ -183,5 +194,30 @@ describe("roster live reads", () => {
     expect(await liveFeedDb(db, "kills")).toEqual([]);
     expect(await liveFeedDb(db, "achievements")).toEqual([]);
     expect(await onlineNowDb(db)).toEqual([]);
+  });
+});
+
+/**
+ * ⚠️ The war-log allowlist (WAR_LOG_KEYS in live.ts) and the keys warLogLine
+ * (packages/copy/src/live-feed.ts) reads are two statements of one fact. A key
+ * the line starts to read but the allowlist lacks would silently vanish from
+ * the public page; nothing but this test holds them together. Each payload
+ * below sets every key its kind reads, with a distinct value, plus junk.
+ */
+describe("war-log allowlist matches warLogLine", () => {
+  const junk = { dayzId: "Z".repeat(40), weekStart: "x", extra: "leak" };
+  const cases: [string, Parameters<typeof warLogLine>[0], Record<string, unknown>][] = [
+    ["raid, solo", "raid", { solo: true, victimClan: "Wolves", victimTag: "WLF", gamertag: "Raider1" }],
+    ["raid, with a clan", "raid", { solo: false, raiderClan: "Bears", raiderTag: "BER", victimClan: "Wolves", victimTag: "WLF", gamertag: "Raider1" }],
+    ["defense", "defense", { victimClan: "Wolves", victimTag: "WLF", durationSeconds: 7260 }],
+    ["week_closed, full podium", "week_closed", { first: "A", t1: "AAA", p1: 30, second: "B", t2: "BBB", p2: 20, third: "C", t3: "CCC", p3: 10 }],
+    ["season_closed, with a champion", "season_closed", { number: 3, clan: "Wolves", tag: "WLF", points: 99 }],
+  ];
+  it.each(cases)("%s", (_name, kind, payload) => {
+    const raw = { ...payload, ...junk };
+    const at = "2026-09-30T12:00:00.000Z";
+    const allowed = allowWarLogPayload(raw);
+    expect(Object.keys(allowed).sort()).toEqual(Object.keys(payload).sort());
+    expect(warLogLine(kind, allowed, at)).toEqual(warLogLine(kind, raw, at));
   });
 });

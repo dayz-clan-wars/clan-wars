@@ -33,11 +33,22 @@ function window(id: AnyPgColumn, q: LiveQuery): SQL | undefined {
 // ⚠️ An unlinked owner's `ownerName` is their Discord id. The site must never print it.
 const DISCORD_ID = /^\d+$/u;
 
+/**
+ * ⚠️ Exactly the keys `warLogLine` (packages/copy/src/live-feed.ts) reads: two
+ * statements of one fact, held together by the drift test in live.test.ts.
+ */
 const WAR_LOG_KEYS = [
   "solo", "raiderClan", "raiderTag", "victimClan", "victimTag", "gamertag", "durationSeconds",
   "first", "t1", "p1", "second", "t2", "p2", "third", "t3", "p3",
   "number", "clan", "tag", "points",
 ] as const;
+
+/** The war-log allowlist as a function, exported (from this file only, not the package root) for the drift test. */
+export function allowWarLogPayload(p: Record<string, unknown>): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const k of WAR_LOG_KEYS) if (k in p) out[k] = p[k];
+  return out;
+}
 
 export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">, q: LiveQuery = {}): Promise<LiveRow[]> {
   const serverId = await activeServerId(db);
@@ -56,7 +67,7 @@ export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">
       // ⚠️ Allowlist by name: this payload is public, and a future key must not ride along.
       return rows.map((r) => {
         const p = r.payload as Record<string, unknown>;
-        const out: Extract<LiveRow, { feed: "clans" }>["payload"] = { name: String(p.name), tag: String(p.tag), texture: String(p.texture) };
+        const out: Extract<LiveRow, { feed: "clans" }>["payload"] = { name: String(p.name), tag: String(p.tag), texture: typeof p.texture === "string" ? p.texture : "" };
         for (const k of ["actor", "previousName", "disbandAt"] as const) if (typeof p[k] === "string") out[k] = p[k];
         return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: out };
       });
@@ -67,10 +78,7 @@ export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">
         .orderBy(desc(warLogEvents.id)).limit(limit);
       // ⚠️ Allowlist: exactly the keys warLogLine reads. Values (including null) are kept as written.
       return rows.map((r) => {
-        const p = r.payload as Record<string, unknown>;
-        const out: Record<string, unknown> = {};
-        for (const k of WAR_LOG_KEYS) if (k in p) out[k] = p[k];
-        return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: out };
+        return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: allowWarLogPayload(r.payload as Record<string, unknown>) };
       });
     }
     case "achievements": {
