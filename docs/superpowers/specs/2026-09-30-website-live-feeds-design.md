@@ -22,7 +22,7 @@ and new entries appearing while the page is open.
 | Recorder vs poster | Separate recorder ticks with their own cursors; the Discord posters are not changed to read the new table |
 | Hit history | Starts at deploy (no backfill) |
 | Wording | Sentence logic moves into `packages/copy`, shared by bot and web |
-| Em dashes | Removed from the shared wording, so the Discord text changes too |
+| Discord wording | Unchanged. The brand guide (`brand/02-verbal-identity.md`) keeps em dashes and the middot, so the shared copy reproduces today's Discord text exactly |
 
 ## Privacy
 
@@ -138,8 +138,8 @@ plain parts (title, lines, link targets). The bot wraps them in markdown and
 APIEmbeds; the web wraps them in JSX. `packages/copy` still imports no runtime
 value from `@factions/roster`.
 
-Em dashes are removed from this wording (player-facing copy voice), so the
-Discord text changes in those places only.
+The move is wording-neutral: every existing bot embed and text test passes
+unchanged, which is the proof that Discord says exactly what it said before.
 
 ## Section 2: Website
 
@@ -190,8 +190,8 @@ An "Online now · N" panel with up to 10 names, linking to `/live/online`.
   rejecting a position key.
 - Each new roster read: paging with `before` and `after`, newest first,
   achievements filtered to `announce = true`, no `ownerName` in the result.
-- Copy functions: unit tests pinning the wording. Existing bot embed tests stay
-  green apart from the em dash changes, which are updated deliberately.
+- Copy functions: unit tests pinning the wording. Existing bot embed and text
+  tests stay green with no edits.
 - Web: route and gate tests, smoke test for the new exports.
 - Full gate: `npx turbo run typecheck test --concurrency=1 --force`, expect 32/32.
 
@@ -201,4 +201,4 @@ An "Online now · N" panel with up to 10 names, linking to `/live/online`.
 - A hit history backfill.
 - SSE or websockets.
 - Per-player opt-outs (none exist on Discord either).
-- Changing what any Discord feed publishes beyond the em dash wording.
+- Changing what any Discord feed publishes.
