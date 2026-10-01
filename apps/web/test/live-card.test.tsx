@@ -39,6 +39,13 @@ describe("LiveCardView", () => {
     } }));
     expect(html).not.toContain("text-rust");
   });
+  it("draws no flag image for an empty texture", () => {
+    const html = renderToStaticMarkup(createElement(LiveCardView, { item: {
+      id: 1, at: "2026-09-07T22:14:00.000Z", title: [{ raw: "A" }], href: null, lines: [["x"]], detail: [],
+      flag: "", badge: null, tone: "plain",
+    } }));
+    expect(html).not.toContain("/flags/thumb/");
+  });
   it("draws an achievement's badge and no flag image", () => {
     const html = renderToStaticMarkup(createElement(LiveCardView, { item: {
       id: 1, at: "2026-09-07T22:14:00.000Z", title: null, href: null, lines: [["x"]], detail: [],

@@ -38,7 +38,7 @@ export function toLiveItem(row: LiveRow): LiveItem {
     case "hits": { const h = row.payload as LiveHitRun; return card(hitCard(h), row, { flag: h.attacker.texture, tone: h.friendlyFire ? "warn" : "plain" }); }
     case "streaks": { const s = row.payload as LiveStreak; return card(streakCard(s), row, { flag: s.killer.texture }); }
     case "long-range": { const l = row.payload as LiveLongRange; return card(longRangeCard(l), row, { flag: l.killer.texture, tone: l.friendlyFire ? "warn" : "plain" }); }
-    case "clans": return card(clanFeedCard(row.kind, row.payload), row, { flag: row.payload.texture });
+    case "clans": return card(clanFeedCard(row.kind, row.payload), row, { flag: row.payload.texture || null });
     case "war-log": return line(warLogLine(row.kind, row.payload, row.occurredAt.toISOString()), row);
     case "achievements": return line(achievementLine(row.payload), row, { badge: { key: row.payload.key } });
     case "bans": return line(banLine({ kind: row.kind, ...row.payload }), row);

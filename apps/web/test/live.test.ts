@@ -52,6 +52,10 @@ describe("toLiveItem", () => {
     expect(item.flag).toBe("Flag_Wolf");
     expect(item.title).not.toBeNull();
   });
+  it("treats an empty clan texture as no flag", () => {
+    const item = toLiveItem({ feed: "clans", id: 5, occurredAt: at, kind: "founded", payload: { name: "Wolves", tag: "WLF", texture: "" } });
+    expect(item.flag).toBeNull();
+  });
   it("gives a war-log row no title and one line", () => {
     const item = toLiveItem({ feed: "war-log", id: 6, occurredAt: at, kind: "defense", payload: { victimClan: "Wolves", victimTag: "WLF", durationSeconds: 3600 } });
     expect(item.title).toBeNull();
