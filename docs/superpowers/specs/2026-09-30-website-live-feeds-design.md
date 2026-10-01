@@ -36,8 +36,11 @@ The site applies exactly the rules Discord applies, no more and no less:
 - Killstreaks and long range: friendly fire and Hub excluded.
 - Clan feed: base moves never say where; flag raises and lowers are not published.
 - Bans: the gamertag frozen at ban time, never `dayzId`, no profile link.
-- Achievements: only `announce = true` unlocks (what Discord actually posted).
-  Never render `payload.ownerName`; it can hold a Discord id. Use `gamertag` / `clanTag`.
+- Achievements: only the public channel notices (`clan_notices` with
+  `kind = 'achievement'`, `target = 'channel'`, `faction_id IS NULL`,
+  `payload->>'public' = 'true'`), which is exactly what Discord posted.
+  The roster read nulls `payload.ownerName` when it is all digits (a Discord id)
+  so the web can never render one.
 - Players online: everyone with an open session, as on Discord.
 
 ## Section 1: Data
@@ -120,7 +123,7 @@ No new storage. New read exports in `@factions/roster`:
 | Online | Open `player_sessions` joined to players, open membership span, factions (the same shape as `online-tick.ts`) |
 | Clan feed | `faction_events` |
 | War log | `war_log_events`, all four kinds (raid, defense, week closed, season closed) |
-| Achievements | `achievement_unlocks` with `announce = true` |
+| Achievements | Public achievement channel notices in `clan_notices` (see Privacy) |
 | Bans | `ban_announcements` |
 | Combat feeds | `feed_entries` by kind |
 
@@ -151,7 +154,9 @@ unchanged, which is the proof that Discord says exactly what it said before.
 - Tabs via `SegNav`, horizontally scrollable on phones.
 - `/live` and the `/live/` prefix are public in `lib/auth/gate.ts`;
   `auth-gate.test.ts` updated.
-- "Live" added to the site nav.
+- Nav: the desktop bar has no room for another cell (`lib/menu.ts`), so "Live"
+  replaces "War log" there and also lights up on `/war-log`. The phone drawer
+  adds "Live" and keeps "War log".
 - `/war-log` stays and links to `/live/war-log`.
 - `force-dynamic`, pinned by `request-time-rendering.test.ts`.
 
@@ -175,7 +180,8 @@ unchanged, which is the proof that Discord says exactly what it said before.
   `achievement-badge`, and the `feed-copy` friendly fire and Hub marks.
 - Gamertags link to `/players/[gamertag]`, clan tags to `/clans/[tag]`.
   Ban entries show the frozen gamertag with no link.
-- Times relative ("4m ago") with the full time as a `title`.
+- Stamps use `when()` (UTC, the site convention pinned by `utc-times.test.ts`)
+  rather than relative times, which go stale in a server render.
 - Styling only with the existing `globals.css` tokens and `ui.tsx` primitives
   (`theme-tokens.test.ts`, `raw-hex.test.ts`).
 
@@ -189,7 +195,7 @@ An "Online now · N" panel with up to 10 names, linking to `/live/online`.
   hit recorder seeding at the head, ordering after a failure, coordinate CHECK
   rejecting a position key.
 - Each new roster read: paging with `before` and `after`, newest first,
-  achievements filtered to `announce = true`, no `ownerName` in the result.
+  achievements limited to public channel notices, a digits-only `ownerName` nulled.
 - Copy functions: unit tests pinning the wording. Existing bot embed and text
   tests stay green with no edits.
 - Web: route and gate tests, smoke test for the new exports.
