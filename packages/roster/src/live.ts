@@ -20,15 +20,24 @@ export type OnlinePlayerRow = { gamertag: string; tag: string | null; connectedA
 
 const clamp = (n: number | undefined) => Math.min(LIVE_PAGE_SIZE, Math.max(1, Math.trunc(n ?? LIVE_PAGE_SIZE) || 1));
 
+// A cursor that is not a positive safe integer is treated as not given, so a bad caller gets the newest page, never a SQL error.
+const validId = (n: number | undefined): n is number => n !== undefined && Number.isSafeInteger(n) && n > 0;
+
 /** `id < before` or `id > after`; after wins. Both are integers the caller has already validated. */
 function window(id: AnyPgColumn, q: LiveQuery): SQL | undefined {
-  if (q.after !== undefined) return gt(id, q.after);
-  if (q.before !== undefined) return lt(id, q.before);
+  if (validId(q.after)) return gt(id, q.after);
+  if (validId(q.before)) return lt(id, q.before);
   return undefined;
 }
 
 // ⚠️ An unlinked owner's `ownerName` is their Discord id. The site must never print it.
 const DISCORD_ID = /^\d+$/u;
+
+const WAR_LOG_KEYS = [
+  "solo", "raiderClan", "raiderTag", "victimClan", "victimTag", "gamertag", "durationSeconds",
+  "first", "t1", "p1", "second", "t2", "p2", "third", "t3", "p3",
+  "number", "clan", "tag", "points",
+] as const;
 
 export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">, q: LiveQuery = {}): Promise<LiveRow[]> {
   const serverId = await activeServerId(db);
@@ -44,13 +53,25 @@ export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">
       const rows = await db.select({ id: factionEvents.id, occurredAt: factionEvents.occurredAt, kind: factionEvents.kind, payload: factionEvents.payload }).from(factionEvents)
         .where(and(eq(factionEvents.serverId, serverId), window(factionEvents.id, q)))
         .orderBy(desc(factionEvents.id)).limit(limit);
-      return rows.map((r) => ({ feed, ...r, payload: r.payload as never }));
+      // ⚠️ Allowlist by name: this payload is public, and a future key must not ride along.
+      return rows.map((r) => {
+        const p = r.payload as Record<string, unknown>;
+        const out: Extract<LiveRow, { feed: "clans" }>["payload"] = { name: String(p.name), tag: String(p.tag), texture: String(p.texture) };
+        for (const k of ["actor", "previousName", "disbandAt"] as const) if (typeof p[k] === "string") out[k] = p[k];
+        return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: out };
+      });
     }
     case "war-log": {
       const rows = await db.select({ id: warLogEvents.id, occurredAt: warLogEvents.occurredAt, kind: warLogEvents.kind, payload: warLogEvents.payload }).from(warLogEvents)
         .where(and(eq(warLogEvents.serverId, serverId), window(warLogEvents.id, q)))
         .orderBy(desc(warLogEvents.id)).limit(limit);
-      return rows.map((r) => ({ feed, ...r, payload: r.payload as Record<string, unknown> }));
+      // ⚠️ Allowlist: exactly the keys warLogLine reads. Values (including null) are kept as written.
+      return rows.map((r) => {
+        const p = r.payload as Record<string, unknown>;
+        const out: Record<string, unknown> = {};
+        for (const k of WAR_LOG_KEYS) if (k in p) out[k] = p[k];
+        return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: out };
+      });
     }
     case "achievements": {
       const rows = await db.select({ id: clanNotices.id, occurredAt: clanNotices.occurredAt, payload: clanNotices.payload }).from(clanNotices)

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, events, admFiles, feedEntries, clanNotices, warLogEvents, banAnnouncements, playerSessions, players, membershipHistory,
+  servers, events, admFiles, feedEntries, factionEvents, clanNotices, warLogEvents, banAnnouncements, playerSessions, players, membershipHistory,
   type Database,
 } from "@factions/db";
 import type { LiveEntryKind } from "@factions/domain";
@@ -122,12 +122,12 @@ describe("roster live reads", () => {
   it("reads the war log from war_log_events, all four kinds", async () => {
     const kinds = ["raid", "defense", "week_closed", "season_closed"] as const;
     for (const [i, kind] of kinds.entries()) {
-      await db.insert(warLogEvents).values({ serverId, kind, occurredAt: new Date(now.getTime() + i * 1000), payload: { n: i } });
+      await db.insert(warLogEvents).values({ serverId, kind, occurredAt: new Date(now.getTime() + i * 1000), payload: { points: i } });
     }
     const rows = await liveFeedDb(db, "war-log");
     expect(rows).toHaveLength(4);
     expect(rows.map((r) => (r.feed === "war-log" ? r.kind : null))).toEqual(["season_closed", "week_closed", "defense", "raid"]);
-    expect(rows[0]).toMatchObject({ feed: "war-log", payload: { n: 3 } });
+    expect(rows[0]).toMatchObject({ feed: "war-log", payload: { points: 3 } });
   });
 
   it("bans carry only gamertag, reason and expiry", async () => {
@@ -139,5 +139,49 @@ describe("roster live reads", () => {
     expect(row).toMatchObject({ feed: "bans", kind: "applied" });
     expect((row as { payload: unknown }).payload).toEqual({ gamertag: "Griefer", reason: "zone", expiresAt: "2026-10-01T00:00:00.000Z" });
     expect(JSON.stringify(row)).not.toMatch(/dayzId|private/u);
+  });
+
+  it("clans carry only the allowlisted payload keys", async () => {
+    await db.insert(factionEvents).values({
+      serverId, factionId: clanId, kind: "renamed", occurredAt: now,
+      payload: { name: "Bears", tag: "BEAR", texture: "Flag_Bear", previousName: "Cubs", actor: 7, dayzId: "Z".repeat(40) },
+    } as never);
+    const [row] = await liveFeedDb(db, "clans");
+    expect(row!.payload).toEqual({ name: "Bears", tag: "BEAR", texture: "Flag_Bear", previousName: "Cubs" });
+  });
+
+  it("war log carries only the keys the line reads, nulls kept", async () => {
+    await db.insert(warLogEvents).values({
+      serverId, kind: "season_closed", occurredAt: now,
+      payload: { number: 2, clan: null, tag: null, points: null, weekStart: "x", dayzId: "Z".repeat(40) },
+    });
+    const [row] = await liveFeedDb(db, "war-log");
+    expect(row!.payload).toEqual({ number: 2, clan: null, tag: null, points: null });
+  });
+
+  it("ignores a cursor that is not a positive safe integer", async () => {
+    const ids = await seedKills(3);
+    const newest = [ids[2], ids[1], ids[0]];
+    expect((await liveFeedDb(db, "kills", { before: NaN })).map((r) => r.id)).toEqual(newest);
+    expect((await liveFeedDb(db, "kills", { after: 1.5 })).map((r) => r.id)).toEqual(newest);
+    expect((await liveFeedDb(db, "kills", { after: -1 })).map((r) => r.id)).toEqual(newest);
+  });
+
+  it("excludes everything that belongs to a server that is not the active one", async () => {
+    // activeServerId takes the lowest-id server with active = true.
+    const [other] = await db.insert(servers).values({ name: "T", map: "livonia", clockOffsetMs: 0, active: false }).returning();
+    const otherId = other!.id;
+    const [e] = await db.insert(events).values({ serverId: otherId, admFileId, lineIndex: 9999, type: "player.killed", occurredAt: now, payload: {} } as never).returning();
+    await db.insert(feedEntries).values({ serverId: otherId, kind: "kill", sourceEventId: e!.id, occurredAt: now, payload: {} });
+    await db.insert(clanNotices).values({
+      serverId: otherId, factionId: null, target: "channel", kind: "achievement", occurredAt: now,
+      payload: { key: "k", name: "N", description: "D", ownerKind: "player", ownerName: "Pat", public: true },
+    });
+    const [c] = await db.insert(events).values({ serverId: otherId, admFileId, lineIndex: 10000, type: "player.connected", occurredAt: now, payload: {} } as never).returning();
+    await db.insert(players).values({ dayzId: "O".repeat(40), gamertag: "Other", firstSeenAt: now, lastSeenAt: now });
+    await db.insert(playerSessions).values({ serverId: otherId, dayzId: "O".repeat(40), connectedAt: now, connectEventId: c!.id });
+    expect(await liveFeedDb(db, "kills")).toEqual([]);
+    expect(await liveFeedDb(db, "achievements")).toEqual([]);
+    expect(await onlineNowDb(db)).toEqual([]);
   });
 });
