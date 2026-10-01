@@ -27,3 +27,4 @@ export * from "./awards";
 export * from "./bounties";
 export * from "./koth";
 export * from "./show";
+export * from "./live-feed";

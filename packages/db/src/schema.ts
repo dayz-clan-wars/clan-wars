@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage, LiveEntryKind } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -2109,7 +2109,7 @@ export const banAnnouncements = pgTable("ban_announcements", {
 export const feedEntries = pgTable("feed_entries", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   serverId: integer("server_id").notNull().references(() => servers.id),
-  kind: text("kind").$type<"kill" | "hit" | "killstreak" | "long_range">().notNull(),
+  kind: text("kind").$type<LiveEntryKind>().notNull(),
   /** The kill's `events.id`, or the last hit event of an engagement: the recorder's cursor value. */
   sourceEventId: bigint("source_event_id", { mode: "number" }).notNull().references(() => events.id),
   /** When it happened in game, not when the row was written; the backfill writes old entries. */
