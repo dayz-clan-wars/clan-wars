@@ -13,17 +13,17 @@ export const KILLSTREAK_FEED_CONSUMER = "killstreak-feed-poster";
 /** Post on every Nth kill of a streak. */
 export const DEFAULT_KILLSTREAK_EVERY = 3;
 
-/**
- * Post streak milestones to #killstreaks. Every PvP kill is a candidate; the
- * render declines the ones that are not milestones, which is what keeps the
- * cursor moving through ordinary kills.
- */
 /** A streak post: a positive multiple of `every`. Shared by the Discord poster and the website recorder. */
 export function isKillstreakMilestone(i: KillstreakFeedItem, every: number): boolean {
   const n = every > 0 ? every : DEFAULT_KILLSTREAK_EVERY;
   return i.streak !== null && i.streak > 0 && i.streak % n === 0;
 }
 
+/**
+ * Post streak milestones to #killstreaks. Every PvP kill is a candidate; the
+ * render declines the ones that are not milestones, which is what keeps the
+ * cursor moving through ordinary kills.
+ */
 export function killstreakFeedTick(
   store: CursorFeedStore<KillstreakFeedItem>,
   post: CursorFeedPoster,

@@ -5,7 +5,7 @@ import { flagLabel } from "./feed-embed.js";
 // Moved to site-links.ts. Re-exported so the five modules that import them
 // from here keep working; prefer importing from site-links.ts in new code.
 export { escapeMarkdown, profileUrl, who } from "./site-links.js";
-import { DETAIL_LINE_CAP, howLine as copyHowLine, killCard } from "@factions/copy";
+import { howLine as copyHowLine, killCard } from "@factions/copy";
 import { lineMarkdown } from "./site-links.js";
 import { toLiveKill } from "./live-payload.js";
 
@@ -55,9 +55,6 @@ export type HitDetail = {
   weapon: string | null;
   distanceM: number | null;
 };
-
-// Re-exported so the cap the bot trims to is the one the website trims to.
-export { DETAIL_LINE_CAP };
 
 // Thin wrappers over the shared copy, kept for tests that pin their old string
 // shape (nothing else in apps/bot/src imports them).
