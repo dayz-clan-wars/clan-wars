@@ -54,4 +54,10 @@ describe("feed_entries", () => {
     await db.insert(feedEntries).values(row({}, "killstreak"));
     expect(await db.select().from(feedEntries)).toHaveLength(2);
   });
+
+  it("deleting the source event deletes its entry: a hand-deleted misparse takes its website row with it", async () => {
+    await db.insert(feedEntries).values(row({}));
+    await db.delete(events).where(sql`id = ${eventId}`);
+    expect(await db.select().from(feedEntries)).toHaveLength(0);
+  });
 });

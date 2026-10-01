@@ -2111,7 +2111,9 @@ export const feedEntries = pgTable("feed_entries", {
   serverId: integer("server_id").notNull().references(() => servers.id),
   kind: text("kind").$type<LiveEntryKind>().notNull(),
   /** The kill's `events.id`, or the last hit event of an engagement: the recorder's cursor value. */
-  sourceEventId: bigint("source_event_id", { mode: "number" }).notNull().references(() => events.id),
+  // ⚠️ Cascades: a misparsed event deleted by hand (docs/deploy/2026-09-10-credited-kills.md)
+  // takes its website entry with it, instead of the delete failing on this FK.
+  sourceEventId: bigint("source_event_id", { mode: "number" }).notNull().references(() => events.id, { onDelete: "cascade" }),
   /** When it happened in game, not when the row was written; the backfill writes old entries. */
   occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
   payload: jsonb("payload").notNull(),

@@ -715,7 +715,34 @@ export async function start(cfg: BotConfig): Promise<void> {
   const hitRecordStore = new PgHitFeedStore(db, { windowS: cfg.hitBurstWindowS, consumer: LIVE_RECORDER_CONSUMERS.hit });
   const killstreakRecordStore = new PgKillstreakFeedStore(db, { consumer: LIVE_RECORDER_CONSUMERS.killstreak });
   const longRangeRecordStore = new PgLongRangeFeedStore(db, { minM: cfg.longRangeMinM, consumer: LIVE_RECORDER_CONSUMERS.long_range });
+  // One helper for all four recorders: its own try/catch (a recorder must never
+  // stop the tick), a once-per-id error log, and a "blocked" report that fires
+  // when the blocking event changes, like the posters'.
   const liveRecordFailures = new Set<string>();
+  const liveRecordBlockedAt = new Map<string, number | null>();
+  const runRecorder = async (
+    kind: string, noun: string,
+    run: (onError: (id: number, err: unknown) => void) => Promise<{ posted: number; blockedAt: number | null; seeded: boolean }>,
+  ): Promise<void> => {
+    // ⚠️ Not gated on a channel: the site keeps its feed with Discord off.
+    try {
+      const r = await run((id, err) => {
+        const key = `${kind}:${id}`;
+        if (liveRecordFailures.has(key)) return;
+        liveRecordFailures.add(key);
+        console.error(`live recorder failed for ${noun} ${id}`, err);
+      });
+      if (r.seeded) console.log(`live recorder: ${kind} cursor seeded at the head`);
+      if (r.posted > 0) console.log(`live recorder: ${r.posted} ${kind}`);
+      if (r.blockedAt === null) liveRecordBlockedAt.set(kind, null);
+      else if (r.blockedAt !== liveRecordBlockedAt.get(kind)) {
+        console.error(`live recorder blocked at event ${r.blockedAt} (${kind}); nothing behind it will record until this one succeeds.`);
+        liveRecordBlockedAt.set(kind, r.blockedAt);
+      }
+    } catch (err) {
+      console.error(`live ${kind} recorder tick failed`, err);
+    }
+  };
   const onlineBoard = cfg.playersOnlineChannelId ? createOnlineBoard(client, cfg.playersOnlineChannelId) : null;
   const onlineStore = new PgOnlineStore(db);
   const onlineState: OnlineState = { lastKey: null };
@@ -1570,20 +1597,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Not gated on a channel: the site keeps its feed with Discord off.
-    try {
-      const r = await recordKills(db, killRecordStore, {
-        onError: (id, err) => {
-          const key = `kill:${id}`;
-          if (liveRecordFailures.has(key)) return;
-          liveRecordFailures.add(key);
-          console.error(`live recorder failed for kill event ${id}`, err);
-        },
-      });
-      if (r.posted > 0) console.log(`live recorder: ${r.posted} kills`);
-    } catch (err) {
-      console.error("live kill recorder tick failed", err);
-    }
+    await runRecorder("kill", "kill event", (onError) => recordKills(db, killRecordStore, { onError }));
 
     // ⚠️ After killFeedTick: #hit-feed suppresses engagements a kill claimed,
     // and reads the kills-projector cursor to decide what is safe to close.
@@ -1612,21 +1626,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Not gated on a channel: the site keeps its feed with Discord off.
-    try {
-      const r = await recordHits(db, hitRecordStore, {
-        onError: (id, err) => {
-          const key = `hit:${id}`;
-          if (liveRecordFailures.has(key)) return;
-          liveRecordFailures.add(key);
-          console.error(`live recorder failed for engagement ending at event ${id}`, err);
-        },
-      });
-      if (r.seeded) console.log("live recorder: hit cursor seeded at the head");
-      if (r.posted > 0) console.log(`live recorder: ${r.posted} hit runs`);
-    } catch (err) {
-      console.error("live hit recorder tick failed", err);
-    }
+    await runRecorder("hit", "engagement ending at event", (onError) => recordHits(db, hitRecordStore, { onError }));
 
     if (killstreakFeedPoster) {
       try {
@@ -1654,20 +1654,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Not gated on a channel: the site keeps its feed with Discord off.
-    try {
-      const r = await recordKillstreaks(db, killstreakRecordStore, cfg.killstreakEvery, {
-        onError: (id, err) => {
-          const key = `killstreak:${id}`;
-          if (liveRecordFailures.has(key)) return;
-          liveRecordFailures.add(key);
-          console.error(`live recorder failed for kill event ${id}`, err);
-        },
-      });
-      if (r.posted > 0) console.log(`live recorder: ${r.posted} killstreaks`);
-    } catch (err) {
-      console.error("live killstreak recorder tick failed", err);
-    }
+    await runRecorder("killstreak", "kill event", (onError) => recordKillstreaks(db, killstreakRecordStore, cfg.killstreakEvery, { onError }));
 
     if (longRangeFeedPoster) {
       try {
@@ -1694,20 +1681,7 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Not gated on a channel: the site keeps its feed with Discord off.
-    try {
-      const r = await recordLongRange(db, longRangeRecordStore, {
-        onError: (id, err) => {
-          const key = `long_range:${id}`;
-          if (liveRecordFailures.has(key)) return;
-          liveRecordFailures.add(key);
-          console.error(`live recorder failed for kill event ${id}`, err);
-        },
-      });
-      if (r.posted > 0) console.log(`live recorder: ${r.posted} long range kills`);
-    } catch (err) {
-      console.error("live long range recorder tick failed", err);
-    }
+    await runRecorder("long_range", "kill event", (onError) => recordLongRange(db, longRangeRecordStore, { onError }));
 
     // ⚠️ Its own try/catch, always run — unlike the feed and war log, a
     // clan_notices row can be a DM, which needs no channel at all, so this
