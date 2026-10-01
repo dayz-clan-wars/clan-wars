@@ -14,6 +14,6 @@ function names(list: string[]): string {
 export function referralWinnersText(winners: string[], count: number): string {
   const players = `${count} new player${count === 1 ? "" : "s"}`;
   return winners.length === 1
-    ? `Top referrer this week: ${names(winners)}, who brought in ${players}. They get a plate carrier for a week.`
-    : `Top referrers this week: ${names(winners)}, with ${players} each. They each get a plate carrier for a week.`;
+    ? `Top referrer this week: ${names(winners)}, who brought in ${players}. They get a weapon kit for a week.`
+    : `Top referrers this week: ${names(winners)}, with ${players} each. They each get a weapon kit for a week.`;
 }

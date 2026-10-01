@@ -477,4 +477,6 @@ export const REFERRAL_WEEK_START_HOUR_UTC = 10;
 /** How long after a week ends before it may close, on top of the sessions-cursor check. */
 export const REFERRAL_CLOSE_GRACE_MS = 30 * 60_000;
 /** The prize. A key in `assets/awards.json`. */
-export const REFERRAL_AWARD_KEY = "plate-carrier";
+export const REFERRAL_AWARD_KEY = "weapon-kit";
+/** How long the prize runs. Set here, not from the catalogue: the weapon kit's own `durationDays` is shorter, and the post promises a week. */
+export const REFERRAL_AWARD_DAYS = 7;

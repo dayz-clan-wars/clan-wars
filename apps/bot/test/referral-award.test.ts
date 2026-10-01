@@ -58,13 +58,13 @@ describe("closing a referral week", () => {
   const event = async (iso: string) =>
     (await db.insert(events).values({ serverId, admFileId: fileId, lineIndex: line++, type: "player.connected", occurredAt: at(iso), payload: {} }).returning())[0]!.id;
 
-  it("grants the plate carrier to the top linked referrer, with its DM, once", async () => {
+  it("grants the weapon kit, for a week, to the top linked referrer, with its DM, once", async () => {
     await link("A"); await link("B");
     await brought("A", 3); await brought("B", 1);
     const out = await closeReferralWeek(db, WEEK, opts);
     expect(out).toEqual({ status: "closed", winners: ["A"], topCount: 3, skipped: [] });
     const grants = await db.select().from(awardGrants);
-    expect(grants).toEqual([expect.objectContaining({ awardKey: "plate-carrier", discordId: "A", grantedByDiscordId: "bot" })]);
+    expect(grants).toEqual([expect.objectContaining({ awardKey: "weapon-kit", durationDays: 7, discordId: "A", grantedByDiscordId: "bot" })]);
     expect(await db.select().from(clanNotices)).toEqual([expect.objectContaining({ kind: "award_granted", discordTargetId: "A" })]);
     expect(await db.select().from(referralWeekWinners)).toEqual([expect.objectContaining({ discordId: "A", dayzId: "dz-A", awardGrantId: grants[0]!.id })]);
     expect(await closeReferralWeek(db, WEEK, opts)).toEqual({ status: "already" });
@@ -98,7 +98,7 @@ describe("closing a referral week", () => {
     expect(await weekRows()).toEqual([expect.objectContaining({ topCount: 0, announcedAt: null })]);
   });
 
-  it("closes with a failure and no grant when plate-carrier has left the catalogue", async () => {
+  it("closes with a failure and no grant when the weapon kit has left the catalogue", async () => {
     await link("A");
     await brought("A", 2);
     awardsOverride.current = {};
