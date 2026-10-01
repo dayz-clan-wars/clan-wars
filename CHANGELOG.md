@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.58.1] - 2026-10-01
+
 ### Removed
 
 - The rule against guessing code lock combinations. Cracking a code is now a legal way to raid a base.
