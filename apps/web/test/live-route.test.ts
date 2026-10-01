@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 vi.mock("@factions/roster", () => ({
@@ -13,6 +13,7 @@ const call = (feed: string, qs = "") =>
   GET(new NextRequest(`http://x/api/live/${feed}${qs}`), { params: Promise.resolve({ feed }) });
 
 describe("GET /api/live/[feed]", () => {
+  beforeEach(() => vi.clearAllMocks());
   it.each(["constructor", "foo", "__proto__"])("404s the unknown feed %s without touching the database", async (feed) => {
     const r = await call(feed);
     expect(r.status).toBe(404);

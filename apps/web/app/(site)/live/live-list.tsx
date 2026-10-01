@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { LIVE_PAGE_SIZE, type LiveFeed } from "@factions/domain";
 // ⚠️ Only the pure half: "@/lib/live" imports @factions/roster at runtime.
-import type { LiveItem } from "@/lib/live-items";
+import { mergePoll, pollMayHaveGap, type LiveItem } from "@/lib/live-items";
 import { visiblePoll } from "@/lib/visible-poll";
 import { btnSecondary } from "@/app/components/ui";
 import { LiveCardView } from "./live-card";
@@ -29,11 +29,10 @@ export function LiveList({ feed, initial, live }: { feed: Exclude<LiveFeed, "onl
         if (!r.ok) return;
         const { items: fresh } = (await r.json()) as { items: LiveItem[] };
         if (fresh.length === 0) return;
+        // A full page replaces the list (see mergePoll), so newest is its top, never a jump past a gap.
         newest.current = Math.max(newest.current, fresh[0]!.id);
-        setItems((cur) => {
-          const seen = new Set(cur.map((i) => i.id));
-          return [...fresh.filter((i) => !seen.has(i.id)), ...cur];
-        });
+        setItems((cur) => mergePoll(cur, fresh, LIVE_PAGE_SIZE).items);
+        if (pollMayHaveGap(fresh, LIVE_PAGE_SIZE)) setMore(true);
       } catch { /* a missed poll is retried in 15 s */ }
     }, LIVE_POLL_MS);
   }, [feed, live]);

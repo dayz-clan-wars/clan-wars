@@ -44,3 +44,19 @@ export function toLiveItem(row: LiveRow): LiveItem {
     case "bans": return line(banLine({ kind: row.kind, ...row.payload }), row);
   }
 }
+
+/**
+ * Fold a poll's answer (`?after=<newest>`, newest first) into the list on screen.
+ * ⚠️ The read returns the NEWEST `pageSize` rows above the cursor, so a full page
+ * may have skipped rows between the cursor and its oldest entry (a tab back from
+ * the background after a busy hour). Then the list is replaced by that page and
+ * "Older" pages back from it; prepending would leave a gap nothing ever fills.
+ */
+export function mergePoll(current: LiveItem[], fresh: LiveItem[], pageSize: number): { items: LiveItem[]; reset: boolean } {
+  if (pollMayHaveGap(fresh, pageSize)) return { items: fresh, reset: true };
+  const seen = new Set(current.map((i) => i.id));
+  return { items: [...fresh.filter((i) => !seen.has(i.id)), ...current], reset: false };
+}
+
+/** A full poll page: rows may exist between the cursor and its oldest entry. */
+export const pollMayHaveGap = (fresh: LiveItem[], pageSize: number): boolean => fresh.length >= pageSize;
