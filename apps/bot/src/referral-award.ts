@@ -1,7 +1,7 @@
 // apps/bot/src/referral-award.ts
 import { and, count, eq, gt, gte, inArray, lt, max } from "drizzle-orm";
 import { events, identityLinks, referralQualifications, referralWeeks, referralWeekWinners, servers, type Database, type ReferralWeekDetail } from "@factions/db";
-import { REFERRAL_AWARD_KEY, REFERRAL_CLOSE_GRACE_MS, referralWinners, type ReferralWeek } from "@factions/domain";
+import { REFERRAL_AWARD_DAYS, REFERRAL_AWARD_KEY, REFERRAL_CLOSE_GRACE_MS, referralWinners, type ReferralWeek } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { readCursor } from "@factions/event-log";
 import { grantAwardTx } from "@factions/roster/internal";
@@ -92,7 +92,7 @@ export async function closeReferralWeek(db: Database, week: ReferralWeek, opts: 
       if (!server) throw new Error("referral award: no active server");
       for (const discordId of winners) {
         const g = await grantAwardTx(tx, {
-          awardKey: REFERRAL_AWARD_KEY, winnerDiscordId: discordId, grantedByDiscordId: opts.grantedByDiscordId,
+          awardKey: REFERRAL_AWARD_KEY, durationDays: REFERRAL_AWARD_DAYS, winnerDiscordId: discordId, grantedByDiscordId: opts.grantedByDiscordId,
           reason: reasonFor(week), siteBaseUrl: opts.siteBaseUrl, now: opts.now, serverId: server.id,
         });
         if (!g.ok) throw new Error(`referral award: grant refused (${g.reason})`);

@@ -32,5 +32,5 @@ Spec `docs/superpowers/specs/2026-09-27-referral-leaderboard-design.md`.
 `referral_week_winners`. A week row means that week is paid; deleting one would pay
 it again on the next tick, so never delete one on `factions_live`.
 
-**A missing prize** (`plate-carrier` removed from `awards.json`): the week closes with
+**A missing prize** (`weapon-kit` removed from `awards.json`; the prize was `plate-carrier` until 2026-10-01): the week closes with
 no grant and an ops alert naming the winners; grant by hand with `/award grant`.

@@ -77,7 +77,7 @@ describe("referralAwardTick", () => {
   it("closes the ended week, grants, and announces once", async () => {
     await playedAndIngested();
     expect(await tick("2026-09-28T11:00:00Z")).toEqual({ qualified: 1, closed: 1, posted: 1 });
-    expect(announced).toEqual(["Top referrer this week: **Otto**, who brought in 1 new player. They get a plate carrier for a week."]);
+    expect(announced).toEqual(["Top referrer this week: **Otto**, who brought in 1 new player. They get a weapon kit for a week."]);
     expect(await tick("2026-09-28T11:05:00Z")).toEqual({ qualified: 0, closed: 0, posted: 0 });
     expect(announced).toHaveLength(1);
     expect(await db.select().from(awardGrants)).toHaveLength(1);
