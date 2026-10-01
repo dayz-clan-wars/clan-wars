@@ -43,11 +43,14 @@ const pvp = and(isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${ki
  * a member who has since left still shows the clan they killed for.
  */
 export class PgKillFeedStore implements KillFeedStore {
-  constructor(private readonly db: Database) {}
+  private readonly consumer: string;
+  constructor(private readonly db: Database, opts: { consumer?: string } = {}) {
+    this.consumer = opts.consumer ?? KILL_FEED_CONSUMER;
+  }
 
   async seeded(): Promise<boolean> {
     const [row] = await this.db.select({ n: consumerCursors.lastEventId }).from(consumerCursors)
-      .where(eq(consumerCursors.consumerName, KILL_FEED_CONSUMER));
+      .where(eq(consumerCursors.consumerName, this.consumer));
     return row !== undefined;
   }
 
@@ -57,11 +60,11 @@ export class PgKillFeedStore implements KillFeedStore {
   }
 
   cursor(): Promise<number> {
-    return readCursor(this.db, KILL_FEED_CONSUMER);
+    return readCursor(this.db, this.consumer);
   }
 
   markPosted(eventId: number): Promise<void> {
-    return writeCursor(this.db, KILL_FEED_CONSUMER, eventId);
+    return writeCursor(this.db, this.consumer, eventId);
   }
 
   async readAfter(cursor: number, limit: number): Promise<KillFeedItem[]> {

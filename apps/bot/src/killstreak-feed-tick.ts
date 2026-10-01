@@ -13,6 +13,12 @@ export const KILLSTREAK_FEED_CONSUMER = "killstreak-feed-poster";
 /** Post on every Nth kill of a streak. */
 export const DEFAULT_KILLSTREAK_EVERY = 3;
 
+/** A streak post: a positive multiple of `every`. Shared by the Discord poster and the website recorder. */
+export function isKillstreakMilestone(i: KillstreakFeedItem, every: number): boolean {
+  const n = every > 0 ? every : DEFAULT_KILLSTREAK_EVERY;
+  return i.streak !== null && i.streak > 0 && i.streak % n === 0;
+}
+
 /**
  * Post streak milestones to #killstreaks. Every PvP kill is a candidate; the
  * render declines the ones that are not milestones, which is what keeps the
@@ -23,10 +29,9 @@ export function killstreakFeedTick(
   post: CursorFeedPoster,
   opts: { siteBaseUrl: string; every: number; flagImage?: FlagImageResolver; batchSize?: number; onError?: (eventId: number, err: unknown) => void },
 ): Promise<CursorFeedResult> {
-  const every = opts.every > 0 ? opts.every : DEFAULT_KILLSTREAK_EVERY;
   return cursorFeedTick(
     store, post,
-    (i) => (i.streak !== null && i.streak > 0 && i.streak % every === 0 ? killstreakFeedEmbed(i, opts.siteBaseUrl, opts.flagImage) : null),
+    (i) => (isKillstreakMilestone(i, opts.every) ? killstreakFeedEmbed(i, opts.siteBaseUrl, opts.flagImage) : null),
     { batchSize: opts.batchSize, onError: opts.onError },
   );
 }
@@ -37,11 +42,14 @@ const pvp = and(isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${ki
 const streakable = and(pvp, eq(kills.friendlyFire, false), eq(kills.atHub, false))!;
 
 export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem> {
-  constructor(private readonly db: Database) {}
+  private readonly consumer: string;
+  constructor(private readonly db: Database, opts: { consumer?: string } = {}) {
+    this.consumer = opts.consumer ?? KILLSTREAK_FEED_CONSUMER;
+  }
 
   async seeded(): Promise<boolean> {
     const [row] = await this.db.select({ n: consumerCursors.lastEventId }).from(consumerCursors)
-      .where(eq(consumerCursors.consumerName, KILLSTREAK_FEED_CONSUMER));
+      .where(eq(consumerCursors.consumerName, this.consumer));
     return row !== undefined;
   }
 
@@ -51,11 +59,11 @@ export class PgKillstreakFeedStore implements CursorFeedStore<KillstreakFeedItem
   }
 
   cursor(): Promise<number> {
-    return readCursor(this.db, KILLSTREAK_FEED_CONSUMER);
+    return readCursor(this.db, this.consumer);
   }
 
   markPosted(eventId: number): Promise<void> {
-    return writeCursor(this.db, KILLSTREAK_FEED_CONSUMER, eventId);
+    return writeCursor(this.db, this.consumer, eventId);
   }
 
   async readAfter(cursor: number, limit: number): Promise<KillstreakFeedItem[]> {

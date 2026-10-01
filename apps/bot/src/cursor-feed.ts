@@ -49,15 +49,18 @@ export const DEFAULT_FEED_BATCH_SIZE = 20;
  * ⚠️ At-least-once: a crash between the post and the cursor write re-posts that
  * item on the next start. See notice-tick.ts.
  */
-export async function cursorFeedTick<T extends { eventId: number }>(
+export async function cursorFeedTick<T extends { eventId: number }, M = APIEmbed>(
   store: CursorFeedStore<T>,
-  post: CursorFeedPoster,
-  render: CursorFeedRender<T>,
-  opts: { batchSize?: number; onError?: (eventId: number, err: unknown) => void } = {},
+  post: (m: M) => Promise<void>,
+  render: (item: T) => M | null,
+  opts: { batchSize?: number; onError?: (eventId: number, err: unknown) => void; seedAtHead?: boolean } = {},
 ): Promise<CursorFeedResult> {
   const out: CursorFeedResult = { posted: 0, blockedAt: null, seeded: false };
 
-  if (!(await store.seeded())) {
+  // ⚠️ Seeding is for Discord posters (a replay announces last week to a public
+  // channel). The website recorders pass `seedAtHead: false`: they write rows,
+  // and replaying history IS their backfill.
+  if ((opts.seedAtHead ?? true) && !(await store.seeded())) {
     await store.markPosted(await store.head());
     out.seeded = true;
     return out;
@@ -65,13 +68,13 @@ export async function cursorFeedTick<T extends { eventId: number }>(
 
   const cursor = await store.cursor();
   for (const item of await store.readAfter(cursor, opts.batchSize ?? DEFAULT_FEED_BATCH_SIZE)) {
-    const embed = render(item);
-    if (embed === null) {
+    const message = render(item);
+    if (message === null) {
       await store.markPosted(item.eventId);
       continue;
     }
     try {
-      await post(embed);
+      await post(message);
       await store.markPosted(item.eventId);
     } catch (err) {
       opts.onError?.(item.eventId, err);

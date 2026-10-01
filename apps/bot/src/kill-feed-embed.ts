@@ -5,7 +5,9 @@ import { flagLabel } from "./feed-embed.js";
 // Moved to site-links.ts. Re-exported so the five modules that import them
 // from here keep working; prefer importing from site-links.ts in new code.
 export { escapeMarkdown, profileUrl, who } from "./site-links.js";
-import { escapeMarkdown, profileUrl, who } from "./site-links.js";
+import { howLine as copyHowLine, killCard } from "@factions/copy";
+import { lineMarkdown } from "./site-links.js";
+import { toLiveKill } from "./live-payload.js";
 
 /** One side of a kill: the name the log used, and the clan they were in at that instant, if any. */
 export type KillFeedSide = { gamertag: string; tag: string | null; texture: string | null };
@@ -46,18 +48,6 @@ export type KillFeedItem = {
 const RUST = 0xb0482a;
 const AMBER = 0xe67e22;
 
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
-
-/** `KA-74 · 41 m`, or whichever half the log gave. Empty when it gave neither. */
-export function howLine(weapon: string | null, distanceM: number | null): string {
-  const parts: string[] = [];
-  if (weapon) parts.push(escapeMarkdown(weapon));
-  if (distanceM !== null && Number.isFinite(distanceM)) parts.push(`${Math.round(distanceM)} m`);
-  return parts.join(" · ");
-}
-
 /** One hit, as both feeds render it. No coordinates — damage, where, what with, how far. */
 export type HitDetail = {
   damage: number | null;
@@ -66,33 +56,10 @@ export type HitDetail = {
   distanceM: number | null;
 };
 
-/**
- * ⚠️ Ten, not Discord's 4096-character description limit. A sustained
- * firefight stops being readable long before it stops being legal.
- */
-export const DETAIL_LINE_CAP = 10;
-
-/**
- * `38 dmg · Torso · KA-74 · 41 m`, dropping whatever the log did not give.
- *
- * The weapon is omitted by default because #hit-feed's engagements are keyed
- * on one weapon and already name it in the header; a kill run can switch
- * weapons, so the kill feed passes `{ weapon: true }`.
- */
-export function detailLine(d: HitDetail, opts: { weapon?: boolean } = {}): string {
-  const parts: string[] = [];
-  if (d.damage !== null && Number.isFinite(d.damage)) parts.push(`${Math.round(d.damage)} dmg`);
-  if (d.bodyPart) parts.push(escapeMarkdown(d.bodyPart));
-  if (opts.weapon && d.weapon) parts.push(escapeMarkdown(d.weapon));
-  if (d.distanceM !== null && Number.isFinite(d.distanceM)) parts.push(`${Math.round(d.distanceM)} m`);
-  return parts.join(" · ");
-}
-
-/** The first `DETAIL_LINE_CAP` lines, plus `… and N more` when there were more. */
-export function cappedLines(lines: string[], noun: string): string[] {
-  if (lines.length <= DETAIL_LINE_CAP) return lines;
-  const extra = lines.length - DETAIL_LINE_CAP;
-  return [...lines.slice(0, DETAIL_LINE_CAP), `… and ${extra} more ${noun}`];
+// Thin wrappers over the shared copy, kept for tests that pin their old string
+// shape (nothing else in apps/bot/src imports them).
+export function howLine(weapon: string | null, distanceM: number | null): string {
+  return lineMarkdown(copyHowLine(weapon, distanceM), "");
 }
 
 /**
@@ -104,25 +71,13 @@ export function cappedLines(lines: string[], noun: string): string[] {
  */
 export function killFeedEmbed(k: KillFeedItem, siteBaseUrl: string, flagImage: FlagImageResolver = () => null): APIEmbed {
   const image = k.killer.texture ? flagImage(k.killer.texture) : null;
-  const killerTag = k.killer.tag ? ` [${escapeMarkdown(k.killer.tag)}]` : "";
-  const how = howLine(k.weapon, k.distanceM);
-  const scope = k.tally.season === null ? "all-time" : "this season";
-  const verb = k.cause === "finished" ? "finished" : "killed";
-  const lines = [
-    k.friendlyFire
-      ? `${verb} their own clanmate ${who(k.victim, siteBaseUrl)}`
-      : `${verb} ${who(k.victim, siteBaseUrl)}`,
-    ...(how ? [how] : []),
-    `${plural(k.tally.killerKills, "kill")} for ${escapeMarkdown(k.killer.gamertag)} · ` +
-      `${plural(k.tally.victimDeaths, "death")} for ${escapeMarkdown(k.victim.gamertag)} ${scope}`,
-  ];
-
-  const detail = cappedLines(k.hits.map((h) => detailLine(h, { weapon: true })).filter((l) => l !== ""), "hits");
-  if (detail.length > 0) lines.push("", ...detail);
+  const card = killCard(toLiveKill(k));
+  const lines = card.lines.map((l) => lineMarkdown(l, siteBaseUrl));
+  if (card.detail.length > 0) lines.push("", ...card.detail.map((l) => lineMarkdown(l, siteBaseUrl)));
 
   return {
-    title: `${k.atHub ? "At the Hub — " : k.friendlyFire ? "Friendly fire — " : ""}${k.killer.gamertag}${killerTag}`,
-    url: profileUrl(siteBaseUrl, k.killer.gamertag),
+    title: lineMarkdown(card.title, siteBaseUrl),
+    url: `${siteBaseUrl}${card.href}`,
     description: lines.join("\n"),
     color: k.atHub || k.friendlyFire ? AMBER : RUST,
     footer: { text: k.tally.season === null ? "All-time" : `Season ${k.tally.season}` },

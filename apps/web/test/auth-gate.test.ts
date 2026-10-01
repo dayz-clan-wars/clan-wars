@@ -10,11 +10,11 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"]);
   });
 
   it("pins the public prefixes", () => {
-    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/"]);
+    expect([...PUBLIC_PREFIXES]).toEqual(["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/", "/live/", "/api/live/"]);
   });
 
   it("pins the auth pages", () => {
@@ -70,6 +70,13 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/alphas")).toBe(true);
     expect(pathIsPublic("/seasons")).toBe(true);
     expect(pathIsPublic("/war-log")).toBe(true);
+  });
+
+  it("lets the Live page, its tabs and its poll through, but not a lookalike", () => {
+    expect(pathIsPublic("/live")).toBe(true);
+    expect(pathIsPublic("/live/kills")).toBe(true);
+    expect(pathIsPublic("/api/live/kills")).toBe(true);
+    expect(pathIsPublic("/livestream")).toBe(false);
   });
 
   it("lets the player boards and player profiles through, but not the clan board", () => {

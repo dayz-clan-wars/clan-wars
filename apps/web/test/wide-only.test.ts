@@ -24,7 +24,7 @@ describe("WideOnly", () => {
 
   it("wraps the landing page's flag pool, which no longer needs a CSS hide", () => {
     const page = readFileSync(join(WEB, "app", "(site)", "page.tsx"), "utf8");
-    expect(page).toMatch(/<WideOnly>\s*<Panel num="03" title="Flag pool"/u);
+    expect(page).toMatch(/<WideOnly>\s*<Panel num="04" title="Flag pool"/u);
     expect(page).not.toMatch(/title="Flag pool"[^>]*hidden lg:block/u);
   });
 });

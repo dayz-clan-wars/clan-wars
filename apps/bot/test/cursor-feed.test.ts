@@ -65,3 +65,20 @@ describe("cursorFeedTick", () => {
     expect(store.at()).toBe(2);
   });
 });
+
+describe("cursorFeedTick seedAtHead: false", () => {
+  it("replays history from the start instead of seeding at the head", async () => {
+    let c: number | null = null;
+    const items = [{ eventId: 1 }, { eventId: 2 }];
+    const store = {
+      seeded: async () => c !== null, head: async () => 2, cursor: async () => c ?? 0,
+      readAfter: async (after: number, limit: number) => items.filter((i) => i.eventId > after).slice(0, limit),
+      markPosted: async (id: number) => { c = id; },
+    };
+    const posted: number[] = [];
+    const r = await cursorFeedTick(store, async (m: number) => { posted.push(m); }, (i) => i.eventId * 10, { seedAtHead: false });
+    expect(r).toEqual({ posted: 2, blockedAt: null, seeded: false });
+    expect(posted).toEqual([10, 20]);
+    expect(c).toBe(2);
+  });
+});

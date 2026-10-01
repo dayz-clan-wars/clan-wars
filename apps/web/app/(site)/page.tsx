@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { directory, scoreboard, warLog } from "@factions/roster";
+import { directory, scoreboard, warLog, onlineNow } from "@factions/roster";
 import { FLAG_POOL_SIZE } from "@factions/domain";
 import { flagThumbPath } from "@/src/flag-images";
 import { EMPTY_SCOREBOARD, EMPTY_WAR_LOG } from "@/lib/scoring-copy";
+import { OnlineNow } from "./live/online-now";
 import { WarLogLine, WarLogKicker } from "./war-log/entry";
 import { currentSession } from "@/lib/viewer";
 import { Page, Panel, Stat, Footer, btnCta, linkMono, kicker } from "@/app/components/ui";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 const WEEK = 7 * 86_400_000;
 
 export default async function Home() {
-  const [{ clans, flags }, board, log, session] = await Promise.all([directory(), scoreboard(), warLog(4), currentSession()]);
+  const [{ clans, flags }, board, log, online, session] = await Promise.all([directory(), scoreboard(), warLog(4), onlineNow(), currentSession()]);
   const week = board.season ? Math.floor((Date.now() - board.season.startedAt.getTime()) / WEEK) + 1 : null;
   // ⚠️ Victims, not raiders: a solo raider is in no clan, so their raid is
   // credited to no row's `raids` — but it is always one row's `timesRaided`.
@@ -96,9 +97,10 @@ export default async function Home() {
               </ul>
             )}
           </Panel>
+          <OnlineNow players={online} />
           {/* ⚠️ Not rendered on a phone at all (WideOnly), not CSS-hidden: a hidden panel's images download anyway (H5). */}
           <WideOnly>
-          <Panel num="03" title="Flag pool" aside={<span className={kicker}>{flags.free.length} free</span>}>
+          <Panel num="04" title="Flag pool" aside={<span className={kicker}>{flags.free.length} free</span>}>
             <div className="flex flex-wrap gap-2.5 p-5">
               {flags.free.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={f} loading="lazy" title={f} width={36} height={36} className="h-9 w-9 object-contain" />)}
               {flags.taken.map((f) => <img key={f} src={`/${flagThumbPath(f)}`} alt={`${f} (taken)`} loading="lazy" title={`${f} — taken`} width={36} height={36} className="h-9 w-9 object-contain opacity-35" />)}

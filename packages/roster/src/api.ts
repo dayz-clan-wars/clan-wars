@@ -53,6 +53,8 @@ import {
 import { attentionDb, type Attention } from "./attention";
 import { baseDamageWindowDb, type BaseDamageWindow } from "./base-damage-window";
 import { liveServersDb, type LiveServer } from "./servers";
+import { liveFeedDb, onlineNowDb, type LiveRow, type LiveQuery, type OnlinePlayerRow } from "./live";
+import type { LiveFeed } from "@factions/domain";
 import { restartsScheduledDb } from "./restarts";
 import { reportIncidentDb, REPORT_REASONS, type ReportOutcome, type ReportableIncident } from "./internal/incidents";
 import {
@@ -88,6 +90,7 @@ export type { GuestGrantOutcome, GuestTargetRef };
 export type { Attention };
 export type { BaseDamageWindow };
 export type { LiveServer };
+export type { LiveRow, LiveQuery, OnlinePlayerRow };
 export type { AchievementWall, AchievementTile, AchievementSubject };
 export type { ReportOutcome, ReportableIncident };
 export type { NotificationsPage, NoticeRow };
@@ -232,6 +235,11 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     seasons: (): Promise<SeasonSummary[]> => seasonsDb(getDb()),
     /** Raids and defenses of the open season, newest first. */
     warLog: (limit?: number, filter?: WarLogFilter): Promise<WarLogEntry[]> => warLogDb(getDb(), limit, filter),
+
+    /** One Live tab's rows, newest first (the website's copy of a Discord feed). */
+    liveFeed: (feed: Exclude<LiveFeed, "online">, q?: LiveQuery): Promise<LiveRow[]> => liveFeedDb(getDb(), feed, q),
+    /** Who is connected now, longest first. No DayZ id. */
+    onlineNow: (): Promise<OnlinePlayerRow[]> => onlineNowDb(getDb()),
 
     /** The map, scoped to who is looking (spec §10.3). */
     mapState: (discordId: string): Promise<MapState | "not-linked"> => mapStateDb(getDb(), discordId, getNow()),

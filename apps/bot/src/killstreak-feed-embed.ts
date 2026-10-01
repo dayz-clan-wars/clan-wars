@@ -1,7 +1,10 @@
 import type { APIEmbed } from "discord.js";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { flagLabel } from "./feed-embed.js";
-import { cappedLines, escapeMarkdown, profileUrl, type KillFeedSide } from "./kill-feed-embed.js";
+import { streakCard } from "@factions/copy";
+import type { KillFeedSide } from "./kill-feed-embed.js";
+import { toLiveStreak } from "./live-payload.js";
+import { lineMarkdown } from "./site-links.js";
 
 /**
  * One kill, with the streak it belongs to. `streak` is null when the kill
@@ -21,45 +24,16 @@ export type KillstreakFeedItem = {
 
 const FLAME = 0xd35400;
 
-/**
- * "41 minutes", "2 hours", "35 seconds" — from the kill times, never from a clock.
- *
- * ⚠️ Escalates to the next unit BEFORE rounding can reach it — rounding a raw
- * second count straight into minutes (or minutes into hours) lets a value
- * like 3599s round to "60 minutes" instead of "1 hour". Each unit is checked
- * only after computing its own rounded value, so a rollover re-escalates.
- */
-function elapsed(from: Date, to: Date): string {
-  const totalSeconds = Math.max(0, Math.round((to.getTime() - from.getTime()) / 1000));
-  const plural = (n: number, w: string) => `${n} ${w}${n === 1 ? "" : "s"}`;
-  if (totalSeconds < 60) return plural(totalSeconds, "second");
-  const minutes = Math.round(totalSeconds / 60);
-  if (minutes < 60) return plural(minutes, "minute");
-  return plural(Math.round(totalSeconds / 3600), "hour");
-}
-
 /** One streak milestone, one embed. Pure — no client, no I/O, no clock. */
 export function killstreakFeedEmbed(i: KillstreakFeedItem, siteBaseUrl: string, flagImage: FlagImageResolver = () => null): APIEmbed {
   const image = i.killer.texture ? flagImage(i.killer.texture) : null;
-  const tag = i.killer.tag ? ` [${escapeMarkdown(i.killer.tag)}]` : "";
-  // cappedLines already appends "… and N more <noun>" — passing "more" here
-  // would render "… and 5 more more".
-  const names = cappedLines(i.victims.map(escapeMarkdown), "victims");
-
-  const lines = [
-    `🔥 **${i.streak ?? 0} kill streak**`,
-    ...(i.victims.length > 0 ? [`last ${i.victims.length}: ${names.join(", ")}`] : []),
-    `started ${elapsed(i.startedAt, i.occurredAt)} ago`,
-  ];
+  const card = streakCard(toLiveStreak(i));
 
   return {
-    // ⚠️ The gamertag is RAW here, unlike everywhere in the description:
-    // Discord renders no markdown in an embed title, so an escape is not
-    // neutralised there, it is displayed — `x_Dave_x` would read `x\_Dave\_x`.
-    // Same rule as `kill-feed-embed.ts`.
-    title: `${i.killer.gamertag}${tag}`,
-    url: profileUrl(siteBaseUrl, i.killer.gamertag),
-    description: lines.join("\n"),
+    // The card's title carries the gamertag as `raw`: Discord renders no markdown in an embed title.
+    title: lineMarkdown(card.title, siteBaseUrl),
+    url: `${siteBaseUrl}${card.href}`,
+    description: card.lines.map((l) => lineMarkdown(l, siteBaseUrl)).join("\n"),
     color: FLAME,
     // ⚠️ The kill's time, not the post's.
     timestamp: i.occurredAt.toISOString(),

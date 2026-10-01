@@ -1,0 +1,1 @@
+CREATE INDEX IF NOT EXISTS "feed_entries_source_event_idx" ON "feed_entries" USING btree ("source_event_id");

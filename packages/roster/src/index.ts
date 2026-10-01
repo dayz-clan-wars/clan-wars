@@ -39,6 +39,7 @@ export type { GuestGrantOutcome, GuestTargetRef } from "./api";
 export type { Attention } from "./api";
 export type { BaseDamageWindow } from "./api";
 export type { LiveServer } from "./api";
+export type { LiveRow, LiveQuery, OnlinePlayerRow } from "./api";
 export type { AchievementWall, AchievementTile, AchievementSubject } from "./api";
 export type { ReportOutcome, ReportableIncident } from "./api";
 export type { NotificationsPage, NoticeRow } from "./api";
@@ -50,9 +51,9 @@ export const {
   acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
-  disband, dropPin, editLock, giveAward, grantGuestPass, invite, kick, leave, linkStatus, liveServers, mapState,
+  disband, dropPin, editLock, giveAward, grantGuestPass, invite, kick, leave, linkStatus, liveFeed, liveServers, mapState,
   markAllNoticesRead, markNoticeRead,
-  myInvites, myRequests, notificationsFor, openVote, playerBoards, playerFeed, playerProfile, promote, referralsFor, referralsForDayzId, releaseSolo, rename,
+  myInvites, myRequests, notificationsFor, onlineNow, openVote, playerBoards, playerFeed, playerProfile, promote, referralsFor, referralsForDayzId, releaseSolo, rename,
   reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveAwardPick, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
   setRecruitingPost, startAwardPlacement, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);

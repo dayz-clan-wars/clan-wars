@@ -3,7 +3,7 @@ import {
   uniqueIndex, index, numeric, boolean, check, char, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
-import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage } from "@factions/domain";
+import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage, LiveEntryKind } from "@factions/domain";
 
 export const servers = pgTable("servers", {
   id: integer("id").primaryKey().generatedAlwaysAsIdentity(),
@@ -2092,6 +2092,41 @@ export const banAnnouncements = pgTable("ban_announcements", {
   // payload field from leaking a base location into a public channel.
   noCoordinates: check("ban_announcements_no_coordinates", sql`NOT (${t.payload} ? 'poleKey' OR ${t.payload} ? 'x' OR ${t.payload} ? 'y' OR ${t.payload} ? 'z')`),
   queue: index("ban_announcements_queue_idx").on(t.id).where(sql`${t.postedAt} IS NULL`),
+}));
+
+/**
+ * The website's copy of the four combat feeds (spec 2026-09-30-website-live-feeds).
+ * Written by the bot's recorder ticks (apps/bot/src/live-recorder.ts), one row
+ * per kill, engagement, streak milestone or long-range kill, with the facts
+ * its Discord embed is built from FROZEN in `payload`. Read by the site's
+ * /live pages through @factions/roster. Nothing updates or deletes a row.
+ *
+ * ⚠️ The position CHECK runs over the payload's TEXT so it catches a key at any
+ * depth: `hits` is an array of objects, and a `?` test only sees the top level.
+ * jsonb::text prints keys as `"key": `, and a string VALUE containing that
+ * shape is printed escaped (`\"x\": `), so a gamertag cannot trip it.
+ */
+export const feedEntries = pgTable("feed_entries", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  kind: text("kind").$type<LiveEntryKind>().notNull(),
+  /** The kill's `events.id`, or the last hit event of an engagement: the recorder's cursor value. */
+  // ⚠️ Cascades: a misparsed event deleted by hand (docs/deploy/2026-09-10-credited-kills.md)
+  // takes its website entry with it, instead of the delete failing on this FK.
+  sourceEventId: bigint("source_event_id", { mode: "number" }).notNull().references(() => events.id, { onDelete: "cascade" }),
+  /** When it happened in game, not when the row was written; the backfill writes old entries. */
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  kindValid: check("feed_entries_kind_valid", sql`${t.kind} IN ('kill','hit','killstreak','long_range')`),
+  noCoordinates: check("feed_entries_no_coordinates",
+    sql`NOT (${t.payload}::text ~ '"(pos|victimPos|attackerPos|killerPos|poleKey|x|y|z)": ')`),
+  uniqSource: uniqueIndex("feed_entries_source_uniq").on(t.kind, t.sourceEventId),
+  byKind: index("feed_entries_kind_idx").on(t.serverId, t.kind, t.id),
+  // ⚠️ Every `events` delete cascades here, and `feed_entries_source_uniq` leads with `kind`, so
+  // it cannot serve a lookup by `source_event_id` alone: without this the cascade scans the table.
+  bySourceEvent: index("feed_entries_source_event_idx").on(t.sourceEventId),
 }));
 
 /**

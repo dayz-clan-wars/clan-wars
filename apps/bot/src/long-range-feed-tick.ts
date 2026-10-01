@@ -33,14 +33,16 @@ export function longRangeFeedTick(
 const pvp = and(isNotNull(kills.killerDayzId), sql`${kills.killerDayzId} <> ${kills.victimDayzId}`)!;
 
 export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> {
+  private readonly consumer: string;
   private readonly minM: number;
-  constructor(private readonly db: Database, opts: { minM?: number } = {}) {
+  constructor(private readonly db: Database, opts: { minM?: number; consumer?: string } = {}) {
+    this.consumer = opts.consumer ?? LONG_RANGE_FEED_CONSUMER;
     this.minM = opts.minM ?? DEFAULT_LONG_RANGE_MIN_M;
   }
 
   async seeded(): Promise<boolean> {
     const [row] = await this.db.select({ n: consumerCursors.lastEventId }).from(consumerCursors)
-      .where(eq(consumerCursors.consumerName, LONG_RANGE_FEED_CONSUMER));
+      .where(eq(consumerCursors.consumerName, this.consumer));
     return row !== undefined;
   }
 
@@ -50,11 +52,11 @@ export class PgLongRangeFeedStore implements CursorFeedStore<LongRangeFeedItem> 
   }
 
   cursor(): Promise<number> {
-    return readCursor(this.db, LONG_RANGE_FEED_CONSUMER);
+    return readCursor(this.db, this.consumer);
   }
 
   markPosted(eventId: number): Promise<void> {
-    return writeCursor(this.db, LONG_RANGE_FEED_CONSUMER, eventId);
+    return writeCursor(this.db, this.consumer, eventId);
   }
 
   async readAfter(cursor: number, limit: number): Promise<LongRangeFeedItem[]> {

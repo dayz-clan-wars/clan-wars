@@ -60,14 +60,16 @@ export function maxOccurredAtQuery(db: Database) {
 }
 
 export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
+  private readonly consumer: string;
   private readonly windowS: number;
-  constructor(private readonly db: Database, opts: { windowS?: number } = {}) {
+  constructor(private readonly db: Database, opts: { windowS?: number; consumer?: string } = {}) {
+    this.consumer = opts.consumer ?? HIT_FEED_CONSUMER;
     this.windowS = opts.windowS ?? DEFAULT_HIT_BURST_WINDOW_S;
   }
 
   async seeded(): Promise<boolean> {
     const [row] = await this.db.select({ n: consumerCursors.lastEventId }).from(consumerCursors)
-      .where(eq(consumerCursors.consumerName, HIT_FEED_CONSUMER));
+      .where(eq(consumerCursors.consumerName, this.consumer));
     return row !== undefined;
   }
 
@@ -78,11 +80,11 @@ export class PgHitFeedStore implements CursorFeedStore<HitFeedItem> {
   }
 
   cursor(): Promise<number> {
-    return readCursor(this.db, HIT_FEED_CONSUMER);
+    return readCursor(this.db, this.consumer);
   }
 
   markPosted(eventId: number): Promise<void> {
-    return writeCursor(this.db, HIT_FEED_CONSUMER, eventId);
+    return writeCursor(this.db, this.consumer, eventId);
   }
 
   /**

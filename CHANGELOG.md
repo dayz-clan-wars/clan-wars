@@ -5,6 +5,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A public Live page at `/live` with every Discord feed in one place: players online, kills, hits, killstreaks, long range, the clan feed, the war log, achievements and bans. It refreshes itself while you have it open.
+- "Online now" on the landing page, so you can see who is on the server before you log in.
+- Kill, killstreak and long-range history is filled in on the Live page from the start. Hit history begins from this release.
+
 ## [1.57.0] - 2026-09-30
 
 ### Added

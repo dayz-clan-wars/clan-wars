@@ -133,6 +133,8 @@ describe("Discord parity with the site", () => {
       "markAllNoticesRead", "markNoticeRead",
       // Referral reads (2026-09-26): who referred you, and who you brought in.
       "referralsFor", "referralsForDayzId",
+      // Website live-feed reads (2026-09-30): the public /live page and landing "Online now".
+      "liveFeed", "onlineNow",
     ]);
     const unaccounted = ROSTER_EXPORTS.filter((n) => !known.has(n) && !reads.has(n));
     expect(unaccounted, "new roster export with no command and no decision — add it to COMMANDS, PENDING, or reads").toEqual([]);

@@ -9,8 +9,9 @@ import { join, sep } from "node:path";
  */
 const API = join(import.meta.dirname, "..", "app", "api");
 const routes = readdirSync(API, { recursive: true, encoding: "utf8" }).filter((f) => f.endsWith("route.ts") || f.endsWith("route.tsx")).map((f) => join(API, f));
+// `/api/live/` is the Live page's poll: a public read, mutating nothing.
 // `/api/og/` renders a share image: a read, fetched by crawlers, mutating nothing.
-const GET_ALLOWED = [`${sep}api${sep}auth${sep}`, `${sep}api${sep}link${sep}status${sep}`, `${sep}api${sep}kit${sep}status${sep}`, `${sep}api${sep}awards${sep}[id]${sep}status${sep}`, `${sep}api${sep}link${sep}search${sep}`, `${sep}api${sep}players${sep}suggest${sep}`, `${sep}api${sep}map${sep}state${sep}`, `${sep}api${sep}og${sep}`];
+const GET_ALLOWED = [`${sep}api${sep}auth${sep}`, `${sep}api${sep}link${sep}status${sep}`, `${sep}api${sep}kit${sep}status${sep}`, `${sep}api${sep}awards${sep}[id]${sep}status${sep}`, `${sep}api${sep}link${sep}search${sep}`, `${sep}api${sep}players${sep}suggest${sep}`, `${sep}api${sep}map${sep}state${sep}`, `${sep}api${sep}og${sep}`, `${sep}api${sep}live${sep}`];
 
 describe("api routes", () => {
   it("finds the clan routes", () => {

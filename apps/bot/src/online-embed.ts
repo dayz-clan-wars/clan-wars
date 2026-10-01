@@ -1,6 +1,6 @@
 import type { APIEmbed } from "discord.js";
-import { rel } from "@factions/copy";
-import { clanLink, playerLink } from "./site-links.js";
+import { onlineLine, ONLINE_TITLE, ONLINE_EMPTY } from "@factions/copy";
+import { lineMarkdown } from "./site-links.js";
 
 /** One player the log currently has on the server. */
 export type OnlinePlayer = { dayzId: string; gamertag: string; tag: string | null; connectedAt: Date };
@@ -27,16 +27,14 @@ export function onlineKey(players: OnlinePlayer[]): string {
 export function onlineEmbed(players: OnlinePlayer[], now: Date, siteBaseUrl: string): APIEmbed {
   const sorted = [...players].sort((a, b) => a.connectedAt.getTime() - b.connectedAt.getTime() || a.gamertag.localeCompare(b.gamertag));
   const lines = sorted.map((p) => {
-    const tag = p.tag ? ` [${clanLink(siteBaseUrl, p.tag)}]` : "";
-    // ⚠️ connectedAt is a DB timestamp and should always be valid, but rel()
-    // still guards it — degrade rather than print "on since " with nothing
-    // after it.
-    const since = rel(p.connectedAt) ?? "an unknown time";
-    return `**${playerLink(siteBaseUrl, p.gamertag)}**${tag} · on since ${since}`;
+    // ⚠️ toISOString() throws on an invalid Date. connectedAt should always be
+    // valid, but an unparseable string makes onlineLine say "an unknown time".
+    const connectedAt = Number.isFinite(p.connectedAt.getTime()) ? p.connectedAt.toISOString() : "invalid";
+    return lineMarkdown(onlineLine({ gamertag: p.gamertag, tag: p.tag, connectedAt }), siteBaseUrl);
   });
   return {
-    title: `Players online · ${players.length}`,
-    description: lines.length > 0 ? lines.join("\n") : "Nobody on the server.",
+    title: ONLINE_TITLE(players.length),
+    description: lines.length > 0 ? lines.join("\n") : ONLINE_EMPTY,
     color: players.length > 0 ? OLIVE : GREY,
     footer: { text: "Last known from the server log · updated" },
     timestamp: now.toISOString(),
