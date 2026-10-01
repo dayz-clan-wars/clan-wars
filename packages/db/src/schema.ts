@@ -2124,6 +2124,9 @@ export const feedEntries = pgTable("feed_entries", {
     sql`NOT (${t.payload}::text ~ '"(pos|victimPos|attackerPos|killerPos|poleKey|x|y|z)": ')`),
   uniqSource: uniqueIndex("feed_entries_source_uniq").on(t.kind, t.sourceEventId),
   byKind: index("feed_entries_kind_idx").on(t.serverId, t.kind, t.id),
+  // ⚠️ Every `events` delete cascades here, and `feed_entries_source_uniq` leads with `kind`, so
+  // it cannot serve a lookup by `source_event_id` alone: without this the cascade scans the table.
+  bySourceEvent: index("feed_entries_source_event_idx").on(t.sourceEventId),
 }));
 
 /**

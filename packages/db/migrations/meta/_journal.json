@@ -442,6 +442,13 @@
       "when": 1790819475506,
       "tag": "0062_famous_caretaker",
       "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1790823639296,
+      "tag": "0063_oval_squirrel_girl",
+      "breakpoints": true
     }
   ]
 }
