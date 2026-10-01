@@ -2095,6 +2095,36 @@ export const banAnnouncements = pgTable("ban_announcements", {
 }));
 
 /**
+ * The website's copy of the four combat feeds (spec 2026-09-30-website-live-feeds).
+ * Written by the bot's recorder ticks (apps/bot/src/live-recorder.ts), one row
+ * per kill, engagement, streak milestone or long-range kill, with the facts
+ * its Discord embed is built from FROZEN in `payload`. Read by the site's
+ * /live pages through @factions/roster. Nothing updates or deletes a row.
+ *
+ * ⚠️ The position CHECK runs over the payload's TEXT so it catches a key at any
+ * depth: `hits` is an array of objects, and a `?` test only sees the top level.
+ * jsonb::text prints keys as `"key": `, and a string VALUE containing that
+ * shape is printed escaped (`\"x\": `), so a gamertag cannot trip it.
+ */
+export const feedEntries = pgTable("feed_entries", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  kind: text("kind").$type<"kill" | "hit" | "killstreak" | "long_range">().notNull(),
+  /** The kill's `events.id`, or the last hit event of an engagement: the recorder's cursor value. */
+  sourceEventId: bigint("source_event_id", { mode: "number" }).notNull().references(() => events.id),
+  /** When it happened in game, not when the row was written; the backfill writes old entries. */
+  occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+  payload: jsonb("payload").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  kindValid: check("feed_entries_kind_valid", sql`${t.kind} IN ('kill','hit','killstreak','long_range')`),
+  noCoordinates: check("feed_entries_no_coordinates",
+    sql`NOT (${t.payload}::text ~ '"(pos|victimPos|attackerPos|killerPos|poleKey|x|y|z)": ')`),
+  uniqSource: uniqueIndex("feed_entries_source_uniq").on(t.kind, t.sourceEventId),
+  byKind: index("feed_entries_kind_idx").on(t.serverId, t.kind, t.id),
+}));
+
+/**
  * Which platform an account plays on, learned from the server's .RPT files.
  *
  * ⚠️ Keyed on (dayz_id, device), NOT on dayz_id. An account seen on both
