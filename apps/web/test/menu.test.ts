@@ -14,7 +14,7 @@ describe("menuFor (the phone drawer)", () => {
   it("signed in: your places first, then the boards, then the guide", () => {
     expect(menuFor(true).map((g) => g.map((m) => m.href))).toEqual([
       ["/me", "/map", "/clan", "/notifications"],
-      ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/war-log"],
+      ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/live", "/war-log"],
       ["/guide"],
     ]);
   });
@@ -33,9 +33,22 @@ describe("barFor (the desktop bar)", () => {
   it("is the short form: Alphas and Seasons live in the scoreboard's own nav", () => {
     expect(barFor(true).map((g) => g.map((m) => m.href))).toEqual([
       ["/me", "/map", "/clan"],
-      ["/clans", "/players", "/scoreboard", "/war-log", "/guide"],
+      ["/clans", "/players", "/scoreboard", "/live", "/guide"],
     ]);
     expect(barFor(false)).toEqual(barFor(true).slice(1));
+  });
+
+  it("Live owns /live/* and /war-log (the war log is one of its tabs)", () => {
+    const live = barFor(false)[0]!.find((m) => m.href === "/live")!;
+    expect(live.label).toBe("Live");
+    for (const p of ["/live", "/live/kills", "/war-log"]) expect(isCurrent(live, p)).toBe(true);
+    expect(isCurrent(live, "/livestream")).toBe(false);
+  });
+
+  it("the drawer has both Live and War log, each its own item", () => {
+    const boards = menuFor(false)[0]!;
+    expect(boards.map((m) => m.label)).toContain("Live");
+    expect(boards.map((m) => m.label)).toContain("War log");
   });
 
   it("⚠️ Kit is in neither nav list", () => {

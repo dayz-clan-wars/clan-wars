@@ -18,7 +18,7 @@
  * fetched by Discord's and Twitter's crawlers, which never have a session —
  * gated, a pasted link unfurls with no picture.
  */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"] as const;
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match
@@ -41,9 +41,11 @@ export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons"
  * gated, every card posts without its badge, silently. `/api/og/` is the
  * share card (app/api/og/achievement/[key]), fetched by the same crawlers
  * for the same reason; it carries a name, a tag and a date, all public
- * already on the wall, never a coordinate.
+ * already on the wall, never a coordinate. `/live/` is the Live page's tabs and
+ * `/api/live/` its poll (spec 2026-09-30-website-live-feeds): the same public
+ * feeds the bot posts to Discord, never a coordinate.
  */
-export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/"] as const;
+export const PUBLIC_PREFIXES = ["/api/auth/", "/flags/", "/clans/", "/players/", "/guide/", "/icons/", "/hero/", "/api/players/", "/achievements/", "/api/og/", "/live/", "/api/live/"] as const;
 
 /**
  * Handled by middleware rather than by this predicate: whether these should

@@ -57,7 +57,9 @@ const BOARDS: readonly MenuItem[] = [
   { label: "Clans", href: "/clans" },
   { label: "Players", href: "/players" },
   { label: "Scoreboard", href: "/scoreboard", also: ["/alphas", "/seasons"] },
-  { label: "War log", href: "/war-log" },
+  // ⚠️ Live replaces War log in the bar: there is no room for another cell at
+  // 1024px. The war log is a Live tab, and /war-log still lights this up.
+  { label: "Live", href: "/live", also: ["/war-log"] },
 ];
 
 const BOARDS_LONG: readonly MenuItem[] = [
@@ -66,6 +68,7 @@ const BOARDS_LONG: readonly MenuItem[] = [
   { label: "Scoreboard", href: "/scoreboard" },
   { label: "Alphas", href: "/alphas" },
   { label: "Seasons", href: "/seasons" },
+  { label: "Live", href: "/live" },
   { label: "War log", href: "/war-log" },
 ];
 
