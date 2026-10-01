@@ -1,8 +1,8 @@
 import type { APIEmbed } from "discord.js";
 import type { FactionEventKind } from "@factions/domain";
 import type { QueuedFactionEvent, FeedPayload } from "@factions/roster/internal";
-import { rel } from "@factions/copy";
-import { clanUrl } from "./site-links.js";
+import { clanFeedCard, flagLabel } from "@factions/copy";
+import { lineMarkdown } from "./site-links.js";
 // ⚠️ Imported, not a second literal here — this file is scanned by
 // vocabulary.test.ts's PLAYER_FACING walk, whose comment-stripper treats a
 // bare `//` inside a hardcoded "https://…" string as a line comment and
@@ -34,61 +34,8 @@ const COLOR: Record<FactionEventKind, number> = {
   disbanded: RED,
 };
 
-/** `Flag_Wolf` → `Wolf`. The player-facing name of the identity. */
-export function flagLabel(texture: string): string {
-  return texture.replace(/^Flag_/u, "");
-}
-
-/** `by SomePlayer`, or nothing at all when the actor is unknown. */
-function by(actor: string | undefined): string {
-  return actor ? ` by **${actor}**` : "";
-}
-
-/** The plain "gone dormant" sentence, with no deadline clause. */
-const DORMANT_SENTENCE = "Gone dormant — the flag has not been raised, and supplies are cut.";
-
-function describe(kind: FactionEventKind, p: FeedPayload): string {
-  switch (kind) {
-    case "founded":
-      return `Founded${by(p.actor)}. The ritual is complete — the flag is reserved.`;
-    case "activated":
-      return `Colors raised${by(p.actor)}. The clan is live.`;
-    case "renamed":
-      // previousName is written by the rename writer for every `renamed` row.
-      // The `?? "its former name"` arm exists only so a hand-inserted or
-      // backfilled row cannot render the literal "undefined" to a channel.
-      return `Now flying as **${p.name}** — formerly **${p.previousName ?? "its former name"}**.`;
-    case "rebound":
-      // ⚠️ Never says where from or to. That is the pole invariant, and it is
-      // the reason this line is this vague on purpose.
-      return `Moved its base${by(p.actor)}.`;
-    case "dormant": {
-      if (!p.disbandAt) return DORMANT_SENTENCE;
-      // ⚠️ payload comes back through an unvalidated cast off a jsonb column,
-      // so disbandAt is only an ISO string by convention. A malformed value
-      // must degrade to the plain sentence, never post `<t:NaN:R>` — visible
-      // garbage in a public channel, permanently, since nothing reposts.
-      const ms = Date.parse(p.disbandAt);
-      if (!Number.isFinite(ms)) return DORMANT_SENTENCE;
-      const token = rel(new Date(ms));
-      // ⚠️ rel() null-guards the same instant Number.isFinite just checked —
-      // this can't currently fire, but it must land on the identical degrade
-      // if `rel`'s guard ever diverges from the check above, never a
-      // different message.
-      if (token === null) return DORMANT_SENTENCE;
-      return `${DORMANT_SENTENCE} ` +
-        `The flag, tag and pole return to the pool ${token}.`;
-    }
-    case "revived":
-      // No actor: the dormancy clock sees a raise through a max(occurred_at)
-      // subquery and never learns who made it. See the spec's §2.
-      return "Active again — the flag is flying and supplies resume at the next restart.";
-    case "disbanded":
-      return "Disbanded. Its flag, tag and pole return to the pool.";
-    case "lapsed":
-      return `Never raised their flag. ${flagLabel(p.texture)} is back in the pool.`;
-  }
-}
+// Other bot files import flagLabel from here.
+export { flagLabel };
 
 /**
  * One transition, one embed. Pure — no client, no I/O, no clock.
@@ -104,12 +51,13 @@ export function feedEmbed(
 ): APIEmbed {
   const p = e.payload;
   const image = flagImage(p.texture);
+  const card = clanFeedCard(e.kind, p);
 
   return {
-    title: `${p.name} [${p.tag}]`,
+    title: lineMarkdown(card.title, siteBaseUrl),
     // ⚠️ BARE url — this is embed.url, which throws on `<https://…>`.
-    url: clanUrl(siteBaseUrl, p.tag),
-    description: describe(e.kind, p),
+    url: `${siteBaseUrl}${card.href}`,
+    description: lineMarkdown(card.lines[0]!, siteBaseUrl),
     color: COLOR[e.kind],
     fields: [{ name: "Flag", value: flagLabel(p.texture), inline: true }],
     // ⚠️ The transition's time, not the post's. A backfilled founding then

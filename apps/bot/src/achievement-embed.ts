@@ -1,7 +1,8 @@
 import type { APIEmbed } from "discord.js";
 import { ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUP_COLORS, type AchievementKey } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
-import { clanLink, playerLink } from "./site-links.js";
+import { achievementLine } from "@factions/copy";
+import { lineMarkdown } from "./site-links.js";
 
 export const ACHIEVEMENT_FOOTER = "Clan Wars · Livonia";
 
@@ -39,16 +40,9 @@ export function achievementEmbed(p: NoticePayload, siteBaseUrl: string): APIEmbe
   const key = String(p.key);
   const def = ACHIEVEMENT_BY_KEY[key as AchievementKey];
   const group = def?.group;
-  // Linked to the site only when there is a tag/gamertag to link to — a
-  // hand-inserted or malformed row still renders a name, just not a link.
-  const who = p.ownerKind === "clan"
-    ? (p.clanTag ? `**${clanLink(siteBaseUrl, String(p.clanTag))}**` : `**[${p.ownerName}]**`)
-    : (p.gamertag
-      ? `**${playerLink(siteBaseUrl, String(p.gamertag))}**`
-      : `**${/^\d+$/u.test(String(p.ownerName)) ? "A player" : p.ownerName}**`);
   return {
     color: colourInt(group ? ACHIEVEMENT_GROUP_COLORS[group] : "#e8e2d4"),
-    description: `${who} unlocked **${p.name}** · ${p.description}`,
+    description: lineMarkdown(achievementLine(p as Record<string, unknown>), siteBaseUrl),
     ...(def ? { thumbnail: { url: badgeUrl(siteBaseUrl, key) } } : {}),
     footer: { text: ACHIEVEMENT_FOOTER },
   };
