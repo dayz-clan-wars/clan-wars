@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.58.2] - 2026-10-01
+
 ### Changed
 
 - The weekly top referrer now wins a Weapon Kit for a week instead of a plate carrier.
