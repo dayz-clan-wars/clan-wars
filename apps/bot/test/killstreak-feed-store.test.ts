@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, kills, players, seasons, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
+import { readCursor } from "@factions/event-log";
 import { PgKillstreakFeedStore } from "../src/killstreak-feed-tick.js";
 
 const URL = requireTestDatabaseUrl();
@@ -141,5 +142,16 @@ describe("PgKillstreakFeedStore", () => {
     const items = await store.readAfter(0, 50);
     expect(items[2]!.streak).toBeNull();   // the Hub kill is declined
     expect(items[items.length - 1]!.streak).toBe(3);
+  });
+
+  it("a store built with its own consumer name reads and writes that cursor, never the poster's", async () => {
+    const own = new PgKillstreakFeedStore(db, { consumer: "x-recorder" });
+    expect(await own.seeded()).toBe(false);
+    await own.markPosted(7);
+    expect(await own.seeded()).toBe(true);
+    expect(await own.cursor()).toBe(7);
+    expect(await readCursor(db, "x-recorder")).toBe(7);
+    expect(await readCursor(db, "killstreak-feed-poster")).toBe(0);
+    expect(await store.seeded()).toBe(false);
   });
 });
