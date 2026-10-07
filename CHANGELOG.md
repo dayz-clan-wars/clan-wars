@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.60.0] - 2026-10-07
+
 ### Changed
 
 - King of the Hill runs on Chernarus. Any of the 31 fast-travel towns can host it, and fresh spawns start at that town's ten fast-travel arrival spots with a KotH kit. Bodies clear faster on the hill, and standing near them no longer keeps them around. There are no wolves, bears or infected hordes any more.
