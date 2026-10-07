@@ -323,5 +323,64 @@ describe("raiseTick", () => {
       const d = await declarationForFaction(db, BEAR);
       expect(d).toMatchObject({ poleKey: P1 }); // unchanged
     });
+
+    describe("with a White flag (the clan's own flag cannot be had until the kit returns)", () => {
+      it("a full member's White raise at a free pole binds the base, with the raise as evidence", async () => {
+        await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+        await raise(B1, "Bear1", "Flag_White", P9, now);
+        expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+        expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: P9 });
+        expect((await db.select().from(factionEvents)).at(-1)).toMatchObject({ kind: "rebound", factionId: BEAR, payload: { texture: "Flag_Bear" } });
+        expect(await db.select().from(clanNotices)).toEqual([]);
+      });
+
+      it("a dormant clan's White bind also revives it", async () => {
+        await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+        await db.update(factions).set({ status: "dormant", dormantSince: ago(86_400_000), dormantReason: "inactive" }).where(eq(factions.id, BEAR));
+        await raise(B1, "Bear1", "Flag_White", P9, now);
+        expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+        const [bear] = await db.select({ s: factions.status }).from(factions).where(eq(factions.id, BEAR));
+        expect(bear).toEqual({ s: "active" });
+      });
+
+      it("then raising the clan's own flag at that pole is ordinary upkeep: no rebind proposal, no second bind", async () => {
+        await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+        await raise(B1, "Bear1", "Flag_White", P9, now);
+        await raise(B1, "Bear1", "Flag_Bear", P9, new Date(now.getTime() + 60_000));
+        expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 1 });
+        expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: P9 });
+        expect(await db.select().from(clanNotices)).toEqual([]);
+      });
+
+      it("⚠️ a clan that still has a base is not moved by a White raise, and is told nothing", async () => {
+        // White at a free pole is founding-ceremony material; a clan moves
+        // its base only through the rebind proposal.
+        await raise(B1, "Bear1", "Flag_White", P3, now);
+        const r = await raiseTick(db, { siteBaseUrl: SITE });
+        expect(r).toMatchObject({ bound: 0, noticed: 0 });
+        expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: P1 });
+        expect(await db.select().from(clanNotices)).toEqual([]);
+      });
+
+      it("a pending member's or a clanless player's White raise binds nothing", async () => {
+        await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+        const PEND = "PEND-DAYZID-000000000000000000000000";
+        await db.insert(factionMembers).values({ factionId: BEAR, serverId, dayzId: PEND, discordId: "dPend", role: "member", joinedAt: now, status: "pending", pendingSince: now });
+        await raise(PEND, "Pendy", "Flag_White", P9, now);
+        await raise(W1, "Wanderer", "Flag_White", P4, now);
+        expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 0, noticed: 0 });
+        expect(await declarationForFaction(db, BEAR)).toBeNull();
+        expect(await db.select().from(clanNotices)).toEqual([]);
+      });
+
+      it("a reserved clan's White raise binds nothing: activation is ceremony-tick's", async () => {
+        await db.delete(declarations).where(eq(declarations.ownerFactionId, BEAR));
+        await db.update(factions).set({ status: "reserved", activatedAt: null, reservedUntil: new Date(now.getTime() + 86_400_000) }).where(eq(factions.id, BEAR));
+        await raise(B1, "Bear1", "Flag_White", P9, now);
+        expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ bound: 0 });
+        expect(await declarationForFaction(db, BEAR)).toBeNull();
+      });
+    });
   });
 });
+

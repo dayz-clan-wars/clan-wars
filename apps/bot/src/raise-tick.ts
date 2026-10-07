@@ -3,7 +3,7 @@ import { declarations, defenses, factionMembers, factions, identityLinks, season
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { appendWarLogTx, appendFactionEventTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
 import { declarationForFaction, declareTx } from "@factions/declarations";
-import { FLAG_DOWN_MS } from "@factions/domain";
+import { FLAG_DOWN_MS, NEUTRAL_FLAG } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
 import { reviveFactionTx } from "./dormancy-store.js";
@@ -12,6 +12,9 @@ import { reviveFactionTx } from "./dormancy-store.js";
 export const RAISE_CONSUMER = "raise-consumer";
 
 export type RaiseTickResult = { scanned: number; defenses: number; revived: number; noticed: number; bound: number };
+
+type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
+type BindingClan = { id: number; name: string; tag: string; texture: string; status: string };
 
 type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string; pole: { x: number; y: number; z: number } };
 function readFlagPayload(payload: unknown): FlagPayload | null {
@@ -139,6 +142,29 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
           return done("noticed" as const);
         }
 
+        // Undeclared pole, White flag: a full member re-establishing a clan
+        // that has no base, the post-wipe case. Clan flags never spawn as
+        // loot and the supply kit (the only source of one) needs a bound
+        // base, so after a wipe a clan's own flag cannot be had; White can.
+        // The bind brings the kit back, and the kit brings the clan's flag.
+        // ⚠️ Only a clan with NO declaration. White at a free pole is also
+        // founding-ceremony material (ceremony-tick), and a clan that still
+        // has a base moves it through the rebind proposal, never this way.
+        // The bind marks the pole bound, which ceremony-tick re-checks before
+        // it settles any window, so the two cannot both take the pole.
+        if (p.texture === NEUTRAL_FLAG) {
+          // ⚠️ FOR UPDATE per §4.12, as in the clan-flag path below.
+          const [clan] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status }).from(factions)
+            .innerJoin(factionMembers, eq(factionMembers.factionId, factions.id))
+            .where(and(
+              eq(factions.serverId, ev.serverId), sql`${factions.status} in ('active','dormant')`,
+              eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full"),
+            ))
+            .for("update", { of: factions });
+          if (!clan || await declarationForFaction(tx, clan.id)) return done(null);
+          return done(await bindTx(tx, ev, p, clan));
+        }
+
         // Undeclared pole: does the texture belong to a holding clan on this server?
         // ⚠️ FOR UPDATE per §4.12 (`factions` before `declarations`): this
         // branch may go on to call `declareTx`, which takes the declarations
@@ -164,26 +190,7 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
           return done("noticed" as const);
         }
 
-        const declared = await declareTx(tx, {
-          serverId: ev.serverId, poleKey: p.poleKey, x: p.pole.x, y: p.pole.y, z: p.pole.z,
-          owner: { factionId: owner.id }, evidence: { eventId: ev.id }, at: ev.occurredAt,
-        });
-        if (!declared.ok) {
-          // ⚠️ No notice kind exists for this (ruling: §9.3 lists none) and
-          // nothing else is written — the site's clan page will show "no
-          // base" once increment 5 lands. Logged so an operator can still
-          // see it happened.
-          console.info(`raise-tick: bind refused for faction ${owner.id} at ${p.poleKey}: ${declared.reason}`);
-          return done(null);
-        }
-        await appendFactionEventTx(tx, {
-          serverId: ev.serverId, factionId: owner.id, kind: "rebound", occurredAt: ev.occurredAt,
-          payload: { name: owner.name, tag: owner.tag, texture: owner.texture },
-        });
-        if (owner.status === "dormant") {
-          await reviveFactionTx(tx, owner.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
-        }
-        return done("bound" as const);
+        return done(await bindTx(tx, ev, p, owner));
       });
       if (r === "defense") out.defenses++;
       else if (r === "revived") out.revived++;
@@ -196,4 +203,31 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
     await writeCursor(db, RAISE_CONSUMER, cursor);
   }
   return out;
+}
+
+/**
+ * §8.5: bind a holding clan with no declaration to the raised pole, reviving
+ * it if dormant. The caller holds the clan's `factions` row FOR UPDATE.
+ */
+async function bindTx(tx: Tx, ev: { id: number; serverId: number; occurredAt: Date }, p: FlagPayload, clan: BindingClan): Promise<"bound" | null> {
+  const declared = await declareTx(tx, {
+    serverId: ev.serverId, poleKey: p.poleKey, x: p.pole.x, y: p.pole.y, z: p.pole.z,
+    owner: { factionId: clan.id }, evidence: { eventId: ev.id }, at: ev.occurredAt,
+  });
+  if (!declared.ok) {
+    // ⚠️ No notice kind exists for this (ruling: §9.3 lists none) and
+    // nothing else is written — the site's clan page will show "no
+    // base" once increment 5 lands. Logged so an operator can still
+    // see it happened.
+    console.info(`raise-tick: bind refused for faction ${clan.id} at ${p.poleKey}: ${declared.reason}`);
+    return null;
+  }
+  await appendFactionEventTx(tx, {
+    serverId: ev.serverId, factionId: clan.id, kind: "rebound", occurredAt: ev.occurredAt,
+    payload: { name: clan.name, tag: clan.tag, texture: clan.texture },
+  });
+  if (clan.status === "dormant") {
+    await reviveFactionTx(tx, clan.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
+  }
+  return "bound";
 }
