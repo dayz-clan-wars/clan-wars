@@ -1,4 +1,5 @@
 import locations from "../assets/koth-locations.json";
+import retired from "../assets/koth-locations-retired.json";
 import presets from "../assets/koth-presets.json";
 import {
   KOTH_MIN_GAP_MS, KOTH_NO_REPEAT, KOTH_PRESET_PREFIX, KOTH_REMINDER_LEAD_MS, KOTH_VOTE_MIN_OPEN_MS,
@@ -7,15 +8,31 @@ import {
 import { nextRestartAt } from "./restarts";
 import { distance2d } from "./spacing";
 
-export type KothLocation = { name: string; slug: string; centreX: number; centreZ: number };
+/** `spawnGroup` is the town's `<fresh>` group in the chernarus repo's cfgplayerspawnpoints.xml. */
+export type KothLocation = { name: string; slug: string; spawnGroup: string; centreX: number; centreZ: number };
 
-/** Vendored from livonia/koth/locations/index.json; koth-drift.test.ts holds them together. */
+/**
+ * The 31 Chernarus towns, generated from the chernarus repo's spawn groups;
+ * koth-drift.test.ts holds them together. The only towns a session may open at.
+ */
 export const KOTH_LOCATIONS: readonly KothLocation[] = locations as KothLocation[];
-/** Vendored from livonia/custom/koth-*.json. */
+/**
+ * Livonia's 31, retired 2026-10-07. Names only: past sessions store these slugs
+ * and must keep printing a town, never be offered again. Their scoring centres
+ * are frozen in koth_events.centre_x/z, so nothing else needs them.
+ */
+const RETIRED_LOCATIONS: readonly { name: string; slug: string }[] = retired;
+/** Vendored from livonia/custom/koth-*.json, carried by chernarus/custom since 2026-10-07. */
 export const KOTH_PRESET_FILES: readonly string[] = presets as string[];
 
+/** ⚠️ Playable towns only: a retired slug is null, so nothing can schedule or open one. */
 export function kothLocation(slug: string): KothLocation | null {
   return KOTH_LOCATIONS.find((l) => l.slug === slug) ?? null;
+}
+
+/** A town's display name for any session, past or present; the slug itself if unknown. */
+export function kothTownName(slug: string): string {
+  return (KOTH_LOCATIONS.find((l) => l.slug === slug) ?? RETIRED_LOCATIONS.find((l) => l.slug === slug))?.name ?? slug;
 }
 
 /** Slots are aligned to the epoch in RESTART_PERIOD_MS steps (rules.ts). */

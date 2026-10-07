@@ -1,188 +1,219 @@
 [
   {
-    "name": "Adamów",
-    "slug": "adamow",
-    "centreX": 3072,
-    "centreZ": 6850
+    "name": "Balota",
+    "slug": "balota",
+    "spawnGroup": "Balota",
+    "centreX": 4465,
+    "centreZ": 2448
   },
   {
-    "name": "Bielawa",
-    "slug": "bielawa",
-    "centreX": 1570,
-    "centreZ": 9675
+    "name": "Berezino",
+    "slug": "berezino",
+    "spawnGroup": "Berezino",
+    "centreX": 12866,
+    "centreZ": 10119
   },
   {
-    "name": "Borek",
-    "slug": "borek",
-    "centreX": 9802,
-    "centreZ": 8493
+    "name": "Chernogorsk",
+    "slug": "chernogorsk",
+    "spawnGroup": "Chernogorsk",
+    "centreX": 6514,
+    "centreZ": 2568
   },
   {
-    "name": "Brena",
-    "slug": "brena",
-    "centreX": 6613,
-    "centreZ": 11208
+    "name": "Dolina",
+    "slug": "dolina",
+    "spawnGroup": "Dolina",
+    "centreX": 11326,
+    "centreZ": 6591
   },
   {
-    "name": "Dolnik",
-    "slug": "dolnik",
-    "centreX": 11306,
-    "centreZ": 657
+    "name": "Elektrozavodsk",
+    "slug": "elektrozavodsk",
+    "spawnGroup": "Elektrozavodsk",
+    "centreX": 10467,
+    "centreZ": 2208
   },
   {
-    "name": "Drewniki",
-    "slug": "drewniki",
-    "centreX": 5830,
-    "centreZ": 5092
+    "name": "Gorka",
+    "slug": "gorka",
+    "spawnGroup": "Gorka",
+    "centreX": 9531,
+    "centreZ": 8836
   },
   {
-    "name": "Gieraltów",
-    "slug": "gieraltow",
-    "centreX": 11234,
-    "centreZ": 4380
+    "name": "Grishino",
+    "slug": "grishino",
+    "spawnGroup": "Grishino",
+    "centreX": 5973,
+    "centreZ": 10306
   },
   {
-    "name": "Gliniska",
-    "slug": "gliniska",
-    "centreX": 4988,
-    "centreZ": 9919
+    "name": "Kamenka",
+    "slug": "kamenka",
+    "spawnGroup": "Kamenka",
+    "centreX": 1837,
+    "centreZ": 2235
   },
   {
-    "name": "Grabin",
-    "slug": "grabin",
-    "centreX": 10660,
-    "centreZ": 11023
+    "name": "Kamensk",
+    "slug": "kamensk",
+    "spawnGroup": "Kamensk",
+    "centreX": 6660,
+    "centreZ": 14418
   },
   {
-    "name": "Huta",
-    "slug": "huta",
-    "centreX": 5137,
-    "centreZ": 5472
+    "name": "Kamyshovo",
+    "slug": "kamyshovo",
+    "spawnGroup": "Kamyshovo",
+    "centreX": 12038,
+    "centreZ": 3524
   },
   {
-    "name": "Karlin",
-    "slug": "karlin",
-    "centreX": 10067,
-    "centreZ": 6956
+    "name": "Krasnostav",
+    "slug": "krasnostav",
+    "spawnGroup": "Krasnostav",
+    "centreX": 11183,
+    "centreZ": 12273
   },
   {
-    "name": "Kolembrody",
-    "slug": "kolembrody",
-    "centreX": 8412,
-    "centreZ": 11979
+    "name": "Lopatino",
+    "slug": "lopatino",
+    "spawnGroup": "Lopatino",
+    "centreX": 2747,
+    "centreZ": 9916
   },
   {
-    "name": "Kulno",
-    "slug": "kulno",
-    "centreX": 11144,
-    "centreZ": 2392
+    "name": "Mogilevka",
+    "slug": "mogilevka",
+    "spawnGroup": "Mogilevka",
+    "centreX": 7557,
+    "centreZ": 5140
   },
   {
-    "name": "Lembork",
-    "slug": "lembork",
-    "centreX": 8675,
-    "centreZ": 6635
+    "name": "Nagornoye",
+    "slug": "nagornoye",
+    "spawnGroup": "Nagornoye",
+    "centreX": 9301,
+    "centreZ": 14602
   },
   {
-    "name": "Lipina",
-    "slug": "lipina",
-    "centreX": 5937,
-    "centreZ": 6819
+    "name": "Nizhneye",
+    "slug": "nizhneye",
+    "spawnGroup": "Nizhneye",
+    "centreX": 12887,
+    "centreZ": 8124
   },
   {
-    "name": "Lukow",
-    "slug": "lukow",
-    "centreX": 3526,
-    "centreZ": 11963
+    "name": "Novaya Petrovka",
+    "slug": "novaya-petrovka",
+    "spawnGroup": "NovayaPetrovka",
+    "centreX": 3369,
+    "centreZ": 13046
   },
   {
-    "name": "Muratyn",
-    "slug": "muratyn",
-    "centreX": 4563,
-    "centreZ": 6383
+    "name": "Novodmitrovsk",
+    "slug": "novodmitrovsk",
+    "spawnGroup": "Novodmitrovsk",
+    "centreX": 11506,
+    "centreZ": 14511
   },
   {
-    "name": "Nadbór",
-    "slug": "nadbor",
+    "name": "Novy Sobor",
+    "slug": "novy-sobor",
+    "spawnGroup": "NovySobor",
+    "centreX": 7088,
+    "centreZ": 7700
+  },
+  {
+    "name": "Polyana",
+    "slug": "polyana",
+    "spawnGroup": "Polyana",
+    "centreX": 10664,
+    "centreZ": 8093
+  },
+  {
+    "name": "Prigorodki",
+    "slug": "prigorodki",
+    "spawnGroup": "Prigorodki",
+    "centreX": 7853,
+    "centreZ": 3155
+  },
+  {
+    "name": "Pustoshka",
+    "slug": "pustoshka",
+    "spawnGroup": "Pustoshka",
+    "centreX": 3067,
+    "centreZ": 7901
+  },
+  {
+    "name": "Severograd",
+    "slug": "severograd",
+    "spawnGroup": "Severograd",
+    "centreX": 7939,
+    "centreZ": 12685
+  },
+  {
+    "name": "Solnechny",
+    "slug": "solnechny",
+    "spawnGroup": "Solnechny",
+    "centreX": 13401,
+    "centreZ": 6293
+  },
+  {
+    "name": "Staroye",
+    "slug": "staroye",
+    "spawnGroup": "Staroye",
+    "centreX": 10145,
+    "centreZ": 5501
+  },
+  {
+    "name": "Stary Sobor",
+    "slug": "stary-sobor",
+    "spawnGroup": "StarySobor",
     "centreX": 6105,
-    "centreZ": 3983
+    "centreZ": 7766
   },
   {
-    "name": "Nidek",
-    "slug": "nidek",
-    "centreX": 6124,
-    "centreZ": 8012
+    "name": "Stary Yar",
+    "slug": "stary-yar",
+    "spawnGroup": "StaryYar",
+    "centreX": 4990,
+    "centreZ": 15073
   },
   {
-    "name": "Olszanka",
-    "slug": "olszanka",
-    "centreX": 4815,
-    "centreZ": 7673
+    "name": "Svergino",
+    "slug": "svergino",
+    "spawnGroup": "Svergino",
+    "centreX": 9591,
+    "centreZ": 13787
   },
   {
-    "name": "Polana",
-    "slug": "polana",
-    "centreX": 3276,
-    "centreZ": 2133
+    "name": "Svetloyarsk",
+    "slug": "svetloyarsk",
+    "spawnGroup": "Svetloyarsk",
+    "centreX": 13890,
+    "centreZ": 13250
   },
   {
-    "name": "Radacz",
-    "slug": "radacz",
-    "centreX": 4004,
-    "centreZ": 7938
+    "name": "Vavilovo",
+    "slug": "vavilovo",
+    "spawnGroup": "Vavilovo",
+    "centreX": 2313,
+    "centreZ": 11087
   },
   {
-    "name": "Radunin",
-    "slug": "radunin",
-    "centreX": 7293,
-    "centreZ": 6491
+    "name": "Vybor",
+    "slug": "vybor",
+    "spawnGroup": "Vybor",
+    "centreX": 3815,
+    "centreZ": 8935
   },
   {
-    "name": "Roztoka",
-    "slug": "roztoka",
-    "centreX": 7690,
-    "centreZ": 5317
-  },
-  {
-    "name": "Sitnik",
-    "slug": "sitnik",
-    "centreX": 11496,
-    "centreZ": 9571
-  },
-  {
-    "name": "Sobotka",
-    "slug": "sobotka",
-    "centreX": 6252,
-    "centreZ": 10250
-  },
-  {
-    "name": "Tarnow",
-    "slug": "tarnow",
-    "centreX": 9323,
-    "centreZ": 10902
-  },
-  {
-    "name": "Topolin",
-    "slug": "topolin",
-    "centreX": 1855,
-    "centreZ": 7330
-  },
-  {
-    "name": "Wrzeszcz",
-    "slug": "wrzeszcz",
-    "centreX": 9038,
-    "centreZ": 4438
-  },
-  {
-    "name": "Zalesie",
-    "slug": "zalesie",
-    "centreX": 893,
-    "centreZ": 5536
-  },
-  {
-    "name": "Zapadlisko",
-    "slug": "zapadlisko",
-    "centreX": 8053,
-    "centreZ": 8710
+    "name": "Zelenogorsk",
+    "slug": "zelenogorsk",
+    "spawnGroup": "Zelenogorsk",
+    "centreX": 2648,
+    "centreZ": 5201
   }
 ]

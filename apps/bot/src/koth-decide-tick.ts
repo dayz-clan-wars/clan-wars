@@ -1,6 +1,6 @@
 import { kothEvents, kothVotes, servers, type Database } from "@factions/db";
 import {
-  KOTH_HISTORY_MS, chooseKothTown, decisionInstantFor, highWater, isoWeekStart, kothLocation, nextRestartAt, shouldFireKoth,
+  KOTH_HISTORY_MS, chooseKothTown, decisionInstantFor, highWater, isoWeekStart, kothTownName, nextRestartAt, shouldFireKoth,
 } from "@factions/domain";
 import { and, eq, gt, gte, inArray, isNull, lt, notInArray } from "drizzle-orm";
 import { scheduledText } from "./koth-text.js";
@@ -100,7 +100,7 @@ export async function kothDecideTick(
  */
 async function announce(db: Database, post: (c: string) => Promise<void>, id: number, slug: string, slot: Date, now: Date): Promise<number> {
   try {
-    await post(scheduledText(kothLocation(slug)?.name ?? slug, slot, null));
+    await post(scheduledText(kothTownName(slug), slot, null));
   } catch (err) {
     console.warn(`koth: automatic announcement for ${slot.toISOString()} failed to post — retrying next tick`, err);
     return 0;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   kothWanted, inKothZone, kothStandings, kothWinner, restoredPresets, isRestartSlot,
-  KOTH_LOCATIONS, kothLocation, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M,
+  KOTH_LOCATIONS, kothLocation, kothTownName, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M, WORLD_SIZE_M,
 } from "../src/index.js";
 
 const at = (iso: string) => new Date(iso);
@@ -80,12 +80,28 @@ describe("restoredPresets", () => {
 });
 
 describe("catalogue", () => {
-  it("has the 31 towns and 44 presets, all flat in ./custom/ with the prefix", () => {
+  it("has the 31 Chernarus towns and 44 presets, all flat in ./custom/ with the prefix", () => {
     expect(KOTH_LOCATIONS).toHaveLength(31);
-    expect(kothLocation("lembork")?.name).toBe("Lembork");
+    expect(kothLocation("novaya-petrovka")).toMatchObject({ name: "Novaya Petrovka", spawnGroup: "NovayaPetrovka" });
     expect(kothLocation("narnia")).toBeNull();
     expect(KOTH_PRESET_FILES).toHaveLength(44);
     for (const p of KOTH_PRESET_FILES) expect(p).toMatch(/^\.\/custom\/koth-[a-z0-9-]+\.json$/);
+  });
+  // ⚠️ Review focus 4: past sessions are Livonia rows, and their names must survive the move.
+  it("names a retired Livonia town but never offers one", () => {
+    expect(kothTownName("lembork")).toBe("Lembork");
+    expect(kothTownName("adamow")).toBe("Adamów");
+    expect(kothLocation("lembork")).toBeNull();
+    expect(kothTownName("novy-sobor")).toBe("Novy Sobor");
+    expect(kothTownName("narnia")).toBe("narnia");
+  });
+  it("keeps slugs unique and every centre on the map", () => {
+    expect(new Set(KOTH_LOCATIONS.map((l) => l.slug)).size).toBe(31);
+    for (const l of KOTH_LOCATIONS) {
+      expect(l.slug).toMatch(/^[a-z]+(-[a-z]+)*$/);
+      expect(l.centreX).toBeGreaterThan(0); expect(l.centreX).toBeLessThan(WORLD_SIZE_M);
+      expect(l.centreZ).toBeGreaterThan(0); expect(l.centreZ).toBeLessThan(WORLD_SIZE_M);
+    }
   });
   it("isRestartSlot is true on even UTC hours only", () => {
     expect(isRestartSlot(at("2026-10-03T20:00:00Z"))).toBe(true);
