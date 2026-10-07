@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.58.3] - 2026-10-07
+
 ### Fixed
 
 - Fast travel on Chernarus uses the Chernarus travel points. The bot was writing Livonia's travel points to the server after the move.
