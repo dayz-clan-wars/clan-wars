@@ -45,7 +45,7 @@ export default async function Home() {
           <div>
             <div className="inline-flex items-center gap-3 border border-gold px-2.5 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-gold">
               <span className="inline-block h-2 w-2 bg-gold" />
-              {board.season ? `Season ${board.season.number} · Week ${week} · Livonia` : "Livonia"}<span className="hidden lg:inline"> · Xbox</span>
+              {board.season ? `Season ${board.season.number} · Week ${week} · Chernarus` : "Chernarus"}<span className="hidden lg:inline"> · Xbox</span>
             </div>
             <h1 className="mt-5 font-display text-[clamp(40px,13.3vw,60px)] uppercase leading-[.88] tracking-[-0.02em] text-ink lg:mt-6 lg:text-[88px] lg:leading-[.86] xl:text-[112px]">
               Your clan.<br />Your <span className="text-gold">war.</span>

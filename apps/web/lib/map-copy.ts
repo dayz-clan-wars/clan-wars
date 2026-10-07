@@ -30,7 +30,7 @@ export const MAP_HINT = {
 } as const;
 
 /** The Leaflet container's accessible name: what it is, and how to move through it without a pointer. */
-export const MAP_REGION_LABEL = "Map of Livonia. Tab moves between markers; Enter opens one.";
+export const MAP_REGION_LABEL = "Map of Chernarus. Tab moves between markers; Enter opens one.";
 
 /** The "On the map" list in the layers panel and sheet. */
 export const ROSTER_COPY = { heading: "On the map", empty: "Nothing of yours is on the map yet." } as const;

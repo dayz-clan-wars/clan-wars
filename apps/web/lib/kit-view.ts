@@ -1,10 +1,10 @@
 import type { BoosterKitView } from "@factions/roster";
-import type { KitSlot } from "@factions/domain";
+import { WORLD_MAP, WORLD_SIZE_M, type KitSlot } from "@factions/domain";
 import { gridRef, gridRefKey } from "./map-projection";
 import { nearestPlace } from "./map-places";
 
-/** Livonia, metres. The same constants /base uses to speak in grid squares. */
-const WORLD = { map: "enoch", size: 12800 } as const;
+/** The map, metres. The same constants /base uses to speak in grid squares. */
+const WORLD = { map: WORLD_MAP, size: WORLD_SIZE_M } as const;
 
 export type KitSpotView = { grid: string; near: string | null; href: string };
 export type KitStepView = { token: string; label: string; confirmed: boolean };

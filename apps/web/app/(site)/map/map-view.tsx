@@ -7,7 +7,7 @@ import type * as L from "leaflet";
  * spells the dynamic import of "leaflet" in exactly one place: `importLeaflet`.
  */
 type LeafletModule = typeof L;
-import { POSITION_FIX_MS } from "@factions/domain";
+import { POSITION_FIX_MS, WORLD_MAP } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
@@ -50,7 +50,7 @@ const TILE_ATTRIBUTION = '<a href="https://dayz.xam.nu" target="_blank">Tiles ©
 const BLANK_TILE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==";
 const LAYER_STORAGE_KEY = "clan-wars.map.layers";
 /** The world this map draws; the place names are keyed on it. */
-const MAP = "enoch";
+const MAP = WORLD_MAP;
 /** Place names sit over the travel points (350) and under every player marker (overlay 400, markers 600). */
 const PLACE_PANE = "places";
 /** Ages are recomputed far more often than positions are fetched, so a label never goes stale. */
@@ -569,7 +569,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         m.on("zoomend", far);
 
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
-        Lm.tileLayer("/tiles/enoch/topographic/{z}/{x}/{y}.webp", {
+        Lm.tileLayer(`/tiles/${MAP}/topographic/{z}/{x}/{y}.webp`, {
           minZoom: 0, maxZoom: MAX_ZOOM, noWrap: true,
           // Absent tiles (dev, or before the mirror has run) leave the drawn
           // layers readable on dark ground instead of a checkerboard of broken

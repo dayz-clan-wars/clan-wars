@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The website's map shows Chernarus: Chernarus terrain, 201 place names, and its 518 fast-travel points. Map pins and grid references cover the whole map, out to 15,360 m.
+- The site, the field guide and achievement cards say Chernarus instead of Livonia.
+
 ## [1.59.0] - 2026-10-07
 
 ### Changed

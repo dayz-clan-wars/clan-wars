@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { baseFor, type ReportableIncident } from "@factions/roster";
-import { WATCH_ZONE_RADIUS_M, sentenceMsFor, type IncidentDamage, type ViolationKind } from "@factions/domain";
+import { WATCH_ZONE_RADIUS_M, WORLD_MAP, WORLD_SIZE_M, sentenceMsFor, type IncidentDamage, type ViolationKind } from "@factions/domain";
 import { gridRef, gridRefKey } from "@/lib/map-projection";
 import { nearestPlace } from "@/lib/map-places";
 import { currentSession } from "@/lib/viewer";
@@ -20,8 +20,8 @@ export const metadata: Metadata = {
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-/** Livonia, metres; the map's own constant (App Review R2: the site speaks in grid squares, not metres). */
-const WORLD = { map: "enoch", size: 12800 };
+/** The map, metres; the map's own constant (App Review R2: the site speaks in grid squares, not metres). */
+const WORLD = { map: WORLD_MAP, size: WORLD_SIZE_M };
 /** "Grid 043 087 · near Topolin", and the map opened on that square. These are the viewer's own raises; nobody else's pole reaches this page. */
 function Pole({ x, z }: { x: number; z: number }) {
   const near = nearestPlace(WORLD.map, x, z, WORLD.size);
