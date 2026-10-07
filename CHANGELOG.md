@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.59.0] - 2026-10-07
+
 ### Changed
 
 - After a wipe, a clan gets its base back by raising a white flag: any full member, at any free pole. Your supply kit returns at the next restart with your clan's flag in it. Raising your own clan flag still works too, if you have one.
