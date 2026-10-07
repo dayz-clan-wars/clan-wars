@@ -38,7 +38,7 @@ count via `scoringKillAnyTeam`); prizes; the restore arm running whether or not
   - `centreX`/`centreZ`: the mean of the group's 10 spawn positions, rounded to the metre.
 - The Livonia list moves to `packages/domain/assets/koth-locations-retired.json`.
   `kothLocation(slug)` looks up both, so the six past sessions (all Livonia slugs) keep
-  their names in `/koth status`, posts and the site. `KOTH_LOCATIONS`, the list that
+  their names (their scoring centres are already frozen in `koth_events.centre_x/z`) in `/koth status`, posts and the site. `KOTH_LOCATIONS`, the list that
   `/koth schedule` autocomplete, `chooseKothTown` and `/kothvote` offer, is Chernarus only.
   No Chernarus slug matches a Livonia slug, and a test enforces that.
 
@@ -81,15 +81,15 @@ reported (`restoreError`), never blanked.
   `infectedRestoreRowId` in `KothPlan` are deleted. `koth_events.infected_snapshot` stays
   in the schema, unused; no migration. Checked on `factions_live` on 2026-10-07: no row
   has an infected snapshot waiting for a restore.
-- The `KOTH_INFECTED_EVENTS` comment's pointer to the Livonia generator's
-  `ZOMBIE_ZONE_NAMES` (and a `koth-drift.test.ts` that does not exist) goes with it.
-  Drift is covered by 5 instead.
+- `packages/domain/test/koth-drift.test.ts` stops reading the `livonia` checkout and
+  reads the sibling `chernarus` checkout instead (see 5); its zombie-zone check goes.
 
 ## 4. The `chernarus` mission repo
 
-- `.github/workflows/` deploy: before the FTP step, copy `cfgplayerspawnpoints.xml` and
-  `db/globals.xml` into `koth/default/`, the same pattern as Livonia's staging step. The
-  defaults are always the release's own files, never a committed copy.
+- `.github/workflows/deploy.yml`: before the FTP step, copy `cfgplayerspawnpoints.xml`
+  and `db/globals.xml` into `koth/default/`, and refuse a `./custom/koth-` entry in the
+  repo's `cfggameplay.json`. Both are Livonia's two steps, trimmed. The defaults are
+  always the release's own files, never a committed copy.
 - Copy `custom/koth-*.json` from `livonia` unchanged.
 - No `koth/locations/` directory.
 
@@ -105,10 +105,11 @@ reported (`restoreError`), never blanked.
 - **Locations** (domain): 31 Chernarus towns; slugs unique and disjoint from the retired
   Livonia slugs; centres inside `WORLD_SIZE_M`; `kothLocation("adamow")` still returns
   Adamów; `KOTH_LOCATIONS` never contains a retired slug.
-- **Spawn-group drift:** a fixture copy of Chernarus `cfgplayerspawnpoints.xml` in the
-  domain tests. Every location's `spawnGroup` is a `<fresh>` group there, and each
-  centre is the mean of that group's spawn positions. The live server is covered by the
-  opening check (3.1).
+- **Drift** (`koth-drift.test.ts`, house pattern: reads the sibling `chernarus`
+  checkout, skipped where it is absent, as in CI): every location's `spawnGroup` is a
+  `<fresh>` group in `cfgplayerspawnpoints.xml` and its centre is that group's mean; the
+  31 groups and the 31 locations are the same set; `KOTH_PRESET_FILES` equals
+  `custom/koth-*.json`. The live server is covered by the opening check (3.1).
 
 ## 6. Player copy
 
