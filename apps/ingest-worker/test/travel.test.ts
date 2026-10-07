@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
+import { FAST_TRAVEL_POINTS, WORLD_MAP } from "@factions/domain";
 import { generateTravel, loadTravelTemplate, travelTemplateFor, POLE_BOX } from "../src/travel.js";
 
 const asset = (mission: string) => JSON.parse(readFileSync(new URL(`../assets/travel/${mission}.json`, import.meta.url), "utf8"));
@@ -55,3 +56,13 @@ describe("the template for a server's map", () => {
     expect(() => travelTemplateFor(templates, "/games/ni1/ftproot/dayzxb_missions/dayzOffline.enoch")).toThrow(/cannot read the mission/);
   });
 });
+
+describe("the web map's travel points", () => {
+  it("⚠️ are the uploaded template's points for the map this deployment runs", () => {
+    // Two statements of one fact: packages/domain/src/fast-travel-points.json
+    // draws the map layer, this template is what the server actually reads.
+    const t = loadTravelTemplate(asset(`dayzOffline.${WORLD_MAP}`));
+    expect(FAST_TRAVEL_POINTS).toEqual(t.PRABoxes.map((b) => ({ x: Math.round(b[2][0] * 10) / 10, z: Math.round(b[2][2] * 10) / 10 })));
+  });
+});
+

@@ -65,7 +65,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ key: str
           <div style={{ display: "flex", alignItems: "center" }}>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={markSrc} width={36} height={36} alt="" />
-            <div style={{ fontSize: 22, letterSpacing: 2, textTransform: "uppercase", marginLeft: 16, color: S.ink }}>CLAN WARS · LIVONIA</div>
+            <div style={{ fontSize: 22, letterSpacing: 2, textTransform: "uppercase", marginLeft: 16, color: S.ink }}>CLAN WARS · CHERNARUS</div>
           </div>
           <div style={{ fontSize: 20, letterSpacing: 4, textTransform: "uppercase", color: S.gold }}>DAYZCLANWARS.COM</div>
         </div>

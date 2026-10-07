@@ -31,6 +31,7 @@ import { dirname, join } from "node:path";
 const VERSION = process.argv[2] ?? "1.29-7";
 // [our servers.map codename, DZMap's publishing name]
 const MAPS = [
+  ["chernarusplus", "chernarusplus"],
   ["enoch", "livonia"],
 ];
 

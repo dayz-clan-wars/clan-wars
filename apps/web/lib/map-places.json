@@ -1,4 +1,1212 @@
 {
+ "chernarusplus": [
+  {
+   "kind": "local",
+   "lat": -66.3331706,
+   "lng": 89.0110026,
+   "name": "Adamovka"
+  },
+  {
+   "kind": "local",
+   "lat": -216.3945353,
+   "lng": 84.7005127,
+   "name": "Airfield"
+  },
+  {
+   "kind": "local",
+   "lat": -46.4350586,
+   "lng": 201.6780111,
+   "name": "Airfield"
+  },
+  {
+   "kind": "hill",
+   "lat": -103.3386719,
+   "lng": 135.7233317,
+   "name": "Altar"
+  },
+  {
+   "kind": "camp",
+   "lat": -24.0228678,
+   "lng": 141.8276856,
+   "name": "Arsenovo"
+  },
+  {
+   "kind": "village",
+   "lat": -214.9113322,
+   "lng": 75.459668,
+   "name": "Balota"
+  },
+  {
+   "kind": "hill",
+   "lat": -152.5246501,
+   "lng": 169.2191244,
+   "name": "Baranchik"
+  },
+  {
+   "kind": "hill",
+   "lat": -59.8130046,
+   "lng": 69.6378337,
+   "name": "Bashnya"
+  },
+  {
+   "kind": "village",
+   "lat": -6.5333333,
+   "lng": 236.1,
+   "name": "Belaya Polyana"
+  },
+  {
+   "kind": "village",
+   "lat": -24.25,
+   "lng": 250.3333333,
+   "name": "Berezhki"
+  },
+  {
+   "kind": "city",
+   "lat": -93.3169759,
+   "lng": 206.2063802,
+   "name": "Berezino"
+  },
+  {
+   "kind": "local",
+   "lat": -55.6071452,
+   "lng": 117.6335205,
+   "name": "Bogat"
+  },
+  {
+   "kind": "village",
+   "lat": -108.1513346,
+   "lng": 24.2269999,
+   "name": "Bogatyrka"
+  },
+  {
+   "kind": "hill",
+   "lat": -147.3261475,
+   "lng": 11.9108165,
+   "name": "Bolshoy Kotel"
+  },
+  {
+   "kind": "village",
+   "lat": -188.1505656,
+   "lng": 55.2734334,
+   "name": "Bor"
+  },
+  {
+   "kind": "hill",
+   "lat": -55.1012044,
+   "lng": 171.3469401,
+   "name": "Chernaya Gora"
+  },
+  {
+   "kind": "city",
+   "lat": -26.4963379,
+   "lng": 202.642334,
+   "name": "Chernaya Polyana"
+  },
+  {
+   "kind": "capital",
+   "lat": -217.3037679,
+   "lng": 112.9769857,
+   "name": "Chernogorsk"
+  },
+  {
+   "kind": "marine",
+   "lat": -55.9666667,
+   "lng": 223.0166667,
+   "name": "Chernoye Ozero"
+  },
+  {
+   "kind": "local",
+   "lat": -125.95,
+   "lng": 150.5166667,
+   "name": "Cherny Les"
+  },
+  {
+   "kind": "marine",
+   "lat": -214.556901,
+   "lng": 126.6511475,
+   "name": "Cherny Zaliv"
+  },
+  {
+   "kind": "local",
+   "lat": -12.6750651,
+   "lng": 65.542867,
+   "name": "Chernye Skaly"
+  },
+  {
+   "kind": "ruin",
+   "lat": -64.3118652,
+   "lng": 114.7206462,
+   "name": "Chortovzamok"
+  },
+  {
+   "kind": "hill",
+   "lat": -112.8333333,
+   "lng": 109.6833333,
+   "name": "Dazhbog"
+  },
+  {
+   "kind": "local",
+   "lat": -125.65,
+   "lng": 76.9666667,
+   "name": "Dichina"
+  },
+  {
+   "kind": "village",
+   "lat": -4.9,
+   "lng": 216.6,
+   "name": "Dobroye"
+  },
+  {
+   "kind": "hill",
+   "lat": -204.9828329,
+   "lng": 175.8816732,
+   "name": "Dobry"
+  },
+  {
+   "kind": "village",
+   "lat": -145.440332,
+   "lng": 188.0861654,
+   "name": "Dolina"
+  },
+  {
+   "kind": "local",
+   "lat": -215.2833333,
+   "lng": 186.5166667,
+   "name": "Drakon"
+  },
+  {
+   "kind": "village",
+   "lat": -174.9833333,
+   "lng": 56.2333333,
+   "name": "Drozhino"
+  },
+  {
+   "kind": "camp",
+   "lat": -77.75,
+   "lng": 190.6166667,
+   "name": "Druzbha"
+  },
+  {
+   "kind": "hill",
+   "lat": -114.752832,
+   "lng": 185.1316732,
+   "name": "Dubina"
+  },
+  {
+   "kind": "local",
+   "lat": -83.8185059,
+   "lng": 54.9715007,
+   "name": "Dubnik"
+  },
+  {
+   "kind": "city",
+   "lat": -196.0790487,
+   "lng": 112.5751628,
+   "name": "Dubovo"
+  },
+  {
+   "kind": "village",
+   "lat": -91.1960449,
+   "lng": 172.0716471,
+   "name": "Dubrovka"
+  },
+  {
+   "kind": "city",
+   "lat": -222.7871663,
+   "lng": 171.4446615,
+   "name": "Elektrozavodsk"
+  },
+  {
+   "kind": "hill",
+   "lat": -189.0864828,
+   "lng": 47.3819336,
+   "name": "Erbenka"
+  },
+  {
+   "kind": "local",
+   "lat": -109.3621745,
+   "lng": 18.3780009,
+   "name": "Galkino"
+  },
+  {
+   "kind": "marine",
+   "lat": -100.6666667,
+   "lng": 123.05,
+   "name": "Glaza"
+  },
+  {
+   "kind": "marine",
+   "lat": -8.9739095,
+   "lng": 28.2092509,
+   "name": "Glubokoye Ozero"
+  },
+  {
+   "kind": "ruin",
+   "lat": -104.3805013,
+   "lng": 124.1152507,
+   "name": "Gnomov Zamok"
+  },
+  {
+   "kind": "city",
+   "lat": -106.9166667,
+   "lng": 158.7333333,
+   "name": "Gorka"
+  },
+  {
+   "kind": "village",
+   "lat": -85.05,
+   "lng": 99.6666667,
+   "name": "Grishino"
+  },
+  {
+   "kind": "local",
+   "lat": -1.8241699,
+   "lng": 55.302002,
+   "name": "Grozovy Pereval"
+  },
+  {
+   "kind": "local",
+   "lat": -9.4472005,
+   "lng": 173.399707,
+   "name": "Grozovye Doly"
+  },
+  {
+   "kind": "local",
+   "lat": -57.6666667,
+   "lng": 218.5843262,
+   "name": "Grubye Skaly"
+  },
+  {
+   "kind": "village",
+   "lat": -146.35,
+   "lng": 140.75,
+   "name": "Guglovo"
+  },
+  {
+   "kind": "village",
+   "lat": -57.0980794,
+   "lng": 144.079183,
+   "name": "Gvozdno"
+  },
+  {
+   "kind": "marine",
+   "lat": -63.1333333,
+   "lng": 220.8,
+   "name": "Ivovoye Ozero"
+  },
+  {
+   "kind": "village",
+   "lat": -111.9016602,
+   "lng": 88.345166,
+   "name": "Kabanino"
+  },
+  {
+   "kind": "local",
+   "lat": -67.7983887,
+   "lng": 55.775,
+   "name": "Kalinka"
+  },
+  {
+   "kind": "village",
+   "lat": -32.5666667,
+   "lng": 124.1333333,
+   "name": "Kalinovka"
+  },
+  {
+   "kind": "hill",
+   "lat": -174.0056641,
+   "lng": 115.0629964,
+   "name": "Kalmyk"
+  },
+  {
+   "kind": "village",
+   "lat": -219.2166667,
+   "lng": 33.0166667,
+   "name": "Kamenka"
+  },
+  {
+   "kind": "village",
+   "lat": -15.499235,
+   "lng": 112.4790202,
+   "name": "Kamensk"
+  },
+  {
+   "kind": "village",
+   "lat": -198.3666667,
+   "lng": 202.8333333,
+   "name": "Kamyshovo"
+  },
+  {
+   "kind": "local",
+   "lat": -32.3552734,
+   "lng": 142.7558106,
+   "name": "Karer Krasnaya Zarya"
+  },
+  {
+   "kind": "village",
+   "lat": -11.144808,
+   "lng": 211.6771322,
+   "name": "Karmanovka"
+  },
+  {
+   "kind": "village",
+   "lat": -76.4831706,
+   "lng": 205.4878255,
+   "name": "Khelm"
+  },
+  {
+   "kind": "hill",
+   "lat": -152.6666667,
+   "lng": 30.2,
+   "name": "Kikimora"
+  },
+  {
+   "kind": "hill",
+   "lat": -67.4101237,
+   "lng": 191.225179,
+   "name": "Klen"
+  },
+  {
+   "kind": "local",
+   "lat": -62.908138,
+   "lng": 181.0450358,
+   "name": "Klenovyipereval"
+  },
+  {
+   "kind": "ruin",
+   "lat": -31.3888346,
+   "lng": 154.7095052,
+   "name": "Klyuch"
+  },
+  {
+   "kind": "hill",
+   "lat": -132.4056478,
+   "lng": 27.677533,
+   "name": "Koman"
+  },
+  {
+   "kind": "village",
+   "lat": -215.3333333,
+   "lng": 61.7,
+   "name": "Komarovo"
+  },
+  {
+   "kind": "camp",
+   "lat": -196.6961996,
+   "lng": 171.1949544,
+   "name": "Kometa"
+  },
+  {
+   "kind": "hill",
+   "lat": -191.5149658,
+   "lng": 131.1913167,
+   "name": "Kopyto"
+  },
+  {
+   "kind": "local",
+   "lat": -141.2793294,
+   "lng": 97.8950033,
+   "name": "Kotka"
+  },
+  {
+   "kind": "village",
+   "lat": -177.0666667,
+   "lng": 73.3666667,
+   "name": "Kozlovka"
+  },
+  {
+   "kind": "city",
+   "lat": -50.3198731,
+   "lng": 186.7194499,
+   "name": "Krasnostav"
+  },
+  {
+   "kind": "village",
+   "lat": -5.500651,
+   "lng": 106.8562337,
+   "name": "Krasnoye"
+  },
+  {
+   "kind": "ruin",
+   "lat": -101.4943359,
+   "lng": 24.8833333,
+   "name": "Krona"
+  },
+  {
+   "kind": "local",
+   "lat": -28.1373372,
+   "lng": 248.0104981,
+   "name": "Krutye Skaly"
+  },
+  {
+   "kind": "village",
+   "lat": -155.1,
+   "lng": 138.3333333,
+   "name": "Kumyrna"
+  },
+  {
+   "kind": "hill",
+   "lat": -167.7188314,
+   "lng": 56.1420003,
+   "name": "Kurgan"
+  },
+  {
+   "kind": "hill",
+   "lat": -171.6091634,
+   "lng": 81.8813314,
+   "name": "Kustryk"
+  },
+  {
+   "kind": "local",
+   "lat": -125.7409994,
+   "lng": 135.3795003,
+   "name": "Lesnoykhrebet"
+  },
+  {
+   "kind": "village",
+   "lat": -88.85,
+   "lng": 46.6833333,
+   "name": "Lopatino"
+  },
+  {
+   "kind": "hill",
+   "lat": -21.8263346,
+   "lng": 112.0409831,
+   "name": "Lysaya Gora"
+  },
+  {
+   "kind": "local",
+   "lat": -147.9968343,
+   "lng": 130.8286703,
+   "name": "Makosh"
+  },
+  {
+   "kind": "hill",
+   "lat": -129.7401693,
+   "lng": 181.6283366,
+   "name": "Malinovka"
+  },
+  {
+   "kind": "local",
+   "lat": -199.5666667,
+   "lng": 46.4833333,
+   "name": "Maryanka"
+  },
+  {
+   "kind": "local",
+   "lat": -133,
+   "lng": 71.35,
+   "name": "Matveyevo"
+  },
+  {
+   "kind": "hill",
+   "lat": -180.1148844,
+   "lng": 205.3968913,
+   "name": "Mayak"
+  },
+  {
+   "kind": "local",
+   "lat": -35.4,
+   "lng": 160.6833333,
+   "name": "Medvezhi Lugi"
+  },
+  {
+   "kind": "camp",
+   "lat": -144.7102865,
+   "lng": 17.2567668,
+   "name": "Metalurg"
+  },
+  {
+   "kind": "local",
+   "lat": -117.8166667,
+   "lng": 74.95,
+   "name": "Military Base"
+  },
+  {
+   "kind": "local",
+   "lat": -21.5166667,
+   "lng": 26.1666667,
+   "name": "Military Base"
+  },
+  {
+   "kind": "local",
+   "lat": -10.9196126,
+   "lng": 130.6468669,
+   "name": "Military Base"
+  },
+  {
+   "kind": "local",
+   "lat": -170.4386475,
+   "lng": 40.1729167,
+   "name": "Military Base"
+  },
+  {
+   "kind": "local",
+   "lat": -199.2,
+   "lng": 33.6,
+   "name": "Military Base"
+  },
+  {
+   "kind": "village",
+   "lat": -171.0590007,
+   "lng": 127.5068359,
+   "name": "Mogilevka"
+  },
+  {
+   "kind": "village",
+   "lat": -165.643335,
+   "lng": 188.8965007,
+   "name": "Msta"
+  },
+  {
+   "kind": "marine",
+   "lat": -224.0179993,
+   "lng": 95.5913167,
+   "name": "Mutnyi Zaliv"
+  },
+  {
+   "kind": "local",
+   "lat": -215.9067017,
+   "lng": 138.1008789,
+   "name": "Mys Golova"
+  },
+  {
+   "kind": "local",
+   "lat": -189.7196655,
+   "lng": 226.3031738,
+   "name": "Mys Krutoy"
+  },
+  {
+   "kind": "village",
+   "lat": -135.0333333,
+   "lng": 34.1333333,
+   "name": "Myshkino"
+  },
+  {
+   "kind": "camp",
+   "lat": -139.094165,
+   "lng": 121.3327962,
+   "name": "Nadezhda"
+  },
+  {
+   "kind": "village",
+   "lat": -176.3333333,
+   "lng": 98.2333333,
+   "name": "Nadezhdino"
+  },
+  {
+   "kind": "village",
+   "lat": -11.3833333,
+   "lng": 154.7666667,
+   "name": "Nagornoye"
+  },
+  {
+   "kind": "marine",
+   "lat": -114.0706706,
+   "lng": 216.4883301,
+   "name": "Nizhniy Zaliv"
+  },
+  {
+   "kind": "village",
+   "lat": -121.0383301,
+   "lng": 213.7479981,
+   "name": "Nizhnoe (Nizhnee)"
+  },
+  {
+   "kind": "local",
+   "lat": -86.35,
+   "lng": 73.8,
+   "name": "North-West Airfield"
+  },
+  {
+   "kind": "city",
+   "lat": -40.4792806,
+   "lng": 57.9528158,
+   "name": "Novaya Petrovka"
+  },
+  {
+   "kind": "capital",
+   "lat": -16.1491699,
+   "lng": 188.9961589,
+   "name": "Novodmitrovsk"
+  },
+  {
+   "kind": "city",
+   "lat": -201.7273316,
+   "lng": 101.9318359,
+   "name": "Novoselki"
+  },
+  {
+   "kind": "local",
+   "lat": -66.6666667,
+   "lng": 154.1833333,
+   "name": "Novy Lug"
+  },
+  {
+   "kind": "village",
+   "lat": -126.4228353,
+   "lng": 118.7271647,
+   "name": "Novy Sobor"
+  },
+  {
+   "kind": "village",
+   "lat": -41.0333333,
+   "lng": 223.3666667,
+   "name": "Olsha"
+  },
+  {
+   "kind": "hill",
+   "lat": -43.0799968,
+   "lng": 216.2616699,
+   "name": "Olsha"
+  },
+  {
+   "kind": "village",
+   "lat": -135.1166667,
+   "lng": 204.1666667,
+   "name": "Orlovets"
+  },
+  {
+   "kind": "marine",
+   "lat": -156.1666667,
+   "lng": 9.95,
+   "name": "Orlye Ozero"
+  },
+  {
+   "kind": "hill",
+   "lat": -218.256132,
+   "lng": 44.2622315,
+   "name": "Ostrog"
+  },
+  {
+   "kind": "hill",
+   "lat": -42.1749349,
+   "lng": 179.8791178,
+   "name": "Ostry"
+  },
+  {
+   "kind": "local",
+   "lat": -202.4460002,
+   "lng": 193.0208333,
+   "name": "Otmel"
+  },
+  {
+   "kind": "marine",
+   "lat": -181.1263346,
+   "lng": 112.9604981,
+   "name": "Ozerko"
+  },
+  {
+   "kind": "village",
+   "lat": -191.6891683,
+   "lng": 28.2329997,
+   "name": "Pavlovo"
+  },
+  {
+   "kind": "local",
+   "lat": -154.5201172,
+   "lng": 163.7031901,
+   "name": "Pereval Oreshka"
+  },
+  {
+   "kind": "hill",
+   "lat": -207.9911662,
+   "lng": 147.502832,
+   "name": "Pik Kozlova"
+  },
+  {
+   "kind": "marine",
+   "lat": -24.755957,
+   "lng": 165.4715658,
+   "name": "Plotina Pobeda"
+  },
+  {
+   "kind": "marine",
+   "lat": -148.7924316,
+   "lng": 19.1803324,
+   "name": "Plotina Tishina"
+  },
+  {
+   "kind": "marine",
+   "lat": -194.480835,
+   "lng": 170.522168,
+   "name": "Plotina Topolka"
+  },
+  {
+   "kind": "camp",
+   "lat": -8.0602702,
+   "lng": 61.7230347,
+   "name": "Pobeda"
+  },
+  {
+   "kind": "village",
+   "lat": -150.6333333,
+   "lng": 74.0833333,
+   "name": "Pogorevka"
+  },
+  {
+   "kind": "village",
+   "lat": -30.0325684,
+   "lng": 99.2622803,
+   "name": "Polesovo"
+  },
+  {
+   "kind": "local",
+   "lat": -185.2855143,
+   "lng": 16.7414337,
+   "name": "Polonina"
+  },
+  {
+   "kind": "city",
+   "lat": -120,
+   "lng": 179.9,
+   "name": "Polyana"
+  },
+  {
+   "kind": "hill",
+   "lat": -146.4889974,
+   "lng": 107.0043294,
+   "name": "Pop Ivan"
+  },
+  {
+   "kind": "village",
+   "lat": -200.4,
+   "lng": 129.3333333,
+   "name": "Prigorodki"
+  },
+  {
+   "kind": "camp",
+   "lat": -153.0844645,
+   "lng": 53.3269491,
+   "name": "Proud Chernarus"
+  },
+  {
+   "kind": "marine",
+   "lat": -100.8571615,
+   "lng": 110.1829997,
+   "name": "Prud"
+  },
+  {
+   "kind": "village",
+   "lat": -162.55,
+   "lng": 83.5833333,
+   "name": "Pulkovo"
+  },
+  {
+   "kind": "village",
+   "lat": -191.45,
+   "lng": 153.2833333,
+   "name": "Pusta"
+  },
+  {
+   "kind": "village",
+   "lat": -124.4845866,
+   "lng": 52.2990682,
+   "name": "Pustoshka"
+  },
+  {
+   "kind": "local",
+   "lat": -161.5833333,
+   "lng": 181.5,
+   "name": "Pustoy Khrebet"
+  },
+  {
+   "kind": "local",
+   "lat": -100.3053385,
+   "lng": 134.6668294,
+   "name": "Radio Zenit"
+  },
+  {
+   "kind": "village",
+   "lat": -43.303304,
+   "lng": 103.2646322,
+   "name": "Ratnoye"
+  },
+  {
+   "kind": "local",
+   "lat": -67.8564941,
+   "lng": 232.1955078,
+   "name": "Rify"
+  },
+  {
+   "kind": "ruin",
+   "lat": -184.4493978,
+   "lng": 187.7867676,
+   "name": "Rog"
+  },
+  {
+   "kind": "village",
+   "lat": -143.5333333,
+   "lng": 80.0333333,
+   "name": "Rogovo"
+  },
+  {
+   "kind": "camp",
+   "lat": -72.9951823,
+   "lng": 136.2933675,
+   "name": "Romashka"
+  },
+  {
+   "kind": "local",
+   "lat": -111.8689941,
+   "lng": 12.4075002,
+   "name": "Rostoki"
+  },
+  {
+   "kind": "city",
+   "lat": -46.439974,
+   "lng": 136.1413981,
+   "name": "Severograd"
+  },
+  {
+   "kind": "village",
+   "lat": -146.5450033,
+   "lng": 162.1439941,
+   "name": "Shakovka"
+  },
+  {
+   "kind": "hill",
+   "lat": -98.9621745,
+   "lng": 59.3218831,
+   "name": "Shishok"
+  },
+  {
+   "kind": "camp",
+   "lat": -13.149528,
+   "lng": 247.6083822,
+   "name": "Shkolnik"
+  },
+  {
+   "kind": "hill",
+   "lat": -129.8334961,
+   "lng": 2.2333333,
+   "name": "Simurg"
+  },
+  {
+   "kind": "village",
+   "lat": -57.5903646,
+   "lng": 25.6379659,
+   "name": "Sinystok"
+  },
+  {
+   "kind": "village",
+   "lat": -204.0203329,
+   "lng": 228.5909017,
+   "name": "Skalisty"
+  },
+  {
+   "kind": "marine",
+   "lat": -195.7676677,
+   "lng": 223.0986654,
+   "name": "Skalisty Proliv"
+  },
+  {
+   "kind": "local",
+   "lat": -14.5666667,
+   "lng": 95.9666667,
+   "name": "Skalka"
+  },
+  {
+   "kind": "local",
+   "lat": -70.3,
+   "lng": 5.95,
+   "name": "Skvsch Biathlon Arena"
+  },
+  {
+   "kind": "hill",
+   "lat": -9.1166667,
+   "lng": 200.0166667,
+   "name": "Sokol"
+  },
+  {
+   "kind": "city",
+   "lat": -152.2352702,
+   "lng": 224.7953939,
+   "name": "Solnechny"
+  },
+  {
+   "kind": "village",
+   "lat": -150.8833333,
+   "lng": 42.6,
+   "name": "Sosnovka"
+  },
+  {
+   "kind": "local",
+   "lat": -146.1620036,
+   "lng": 44.7899984,
+   "name": "Sosnovy Pereval"
+  },
+  {
+   "kind": "village",
+   "lat": -166.2491699,
+   "lng": 170.2086589,
+   "name": "Staroye"
+  },
+  {
+   "kind": "city",
+   "lat": -125.1833333,
+   "lng": 101.9,
+   "name": "Stary Sobor"
+  },
+  {
+   "kind": "village",
+   "lat": -6.1170736,
+   "lng": 83.1309977,
+   "name": "Stary Yar"
+  },
+  {
+   "kind": "local",
+   "lat": -106.0833333,
+   "lng": 115.3166667,
+   "name": "Starye Luga"
+  },
+  {
+   "kind": "ruin",
+   "lat": -234.7006673,
+   "lng": 46.9433512,
+   "name": "Storozh"
+  },
+  {
+   "kind": "camp",
+   "lat": -183.2465007,
+   "lng": 116.9604981,
+   "name": "Stroytel"
+  },
+  {
+   "kind": "village",
+   "lat": -24.7455078,
+   "lng": 158.2253255,
+   "name": "Svergino"
+  },
+  {
+   "kind": "city",
+   "lat": -34.9369955,
+   "lng": 233.1623372,
+   "name": "Svetloyarsk"
+  },
+  {
+   "kind": "hill",
+   "lat": -57.6458984,
+   "lng": 1.4138667,
+   "name": "Svyatoy Roman"
+  },
+  {
+   "kind": "local",
+   "lat": -61.55,
+   "lng": 10.6333333,
+   "name": "Svyatoy Roman Ski Resort"
+  },
+  {
+   "kind": "marine",
+   "lat": -220.8018351,
+   "lng": 20.3581665,
+   "name": "Tikhiy Zaliv"
+  },
+  {
+   "kind": "village",
+   "lat": -9.3408366,
+   "lng": 57.3608317,
+   "name": "Tisy"
+  },
+  {
+   "kind": "hill",
+   "lat": -161.4574463,
+   "lng": 148.1746257,
+   "name": "Tokarnya"
+  },
+  {
+   "kind": "village",
+   "lat": -49.894043,
+   "lng": 48.5624186,
+   "name": "Topolniki"
+  },
+  {
+   "kind": "local",
+   "lat": -165.7965007,
+   "lng": 212.7411621,
+   "name": "Tri Doliny"
+  },
+  {
+   "kind": "local",
+   "lat": -98.0333333,
+   "lng": 5.0166667,
+   "name": "Tri Kresta"
+  },
+  {
+   "kind": "village",
+   "lat": -182.9333333,
+   "lng": 212.8,
+   "name": "Tulga"
+  },
+  {
+   "kind": "hill",
+   "lat": -39.6168294,
+   "lng": 5.5204,
+   "name": "Tumanny Verkh"
+  },
+  {
+   "kind": "village",
+   "lat": -20.2333333,
+   "lng": 227.1666667,
+   "name": "Turovo"
+  },
+  {
+   "kind": "local",
+   "lat": -21.1782389,
+   "lng": 244.5706869,
+   "name": "Turovskiypereval"
+  },
+  {
+   "kind": "village",
+   "lat": -70.95,
+   "lng": 37.7166667,
+   "name": "Vavilovo"
+  },
+  {
+   "kind": "marine",
+   "lat": -104.2833008,
+   "lng": 73.5813151,
+   "name": "Verbnik"
+  },
+  {
+   "kind": "hill",
+   "lat": -121.4909994,
+   "lng": 74.002832,
+   "name": "Veresnik"
+  },
+  {
+   "kind": "hill",
+   "lat": -185.9901693,
+   "lng": 64.8789998,
+   "name": "Vetryanaya Gora"
+  },
+  {
+   "kind": "local",
+   "lat": -16.0197428,
+   "lng": 13.0842336,
+   "name": "Vidy"
+  },
+  {
+   "kind": "hill",
+   "lat": -130.9325033,
+   "lng": 212.0359538,
+   "name": "Viselitsa"
+  },
+  {
+   "kind": "hill",
+   "lat": -210.6788493,
+   "lng": 5.3375666,
+   "name": "Volchiypik"
+  },
+  {
+   "kind": "ruin",
+   "lat": -200.8125814,
+   "lng": 225.2988281,
+   "name": "Voron"
+  },
+  {
+   "kind": "city",
+   "lat": -105.6730957,
+   "lng": 65.1638509,
+   "name": "Vybor"
+  },
+  {
+   "kind": "village",
+   "lat": -81.5180176,
+   "lng": 165.447054,
+   "name": "Vyshnaya Dubrovka (Verkhnaya Dubrovka)"
+  },
+  {
+   "kind": "village",
+   "lat": -155.15,
+   "lng": 110.4833333,
+   "name": "Vyshnoye"
+  },
+  {
+   "kind": "hill",
+   "lat": -182.991333,
+   "lng": 149.0031738,
+   "name": "Vysokiy Kamen"
+  },
+  {
+   "kind": "hill",
+   "lat": -199.3333333,
+   "lng": 109.8604981,
+   "name": "Vysota"
+  },
+  {
+   "kind": "city",
+   "lat": -213.3981649,
+   "lng": 95.0206706,
+   "name": "Vysotovo"
+  },
+  {
+   "kind": "camp",
+   "lat": -138.0976156,
+   "lng": 185.9304199,
+   "name": "Youth Pioneer"
+  },
+  {
+   "kind": "village",
+   "lat": -89.4456706,
+   "lng": 20.9476502,
+   "name": "Zabolotye"
+  },
+  {
+   "kind": "marine",
+   "lat": -37.0544596,
+   "lng": 238.8062337,
+   "name": "Zaliv Guba"
+  },
+  {
+   "kind": "village",
+   "lat": -42.8,
+   "lng": 86.9,
+   "name": "Zaprudnoye"
+  },
+  {
+   "kind": "hill",
+   "lat": -155.8243327,
+   "lng": 62.7861654,
+   "name": "Zelenaya Gora"
+  },
+  {
+   "kind": "city",
+   "lat": -169.9,
+   "lng": 46.6,
+   "name": "Zelenogorsk"
+  },
+  {
+   "kind": "marine",
+   "lat": -206.1693685,
+   "lng": 187.1169759,
+   "name": "Zeleny Zaliv"
+  },
+  {
+   "kind": "local",
+   "lat": -29.2180013,
+   "lng": 190.7694987,
+   "name": "Zmeinykhrebet"
+  },
+  {
+   "kind": "ruin",
+   "lat": -56.0333333,
+   "lng": 169.65,
+   "name": "Zolotar"
+  },
+  {
+   "kind": "ruin",
+   "lat": -163.1024984,
+   "lng": 109.5713298,
+   "name": "Zub"
+  },
+  {
+   "kind": "village",
+   "lat": -167.3763346,
+   "lng": 9.622167,
+   "name": "Zvir"
+  }
+ ],
  "enoch": [
   {
    "kind": "village",

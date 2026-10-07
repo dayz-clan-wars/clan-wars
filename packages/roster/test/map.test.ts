@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, factionMembers, identityLinks, players, playerPositions, playerSessions, poles, intruderSightings, declarations, clanPins, bounties, type Database } from "@factions/db";
-import { HUB_POSITION, PIN_TTL_MS, TRAVEL_POINTS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
+import { HUB_POSITION, PIN_TTL_MS, TRAVEL_POINTS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState } from "../src/map";
 import { seedFaction } from "./seed";
@@ -106,7 +106,7 @@ describe("mapState / dropPin / deletePin", () => {
     expect(await dropPinDb(db, "1", { x: 1, z: 1, icon: "treasure", note: null }, now)).toEqual({ ok: false, reason: "bad-icon" });
     expect(await dropPinDb(db, "1", { x: 1, z: 1, icon: "note", note: "x".repeat(141) }, now)).toEqual({ ok: false, reason: "bad-note" });
     expect(await dropPinDb(db, "1", { x: -1, z: 1, icon: "note", note: null }, now)).toEqual({ ok: false, reason: "off-map" });
-    expect(await dropPinDb(db, "1", { x: 12801, z: 1, icon: "note", note: null }, now)).toEqual({ ok: false, reason: "off-map" });
+    expect(await dropPinDb(db, "1", { x: WORLD_SIZE_M + 1, z: 1, icon: "note", note: null }, now)).toEqual({ ok: false, reason: "off-map" });
     const s = await mapStateDb(db, "2", now);
     if (s === "not-linked") throw new Error("linked");
     expect(s.pins).toEqual([{ id: (ok as { id: number }).id, x: 5050, z: 5050, icon: "loot", note: "ammo", by: "Ann", at: now, expiresAt: new Date(now.getTime() + PIN_TTL_MS) }]);

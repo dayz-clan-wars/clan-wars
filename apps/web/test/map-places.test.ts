@@ -1,8 +1,19 @@
 import { describe, it, expect } from "vitest";
 import { PLACE_FALLBACK_MIN_ZOOM, placeMinZoom, placeWeight, placesFor } from "../lib/map-places";
-import { MAX_ZOOM, zoomFloor } from "../lib/map-projection";
+import { MAX_ZOOM, latLngToWorld, zoomFloor } from "../lib/map-projection";
+import { WORLD_MAP, WORLD_SIZE_M } from "@factions/domain";
 
 describe("map places", () => {
+  it("⚠️ has names for the map this deployment runs, landing where its towns are", () => {
+    // An unknown map yields no names, silently: the map renders, unlabelled.
+    const all = placesFor(WORLD_MAP, MAX_ZOOM);
+    expect(all.length).toBeGreaterThan(100);
+    const cherno = all.find((p) => p.name === "Chernogorsk")!;
+    const { x, z } = latLngToWorld(cherno.lat, cherno.lng, WORLD_SIZE_M);
+    expect(Math.abs(x - 6779)).toBeLessThan(50);
+    expect(Math.abs(z - 2322)).toBeLessThan(50);
+  });
+
   it("has Livonia's sixty places, every one inside the zoom-6 pyramid", () => {
     const all = placesFor("enoch", MAX_ZOOM);
     expect(all).toHaveLength(60);
@@ -27,7 +38,7 @@ describe("map places", () => {
   });
 
   it("an unknown map has no places, never a throw", () => {
-    expect(placesFor("chernarusplus", 6)).toEqual([]);
+    expect(placesFor("sakhal", 6)).toEqual([]);
   });
 
   it("weights settlements louder than terrain", () => {

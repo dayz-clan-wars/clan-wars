@@ -29,7 +29,7 @@ describe("achievementEmbed", () => {
   });
   it("carries the footer, and no field that could hold a coordinate", () => {
     const e = achievementEmbed(player, site);
-    expect(e.footer).toEqual({ text: "Clan Wars · Livonia" });
+    expect(e.footer).toEqual({ text: "Clan Wars · Chernarus" });
     expect(e.fields).toBeUndefined();
     expect(JSON.stringify(e)).not.toMatch(/"(x|z|poleKey)"/u);
   });

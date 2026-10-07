@@ -20,7 +20,7 @@ const LABELS = [
   "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rename cooldown", "Old name / tag held after rename or disband", "Base move: confirm window", "Base move: cooldown between moves", "Vault code length",
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",
-  "Fast travel points (outhouses, wells, bus stops)", "Hub destinations",
+  "Fast travel points (outhouses, wells)", "Hub destinations",
   "Combat log rule", "Watchtower height", "Window to press charges on a closed zone incident",
   "Hub: combat ban", "Hub: self-defence window", "Hub: no-combat radius",
   "Bounty: online time to serve (default)", "Bounty: longest an admin can set", "Bounty: closes regardless after",

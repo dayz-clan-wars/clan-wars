@@ -4,7 +4,7 @@ import type { NoticePayload } from "@factions/roster/internal";
 import { achievementLine } from "@factions/copy";
 import { lineMarkdown } from "./site-links.js";
 
-export const ACHIEVEMENT_FOOTER = "Clan Wars · Livonia";
+export const ACHIEVEMENT_FOOTER = "Clan Wars · Chernarus";
 
 /** `#d4623a` → 0xd4623a, the integer Discord wants. */
 export function colourInt(hex: string): number {

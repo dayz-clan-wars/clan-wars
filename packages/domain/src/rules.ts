@@ -141,8 +141,14 @@ export const PIN_ICONS = ["loot", "vehicle", "enemy", "meet", "danger", "note"] 
 export type PinIcon = (typeof PIN_ICONS)[number];
 /** Pin note length cap, characters. UI + package share it. */
 export const PIN_NOTE_MAX = 140;
-/** Livonia. The one map this deployment runs; `servers.map` says "livonia". */
-export const WORLD_SIZE_M = 12800;
+/**
+ * Chernarus, since 2026-10-07 (Livonia, 12800 m, before). The one map this
+ * deployment runs: its edge for pins and fixes, the tile directory under
+ * /tiles/ and the key into the web's place names. ⚠️ `servers.map` is a
+ * separate statement of the same fact, set by hand on a map change.
+ */
+export const WORLD_SIZE_M = 15360;
+export const WORLD_MAP = "chernarusplus";
 
 /**
  * Vault lock label and note caps, characters.
@@ -159,7 +165,7 @@ export const VAULT_NAME_MAX = 40;
 export const VAULT_NOTE_MAX = 140;
 
 // Getting around
-export const TRAVEL_POINTS = 209;
+export const TRAVEL_POINTS = 518;
 export const HUB_DESTINATIONS = 31;
 
 // Fair play

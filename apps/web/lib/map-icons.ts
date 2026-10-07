@@ -142,7 +142,7 @@ export function publicBaseIcon(p: Palette): string {
  * see the point before walking. The container's `cw-far` class picks.
  *
  * The glyph is a bolt — the points are fast travel, and the data carries no
- * kind (outhouse / well / bus stop) to draw instead.
+ * kind (outhouse / well) to draw instead.
  */
 export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
 
