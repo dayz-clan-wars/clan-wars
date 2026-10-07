@@ -725,7 +725,9 @@ season it closes:
 6. Open the next season with `started_at = wipe_at`.
 
 After the wipe, **a clan with no declaration binds one on the first `flag.raised` of its
-texture by a full member at any pole** — the raise consumer handles it: 200 m checked, no
+texture, or of `Flag_White`, by a full member at any pole** (White added 2026-10-07: clan
+flags are `nominal 0`, and the kit that carries one needs a bound base, so after a wipe a
+clan's own flag cannot be had; the bind brings the kit, the kit brings the flag) — the raise consumer handles it: 200 m checked, no
 rebind cooldown, no confirmation, evidence = the raise. Solos re-declare on the site. The
 7-day inactivity clock runs from `seasons.started_at` (the coalesce in §5.1). Dormant clans
 stay dormant and their disband clock keeps running. Rosters, identities, the vault, and

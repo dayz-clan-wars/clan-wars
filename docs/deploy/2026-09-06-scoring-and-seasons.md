@@ -38,8 +38,9 @@ interval) and `@Alpha`; the site gains four public pages. `scripts/wipe.ts` is t
    changes nothing, and **exits non-zero on purpose**: that is the guard against a second,
    accidental wipe, not a bug. Then start the bot. `#war-log` gets the `🏁 Season N is over…`
    line; `/seasons` shows the table; every clan's flag is down in the game and its base is
-   unbound. The first raise of a holding clan's own texture by one of its full members, at any
-   free pole, binds the new base (the normal 200 m rule applies to that raise like any other
+   unbound. The first raise of a holding clan's own texture, or of a White flag (since 2026-10-07 —
+   clan flags never spawn, so White is how a clan gets its kit back), by one of its full
+   members, at any free pole, binds the new base (the normal 200 m rule applies to that raise like any other
    declare); if the raise is refused (too close to another hold, or the pole is already taken),
    nothing is written — no notice, no feed row, just an `info`-level log line — and the member has
    to raise again at a different pole. Solos re-declare on `/base`. ⚠️ Until each clan rebinds,
