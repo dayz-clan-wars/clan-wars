@@ -1,12 +1,11 @@
 import { kothEvents, type Database } from "@factions/db";
 import {
-  KOTH_GLOBALS, KOTH_INFECTED_EVENTS, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_WHOLE_FILES,
-  kothWanted, restoredPresets,
+  KOTH_GLOBALS, KOTH_LOCATIONS, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, kothLocation, kothWanted, restoredPresets,
 } from "@factions/domain";
-import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { readSpawnGearPresets } from "./cfggameplay.js";
-import { readEventActive } from "./events-xml.js";
 import { readGlobalVar, setGlobalVar } from "./globals-xml.js";
+import { narrowFreshSpawns } from "./spawn-points.js";
 import type { RestartTarget } from "./restart-tick.js";
 
 export type KothRow = typeof kothEvents.$inferSelect;
@@ -17,29 +16,21 @@ export type KothPlan = {
   opening: KothRow | null;
   /** The wanted preset list, or null to leave cfggameplay.json's list alone. */
   presets: string[] | null;
-  /** The wanted infected `<active>` values, or null to leave events.xml alone. */
-  infected: Record<string, 0 | 1> | null;
-  /** The row whose `restored_at` to stamp once `infected` has uploaded. */
-  infectedRestoreRowId: number | null;
-  /** Whole files to converge (only the ones that differ from the target). */
+  /** Files to converge (only the ones that differ from the target). */
   files: FileEdit[];
   /** Why an opening was refused (already recorded on the row), or null. */
   failure: string | null;
 };
 
 const GAMEPLAY = "cfggameplay.json";
-const EVENTS = "events.xml";
 const GLOBALS = "globals.xml";
+const SPAWNS = "cfgplayerspawnpoints.xml";
 const isKoth = (p: string) => p.includes(`/${KOTH_PRESET_PREFIX}`);
-
-function targetDir(root: string, dir: "root" | "env"): string {
-  return dir === "root" ? root : `${root}/env`;
-}
 
 async function readNonEmpty(nitrado: RestartTarget, path: string): Promise<string> {
   // ⚠️ The path goes into the message ourselves: it lands in the row's `detail`
-  // and the ops alert, and an operator told only "404" cannot tell which of the
-  // eight files to put back.
+  // and the ops alert, and an operator told only "404" cannot tell which file
+  // to put back.
   const body = await nitrado.downloadFile(path).catch((err: unknown) => {
     throw new Error(`${path} could not be read (${err instanceof Error ? err.message : String(err)})`);
   });
@@ -51,11 +42,8 @@ async function readNonEmpty(nitrado: RestartTarget, path: string): Promise<strin
 
 /**
  * db/globals.xml with every `KOTH_GLOBALS` var set to `wanted(name)`, as an edit —
- * or none when the live file already carries those values.
- *
- * ⚠️ A splice of the live file, not a whole-file copy like the four spawn files:
- * a copy would need a globals.xml in every town's directory, each one a stale
- * mirror of every OTHER var in the file.
+ * or none when the live file already carries those values. A splice of the live
+ * file, never a whole-file copy: globals.xml holds far more than these vars.
  */
 async function globalsEdit(nitrado: RestartTarget, dbDir: string, wanted: (name: string) => number): Promise<FileEdit[]> {
   const live = await readNonEmpty(nitrado, `${dbDir}/${GLOBALS}`);
@@ -65,26 +53,22 @@ async function globalsEdit(nitrado: RestartTarget, dbDir: string, wanted: (name:
 }
 
 /**
- * What King of the Hill wants from this slot (spec §5). Null when no KotH row
- * has EVER existed — the only case the restore arm may skip entirely.
+ * What King of the Hill wants from this slot (spec 2026-10-07-koth-chernarus §3).
+ * Null when no KotH row has EVER existed — the only case the restore arm may skip.
  *
- * ⚠️ Not gated on KOTH_TICK by the caller: switching the feature off
- * mid-event must still put the server back (spec §5.3). `allowOpen` (the flag)
- * gates the OPENING branch alone: with the tick off nothing would post, remind
- * or score a session, so a due row is left `scheduled` for koth-tick to fail as
- * missed once the flag is back — and the restore arm below runs either way.
+ * ⚠️ Not gated on KOTH_TICK by the caller: switching the feature off mid-event
+ * must still put the server back. `allowOpen` gates the OPENING branch alone.
  *
  * ⚠️ The opening is verified BEFORE anything is written, and a refusal returns
  * the RESTORE plan: a KotH we could not reverse is worse than one that never
- * starts (§5.1), and a half-written open from an earlier failed attempt is
- * undone the same way.
+ * starts, and a half-written open from an earlier failed attempt is undone the
+ * same way.
  */
 export async function planKoth(
   db: Database, nitrado: RestartTarget, serverId: number, slot: Date, opts: { allowOpen: boolean },
 ): Promise<KothPlan | null> {
   // ⚠️ FIRST, before any Nitrado call: a server that has never had a KotH row
-  // must cost the restart tick nothing — not a single download (restart-tick.test.ts's
-  // throwing fake holds this).
+  // must cost the restart tick nothing.
   const [any] = await db.select({ id: kothEvents.id }).from(kothEvents).where(eq(kothEvents.serverId, serverId)).limit(1);
   if (!any) return null;
 
@@ -97,35 +81,32 @@ export async function planKoth(
   let failure: string | null = null;
   if (opening) {
     try {
+      // ⚠️ A row scheduled before the move to Chernarus names a Livonia town:
+      // refused here with a reason, never a throw out of planKoth.
+      const loc = kothLocation(opening.location);
+      if (!loc) throw new Error(`${opening.location} is not one of the ${KOTH_LOCATIONS.length} KotH towns on this map`);
       const custom = new Set(await nitrado.listFiles(`${root}/custom`));
       const missing = KOTH_PRESET_FILES.filter((p) => !custom.has(p.slice("./custom/".length)));
       if (missing.length > 0) throw new Error(`KotH preset(s) missing on the server: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? " …" : ""}`);
-      const town: FileEdit[] = [];
-      for (const f of KOTH_WHOLE_FILES) {
-        await readNonEmpty(nitrado, `${root}/koth/default/${f.name}`);
-        town.push({ dir: targetDir(root, f.dir), name: f.name, content: await readNonEmpty(nitrado, `${root}/koth/locations/${opening.location}/${f.name}`) });
-      }
-      // ⚠️ The default is proved readable, var by var, BEFORE the session opens —
-      // the same rule as the four files above: without it the restore could never
-      // put the cleanup timers back, and bodies would vanish in 30 s for good.
+      // The default is both the source of the session file and the restore target,
+      // so reading it proves both.
+      const spawns = narrowFreshSpawns(await readNonEmpty(nitrado, `${root}/koth/default/${SPAWNS}`), loc.spawnGroup);
+      // ⚠️ The default is proved readable, var by var, BEFORE the session opens:
+      // without it the restore could never put the cleanup values back.
       const globalsDefault = await readNonEmpty(nitrado, `${root}/koth/default/${GLOBALS}`);
       for (const name of Object.keys(KOTH_GLOBALS)) readGlobalVar(globalsDefault, name);
       const globals = await globalsEdit(nitrado, dbDir, (name) => KOTH_GLOBALS[name]!);
-      // Snapshots, BEFORE any upload (spec §2.5). Read-only downloads here; the
-      // single upload of each file stays in applyGameplay/applyEvents.
+      // Snapshot BEFORE any upload. Read-only here; the single upload of
+      // cfggameplay.json stays in applyGameplay.
       const presetsNow = readSpawnGearPresets(await nitrado.downloadFile(`${root}/${GAMEPLAY}`));
-      const eventsNow = await nitrado.downloadFile(`${dbDir}/${EVENTS}`);
-      const infectedNow = Object.fromEntries(KOTH_INFECTED_EVENTS.map((n) => [n, readEventActive(eventsNow, n)])) as Record<string, 0 | 1>;
-      await db.update(kothEvents).set({
-        // ⚠️ Only from a list with no koth- entry: a retried open after a partial
-        // upload would otherwise record KotH's own list as the default.
-        ...(opening.loadoutSnapshot === null && !presetsNow.some(isKoth) ? { loadoutSnapshot: presetsNow } : {}),
-        ...(opening.infectedSnapshot === null ? { infectedSnapshot: infectedNow } : {}),
-      }).where(eq(kothEvents.id, opening.id));
+      // ⚠️ Only from a list with no koth- entry: a retried open after a partial
+      // upload would otherwise record KotH's own list as the default.
+      if (opening.loadoutSnapshot === null && !presetsNow.some(isKoth)) {
+        await db.update(kothEvents).set({ loadoutSnapshot: presetsNow }).where(eq(kothEvents.id, opening.id));
+      }
       return {
         opening, presets: [...KOTH_PRESET_FILES],
-        infected: Object.fromEntries(KOTH_INFECTED_EVENTS.map((n) => [n, 1])) as Record<string, 0 | 1>,
-        infectedRestoreRowId: null, files: [...await differing(nitrado, town), ...globals], failure: null,
+        files: [...await differing(nitrado, [{ dir: root, name: SPAWNS, content: spawns }]), ...globals], failure: null,
       };
     } catch (err) {
       failure = err instanceof Error ? err.message : String(err);
@@ -147,25 +128,17 @@ export async function planKoth(
   try {
     presets = restoredPresets(presetsNow, latest?.loadoutSnapshot ?? null);
   } catch (err) {
-    // ⚠️ Spec §5.3: an empty restore leaves ONLY the preset list alone. Letting this
-    // throw out of planKoth skipped the infected and whole-file restores with it,
-    // at every slot, for as long as the koth-only list stayed on the server.
+    // ⚠️ An empty restore leaves ONLY the preset list alone; the files still restore.
     presets = null;
     problems.push(err instanceof Error ? err.message : String(err));
   }
 
-  const [unrestored] = await db.select().from(kothEvents).where(and(
-    eq(kothEvents.serverId, serverId), isNotNull(kothEvents.infectedSnapshot), isNull(kothEvents.restoredAt),
-  )).orderBy(desc(kothEvents.slotAt)).limit(1);
-
-  const defaults: FileEdit[] = [];
-  for (const f of KOTH_WHOLE_FILES) {
-    try {
-      defaults.push({ dir: targetDir(root, f.dir), name: f.name, content: await readNonEmpty(nitrado, `${root}/koth/default/${f.name}`) });
-    } catch (err) {
-      // ⚠️ Skip, never blank: a missing default must not become an empty spawn file.
-      problems.push(err instanceof Error ? err.message : String(err));
-    }
+  let spawns: FileEdit[] = [];
+  try {
+    spawns = await differing(nitrado, [{ dir: root, name: SPAWNS, content: await readNonEmpty(nitrado, `${root}/koth/default/${SPAWNS}`) }]);
+  } catch (err) {
+    // ⚠️ Skip, never blank: a missing default must not become an empty spawn file.
+    problems.push(err instanceof Error ? err.message : String(err));
   }
   let globals: FileEdit[] = [];
   try {
@@ -183,12 +156,7 @@ export async function planKoth(
     console.error(`koth: server ${serverId} could not restore everything — ${problems.join("; ")}`);
   }
 
-  return {
-    opening: null, presets,
-    infected: unrestored?.infectedSnapshot ?? null,
-    infectedRestoreRowId: unrestored?.id ?? null,
-    files: [...await differing(nitrado, defaults), ...globals], failure,
-  };
+  return { opening: null, presets, files: [...spawns, ...globals], failure };
 }
 
 /** Only the edits whose target currently differs. A missing target counts as differing. */
@@ -204,7 +172,7 @@ async function differing(nitrado: RestartTarget, edits: FileEdit[]): Promise<Fil
 /**
  * Upload each edit. Each is independent: one failed upload does not stop the rest.
  * The list is `planKoth`'s, which has already dropped every file that matches its
- * target — a second comparison here only doubled the downloads.
+ * target.
  */
 export async function convergeKothFiles(nitrado: RestartTarget, files: FileEdit[]): Promise<{ uploaded: number; errors: string[] }> {
   let uploaded = 0;
@@ -219,4 +187,3 @@ export async function convergeKothFiles(nitrado: RestartTarget, files: FileEdit[
   }
   return { uploaded, errors };
 }
-

@@ -703,31 +703,19 @@ const EVENTS = `<events>
 describe("applyEvents", () => {
   // ⚠️ The reason applyEvents exists: two features, ONE round trip. Two
   // download/upload pairs silently lose whichever edit uploads first.
-  it("does the truck wipe and the infected splice in one download and one upload", async () => {
+  it("does the truck wipe in one download and one upload", async () => {
     const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
     const r = await applyEvents(h.target, at("2026-09-12T08:00:00Z"), {
       truckWipe: { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false },
-      infected: { InfectedCity: 1, InfectedVillage: 1 },
     });
     expect(r.uploaded).toBe(true);
     expect(h.downloadFile).toHaveBeenCalledTimes(1);
     expect(h.uploadFile).toHaveBeenCalledTimes(1);
-    const out = h.read("/mission/db/events.xml")!;
-    expect(out).toContain(`<event name="VehicleTruck01"><active>0</active>`);
-    expect(out).toContain(`<event name="InfectedCity"><active>1</active>`);
-  });
-  it("a refused infected splice does not cost the truck wipe", async () => {
-    const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
-    const r = await applyEvents(h.target, at("2026-09-12T08:00:00Z"), {
-      truckWipe: { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false },
-      infected: { InfectedNope: 1 },
-    });
-    expect(r.infectedError?.message).toMatch(/InfectedNope/);
     expect(h.read("/mission/db/events.xml")).toContain(`<event name="VehicleTruck01"><active>0</active>`);
   });
   it("uploads nothing when nothing changes", async () => {
     const h = fakeFiles({ "/mission/db/events.xml": EVENTS });
-    const r = await applyEvents(h.target, at("2026-09-12T12:00:00Z"), { infected: { InfectedCity: 0 } });
+    const r = await applyEvents(h.target, at("2026-09-12T12:00:00Z"), { truckWipe: { events: ["VehicleTruck01"], offHour: 8, onHour: 10, rotation: false } });
     expect(r.uploaded).toBe(false);
     expect(h.uploadFile).not.toHaveBeenCalled();
   });
