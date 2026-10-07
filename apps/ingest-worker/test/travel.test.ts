@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
-import { generateTravel, loadTravelTemplate, POLE_BOX } from "../src/travel.js";
+import { generateTravel, loadTravelTemplate, travelTemplateFor, POLE_BOX } from "../src/travel.js";
 
-const RAW = JSON.parse(readFileSync(new URL("../assets/teleport-hub.template.json", import.meta.url), "utf8"));
+const asset = (mission: string) => JSON.parse(readFileSync(new URL(`../assets/travel/${mission}.json`, import.meta.url), "utf8"));
+const RAW = asset("dayzOffline.enoch");
 
 describe("the fast-travel projection", () => {
   const template = loadTravelTemplate(RAW);
@@ -31,5 +32,26 @@ describe("the fast-travel projection", () => {
   it("refuses a template with no points", () => {
     expect(() => loadTravelTemplate({ areaName: "x", PRABoxes: [], safePositions3D: [] })).toThrow(/no PRABoxes/);
     expect(() => loadTravelTemplate({})).toThrow(/expected/);
+  });
+});
+
+describe("the template for a server's map", () => {
+  const templates = {
+    "dayzOffline.chernarusplus": loadTravelTemplate(asset("dayzOffline.chernarusplus")),
+    "dayzOffline.enoch": loadTravelTemplate(RAW),
+  };
+  const dir = (mission: string) => `/games/ni11558038_4/ftproot/dayzxb_missions/${mission}/custom`;
+
+  it("picks Chernarus's 518 points for the Chernarus mission, and Livonia's 209 for Livonia", () => {
+    expect(travelTemplateFor(templates, dir("dayzOffline.chernarusplus")).PRABoxes).toHaveLength(518);
+    expect(travelTemplateFor(templates, dir("dayzOffline.enoch")).PRABoxes).toHaveLength(209);
+  });
+
+  it("⚠️ refuses a map it has no template for, rather than sending another map's points", () => {
+    expect(() => travelTemplateFor(templates, dir("dayzOffline.sakhal"))).toThrow(/none for mission dayzOffline\.sakhal/);
+  });
+
+  it("refuses a directory that is not a mission's custom folder", () => {
+    expect(() => travelTemplateFor(templates, "/games/ni1/ftproot/dayzxb_missions/dayzOffline.enoch")).toThrow(/cannot read the mission/);
   });
 });

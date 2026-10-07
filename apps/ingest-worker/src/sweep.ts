@@ -7,7 +7,7 @@ import type { SpawnObject } from "./supplies.js";
 import { travelTick, type TravelTickResult } from "./travel-tick.js";
 import { boosterKitTick, type BoosterKitTickResult } from "./booster-kit-tick.js";
 import { awardTick, type AwardTickResult } from "./award-tick.js";
-import type { TravelTemplate } from "./travel.js";
+import { travelTemplateFor, type TravelTemplate } from "./travel.js";
 import type { ProjectionDrift } from "./projection-upload.js";
 import { deviceTick, type DeviceClient } from "./device-tick.js";
 
@@ -66,7 +66,8 @@ export type SweepDeps = {
   /** The second projected file: the fast-travel config with active clans' poles. Absent in tests that only exercise ingestion. */
   travel?: {
     clientFor: (nitradoServiceId: number) => SupplyClient;
-    template: TravelTemplate;
+    /** Keyed by mission name; picked per server by `travelTemplateFor`. */
+    templates: Readonly<Record<string, TravelTemplate>>;
     fileName: string;
   };
   onTravelError?: (serverId: number, err: unknown) => void;
@@ -191,7 +192,7 @@ export async function ingestSweep(db: Database, deps: SweepDeps): Promise<{ serv
         const result = await travelTick(db, {
           serverId: s.id,
           client,
-          template: deps.travel.template,
+          template: travelTemplateFor(deps.travel.templates, remoteDir),
           remoteDir,
           fileName: deps.travel.fileName,
           now: new Date(),

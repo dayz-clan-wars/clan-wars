@@ -28,6 +28,29 @@ export function loadTravelTemplate(json: unknown): TravelTemplate {
 }
 
 /**
+ * The template for the map a server is running, keyed by mission name
+ * (`dayzOffline.chernarusplus`), the folder `missionCustomDir()` resolved:
+ * `/games/<user>/ftproot/<game>_missions/<mission>/custom`.
+ *
+ * ⚠️ Read from the directory the file is about to be written to, never from
+ * configuration, so the template and the folder cannot disagree. The 50-slot
+ * server moved from Livonia to Chernarus on 2026-10-07 and the worker went
+ * on pushing Livonia's 209 boxes into the Chernarus mission. A map with no
+ * template throws: the sweep skips this server's file and logs it, rather
+ * than uploading another map's travel points.
+ */
+export function travelTemplateFor(templates: Readonly<Record<string, TravelTemplate>>, customDir: string): TravelTemplate {
+  const parts = customDir.split("/").filter(Boolean);
+  const mission = parts.at(-1) === "custom" ? parts.at(-2) : undefined;
+  if (!mission) throw new Error(`travel template: cannot read the mission from ${customDir}`);
+  const template = templates[mission];
+  if (!template) {
+    throw new Error(`travel template: none for mission ${mission} (have ${Object.keys(templates).join(", ")})`);
+  }
+  return template;
+}
+
+/**
  * The file's exact bytes: the template's boxes first, in their order, then
  * one box per pole in the order given. The caller sorts the poles by tag,
  * because these bytes are hashed and a wandering order would re-upload

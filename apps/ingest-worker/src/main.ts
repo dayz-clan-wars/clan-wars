@@ -15,10 +15,15 @@ const offsets = loadTemplate(JSON.parse(
   readFileSync(new URL("../assets/flag-supplies.template.json", import.meta.url), "utf8"),
 ));
 
-// The fast-travel config, same treatment: a broken template stops the worker here.
-const travelTemplate = loadTravelTemplate(JSON.parse(
-  readFileSync(new URL("../assets/teleport-hub.template.json", import.meta.url), "utf8"),
-));
+// The fast-travel config, one template per map, same treatment: a broken
+// template stops the worker here. Each is that map's mission repo's
+// `custom/pra-teleport-hub.json` copied verbatim (chernarus, livonia), so a
+// fast-travel change there needs copying here too or the worker reverts it.
+const travelTemplates = Object.fromEntries(
+  ["dayzOffline.chernarusplus", "dayzOffline.enoch"].map((mission) => [mission, loadTravelTemplate(JSON.parse(
+    readFileSync(new URL(`../assets/travel/${mission}.json`, import.meta.url), "utf8"),
+  ))]),
+);
 
 // One client per service id, cached for the process lifetime. Typed to the
 // concrete NitradoClient (not the narrower NitradoLike) because it also
@@ -80,7 +85,7 @@ for (;;) {
       // a no-op change.
       travel: {
         clientFor,
-        template: travelTemplate,
+        templates: travelTemplates,
         fileName: "pra-teleport-hub.json",
       },
       // ⚠️ The third projected file, and inert until an operator adds
