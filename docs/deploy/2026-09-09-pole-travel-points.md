@@ -2,9 +2,10 @@
 
 The ingest worker now projects a second file onto the game server, next to
 `faction-supplies.json`: **`pra-teleport-hub.json`**, the fast-travel mod's config.
-It is the vendored template (`apps/ingest-worker/assets/teleport-hub.template.json`,
-a verbatim copy of `livonia/custom/pra-teleport-hub.json` — 209 boxes, the Hub's
-arrival spots) plus one 4 × 3 × 4 m box at the declared pole of every clan that is
+It is the vendored template for the server's map (`apps/ingest-worker/assets/travel/<mission>.json`,
+a verbatim copy of that mission repo's `custom/pra-teleport-hub.json`: Chernarus 518 boxes,
+Livonia 209, each with the Hub's arrival spots; chosen per sweep from the mission folder
+Nitrado reports, and a map with no template gets no upload — since 2026-10-07) plus one 4 × 3 × 4 m box at the declared pole of every clan that is
 **active with its flag up**. Reserved, dormant and raided clans have no box.
 Same contract as supplies: regenerate every sweep, hash, upload on difference, drift
 detection against the observed remote size/mtime (`apps/ingest-worker/src/projection-upload.ts`,

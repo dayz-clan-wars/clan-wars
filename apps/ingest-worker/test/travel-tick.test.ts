@@ -7,7 +7,7 @@ import { loadTravelTemplate } from "../src/travel.js";
 import { travelTick } from "../src/travel-tick.js";
 
 const DB_URL = requireTestDatabaseUrl();
-const template = loadTravelTemplate(JSON.parse(readFileSync(new URL("../assets/teleport-hub.template.json", import.meta.url), "utf8")));
+const template = loadTravelTemplate(JSON.parse(readFileSync(new URL("../assets/travel/dayzOffline.enoch.json", import.meta.url), "utf8")));
 const now = new Date("2026-09-09T12:00:00Z");
 const FIXED = template.PRABoxes.length;
 

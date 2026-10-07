@@ -228,4 +228,30 @@ describe("ingestSweep", () => {
     expect(r.servers).toBeGreaterThan(0);
     expect(errors).toHaveLength(1);
   });
+
+  it("⚠️ uploads no travel file for a map with no template, and says so", async () => {
+    // The 50-slot server moved to Chernarus on 2026-10-07 and the worker kept
+    // writing Livonia's travel points into the Chernarus mission. A map we
+    // have no template for must cost that server its file, never borrow one.
+    const [srv] = await addServer();
+    const uploads: string[] = [];
+    const errors: { serverId: number; err: unknown }[] = [];
+    const travel = (mission: string) => ({
+      fileName: "pra-teleport-hub.json",
+      templates: { "dayzOffline.chernarusplus": { areaName: "TeleportToHub", PRABoxes: [[[2, 1.5, 2], [0, 0, 0], [1, 2, 3]]], safePositions3D: [] } } as never,
+      clientFor: () => ({
+        statFile: async () => null,
+        missionCustomDir: async () => `/games/ni1/ftproot/dayzxb_missions/${mission}/custom`,
+        uploadFile: async (dir: string) => { uploads.push(dir); },
+      }),
+    });
+    await ingestSweep(db, { ...baseDeps, travel: travel("dayzOffline.sakhal"), onTravelError: (serverId, err) => { errors.push({ serverId, err }); } });
+    expect(uploads).toEqual([]);
+    expect(errors.map((e) => e.serverId)).toEqual([srv!.id]);
+    expect(String(errors[0]!.err)).toMatch(/none for mission dayzOffline\.sakhal/);
+
+    await ingestSweep(db, { ...baseDeps, travel: travel("dayzOffline.chernarusplus") });
+    expect(uploads).toEqual(["/games/ni1/ftproot/dayzxb_missions/dayzOffline.chernarusplus/custom"]);
+  });
 });
+
