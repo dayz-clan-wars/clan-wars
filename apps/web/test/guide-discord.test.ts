@@ -58,7 +58,7 @@ describe("guide → Discord", () => {
     expect(map).toContain("- **You** — everyone linked — your last known position");
     expect(map).toContain("> 🛰️ **What the server can see**");
     const around = chapterMessages(CHAPTERS.find((x) => x.slug === "getting-around")!, readFileSync(join(CONTENT_DIR, "11-getting-around.html"), "utf8"), ids).join("\n");
-    expect(around).toMatch(/```\n#\s+Town\s+X \/ Z\n— Left arm —\n1\s+Adamow\s+3112 \/ 6516/u);
+    expect(around).toMatch(/```\n#\s+Town\s+X \/ Z\n— Left arm —\n1\s+Balota\s+4491 \/ 2312/u);
   });
 
   it("escapes what Discord would style, and never lets an @ become a mention", () => {
