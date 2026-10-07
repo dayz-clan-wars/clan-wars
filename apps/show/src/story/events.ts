@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
+import { kothTownName } from "@factions/domain";
 import type { WeekRead } from "./people.js";
 import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory, MemberMove } from "./types.js";
 import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
@@ -109,7 +110,8 @@ export async function kothForWeek(db: Database, a: WeekRead): Promise<KothStory[
   return parsed.map(({ r, res }) => {
     const winner = res?.winner ?? res?.topKiller ?? null;
     return {
-      location: r.location,
+      // ⚠️ The town's name, never its slug: this reaches the script model as written.
+      location: kothTownName(r.location),
       at: iso(r.at),
       when: whenLabel(r.at),
       winner: winner === null ? null : nameOf(winner),
