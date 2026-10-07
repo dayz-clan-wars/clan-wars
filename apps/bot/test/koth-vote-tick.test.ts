@@ -21,7 +21,7 @@ describe("kothVoteTick", () => {
     serverId = s!.id;
     await db.insert(identityLinks).values({ discordId: "d0", dayzId: "z0", gamertag: "Mina", verifiedAt: CLOSE });
     const [v] = await db.insert(kothVotes).values({
-      serverId, slotAt: SLOT, location: "borek", startedByDiscordId: "d0", openedAt: at("2026-10-03T15:00:00Z"),
+      serverId, slotAt: SLOT, location: "berezino", startedByDiscordId: "d0", openedAt: at("2026-10-03T15:00:00Z"),
       closesAt: CLOSE, electorateSize: 6, turnoutFloor: 5, state: "open", channelId: "c1", messageId: "m1", tallyText: "old",
     }).returning();
     voteId = v!.id;
@@ -59,12 +59,20 @@ describe("kothVoteTick", () => {
     const v = await vote();
     expect(v.state).toBe("passed");
     const [ev] = await db.select().from(kothEvents);
-    expect(ev).toMatchObject({ id: v.kothEventId, origin: "vote", scheduledByDiscordId: "d0", slotAt: SLOT, location: "borek", awardKey: null, state: "scheduled" });
+    expect(ev).toMatchObject({ id: v.kothEventId, origin: "vote", scheduledByDiscordId: "d0", slotAt: SLOT, location: "berezino", awardKey: null, state: "scheduled" });
     expect(ev!.announcedAt).toEqual(CLOSE);
     expect(ev!.remindedAt).toEqual(CLOSE);
     expect(announce.mock.calls[0]![0]).toContain("The vote passed (Yes 4 · No 1)");
     expect(v.resultPostedAt).toEqual(CLOSE);
     expect(ch.edit).toHaveBeenLastCalledWith("c1", "m1", expect.stringContaining("Voting has closed"), null);
+  });
+  // ⚠️ A vote opened on Livonia names a town that is no longer on the map.
+  it("voids a passed vote whose town is not on this map any more, and schedules nothing", async () => {
+    await db.update(kothVotes).set({ location: "borek" }).where(eq(kothVotes.id, voteId));
+    for (const d of ["d0", "d1", "d2", "d3", "d4"]) await cast(d, true);
+    await run(channel(), vi.fn(async () => {}), CLOSE);
+    expect((await vote()).state).toBe("void");
+    expect(await db.select().from(kothEvents)).toEqual([]);
   });
   // Review focus 2.
   it("passes when closed late but before the slot", async () => {

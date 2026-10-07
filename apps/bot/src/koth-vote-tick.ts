@@ -1,5 +1,5 @@
 import { identityLinks, kothEvents, kothVotes, kothVoteVoters, servers, type Database } from "@factions/db";
-import { kothGapOk, kothLocation, voteOutcome } from "@factions/domain";
+import { kothGapOk, kothLocation, kothTownName, voteOutcome } from "@factions/domain";
 import { and, eq, gte, isNotNull, isNull, ne } from "drizzle-orm";
 import { voteView } from "./commands/kothvote.js";
 import { voteFailedText, voteMessage, votePassedText, voteVoidText, type Tally } from "./koth-text.js";
@@ -18,7 +18,7 @@ async function starterTag(db: Database, v: Vote): Promise<string> {
   const [l] = await db.select({ g: identityLinks.gamertag }).from(identityLinks).where(eq(identityLinks.discordId, v.startedByDiscordId)).limit(1);
   return l?.g ?? "A player";
 }
-const town = (v: Vote) => kothLocation(v.location)?.name ?? v.location;
+const town = (v: Vote) => kothTownName(v.location);
 
 /**
  * Keeps the open vote's tally current, closes it, and posts the result
@@ -82,7 +82,9 @@ async function close(db: Database, open: Vote, opts: { now: Date; enabled: boole
     if (taken) { await done("void", { reason: `an ${taken === "koth" ? "event" : "airdrop"} took that restart` }); return; }
     if (await kothOpen(tx, v.serverId)) { await done("void", { reason: "another King of the Hill was scheduled first" }); return; }
     if (!kothGapOk(v.slotAt, await lastKothSlot(tx, v.serverId, v.slotAt))) { await done("void", { reason: "another King of the Hill ran too recently" }); return; }
-    const loc = kothLocation(v.location)!;
+    const loc = kothLocation(v.location);
+    // ⚠️ A vote opened before the move to Chernarus names a Livonia town; it can no longer open.
+    if (!loc) { await done("void", { reason: "that town is not on this map any more" }); return; }
     const [ev] = await tx.insert(kothEvents).values({
       serverId: v.serverId, slotAt: v.slotAt, location: v.location, centreX: String(loc.centreX), centreZ: String(loc.centreZ),
       state: "scheduled", origin: "vote", scheduledByDiscordId: v.startedByDiscordId, awardKey: null,

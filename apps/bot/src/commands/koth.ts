@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { airdropEvents, kothEvents, servers } from "@factions/db";
 import {
-  KOTH_LOCATIONS, KOTH_MIN_GAP_MS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothGapOk, kothLocation, kothStandings, nextRestartAt,
+  KOTH_LOCATIONS, KOTH_MIN_GAP_MS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothGapOk, kothLocation, kothTownName, kothStandings, nextRestartAt,
   restartSlot,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -118,7 +118,7 @@ async function cancel(ctx: Ctx, input: CommandInput): Promise<Reply> {
     return reply("It is opening this slot, so it is too late to cancel. It ends at the next restart.");
   }
   await ctx.db.update(kothEvents).set({ state: "cancelled" }).where(and(eq(kothEvents.id, row.id), eq(kothEvents.state, "scheduled")));
-  return reply(`Cancelled ${kothLocation(row.location)?.name ?? row.location}. The channel will be told.`);
+  return reply(`Cancelled ${kothTownName(row.location)}. The channel will be told.`);
 }
 
 async function status(ctx: Ctx, _input: CommandInput): Promise<Reply> {
@@ -127,7 +127,7 @@ async function status(ctx: Ctx, _input: CommandInput): Promise<Reply> {
   const [row] = await ctx.db.select().from(kothEvents)
     .where(and(eq(kothEvents.serverId, server.id), inArray(kothEvents.state, ["scheduled", "live"])));
   if (!row) return reply("No King of the Hill event is scheduled.");
-  const head = `${kothLocation(row.location)?.name ?? row.location}: ${row.state}, slot ${row.slotAt.toISOString()}, prize: ${prizeName(row.awardKey)}.`;
+  const head = `${kothTownName(row.location)}: ${row.state}, slot ${row.slotAt.toISOString()}, prize: ${prizeName(row.awardKey)}.`;
   if (row.state !== "live") return reply(head);
   // Spec §7: the standings so far, by the same reads the final score uses. Not
   // settled — log lag means the last minutes may still be arriving.

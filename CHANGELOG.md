@@ -7,6 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Changed
 
+- King of the Hill runs on Chernarus. Any of the 31 fast-travel towns can host it, and fresh spawns start at that town's ten fast-travel arrival spots with a KotH kit. Bodies clear faster on the hill, and standing near them no longer keeps them around. There are no wolves, bears or infected hordes any more.
 - The website's map shows Chernarus: Chernarus terrain, 201 place names, and its 518 fast-travel points. Map pins and grid references cover the whole map, out to 15,360 m.
 - The site, the field guide and achievement cards say Chernarus instead of Livonia.
 - The field guide's Getting around chapter describes Chernarus: outhouses and well pumps are the travel points (no bus stops), and the Hub's 31 doors go to Chernarus towns. There are no supplies laid out at the Hub any more.

@@ -1,5 +1,5 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, kothEvents, type Database } from "@factions/db";
-import { restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
+import { kothTownName, restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 import { setAirdropSpawner, setBaseDamageDisabled, setSpawnGearPresets } from "./cfggameplay.js";
@@ -27,16 +27,12 @@ export type TruckWipe = { events: string[]; offHour: number; onHour: number; rot
 const EVENTS_FILE = "events.xml";
 export type RestartTickResult = { restarted: number; skipped: number; missed: number; failed: number };
 
-export type EventsEdits = {
-  truckWipe?: TruckWipe;
-  /** King of the Hill's wanted `<active>` per infected event, or undefined to leave them. */
-  infected?: Record<string, 0 | 1>;
-};
-export type EventsResult = { uploaded: boolean; truckWipeError?: Error; infectedError?: Error };
+export type EventsEdits = { truckWipe?: TruckWipe };
+export type EventsResult = { uploaded: boolean; truckWipeError?: Error };
 
 /**
- * Bring one server's events.xml to the state `slot` wants — the truck wipe, the
- * weekly rotation and King of the Hill's infected — immediately before its restart.
+ * Bring one server's events.xml to the state `slot` wants — the truck wipe and the
+ * weekly rotation — immediately before its restart.
  *
  * ⚠️ ONE download and ONE upload for every feature, exactly as `applyGameplay` is
  * for cfggameplay.json: two round trips silently lose whichever edit uploads first.
@@ -44,10 +40,8 @@ export type EventsResult = { uploaded: boolean; truckWipeError?: Error; infected
  * ⚠️ Level-triggered — see `truckWipeActive`. A file already in the wanted state
  * is never re-uploaded.
  *
- * ⚠️ Each feature's splices run in their own try/catch and are RETURNED, never
- * thrown: KotH naming a missing event must not cost the truck wipe, or vice versa.
- * A feature whose splice throws contributes NONE of its edits (`let next = xml`
- * then commit), so a half-applied infected set never uploads.
+ * ⚠️ The splices run in their own try/catch and are RETURNED, never thrown. A
+ * splice that throws contributes NONE of its edits (`let next = xml` then commit).
  */
 export async function applyEvents(nitrado: RestartTarget, slot: Date, edits: EventsEdits): Promise<EventsResult> {
   const dir = await nitrado.missionDbDir();
@@ -72,16 +66,6 @@ export async function applyEvents(nitrado: RestartTarget, slot: Date, edits: Eve
       xml = next;
     } catch (err) {
       out.truckWipeError = err instanceof Error ? err : new Error(String(err));
-    }
-  }
-
-  if (edits.infected) {
-    try {
-      let next = xml;
-      for (const [name, active] of Object.entries(edits.infected)) next = setEventActive(next, name, active).xml;
-      xml = next;
-    } catch (err) {
-      out.infectedError = err instanceof Error ? err : new Error(String(err));
     }
   }
 
@@ -401,30 +385,14 @@ export async function restartTick(
       // slot recomputes the wanted state anyway.
       // ⚠️ Either half can run alone: the daily truck wipe and the weekly rotation are
       // independently switchable, so this must not require `events` to be non-empty.
-      // ⚠️ KotH's infected splice rides in the SAME call — one events.xml round trip
-      // (spec §5.4); a second download/upload would silently lose one of the edits.
       const wipeWanted = !!opts.truckWipe && (opts.truckWipe.events.length > 0 || opts.truckWipe.rotation);
-      if (wipeWanted || koth?.infected) {
+      if (wipeWanted) {
         try {
-          const r = await applyEvents(nitrado, slot.start, {
-            truckWipe: wipeWanted ? opts.truckWipe : undefined,
-            infected: koth?.infected ?? undefined,
-          });
+          const r = await applyEvents(nitrado, slot.start, { truckWipe: opts.truckWipe });
           if (r.truckWipeError) console.error(`restart: server ${s.id} truck wipe refused for slot ${slot.start.toISOString()} — restarting anyway`, r.truckWipeError);
           if (r.uploaded) console.log(`restart: server ${s.id} wrote events.xml for ${slot.start.toISOString()}`);
-          if (r.infectedError) {
-            console.error(`koth: server ${s.id} REFUSED the infected splice for slot ${slot.start.toISOString()}`, r.infectedError);
-            await failKoth(r.infectedError.message);
-          } else if (koth?.infectedRestoreRowId) {
-            // ⚠️ Stamped only once the restore is in the file (uploaded now, or
-            // already there): after it, KotH never edits events.xml again, so an
-            // operator turning InfectedCity on for normal play just works (§2.5).
-            await db.update(kothEvents).set({ restoredAt: opts.now })
-              .where(eq(kothEvents.id, koth.infectedRestoreRowId)).catch(() => undefined);
-          }
         } catch (err) {
           console.error(`restart: server ${s.id} events.xml failed for slot ${slot.start.toISOString()} — restarting anyway`, err);
-          if (koth?.infected) await failKoth(`events.xml: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 
@@ -476,7 +444,7 @@ export async function restartTick(
         }
 
         // ⚠️ Same guard as the whole files below: an opening that already failed
-        // (its infected splice or events.xml write) must not put KotH's presets in
+        // (a refused narrowing or globals edit) must not put KotH's presets in
         // the file — the row is `failed` and nothing would ever advertise the session.
         if (koth?.presets && (koth.opening === null || kothOpening !== null)) edits.koth = { presets: koth.presets };
 
@@ -691,7 +659,7 @@ export async function restartTick(
         }
       }
 
-      await nitrado.restart(restartMessage(airdropLocation, kothOpening?.location ?? null));
+      await nitrado.restart(restartMessage(airdropLocation, kothOpening ? kothTownName(kothOpening.location) : null));
       // ⚠️ An upload whose restart did not happen is NOT in effect. Confirmation is
       // what the website and the open/close announcements read; recording it before
       // the restart would make them assert a flip the server has not loaded.

@@ -425,30 +425,19 @@ export const KOTH_SCORE_SETTLE_MS = 10 * 60_000;
 /** ⚠️ Reserved: the restore arm treats any preset starting with this as KotH's. */
 export const KOTH_PRESET_PREFIX = "koth-";
 /**
- * The events.xml infected events a KotH session switches on.
- * ⚠️ The livonia generator's ZOMBIE_ZONE_NAMES must be a subset — a zone with no
- * active event spawns nothing (koth-drift.test.ts).
- */
-export const KOTH_INFECTED_EVENTS: readonly string[] = ["InfectedCity", "InfectedVillage", "InfectedArmy", "InfectedPolice", "InfectedMedic"];
-/** The whole-file targets, by directory ("root" = the mission root, "env" = its env/). */
-export const KOTH_WHOLE_FILES: readonly { dir: "root" | "env"; name: string }[] = [
-  { dir: "root", name: "cfgplayerspawnpoints.xml" },
-  { dir: "env", name: "wolf_territories.xml" },
-  { dir: "env", name: "bear_territories.xml" },
-  { dir: "env", name: "zombie_territories.xml" },
-];
-/**
- * The db/globals.xml `<var>` values a KotH session runs with: bodies clear fast so
- * a busy hill does not fill with corpses and loot piles. Spliced in place, never a
- * whole-file copy.
+ * The db/globals.xml `<var>` values a KotH session runs with: bodies clear fast,
+ * and players standing near them no longer hold the cleanup off, so a busy hill
+ * does not fill with corpses and loot piles. Spliced in place, never a whole-file
+ * copy.
  * ⚠️ There is deliberately no "normal" value here. The restore reads each one from
- * the mission's koth/default/globals.xml (staged from db/globals.xml by the livonia
- * deploy), so the livonia repo stays the only statement of the defaults and a
- * retune there is never reverted by the bot.
+ * the mission's koth/default/globals.xml (staged from db/globals.xml by the
+ * chernarus deploy), so the mission repo stays the only statement of the defaults
+ * and a retune there is never reverted by the bot.
  */
 export const KOTH_GLOBALS: Readonly<Record<string, number>> = {
   CleanupLifetimeDeadPlayer: 30,
   CleanupLifetimeDeadInfected: 10,
+  CleanupAvoidance: 5,
 };
 
 // ─── KotH automatic trigger and vote (spec 2026-09-24-koth-auto-and-vote) ───

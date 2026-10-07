@@ -1,6 +1,6 @@
 import { events, identityLinks, kills, kothEvents, players, serverRestarts, type Database, type KothResults } from "@factions/db";
 import {
-  KOTH_SCORE_SETTLE_MS, RESTART_PERIOD_MS, inKothZone, kothLocation, kothStandings, kothWinner,
+  KOTH_SCORE_SETTLE_MS, RESTART_PERIOD_MS, inKothZone, kothTownName, kothStandings, kothWinner,
   readVec3, type KothKill,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -115,7 +115,7 @@ export async function scoreAndAward(db: Database, rowId: number, opts: { now: Da
       await tx.update(kothEvents).set({ state: "finished", results, winnerDayzId: winner.dayzId, detail }).where(eq(kothEvents.id, row.id));
       return "finished";
     }
-    const town = kothLocation(row.location)?.name ?? row.location;
+    const town = kothTownName(row.location);
     const g = await grantAwardTx(tx, {
       // ⚠️ Non-null, permanently: `auto` and `vote` rows are created with `awardKey =
       // null` (koth-decide-tick.ts, koth-vote-tick.ts), the `row.awardKey === null`

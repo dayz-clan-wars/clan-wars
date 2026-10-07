@@ -1,7 +1,7 @@
 import { SlashCommandBuilder } from "discord.js";
 import { kothVotes, kothVoteVoters, servers } from "@factions/db";
 import {
-  KOTH_MIN_GAP_MS, KOTH_VOTE_MIN_POP, KOTH_VOTE_TURNOUT_MIN, chooseKothTown, kothGapOk, kothLocation, turnoutFloor,
+  KOTH_MIN_GAP_MS, KOTH_VOTE_MIN_POP, KOTH_VOTE_TURNOUT_MIN, chooseKothTown, kothGapOk, kothTownName, turnoutFloor,
   voteClosesAt, voteTargetSlot,
 } from "@factions/domain";
 import { and, eq } from "drizzle-orm";
@@ -21,7 +21,7 @@ export function voteConstraintReply(constraint: string): string | null {
 }
 
 export const voteView = (v: typeof kothVotes.$inferSelect, starter: string): VoteView =>
-  ({ town: kothLocation(v.location)?.name ?? v.location, slotAt: v.slotAt, closesAt: v.closesAt, floor: v.turnoutFloor, starter });
+  ({ town: kothTownName(v.location), slotAt: v.slotAt, closesAt: v.closesAt, floor: v.turnoutFloor, starter });
 
 async function start(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const kothVote = ctx.kothVote;

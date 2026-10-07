@@ -67,9 +67,17 @@ describe("events and the previous episode", () => {
       { dayzId: "y", gamertag: "YrJustBad", kills: 77 }, { dayzId: "c", gamertag: "CainObennett", kills: 27 },
     ] });
     expect(await kothForWeek(db, read())).toEqual([{
-      location: "gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "YrJustBad",
+      location: "Gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "YrJustBad",
       top: [{ gamertag: "YrJustBad", kills: 77 }, { gamertag: "CainObennett", kills: 27 }],
     }]);
+  });
+
+  // ⚠️ The script model gets a town name, never a slug: "novaya-petrovka" would
+  // reach Boris and Pavel's lines as written.
+  it("KotH gives the town's display name, Chernarus and retired Livonia alike", async () => {
+    await fx.koth({ location: "novaya-petrovka", slotAt: at(3, 20), top: [] });
+    await fx.koth({ location: "adamow", slotAt: at(4, 20), top: [] });
+    expect((await kothForWeek(db, read())).map((k) => k.location)).toEqual(["Novaya Petrovka", "Adamów"]);
   });
 
   // Controller ruling (spec §5.2): the bot froze KotH gamertags as
@@ -82,7 +90,7 @@ describe("events and the previous episode", () => {
     ] });
     const out = await kothForWeek(db, read());
     expect(out).toEqual([{
-      location: "gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "an unknown survivor",
+      location: "Gliniska", at: at(3, 20).toISOString(), when: whenLabel(at(3, 20)), winner: "an unknown survivor",
       top: [{ gamertag: "an unknown survivor", kills: 9 }, { gamertag: "CainObennett", kills: 4 }],
     }]);
     expect(JSON.stringify(out)).not.toContain("ghost-koth-id");

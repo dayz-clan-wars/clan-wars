@@ -31,7 +31,7 @@ describe("/koth", () => {
     ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, kothVote: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; at?: string; prize?: string } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
-    string: (n: string) => (n === "location" ? over.location ?? "lembork" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),
+    string: (n: string) => (n === "location" ? over.location ?? "berezino" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),
     integer: () => null, boolean: () => null, user: () => null,
     ...over,
   }) as unknown as CommandInput;
@@ -40,11 +40,11 @@ describe("/koth", () => {
   it("schedules, announces, and stamps announced_at", async () => {
     const post = vi.fn(async () => {});
     const reply = await schedule(ctx(post), input());
-    expect(reply.content).toMatch(/Lembork/);
+    expect(reply.content).toMatch(/Berezino/);
     const [row] = await rows();
-    expect(row).toMatchObject({ slotAt: SLOT, location: "lembork", state: "scheduled", scheduledByDiscordId: "99", awardKey: "plate-carrier" });
+    expect(row).toMatchObject({ slotAt: SLOT, location: "berezino", state: "scheduled", scheduledByDiscordId: "99", awardKey: "plate-carrier" });
     expect(row!.announcedAt).not.toBeNull();
-    expect(post).toHaveBeenCalledWith(expect.stringContaining("LEMBORK"));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining("BEREZINO"));
     expect(post).toHaveBeenCalledWith(expect.stringContaining("Plate Carrier"));
   });
 
@@ -172,7 +172,7 @@ describe("/koth", () => {
     expect(none.content).toMatch(/no king of the hill/i);
     await schedule(ctx(), input());
     const reply = await status(ctx(), input());
-    expect(reply.content).toMatch(/Lembork/);
+    expect(reply.content).toMatch(/Berezino/);
     expect(reply.content).toMatch(/scheduled/);
   });
 
@@ -239,8 +239,8 @@ describe("/koth", () => {
       schedule(ctx(postB), input()),
     ]);
     const replies = [replyA, replyB];
-    const winners = replies.filter((r) => /Lembork/.test(r.content ?? ""));
-    const losers = replies.filter((r) => !/Lembork/.test(r.content ?? ""));
+    const winners = replies.filter((r) => /Berezino/.test(r.content ?? ""));
+    const losers = replies.filter((r) => !/Berezino/.test(r.content ?? ""));
     expect(winners).toHaveLength(1);
     expect(losers).toHaveLength(1);
     expect(losers[0]!.content).toMatch(/already|took that slot/i);
@@ -263,8 +263,8 @@ describe("/koth", () => {
   });
 
   it("autocompletes towns by prefix and the next 7 days of slots", async () => {
-    const towns = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.location!(ctx(), { actorDiscordId: "99", value: "le" });
-    expect(towns.map((t) => t.value)).toContain("lembork");
+    const towns = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.location!(ctx(), { actorDiscordId: "99", value: "be" });
+    expect(towns.map((t) => t.value)).toContain("berezino");
     const slots = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.at!(ctx(), { actorDiscordId: "99", value: "" });
     expect(slots.length).toBeLessThanOrEqual(25);
     expect(slots[0]!.value).toBe("2026-10-03T14:00:00.000Z");

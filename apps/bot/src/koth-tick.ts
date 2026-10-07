@@ -1,12 +1,12 @@
 import { kothEvents, servers, serverRestarts, type Database } from "@factions/db";
-import { KOTH_REMINDER_LEAD_MS, kothLocation, restartSlot } from "@factions/domain";
+import { KOTH_REMINDER_LEAD_MS, kothTownName, restartSlot } from "@factions/domain";
 import { and, eq, lt, sql } from "drizzle-orm";
 import { cancelledText, kothPrize, liveText, reminderText, resultsText } from "./koth-text.js";
 import { scoreAndAward, scoringReady } from "./koth-score.js";
 
 export type KothPosters = { announce: (c: string) => Promise<void>; ops: (c: string) => Promise<void> };
 type Row = typeof kothEvents.$inferSelect;
-const town = (r: Row) => kothLocation(r.location)?.name ?? r.location;
+const town = (r: Row) => kothTownName(r.location);
 
 /** Post, THEN stamp — a stamp first silences a post that never went out. */
 async function postThen(post: (c: string) => Promise<void>, content: string, stamp: () => Promise<unknown>, what: string): Promise<boolean> {
