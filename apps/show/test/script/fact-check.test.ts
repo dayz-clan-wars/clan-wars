@@ -32,9 +32,11 @@ describe("factCheck", () => {
     await expect(factCheck("s", "d", async () => '{"ok":true}')).rejects.toThrow(FactCheckError);
   });
 
-  it("checks kill direction, superlatives and Livonia place names", () => {
+  it("checks kill direction, superlatives and Chernarus place names", () => {
     expect(FACT_CHECK_SYSTEM).toMatch(/never reversed/u);
     expect(FACT_CHECK_SYSTEM).toMatch(/longest, most, top/u);
-    expect(FACT_CHECK_SYSTEM).toMatch(/Chernarus town/u);
+    expect(FACT_CHECK_SYSTEM).toMatch(/server is on the Chernarus map/u);
+    expect(FACT_CHECK_SYSTEM).toMatch(/Livonia town/u);
+    expect(FACT_CHECK_SYSTEM).toMatch(/unless the data names it/u);
   });
 });

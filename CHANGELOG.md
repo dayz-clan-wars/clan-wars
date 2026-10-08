@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The weekly show knows the server is on Chernarus. It no longer sets stories in Livonia or flags Chernarus towns as mistakes, and this week's episode knows the server moved on 7 October.
+
 ## [1.61.0] - 2026-10-08
 
 ### Changed

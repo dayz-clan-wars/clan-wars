@@ -80,7 +80,15 @@ async function scrubStep(db: Database, serverId: number, post: AirdropPoster, no
  */
 export async function airdropTick(
   db: Database, post: AirdropPoster,
-  opts: { now: Date; weeklyCap: number; minPop: number; rng?: () => number },
+  opts: {
+    now: Date; weeklyCap: number; minPop: number; rng?: () => number;
+    /**
+     * `serverId:slot` keys whose KotH skip has been logged. Held by the caller across
+     * ticks: the tick runs every 10 s through the 30 minutes before a slot, and logged
+     * the same skip on each one. Without it, every tick logs.
+     */
+    skipLogged?: Set<string>;
+  },
 ): Promise<AirdropTickResult> {
   const out: AirdropTickResult = { decided: 0, posted: 0, failed: 0 };
   const rng = opts.rng ?? Math.random;
@@ -132,7 +140,9 @@ export async function airdropTick(
         eq(kothEvents.serverId, s.id), eq(kothEvents.slotAt, slot), eq(kothEvents.state, "scheduled"),
       )).limit(1);
       if (koth) {
-        console.log(`airdrop: skipped ${slot.toISOString()}: koth`);
+        const key = `${s.id}:${slot.toISOString()}`;
+        if (!opts.skipLogged?.has(key)) console.log(`airdrop: skipped ${slot.toISOString()}: koth`);
+        opts.skipLogged?.add(key);
         continue;
       }
 

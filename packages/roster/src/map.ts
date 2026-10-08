@@ -17,7 +17,7 @@ export { WORLD_SIZE_M };
 
 export type MapFix = { x: number; z: number; at: Date };
 export type MapState = {
-  /** Livonia, metres. */
+  /** The map's side, metres (`WORLD_SIZE_M`: Chernarus since 2026-10-07). */
   world: { size: number };
   you: { gamertag: string; fix: MapFix | null };
   base: { x: number; z: number; radiusM: number; kind: "clan" | "solo" } | null;
