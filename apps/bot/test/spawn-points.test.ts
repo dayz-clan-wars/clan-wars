@@ -69,6 +69,15 @@ describe("narrowFreshSpawns", () => {
     const onlyComment = SPAWNS.replace(/            <group name="Berezino">[\s\S]*?<\/group>\n/, "");
     expect(() => narrowFreshSpawns(onlyComment, "Berezino")).toThrow(/no group "Berezino"/);
   });
+  // A self-closing group once ran the match on into the next group's </group>, so
+  // narrowing to it kept that neighbour's spots too: players spread over two towns.
+  it("treats a self-closing group as one empty group, never swallowing the next", () => {
+    const selfClosing = SPAWNS.replace('<group name="Balota">\n                <pos x="4491.000000" z="2312.000000" />\n            </group>', '<group name="Balota" />');
+    const out = narrowFreshSpawns(selfClosing, "Berezino");
+    expect(out).not.toContain('<group name="Balota" />');
+    expect(out).toContain('<group name="Berezino">');
+    expect(() => narrowFreshSpawns(selfClosing, "Balota")).toThrow(/has no <pos>/);
+  });
   it("refuses an unknown group, a duplicate, an empty group, and a file with no <fresh>", () => {
     expect(() => narrowFreshSpawns(SPAWNS, "Narnia")).toThrow(/^cfgplayerspawnpoints\.xml: .*no group "Narnia"/);
     const twice = SPAWNS.replace(`<group name="Chernogorsk">`, `<group name="Balota">`);

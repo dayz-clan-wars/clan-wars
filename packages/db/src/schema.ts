@@ -2285,8 +2285,14 @@ export const kothEvents = pgTable("koth_events", {
   resultsPostedAt: timestamp("results_posted_at", { withTimezone: true }),
   cancelPostedAt: timestamp("cancel_posted_at", { withTimezone: true }),
   loadoutSnapshot: jsonb("loadout_snapshot").$type<string[]>(),
+  /**
+   * Livonia-era only: written by the sessions before 2026-10-07 and read by nothing
+   * since (Chernarus KotH restores from `koth/default/`, spec 2026-10-07-koth-chernarus).
+   * Kept, not dropped, because those rows' values are the only record of them.
+   */
   infectedSnapshot: jsonb("infected_snapshot").$type<Record<string, 0 | 1>>(),
   openedAt: timestamp("opened_at", { withTimezone: true }),
+  /** Livonia-era only, like `infectedSnapshot`: unwritten and unread since 2026-10-07. */
   restoredAt: timestamp("restored_at", { withTimezone: true }),
   results: jsonb("results").$type<KothResults>(),
   winnerDayzId: text("winner_dayz_id"),

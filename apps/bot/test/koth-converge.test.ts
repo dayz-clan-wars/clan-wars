@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, serverRestarts, servers, type Database } from "@factions/db";
-import { KOTH_PRESET_FILES } from "@factions/domain";
+import { KOTH_LOCATIONS, KOTH_PRESET_FILES } from "@factions/domain";
 import { eq, sql } from "drizzle-orm";
 import { planKoth, convergeKothFiles } from "../src/koth-converge.js";
 import { narrowFreshSpawns } from "../src/spawn-points.js";
@@ -120,7 +120,7 @@ describe("planKoth", () => {
   it("a retired Livonia town refuses with a reason rather than throwing", async () => {
     await schedule({ location: "adamow" });
     const p = (await planKoth(db, mission().target, serverId, SLOT, { allowOpen: true }))!;
-    expect(p.failure).toMatch(/adamow is not one of the 31 KotH towns/);
+    expect(p.failure).toContain(`adamow is not one of the ${KOTH_LOCATIONS.length} KotH towns`);
     expect(p.opening).toBeNull();
   });
 

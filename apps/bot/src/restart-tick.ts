@@ -207,10 +207,10 @@ export const RESTART_MESSAGE = "Scheduled restart";
  * ⚠️ Never the kind. Players are told where, never what is inside (bunker spec §2).
  */
 export function restartMessage(airdrop: string | null, koth: string | null = null): string {
-  const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
+  // Both arrive as display names (`bunkerRoomName`, `kothTownName`), already cased.
   const parts: string[] = [];
-  if (airdrop) parts.push(`Bunker online at ${cap(airdrop)} next session.`);
-  if (koth) parts.push(`King of the Hill at ${cap(koth)} next session.`);
+  if (airdrop) parts.push(`Bunker online at ${airdrop} next session.`);
+  if (koth) parts.push(`King of the Hill at ${koth} next session.`);
   return parts.length === 0 ? RESTART_MESSAGE : `${RESTART_MESSAGE}. ${parts.join(" ")}`;
 }
 
@@ -445,6 +445,9 @@ export async function restartTick(
           // registers nothing it has not just uploaded, and a live bunker whose file
           // vanished mid-session gets it back. A staging failure leaves
           // `objectSpawnersArr` untouched and counts as a failed enable below.
+          // A failure while an older bunker is `ending` would leave that one registered
+          // another session, but the two never share a slot: nothing new is decided or
+          // placed while a bunker is announced or live (airdrop-tick, /bunker place).
           if (intent.wanted) {
             try {
               await stageBunker(nitrado, intent.wanted);
