@@ -99,7 +99,12 @@ describe("events and the previous episode", () => {
   it("airdrops in the week only", async () => {
     await fx.airdrop({ location: "tarnow", slotAt: at(1, 22) });
     await fx.airdrop({ location: "dolnik", slotAt: at(-1, 22) });
-    expect(await airdropsForWeek(db, read())).toEqual([{ location: "tarnow", at: at(1, 22).toISOString(), when: whenLabel(at(1, 22)), state: "ended" }]);
+    expect(await airdropsForWeek(db, read())).toEqual([{ location: "Tarnow", at: at(1, 22).toISOString(), when: whenLabel(at(1, 22)), state: "ended" }]);
+  });
+
+  it("bunkers carry the room's name", async () => {
+    await fx.airdrop({ location: "kamensk-military", slotAt: at(2, 22) });
+    expect((await airdropsForWeek(db, read())).map((a) => a.location)).toContain("Kamensk Military");
   });
 
   it("the previous episode is the latest earlier one in the season with a narrative, published or not", async () => {

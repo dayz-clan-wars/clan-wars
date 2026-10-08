@@ -1897,7 +1897,14 @@ export const airdropEvents = pgTable("airdrop_events", {
   /** The restart slot the drop goes live at. */
   slotAt: timestamp("slot_at", { withTimezone: true }).notNull(),
   location: text("location").notNull(),
-  colour: text("colour").$type<"blue" | "orange" | "yellow">().notNull(),
+  /** A Livonia airdrop's container colour. Null on bunker rows (since 2026-10-07). */
+  colour: text("colour").$type<"blue" | "orange" | "yellow">(),
+  /**
+   * A bunker's template (spec 2026-10-07-bunker-online §6). Null on the Livonia
+   * airdrops that predate it. ⚠️ Exactly one of `colour` and `kind` is set: a row
+   * with neither could never be placed, and one with both would be read two ways.
+   */
+  kind: text("kind").$type<"boom" | "guns">(),
   decidedAt: timestamp("decided_at", { withTimezone: true }).notNull(),
   popAtDecision: integer("pop_at_decision").notNull(),
   threshold: numeric("threshold").notNull(),
@@ -1919,6 +1926,8 @@ export const airdropEvents = pgTable("airdrop_events", {
   pk: primaryKey({ columns: [t.serverId, t.slotAt] }),
   stateValid: check("airdrop_events_state_valid", sql`${t.state} IN ('announced','live','ended','failed')`),
   colourValid: check("airdrop_events_colour_valid", sql`${t.colour} IN ('blue','orange','yellow')`),
+  kindValid: check("airdrop_events_kind_valid", sql`${t.kind} IN ('boom','guns')`),
+  colourXorKind: check("airdrop_events_colour_xor_kind", sql`(${t.colour} IS NULL) <> (${t.kind} IS NULL)`),
 }));
 
 /**

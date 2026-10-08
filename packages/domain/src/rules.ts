@@ -374,22 +374,6 @@ export const BOUNTY_REASON_MAX = 200;
  */
 export const AWARD_REMOVAL_LEAD_MS = 15 * MIN;
 
-/**
- * The 16 Livonia locations with a staged locked-container spawner, and the three
- * colours each is staged in (spec §1).
- *
- * ⚠️ A literal list, deliberately, not a directory read: the bot runs nowhere near
- * the mission tree, and a location named here that has no staged file registers a
- * spawner the server silently ignores. Adding a location means staging three files
- * in the `livonia` repo FIRST.
- */
-export const AIRDROP_LOCATIONS = [
-  "airfield", "bielawa", "brena", "dolnik", "gieraltow", "gliniska", "grabin", "lukow",
-  "nadbor", "polana", "sarnowek", "sitnik", "sobotka", "tarnow", "topolin", "zalesie",
-] as const;
-
-export const AIRDROP_COLOURS = ["blue", "orange", "yellow"] as const;
-
 /** How many recent locations are excluded from the draw (spec §3.3). */
 export const AIRDROP_NO_REPEAT = 5;
 

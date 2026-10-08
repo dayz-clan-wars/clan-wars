@@ -76,7 +76,7 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const drop = await ctx.db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
     eq(airdropEvents.serverId, server.id), eq(airdropEvents.slotAt, slot), inArray(airdropEvents.state, ["announced", "live"]),
   ));
-  if (drop.length > 0) return reply("An airdrop is already set for that session. Pick another slot.");
+  if (drop.length > 0) return reply("A bunker is already set to come online that session. Pick another slot.");
 
   let row: { id: number } | undefined;
   try {

@@ -1,8 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
-  AIRDROP_COLOURS, AIRDROP_LOCATIONS, AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT,
-  airdropSpawnerPath, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart, shouldFire,
+  AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart, shouldFire,
 } from "../src/airdrops";
+import { BUNKER_KINDS, BUNKER_ROOMS } from "../src/bunker";
 
 const at = (iso: string) => new Date(iso);
 const fire = (over: Partial<Parameters<typeof shouldFire>[0]> = {}) => shouldFire({
@@ -10,36 +10,24 @@ const fire = (over: Partial<Parameters<typeof shouldFire>[0]> = {}) => shouldFir
   lastFireAt: null, openEvent: false, now: at("2026-09-21T19:30:00Z"), ...over,
 });
 
-describe("the menu", () => {
-  it("is the 16 staged locations and 3 colours, and nothing else", () => {
-    expect(AIRDROP_LOCATIONS).toHaveLength(16);
-    expect(AIRDROP_COLOURS).toEqual(["blue", "orange", "yellow"]);
-  });
-
-  // ⚠️ location THEN colour. The spec's first draft had them the other way round,
-  // which names 48 files that do not exist — and the miss is silent: the file is
-  // registered, the server boots, and no container ever spawns.
-  it("names the spawner file location-then-colour", () => {
-    expect(airdropSpawnerPath({ location: "dolnik", colour: "blue" }))
-      .toBe("./custom/airdrop-dolnik-blue.json");
-  });
-});
 
 describe("chooseAirdrop", () => {
-  it("never repeats a location inside the no-repeat window", () => {
-    const recent = AIRDROP_LOCATIONS.slice(0, AIRDROP_NO_REPEAT);
+  const slugs = BUNKER_ROOMS.map((r) => r.slug);
+  it("never draws one of the last AIRDROP_NO_REPEAT rooms, and draws a kind", () => {
+    const recent = slugs.slice(0, AIRDROP_NO_REPEAT);
     for (let i = 0; i < 200; i++) {
       const spec = chooseAirdrop([...recent], () => i / 200);
       expect(recent).not.toContain(spec.location);
-      expect(AIRDROP_COLOURS).toContain(spec.colour);
+      expect(slugs).toContain(spec.location);
+      expect(BUNKER_KINDS).toContain(spec.kind);
     }
   });
-
-  // ⚠️ A window longer than the menu would otherwise empty the pool and throw on
-  // an undefined index — a crash in the one tick that is supposed to be optional.
-  it("falls back to the full menu rather than emptying the pool", () => {
-    const spec = chooseAirdrop([...AIRDROP_LOCATIONS], () => 0);
-    expect(AIRDROP_LOCATIONS).toContain(spec.location);
+  // ⚠️ An empty pool indexes undefined; the fallback is what keeps the tick alive.
+  it("falls back to all 11 when every room is recent", () => {
+    expect(slugs).toContain(chooseAirdrop([...slugs], () => 0).location);
+  });
+  it("draws both kinds", () => {
+    expect(new Set([0, 0.99].map((r) => chooseAirdrop([], () => r).kind))).toEqual(new Set(["boom", "guns"]));
   });
 });
 

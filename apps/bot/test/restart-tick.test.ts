@@ -592,15 +592,28 @@ describe("restartTick", () => {
     // still fires (`gameplay.uploaded` is true).
     const SAT = at("2026-09-19T12:00:00Z");
     await db.insert(airdropEvents).values({
-      serverId, slotAt: SAT, location: "dolnik", colour: "blue",
+      serverId, slotAt: SAT, location: "nwaf", colour: null, kind: "boom",
       decidedAt: at("2026-09-19T11:30:00Z"), popAtDecision: 6, threshold: "5",
       state: "announced", announcedAt: at("2026-09-19T11:30:01Z"),
     });
+    // The bunker's own files: the fake serves cfggameplay.json for every path and
+    // treats every upload as that file, so the two bunker inputs and the staged
+    // output are routed around it.
+    const exit = (customString: string, pos: number[], yaw: number) =>
+      ({ name: "Land_Underground_Stairs_Exit", pos, ypr: [yaw, 0, 0], scale: 1, enableCEPersistency: 0, customString });
+    const bunkerFiles: Record<string, string> = {
+      "/mission/custom/keycard-rooms.json": JSON.stringify({ Objects: [exit("NWAF", [4765.7, 338.8, 10384.0], 149)] }),
+      "/mission/custom/keycard-bunker-boom.json": JSON.stringify({ Objects: [exit("", [2782.4, 25.9, 1195.4], 0)] }),
+    };
+    const cfgDownload = h.downloadFile.getMockImplementation()!;
+    const cfgUpload = h.uploadFile.getMockImplementation()!;
+    h.downloadFile.mockImplementation((async (p: string) => bunkerFiles[p] ?? cfgDownload()) as never);
+    h.uploadFile.mockImplementation(async (d: string, n: string, c: string) => (n === "bunker-online.json" ? undefined : cfgUpload(d, n, c)));
     await restartTick(db, () => h.target, {
       now: at("2026-09-19T12:00:03Z"), lastError, raidWindow: { enabled: true }, airdrop: { enabled: true },
     });
     // Confirms the premise: the airdrop really did cause an upload this slot.
-    expect(JSON.parse(h.read()).WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+    expect(JSON.parse(h.read()).WorldsData.objectSpawnersArr).toContain("./custom/bunker-online.json");
 
     const satRows = await raidRows();
     expect(satRows).toHaveLength(1); // still the one row for this window
@@ -636,13 +649,13 @@ describe("applyGameplay", () => {
     const host = fakeGameplayHost();
     const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
       raidWindow: { skips: [] },
-      airdrop: { wanted: { location: "dolnik", colour: "blue" } },
+      airdrop: { wanted: { location: "nwaf", kind: "boom" } },
     });
     expect(host.downloadFile).toHaveBeenCalledTimes(1);
     expect(host.uploadFile).toHaveBeenCalledTimes(1);
     const after = JSON.parse(host.read());
     expect(after.GeneralData.disableBaseDamage).toBe(out.flip!.wantedDisabled);
-    expect(after.WorldsData.objectSpawnersArr).toContain("./custom/airdrop-dolnik-blue.json");
+    expect(after.WorldsData.objectSpawnersArr).toContain("./custom/bunker-online.json");
   });
 
   it("uploads nothing when neither edit changes anything", async () => {

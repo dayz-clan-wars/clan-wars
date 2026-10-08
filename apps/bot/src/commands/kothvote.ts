@@ -42,7 +42,7 @@ async function start(ctx: Ctx, input: CommandInput): Promise<Reply> {
     .where(and(eq(kothVotes.serverId, server.id), eq(kothVotes.slotAt, slot))).limit(1);
   if (held) return reply(voteConstraintReply("koth_votes_slot_uq")!);
   const taken = await slotTakenBy(ctx.db, server.id, slot);
-  if (taken === "airdrop") return reply(`An airdrop is set for the ${hhmm(slot)} restart.`);
+  if (taken === "airdrop") return reply(`A bunker comes online at the ${hhmm(slot)} restart.`);
   if (taken === "koth" || await kothOpen(ctx.db, server.id)) return reply("A King of the Hill event is already scheduled or live.");
   if (!kothGapOk(slot, await lastKothSlot(ctx.db, server.id, slot))) {
     return reply(`The ${hhmm(slot)} restart is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill.`);

@@ -1,6 +1,6 @@
 import { airdropEvents, kothEvents, servers, type Database } from "@factions/db";
 import {
-  AIRDROP_HISTORY_MS, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
+  AIRDROP_HISTORY_MS, bunkerRoomName, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
   nextRestartAt, shouldFire,
 } from "@factions/domain";
 import { and, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
@@ -51,7 +51,7 @@ async function scrubStep(db: Database, serverId: number, post: AirdropPoster, no
   let posted = 0;
   for (const row of scrubbed) {
     try {
-      await post(scrubText(row.location));
+      await post(scrubText(bunkerRoomName(row.location)));
     } catch (err) {
       // No mark: the next tick retries. Logged, because a permanently broken
       // poster retrying in silence is indistinguishable from nothing to say.
@@ -109,7 +109,7 @@ export async function airdropTick(
           continue;
         }
         try {
-          await post(airdropText(row.location, row.slotAt));
+          await post(airdropText(bunkerRoomName(row.location), row.slotAt));
           await db.update(airdropEvents).set({ announcedAt: opts.now })
             .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, row.slotAt)));
           out.posted += 1;
@@ -171,10 +171,7 @@ export async function airdropTick(
       const spec = chooseAirdrop(recent.map((r) => r.location), rng);
 
       const inserted = await db.insert(airdropEvents).values({
-        // ⚠️ `chooseAirdrop` returns a plain `string` (it draws from `AIRDROP_COLOURS`,
-        // which the schema's CHECK constraint already restricts to the same three
-        // values) — the cast doesn't widen what can land in the column.
-        serverId: s.id, slotAt: slot, location: spec.location, colour: spec.colour as "blue" | "orange" | "yellow",
+        serverId: s.id, slotAt: slot, location: spec.location, kind: spec.kind,
         decidedAt: opts.now, popAtDecision: pop ?? 0, threshold: String(threshold), state: "announced",
       }).onConflictDoNothing().returning({ slotAt: airdropEvents.slotAt });
       // ⚠️ The insert is only "decided" when it actually wrote a row. On a conflict
@@ -185,10 +182,10 @@ export async function airdropTick(
       // players to go somewhere nothing will ever spawn.
       if (inserted.length === 0) continue;
       out.decided += 1;
-      console.log(`airdrop: server ${s.id} decided ${spec.location}/${spec.colour} for ${slot.toISOString()} (pop ${pop}, threshold ${threshold.toFixed(2)})`);
+      console.log(`airdrop: server ${s.id} decided ${spec.location}/${spec.kind} for ${slot.toISOString()} (pop ${pop}, threshold ${threshold.toFixed(2)})`);
 
       try {
-        await post(airdropText(spec.location, slot));
+        await post(airdropText(bunkerRoomName(spec.location), slot));
         await db.update(airdropEvents).set({ announcedAt: opts.now })
           .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slot)));
         out.posted += 1;
