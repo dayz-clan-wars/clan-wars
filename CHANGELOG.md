@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Airdrops are now bunkers. When one comes online, one of the 11 keycard rooms opens for a session with explosives or guns inside. The room is announced; what is inside is not. Bring a punched card: you get them from the locked containers on train wrecks.
+
 ## [1.60.0] - 2026-10-07
 
 ### Changed
