@@ -24,7 +24,9 @@ export function narrowFreshSpawns(xml: string, group: string): string {
   const innerFrom = fresh.index + bubbles.index + "<generator_posbubbles>".length;
   const inner = masked.slice(innerFrom, innerFrom + bubbles[1]!.length);
   // Whole lines: leading indent, the block, trailing spaces and one newline.
-  const groups = [...inner.matchAll(/[ \t]*<group\s+name="([^"]*)"[^>]*>[\s\S]*?<\/group>[ \t]*\r?\n?/g)];
+  // ⚠️ A self-closing `<group … />` is its own alternative: matched as an open tag,
+  // it ran on to the NEXT group's `</group>` and took that group with it.
+  const groups = [...inner.matchAll(/[ \t]*<group\s+name="([^"]*)"(?:[^>]*\/>|[^>]*>[\s\S]*?<\/group>)[ \t]*\r?\n?/g)];
   const keep = groups.filter((g) => g[1] === group);
   if (keep.length === 0) throw new Error(`cfgplayerspawnpoints.xml: <fresh> has no group "${group}"`);
   if (keep.length > 1) throw new Error(`cfgplayerspawnpoints.xml: <fresh> group "${group}" appears more than once — refusing to guess`);

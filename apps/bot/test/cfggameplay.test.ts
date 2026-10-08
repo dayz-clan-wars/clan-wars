@@ -146,13 +146,17 @@ describe("setAirdropSpawner", () => {
     expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: { objectSpawnersArr: [1] } }), true)).toThrow(/objectSpawnersArr/);
   });
 
-  // ⚠️ Two live drops is a state the bot never creates, so reaching it means a hand
-  // edit or a half-applied write. Guessing which to remove could take away the one
-  // players were told about and leave the other standing.
-  it("throws on two airdrop entries rather than guessing which is live", () => {
-    const two = setAirdropSpawner(REAL, true).json
-      .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json"');
-    expect(() => setAirdropSpawner(two, false)).toThrow(/2×|two/i);
+  // Since bunker online there is one spawner path, so several feature entries never
+  // leave a guess to make: a Livonia-era `/airdrop-` leftover beside a registered
+  // bunker used to count as "2×" and refuse every edit, on and off, for good.
+  it("cleans a Livonia leftover out beside a registered bunker, on and off", () => {
+    const both = setAirdropSpawner(REAL, true).json
+      .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json",\n\t\t\t"./custom/admin-castle.json"');
+    const off = spawners(setAirdropSpawner(both, false).json);
+    expect(off.filter((e) => e.includes("/airdrop-") || e.endsWith("/bunker-online.json"))).toEqual([]);
+    expect(off).toContain("./custom/admin-castle.json");
+    const on = spawners(setAirdropSpawner(both, true).json);
+    expect(on.filter((e) => e.includes("/airdrop-") || e.endsWith("/bunker-online.json"))).toEqual(["./custom/bunker-online.json"]);
   });
 
   // ⚠️ The splice works on LINES. A reformat that puts two elements on one line

@@ -674,11 +674,12 @@ describe("applyGameplay", () => {
   // ⚠️ One refusal must not take the other feature down with it. A raid weekend is
   // worth more than a drop, and a drop is worth more than nothing.
   it("still applies and uploads the raid flip when the airdrop splice refuses", async () => {
-    const twoDrops = GAMEPLAY.replace(
+    // A drop sharing a line with another spawner: removing it would take its line-mate.
+    const sharedLine = GAMEPLAY.replace(
       '"./custom/admin-castle.json"',
-      '"./custom/airdrop-lukow-blue.json",\n\t\t\t"./custom/airdrop-nadbor-blue.json"',
+      '"./custom/airdrop-lukow-blue.json", "./custom/admin-castle.json"',
     );
-    const host = fakeGameplayHost(twoDrops);
+    const host = fakeGameplayHost(sharedLine);
     const out = await applyGameplay(host.target, at("2026-09-18T02:00:00Z"), {
       raidWindow: { skips: [] }, airdrop: { wanted: null },
     });

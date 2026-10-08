@@ -134,16 +134,13 @@ export function setAirdropSpawner(json: string, on: boolean): { json: string; ch
     );
   }
 
+  // ⚠️ Several feature entries are collapsed, never refused. There is one spawner
+  // path since bunker online (2026-10-07), so no guess is left to make, and refusing
+  // a Livonia `/airdrop-` leftover beside a registered bunker refused every later
+  // edit too, on and off, for good. The splice below drops every feature line.
   const present = (current as string[]).filter((e) => isFeatureEntry(e));
-  if (present.length > 1) {
-    throw new Error(
-      `cfggameplay.json: objectSpawnersArr registers ${present.length}× airdrop spawners — ` +
-        "refusing to guess which one is live",
-    );
-  }
-
   const wanted = on ? BUNKER_SPAWNER_PATH : null;
-  if ((present[0] ?? null) === wanted) return { json, changed: false };
+  if (present.length === (wanted ? 1 : 0) && (present[0] ?? null) === wanted) return { json, changed: false };
 
   const matches = [...json.matchAll(SPAWNERS_RE)];
   if (matches.length !== 1) {
