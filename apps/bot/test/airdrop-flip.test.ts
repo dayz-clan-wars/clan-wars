@@ -117,6 +117,22 @@ describe("the bunker at the slot", () => {
     expect(row.detail.enableAttempts).toBe(2);
   });
 
+  // ⚠️ Review fix: the restart warning must not promise a bunker even when recording
+  // the failed attempt itself throws (a database hiccup after a staging failure).
+  it("does not advertise a bunker that failed to stage, even when recording the attempt throws", async () => {
+    await decide();
+    const h = host(GAMEPLAY, { "/mission/custom/keycard-bunker-boom.json": undefined });
+    const flaky = new Proxy(db, {
+      get(t, p) {
+        if (p === "update") return () => { throw new Error("db hiccup"); };
+        const v = Reflect.get(t, p);
+        return typeof v === "function" ? v.bind(t) : v;
+      },
+    }) as Database;
+    await restartTick(flaky, () => h.target, { now: at("2026-09-21T20:00:03Z"), airdrop: { enabled: true } });
+    expect(h.restart).toHaveBeenCalledWith(restartMessage(null));
+  });
+
   it("counts a failed attempt when the template is missing, and uploads nothing", async () => {
     await decide();
     const h = host(GAMEPLAY, { "/mission/custom/keycard-bunker-boom.json": undefined });

@@ -607,6 +607,9 @@ export async function restartTick(
           // window's, nor the restart below.
           try {
             if (airdropError) {
+              // ⚠️ First, before any bookkeeping that could throw: nothing was staged or
+              // registered, so the restart warning must not promise a bunker.
+              airdropLocation = null;
               const attempts = (intent.enabling?.attempts ?? 0) + 1;
               const detail = { enableAttempts: attempts, error: airdropError.message };
               console.error(`airdrop: server ${s.id} REFUSED the bunker for slot ${slot.start.toISOString()} — restarting anyway`, airdropError);
@@ -624,7 +627,6 @@ export async function restartTick(
                   detail: sql`${airdropEvents.detail} || ${JSON.stringify(detail)}::jsonb`,
                 }).where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, intent.enabling.slotAt)));
               }
-              airdropLocation = null;
             } else {
               if (intent.enabling) {
                 // ⚠️ NOT moved to `live` here — only after the restart POST, below.

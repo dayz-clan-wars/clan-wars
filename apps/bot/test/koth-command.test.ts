@@ -105,13 +105,13 @@ describe("/koth", () => {
     expect(await rows()).toHaveLength(1);
   });
 
-  it("refuses a slot an airdrop holds", async () => {
+  it("refuses a slot a bunker holds", async () => {
     await db.insert(airdropEvents).values({
       serverId, slotAt: SLOT, location: "dolnik", colour: "blue", decidedAt: NOW,
       popAtDecision: 4, threshold: "0", state: "announced", announcedAt: NOW,
     });
     const reply = await schedule(ctx(), input());
-    expect(reply.content).toMatch(/airdrop/i);
+    expect(reply.content).toBe("A bunker is already set to come online that session. Pick another slot.");
     expect(await rows()).toHaveLength(0);
   });
 
