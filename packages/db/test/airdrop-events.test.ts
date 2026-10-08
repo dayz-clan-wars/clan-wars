@@ -36,4 +36,16 @@ describe("airdrop_events", () => {
     await db.insert(airdropEvents).values(row());
     expect((await db.select().from(airdropEvents))[0]!.manual).toBe(false);
   });
+
+  it("takes a bunker row: a kind and no colour", async () => {
+    await db.insert(airdropEvents).values(row({ colour: null, kind: "guns", location: "nwaf" }));
+    expect((await db.select().from(airdropEvents))[0]).toMatchObject({ kind: "guns", colour: null });
+  });
+  it("refuses both a colour and a kind, or neither", async () => {
+    await expect(db.insert(airdropEvents).values(row({ kind: "boom" }))).rejects.toThrow();
+    await expect(db.insert(airdropEvents).values(row({ colour: null }))).rejects.toThrow();
+  });
+  it("refuses a kind outside the two", async () => {
+    await expect(db.insert(airdropEvents).values(row({ colour: null, kind: "nukes" }))).rejects.toThrow();
+  });
 });
