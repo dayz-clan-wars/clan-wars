@@ -346,6 +346,22 @@ describe("airdropTick", () => {
     expect(log).toHaveBeenCalledWith(expect.stringContaining("airdrop: skipped 2026-09-21T20:00:00.000Z: koth"));
     log.mockRestore();
   });
+
+  // The tick runs every 10 s for the 30 minutes before the slot: 180 identical lines.
+  it("logs a King of the Hill skip once per slot, not on every tick", async () => {
+    await online(9, "2026-09-21T18:00:00Z", null);
+    await db.insert(kothEvents).values({
+      serverId, slotAt: at("2026-09-21T20:00:00Z"), location: "lembork", centreX: "1", centreZ: "1",
+      state: "scheduled", origin: "auto", announcedAt: NOW,
+    });
+    const log = vi.spyOn(console, "log").mockImplementation(() => {});
+    const skipLogged = new Set<string>();
+    await run(vi.fn(async () => {}), { skipLogged });
+    await run(vi.fn(async () => {}), { skipLogged, now: at("2026-09-21T19:30:10Z") });
+    const skips = log.mock.calls.filter(([m]) => String(m).startsWith("airdrop: skipped"));
+    expect(skips).toHaveLength(1);
+    log.mockRestore();
+  });
 });
 
 describe("the bunker posts", () => {

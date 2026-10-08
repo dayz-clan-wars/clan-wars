@@ -20,9 +20,13 @@ describe("the show prompt", () => {
   it("carries the standing rules (spec §2.3)", () => {
     expect(RULES).toMatch(/seated at a news desk/u);
     expect(RULES).toMatch(/No props/u);
-    // The server is Livonia; Boris's KOTH backstory made the model place the show in Chernarus.
-    expect(HOSTS).toMatch(/on the Livonia map/u);
-    expect(RULES).toMatch(/map is Livonia/u);
+    // The server moved from Livonia to Chernarus on 2026-10-07. Earlier, Boris's KOTH backstory
+    // made the model place a Livonia show in Chernarus; the place rule guards the reverse now.
+    expect(HOSTS).toMatch(/on the Chernarus map/u);
+    expect(HOSTS).not.toMatch(/Livonia map/u);
+    expect(RULES).toMatch(/map is Chernarus/u);
+    // The week of 2026-10-05 straddles the move: its data holds both maps.
+    expect(RULES).toMatch(/moved from Livonia to Chernarus on 7 October 2026/u);
     // A render had Pavel read out "a field literally called raidedThisClanEarlier".
     expect(RULES).toMatch(/never mention the data, JSON, field names/u);
     // Week 1 said a clan "died nine times each" (one player's number, spread over a clan) and
@@ -33,10 +37,10 @@ describe("the show prompt", () => {
     // Week 1 read "Tuesday twenty-three forty-six" and "seven hundred and twenty-five minutes" aloud.
     expect(DATA_DICTIONARY).toMatch(/longer ones rounded to hours/u);
     expect(DATA_DICTIONARY).toMatch(/raidsByPlayer/u);
-    expect(RULES).toMatch(/Boris's old war stories included, is in Livonia/u);
-    expect(RULES).toMatch(/Never name Chernarus or a Chernarus place \(Elektrozavodsk/u);
+    expect(RULES).toMatch(/Boris's old war stories included, is in Chernarus/u);
+    expect(RULES).toMatch(/Never name a Livonia place \(Topolin/u);
+    expect(RULES).toMatch(/unless the data names it/u);
     expect(HOSTS).toMatch(/ex-Livonian military/u);
-    expect(HOSTS).not.toMatch(/Chernarus/u);
     expect(RULES).toMatch(/Raiders are the heroes/u);
     expect(RULES).toMatch(/NOT a siege/u);
     expect(RULES).toMatch(/Go extra hard on them/u);

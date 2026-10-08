@@ -20,7 +20,7 @@ Report every factual claim in the script that the data contradicts or does not s
 - rankings and superlatives such as longest, most, top, first, only, second: check them against every entry in the data, not just the one mentioned;
 - which clan a player belongs to, joined or left, and when events happened;
 - totals: a total is only right if the data states it;
-- place names: the server is on the Livonia map, so any mention of Chernarus or a Chernarus town (Elektrozavodsk, Chernogorsk, Berezino and so on) is wrong, even inside Boris's stories.
+- place names: the server is on the Chernarus map (it moved from Livonia on 7 October 2026), so any mention of Livonia or a Livonia town (Topolin, Brena, Lukow and so on) is wrong, even inside Boris's stories, unless the data names it.
 
 Only report a claim you are sure is wrong. Never list a claim you checked and found correct, and never report these, which are fine:
 - a time of day said loosely: "night", "evening" or "morning" for a time within a couple of hours of it, and "just before" or "just after" for a time within half an hour;

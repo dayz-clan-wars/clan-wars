@@ -785,6 +785,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   // lifetime (owner, outranked, no permission) — shared between the
   // start-up pass and every tick pass so neither repeats the other's log.
   const nicknameNoRetry = new Set<string>();
+  // Slots whose "airdrop: skipped …: koth" line is already logged, so the 10 s tick
+  // says it once per slot. About a dozen keys a day, gone at the next bot restart.
+  const airdropSkipLogged = new Set<string>();
   // ⚠️ False until one `fetchAllMembers()` resolves. `guild.members.fetch()`
   // rejects with GuildMembersTimeout after 120s on a large or slow guild, and
   // without a retry the member cache stays whatever gateway events happen to
@@ -1773,7 +1776,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (cfg.airdrop.enabled) {
       try {
         const a = await airdropTick(db, serverEventsPoster!, {
-          now: new Date(), weeklyCap: cfg.airdrop.weeklyCap, minPop: cfg.airdrop.minPop,
+          now: new Date(), weeklyCap: cfg.airdrop.weeklyCap, minPop: cfg.airdrop.minPop, skipLogged: airdropSkipLogged,
         });
         if (a.decided + a.posted + a.failed > 0) console.log(`airdrop: ${a.decided} decided, ${a.posted} posted, ${a.failed} failed`);
       } catch (err) {

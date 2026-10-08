@@ -1,5 +1,13 @@
 # King of the Hill — deploy and operate
 
+> **Since 2026-10-07 the server is Chernarus.** Read `livonia` below as `chernarus`: that repo
+> stages `koth/default/{cfgplayerspawnpoints.xml, globals.xml}` and carries the 44
+> `custom/koth-*.json` loadouts since chernarus v1.29.0, and refuses a `koth-` preset in its
+> default `cfggameplay.json`. The 31 towns are Chernarus towns (`koth-locations.json`; the
+> Livonia ones are names only, `koth-locations-retired.json`). Airdrops are now "bunker online"
+> (`docs/deploy/2026-10-07-bunker-online.md`). Spec:
+> `docs/superpowers/specs/2026-10-07-koth-chernarus-design.md`.
+
 An admin schedules a one-session King of the Hill event at one of 31 Livonia towns:
 for that session every fresh spawn lands at the hill in a KotH kit, infected and
 predators converge there, and kills whose victim is within `KOTH_ZONE_RADIUS_M`
