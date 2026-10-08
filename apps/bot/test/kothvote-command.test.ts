@@ -91,10 +91,10 @@ describe("/kothvote", () => {
     await db.execute(sql`update koth_votes set state = 'failed', closed_at = now()`);
     expect((await start(ctx(), input("d1"))).content).toMatch(/already been a vote/i);
   });
-  it("refuses a slot an airdrop holds", async () => {
+  it("refuses a slot a bunker holds", async () => {
     await populate(6, 5);
     await db.insert(airdropEvents).values({ serverId, slotAt: SLOT, location: "brena", colour: "blue", decidedAt: NOW, popAtDecision: 0, threshold: "0", state: "announced", manual: true, announcedAt: NOW });
-    expect((await start(ctx(), input())).content).toMatch(/airdrop/i);
+    expect((await start(ctx(), input())).content).toMatch(/^A bunker comes online at the \d\d:\d\d UTC restart\.$/);
   });
   it("refuses inside the 24 h gap", async () => {
     await populate(6, 5);

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { Database } from "@factions/db";
-import { kothTownName } from "@factions/domain";
+import { bunkerRoomName, kothTownName } from "@factions/domain";
 import type { WeekRead } from "./people.js";
 import type { AirdropStory, BountyStory, FlagEvent, FlagEventKind, KothStory, MemberMove } from "./types.js";
 import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
@@ -125,5 +125,6 @@ export async function airdropsForWeek(db: Database, a: WeekRead): Promise<Airdro
     select location, slot_at as at, state from airdrop_events
     where server_id = ${a.serverId} and ${between("slot_at", a)} and state in ('live', 'ended')
     order by slot_at asc`);
-  return rs.map((r) => ({ location: r.location, at: iso(r.at), when: whenLabel(r.at), state: r.state }));
+  // ⚠️ A name, never a slug: this reaches the script model as written.
+  return rs.map((r) => ({ location: bunkerRoomName(r.location), at: iso(r.at), when: whenLabel(r.at), state: r.state }));
 }

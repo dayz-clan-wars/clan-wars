@@ -348,23 +348,15 @@ describe("airdropTick", () => {
   });
 });
 
-describe("airdropText", () => {
-  it("names the place, counts down by itself, and says nothing about the colour", () => {
-    const body = airdropText("dolnik", at("2026-09-21T20:00:00Z"));
-    expect(body).toContain("DOLNIK");
-    expect(body).toContain(`<t:${1790020800}:R>`);
-    expect(body).not.toMatch(/blue|orange|yellow/i);
-    // House rule: no em dashes in player-facing copy.
-    expect(body).not.toContain("—");
+describe("the bunker posts", () => {
+  it("names the room, counts down by itself, asks for a punched card, and never names the kind", () => {
+    const t = airdropText("Kamensk Military", at("2026-09-21T20:00:00Z"));
+    expect(t.split("\n")[0]).toBe("**BUNKER ONLINE: KAMENSK MILITARY**");
+    expect(t).toMatch(/^Opens at the restart, <t:\d+:R>\. Bring a punched card\.$/m);
+    expect(t).not.toMatch(/boom|guns|explosive/i);
+    expect(t).not.toContain("\u2014");
   });
-});
-
-describe("scrubText", () => {
-  it("names the place, says nothing about the colour, and does not talk anybody off the next one", () => {
-    const body = scrubText("dolnik");
-    expect(body).toContain("DOLNIK");
-    expect(body).not.toMatch(/blue|orange|yellow/i);
-    // House rule: no em dashes in player-facing copy.
-    expect(body).not.toContain("\u2014");
+  it("says plainly when it did not come online", () => {
+    expect(scrubText("NWAF")).toBe("**BUNKER OFFLINE: NWAF**\nIt did not come online. The next one can come any day.");
   });
 });

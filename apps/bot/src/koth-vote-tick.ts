@@ -79,7 +79,7 @@ async function close(db: Database, open: Vote, opts: { now: Date; enabled: boole
     // ⚠️ Re-checked under the lock: an admin may have scheduled, or an airdrop been
     // placed, since the vote opened.
     const taken = await slotTakenBy(tx, v.serverId, v.slotAt);
-    if (taken) { await done("void", { reason: `an ${taken === "koth" ? "event" : "airdrop"} took that restart` }); return; }
+    if (taken) { await done("void", { reason: `${taken === "koth" ? "an event" : "a bunker"} took that restart` }); return; }
     if (await kothOpen(tx, v.serverId)) { await done("void", { reason: "another King of the Hill was scheduled first" }); return; }
     if (!kothGapOk(v.slotAt, await lastKothSlot(tx, v.serverId, v.slotAt))) { await done("void", { reason: "another King of the Hill ran too recently" }); return; }
     const loc = kothLocation(v.location);
