@@ -1,9 +1,10 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, airdropEvents, kothEvents, type Database } from "@factions/db";
-import { kothTownName, restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
+import { bunkerRoomName, kothTownName, restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow, type AirdropSpec } from "@factions/domain";
 import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 import { setAirdropSpawner, setBaseDamageDisabled, setSpawnGearPresets } from "./cfggameplay.js";
 import { planKoth, convergeKothFiles, type KothPlan } from "./koth-converge.js";
+import { stageBunker } from "./bunker-stage.js";
 
 /** What the tick needs from a Nitrado client, so a test can hand it a fake. */
 export type RestartTarget = {
@@ -172,7 +173,7 @@ export async function applyGameplay(
 
   if (edits.airdrop) {
     try {
-      const r = setAirdropSpawner(json, edits.airdrop.wanted);
+      const r = setAirdropSpawner(json, edits.airdrop.wanted !== null);
       json = r.json;
       out.airdrop = { wanted: edits.airdrop.wanted, changed: r.changed };
     } catch (err) {
@@ -203,12 +204,12 @@ export const RESTART_MESSAGE = "Scheduled restart";
  * reaches everyone who is not in Discord. A King of the Hill session names its
  * town the same way (KotH spec §5.5).
  *
- * ⚠️ Never the colour. Players are told where, never which key opens it (spec §3.4).
+ * ⚠️ Never the kind. Players are told where, never what is inside (bunker spec §2).
  */
 export function restartMessage(airdrop: string | null, koth: string | null = null): string {
   const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
   const parts: string[] = [];
-  if (airdrop) parts.push(`Airdrop at ${cap(airdrop)} next session.`);
+  if (airdrop) parts.push(`Bunker online at ${cap(airdrop)} next session.`);
   if (koth) parts.push(`King of the Hill at ${cap(koth)} next session.`);
   return parts.length === 0 ? RESTART_MESSAGE : `${RESTART_MESSAGE}. ${parts.join(" ")}`;
 }
@@ -257,7 +258,7 @@ async function airdropIntent(db: Database, serverId: number, slot: Date): Promis
   // re-converged (the FTP-clobber repair), not enabled a second time.
   const holder = live ?? enabling ?? null;
   return {
-    wanted: holder ? { location: holder.location, colour: holder.colour } : null,
+    wanted: holder ? { location: holder.location, kind: holder.kind } : null,
     enabling: enabling && !live
       ? { slotAt: enabling.slotAt, location: enabling.location, attempts: Number(enabling.detail.enableAttempts ?? 0) }
       : undefined,
@@ -409,6 +410,7 @@ export async function restartTick(
       // not only for a flip this exact slot made.
       let raidBoundaryAt: Date | undefined;
       let intent: AirdropIntent | undefined;
+      let stageError: Error | undefined;
       // ⚠️ The message is settled BEFORE the upload, and names the drop this
       // slot is bringing up. A drop being taken away must not be advertised.
       let airdropLocation: string | null = null;
@@ -420,7 +422,7 @@ export async function restartTick(
       // that would first have loaded it. The container never exists in-world and
       // the week's budget is spent, with nothing reporting it. Same shape, and the
       // same reason, as the raid window's `restartConfirmedAt`.
-      let enabled: { slotAt: Date; location: string; colour: string } | undefined;
+      let enabled: { slotAt: Date; location: string; kind: string | null } | undefined;
       try {
         const edits: GameplayEdits = {};
         // ⚠️ The boundary is computed BEFORE the attempt, so a refusal below can
@@ -439,8 +441,22 @@ export async function restartTick(
         }
         if (opts.airdrop?.enabled) {
           intent = await airdropIntent(db, s.id, slot.start);
-          edits.airdrop = { wanted: intent.wanted };
-          airdropLocation = intent.enabling?.location ?? intent.wanted?.location ?? null;
+          // ⚠️ The file BEFORE the splice, every slot the bunker is wanted: an opening
+          // registers nothing it has not just uploaded, and a live bunker whose file
+          // vanished mid-session gets it back. A staging failure leaves
+          // `objectSpawnersArr` untouched and counts as a failed enable below.
+          if (intent.wanted) {
+            try {
+              await stageBunker(nitrado, intent.wanted);
+              edits.airdrop = { wanted: intent.wanted };
+            } catch (err) {
+              stageError = err instanceof Error ? err : new Error(String(err));
+            }
+          } else {
+            edits.airdrop = { wanted: null };
+          }
+          const where = intent.enabling?.location ?? intent.wanted?.location ?? null;
+          airdropLocation = where === null ? null : bunkerRoomName(where);
         }
 
         // ⚠️ Same guard as the whole files below: an opening that already failed
@@ -449,6 +465,9 @@ export async function restartTick(
         if (koth?.presets && (koth.opening === null || kothOpening !== null)) edits.koth = { presets: koth.presets };
 
         const gameplay = await applyGameplay(nitrado, slot.start, edits);
+        // A staging failure is the same fact as a refused splice: nothing
+        // registered, one enable attempt spent (spec §5.2.1).
+        const airdropError = stageError ?? gameplay.airdropError;
 
         if (gameplay.kothError) {
           console.error(`koth: server ${s.id} REFUSED the preset splice for slot ${slot.start.toISOString()}`, gameplay.kothError);
@@ -587,10 +606,10 @@ export async function restartTick(
           // ⚠️ Its own try/catch: airdrop bookkeeping must never cost the raid
           // window's, nor the restart below.
           try {
-            if (gameplay.airdropError) {
+            if (airdropError) {
               const attempts = (intent.enabling?.attempts ?? 0) + 1;
-              const detail = { enableAttempts: attempts, error: gameplay.airdropError.message };
-              console.error(`airdrop: server ${s.id} REFUSED the splice for slot ${slot.start.toISOString()} — restarting anyway`, gameplay.airdropError);
+              const detail = { enableAttempts: attempts, error: airdropError.message };
+              console.error(`airdrop: server ${s.id} REFUSED the bunker for slot ${slot.start.toISOString()} — restarting anyway`, airdropError);
               if (intent.enabling) {
                 await db.update(airdropEvents).set({
                   // ⚠️ Two attempts and it scrubs (spec §9): a failed enable costs one
@@ -611,7 +630,7 @@ export async function restartTick(
                 // ⚠️ NOT moved to `live` here — only after the restart POST, below.
                 enabled = {
                   slotAt: intent.enabling.slotAt,
-                  location: intent.wanted!.location, colour: intent.wanted!.colour,
+                  location: intent.wanted!.location, kind: intent.wanted!.kind,
                 };
               }
               for (const slotAt of intent.ending) {
@@ -703,7 +722,7 @@ export async function restartTick(
           // `setAirdropSpawner` returns `changed: false`, nothing is uploaded a
           // second time, and the row goes `live` then.
           .catch(() => undefined);
-        console.log(`airdrop: server ${s.id} enabled ${enabled.location}/${enabled.colour} for ${slot.start.toISOString()}`);
+        console.log(`airdrop: server ${s.id} enabled ${enabled.location}/${enabled.kind} for ${slot.start.toISOString()}`);
       }
       if (kothOpening) {
         // ⚠️ Only after the POST, and only from `scheduled`: a row a failed edit

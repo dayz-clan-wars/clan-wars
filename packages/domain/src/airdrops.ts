@@ -1,41 +1,29 @@
-import {
-  AIRDROP_COLOURS, AIRDROP_DECIDE_LEAD_MS, AIRDROP_HISTORY_MS, AIRDROP_LOCATIONS,
-  AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT,
-} from "./rules";
-export {
-  AIRDROP_COLOURS, AIRDROP_DECIDE_LEAD_MS, AIRDROP_HISTORY_MS, AIRDROP_LOCATIONS,
-  AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT,
-};
-
-export type AirdropSpec = { location: string; colour: string };
+import { AIRDROP_DECIDE_LEAD_MS, AIRDROP_HISTORY_MS, AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT } from "./rules";
+import { BUNKER_KINDS, BUNKER_ROOMS, type BunkerKind } from "./bunker";
+export { AIRDROP_DECIDE_LEAD_MS, AIRDROP_HISTORY_MS, AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT };
 
 /**
- * The spawner file a spec names, as `objectSpawnersArr` spells it.
- *
- * ⚠️ Location THEN colour, and the `./custom/` prefix is part of it. The one
- * statement of this fact: `setAirdropSpawner` matches on the `/airdrop-` in it,
- * and a file name assembled a second way somewhere else would register a path the
- * server ignores in silence — no error, no log, no container.
+ * What an event places: a bunker room and its template (spec 2026-10-07-bunker-online).
+ * `kind` is null only on a row decided before bunkers existed; staging refuses it.
  */
-export function airdropSpawnerPath(spec: AirdropSpec): string {
-  return `./custom/airdrop-${spec.location}-${spec.colour}.json`;
-}
+export type AirdropSpec = { location: string; kind: BunkerKind | null };
 
 /**
- * Pick a location and a colour (spec §3.3). Uniform across the 16 less the last
- * `AIRDROP_NO_REPEAT` used, and uniform across the three colours.
+ * Pick a room and a kind: uniform across the 11 rooms less the last
+ * `AIRDROP_NO_REPEAT` used, and 50/50 between the kinds.
  *
- * ⚠️ The fallback to the full menu is not defensive padding: a no-repeat window
- * at or above the menu size empties the pool, and an empty pool indexes undefined
- * and throws inside the decision tick.
+ * ⚠️ The fallback to the full list is not defensive padding: a no-repeat window
+ * at or above the list's size empties the pool, and an empty pool indexes
+ * undefined and throws inside the decision tick.
  */
-export function chooseAirdrop(recentLocations: string[], rng: () => number): AirdropSpec {
+export function chooseAirdrop(recentLocations: string[], rng: () => number): { location: string; kind: BunkerKind } {
   const recent = new Set(recentLocations.slice(0, AIRDROP_NO_REPEAT));
-  const pool = AIRDROP_LOCATIONS.filter((l) => !recent.has(l));
-  const locations: readonly string[] = pool.length > 0 ? pool : AIRDROP_LOCATIONS;
-  const location = locations[Math.floor(rng() * locations.length)]!;
-  const colour = AIRDROP_COLOURS[Math.floor(rng() * AIRDROP_COLOURS.length)]!;
-  return { location, colour };
+  const slugs = BUNKER_ROOMS.map((r) => r.slug);
+  const pool = slugs.filter((l) => !recent.has(l));
+  const from = pool.length > 0 ? pool : slugs;
+  const location = from[Math.floor(rng() * from.length)]!;
+  const kind = BUNKER_KINDS[Math.floor(rng() * BUNKER_KINDS.length)]!;
+  return { location, kind };
 }
 
 /**

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { bunkerRoomName } from "@factions/domain";
 import { createClient, runMigrations, requireTestDatabaseUrl, admFiles, airdropEvents, events, kothEvents, playerSessions, servers, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { airdropTick } from "../src/airdrop-tick.js";
@@ -55,9 +56,9 @@ describe("airdropTick", () => {
     const [row] = await rows();
     expect(row).toMatchObject({ slotAt: at("2026-09-21T20:00:00Z"), state: "announced", popAtDecision: 6 });
     expect(row!.announcedAt).not.toBeNull();
-    expect(post).toHaveBeenCalledWith(expect.stringContaining(row!.location.toUpperCase()));
+    expect(post).toHaveBeenCalledWith(expect.stringContaining(bunkerRoomName(row!.location).toUpperCase()));
     // ⚠️ The colour is the gamble (spec §3.4) — it must not be in the message.
-    expect(post.mock.calls[0]![0]).not.toContain(row!.colour);
+    expect(post.mock.calls[0]![0]).not.toMatch(new RegExp(row!.kind!, "i"));
   });
 
   it("does nothing before the decision instant", async () => {

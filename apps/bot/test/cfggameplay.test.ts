@@ -5,7 +5,6 @@ import { setBaseDamageDisabled, setAirdropSpawner, readSpawnGearPresets, setSpaw
 
 const REAL = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
 
-const DOLNIK = { location: "dolnik", colour: "blue" };
 const spawners = (json: string) => JSON.parse(json).WorldsData.objectSpawnersArr as string[];
 
 describe("setBaseDamageDisabled", () => {
@@ -92,10 +91,10 @@ describe("setBaseDamageDisabled", () => {
 
 describe("setAirdropSpawner", () => {
   it("adds the spawner and leaves the other four alone", () => {
-    const { json, changed } = setAirdropSpawner(REAL, DOLNIK);
+    const { json, changed } = setAirdropSpawner(REAL, true);
     expect(changed).toBe(true);
     expect(spawners(json)).toEqual([
-      "./custom/airdrop-dolnik-blue.json",
+      "./custom/bunker-online.json",
       "./custom/admin-castle.json",
       "./custom/bunker-enhancements.json",
       "./custom/faction-supplies.json",
@@ -104,20 +103,20 @@ describe("setAirdropSpawner", () => {
   });
 
   it("⚠️ changes NOTHING outside the array — every other byte is identical", () => {
-    const { json } = setAirdropSpawner(REAL, DOLNIK);
-    expect(json.replace('\t\t\t"./custom/airdrop-dolnik-blue.json",\n', "")).toBe(REAL);
+    const { json } = setAirdropSpawner(REAL, true);
+    expect(json.replace('\t\t\t"./custom/bunker-online.json",\n', "")).toBe(REAL);
   });
 
   it("round-trips: add then remove returns the original bytes", () => {
-    const on = setAirdropSpawner(REAL, DOLNIK).json;
-    expect(setAirdropSpawner(on, null).json).toBe(REAL);
+    const on = setAirdropSpawner(REAL, true).json;
+    expect(setAirdropSpawner(on, false).json).toBe(REAL);
   });
 
-  it("swaps one drop for another without stacking them", () => {
-    const on = setAirdropSpawner(REAL, DOLNIK).json;
-    const { json } = setAirdropSpawner(on, { location: "nadbor", colour: "yellow" });
-    expect(spawners(json).filter((e) => e.includes("/airdrop-")))
-      .toEqual(["./custom/airdrop-nadbor-yellow.json"]);
+  it("removes a leftover Livonia airdrop entry when the bunker goes on, rather than refusing", () => {
+    const leftover = REAL.replace('"./custom/admin-castle.json"', '"./custom/airdrop-dolnik-blue.json",\n\t\t\t"./custom/admin-castle.json"');
+    const out = spawners(setAirdropSpawner(leftover, true).json);
+    expect(out).toContain("./custom/bunker-online.json");
+    expect(out.some((e) => e.includes("/airdrop-"))).toBe(false);
   });
 
   // ⚠️ The only-element case is the one that breaks a naive line delete: removing
@@ -125,35 +124,35 @@ describe("setAirdropSpawner", () => {
   // file that does not parse — the exact failure that stops the server booting.
   it("removes a drop that is the only element without stranding a comma", () => {
     const empty = REAL.replace(/("objectSpawnersArr"\s*:\s*\[)[^\]]*(\])/, "$1\n$2");
-    const one = setAirdropSpawner(empty, DOLNIK).json;
-    expect(spawners(one)).toEqual(["./custom/airdrop-dolnik-blue.json"]);
-    const off = setAirdropSpawner(one, null);
+    const one = setAirdropSpawner(empty, true).json;
+    expect(spawners(one)).toEqual(["./custom/bunker-online.json"]);
+    const off = setAirdropSpawner(one, false);
     expect(spawners(off.json)).toEqual([]);
     expect(off.json).toBe(empty);
   });
 
   it("reports changed=false and returns the input untouched when already correct", () => {
-    expect(setAirdropSpawner(REAL, null)).toEqual({ json: REAL, changed: false });
-    const on = setAirdropSpawner(REAL, DOLNIK).json;
-    expect(setAirdropSpawner(on, DOLNIK)).toEqual({ json: on, changed: false });
+    expect(setAirdropSpawner(REAL, false)).toEqual({ json: REAL, changed: false });
+    const on = setAirdropSpawner(REAL, true).json;
+    expect(setAirdropSpawner(on, true)).toEqual({ json: on, changed: false });
   });
 
   it("throws on input that does not parse", () => {
-    expect(() => setAirdropSpawner("{ nope", DOLNIK)).toThrow(/did not parse/);
+    expect(() => setAirdropSpawner("{ nope", true)).toThrow(/did not parse/);
   });
 
   it("throws when objectSpawnersArr is missing or not an array of strings", () => {
-    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: {} }), DOLNIK)).toThrow(/objectSpawnersArr/);
-    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: { objectSpawnersArr: [1] } }), DOLNIK)).toThrow(/objectSpawnersArr/);
+    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: {} }), true)).toThrow(/objectSpawnersArr/);
+    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: { objectSpawnersArr: [1] } }), true)).toThrow(/objectSpawnersArr/);
   });
 
   // ⚠️ Two live drops is a state the bot never creates, so reaching it means a hand
   // edit or a half-applied write. Guessing which to remove could take away the one
   // players were told about and leave the other standing.
   it("throws on two airdrop entries rather than guessing which is live", () => {
-    const two = setAirdropSpawner(setAirdropSpawner(REAL, DOLNIK).json, DOLNIK).json
+    const two = setAirdropSpawner(REAL, true).json
       .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json"');
-    expect(() => setAirdropSpawner(two, null)).toThrow(/2×|two/i);
+    expect(() => setAirdropSpawner(two, false)).toThrow(/2×|two/i);
   });
 
   // ⚠️ The splice works on LINES. A reformat that puts two elements on one line
@@ -168,7 +167,7 @@ describe("setAirdropSpawner", () => {
       '$1\n\t\t\t"./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"\n\t\t$2',
     );
     expect(spawners(shared)).toEqual(["./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"]);
-    expect(() => setAirdropSpawner(shared, null)).toThrow(/does not own/);
+    expect(() => setAirdropSpawner(shared, false)).toThrow(/does not own/);
   });
 });
 
