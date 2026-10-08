@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.61.2] - 2026-10-08
+
 ### Fixed
 
 - A leftover Livonia airdrop entry in the server's settings can no longer stop bunkers coming online; it is cleaned out at the next restart.
