@@ -1209,8 +1209,8 @@ export async function start(cfg: BotConfig): Promise<void> {
     // silence the other.
     try {
       const raised = await raiseTick(db, { siteBaseUrl: cfg.siteBaseUrl });
-      if (raised.defenses > 0 || raised.revived > 0 || raised.noticed > 0) {
-        console.log(`raises: ${raised.defenses} defended, ${raised.revived} revived, ${raised.noticed} noticed`);
+      if (raised.defenses > 0 || raised.revived > 0 || raised.noticed > 0 || raised.adopted > 0) {
+        console.log(`raises: ${raised.defenses} defended, ${raised.revived} revived, ${raised.noticed} noticed, ${raised.adopted} adopted`);
       }
     } catch (err) {
       console.error("raise tick failed", err);
