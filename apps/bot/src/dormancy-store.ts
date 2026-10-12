@@ -165,8 +165,8 @@ export function clockQuery(db: Database) {
     // as infinitely stale and is dormant on the first tick.
     //
     // ⚠️ GREATEST against the server's open season's `started_at` (§5.1,
-    // §8.5): the wipe clears every declaration but does not touch the clock
-    // otherwise, so without this a clan whose last raise predates the wipe
+    // §8.5): the wipe keeps declarations (marked carried) but does not touch
+    // the clock otherwise, so without this a clan whose last raise predates the wipe
     // would read as stale by the wipe's own age the instant the season
     // opens — dormant on day one of a new season through no fault of its
     // own. `greatest()` ignores nulls, so a server with no open season (or a

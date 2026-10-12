@@ -43,7 +43,7 @@ interval) and `@Alpha`; the site gains four public pages. `scripts/wipe.ts` is t
    members, at any free pole, binds the new base (the normal 200 m rule applies to that raise like any other
    declare); if the raise is refused (too close to another hold, or the pole is already taken),
    nothing is written — no notice, no feed row, just an `info`-level log line — and the member has
-   to raise again at a different pole. Solos re-declare on `/base`. ⚠️ Until each clan rebinds,
+   to raise again at a different pole. Solos re-declare on `/base` (since 2026-10-12 a carried solo must release on `/base` first, or wait for the solo lapse — solos cannot adopt a new pole). ⚠️ Until each clan rebinds,
    **no clan appears in the generated supply file and no kit spawns** — the supply projection joins
    `factions` to `declarations`, and the wipe deleted every declaration — so expect an empty supply
    file and no supply drops at the first restart; each clan's drops resume with its bind.

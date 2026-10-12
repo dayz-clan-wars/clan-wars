@@ -160,7 +160,11 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
           .for("update", { of: factions });
         if (mine && (p.texture === NEUTRAL_FLAG || p.texture === mine.texture)) {
           const carried = await declarationForFaction(tx, mine.id);
-          if (carried?.carriedSince && distance2d({ x: p.pole.x, z: p.pole.z }, { x: Number(carried.x), z: Number(carried.z) }) <= CARRIED_ADOPT_RADIUS_M) {
+          // ⚠️ A raise dated before the wipe is the OLD world's pole, which no
+          // longer exists: the bot can stop before the game wipes and process
+          // that gap after restart. Adopting it would clear carried_since and
+          // leave the base on a dead pole, silently. Such a raise falls through.
+          if (carried?.carriedSince && ev.occurredAt >= carried.carriedSince && distance2d({ x: p.pole.x, z: p.pole.z }, { x: Number(carried.x), z: Number(carried.z) }) <= CARRIED_ADOPT_RADIUS_M) {
             const adopted = await adoptCarriedTx(tx, {
               serverId: ev.serverId, factionId: mine.id, poleKey: p.poleKey, x: p.pole.x, y: p.pole.y, z: p.pole.z, eventId: ev.id, at: ev.occurredAt,
             });

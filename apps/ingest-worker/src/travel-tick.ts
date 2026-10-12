@@ -27,7 +27,9 @@ export async function travelTick(db: Database, deps: {
 }): Promise<TravelTickResult> {
   const rows = await db.select({ tag: factions.tag, x: declarations.x, y: declarations.y, z: declarations.z })
     .from(factions)
-    // INNER: a travel point needs a pole; a clan with no declaration has none.
+    // INNER: a clan with no declaration has no base spot. A carried base (post-wipe)
+    // has x/z but no pole; it still gets its Hub travel box there, which helps the
+    // clan reach its kit after a wipe.
     .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
     .where(and(
       eq(factions.serverId, deps.serverId),

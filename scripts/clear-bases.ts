@@ -19,6 +19,13 @@ function usageError(message: string): never {
   console.error(`${message}\n${USAGE}`);
   process.exit(2);
 }
+// ⚠️ Reject anything unrecognised: a misspelled `--dry-run` (say `--dryrun`)
+// would otherwise be ignored and run the REAL deletion against production.
+for (let i = 0; i < args.length; i++) {
+  const a = args[i]!;
+  if (a === "--server" || a === "--before") i++; // skip the value; its own check follows
+  else if (a !== "--dry-run" && a !== "--allow-test-db") usageError(`unknown argument: ${a}`);
+}
 const valueOf = (flag: string) => {
   const i = args.indexOf(flag);
   return i === -1 ? undefined : args[i + 1];

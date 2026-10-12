@@ -449,6 +449,25 @@ describe("raiseTick", () => {
       expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00" });
     });
 
+    it("⚠️ a raise dated BEFORE the wipe adopts nothing: that pole no longer exists", async () => {
+      await db.update(declarations).set({ carriedSince: now }).where(eq(declarations.ownerFactionId, BEAR));
+      await raise(B1, "Bear1", "Flag_White", NEAR, ago(60_000));
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: now });
+    });
+
+    it("⚠️ a member of a clan whose base is NOT carried never moves a neighbour's carried base", async () => {
+      const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "2000.00:100.00:2000.00", x: 2000, y: 100, z: 2000, createdAt: now, activatedAt: now });
+      const W2 = "W2-DAYZID-0000000000000000000000000";
+      await db.insert(factionMembers).values({ factionId: wolf.id, serverId, dayzId: W2, discordId: "dW2", role: "leader", joinedAt: now, status: "full" });
+      const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${rows[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(W2, "Wolf2", "Flag_White", NEAR, now); // beside BEAR's carried spot
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
+      expect(await declarationForFaction(db, wolf.id)).toMatchObject({ x: "2000.00", carriedSince: null });
+    });
+
     it("too close to another base adopts nothing and writes nothing", async () => {
       const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "6200.00:100.00:6040.00", x: 6200, y: 100, z: 6040, createdAt: now, activatedAt: now });
       const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];

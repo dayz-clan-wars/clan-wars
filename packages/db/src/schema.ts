@@ -713,7 +713,7 @@ export const declarations = pgTable("declarations", {
    * a pole that exists. While set, raise-tick lets the clan's first nearby
    * raise adopt a new pole (`adoptCarriedTx`) and the supply kit keeps
    * spawning at x/z. ⚠️ Only the wipe sets it; only `adoptCarriedTx` and a
-   * fresh `declareTx` row clear it.
+   * fresh `declareTx` row clear it, and `releaseTx` ends it by deleting the row.
    */
   carriedSince: timestamp("carried_since", { withTimezone: true }),
 }, (t) => ({
