@@ -18,7 +18,10 @@ reads `DATABASE_URL` from the environment; `. ./.env`, not `. .env`):
 
     cd /opt/clan-wars && set -a && . ./.env && set +a
 
-    pnpm clear-bases --server 1 --before 2026-10-08T00:00:00Z --dry-run
+    /home/acab/.local/bin/pnpm clear-bases --server 1 --before 2026-10-08T00:00:00Z --dry-run
+
+(`pnpm` is not on the host's `PATH` in an ssh shell; `deploy-release.sh` uses
+the same absolute path.)
 
 Expect exactly the Livonia-era bases (2026-10-12: SKULL, ADM, VOLK, Z2,
 WOOKI, all declared in September). Anything declared on or after
