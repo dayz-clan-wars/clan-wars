@@ -1,0 +1,1 @@
+ALTER TABLE "declarations" ADD COLUMN "carried_since" timestamp with time zone;

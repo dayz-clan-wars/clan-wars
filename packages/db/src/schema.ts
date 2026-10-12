@@ -708,6 +708,14 @@ export const declarations = pgTable("declarations", {
   evidenceEventId: bigint("evidence_event_id", { mode: "number" }).references(() => events.id),
   evidenceCeremonyId: bigint("evidence_ceremony_id", { mode: "number" }).references(() => ceremonies.id),
   declaredAt: timestamp("declared_at", { withTimezone: true }).notNull(),
+  /**
+   * Set by the wipe: this base outlived its pole. Null means the base sits on
+   * a pole that exists. While set, raise-tick lets the clan's first nearby
+   * raise adopt a new pole (`adoptCarriedTx`) and the supply kit keeps
+   * spawning at x/z. ⚠️ Only the wipe sets it; only `adoptCarriedTx` and a
+   * fresh `declareTx` row clear it.
+   */
+  carriedSince: timestamp("carried_since", { withTimezone: true }),
 }, (t) => ({
   oneOwner: check("declarations_one_owner",
     sql`(${t.ownerFactionId} IS NULL) <> (${t.ownerDayzId} IS NULL)`),

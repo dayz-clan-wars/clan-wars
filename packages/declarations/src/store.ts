@@ -16,7 +16,7 @@ export type DeclareOutcome =
   | { ok: true; id: number }
   | { ok: false; reason: "too-close" | "pole-taken" | "owner-has-base" };
 
-export type Declaration = { id: number; poleKey: string; x: string; y: string; z: string; declaredAt: Date };
+export type Declaration = { id: number; poleKey: string; x: string; y: string; z: string; declaredAt: Date; carriedSince: Date | null };
 
 /**
  * Take the server's declaration lock — the transaction-scoped advisory lock
@@ -138,7 +138,7 @@ export async function releaseTx(tx: Tx, owner: Owner, at: Date): Promise<boolean
   return true;
 }
 
-const shape = { id: declarations.id, poleKey: declarations.poleKey, x: declarations.x, y: declarations.y, z: declarations.z, declaredAt: declarations.declaredAt };
+const shape = { id: declarations.id, poleKey: declarations.poleKey, x: declarations.x, y: declarations.y, z: declarations.z, declaredAt: declarations.declaredAt, carriedSince: declarations.carriedSince };
 
 export async function declarationForFaction(db: Database | Tx, factionId: number): Promise<Declaration | null> {
   const [row] = await db.select(shape).from(declarations).where(eq(declarations.ownerFactionId, factionId));
