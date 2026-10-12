@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.62.0] - 2026-10-12
+
 ### Changed
 
 - A wipe no longer takes your base. Your clan keeps its spot and your supply kit spawns there. Build a pole within 100 m and raise a white flag or your clan's flag on it, and that pole is your base. No confirmation needed.
