@@ -237,8 +237,8 @@ describe("PgDormancyStore", () => {
     });
 
     it("⚠️ the open season's start floors lastRaiseAt — a wipe does not read as dormancy", async () => {
-      // §5.1, §8.5: the wipe clears every declaration but the clock itself
-      // ticks on. Without the floor, a clan whose last raise predates a wipe
+      // §5.1, §8.5: the wipe keeps declarations (marked carried) but the
+      // clock itself ticks on, so the season-start floor restarts it. Without the floor, a clan whose last raise predates a wipe
       // by more than the dormancy window would go dormant on day one of the
       // new season through no fault of its own.
       await seedFaction({ tag: "BEAR" });

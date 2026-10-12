@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- A wipe no longer takes your base. Your clan keeps its spot and your supply kit spawns there. Build a pole within 100 m and raise a white flag or your clan's flag on it, and that pole is your base. No confirmation needed.
+- Bases left over from Livonia are cleared. If your clan had one, a single member raising a white flag at a free pole on Chernarus now makes that your base.
+
 ## [1.61.2] - 2026-10-08
 
 ### Fixed

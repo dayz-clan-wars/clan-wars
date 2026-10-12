@@ -13,7 +13,7 @@ export type WipeResult = {
   closedSeason: number | null;
   openedSeason: number;
   holdsEnded: number;
-  declarationsDeleted: number;
+  declarationsCarried: number;
   polesStamped: number;
   clansCleared: number;
   weeksClosed: number;
@@ -33,8 +33,8 @@ const WIPE_RERUN_WINDOW_MS = POST_WIPE_BIND_MS;
 
 /**
  * The wipe (spec §8.5), in one transaction: close every week of the season
- * that has already elapsed, close the season, end every identity hold, clear
- * every declaration, re-bind every pole, clear the per-clan wipe-scoped
+ * that has already elapsed, close the season, end every identity hold, mark
+ * every declaration carried, re-bind every pole, clear the per-clan wipe-scoped
  * flags, and open the next season. The bot is stopped per the runbook before
  * this runs, but the function still takes the same locks a live writer would
  * (lock order §4.12): `factions` FOR UPDATE first, then the open `seasons`
@@ -45,8 +45,8 @@ const WIPE_RERUN_WINDOW_MS = POST_WIPE_BIND_MS;
  * opened — its `started_at` is at or after `wipeAt`, or within
  * `WIPE_RERUN_WINDOW_MS` before it. §8.5 makes the wipe "idempotent by the
  * season it closes", and after a first run the season on offer is the one
- * that run created; closing it would clear declarations clans re-bound after
- * the restart, queue a second `season_closed` line and open a third season.
+ * that run created; closing it would re-mark as carried the bases clans adopted
+ * after the restart, queue a second `season_closed` line and open a third season.
  * The guard is read UNDER the `factions` and `seasons` locks, so a second
  * invocation that raced the first blocks, then sees the committed new season
  * and skips — the pre-lock check it replaces was a TOCTOU on the one
@@ -68,7 +68,7 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
   if (open && wipeAt.getTime() < open.startedAt.getTime() + WIPE_RERUN_WINDOW_MS) {
     return {
       skipped: true, closedSeason: null, openedSeason: open.number,
-      holdsEnded: 0, declarationsDeleted: 0, polesStamped: 0, clansCleared: 0, weeksClosed: 0,
+      holdsEnded: 0, declarationsCarried: 0, polesStamped: 0, clansCleared: 0, weeksClosed: 0,
       pinsCleared: 0, sightingsCleared: 0,
     };
   }
@@ -89,13 +89,13 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
     .where(and(eq(identityHolds.serverId, serverId), sql`${identityHolds.heldUntil} = 'infinity'`))
     .returning({ id: identityHolds.id });
 
-  // (5) Clear every declaration, after taking the declarations advisory lock.
+  // (5) Mark every declaration carried, after taking the declarations advisory lock.
   await lockDeclarations(tx, serverId);
   const declarationIds = (await tx.select({ id: declarations.id }).from(declarations).where(eq(declarations.serverId, serverId))).map((d) => d.id);
 
   // (5) The map's wipe-scoped state (§8.5): every pin and every sighting on
-  // this server. Sightings cascade with the declarations deleted below;
-  // the explicit delete keeps the step honest if that cascade ever changes.
+  // this server. The explicit delete
+  // is what clears them (the declarations survive the wipe now).
   //
   // ⚠️ These two deletes sit BEFORE step (6)'s `poles` update, which inverts
   // §4.12's poles-before-the-new-tables order inside this one transaction.
@@ -108,7 +108,15 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
   const pinsCleared = (await tx.delete(clanPins).where(inArray(clanPins.factionId, factionIds)).returning({ id: clanPins.id })).length;
   const sightingsCleared = (await tx.delete(intruderSightings).where(inArray(intruderSightings.declarationId, declarationIds)).returning({ id: intruderSightings.id })).length;
 
-  const declRows = await tx.delete(declarations).where(eq(declarations.serverId, serverId)).returning({ id: declarations.id });
+  // ⚠️ Carried, not deleted. The wipe takes the poles but the spot is still
+  // the clan's: the supply sweep keeps placing the kit at x/z, and raise-tick
+  // lets the clan's first raise within CARRIED_ADOPT_RADIUS_M adopt the new
+  // pole. An already-carried row (never adopted since the last wipe) is
+  // re-stamped; nothing reads the timestamp beyond "is it set".
+  const declRows = await tx.update(declarations)
+    .set({ carriedSince: wipeAt })
+    .where(eq(declarations.serverId, serverId))
+    .returning({ id: declarations.id });
 
   // (6) Re-bind every pole: fresh post-wipe grace, flag down.
   const poleRows = await tx.update(poles)
@@ -134,7 +142,7 @@ export async function wipeTx(tx: Tx, serverId: number, wipeAt: Date): Promise<Wi
     closedSeason: closed?.number ?? null,
     openedSeason: opened!.number,
     holdsEnded: heldRows.length,
-    declarationsDeleted: declRows.length,
+    declarationsCarried: declRows.length,
     polesStamped: poleRows.length,
     clansCleared: clanRows.length,
     weeksClosed,

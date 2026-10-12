@@ -2,8 +2,8 @@ import type { Database } from "@factions/db";
 import { declarations, defenses, factionMembers, factions, identityLinks, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
 import { appendWarLogTx, appendFactionEventTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
-import { declarationForFaction, declareTx } from "@factions/declarations";
-import { FLAG_DOWN_MS, NEUTRAL_FLAG } from "@factions/domain";
+import { adoptCarriedTx, declarationForFaction, declareTx } from "@factions/declarations";
+import { CARRIED_ADOPT_RADIUS_M, FLAG_DOWN_MS, NEUTRAL_FLAG, distance2d } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
 import { reviveFactionTx } from "./dormancy-store.js";
@@ -11,7 +11,7 @@ import { reviveFactionTx } from "./dormancy-store.js";
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const RAISE_CONSUMER = "raise-consumer";
 
-export type RaiseTickResult = { scanned: number; defenses: number; revived: number; noticed: number; bound: number };
+export type RaiseTickResult = { scanned: number; defenses: number; revived: number; noticed: number; bound: number; adopted: number };
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
 type BindingClan = { id: number; name: string; tag: string; texture: string; status: string };
@@ -33,7 +33,8 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
  * checks per event:
  *   1. the pole is a clan's declaration → member/non-member branch
  *   2. else the pole is a solo declaration → non-member DM
- *   3. else, if the texture belongs to a clan → proposal or colors elsewhere
+ *   3. else the raiser's clan has a carried base within CARRIED_ADOPT_RADIUS_M → adopt
+ *   4. else White → bind a baseless clan; the clan's texture → proposal or colors elsewhere
  *
  * ⚠️ Lock order (§4.12): `factions` FOR UPDATE first, then declarations,
  * poles, faction_members, … `season_standings` BEFORE `defenses`, then
@@ -45,7 +46,7 @@ function readFlagPayload(payload: unknown): FlagPayload | null {
  */
 export async function raiseTick(db: Database, opts: { batchSize?: number; siteBaseUrl: string }): Promise<RaiseTickResult> {
   const batchSize = opts.batchSize ?? 500;
-  const out: RaiseTickResult = { scanned: 0, defenses: 0, revived: 0, noticed: 0, bound: 0 };
+  const out: RaiseTickResult = { scanned: 0, defenses: 0, revived: 0, noticed: 0, bound: 0, adopted: 0 };
   let cursor = await readCursor(db, RAISE_CONSUMER);
   for (;;) {
     const batch = await readEventBatch(db, cursor, batchSize);
@@ -142,6 +143,40 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
           return done("noticed" as const);
         }
 
+        // Undeclared pole near the raiser's own carried base (the wipe kept
+        // the spot, not the pole): the clan's first White or own-flag raise
+        // within CARRIED_ADOPT_RADIUS_M is its new base, no confirmation.
+        // ⚠️ Keyed off the RAISER's clan, never "any carried base nearby": a
+        // White raise beside a neighbour's kit must not move the neighbour.
+        // ⚠️ FOR UPDATE per §4.12, factions before adoptCarriedTx's
+        // declarations lock. Falls through on anything else, so a raise
+        // further out is still an ordinary bind, proposal or nothing.
+        const [mine] = await tx.select({ id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status }).from(factions)
+          .innerJoin(factionMembers, eq(factionMembers.factionId, factions.id))
+          .where(and(
+            eq(factions.serverId, ev.serverId), sql`${factions.status} in ('active','dormant')`,
+            eq(factionMembers.dayzId, p.dayzId), eq(factionMembers.status, "full"),
+          ))
+          .for("update", { of: factions });
+        if (mine && (p.texture === NEUTRAL_FLAG || p.texture === mine.texture)) {
+          const carried = await declarationForFaction(tx, mine.id);
+          // ⚠️ A raise dated before the wipe is the OLD world's pole, which no
+          // longer exists: the bot can stop before the game wipes and process
+          // that gap after restart. Adopting it would clear carried_since and
+          // leave the base on a dead pole, silently. Such a raise falls through.
+          if (carried?.carriedSince && ev.occurredAt >= carried.carriedSince && distance2d({ x: p.pole.x, z: p.pole.z }, { x: Number(carried.x), z: Number(carried.z) }) <= CARRIED_ADOPT_RADIUS_M) {
+            const adopted = await adoptCarriedTx(tx, {
+              serverId: ev.serverId, factionId: mine.id, poleKey: p.poleKey, x: p.pole.x, y: p.pole.y, z: p.pole.z, eventId: ev.id, at: ev.occurredAt,
+            });
+            if (!adopted.ok) {
+              console.info(`raise-tick: adopt refused for faction ${mine.id} at ${p.poleKey}: ${adopted.reason}`);
+              return done(null);
+            }
+            await afterRebindTx(tx, ev, p, mine);
+            return done("adopted" as const);
+          }
+        }
+
         // Undeclared pole, White flag: a full member re-establishing a clan
         // that has no base, the post-wipe case. Clan flags never spawn as
         // loot and the supply kit (the only source of one) needs a bound
@@ -196,6 +231,7 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
       else if (r === "revived") out.revived++;
       else if (r === "noticed") out.noticed++;
       else if (r === "bound") out.bound++;
+      else if (r === "adopted") out.adopted++;
     }
     // The tail: events this consumer skipped outright (wrong type, unparseable
     // payload) opened no transaction. They have no effects, so replaying them
@@ -222,6 +258,12 @@ async function bindTx(tx: Tx, ev: { id: number; serverId: number; occurredAt: Da
     console.info(`raise-tick: bind refused for faction ${clan.id} at ${p.poleKey}: ${declared.reason}`);
     return null;
   }
+  await afterRebindTx(tx, ev, p, clan);
+  return "bound";
+}
+
+/** The `rebound` feed row and, for a dormant clan, the revive — shared by a bind and an adoption. */
+async function afterRebindTx(tx: Tx, ev: { serverId: number; occurredAt: Date }, p: FlagPayload, clan: BindingClan): Promise<void> {
   await appendFactionEventTx(tx, {
     serverId: ev.serverId, factionId: clan.id, kind: "rebound", occurredAt: ev.occurredAt,
     payload: { name: clan.name, tag: clan.tag, texture: clan.texture },
@@ -229,5 +271,4 @@ async function bindTx(tx: Tx, ev: { id: number; serverId: number; occurredAt: Da
   if (clan.status === "dormant") {
     await reviveFactionTx(tx, clan.id, ev.occurredAt, { dayzId: p.dayzId, gamertag: p.gamertag });
   }
-  return "bound";
 }

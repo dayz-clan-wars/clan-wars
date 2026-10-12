@@ -21,6 +21,7 @@
     "backfill:achievement-notices": "tsx scripts/backfill-achievement-notices.ts",
     "wipe": "tsx scripts/wipe.ts",
     "launch": "tsx scripts/launch.ts",
+    "clear-bases": "tsx scripts/clear-bases.ts",
     "raid:skip": "tsx scripts/raid-skip.ts",
     "release:sync": "tsx scripts/release-sync.ts",
     "deploy:select": "tsx scripts/deploy-select.ts",

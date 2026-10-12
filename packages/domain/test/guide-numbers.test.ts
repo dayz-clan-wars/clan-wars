@@ -16,7 +16,7 @@ const LABELS = [
   "Declarations per player", "New pole grace before public", "Released pole grace before public", "Public base despawns after (no flag raise)", "Minimum distance between declared bases", "Watch zone radius", "Solo declaration lapses after (no raise by declarant)",
   "Same clan raiding the same victim counts once per", "Raid window (base damage on)",
   "Flag-down clock", "Inactivity → dormant", "Dormant → disbanded",
-  "Points: raid on #1 / bottom / unranked", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "Player board: minimum kills for K/D",
+  "Points: raid on #1 / bottom / unranked", "Alpha week", "Alphas per week", "Season", "After a wipe: raise your flag to bind a new base within", "After a wipe: a new pole this close to your old base becomes your base", "Player board: minimum kills for K/D",
   "Clan size cap", "Join: presence radius at base", "Invite / request / pending no-show expiry", "Leave / kick cooldown", "Leader silent before a succession claim", "Succession: objection window", "No-confidence vote: length", "No-confidence vote: threshold", "Failed vote cooldown", "Rename cooldown", "Old name / tag held after rename or disband", "Base move: confirm window", "Base move: cooldown between moves", "Vault code length",
   "Guest pass",
   "Position fix cadence", "Intruder: alert cooldown per player", "Intruder: pin drops off after", "Pin lifetime",

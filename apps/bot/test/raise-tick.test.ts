@@ -382,5 +382,123 @@ describe("raiseTick", () => {
       });
     });
   });
-});
 
+  describe("adopting a pole near a carried base", () => {
+    // BEAR's old spot, carried by a wipe.
+    const OLD = { x: 6000, z: 6000 };
+    const NEAR = "6060.00:100.00:6040.00";   // ~72 m
+    const EDGE = "6100.00:100.00:6000.00";   // exactly 100 m
+    const FAR = "6101.00:100.00:6000.00";    // 101 m
+
+    beforeEach(async () => {
+      await db.update(declarations).set({
+        poleKey: "6000.00:100.00:6000.00", x: "6000.00", z: "6000.00", carriedSince: ago(86_400_000),
+      }).where(eq(declarations.ownerFactionId, BEAR));
+    });
+
+    it("a full member's White raise within 100 m adopts the pole: no notice, a rebound event", async () => {
+      await raise(B1, "Bear1", "Flag_White", NEAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 1, bound: 0, noticed: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: NEAR, carriedSince: null });
+      expect((await db.select().from(factionEvents)).map((r) => r.kind)).toEqual(["rebound"]);
+      expect(await db.select().from(clanNotices)).toEqual([]);
+    });
+
+    it("the clan's own flag at exactly 100 m adopts too", async () => {
+      await raise(B1, "Bear1", "Flag_Bear", EDGE, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 1 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: EDGE, carriedSince: null });
+    });
+
+    it("101 m away the clan's own flag falls through to the rebind proposal, and the base stays carried", async () => {
+      await raise(B1, "Bear1", "Flag_Bear", FAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, noticed: 1 });
+      expect((await db.select({ k: clanNotices.kind }).from(clanNotices))[0]).toEqual({ k: "rebind_proposed" });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
+    });
+
+    it("101 m away a White raise does nothing for the clan", async () => {
+      await raise(B1, "Bear1", "Flag_White", FAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, bound: 0, noticed: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00" });
+    });
+
+    it("a dormant clan's adoption revives it", async () => {
+      await db.update(factions).set({ status: "dormant", dormantSince: ago(86_400_000), dormantReason: "inactive" }).where(eq(factions.id, BEAR));
+      await raise(B1, "Bear1", "Flag_White", NEAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 1 });
+      const [bear] = await db.select({ s: factions.status }).from(factions).where(eq(factions.id, BEAR));
+      expect(bear).toEqual({ s: "active" });
+      expect((await db.select().from(factionEvents).orderBy(factionEvents.id)).map((r) => r.kind)).toEqual(["rebound", "revived"]);
+    });
+
+    it("a pending member, a foreign flag, or a clanless player adopts nothing", async () => {
+      const PEND = "PEND-DAYZID-000000000000000000000000";
+      await db.insert(factionMembers).values({ factionId: BEAR, serverId, dayzId: PEND, discordId: "dPend", role: "member", joinedAt: now, status: "pending", pendingSince: now });
+      await raise(PEND, "Pendy", "Flag_White", NEAR, now);
+      await raise(B1, "Bear1", "Flag_Wolf", NEAR, new Date(now.getTime() + 1000));
+      await raise(W1, "Wanderer", "Flag_White", NEAR, new Date(now.getTime() + 2000));
+      expect((await raiseTick(db, { siteBaseUrl: SITE })).adopted).toBe(0);
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
+    });
+
+    it("⚠️ a clan whose base is NOT carried is never moved by a nearby White raise", async () => {
+      await db.update(declarations).set({ carriedSince: null }).where(eq(declarations.ownerFactionId, BEAR));
+      await raise(B1, "Bear1", "Flag_White", NEAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0, bound: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00" });
+    });
+
+    it("⚠️ a raise dated BEFORE the wipe adopts nothing: that pole no longer exists", async () => {
+      await db.update(declarations).set({ carriedSince: now }).where(eq(declarations.ownerFactionId, BEAR));
+      await raise(B1, "Bear1", "Flag_White", NEAR, ago(60_000));
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: now });
+    });
+
+    it("⚠️ a member of a clan whose base is NOT carried never moves a neighbour's carried base", async () => {
+      const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "2000.00:100.00:2000.00", x: 2000, y: 100, z: 2000, createdAt: now, activatedAt: now });
+      const W2 = "W2-DAYZID-0000000000000000000000000";
+      await db.insert(factionMembers).values({ factionId: wolf.id, serverId, dayzId: W2, discordId: "dW2", role: "leader", joinedAt: now, status: "full" });
+      const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${rows[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(W2, "Wolf2", "Flag_White", NEAR, now); // beside BEAR's carried spot
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
+      expect(await declarationForFaction(db, wolf.id)).toMatchObject({ x: "2000.00", carriedSince: null });
+    });
+
+    it("too close to another base adopts nothing and writes nothing", async () => {
+      const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "6200.00:100.00:6040.00", x: 6200, y: 100, z: 6040, createdAt: now, activatedAt: now });
+      const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${rows[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(B1, "Bear1", "Flag_White", NEAR, now); // 140 m from WOLF
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ x: "6000.00", carriedSince: ago(86_400_000) });
+      expect(await declarationForFaction(db, wolf.id)).toMatchObject({ x: "6200.00" });
+      expect(await db.select().from(factionEvents)).toHaveLength(0);
+    });
+
+    it("⚠️ a replay after the adoption moves nothing and writes no second rebound", async () => {
+      await raise(B1, "Bear1", "Flag_White", NEAR, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      await db.execute(sql`update consumer_cursors set last_event_id = ${cursorAfterSetup} where consumer_name = 'raise-consumer'`);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 0 });
+      expect(await declarationForFaction(db, BEAR)).toMatchObject({ poleKey: NEAR });
+      expect(await db.select().from(factionEvents)).toHaveLength(1);
+      expect(await db.select().from(clanNotices)).toEqual([]);
+    });
+
+    it("⚠️ only the raiser's own clan adopts, never a neighbour's carried base", async () => {
+      // WOLF is carried 210 m from NEAR (clear of the spacing rule); B1 is in
+      // BEAR. BEAR adopts; WOLF is untouched.
+      const wolf = await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "6270.00:100.00:6040.00", x: 6270, y: 100, z: 6040, createdAt: now, activatedAt: now });
+      await db.update(declarations).set({ carriedSince: ago(86_400_000) }).where(eq(declarations.ownerFactionId, wolf.id));
+      const rows = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${rows[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(B1, "Bear1", "Flag_White", NEAR, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 1 });
+      expect(await declarationForFaction(db, wolf.id)).toMatchObject({ x: "6270.00", carriedSince: ago(86_400_000) });
+    });
+  });
+});

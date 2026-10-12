@@ -43,10 +43,18 @@ interval) and `@Alpha`; the site gains four public pages. `scripts/wipe.ts` is t
    members, at any free pole, binds the new base (the normal 200 m rule applies to that raise like any other
    declare); if the raise is refused (too close to another hold, or the pole is already taken),
    nothing is written — no notice, no feed row, just an `info`-level log line — and the member has
-   to raise again at a different pole. Solos re-declare on `/base`. ⚠️ Until each clan rebinds,
+   to raise again at a different pole. Solos re-declare on `/base` (since 2026-10-12 a carried solo must release on `/base` first, or wait for the solo lapse — solos cannot adopt a new pole). ⚠️ Until each clan rebinds,
    **no clan appears in the generated supply file and no kit spawns** — the supply projection joins
    `factions` to `declarations`, and the wipe deleted every declaration — so expect an empty supply
    file and no supply drops at the first restart; each clan's drops resume with its bind.
+   ⚠️ **Superseded 2026-10-12** (the text above is kept as history): the wipe no longer deletes
+   declarations. It marks every one carried (`declarations.carried_since`), so after a wipe each
+   clan's base is NOT unbound and the supply file still lists every holding clan — the kit keeps
+   spawning at the old spot. A clan adopts a new pole only when a full member raises a White flag
+   (or the clan's own) within `CARRIED_ADOPT_RADIUS_M` = 100 m of that old spot (raise-tick); a raise
+   further away does not adopt, and the clan's own flag there is an ordinary rebind proposal for the
+   leader to confirm. Expect a full supply file at the first restart, not an empty one. Design:
+   `docs/superpowers/specs/2026-10-12-carry-bases-through-wipe-design.md`.
 7. **Rebuild standings** only if a hand edit or a bug is suspected:
 
        DATABASE_URL=... pnpm rebuild:standings --season <id>

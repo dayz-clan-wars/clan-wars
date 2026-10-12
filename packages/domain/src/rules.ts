@@ -106,6 +106,12 @@ export const POINTS_BOTTOM = 100;
 export const POINTS_UNRANKED = 100;
 export const ALPHAS_PER_WEEK = 3;
 export const POST_WIPE_BIND_MS = 7 * DAY;
+/**
+ * After a wipe a base keeps its spot but loses its pole. The clan's first
+ * white or own-flag raise at a new pole this close to the old spot becomes the
+ * base with no confirmation; further away is an ordinary move.
+ */
+export const CARRIED_ADOPT_RADIUS_M = 100;
 export const KD_MIN_KILLS = 10;
 
 // Running a clan

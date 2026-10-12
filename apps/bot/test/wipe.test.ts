@@ -122,14 +122,18 @@ describe("wipe", () => {
     const r = await wipe(db, serverId, wipeAt);
     expect(r).toMatchObject({
       skipped: false, closedSeason: 1, openedSeason: 2,
-      holdsEnded: 1, declarationsDeleted: 3, polesStamped: 3, clansCleared: 2,
+      holdsEnded: 1, declarationsCarried: 3, polesStamped: 3, clansCleared: 2,
       // Season 1 opened Mon 2026-08-03; the last week to end at or before
       // wipeAt (Wed 2026-09-30) is the one starting 2026-09-21.
       weeksClosed: 8,
       pinsCleared: 1, sightingsCleared: 1,
     });
 
-    expect(await db.select().from(declarations)).toEqual([]);
+    // The wipe keeps every base and marks it carried: the kit keeps spawning
+    // at the old spot until the clan adopts a new pole (raise-tick).
+    const decls = await db.select().from(declarations);
+    expect(decls).toHaveLength(3);
+    for (const d of decls) expect(d.carriedSince).toEqual(wipeAt);
     expect(await db.select().from(clanPins)).toEqual([]);
     expect(await db.select().from(intruderSightings)).toEqual([]);
 
@@ -161,6 +165,13 @@ describe("wipe", () => {
     expect(again.openedSeason).toBe(2);
     expect(await snapshot()).toEqual(after);
     expect(after.seasons).toBe(2);
+  });
+
+  it("⚠️ a skipped re-run leaves carried_since at the first wipe", async () => {
+    await wipe(db, serverId, wipeAt);
+    const later = new Date(wipeAt.getTime() + 60_000);
+    expect((await wipe(db, serverId, later)).skipped).toBe(true);
+    for (const d of await db.select().from(declarations)) expect(d.carriedSince).toEqual(wipeAt);
   });
 
   it("⚠️ a re-run with a LATER --at is skipped too", async () => {
@@ -199,7 +210,7 @@ describe("wipe", () => {
       expect(await bPromise!).toMatchObject({ skipped: true, closedSeason: null, openedSeason: 2, weeksClosed: 0 });
       expect(await db.select().from(seasons)).toHaveLength(2);
       expect(await db.select().from(warLogEvents)).toHaveLength(9);
-      expect(await db.select().from(declarations)).toEqual([]);
+      expect(await db.select().from(declarations)).toHaveLength(3);
     } finally {
       await dbB.$client.end();
     }
