@@ -138,6 +138,49 @@ export async function releaseTx(tx: Tx, owner: Owner, at: Date): Promise<boolean
   return true;
 }
 
+export type AdoptArgs = { serverId: number; factionId: number; poleKey: string; x: number; y: number; z: number; eventId: number; at: Date };
+export type AdoptOutcome = { ok: true } | { ok: false; reason: "not-carried" | "too-close" | "pole-taken" };
+
+/**
+ * Move a base the wipe carried (`carried_since` set) onto the pole the clan
+ * just raised near it, in place.
+ *
+ * ⚠️ An UPDATE, never `releaseTx` + `declareTx`. Release-then-declare passes
+ * through "no base": inside one transaction nobody sees it, but the delete
+ * stamps the old pole's release grace and the insert would need the
+ * savepoint dance `declareTx` does — and it would hand the row a new id, which
+ * the zone consumer's sightings hang off. Same lock, same spacing query, so
+ * this is still the one module that writes `declarations`.
+ *
+ * The radius check is the caller's: whether a raise counts as an adoption at
+ * all is raise-tick's decision. This re-checks only what a concurrent writer
+ * can change between the caller's read and this lock: the carried flag, the
+ * neighbours, and the pole.
+ *
+ * Lock order (spec §4.12): the caller holds the clan's `factions` row first.
+ */
+export async function adoptCarriedTx(tx: Tx, a: AdoptArgs): Promise<AdoptOutcome> {
+  await lockDeclarations(tx, a.serverId);
+  const rows = await tx.select({ id: declarations.id, poleKey: declarations.poleKey, x: declarations.x, z: declarations.z, ownerFactionId: declarations.ownerFactionId, carriedSince: declarations.carriedSince })
+    .from(declarations)
+    .where(eq(declarations.serverId, a.serverId))
+    .for("update");
+
+  const own = rows.find((r) => r.ownerFactionId === a.factionId);
+  if (!own || own.carriedSince === null) return { ok: false, reason: "not-carried" };
+  const others = rows.filter((r) => r.id !== own.id);
+  if (others.some((r) => r.poleKey === a.poleKey)) return { ok: false, reason: "pole-taken" };
+  if (tooClose({ x: a.x, z: a.z }, others.map((r) => ({ x: Number(r.x), z: Number(r.z) })))) {
+    return { ok: false, reason: "too-close" };
+  }
+
+  await tx.update(declarations).set({
+    poleKey: a.poleKey, x: a.x.toFixed(2), y: a.y.toFixed(2), z: a.z.toFixed(2),
+    evidenceEventId: a.eventId, evidenceCeremonyId: null, declaredAt: a.at, carriedSince: null,
+  }).where(eq(declarations.id, own.id));
+  return { ok: true };
+}
+
 const shape = { id: declarations.id, poleKey: declarations.poleKey, x: declarations.x, y: declarations.y, z: declarations.z, declaredAt: declarations.declaredAt, carriedSince: declarations.carriedSince };
 
 export async function declarationForFaction(db: Database | Tx, factionId: number): Promise<Declaration | null> {
