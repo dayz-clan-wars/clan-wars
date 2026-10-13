@@ -7,8 +7,9 @@ import { RebrandForm } from "../app/(site)/clan/settings/rebrand-form";
 const read = (...p: string[]) => readFileSync(join(import.meta.dirname, "..", ...p), "utf8");
 const input = (html: string, needle: string) => html.match(new RegExp(`<input[^>]*${needle}[^>]*/>`, "u"))?.[0] ?? "";
 
-const render = (pending: { texture: string; until: Date } | null, freeFlags: string[]) => renderToStaticMarkup(
-  <RebrandForm name="Bears" tag="BEAR" texture="Flag_Bear" freeFlags={freeFlags} pending={pending} err={null} kept={{}} />,
+const NOW = new Date("2026-10-13T12:00:00Z");
+const render = (pending: { texture: string; until: Date } | null, freeFlags: string[], now = NOW) => renderToStaticMarkup(
+  <RebrandForm name="Bears" tag="BEAR" texture="Flag_Bear" freeFlags={freeFlags} pending={pending} err={null} kept={{}} now={now} />,
 );
 
 describe("the rebrand panel", () => {
@@ -27,6 +28,15 @@ describe("the rebrand panel", () => {
     expect(html).toContain("UTC");
     expect(html).toContain('action="/api/clan/rebrand/cancel"');
     expect(html).not.toContain('action="/api/clan/rename"');
+    expect(html).toContain("Raise it at your pole by");
+  });
+
+  it("past the deadline, says so instead of asking for a raise by a time already gone", () => {
+    const html = render({ texture: "Flag_Wolf", until: new Date("2026-10-13T11:00:00Z") }, []);
+    expect(html).not.toContain("Raise it at your pole by");
+    expect(html).toContain("has passed");
+    expect(html).toContain("goes back to the pool shortly");
+    expect(html).toContain('action="/api/clan/rebrand/cancel"');
   });
 });
 

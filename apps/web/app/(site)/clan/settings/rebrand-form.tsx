@@ -13,16 +13,24 @@ import { FieldError, SubmitButton, invalid, btnSecondary, field, fieldLabel } fr
  * reset to the clan's current name, so "Another clan has that name." sat
  * under the name the clan already has — the one name it was plainly not about.
  */
-export function RebrandForm({ name, tag, texture, freeFlags, pending, err, kept }: {
+export function RebrandForm({ name, tag, texture, freeFlags, pending, err, kept, now = new Date() }: {
   name: string; tag: string; texture: string; freeFlags: string[];
   pending: { texture: string; until: Date } | null;
   err: FieldErrorT | null; kept: { name?: string; tag?: string; texture?: string };
+  /** Render time; the page is per-request. A prop only so tests can pin it. */
+  now?: Date;
 }) {
   if (pending) {
+    // Between the deadline and the sweep the hold still shows (the sweep waits
+    // for the log to catch up), so "raise it by" a time already gone would
+    // ask for the impossible.
+    const overdue = pending.until.getTime() <= now.getTime();
     return (
       <div className="flex flex-col gap-3">
         <p className="text-sm leading-relaxed text-ink-2">
-          <strong>{flagLabel(pending.texture)}</strong> is reserved for you. It arrives in your kit at the next restart. Raise it at your pole by {when(pending.until)} to make it yours. Until then you still fly {flagLabel(texture)}.
+          {overdue
+            ? <>The deadline to raise <strong>{flagLabel(pending.texture)}</strong> has passed. Unless the server log shows it was raised in time, it goes back to the pool shortly and you keep {flagLabel(texture)}.</>
+            : <><strong>{flagLabel(pending.texture)}</strong> is reserved for you. It arrives in your kit at the next restart. Raise it at your pole by {when(pending.until)} to make it yours. Until then you still fly {flagLabel(texture)}.</>}
         </p>
         <form action="/api/clan/rebrand/cancel" method="post">
           <SubmitButton className={`${btnSecondary} self-start`} pending="Cancelling…">Cancel flag change</SubmitButton>

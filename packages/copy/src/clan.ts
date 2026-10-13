@@ -100,7 +100,7 @@ const DISBAND: Record<"ok" | "not-leader" | "vote-open" | ActorRefusal | "unconf
 const RENAME: Record<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag" | "bad-flag", string> = {
   ...REFUSAL,
   ok: "Renamed.",
-  "flag-pending": `New flag reserved. It arrives in your kit at the next restart. Raise it at your pole within ${hours(FLAG_CHANGE_WINDOW_MS)} to make it yours.`,
+  "flag-pending": `Saved. Your new flag is reserved and arrives in your kit at the next restart. Raise it at your pole within ${hours(FLAG_CHANGE_WINDOW_MS)} to make it yours.`,
   "not-leader": "Only the leader can rebrand the clan.",
   cooldown: `A clan can rebrand once every ${days(RENAME_COOLDOWN_MS)}.`,
   "name-taken": "Another clan has that name.",
