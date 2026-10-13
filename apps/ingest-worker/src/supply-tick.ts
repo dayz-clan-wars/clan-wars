@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
-import { declarations, factions } from "@factions/db";
+import { declarations, factions, flagHolds } from "@factions/db";
 import { HOLDING_STATUSES, isSupplied } from "@factions/domain";
-import { and, eq, inArray, asc } from "drizzle-orm";
+import { and, eq, inArray, asc, sql } from "drizzle-orm";
 import { generateSupplies, type SpawnObject, type SupplyFaction } from "./supplies.js";
 import { syncProjection, SUPPLY_STORE, type ProjectionUploader, type ProjectionDrift, type RemoteFileStat } from "./projection-upload.js";
 
@@ -33,7 +33,10 @@ export async function supplyTick(db: Database, deps: {
   onDrift?: (drift: SupplyDrift) => void;
 }): Promise<SupplyTickResult> {
   const rows = await db.select({
-    tag: factions.tag, texture: factions.texture,
+    // ⚠️ The PENDING flag when a rebrand is waiting to be raised: the kit is
+    // the only source of a clan flag in game, so without this there is
+    // nothing to raise and every flag change lapses (spec 2026-10-13 §4).
+    tag: factions.tag, texture: sql<string>`coalesce(${flagHolds.texture}, ${factions.texture})`,
     status: factions.status, flagDownSince: factions.flagDownSince,
     x: declarations.x, y: declarations.y, z: declarations.z,
   }).from(factions)
@@ -44,6 +47,9 @@ export async function supplyTick(db: Database, deps: {
     // for it; a LEFT join would put every such clan's crate, or its two
     // flags, at (0, 0, 0).
     .innerJoin(declarations, eq(declarations.ownerFactionId, factions.id))
+    // At most one joined row: flag_holds_one_pending is a partial unique index
+    // on pending rows per faction, so the tag ordering below stays total.
+    .leftJoin(flagHolds, and(eq(flagHolds.factionId, factions.id), eq(flagHolds.kind, "pending")))
     .where(and(
       eq(factions.serverId, deps.serverId),
       // ⚠️ HOLDING, not SUPPLIED. Every clan that holds a flag, tag and pole
