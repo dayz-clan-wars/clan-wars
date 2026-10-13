@@ -15,6 +15,7 @@ export * from "./rebind";
 export * from "./feed-store";
 export * from "./feed-actor";
 export * from "./holds";
+export * from "./flag-holds";
 export * from "./requests";
 export * from "./notices";
 export * from "./site-url";

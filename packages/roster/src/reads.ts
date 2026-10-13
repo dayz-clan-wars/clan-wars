@@ -10,6 +10,7 @@ import {
   type JoinRequest, type Role, type OpenClaim, type OpenVote, type SuccessionEligibility, type OpenGuestPass,
 } from "./internal";
 import { activeServerId } from "./server";
+import { freeFlagsDb } from "./internal/flag-holds";
 import { alphaWeekCountFor, clanStatsFor, latestAlphaFactionIds, placementsFor } from "./scoring";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
@@ -188,15 +189,13 @@ export async function directoryDb(db: Database): Promise<{ clans: DirectoryEntry
     .groupBy(factions.id)
     .orderBy(desc(factions.recruiting), asc(sql`lower(${factions.name})`));
 
-  const holdingRows = await db.select({ texture: factions.texture }).from(factions)
-    .where(and(eq(factions.serverId, serverId), inArray(factions.status, HOLDING)));
-  const taken = holdingRows.map((r) => r.texture);
+  const free = await freeFlagsDb(db, serverId, new Date());
 
   const alphaIds = await latestAlphaFactionIds(db, serverId);
 
   return {
     clans: rows.map(({ id, ...r }) => ({ ...r, memberCount: Number(r.memberCount), alpha: alphaIds.has(id) })),
-    flags: { taken, free: CLAIMABLE_FLAGS.filter((f) => !taken.includes(f)) },
+    flags: { taken: CLAIMABLE_FLAGS.filter((f) => !free.includes(f)), free },
   };
 }
 
@@ -275,12 +274,9 @@ export async function claimContextDb(db: Database, discordId: string): Promise<C
   if (!ceremony) return null;
   const [row] = await db.select({ detectedAt: ceremonies.detectedAt, expiresAt: ceremonies.expiresAt })
     .from(ceremonies).where(eq(ceremonies.id, ceremony.id));
-  const holdingRows = await db.select({ texture: factions.texture }).from(factions)
-    .where(and(eq(factions.serverId, ceremony.serverId), inArray(factions.status, HOLDING)));
-  const taken = new Set(holdingRows.map((r) => r.texture));
   return {
     ceremony: { id: ceremony.id, detectedAt: row!.detectedAt, expiresAt: row!.expiresAt, participants: ceremony.participants },
-    freeFlags: CLAIMABLE_FLAGS.filter((f) => !taken.has(f)),
+    freeFlags: await freeFlagsDb(db, ceremony.serverId, new Date()),
   };
 }
 
