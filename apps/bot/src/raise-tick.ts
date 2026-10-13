@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { declarations, defenses, factionMembers, factions, identityLinks, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { appendWarLogTx, appendFactionEventTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
+import { appendWarLogTx, appendFactionEventTx, announceFlagChangeTx, completeFlagChangeTx, noticeClanTx, noticeUserTx } from "@factions/roster/internal";
 import { adoptCarriedTx, declarationForFaction, declareTx } from "@factions/declarations";
 import { CARRIED_ADOPT_RADIUS_M, FLAG_DOWN_MS, NEUTRAL_FLAG, distance2d } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
@@ -65,7 +65,16 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
         // nothing but a queue row and so have no unique key to dedupe on; the
         // cursor is what makes them replay-proof. A mid-batch failure now
         // rolls back exactly the unfinished event.
+        //
+        // ⚠️ `last` holds queue writes that must land LAST in this transaction
+        // (§4.12: faction_events and clan_notices after every roster table),
+        // after whichever branch below finishes — today the flag_changed
+        // announcement, which the defense or revive the same raise performs
+        // must precede. Declared per event so each one starts empty; `done`
+        // drains it before the cursor write so a replay can never re-announce.
+        const last: (() => Promise<void>)[] = [];
         const done = async <T,>(v: T): Promise<T> => {
+          for (const f of last) await f();
           await writeCursor(tx, RAISE_CONSUMER, ev.id);
           return v;
         };
@@ -85,7 +94,22 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
             }
             return done(null);
           }
-          if (p.texture !== clan.texture) return done(null); // a member raising a foreign flag at home is nothing
+          if (p.texture !== clan.texture) {
+            // Spec 2026-10-13 §3: the clan's PENDING flag, raised at home by
+            // a full member before the deadline, becomes its flag — and this
+            // same raise then defends, revives or upkeeps below like any
+            // raise of the clan's own colors. Anything else foreign is nothing.
+            // ⚠️ `clan.texture` is the OLD flag from here on; nothing below
+            // reads it, and the announcement carries the new one explicitly.
+            const changed = clan.status === "active" || clan.status === "dormant"
+              ? await completeFlagChangeTx(tx, { factionId: clan.id, serverId: ev.serverId, texture: p.texture, at: ev.occurredAt })
+              : null;
+            if (!changed) return done(null); // a member raising a foreign flag at home is nothing
+            last.push(() => announceFlagChangeTx(tx, {
+              serverId: ev.serverId, factionId: clan.id, name: changed.name, tag: changed.tag,
+              texture: p.texture, previousTexture: changed.previousTexture, gamertag: p.gamertag, at: ev.occurredAt,
+            }));
+          }
           // ⚠️ Bounded by FLAG_DOWN_MS (§5.8). `dormancy-tick` decides against
           // wall-clock now while this consumer decides against event time, and
           // during any backlog (bot down, ingest catching up) a raise can

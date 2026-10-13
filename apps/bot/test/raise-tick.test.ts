@@ -2,11 +2,11 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, declarations, events, admFiles, identityLinks,
-  defenses, seasonStandings, warLogEvents, clanNotices, factionEvents,
+  defenses, seasonStandings, warLogEvents, clanNotices, factionEvents, flagHolds, factionTextures,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { FLAG_DOWN_MS } from "@factions/domain";
+import { FLAG_CHANGE_WINDOW_MS, FLAG_DOWN_MS, OLD_FLAG_HOLD_MS } from "@factions/domain";
 import { declarationForFaction } from "@factions/declarations";
 import { raiseTick } from "../src/raise-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
@@ -38,7 +38,7 @@ describe("raiseTick", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table clan_notices, war_log_events, defenses, season_standings, raids, seasons, faction_events, faction_members, declarations, poles, identity_links, consumer_cursors, events, adm_files, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table flag_holds, faction_textures, clan_notices, war_log_events, defenses, season_standings, raids, seasons, faction_events, faction_members, declarations, poles, identity_links, consumer_cursors, events, adm_files, factions, servers restart identity cascade`);
     });
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
@@ -499,6 +499,88 @@ describe("raiseTick", () => {
       await raise(B1, "Bear1", "Flag_White", NEAR, now);
       expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ adopted: 1 });
       expect(await declarationForFaction(db, wolf.id)).toMatchObject({ x: "6270.00", carriedSince: ago(86_400_000) });
+    });
+  });
+
+  describe("a pending flag change", () => {
+    const pend = (until = new Date(now.getTime() + FLAG_CHANGE_WINDOW_MS), stampsCooldown = true) =>
+      db.insert(flagHolds).values({ serverId, texture: "Flag_Wolf", factionId: BEAR, kind: "pending", until, stampsCooldown, createdAt: ago(3_600_000) });
+    const bearRow = async () => (await db.select().from(factions).where(eq(factions.id, BEAR)))[0]!;
+
+    it("the old flag still counts while the change is pending", async () => {
+      await pend();
+      await db.update(factions).set({ flagDownSince: ago(3_600_000), flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+      await raise(B1, "Bear1", "Flag_Bear", P1, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ defenses: 1 });
+      expect((await bearRow()).texture).toBe("Flag_Bear");
+    });
+
+    it("a full member raising the new flag at home completes the change", async () => {
+      await pend();
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect(await bearRow()).toMatchObject({ texture: "Flag_Wolf", renamedAt: now });
+      expect(await db.select({ texture: flagHolds.texture, kind: flagHolds.kind, until: flagHolds.until }).from(flagHolds))
+        .toEqual([{ texture: "Flag_Bear", kind: "released", until: new Date(now.getTime() + OLD_FLAG_HOLD_MS) }]);
+      const hist = await db.select().from(factionTextures).where(eq(factionTextures.factionId, BEAR)).orderBy(factionTextures.fromAt);
+      expect(hist.map((h) => [h.texture, h.toAt])).toEqual([["Flag_Bear", now], ["Flag_Wolf", null]]);
+      const [fe] = await db.select().from(factionEvents).where(eq(factionEvents.kind, "flag_changed"));
+      expect(fe!.payload).toMatchObject({ texture: "Flag_Wolf", previousTexture: "Flag_Bear", actor: "Bear1" });
+      expect((await db.select().from(clanNotices).where(eq(clanNotices.kind, "flag_changed")))).toHaveLength(1);
+    });
+
+    it("a name-and-flag rebrand does not restamp the cooldown on completion", async () => {
+      await pend(undefined, false);
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect((await bearRow()).renamedAt).toBeNull();
+    });
+
+    it("completing during a siege is also the defense", async () => {
+      await pend();
+      await db.update(factions).set({ flagDownSince: ago(3_600_000), flagDownByDayzId: W1 }).where(eq(factions.id, BEAR));
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ defenses: 1 });
+      expect(await bearRow()).toMatchObject({ texture: "Flag_Wolf", flagDownSince: null });
+    });
+
+    it("completing revives a clan that went dormant meanwhile", async () => {
+      await pend();
+      await db.update(factions).set({ status: "dormant", dormantSince: ago(3_600_000), dormantReason: "inactive" }).where(eq(factions.id, BEAR));
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      expect(await raiseTick(db, { siteBaseUrl: SITE })).toMatchObject({ revived: 1 });
+      expect(await bearRow()).toMatchObject({ texture: "Flag_Wolf", status: "active" });
+    });
+
+    it("a raise at or after the deadline does nothing", async () => {
+      await pend(now);
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect((await bearRow()).texture).toBe("Flag_Bear");
+      expect((await db.select().from(flagHolds))[0]).toMatchObject({ kind: "pending" });
+    });
+
+    it("the pending flag raised at another pole does nothing", async () => {
+      await pend();
+      await raise(B1, "Bear1", "Flag_Wolf", P9, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect((await bearRow()).texture).toBe("Flag_Bear");
+      expect(await db.select().from(clanNotices)).toEqual([]);
+    });
+
+    it("a non-member raising the pending flag at home completes nothing", async () => {
+      await pend();
+      await raise(W1, "Wolfie", "Flag_Wolf", P1, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect((await bearRow()).texture).toBe("Flag_Bear");
+    });
+
+    it("a second tick does not announce twice", async () => {
+      await pend();
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      await raiseTick(db, { siteBaseUrl: SITE });
+      await raiseTick(db, { siteBaseUrl: SITE });
+      expect(await db.select().from(factionEvents).where(eq(factionEvents.kind, "flag_changed"))).toHaveLength(1);
     });
   });
 });

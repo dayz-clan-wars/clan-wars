@@ -1,8 +1,10 @@
 import type { Tx } from "@factions/declarations";
 import type { Database } from "@factions/db";
-import { factions, flagHolds } from "@factions/db";
-import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES } from "@factions/domain";
-import { and, eq, gt, inArray, lte, or, type SQL } from "drizzle-orm";
+import { factions, factionTextures, flagHolds } from "@factions/db";
+import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES, OLD_FLAG_HOLD_MS } from "@factions/domain";
+import { and, eq, gt, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
+import { appendFactionEventTx } from "./feed-store";
+import { noticeClanTx } from "./notices";
 
 /**
  * Is a `flag_holds` row still holding its flag?
@@ -80,5 +82,50 @@ export async function cancelFlagChangeDb(db: Database, factionId: number): Promi
       .where(and(eq(flagHolds.factionId, factionId), eq(flagHolds.kind, "pending")))
       .returning({ id: flagHolds.id });
     return gone.length > 0 ? "ok" : "nothing-pending";
+  });
+}
+
+/**
+ * Spec §3: a full member raised the clan's pending flag at its home pole.
+ * Promote it. The caller holds the clan's `factions` row FOR UPDATE.
+ *
+ * Writes `factions` → `flag_holds` → `faction_textures`, the §4.12 order.
+ * Takes no new flag (the pending hold already reserved it), so no identity
+ * lock. Announcing is separate (`announceFlagChangeTx`) because the feed and
+ * notice queues must be written LAST in the caller's transaction, after any
+ * defense or revive the same raise also performs.
+ *
+ * ⚠️ `until` is compared with the EVENT's time, never the wall clock — the
+ * same rule as FLAG_DOWN_MS in raise-tick: during a backlog a raise logged
+ * in time is folded late and must still count.
+ */
+export async function completeFlagChangeTx(tx: Tx, a: { factionId: number; serverId: number; texture: string; at: Date }): Promise<{ previousTexture: string; name: string; tag: string } | null> {
+  const [hold] = await tx.select({ id: flagHolds.id, stampsCooldown: flagHolds.stampsCooldown }).from(flagHolds)
+    .where(and(eq(flagHolds.factionId, a.factionId), eq(flagHolds.kind, "pending"), eq(flagHolds.texture, a.texture), gt(flagHolds.until, a.at)));
+  if (!hold) return null;
+  const [before] = await tx.select({ texture: factions.texture, name: factions.name, tag: factions.tag }).from(factions).where(eq(factions.id, a.factionId));
+  await tx.update(factions)
+    .set({ texture: a.texture, ...(hold.stampsCooldown ? { renamedAt: a.at } : {}) })
+    .where(eq(factions.id, a.factionId));
+  await tx.delete(flagHolds).where(eq(flagHolds.id, hold.id));
+  await tx.insert(flagHolds).values({
+    serverId: a.serverId, texture: before!.texture, factionId: a.factionId, kind: "released",
+    until: new Date(a.at.getTime() + OLD_FLAG_HOLD_MS), createdAt: a.at,
+  });
+  await tx.update(factionTextures).set({ toAt: a.at })
+    .where(and(eq(factionTextures.factionId, a.factionId), isNull(factionTextures.toAt)));
+  await tx.insert(factionTextures).values({ factionId: a.factionId, texture: a.texture, fromAt: a.at });
+  return { previousTexture: before!.texture, name: before!.name, tag: before!.tag };
+}
+
+/** The feed row and the clan-channel notice for a completed flag change. Last in the transaction (§4.12). */
+export async function announceFlagChangeTx(tx: Tx, a: { serverId: number; factionId: number; name: string; tag: string; texture: string; previousTexture: string; gamertag: string; at: Date }): Promise<void> {
+  await appendFactionEventTx(tx, {
+    serverId: a.serverId, factionId: a.factionId, kind: "flag_changed", occurredAt: a.at,
+    payload: { name: a.name, tag: a.tag, texture: a.texture, previousTexture: a.previousTexture, actor: a.gamertag },
+  });
+  await noticeClanTx(tx, {
+    serverId: a.serverId, factionId: a.factionId, kind: "flag_changed", occurredAt: a.at,
+    payload: { texture: a.texture, previousTexture: a.previousTexture, gamertag: a.gamertag },
   });
 }
