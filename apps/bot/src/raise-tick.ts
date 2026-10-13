@@ -72,6 +72,13 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
         // announcement, which the defense or revive the same raise performs
         // must precede. Declared per event so each one starts empty; `done`
         // drains it before the cursor write so a replay can never re-announce.
+        // ⚠️ Ordering exception, deliberate: in the defense branch the
+        // deferred `faction_events` row lands AFTER that branch's
+        // `war_log_events` row and notice, not before as §4.12 lists them.
+        // All three are insert-only queues here: a fresh insert waits on no
+        // other row, and the posters only mark rows already committed, one
+        // table per statement — so no lock cycle can form. The only effect is
+        // that the flag_changed feed row gets the later id.
         const last: (() => Promise<void>)[] = [];
         const done = async <T,>(v: T): Promise<T> => {
           for (const f of last) await f();

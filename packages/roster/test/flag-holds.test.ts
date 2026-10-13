@@ -4,7 +4,7 @@ import {
   identityLinks, players, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { CLAIMABLE_FLAGS } from "@factions/domain";
+import { CLAIMABLE_FLAGS, HOLDING_STATUSES } from "@factions/domain";
 import { flagTakenTx, freeFlagsDb } from "../src/internal/flag-holds";
 import { claimCeremonyDb } from "../src/writes";
 import { seedFaction } from "./seed";
@@ -34,6 +34,16 @@ describe("flag holds: the free pool", () => {
   it("a holding clan's flag is taken", async () => {
     expect(await flagTakenTx(db, serverId, "Flag_Bear", now)).toBe(true);
     expect(await flagTakenTx(db, serverId, "Flag_Wolf", now)).toBe(false);
+  });
+
+  // ⚠️ The pool's two reads must follow HOLDING_STATUSES, the same set the
+  // `factions_holding_texture_uniq` predicate spells (pinned against it by
+  // packages/db/test/holding-index-drift.test.ts, which cannot import roster).
+  it.each(["reserved", "active", "dormant", "lapsed", "disbanded"] as const)("a %s clan holds its flag iff its status is a holding one", async (status) => {
+    await db.update(factions).set({ status, reservedUntil: status === "reserved" ? later(86_400_000) : null }).where(eq(factions.id, bear));
+    const holds = (HOLDING_STATUSES as readonly string[]).includes(status);
+    expect(await flagTakenTx(db, serverId, "Flag_Bear", now)).toBe(holds);
+    expect((await freeFlagsDb(db, serverId, now)).includes("Flag_Bear")).toBe(!holds);
   });
 
   it("a pending hold is taken even past its deadline, until the sweep deletes it", async () => {
