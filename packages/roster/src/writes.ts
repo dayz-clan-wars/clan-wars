@@ -6,7 +6,7 @@ import {
 } from "@factions/domain";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import {
-  PgRosterStore, PgFactionStore, PgRebindStore, selectCandidates, requestJoinDb, decideRequestDb, withdrawRequestDb, siteBaseUrl,
+  PgRosterStore, PgFactionStore, PgRebindStore, selectCandidates, requestJoinDb, decideRequestDb, withdrawRequestDb, siteBaseUrl, cancelFlagChangeDb,
   type CreateInviteOutcome, type AcceptInviteOutcome, type KickOutcome, type LeaveOutcome, type SetRoleOutcome, type TransferOutcome, type RenameOutcome,
   type RequestJoinOutcome, type DecideRequestOutcome,
 } from "./internal";
@@ -112,12 +112,22 @@ export async function disbandDb(db: Database, actorDiscordId: string): Promise<"
   if (isRefusal(a)) return a;
   return new PgRosterStore(db).disband(a.factionId, actorDiscordId);
 }
-export async function renameDb(db: Database, now: Date, actorDiscordId: string, r: { name: string; tag?: string }): Promise<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag"> {
+export async function renameDb(db: Database, now: Date, actorDiscordId: string, r: { name: string; tag?: string; texture?: string }): Promise<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag" | "bad-flag"> {
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return a;
   if (!validName(r.name)) return "bad-name";
   if (r.tag !== undefined && !validTag(r.tag)) return "bad-tag";
-  return new PgRosterStore(db).rename({ factionId: a.factionId, discordId: actorDiscordId, name: r.name.trim(), tag: r.tag, at: now, notBefore: new Date(now.getTime() - RENAME_COOLDOWN_MS) });
+  if (r.texture !== undefined && !isClaimableFlag(r.texture)) return "bad-flag";
+  return new PgRosterStore(db).rename({ factionId: a.factionId, discordId: actorDiscordId, name: r.name.trim(), tag: r.tag, texture: r.texture, at: now, notBefore: new Date(now.getTime() - RENAME_COOLDOWN_MS) });
+}
+
+export type CancelRebrandOutcome = "ok" | "not-leader" | "nothing-pending";
+/** Drop the clan's pending flag. Leader only. */
+export async function cancelRebrandDb(db: Database, actorDiscordId: string): Promise<CancelRebrandOutcome | ActorRefusal> {
+  const a = await actorFor(db, actorDiscordId);
+  if (isRefusal(a)) return a;
+  if (a.role !== "leader") return "not-leader";
+  return cancelFlagChangeDb(db, a.factionId);
 }
 export async function setRecruitingPostDb(db: Database, actorDiscordId: string, post: { recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }) {
   const a = await actorFor(db, actorDiscordId);

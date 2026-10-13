@@ -166,7 +166,7 @@ export const flagLabel = (texture: string): string => texture.replace(/^Flag_/u,
 export const flagDownDuration = (seconds: number): string =>
   `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
 
-export type ClanFeedPayload = { name: string; tag: string; texture: string; actor?: string; previousName?: string; disbandAt?: string };
+export type ClanFeedPayload = { name: string; tag: string; texture: string; actor?: string; previousName?: string; previousTexture?: string; disbandAt?: string };
 
 const DORMANT_SENTENCE = "Gone dormant — the flag has not been raised, and supplies are cut.";
 const by = (actor: string | undefined): Line => (actor ? [" by ", { bold: [{ raw: actor }] }] : []);
@@ -175,6 +175,7 @@ function clanFeedLine(kind: FactionEventKind, p: ClanFeedPayload): Line {
   switch (kind) {
     case "founded": return ["Founded", ...by(p.actor), ". The ritual is complete — the flag is reserved."];
     case "activated": return ["Colors raised", ...by(p.actor), ". The clan is live."];
+    case "flag_changed": return ["New colors", ...by(p.actor), ". Now flying ", { bold: [flagLabel(p.texture)] }, p.previousTexture ? ` — formerly ${flagLabel(p.previousTexture)}.` : "."];
     case "renamed": return ["Now flying as ", { bold: [{ raw: p.name }] }, " — formerly ", { bold: [{ raw: p.previousName ?? "its former name" }] }, "."];
     case "rebound": return ["Moved its base", ...by(p.actor), "."];
     case "dormant": {

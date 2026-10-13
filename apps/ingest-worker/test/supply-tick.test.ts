@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import { readFileSync } from "node:fs";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, supplyUploads, type Database,
+  servers, factions, supplyUploads, flagHolds, type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { seedFaction as seedFactionAndDeclaration } from "./seed.js";
@@ -43,7 +43,7 @@ describe("supplyTick", () => {
     await runMigrations(db);
     await db.transaction(async (tx) => {
       await tx.execute(sql`set local client_min_messages = warning`);
-      await tx.execute(sql`truncate table supply_uploads, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
+      await tx.execute(sql`truncate table supply_uploads, declarations, poles, events, adm_files, flag_holds, faction_textures, factions, servers restart identity cascade`);
     });
     serverId = await seedServer("S");
   });
@@ -290,5 +290,15 @@ describe("supplyTick", () => {
     expect(bodies).toHaveLength(2);
     // The crate stops respawning; the flags stay.
     expect(JSON.parse(bodies[1]!).Objects).toHaveLength(2);
+  });
+
+  it("a clan with a pending flag change gets the NEW flag in its kit", async () => {
+    const f = await seedFaction({ tag: "BEAR", texture: "Flag_Bear", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.insert(flagHolds).values({ serverId, texture: "Flag_Wolf", factionId: f.id, kind: "pending", until: new Date(now.getTime() + 3_600_000), createdAt: now });
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(bodies[0]).toContain("Flag_Wolf");
+    expect(bodies[0]).not.toContain("Flag_Bear");
   });
 });

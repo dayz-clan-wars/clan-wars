@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import {
-  ceremonies, declarations, factionJoinRequests, factionMembers, factionVoteBallots, factions, identityLinks, players, rosterCooldowns,
+  ceremonies, declarations, factionJoinRequests, factionMembers, factionVoteBallots, factions, flagHolds, identityLinks, players, rosterCooldowns,
 } from "@factions/db";
 import { and, asc, desc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { CLAIMABLE_FLAGS, CLAN_SIZE_CAP, HOLDING_STATUSES, REBIND_CONFIRM_MS, type MemberStatus } from "@factions/domain";
@@ -10,6 +10,7 @@ import {
   type JoinRequest, type Role, type OpenClaim, type OpenVote, type SuccessionEligibility, type OpenGuestPass,
 } from "./internal";
 import { activeServerId } from "./server";
+import { freeFlagsDb } from "./internal/flag-holds";
 import { alphaWeekCountFor, clanStatsFor, latestAlphaFactionIds, placementsFor } from "./scoring";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
@@ -40,6 +41,8 @@ export type ClanView = {
     leaderLastSeenAt: Date | null;
   };
   guestPasses: OpenGuestPass[];
+  /** The leader's rebrand panel: the pending flag change, if any, and the flags they could pick. Null for everyone else. */
+  rebrand: { pending: { texture: string; until: Date } | null; freeFlags: string[] } | null;
 };
 
 export type DirectoryEntry = {
@@ -143,8 +146,10 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const [clan] = await db.select({
     id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status,
     createdAt: factions.createdAt, activatedAt: factions.activatedAt, recruiting: factions.recruiting,
-    playWindow: factions.playWindow, language: factions.language, pitch: factions.pitch,
+    playWindow: factions.playWindow, language: factions.language, pitch: factions.pitch, serverId: factions.serverId,
   }).from(factions).where(eq(factions.id, m.factionId));
+  // serverId is for the rebrand pool below, not part of the clan card.
+  const { serverId, ...card } = clan!;
 
   const role = m.role as Role;
   const status = m.status as MemberStatus;
@@ -160,8 +165,15 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const rebindCandidates = status === "full" && role === "leader" ? await rebindCandidatesFor(db, m.factionId, now) : [];
   const leadership = status === "full" ? await leadershipFor(db, m.factionId, link.dayzId, now) : PENDING_LEADERSHIP;
   const guestPasses = officerPlus ? await openGuestPassesDb(db, m.factionId, now) : [];
+  const rebrand = status === "full" && role === "leader" ? await rebrandFor(db, serverId, m.factionId, now) : null;
 
-  return { clan: { ...clan!, base }, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses };
+  return { clan: { ...card, base }, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses, rebrand };
+}
+
+async function rebrandFor(db: Database, serverId: number, factionId: number, now: Date): Promise<NonNullable<ClanView["rebrand"]>> {
+  const [p] = await db.select({ texture: flagHolds.texture, until: flagHolds.until }).from(flagHolds)
+    .where(and(eq(flagHolds.factionId, factionId), eq(flagHolds.kind, "pending")));
+  return { pending: p ?? null, freeFlags: await freeFlagsDb(db, serverId, now) };
 }
 
 /**
@@ -188,15 +200,13 @@ export async function directoryDb(db: Database): Promise<{ clans: DirectoryEntry
     .groupBy(factions.id)
     .orderBy(desc(factions.recruiting), asc(sql`lower(${factions.name})`));
 
-  const holdingRows = await db.select({ texture: factions.texture }).from(factions)
-    .where(and(eq(factions.serverId, serverId), inArray(factions.status, HOLDING)));
-  const taken = holdingRows.map((r) => r.texture);
+  const free = await freeFlagsDb(db, serverId, new Date());
 
   const alphaIds = await latestAlphaFactionIds(db, serverId);
 
   return {
     clans: rows.map(({ id, ...r }) => ({ ...r, memberCount: Number(r.memberCount), alpha: alphaIds.has(id) })),
-    flags: { taken, free: CLAIMABLE_FLAGS.filter((f) => !taken.includes(f)) },
+    flags: { taken: CLAIMABLE_FLAGS.filter((f) => !free.includes(f)), free },
   };
 }
 
@@ -275,12 +285,9 @@ export async function claimContextDb(db: Database, discordId: string): Promise<C
   if (!ceremony) return null;
   const [row] = await db.select({ detectedAt: ceremonies.detectedAt, expiresAt: ceremonies.expiresAt })
     .from(ceremonies).where(eq(ceremonies.id, ceremony.id));
-  const holdingRows = await db.select({ texture: factions.texture }).from(factions)
-    .where(and(eq(factions.serverId, ceremony.serverId), inArray(factions.status, HOLDING)));
-  const taken = new Set(holdingRows.map((r) => r.texture));
   return {
     ceremony: { id: ceremony.id, detectedAt: row!.detectedAt, expiresAt: row!.expiresAt, participants: ceremony.participants },
-    freeFlags: CLAIMABLE_FLAGS.filter((f) => !taken.has(f)),
+    freeFlags: await freeFlagsDb(db, ceremony.serverId, new Date()),
   };
 }
 

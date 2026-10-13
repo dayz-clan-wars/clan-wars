@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { discordCopy, DISBAND_WARNING, REFUSAL } from "@factions/copy";
+import { discordCopy, DISBAND_WARNING, REFUSAL, flagLabel } from "@factions/copy";
 import { clanGroup } from "../src/commands/clan.js";
 import { clanEmbed } from "../src/commands/embeds/clan.js";
 import { specOf, sourceOf, componentOf, input, ctxWith, viewFixture } from "./command-fakes.js";
@@ -147,6 +147,14 @@ describe("/clan rename", () => {
     expect(seen).toEqual([{ name: "Wolves" }, { name: "Wolves", tag: "WLF" }]);
   });
 
+  it("passes the flag through as texture and renders flag-pending", async () => {
+    const seen: unknown[] = [];
+    const ctx = ctxWith({ rename: async (a: string, r: unknown) => { seen.push([a, r]); return "flag-pending"; } });
+    const reply = await spec("clan rename").handler(ctx, input({ name: "Bears", flag: "Flag_Wolf" }));
+    expect(seen).toEqual([["111", { name: "Bears", texture: "Flag_Wolf" }]]);
+    expect(reply.content).toBe(discordCopy("rename", "flag-pending"));
+  });
+
   it("refuses without a name, without calling the roster", async () => {
     const seen: unknown[] = [];
     const ctx = ctxWith({ rename: async () => { seen.push("ran"); return "ok"; } });
@@ -246,5 +254,29 @@ describe("clan reply ephemerality", () => {
     expect(disbandPrompt.ephemeral).toBe(true);
     const pressed = await componentOf(clanGroup, "disband")(ctx, { actorDiscordId: "111", arg: null, values: [] });
     expect(pressed.ephemeral).toBe(true);
+  });
+});
+
+describe("/clan rebrand-cancel", () => {
+  it("calls cancelRebrand and renders the shared copy, ephemerally", async () => {
+    const seen: string[] = [];
+    const ctx = ctxWith({ cancelRebrand: async (a: string) => { seen.push(a); return "ok"; } });
+    const reply = await spec("clan rebrand-cancel").handler(ctx, input());
+    expect(seen).toEqual(["111"]);
+    expect(reply.content).toBe(discordCopy("rebrand-cancel", "ok"));
+    expect(reply.ephemeral).toBe(true);
+  });
+});
+
+describe("/clan rename flag autocomplete", () => {
+  const src = () => sourceOf(clanGroup, "clan rename", "flag");
+  it("offers the leader's free pool, labelled", async () => {
+    const ctx = ctxWith({ clanFor: async () => viewFixture({ rebrand: { pending: null, freeFlags: ["Flag_Wolf"] } }) });
+    expect(await src()(ctx, { actorDiscordId: "111", value: "" })).toEqual([{ name: flagLabel("Flag_Wolf"), value: "Flag_Wolf" }]);
+    expect(await src()(ctx, { actorDiscordId: "111", value: "zzzz" })).toEqual([]);
+  });
+  it("offers nothing to a non-leader", async () => {
+    const ctx = ctxWith({ clanFor: async () => viewFixture({ rebrand: null }) });
+    expect(await src()(ctx, { actorDiscordId: "111", value: "" })).toEqual([]);
   });
 });

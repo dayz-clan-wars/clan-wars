@@ -48,6 +48,7 @@ import { feedTick, type FeedPoster } from "./feed-tick.js";
 import { flagImageResolver } from "./flag-image.js";
 import { raidTick } from "./raid-tick.js";
 import { raiseTick } from "./raise-tick.js";
+import { flagHoldTick } from "./flag-hold-tick.js";
 import { weekTick } from "./week-tick.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
@@ -1214,6 +1215,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     } catch (err) {
       console.error("raise tick failed", err);
+    }
+
+    // ⚠️ Right after raiseTick, in its own try/catch: it lapses a pending
+    // flag change only once raiseTick has folded past the deadline, so it
+    // must never run ahead of it — and a raise-tick failure must not stop
+    // old flags returning to the pool.
+    try {
+      const fh = await flagHoldTick(db, new Date());
+      if (fh.lapsed > 0 || fh.released > 0) console.log(`flag holds: ${fh.lapsed} lapsed, ${fh.released} released`);
+    } catch (err) {
+      console.error("flag hold tick failed", err);
     }
 
     // ⚠️ Its own try/catch, after the raise tick and before the posters: the

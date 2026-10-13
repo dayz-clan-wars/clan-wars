@@ -225,6 +225,16 @@ describe("bounty", () => {
     expect(text).toContain("72 h");
     expect(text).toMatch(/map/u);
   });
+  it("flag change notices name the flag, never a coordinate", () => {
+    const render = (kind: string, payload: Record<string, string>) =>
+      noticeText({ kind: kind as never, target: "channel", occurredAt: now, payload }, site, dormantAfterMs);
+    const started = render("flag_change_started", { texture: "Flag_Wolf", until: "2026-10-14T12:00:00.000Z" });
+    expect(started).toContain("**Wolf**");
+    expect(started).toContain("24 hours");
+    expect(render("flag_changed", { texture: "Flag_Wolf", previousTexture: "Flag_Bear", gamertag: "Racer" })).toContain("**Bear**");
+    expect(render("flag_change_lapsed", { texture: "Flag_Wolf" })).toContain("back to the pool");
+  });
+
   it("says an expired bounty is over, and a revoked one was lifted", () => {
     const e = noticeText({ kind: "bounty_expired", target: "dm", occurredAt: now, payload: { bountyId: 1 } }, site, dormantAfterMs);
     const r = noticeText({ kind: "bounty_revoked", target: "dm", occurredAt: now, payload: { bountyId: 1 } }, site, dormantAfterMs);

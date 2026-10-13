@@ -2,10 +2,10 @@ import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, admFiles, events, players, identityLinks, factionMembers, seasons,
-  kills, playerSessions, membershipHistory, raids, bounties,
+  kills, playerSessions, membershipHistory, raids, bounties, factions, factionTextures,
   type Database,
 } from "@factions/db";
-import { sql } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { KD_MIN_KILLS } from "@factions/domain";
 import { playerBoardsDb, playerProfileDb, clanBoardDb, boardPageDb, clanBoardPageDb, playerFeedDb, BOARD_KINDS, BOARD_PAGE_SIZE, FEED_PAGE_SIZE } from "../src/stats";
 import { seedFaction } from "./seed";
@@ -430,6 +430,19 @@ describe("roster player stats", () => {
       expect(p.longestKill).toEqual({ distanceM: 250, weapon: "DMR" });
       expect(p.clanHistory).toEqual([{ tag: "BEAR", name: "BEAR", joinedAt: h(t0, -2), leftAt: null }]);
       expect(p.clan).toEqual({ tag: "BEAR", name: "BEAR", texture: "Flag_Bear" });
+    });
+
+    it("a rebrand does not erase upkeep raises made under the old flag", async () => {
+      const [bear] = await db.select({ id: factions.id }).from(factions).where(eq(factions.tag, "BEAR"));
+      const switchAt = h(t50, 20);
+      await db.update(factionTextures).set({ toAt: switchAt }).where(and(eq(factionTextures.factionId, bear!.id), isNull(factionTextures.toAt)));
+      await db.insert(factionTextures).values({ factionId: bear!.id, texture: "Flag_Rex", fromAt: switchAt });
+      await db.update(factions).set({ texture: "Flag_Rex" }).where(eq(factions.id, bear!.id));
+      // Under the new flag, a Flag_Bear raise no longer counts; a Flag_Rex one does.
+      await mkEvent({ type: "flag.raised", at: h(t50, 21), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });
+      await mkEvent({ type: "flag.raised", at: h(t50, 22), payload: { dayzId: A, gamertag: "Alpha", texture: "Flag_Rex", poleKey: "BEAR:0:0" } });
+      const p = (await playerProfileDb(db, "Alpha", ALL, now))!;
+      expect(p.upkeepRaises).toBe(4);
     });
 
     it("a pending member has no clan on their page", async () => {

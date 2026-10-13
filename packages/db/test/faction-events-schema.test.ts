@@ -72,7 +72,7 @@ describe("faction_events", () => {
       where conname = 'faction_events_kind_valid'
     `);
     const def = (rows as unknown as { def: string }[])[0]!.def;
-    const inSql = [...def.matchAll(/'([a-z]+)'::text/gu)].map((m) => m[1]);
+    const inSql = [...def.matchAll(/'([a-z_]+)'::text/gu)].map((m) => m[1]);
     expect(new Set(inSql)).toEqual(new Set(FACTION_EVENT_KINDS));
   });
 

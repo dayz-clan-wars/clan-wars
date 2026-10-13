@@ -1,5 +1,5 @@
 import { SlashCommandBuilder } from "discord.js";
-import { DISBAND_WARNING, REFUSAL, discordCopy } from "@factions/copy";
+import { DISBAND_WARNING, REFUSAL, discordCopy, flagLabel } from "@factions/copy";
 import { clanEmbed } from "./embeds/clan.js";
 import { confirmReply } from "./confirm.js";
 import { clanView } from "./roster.js";
@@ -20,8 +20,23 @@ const rename: Handler = async (ctx, input) => {
   const name = input.string("name");
   if (!name) return { content: "Give the new name.", ephemeral: true };
   const tag = input.string("tag");
-  const outcome = await ctx.roster.rename(input.actorDiscordId, tag ? { name, tag } : { name });
+  const texture = input.string("flag");
+  const outcome = await ctx.roster.rename(input.actorDiscordId, { name, ...(tag ? { tag } : {}), ...(texture ? { texture } : {}) });
   return { content: discordCopy("rename", outcome), ephemeral: true };
+};
+
+const rebrandCancel: Handler = async (ctx, input) =>
+  ({ content: discordCopy("rebrand-cancel", await ctx.roster.cancelRebrand(input.actorDiscordId)), ephemeral: true });
+
+/** The leader's free pool. Discord caps autocomplete at 25; filter by what was typed so all stay reachable. */
+const flags: AutocompleteSource = async (ctx, a) => {
+  const view = await clanView(ctx, a.actorDiscordId);
+  const typed = a.value.toLowerCase();
+  const free = typeof view === "object" && view ? view.rebrand?.freeFlags ?? [] : [];
+  return free
+    .filter((f) => flagLabel(f).toLowerCase().includes(typed))
+    .slice(0, 25)
+    .map((f) => ({ name: flagLabel(f), value: f }));
 };
 
 const recruiting: Handler = async (ctx, input) => {
@@ -59,9 +74,11 @@ export const clanGroup: CommandGroup = {
     .setDescription("Your clan's page and the leader's settings")
     .addSubcommand((s) => s.setName("info").setDescription("Your clan's page"))
     .addSubcommand((s) => s.setName("leave").setDescription("Leave your clan"))
-    .addSubcommand((s) => s.setName("rename").setDescription("Rename the clan")
-      .addStringOption((o) => o.setName("name").setDescription("New name").setRequired(true))
-      .addStringOption((o) => o.setName("tag").setDescription("New tag").setRequired(false)))
+    .addSubcommand((s) => s.setName("rename").setDescription("Rebrand the clan: name, tag, and optionally a new flag")
+      .addStringOption((o) => o.setName("name").setDescription("New name (repeat the current one to keep it)").setRequired(true))
+      .addStringOption((o) => o.setName("tag").setDescription("New tag").setRequired(false))
+      .addStringOption((o) => o.setName("flag").setDescription("New flag. Yours once a member raises it at your pole").setRequired(false).setAutocomplete(true)))
+    .addSubcommand((s) => s.setName("rebrand-cancel").setDescription("Cancel a flag change that hasn't been raised yet"))
     .addSubcommand((s) => s.setName("recruiting").setDescription("Edit the recruiting post")
       .addBooleanOption((o) => o.setName("open").setDescription("Recruiting open").setRequired(true))
       .addStringOption((o) => o.setName("hours").setDescription("Play window").setRequired(false))
@@ -73,7 +90,8 @@ export const clanGroup: CommandGroup = {
   specs: [
     { path: "clan info", handler: info },
     { path: "clan leave", handler: leave },
-    { path: "clan rename", handler: rename },
+    { path: "clan rename", handler: rename, autocomplete: { flag: flags } },
+    { path: "clan rebrand-cancel", handler: rebrandCancel },
     { path: "clan recruiting", handler: recruiting },
     { path: "clan rebind", handler: rebind, autocomplete: { pole: poles } },
     { path: "clan disband", handler: disband },

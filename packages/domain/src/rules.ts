@@ -23,6 +23,10 @@ export const CEREMONY_MIN_PARTICIPANTS = 3;
 export const CEREMONY_WINDOW_MS = 10 * MIN;
 export const CLAIM_WINDOW_MS = 24 * HOUR;
 export const ACTIVATION_WINDOW_MS = 24 * HOUR;
+/** A pending flag change lapses if no full member raises the new flag at home within this (spec 2026-10-13 §1). Same length as activation: a restart must fall inside it, since the kit is the only source of the new flag. */
+export const FLAG_CHANGE_WINDOW_MS = 24 * HOUR;
+/** After a flag change completes, the old flag stays off the pool this long — it is probably still flying at the base. Equal to RELEASED_POLE_GRACE_MS. */
+export const OLD_FLAG_HOLD_MS = 3 * DAY;
 export const CLAN_NAME_LENGTH = { min: 3, max: 32 } as const;
 export const CLAN_TAG_LENGTH = { min: 2, max: 5 } as const;
 

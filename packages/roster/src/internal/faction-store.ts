@@ -6,6 +6,7 @@ import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx } from "./feed-actor";
 import { declareTx, lockDeclarations, releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity } from "./holds";
+import { flagTakenTx } from "./flag-holds";
 
 // Widened to a mutable array: HOLDING_STATUSES is `as const` (a readonly
 // tuple) so every faction/domain consumer gets full literal-type checking,
@@ -20,7 +21,6 @@ export type OpenCeremony = {
 export interface FactionStore {
   openCeremonyFor(discordId: string): Promise<OpenCeremony | null>;
   openCeremonyByIdFor(ceremonyId: number, discordId: string): Promise<OpenCeremony | null>;
-  textureHeld(serverId: number, texture: string): Promise<boolean>;
   saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void>;
   loadDraft(ceremonyId: number, discordId: string): Promise<{ name: string; tag: string; texture: string } | null>;
   reserve(a: ReserveArgs): Promise<"ok" | "ceremony-taken" | "flag-taken" | "tag-taken" | "pole-taken" | "too-close" | "name-taken" | "name-held" | "tag-held">;
@@ -36,7 +36,7 @@ export type ReserveArgs = {
 
 /** Unwinds the transaction carrying a non-error outcome, the way roster-store's RosterAbort does. */
 class ReserveAbort extends Error {
-  constructor(readonly outcome: "too-close" | "pole-taken" | "name-taken" | "name-held" | "tag-held") { super(outcome); }
+  constructor(readonly outcome: "flag-taken" | "too-close" | "pole-taken" | "name-taken" | "name-held" | "tag-held") { super(outcome); }
 }
 
 export class PgFactionStore implements FactionStore {
@@ -99,16 +99,6 @@ export class PgFactionStore implements FactionStore {
     };
   }
 
-  async textureHeld(serverId: number, texture: string): Promise<boolean> {
-    const [row] = await this.db.select({ id: factions.id }).from(factions)
-      .where(and(
-        eq(factions.serverId, serverId),
-        eq(factions.texture, texture),
-        inArray(factions.status, HOLDING),
-      ));
-    return row !== undefined;
-  }
-
   async saveDraft(ceremonyId: number, discordId: string, d: { name: string; tag: string; texture: string }, at: Date): Promise<void> {
     await this.db.insert(claimDrafts)
       .values({ ceremonyId, discordId, name: d.name, tag: d.tag, texture: d.texture, createdAt: at })
@@ -166,6 +156,11 @@ export class PgFactionStore implements FactionStore {
         if (identityTaken === "name-taken" || identityTaken === "name-held" || identityTaken === "tag-held") {
           throw new ReserveAbort(identityTaken);
         }
+        // ⚠️ A flag can be held outside `factions` — a rival's pending
+        // rebrand, or a just-replaced flag on its 3-day hold — and
+        // `factions_holding_texture_uniq` cannot see those. Under the
+        // identity lock taken above, which every rebrand also takes.
+        if (await flagTakenTx(tx, a.serverId, a.texture, a.at)) throw new ReserveAbort("flag-taken");
 
         const [f] = await tx.insert(factions).values({
           serverId: a.serverId, name: a.name, tag: a.tag, texture: a.texture,

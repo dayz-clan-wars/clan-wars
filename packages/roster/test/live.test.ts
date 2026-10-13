@@ -152,6 +152,15 @@ describe("roster live reads", () => {
     expect(row!.payload).toEqual({ name: "Bears", tag: "BEAR", texture: "Flag_Bear", previousName: "Cubs" });
   });
 
+  it("clans carry previousTexture on flag_changed and drop keys outside the allowlist", async () => {
+    await db.insert(factionEvents).values({
+      serverId, factionId: clanId, kind: "flag_changed", occurredAt: now,
+      payload: { name: "Bears", tag: "BEAR", texture: "Flag_Wolf", previousTexture: "Flag_Bear", dayzId: "Z".repeat(40) },
+    } as never);
+    const [row] = await liveFeedDb(db, "clans");
+    expect(row!.payload).toEqual({ name: "Bears", tag: "BEAR", texture: "Flag_Wolf", previousTexture: "Flag_Bear" });
+  });
+
   it("clans give a missing or non-string texture as an empty string, never the text undefined", async () => {
     await db.insert(factionEvents).values({
       serverId, factionId: clanId, kind: "founded", occurredAt: now,

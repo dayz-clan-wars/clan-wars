@@ -1,6 +1,6 @@
 import { ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, MIN_BASE_SPACING_M } from "@factions/domain";
 import { days } from "@/lib/format";
-import { flagThumbPath } from "@/src/flag-images";
+import { FlagPicker } from "@/app/components/flag-picker";
 import type { FieldError as FieldErrorT } from "@/lib/field-errors";
 import { Panel, PanelBody, FieldError, SubmitButton, invalid, btnCta, field, fieldLabel, checkbox, kickerSm } from "@/app/components/ui";
 
@@ -27,7 +27,6 @@ export function ClaimForm({ ceremonyId, freeFlags, participants, meDayzId, err, 
   // ⚠️ Empty means "nothing to restore", not "nobody ticked": the claimant's own
   // hidden field always posts, so a refused roster that came back is never empty.
   const keptMembers = kept.members.length > 0 ? new Set(kept.members) : null;
-  const flagErr = err?.field === "texture";
   const memberErr = err?.field === "member";
   const firstOther = participants.find((p) => p.dayzId !== meDayzId)?.dayzId;
 
@@ -56,26 +55,7 @@ export function ClaimForm({ ceremonyId, freeFlags, participants, meDayzId, err, 
        */}
       <Panel num="02" title="Flag" aside={`${freeFlags.length} free`} tone="plain">
         <PanelBody>
-          <fieldset aria-describedby={flagErr ? "err-texture" : undefined}>
-            <legend className="sr-only">Flag</legend>
-            <FieldError err={err} name="texture" />
-            <ul className="grid grid-cols-4 gap-2 sm:grid-cols-6">
-              {freeFlags.map((f, i) => (
-                <li key={f}>
-                  <label className="group relative flex cursor-pointer flex-col items-center gap-1 border-2 border-rule-3 p-2 has-[:checked]:border-gold has-[:checked]:bg-surface has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-gold">
-                    <input type="radio" name="texture" value={f} required className="sr-only" defaultChecked={f === keptFlag}
-                      aria-invalid={flagErr || undefined} autoFocus={flagErr && i === 0 ? true : undefined} />
-                    {/* L4: the pick is marked by a glyph as well as the edge colour, so it never rests on colour alone. */}
-                    <span aria-hidden="true" className="absolute right-1 top-1 hidden h-4 w-4 items-center justify-center bg-gold font-mono text-[11px] leading-none text-ground group-has-[:checked]:flex">✓</span>
-                    {/* L4: alt="" — the flag's name is the text right under it; alt={f} made a reader say it twice. */}
-                    {/* H5: up to 33 tiles at once — the 96px thumb, not the ~50KB full PNG, covers this 48px box at 2x; lazy because most sit off the fold. */}
-                    <img src={`/${flagThumbPath(f)}`} alt="" loading="lazy" width={48} height={48} className="h-12 w-12 object-contain" />
-                    <span className="font-mono text-[11px] text-muted">{f.replace(/^Flag_/u, "")}</span>
-                  </label>
-                </li>
-              ))}
-            </ul>
-          </fieldset>
+          <FlagPicker flags={freeFlags} name="texture" checked={keptFlag} err={err} required />
         </PanelBody>
       </Panel>
 

@@ -13,6 +13,10 @@ const URL = requireTestDatabaseUrl();
  * uniques. They are two statements of one fact and nothing but this test
  * holds them together. Drift means a faction keeps or loses its flag, tag or
  * pole in a state nobody intended.
+ *
+ * The rebrand's pool reads (`freeFlagsDb`, `flagTakenTx`) are a third
+ * statement of the same set; this package cannot import roster, so they are
+ * pinned per status in packages/roster/test/flag-holds.test.ts.
  */
 describe("faction scarcity indexes match HOLDING_STATUSES", () => {
   let db: Database;

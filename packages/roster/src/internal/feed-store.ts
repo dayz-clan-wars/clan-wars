@@ -21,6 +21,8 @@ export type FeedPayload = {
   actor?: string;
   /** `renamed` only. */
   previousName?: string;
+  /** `flag_changed` only: the flag flown before. */
+  previousTexture?: string;
   /** `dormant` only. ISO 8601 — jsonb has no timestamp type. */
   disbandAt?: string;
 };

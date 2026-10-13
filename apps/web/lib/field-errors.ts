@@ -15,6 +15,7 @@ import { lookupCopy } from "./copy-lookup";
 export const FIELD_FOR: Record<string, string> = Object.assign(Object.create(null), {
   "rename.bad-name": "name", "rename.name-taken": "name", "rename.name-held": "name",
   "rename.bad-tag": "tag", "rename.tag-taken": "tag", "rename.tag-held": "tag",
+  "rename.bad-flag": "texture", "rename.flag-taken": "texture",
   "claim.bad-name": "name", "claim.name-taken": "name", "claim.name-held": "name",
   "claim.bad-tag": "tag", "claim.tag-taken": "tag", "claim.tag-held": "tag",
   "claim.bad-flag": "texture", "claim.flag-taken": "texture",

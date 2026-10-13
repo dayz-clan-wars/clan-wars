@@ -1,10 +1,10 @@
 import {
-  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
+  ACTIVATION_WINDOW_MS, CLAN_NAME_LENGTH, CLAN_SIZE_CAP, CLAN_TAG_LENGTH, FLAG_CHANGE_WINDOW_MS, GUEST_PASS_MS, JOIN_PRESENCE_RADIUS_M, MIN_BASE_SPACING_M,
   PENDING_EXPIRY_MS, REBIND_COOLDOWN_MS, RELEASED_POLE_GRACE_MS, RENAME_COOLDOWN_MS, ROSTER_COOLDOWN_MS,
 } from "@factions/domain";
 import type {
   ActorRefusal, InviteOutcome, AcceptInviteOutcome, RequestJoinOutcome, DecideRequestOutcome, LeaveOutcome, KickOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, ReserveOutcome, GuestGrantOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, ReserveOutcome, GuestGrantOutcome,
 } from "@factions/roster";
 import { days, hours } from "./format";
 
@@ -97,18 +97,30 @@ const DISBAND: Record<"ok" | "not-leader" | "vote-open" | ActorRefusal | "unconf
   unconfirmed: "Tick the box to confirm before disbanding.",
   "vote-open": VOTE_OPEN,
 };
-const RENAME: Record<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag", string> = {
+const RENAME: Record<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag" | "bad-flag", string> = {
   ...REFUSAL,
   ok: "Renamed.",
-  "not-leader": "Only the leader can rename the clan.",
-  cooldown: `A clan can be renamed once every ${days(RENAME_COOLDOWN_MS)}.`,
+  "flag-pending": `Saved. Your new flag is reserved and arrives in your kit at the next restart. Raise it at your pole within ${hours(FLAG_CHANGE_WINDOW_MS)} to make it yours.`,
+  "not-leader": "Only the leader can rebrand the clan.",
+  cooldown: `A clan can rebrand once every ${days(RENAME_COOLDOWN_MS)}.`,
   "name-taken": "Another clan has that name.",
   "tag-taken": "Another clan has that tag.",
   "name-held": "That name belongs to a clan that renamed or disbanded and is held.",
   "tag-held": "That tag belongs to a clan that renamed or disbanded and is held.",
-  unchanged: "That is already the clan's name and tag.",
+  unchanged: "That is already the clan's name, tag and flag.",
+  "change-pending": "A flag change is already waiting to be raised. Cancel it first.",
+  "not-active": "Only an active clan can change its flag.",
+  "no-base": "Your clan needs a base before it can change its flag.",
+  "flag-taken": "That flag was taken while you were choosing. Pick another.",
   "bad-name": `A clan name is ${CLAN_NAME_LENGTH.min} to ${CLAN_NAME_LENGTH.max} characters.`,
   "bad-tag": `A tag is ${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits.`,
+  "bad-flag": "Pick one of the flags on the list.",
+};
+const REBRAND_CANCEL: Record<CancelRebrandOutcome | ActorRefusal, string> = {
+  ...REFUSAL,
+  ok: "Flag change cancelled. The flag is back in the pool.",
+  "not-leader": "Only the leader can cancel a flag change.",
+  "nothing-pending": "There is no flag change to cancel.",
 };
 const RECRUITING: Record<"ok" | "not-permitted" | ActorRefusal, string> = { ...REFUSAL, ok: "Recruiting post saved.", "not-permitted": "Only an officer or the leader can edit the recruiting post." };
 const REBIND: Record<"ok" | "refused" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
@@ -164,6 +176,6 @@ const REVOKE_GUEST: Record<"ok" | "not-permitted" | "gone" | ActorRefusal, strin
 export const TABLES = {
   invite: INVITE, revoke: REVOKE, accept: ACCEPT, decline: DECLINE, request: REQUEST, withdraw: WITHDRAW, decide: DECIDE,
   leave: LEAVE, kick: KICK, role: ROLE, transfer: TRANSFER, disband: DISBAND, rename: RENAME, recruiting: RECRUITING, rebind: REBIND, claim: CLAIM, input: INPUT,
-  guest: GUEST, "revoke-guest": REVOKE_GUEST,
+  guest: GUEST, "revoke-guest": REVOKE_GUEST, "rebrand-cancel": REBRAND_CANCEL,
 } as const;
 export type Action = keyof typeof TABLES;

@@ -15,7 +15,7 @@ export const GUIDE_LINKS: Record<string, GuideRef> = {
   "/join": { slug: "getting-in" },
   "/me": { slug: "" },
   "/clan": { slug: "running-a-clan" },
-  "/clan/settings": { slug: "running-a-clan", heading: "rename" },
+  "/clan/settings": { slug: "running-a-clan", heading: "rebrand" },
   "/clan/vault": { slug: "running-a-clan", heading: "the-vault" },
   "/clan/board": { slug: "the-scoreboard", heading: "player-boards" },
   "/players": { slug: "the-scoreboard", heading: "player-boards" },

@@ -10,7 +10,7 @@ import { activeServerId } from "./server";
 
 export type LiveRow =
   | { feed: "kills" | "hits" | "streaks" | "long-range"; id: number; occurredAt: Date; payload: LivePayload[LiveEntryKind] }
-  | { feed: "clans"; id: number; occurredAt: Date; kind: FactionEventKind; payload: { name: string; tag: string; texture: string; actor?: string; previousName?: string; disbandAt?: string } }
+  | { feed: "clans"; id: number; occurredAt: Date; kind: FactionEventKind; payload: { name: string; tag: string; texture: string; actor?: string; previousName?: string; previousTexture?: string; disbandAt?: string } }
   | { feed: "war-log"; id: number; occurredAt: Date; kind: WarLogKind; payload: Record<string, unknown> }
   | { feed: "achievements"; id: number; occurredAt: Date; payload: { key: string; name: string; description: string; ownerKind: "player" | "clan"; ownerName: string | null; gamertag: string | null; clanTag: string | null } }
   | { feed: "bans"; id: number; occurredAt: Date; kind: BanAnnouncementKind; payload: { gamertag: string; reason: BanReason; expiresAt: string | null } };
@@ -68,7 +68,7 @@ export async function liveFeedDb(db: Database, feed: Exclude<LiveFeed, "online">
       return rows.map((r) => {
         const p = r.payload as Record<string, unknown>;
         const out: Extract<LiveRow, { feed: "clans" }>["payload"] = { name: String(p.name), tag: String(p.tag), texture: typeof p.texture === "string" ? p.texture : "" };
-        for (const k of ["actor", "previousName", "disbandAt"] as const) if (typeof p[k] === "string") out[k] = p[k];
+        for (const k of ["actor", "previousName", "previousTexture", "disbandAt"] as const) if (typeof p[k] === "string") out[k] = p[k];
         return { feed, id: r.id, occurredAt: r.occurredAt, kind: r.kind, payload: out };
       });
     }

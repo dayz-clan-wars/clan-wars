@@ -29,7 +29,7 @@ const RED = 0xed4245;
 
 const COLOR: Record<FactionEventKind, number> = {
   founded: GREEN, activated: GREEN, revived: GREEN,
-  renamed: BLUE, rebound: BLUE,
+  renamed: BLUE, rebound: BLUE, flag_changed: BLUE,
   dormant: AMBER, lapsed: AMBER,
   disbanded: RED,
 };

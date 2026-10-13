@@ -35,6 +35,13 @@ describe("feedEmbed", () => {
     expect(d).toContain("Wolf Tang Clan");
   });
 
+  it("flag_changed names the new flag and the old one", () => {
+    const d = feedEmbed(ev("flag_changed", { texture: "Flag_Wolf", previousTexture: "Flag_Bear", actor: "Racer" })).description!;
+    expect(d).toContain("New colors");
+    expect(d).toContain("Wolf");
+    expect(d).toContain("formerly Bear");
+  });
+
   it("renders the disband deadline on a dormancy post as a relative timestamp", () => {
     const disbandAt = "2026-09-15T21:30:07.000Z";
     const d = feedEmbed(ev("dormant", { disbandAt })).description!;
@@ -82,7 +89,7 @@ describe("feedEmbed", () => {
   });
 
   it("covers every kind", () => {
-    for (const kind of ["founded", "activated", "lapsed", "renamed", "rebound", "dormant", "revived", "disbanded"] as const) {
+    for (const kind of ["founded", "activated", "lapsed", "renamed", "rebound", "dormant", "revived", "disbanded", "flag_changed"] as const) {
       const e = feedEmbed(ev(kind, { previousName: "Old", disbandAt: "2026-09-15T00:00:00.000Z" }));
       expect(e.description).toBeTruthy();
       expect(e.color).toBeTypeOf("number");

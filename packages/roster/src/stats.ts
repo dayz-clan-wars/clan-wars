@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import {
-  bounties, events, factionMembers, factions, identityLinks, kills, membershipHistory, playerSessions, players, raids, referralQualifications, referrals, seasons,
+  bounties, events, factionMembers, factions, factionTextures, identityLinks, kills, membershipHistory, playerSessions, players, raids, referralQualifications, referrals, seasons,
 } from "@factions/db";
 import { KD_MIN_KILLS, referralWeekFor } from "@factions/domain";
 import { and, asc, desc, eq, inArray, isNotNull, sql, type SQL } from "drizzle-orm";
@@ -673,8 +673,9 @@ async function opponents(db: Database, other: PgColumn, where: SQL): Promise<{ g
  * own clan's declaration with the clan's texture while a full member";
  * declaration history is not kept (the rows are deleted on release), so the
  * pole check is dropped and what remains is: a `flag.raised` by this player
- * whose texture is the texture of a clan they were a FULL member of at
- * `occurred_at`, resolved through `membership_history`. A member raising
+ * whose texture is the texture that clan was flying at the time of the raise
+ * (`faction_textures`, so a rebrand keeps earlier raises) of a clan they were a
+ * FULL member of at `occurred_at`, resolved through `membership_history`. A member raising
  * their own colors at a pole that is not the base therefore counts — that
  * raise already triggers a rebind proposal, so it is rare and visible.
  */
@@ -687,7 +688,14 @@ async function upkeepRaiseCount(db: Database, serverId: number, dayzId: string, 
       sql`${membershipHistory.joinedAt} <= ${events.occurredAt}`,
       sql`(${membershipHistory.leftAt} is null or ${events.occurredAt} < ${membershipHistory.leftAt})`,
     ))
-    .innerJoin(factions, and(eq(factions.id, membershipHistory.factionId), sql`${factions.texture} = ${events.payload}->>'texture'`))
+    // Spec 2026-10-13 §3: the flag the clan flew AT THE TIME of the raise,
+    // not its current one — a rebrand must not erase members' raises.
+    .innerJoin(factionTextures, and(
+      eq(factionTextures.factionId, membershipHistory.factionId),
+      sql`${factionTextures.texture} = ${events.payload}->>'texture'`,
+      sql`${factionTextures.fromAt} <= ${events.occurredAt}`,
+      sql`(${factionTextures.toAt} is null or ${events.occurredAt} < ${factionTextures.toAt})`,
+    ))
     .where(and(
       eq(events.serverId, serverId), eq(events.type, "flag.raised"),
       sql`${events.payload}->>'dayzId' = ${dayzId}`,

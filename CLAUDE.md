@@ -420,6 +420,7 @@ anything.
 
 | What | Where |
 |---|---|
+| Rebrand (a clan changes its flag) | Rules in `packages/roster/src/internal/flag-holds.ts` (`freeFlagsDb`, `flagTakenTx`, start/cancel/complete/sweep); `flag_holds` + `faction_textures` (migration 0066, whose `faction_textures_first` trigger writes every clan's first row); completion in `apps/bot/src/raise-tick.ts`; sweep `apps/bot/src/flag-hold-tick.ts` right after raiseTick. ⚠️ A pending hold holds its flag until the SWEEP deletes it, never just until `until` — the sweep waits for the raise consumer to fold past the deadline. ⚠️ The kit (`supply-tick.ts`) delivers the pending flag; without it nothing can be raised. Spec `docs/superpowers/specs/2026-10-13-clan-rebrand-flag-design.md` |
 | The player's guide (the authority over every rule) | `apps/web/content/guide/` (hand-written HTML fragments) and `apps/web/lib/guide.ts` (chapter manifest) — served at dayzclanwars.com/guide by `apps/web/app/guide/`. Moved in from the archived field-guide repo on 2026-09-07 |
 | The guide in Discord (📖 Field Guide category, one channel per chapter) | Written from the same fragments by `apps/web/scripts/publish-guide.ts` via `apps/web/lib/guide-discord.ts`; a reconciler, run by `deploy/deploy-web.sh` after every web deploy and hourly by `clan-wars-guide.timer`. Edit the site, never the channels. Runbook: `docs/deploy/2026-09-09-guide-in-discord.md` |
 | The server-name marquee (in-game name under the top bar) | Nitrado `settings.config.hostname`, read every sweep by the worker into `servers.hostname`/`hostname_seen_at`, served by `liveServers()` in `packages/roster/src/servers.ts`, rendered by `apps/web/app/components/server-strip.tsx`. Never configured or hard-coded. Runbook: `docs/deploy/2026-09-11-server-name-strip.md` |
@@ -521,12 +522,13 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   flag and raising it is the activation, so an active-only predicate leaves every new clan
   unable to activate. The 2026-09-04 spec's §4.3 shipped with `active` alone and did
   exactly that to COK and NIGHT; it is amended.
-- **Lock order (spec §4.12): `factions` → `declarations` → `poles` →
+- **Lock order (spec §4.12): `factions` → `flag_holds` → `faction_textures` → `declarations` → `poles` →
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
   `achievement_counters` → `koth_votes` → `koth_vote_voters` → `koth_events` → `bounties` → `award_grants` → `award_transfers` → `faction_events` → `war_log_events` → `clan_notices` →
   `zone_incidents` → `zone_incident_participants` → `bans`.**
+  `flag_holds`/`faction_textures` are written by `packages/roster/src/internal/flag-holds.ts` alone (rename, cancel, raise-tick's completion, the flag-hold sweep), always under the clan's `factions` row lock.
   `koth_events` is written by the restart tick, `/koth` and `koth-tick`; the award transaction
   takes `koth_events` → `award_grants` → `clan_notices`.
   `koth_votes`/`koth_vote_voters` are written by `/kothvote`, the ballot handler and
