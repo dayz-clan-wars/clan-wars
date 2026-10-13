@@ -4,7 +4,7 @@ import { factions, factionTextures, flagHolds } from "@factions/db";
 import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES, OLD_FLAG_HOLD_MS } from "@factions/domain";
 import { and, eq, gt, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
 import { appendFactionEventTx } from "./feed-store";
-import { noticeClanTx } from "./notices";
+import { noticeClanTx, noticeUserTx } from "./notices";
 
 /**
  * Is a `flag_holds` row still holding its flag?
@@ -128,4 +128,44 @@ export async function announceFlagChangeTx(tx: Tx, a: { serverId: number; factio
     serverId: a.serverId, factionId: a.factionId, kind: "flag_changed", occurredAt: a.at,
     payload: { texture: a.texture, previousTexture: a.previousTexture, gamertag: a.gamertag },
   });
+}
+
+/**
+ * Spec §2 "Sweep". Released holds go on the clock. A pending hold lapses only
+ * once the raise consumer has folded an event at or past its deadline
+ * (`foldedThrough`), so a raise logged in time but not yet folded can still
+ * complete it — or, as a backstop for a log that has stopped, a full
+ * FLAG_CHANGE_WINDOW_MS after the deadline.
+ *
+ * ⚠️ Each lapse locks the clan's `factions` row first (§4.12) — the same lock
+ * a completing raise holds — and re-reads the hold under it.
+ */
+export async function sweepFlagHoldsDb(db: Database, a: { now: Date; foldedThrough: Date | null }): Promise<{ lapsed: number; released: number }> {
+  const released = await db.delete(flagHolds)
+    .where(and(eq(flagHolds.kind, "released"), lte(flagHolds.until, a.now)))
+    .returning({ id: flagHolds.id });
+
+  const backstop = new Date(a.now.getTime() - FLAG_CHANGE_WINDOW_MS);
+  const due = await db.select({ id: flagHolds.id, factionId: flagHolds.factionId }).from(flagHolds).where(and(
+    eq(flagHolds.kind, "pending"),
+    a.foldedThrough === null
+      ? lte(flagHolds.until, backstop)
+      : or(lte(flagHolds.until, a.foldedThrough), lte(flagHolds.until, backstop))!,
+  ));
+
+  let lapsed = 0;
+  for (const d of due) {
+    lapsed += await db.transaction(async (tx) => {
+      const [clan] = await tx.select({ serverId: factions.serverId, leader: factions.leaderDiscordId }).from(factions)
+        .where(eq(factions.id, d.factionId)).for("update");
+      const gone = await tx.delete(flagHolds).where(and(eq(flagHolds.id, d.id), eq(flagHolds.kind, "pending")))
+        .returning({ texture: flagHolds.texture });
+      if (!clan || gone.length === 0) return 0; // completed or cancelled meanwhile
+      const payload = { texture: gone[0]!.texture };
+      await noticeClanTx(tx, { serverId: clan.serverId, factionId: d.factionId, kind: "flag_change_lapsed", occurredAt: a.now, payload });
+      await noticeUserTx(tx, { serverId: clan.serverId, factionId: d.factionId, discordId: clan.leader, kind: "flag_change_lapsed", occurredAt: a.now, payload });
+      return 1;
+    });
+  }
+  return { lapsed, released: released.length };
 }
