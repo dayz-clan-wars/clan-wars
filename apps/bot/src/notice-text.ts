@@ -1,7 +1,7 @@
-import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, timeLeftText } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, FLAG_CHANGE_WINDOW_MS, timeLeftText } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
-import { rel, at, atRel } from "@factions/copy";
+import { rel, at, atRel, flagLabel } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
 
 const DAY_MS = 86_400_000;
@@ -146,6 +146,9 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   demoted: (p, ctx) => `⬇️ ${person(p.gamertag, ctx.site)} demoted to member`,
   transferred: (p, ctx) => `👑 ${person(p.gamertag, ctx.site)} is now leader (transferred by ${person(p.old, ctx.site)})`,
   renamed: (p, ctx) => `✏️ We are now ${clanLink(ctx.site, String(p.tag), String(p.name))}.`,
+  flag_change_started: (p) => `🏳️ New flag reserved: **${flagLabel(String(p.texture))}**. It's in your kit at the next restart. Raise it at your pole within ${hours(FLAG_CHANGE_WINDOW_MS)} hours, or it goes back to the pool.`,
+  flag_changed: (p, ctx) => `🏳️ ${person(p.gamertag, ctx.site)} raised **${flagLabel(String(p.texture))}**. These are our colors now. **${flagLabel(String(p.previousTexture))}** is held for a few days, then goes back to the pool.`,
+  flag_change_lapsed: (p) => `🏳️ Nobody raised **${flagLabel(String(p.texture))}** in time, so it went back to the pool. We still fly our old flag.`,
   invited: (p, ctx) => `${clanLink(ctx.site, String(p.tag), String(p.clan))} invited you. Accept or decline: [open it](<${p.link}>)`,
   // request_accepted/declined and pending_expired carry a clan NAME only, no
   // tag (requests.ts, presence-tick.ts) — bold and unlinked, same rule.

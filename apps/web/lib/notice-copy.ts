@@ -1,5 +1,6 @@
 import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
+import { flagLabel } from "@factions/copy";
 
 /**
  * The site's rendering of a clan notice: a kicker, a title, and a sentence.
@@ -53,6 +54,9 @@ export type NoticeCopy = {
  * `gamertagOrId` in the roster's feed-actor) and must never be printed as if
  * it were a gamertag.
  */
+/** A flag's display name; an empty payload reads "the flag" rather than leaking "undefined". */
+const flagName = (v: NoticePayload[string] | undefined): string => (typeof v === "string" && v ? flagLabel(v) : "the flag");
+
 const who = (v: NoticePayload[string] | undefined): string => {
   if (v === null || v === undefined || v === "") return "someone";
   const s = String(v);
@@ -145,6 +149,15 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   renamed: { group: "Roster", render: (p) => ({
     kicker: "Roster", title: `You are now ${clanOf(p.name)}`,
     body: p.tag ? `The tag is ${String(p.tag)}.` : "The clan was renamed." }) },
+  flag_change_started: { group: "Roster", render: (p) => ({
+    kicker: "Rebrand", title: `New flag reserved: ${flagName(p.texture)}`,
+    body: "It arrives in your kit at the next restart. Raise it at your pole to make it yours." }) },
+  flag_changed: { group: "Roster", render: (p) => ({
+    kicker: "Rebrand", title: `New colors: ${flagName(p.texture)}`,
+    body: `${who(p.gamertag)} raised it. ${flagName(p.previousTexture)} is held for a few days, then goes back to the pool.` }) },
+  flag_change_lapsed: { group: "Roster", render: (p) => ({
+    kicker: "Rebrand", title: "The flag change lapsed",
+    body: `Nobody raised ${flagName(p.texture)} in time. It is back in the pool, and the clan keeps its flag.` }) },
 
   // ---- Leadership ----
   transferred: { group: "Leadership", render: (p) => ({
