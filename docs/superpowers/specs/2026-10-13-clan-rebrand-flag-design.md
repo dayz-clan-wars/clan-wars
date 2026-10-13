@@ -1,7 +1,7 @@
 # Clan rebrand: changing a clan's flag
 
 **Date:** 2026-10-13
-**Status:** design approved in chat; spec awaiting review
+**Status:** approved; implemented by `docs/superpowers/plans/2026-10-13-clan-rebrand-flag.md`
 
 ## Purpose
 
@@ -90,6 +90,7 @@ and revives it, through the existing dormant branch.
 | `faction_id` | bigint FK `factions.id`, `ON DELETE cascade` | the clan holding it |
 | `kind` | text, CHECK in `('pending','released')` | |
 | `until` | timestamptz not null | lapse time (`pending`) or release time (`released`) |
+| `stamps_cooldown` | boolean not null | a flag-only change stamps `renamed_at` at completion; the completing raise needs to know which kind of change it finishes |
 | `created_at` | timestamptz not null | |
 
 - `flag_holds_texture_uniq` UNIQUE `(server_id, texture)`, **unconditional**: a row
@@ -108,8 +109,10 @@ and revives it, through the existing dormant branch.
 - PK `(faction_id, from_at)`; partial UNIQUE `(faction_id) WHERE to_at IS NULL`.
 - **Backfill** in the migration: one row per existing `factions` row (every status),
   `(id, texture, created_at, null)`.
-- Founding (`reserve`) inserts the first row in the same transaction as the
-  `factions` insert.
+- The first row per clan is written by an `AFTER INSERT` trigger on `factions`
+  (`faction_textures_first`) with `from_at = '-infinity'`, not by `reserve`, so every
+  insert path gets one, including test seeds. `'-infinity'` keeps `upkeepRaiseCount`
+  unchanged for a clan that never rebrands, since its membership span still bounds the window.
 
 ### One clan per flag across both tables
 
@@ -138,8 +141,9 @@ gains a case pinning the free-pool read's holding-status predicate to
 ### Free pool
 
 Claim form and Rebrand picker share one rule: the 33-flag constant, minus textures of
-holding clans, minus `flag_holds` rows with `until > now`. Because reads filter on the
-time, a hold ends on time whether or not the sweep has run.
+holding clans, minus held `flag_holds` rows. A `pending` hold is held until the sweep
+deletes it, even past `until`: another clan must not claim the flag while the sweep is
+still waiting for the log to catch up. A `released` hold is held while `until > now`.
 
 ### Sweep
 
@@ -210,12 +214,13 @@ nothing to raise.
 - **`/api/clan/rename`** accepts an optional `texture`; **`/api/clan/rebrand/cancel`**
   is new. Refusal codes follow the existing `code("rename", …)` pattern: `bad-flag`,
   `flag-taken`, `change-pending`, `cooldown`, `not-active`.
+  The cancel copy action key, on the site and in Discord, is `rebrand-cancel` (kebab).
 - **Discord**: `/clan rename` gains an optional `flag` option (with autocomplete over
   the free pool) and a `/clan rebrand-cancel` subcommand, per the command-parity spec.
   `apps/bot/test/parity.test.ts` maps the new cancel write to it.
 - **Notice kinds** (`flag_change_started`, `flag_changed`, `flag_change_lapsed`) need
   wording in **both** renderers: `apps/bot/src/notice-text.ts` and
-  `apps/web/lib/notice-copy.ts`. The feed kind `flag_changed` carries old and new
+  `apps/web/lib/notice-copy.ts`. The feed kind is `flag_changed`, the same name as the clan notice kind, and carries old and new
   texture in its frozen payload (no coordinates).
 - **Web vocabulary**: `apps/web` sees `clanTextures`-style names that `packages/roster`
   maps at its boundary. `copy-vocabulary.test.ts` bans "faction" in web identifiers.

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- **Rebrand: clans can change their flag.** The leader picks a new flag with the rename (now "Rebrand") on the site or with `/clan rename flag:`. It is reserved at once, arrives in the kit at the next restart, and becomes the clan's flag when a member raises it at the base. Until then either flag counts at home. Unraised within 24 hours, it goes back to the pool at no cooldown cost; `/clan rebrand-cancel` drops it sooner. The old flag is held for 3 days. Members' past flag raises keep counting on their profiles.
+
 ## [1.62.1] - 2026-10-13
 
 ### Fixed
