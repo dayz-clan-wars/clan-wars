@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.62.1] - 2026-10-13
+
 ### Fixed
 
 - A clan that sets up a new base with a white flag no longer goes dormant a minute later. A new base gives you the usual 7 days to raise your own flag there.
