@@ -250,8 +250,23 @@ describe("PgDormancyStore", () => {
       expect(decide(c!, now, W)).toBeNull();
     });
 
+    it("⚠️ a freshly declared base floors lastRaiseAt — a White bind does not read as dormancy", async () => {
+      // A clan binds a new pole with a White flag (its own flag only arrives
+      // with the kit at the next restart), so LAST_RAISE — own texture at
+      // own pole — has nothing yet and the coalesce would fall back to a
+      // months-old activated_at: revived by the bind, dormant again a tick
+      // later. Production, 2026-10-12: VOLK and ADM, one minute apart.
+      const f = await seedFaction({ tag: "BEAR", activatedAt: ago(30 * 86_400_000), createdAt: ago(30 * 86_400_000) });
+      await db.update(declarations).set({ declaredAt: ago(3_600_000) }).where(eq(declarations.ownerFactionId, f.id));
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(3_600_000));
+      expect(decide(c!, now, W)).toBeNull();
+    });
+
     it("with no open season, the old behaviour holds — a raise 20 days old is dormant", async () => {
-      await seedFaction({ tag: "BEAR" });
+      // Base declared before the raise: declared_at also floors the clock now.
+      await seedFaction({ tag: "BEAR", createdAt: ago(30 * 86_400_000) });
       await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(20 * 86_400_000), dayzId: "A" });
 
       const [c] = await store.clocks();

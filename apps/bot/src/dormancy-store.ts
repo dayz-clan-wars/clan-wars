@@ -175,7 +175,17 @@ export function clockQuery(db: Database) {
     // subquery, per dormancy-index-drift.test.ts — that test's EXPLAIN
     // pins LAST_RAISE's own index usage, and a second correlated subquery
     // sitting next to it in the select list is a needless risk to that plan.
-    lastRaiseAt: sql<Date | null>`greatest(coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt}), ${seasons.startedAt})`,
+    //
+    // ⚠️ And GREATEST against the declaration's `declared_at`: a new base is
+    // a fresh start. A White bind (or a post-wipe adoption) declares a pole
+    // the clan's own flag has never flown on — the flag only arrives with
+    // the kit at the next restart — so LAST_RAISE is null and the coalesce
+    // falls back to a months-old activated_at: revived by the bind, dormant
+    // again on the next tick (VOLK and ADM in production, 2026-10-12). The
+    // clan gets the normal window to raise its own flag there. `declared_at`
+    // is a plain column of the row already joined, so it costs nothing next
+    // to LAST_RAISE's index plan.
+    lastRaiseAt: sql<Date | null>`greatest(coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt}), ${declarations.declaredAt}, ${seasons.startedAt})`,
     serverLastEventAt: SERVER_LAST_EVENT,
     flagDownSince: factions.flagDownSince,
     disbandWarnedAt: factions.disbandWarnedAt,
