@@ -2,14 +2,37 @@ import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { renderToStaticMarkup } from "react-dom/server";
-import { RenameForm } from "../app/(site)/clan/settings/rename-form";
+import { RebrandForm } from "../app/(site)/clan/settings/rebrand-form";
 
 const read = (...p: string[]) => readFileSync(join(import.meta.dirname, "..", ...p), "utf8");
 const input = (html: string, needle: string) => html.match(new RegExp(`<input[^>]*${needle}[^>]*/>`, "u"))?.[0] ?? "";
 
+const render = (pending: { texture: string; until: Date } | null, freeFlags: string[]) => renderToStaticMarkup(
+  <RebrandForm name="Bears" tag="BEAR" texture="Flag_Bear" freeFlags={freeFlags} pending={pending} err={null} kept={{}} />,
+);
+
+describe("the rebrand panel", () => {
+  it("offers keep-current plus the free flags, posting texture", () => {
+    const html = render(null, ["Flag_Rex", "Flag_Wolf"]);
+    expect(html).toContain('action="/api/clan/rename"');
+    // React prints a default-checked radio's `checked` before its value, so match the tag, not the attribute run.
+    expect(input(html, 'name="texture"[^>]*value=""')).toContain('checked=""');
+    expect(html).toContain('value="Flag_Wolf"');
+    expect(html).toContain("Keep Bear");
+  });
+
+  it("while a change is pending, shows it with a cancel button and no form", () => {
+    const html = render({ texture: "Flag_Wolf", until: new Date("2026-10-14T12:00:00Z") }, []);
+    expect(html).toContain("Wolf");
+    expect(html).toContain("UTC");
+    expect(html).toContain('action="/api/clan/rebrand/cancel"');
+    expect(html).not.toContain('action="/api/clan/rename"');
+  });
+});
+
 describe("rename keeps the refused name under its refusal (H2)", () => {
   it("shows the typed name, not the current one, beside 'Another clan has that name.'", () => {
-    const html = renderToStaticMarkup(<RenameForm name="Bears" tag="BEAR" err={{ field: "name", message: "Another clan has that name." }} kept={{ name: "Wolves & Co", tag: "WOLF" }} />);
+    const html = renderToStaticMarkup(<RebrandForm name="Bears" tag="BEAR" texture="Flag_Bear" freeFlags={[]} pending={null} err={{ field: "name", message: "Another clan has that name." }} kept={{ name: "Wolves & Co", tag: "WOLF" }} />);
     expect(input(html, 'name="name"')).toContain('value="Wolves &amp; Co"');
     expect(input(html, 'name="name"')).toContain('aria-invalid="true"');
     expect(input(html, 'name="tag"')).toContain('value="WOLF"');
@@ -17,7 +40,7 @@ describe("rename keeps the refused name under its refusal (H2)", () => {
   });
 
   it("shows the clan's own name and tag when nothing was refused", () => {
-    const html = renderToStaticMarkup(<RenameForm name="Bears" tag="BEAR" err={null} kept={{}} />);
+    const html = renderToStaticMarkup(<RebrandForm name="Bears" tag="BEAR" texture="Flag_Bear" freeFlags={[]} pending={null} err={null} kept={{}} />);
     expect(input(html, 'name="name"')).toContain('value="Bears"');
     expect(input(html, 'name="tag"')).toContain('value="BEAR"');
   });

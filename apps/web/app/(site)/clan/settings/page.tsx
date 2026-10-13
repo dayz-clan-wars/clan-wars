@@ -11,7 +11,7 @@ import { guideLinkFor } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, FieldError, invalid, btnPrimary, btnDanger, link, field, fieldLabel, checkbox, SubmitButton } from "@/app/components/ui";
 import { fieldError } from "@/lib/field-errors";
 import { readKept } from "@/lib/form";
-import { RenameForm } from "./rename-form";
+import { RebrandForm } from "./rebrand-form";
 import { GuestPassList } from "./guest-passes";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { RowAction } from "@/app/components/row-action";
@@ -77,9 +77,9 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {leader && (
           <>
-            <Panel num="03" title="Rename" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
+            <Panel num="03" title="Rebrand" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
               <PanelBody>
-                <RenameForm name={clan.name} tag={clan.tag} err={err} kept={{ name: kept.get("name"), tag: kept.get("tag") }} />
+                <RebrandForm name={clan.name} tag={clan.tag} texture={clan.texture} freeFlags={view.rebrand?.freeFlags ?? []} pending={view.rebrand?.pending ?? null} err={err} kept={{ name: kept.get("name"), tag: kept.get("tag"), texture: kept.get("texture") }} />
               </PanelBody>
             </Panel>
 
