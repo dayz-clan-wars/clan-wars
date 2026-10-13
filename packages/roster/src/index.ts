@@ -28,7 +28,7 @@ export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView } from "./api";
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason } from "./api";
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome,
 } from "./api";
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest } from "./api";
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter } from "./api";
@@ -48,7 +48,7 @@ export type { BoosterKitView, KitStep, KitSpot, KitArmband, KitChallenge, SaveKi
 export type { AwardSummary, AwardView, AwardWriteOutcome, GiveAwardOutcome } from "./api";
 
 export const {
-  acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, castVote,
+  acceptInvite, achievementsFor, addLock, addReferrer, alphas, attention, award, awards, baseDamageWindow, baseFor, boardPage, boosterKit, cancelAwardPlacement, cancelKitPlacement, cancelLink, cancelRebrand, castVote,
   claimCeremony, claimContext, claimSuccession, clanBoard, clanBoardPage, clanByTag, clanFor, confirmLock,
   confirmRebind, decideRequest, declareSolo, declineInvite, deleteLock, deletePin, demote, directory,
   disband, dropPin, editLock, giveAward, grantGuestPass, invite, kick, leave, linkStatus, liveFeed, liveServers, mapState,

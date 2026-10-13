@@ -1,8 +1,8 @@
 import type { Tx } from "@factions/declarations";
 import type { Database } from "@factions/db";
 import { factions, flagHolds } from "@factions/db";
-import { CLAIMABLE_FLAGS, HOLDING_STATUSES } from "@factions/domain";
-import { and, eq, gt, inArray, or, type SQL } from "drizzle-orm";
+import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES } from "@factions/domain";
+import { and, eq, gt, inArray, lte, or, type SQL } from "drizzle-orm";
 
 /**
  * Is a `flag_holds` row still holding its flag?
@@ -41,4 +41,44 @@ export async function freeFlagsDb(db: Tx | Database, serverId: number, now: Date
     .where(and(eq(flagHolds.serverId, serverId), liveHold(now)));
   const taken = new Set([...held, ...holds].map((r) => r.texture));
   return CLAIMABLE_FLAGS.filter((f) => !taken.has(f));
+}
+
+/**
+ * Reserve the new flag for this clan (spec §1 "Start"). The caller holds the
+ * clan's `factions` row FOR UPDATE and `lockIdentity`, and has checked
+ * `flagTakenTx` under that lock. Lock order: after `factions`. Returns the
+ * deadline; the caller queues the `flag_change_started` notice LAST, after
+ * any `renamed` feed row (§4.12: the queues come after every roster table,
+ * and this hold IS a roster table).
+ *
+ * An expired RELEASED row for this texture may still exist if the sweep has
+ * not run; it is deleted here first, or `flag_holds_texture_uniq` would
+ * refuse a flag `freeFlagsDb` just offered as free.
+ */
+export async function startFlagChangeTx(tx: Tx, a: { serverId: number; factionId: number; texture: string; at: Date; stampsCooldown: boolean }): Promise<Date> {
+  const until = new Date(a.at.getTime() + FLAG_CHANGE_WINDOW_MS);
+  await tx.delete(flagHolds).where(and(
+    eq(flagHolds.serverId, a.serverId), eq(flagHolds.texture, a.texture), eq(flagHolds.kind, "released"), lte(flagHolds.until, a.at),
+  ));
+  await tx.insert(flagHolds).values({
+    serverId: a.serverId, texture: a.texture, factionId: a.factionId, kind: "pending", until, stampsCooldown: a.stampsCooldown, createdAt: a.at,
+  });
+  return until;
+}
+
+/**
+ * Drop a clan's pending flag (spec §1: "frees the new flag immediately").
+ *
+ * ⚠️ Takes the clan's `factions` row FOR UPDATE before touching the hold:
+ * raise-tick completes a change under that same row lock, so a cancel and a
+ * completing raise serialise instead of both acting on one hold.
+ */
+export async function cancelFlagChangeDb(db: Database, factionId: number): Promise<"ok" | "nothing-pending"> {
+  return db.transaction(async (tx) => {
+    await tx.select({ id: factions.id }).from(factions).where(eq(factions.id, factionId)).for("update");
+    const gone = await tx.delete(flagHolds)
+      .where(and(eq(flagHolds.factionId, factionId), eq(flagHolds.kind, "pending")))
+      .returning({ id: flagHolds.id });
+    return gone.length > 0 ? "ok" : "nothing-pending";
+  });
 }

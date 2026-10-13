@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, factions, factionInvites, factionMembers, identityLinks, players, rosterCooldowns, servers } from "@factions/db";
+import { declarations, factions, factionInvites, flagHolds, factionMembers, identityLinks, players, rosterCooldowns, servers } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/domain";
 import { appendFactionEventTx } from "./feed-store";
@@ -7,6 +7,7 @@ import { actorGamertagTx, gamertagOrId } from "./feed-actor";
 import { noticeClanTx, noticeUserTx } from "./notices";
 import { releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
+import { flagTakenTx, startFlagChangeTx } from "./flag-holds";
 import { applyElectorateLeaveTx, closeLeadershipSilentlyTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
 import { exposeLocksTx } from "./vault-store";
 
@@ -80,8 +81,8 @@ export type SetRoleArgs = {
 export type SetRoleOutcome = "ok" | "not-leader" | "target-not-member" | "cannot-target-leader";
 export type TransferArgs = { factionId: number; fromDiscordId: string; toDiscordId: string; at: Date };
 export type TransferOutcome = "ok" | "not-leader" | "target-not-member" | "vote-open";
-export type RenameArgs = { factionId: number; discordId: string; name: string; tag?: string; at: Date; notBefore: Date };
-export type RenameOutcome = "ok" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged";
+export type RenameArgs = { factionId: number; discordId: string; name: string; tag?: string; texture?: string; at: Date; notBefore: Date };
+export type RenameOutcome = "ok" | "flag-pending" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged" | "change-pending" | "not-active" | "flag-taken";
 
 export interface RosterStore {
   // Reads (Task 3)
@@ -1005,63 +1006,119 @@ export class PgRosterStore implements RosterStore {
    * read-then-write is not a race worth guarding: a second concurrent rename
    * is barred by the 7-day cooldown, and the update's own guard rejects it
    * regardless.
+   *
+   * The rebrand (spec docs/superpowers/specs/2026-10-13-clan-rebrand-flag-design.md
+   * §1): a `texture` that differs from the clan's flag starts a flag change —
+   * a `pending` `flag_holds` row the leader must raise within
+   * FLAG_CHANGE_WINDOW_MS — alongside or instead of a name/tag change. Only
+   * one change may be in flight; a flag-only change stamps the cooldown at
+   * completion, not here. Outcome `"flag-pending"` whenever a flag change
+   * was started.
    */
   async rename(a: RenameArgs): Promise<RenameOutcome> {
     const outcome = await this.db.transaction(async (tx) => {
-      const [before] = await tx.select({ name: factions.name, tag: factions.tag, serverId: factions.serverId })
+      const [before] = await tx.select({ name: factions.name, tag: factions.tag, serverId: factions.serverId, texture: factions.texture, status: factions.status })
         .from(factions).where(eq(factions.id, a.factionId)).for("update");
       if (!before) return "not-leader" as const;
 
       const newTag = a.tag ?? before.tag;
-      if (before.name === a.name && before.tag === newTag) return "unchanged" as const;
+      const identityChanged = before.name !== a.name || before.tag !== newTag;
+      const flagChanged = a.texture !== undefined && a.texture !== before.texture;
+      if (!identityChanged && !flagChanged) return "unchanged" as const;
 
-      // The identity lock (spec §4.4) before the taken/held check: names have
-      // no unique index, so this transaction and every other renamer or
-      // reserver on this server must serialise through it before either one
-      // reads a row. Lock order: right after the `factions` row lock above.
+      // Spec §1: one change in flight. A name-only rename is refused too, so
+      // the leader never has two half-finished rebrands to reason about.
+      const [pending] = await tx.select({ id: flagHolds.id }).from(flagHolds)
+        .where(and(eq(flagHolds.factionId, a.factionId), eq(flagHolds.kind, "pending")));
+      if (pending) return "change-pending" as const;
+
+      // The identity lock (spec §4.4) before any taken/held check — names
+      // AND, since the rebrand, flags. Names have no unique index, so this
+      // transaction and every other renamer or reserver on this server must
+      // serialise through it before either one reads a row. Lock order: right
+      // after the `factions` row lock above.
       await lockIdentity(tx, before.serverId);
-      const taken = await identityTakenTx(tx, { serverId: before.serverId, name: a.name, tag: newTag, exceptFactionId: a.factionId });
-      if (taken) return taken;
+      if (identityChanged) {
+        const taken = await identityTakenTx(tx, { serverId: before.serverId, name: a.name, tag: newTag, exceptFactionId: a.factionId });
+        if (taken) return taken;
+      }
+      if (flagChanged) {
+        // A reserved clan has never flown its flag; a dormant one revives first.
+        if (before.status !== "active") return "not-active" as const;
+        if (await flagTakenTx(tx, before.serverId, a.texture!, a.at)) return "flag-taken" as const;
+      }
 
-      const [updated] = await tx.update(factions)
-        .set({ name: a.name, tag: newTag, renamedAt: a.at })
-        .where(and(
+      // ⚠️ Order (§4.12): every roster-table write first — factions,
+      // identity_holds, flag_holds — then the feed row, then notices.
+      let updated: { id: number; serverId: number; tag: string; texture: string } | undefined;
+      if (identityChanged) {
+        [updated] = await tx.update(factions)
+          .set({ name: a.name, tag: newTag, renamedAt: a.at })
+          .where(and(
+            eq(factions.id, a.factionId),
+            leaderIs(a.factionId, a.discordId),
+            inArray(factions.status, HOLDING),
+            or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
+          ))
+          .returning({
+            id: factions.id, serverId: factions.serverId,
+            tag: factions.tag, texture: factions.texture,
+          });
+
+        if (!updated) return null;
+
+        // Hold only what was actually given up (guide ch. 8: "so nobody can
+        // impersonate you") — a rename that only changes the tag must not also
+        // stamp a hold on the unchanged name, and vice versa. `exceptFactionId`
+        // above already let this same clan rename back into a name or tag it
+        // once held itself.
+        await writeHoldsTx(tx, {
+          serverId: updated.serverId, factionId: updated.id,
+          name: before.name === a.name ? null : before.name,
+          tag: before.tag === newTag ? null : before.tag,
+          reason: "renamed",
+        });
+      } else {
+        // ⚠️ Flag only: nothing on `factions` changes, but the leader and
+        // cooldown guards still apply — the same predicate the update uses.
+        // Null falls through to the not-leader/cooldown read below.
+        const [ok] = await tx.select({ id: factions.id }).from(factions).where(and(
           eq(factions.id, a.factionId),
           leaderIs(a.factionId, a.discordId),
           inArray(factions.status, HOLDING),
           or(isNull(factions.renamedAt), lte(factions.renamedAt, a.notBefore)),
-        ))
-        .returning({
-          id: factions.id, serverId: factions.serverId,
-          tag: factions.tag, texture: factions.texture,
+        ));
+        if (!ok) return null;
+      }
+
+      // Spec §1 cooldown: a name/tag change already stamped renamed_at
+      // above; a flag-only change stamps it at completion instead, so a
+      // lapsed or cancelled one costs nothing.
+      const until = flagChanged
+        ? await startFlagChangeTx(tx, { serverId: before.serverId, factionId: a.factionId, texture: a.texture!, at: a.at, stampsCooldown: !identityChanged })
+        : null;
+
+      if (updated) {
+        await appendFactionEventTx(tx, {
+          serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
+          payload: {
+            name: a.name, previousName: before.name,
+            tag: updated.tag, texture: updated.texture,
+            actor: await actorGamertagTx(tx, a.discordId),
+          },
         });
-
-      if (!updated) return null;
-
-      // Hold only what was actually given up (guide ch. 8: "so nobody can
-      // impersonate you") — a rename that only changes the tag must not also
-      // stamp a hold on the unchanged name, and vice versa. `exceptFactionId`
-      // above already let this same clan rename back into a name or tag it
-      // once held itself.
-      await writeHoldsTx(tx, {
-        serverId: updated.serverId, factionId: updated.id,
-        name: before.name === a.name ? null : before.name,
-        tag: before.tag === newTag ? null : before.tag,
-        reason: "renamed",
-      });
-
-      await appendFactionEventTx(tx, {
-        serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
-        payload: {
-          name: a.name, previousName: before.name,
-          tag: updated.tag, texture: updated.texture,
-          actor: await actorGamertagTx(tx, a.discordId),
-        },
-      });
-      await noticeClanTx(tx, {
-        serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
-        payload: { name: a.name, tag: updated.tag },
-      });
+        await noticeClanTx(tx, {
+          serverId: updated.serverId, factionId: updated.id, kind: "renamed", occurredAt: a.at,
+          payload: { name: a.name, tag: updated.tag },
+        });
+      }
+      if (until) {
+        await noticeClanTx(tx, {
+          serverId: before.serverId, factionId: a.factionId, kind: "flag_change_started", occurredAt: a.at,
+          payload: { texture: a.texture!, until: until.toISOString() },
+        });
+        return "flag-pending" as const;
+      }
       return "ok" as const;
     });
 

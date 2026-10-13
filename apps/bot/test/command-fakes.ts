@@ -79,6 +79,7 @@ export function viewFixture(over: Partial<ClanView> = {}): ClanView {
     rebindCandidates: [],
     leadership: { openClaim: null, openVote: null, canClaim: "not-eligible", nextVoteAllowedAt: null, leaderLastSeenAt: null },
     guestPasses: [],
+    rebrand: null,
     ...over,
   };
 }

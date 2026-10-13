@@ -14,8 +14,8 @@ import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSol
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
 import {
   inviteDb, revokeInviteDb, acceptInviteDb, declineInviteDb, requestJoinDbByTag, withdrawRequestDbFor, decideRequestDbFor,
-  leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb, claimCeremonyDb, confirmRebindDb,
-  type InviteOutcome, type InviteeRef, type ReserveOutcome,
+  leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, cancelRebrandDb, setRecruitingPostDb, claimCeremonyDb, confirmRebindDb,
+  type InviteOutcome, type InviteeRef, type ReserveOutcome, type CancelRebrandOutcome,
 } from "./writes";
 import type {
   CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome, SetRoleOutcome, TransferOutcome, RenameOutcome,
@@ -79,7 +79,7 @@ export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, RequestJoinOutcome, DecideRequestOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
@@ -191,8 +191,10 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     transfer: (actorDiscordId: string, targetDiscordId: string) => transferDb(getDb(), getNow(), actorDiscordId, targetDiscordId),
     /** Disband your clan. Leader only. */
     disband: (actorDiscordId: string) => disbandDb(getDb(), actorDiscordId),
-    /** Rename your clan, and optionally its tag. Leader only, on a cooldown. */
-    rename: (actorDiscordId: string, r: { name: string; tag?: string }) => renameDb(getDb(), getNow(), actorDiscordId, r),
+    /** Rename your clan, and optionally its tag and flag (a flag change waits for the raise). Leader only, on a cooldown. */
+    rename: (actorDiscordId: string, r: { name: string; tag?: string; texture?: string }) => renameDb(getDb(), getNow(), actorDiscordId, r),
+    /** Drop your clan's pending flag change. Leader only. */
+    cancelRebrand: (actorDiscordId: string) => cancelRebrandDb(getDb(), actorDiscordId),
     /** Edit your clan's recruiting post. Officer+ only. */
     setRecruitingPost: (actorDiscordId: string, post: { recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }) =>
       setRecruitingPostDb(getDb(), actorDiscordId, post),
