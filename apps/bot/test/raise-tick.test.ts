@@ -575,6 +575,20 @@ describe("raiseTick", () => {
       expect((await bearRow()).texture).toBe("Flag_Bear");
     });
 
+    it("⚠️ a pending flag another holding clan already flies completes nothing, and the tick does not wedge", async () => {
+      await pend();
+      await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: WOLF_POLE, x: 5000, y: 100, z: 5000, createdAt: now, activatedAt: now });
+      const seeded = (await db.execute(sql`select coalesce(max(id), 0)::int as n from events`)) as unknown as { n: number }[];
+      await db.execute(sql`update consumer_cursors set last_event_id = ${seeded[0]!.n} where consumer_name = 'raise-consumer'`);
+      await raise(B1, "Bear1", "Flag_Wolf", P1, now);
+      await expect(raiseTick(db, { siteBaseUrl: SITE })).resolves.toBeDefined();
+      expect((await bearRow()).texture).toBe("Flag_Bear");
+      expect(await db.select().from(factionEvents).where(eq(factionEvents.kind, "flag_changed"))).toEqual([]);
+      const head = (await db.execute(sql`select max(id)::int as n from events`)) as unknown as { n: number }[];
+      const cur = (await db.execute(sql`select last_event_id::int as n from consumer_cursors where consumer_name = 'raise-consumer'`)) as unknown as { n: number }[];
+      expect(cur[0]!.n).toBe(head[0]!.n);
+    });
+
     it("a second tick does not announce twice", async () => {
       await pend();
       await raise(B1, "Bear1", "Flag_Wolf", P1, now);

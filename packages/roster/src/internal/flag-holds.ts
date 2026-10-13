@@ -2,7 +2,7 @@ import type { Tx } from "@factions/declarations";
 import type { Database } from "@factions/db";
 import { factions, factionTextures, flagHolds } from "@factions/db";
 import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES, OLD_FLAG_HOLD_MS } from "@factions/domain";
-import { and, eq, gt, inArray, isNull, lte, or, type SQL } from "drizzle-orm";
+import { and, eq, exists, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { appendFactionEventTx } from "./feed-store";
 import { noticeClanTx, noticeUserTx } from "./notices";
 
@@ -25,14 +25,22 @@ export function liveHold(now: Date): SQL {
  * `lockIdentity(tx, serverId)`, which every caller that then takes the flag
  * holds — `factions_holding_texture_uniq` and `flag_holds_texture_uniq`
  * each see only their own table.
+ *
+ * ⚠️ ONE statement, so both tables are read from one snapshot. Raise-tick's
+ * completion moves a texture from a pending `flag_holds` row into
+ * `factions.texture` without the identity lock; under READ COMMITTED two
+ * selects each take a fresh snapshot, and a completion committing between
+ * them makes the flag look free in both — a rebrand or founding then takes a
+ * flag another clan flies (two clans on one flag, and that clan's own later
+ * completion hits `factions_holding_texture_uniq` on every tick).
  */
 export async function flagTakenTx(tx: Tx | Database, serverId: number, texture: string, now: Date): Promise<boolean> {
-  const [clan] = await tx.select({ id: factions.id }).from(factions)
+  const clan = tx.select({ id: factions.id }).from(factions)
     .where(and(eq(factions.serverId, serverId), eq(factions.texture, texture), inArray(factions.status, [...HOLDING_STATUSES])));
-  if (clan) return true;
-  const [hold] = await tx.select({ id: flagHolds.id }).from(flagHolds)
+  const hold = tx.select({ id: flagHolds.id }).from(flagHolds)
     .where(and(eq(flagHolds.serverId, serverId), eq(flagHolds.texture, texture), liveHold(now)));
-  return hold !== undefined;
+  const [row] = await tx.execute<{ taken: boolean }>(sql`select ${or(exists(clan), exists(hold))} as taken`);
+  return row!.taken === true;
 }
 
 /** The claim form's and the rebrand picker's one list (spec §2 "Free pool"), in pool order. */
@@ -103,6 +111,19 @@ export async function completeFlagChangeTx(tx: Tx, a: { factionId: number; serve
   const [hold] = await tx.select({ id: flagHolds.id, stampsCooldown: flagHolds.stampsCooldown }).from(flagHolds)
     .where(and(eq(flagHolds.factionId, a.factionId), eq(flagHolds.kind, "pending"), eq(flagHolds.texture, a.texture), gt(flagHolds.until, a.at)));
   if (!hold) return null;
+  // ⚠️ Defence in depth: `flagTakenTx` should make this impossible, but if
+  // another holding clan already flies this texture, promoting it violates
+  // `factions_holding_texture_uniq` — and a throw here rolls back the cursor
+  // too, so the raise consumer would retry this one event every tick and
+  // wedge the whole server. Checked, never caught: a caught error inside a
+  // postgres transaction aborts it anyway. The hold is left for the sweep.
+  const [rival] = await tx.select({ id: factions.id }).from(factions).where(and(
+    eq(factions.serverId, a.serverId), eq(factions.texture, a.texture), inArray(factions.status, [...HOLDING_STATUSES]), ne(factions.id, a.factionId),
+  ));
+  if (rival) {
+    console.error(`flag change: faction ${a.factionId} cannot take ${a.texture}, already flown by faction ${rival.id}; not completing`);
+    return null;
+  }
   const [before] = await tx.select({ texture: factions.texture, name: factions.name, tag: factions.tag }).from(factions).where(eq(factions.id, a.factionId));
   await tx.update(factions)
     .set({ texture: a.texture, ...(hold.stampsCooldown ? { renamedAt: a.at } : {}) })

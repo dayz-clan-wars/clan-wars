@@ -104,6 +104,9 @@ export async function raiseTick(db: Database, opts: { batchSize?: number; siteBa
             const changed = clan.status === "active" || clan.status === "dormant"
               ? await completeFlagChangeTx(tx, { factionId: clan.id, serverId: ev.serverId, texture: p.texture, at: ev.occurredAt })
               : null;
+            // Null also when another holding clan already flies this texture
+            // (completeFlagChangeTx logs it): never a throw, which would roll
+            // back the cursor and retry this event every tick.
             if (!changed) return done(null); // a member raising a foreign flag at home is nothing
             last.push(() => announceFlagChangeTx(tx, {
               serverId: ev.serverId, factionId: clan.id, name: changed.name, tag: changed.tag,
