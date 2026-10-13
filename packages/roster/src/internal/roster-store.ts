@@ -5,7 +5,7 @@ import { CLAN_SIZE_CAP, HOLDING_STATUSES, type MemberStatus } from "@factions/do
 import { appendFactionEventTx } from "./feed-store";
 import { actorGamertagTx, gamertagOrId } from "./feed-actor";
 import { noticeClanTx, noticeUserTx } from "./notices";
-import { releaseTx } from "@factions/declarations";
+import { declarationForFaction, releaseTx } from "@factions/declarations";
 import { identityTakenTx, lockIdentity, writeHoldsTx } from "./holds";
 import { flagTakenTx, startFlagChangeTx } from "./flag-holds";
 import { applyElectorateLeaveTx, closeLeadershipSilentlyTx, lockFactionTx, voteIsOpenTx } from "./leadership-store";
@@ -82,7 +82,7 @@ export type SetRoleOutcome = "ok" | "not-leader" | "target-not-member" | "cannot
 export type TransferArgs = { factionId: number; fromDiscordId: string; toDiscordId: string; at: Date };
 export type TransferOutcome = "ok" | "not-leader" | "target-not-member" | "vote-open";
 export type RenameArgs = { factionId: number; discordId: string; name: string; tag?: string; texture?: string; at: Date; notBefore: Date };
-export type RenameOutcome = "ok" | "flag-pending" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged" | "change-pending" | "not-active" | "flag-taken";
+export type RenameOutcome = "ok" | "flag-pending" | "not-leader" | "cooldown" | "name-taken" | "tag-taken" | "name-held" | "tag-held" | "unchanged" | "change-pending" | "not-active" | "no-base" | "flag-taken";
 
 export interface RosterStore {
   // Reads (Task 3)
@@ -235,6 +235,15 @@ export async function disbandFactionTx(tx: Tx, factionId: number, guard: SQL): P
     });
 
   if (!updated) return false;
+
+  // ⚠️ Its flag holds go with it — a pending new flag and a released old one
+  // alike. Left behind, a pending hold is never raised (the clan has no pole
+  // and no kit any more) and keeps that flag out of the pool until the
+  // sweep's backstop, while the disband copy says the flag is back now.
+  // Lock order (§4.12): right after `factions`. Every exit from HOLDING that
+  // can carry a hold comes through here: leader disband, dormancy disband
+  // and guild removal; a lapsed reservation cannot rebrand, so has none.
+  await tx.delete(flagHolds).where(eq(flagHolds.factionId, factionId));
 
   // Holds first (guide ch. 8: "so nobody can impersonate you") — before the
   // release and the roster delete, per this function's own docblock. Nothing
@@ -1045,6 +1054,10 @@ export class PgRosterStore implements RosterStore {
       if (flagChanged) {
         // A reserved clan has never flown its flag; a dormant one revives first.
         if (before.status !== "active") return "not-active" as const;
+        // No base, no kit (the spawner places it at the declared pole) and no
+        // home pole to raise at: the change could only ever lapse. A plain
+        // read, no lock — nothing here writes `declarations`.
+        if (!(await declarationForFaction(tx, a.factionId))) return "no-base" as const;
         if (await flagTakenTx(tx, before.serverId, a.texture!, a.at)) return "flag-taken" as const;
       }
 

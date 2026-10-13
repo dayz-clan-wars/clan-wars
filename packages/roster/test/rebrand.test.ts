@@ -1,12 +1,13 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, identityLinks, players, admFiles, flagHolds, clanNotices,
+  servers, factions, factionMembers, identityLinks, players, admFiles, flagHolds, clanNotices, declarations,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { FLAG_CHANGE_WINDOW_MS } from "@factions/domain";
-import { renameDb, cancelRebrandDb } from "../src/writes";
+import { renameDb, cancelRebrandDb, disbandDb } from "../src/writes";
+import { freeFlagsDb } from "../src/internal/flag-holds";
 import { clanForDb, type ClanView } from "../src/reads";
 import { seedFaction } from "./seed";
 
@@ -91,6 +92,24 @@ describe("rebrand: starting and cancelling a flag change", () => {
     expect(await renameDb(db, now, "d1", { name: "Bears", texture: "Flag_White" })).toBe("bad-flag");
     await db.update(factions).set({ status: "dormant", dormantSince: now, dormantReason: "inactive" }).where(eq(factions.id, factionId));
     expect(await renameDb(db, now, "d1", { name: "Bears", texture: "Flag_Rex" })).toBe("not-active");
+  });
+
+  it("refuses a flag change for a clan with no base, since the kit could never deliver it", async () => {
+    await db.delete(declarations).where(eq(declarations.ownerFactionId, factionId));
+    expect(await renameDb(db, now, "d1", { name: "Bears", texture: "Flag_Wolf" })).toBe("no-base");
+    expect(await holds()).toEqual([]);
+    // A name-only rename needs no base.
+    expect(await renameDb(db, now, "d1", { name: "Grizzlies" })).toBe("ok");
+  });
+
+  it("disband drops the clan's flag holds, pending and released, and the flags are free at once", async () => {
+    await renameDb(db, now, "d1", { name: "Bears", texture: "Flag_Wolf" });
+    await db.insert(flagHolds).values({ serverId, texture: "Flag_Rex", factionId, kind: "released", until: new Date(now.getTime() + 86_400_000), createdAt: now });
+    expect(await freeFlagsDb(db, serverId, now)).not.toContain("Flag_Wolf");
+    expect(await disbandDb(db, "d1")).toBe("ok");
+    expect(await holds()).toEqual([]);
+    const free = await freeFlagsDb(db, serverId, now);
+    expect(free).toEqual(expect.arrayContaining(["Flag_Wolf", "Flag_Rex", "Flag_Bear"]));
   });
 
   it("only the leader can rebrand or cancel", async () => {

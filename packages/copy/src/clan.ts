@@ -110,6 +110,7 @@ const RENAME: Record<RenameOutcome | ActorRefusal | "bad-name" | "bad-tag" | "ba
   unchanged: "That is already the clan's name, tag and flag.",
   "change-pending": "A flag change is already waiting to be raised. Cancel it first.",
   "not-active": "Only an active clan can change its flag.",
+  "no-base": "Your clan needs a base before it can change its flag.",
   "flag-taken": "That flag was taken while you were choosing. Pick another.",
   "bad-name": `A clan name is ${CLAN_NAME_LENGTH.min} to ${CLAN_NAME_LENGTH.max} characters.`,
   "bad-tag": `A tag is ${CLAN_TAG_LENGTH.min} to ${CLAN_TAG_LENGTH.max} letters or digits.`,
