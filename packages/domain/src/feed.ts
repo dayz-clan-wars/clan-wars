@@ -8,7 +8,7 @@
  * transition's own transaction, rolling the transition back with it.
  */
 export const FACTION_EVENT_KINDS = [
-  "founded", "activated", "lapsed", "renamed", "rebound", "dormant", "revived", "disbanded",
+  "founded", "activated", "lapsed", "renamed", "rebound", "dormant", "revived", "disbanded", "flag_changed",
 ] as const;
 
 export type FactionEventKind = (typeof FACTION_EVENT_KINDS)[number];

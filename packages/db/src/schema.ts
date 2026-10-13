@@ -688,6 +688,56 @@ export const factions = pgTable("factions", {
 }));
 
 /**
+ * Flags held OUTSIDE `factions.texture` (spec 2026-10-13 §2): a rebrand's
+ * pending flag, and a completed rebrand's old flag for OLD_FLAG_HOLD_MS.
+ *
+ * ⚠️ `flag_holds_texture_uniq` is unconditional: a row exists only while its
+ * hold is live, and `sweepFlagHoldsDb` deletes it after. A partial index on
+ * `until > now()` is impossible (now() is not immutable), and a stale row
+ * left behind would block the texture forever — so every reader filters on
+ * liveness itself (`liveHold` in packages/roster/src/internal/flag-holds.ts).
+ *
+ * ⚠️ One flag, one clan, across TWO tables: `factions_holding_texture_uniq`
+ * cannot see this one. Writers that take a flag serialise through
+ * `lockIdentity` and check both (`flagTakenTx`).
+ */
+export const flagHolds = pgTable("flag_holds", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  texture: text("texture").notNull(),
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  kind: text("kind").$type<"pending" | "released">().notNull(),
+  until: timestamp("until", { withTimezone: true }).notNull(),
+  /** Pending only: true when the rebrand changed the flag alone, so completion (not submission) starts the rename cooldown. */
+  stampsCooldown: boolean("stamps_cooldown").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+}, (t) => ({
+  kindValid: check("flag_holds_kind_valid", sql`${t.kind} IN ('pending','released')`),
+  uniqTexture: uniqueIndex("flag_holds_texture_uniq").on(t.serverId, t.texture),
+  onePending: uniqueIndex("flag_holds_one_pending").on(t.factionId).where(sql`${t.kind} = 'pending'`),
+}));
+
+/**
+ * Which flag a clan flew, when (spec 2026-10-13 §2). Past raises are
+ * attributed through this, not `factions.texture`, so a rebrand does not
+ * erase members' upkeep raises.
+ *
+ * ⚠️ The first row is written by the `faction_textures_first` trigger on
+ * `factions` INSERT, with from_at = '-infinity' — every insert path gets one,
+ * including test seeds. Only a completed rebrand writes here from code.
+ */
+export const factionTextures = pgTable("faction_textures", {
+  factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
+  texture: text("texture").notNull(),
+  fromAt: timestamp("from_at", { withTimezone: true }).notNull(),
+  /** Null = the clan's current flag. */
+  toAt: timestamp("to_at", { withTimezone: true }),
+}, (t) => ({
+  pk: primaryKey({ columns: [t.factionId, t.fromAt] }),
+  oneOpen: uniqueIndex("faction_textures_one_open").on(t.factionId).where(sql`${t.toAt} IS NULL`),
+}));
+
+/**
  * The pole binding, for clans and solos alike (spec §4.1; base-declaration
  * design §8 option C). One row per declared pole.
  *
@@ -761,7 +811,7 @@ export const factionEvents = pgTable("faction_events", {
   postedAt: timestamp("posted_at", { withTimezone: true }),
 }, (t) => ({
   kindValid: check("faction_events_kind_valid",
-    sql`${t.kind} IN ('founded','activated','lapsed','renamed','rebound','dormant','revived','disbanded')`),
+    sql`${t.kind} IN ('founded','activated','lapsed','renamed','rebound','dormant','revived','disbanded','flag_changed')`),
   // ⚠️ The pole invariant, enforced by the database rather than by every
   // author remembering it. This is the first table whose entire purpose is
   // to be published; `poles.pole_key`'s own comment says a coordinate "must
