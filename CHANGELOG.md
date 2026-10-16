@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Admins can now start a flag change for a clan. It runs like a normal rebrand: the new flag comes in your kit at the next restart, a member raises it at your base within 24 hours, and your old flag is held for 3 days. It doesn't use up your clan's own rebrand cooldown.
+
 ## [1.63.0] - 2026-10-13
 
 ### Added
