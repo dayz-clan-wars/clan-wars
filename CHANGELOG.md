@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The vault takes codes from 4 to 6 digits, so you can store the code for a digital code lock as well as a 4-dial combination lock. Leave the code blank and you still get a 4-digit one, which fits either lock. Rotating a lock keeps its code the same length.
+
 ## [1.63.0] - 2026-10-13
 
 ### Added

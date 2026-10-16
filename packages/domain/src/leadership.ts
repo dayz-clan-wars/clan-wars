@@ -42,11 +42,21 @@ export function nicknameFor(gamertag: string, tag: string | null): string {
   return prefix + gamertag.slice(0, maxGamertag);
 }
 
-/** `VAULT_CODE_DIGITS`-digit zero-padded numeric code. */
-export function randomVaultCode(rng: () => number = Math.random): string {
-  const max = 10 ** VAULT_CODE_DIGITS;
+/** `^[0-9]{min,max}$` over `VAULT_CODE_DIGITS`; matches `vault_locks_code_digits`. */
+export const VAULT_CODE_RE = new RegExp(`^[0-9]{${VAULT_CODE_DIGITS.min},${VAULT_CODE_DIGITS.max}}$`, "u");
+
+/**
+ * A `digits`-long zero-padded numeric code. Defaults to `VAULT_CODE_DIGITS.min`,
+ * the one length every lock takes; rotation passes the lock's current length
+ * so a 6-digit digital lock stays 6 and a 4-dial lock never gets a 5th digit.
+ */
+export function randomVaultCode(rng: () => number = Math.random, digits: number = VAULT_CODE_DIGITS.min): string {
+  if (!Number.isInteger(digits) || digits < VAULT_CODE_DIGITS.min || digits > VAULT_CODE_DIGITS.max) {
+    throw new RangeError(`vault code length ${digits} is outside ${VAULT_CODE_DIGITS.min}–${VAULT_CODE_DIGITS.max}`);
+  }
+  const max = 10 ** digits;
   const n = Math.floor(rng() * max);
-  return String(Math.min(n, max - 1)).padStart(VAULT_CODE_DIGITS, "0");
+  return String(Math.min(n, max - 1)).padStart(digits, "0");
 }
 
 /** `vault_history.action` (spec §4, vault_locks/vault_history). */

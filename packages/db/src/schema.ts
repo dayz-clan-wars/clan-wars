@@ -1,6 +1,6 @@
 import {
   pgTable, bigserial, bigint, integer, text, timestamp, jsonb,
-  uniqueIndex, index, numeric, boolean, check, char, primaryKey,
+  uniqueIndex, index, numeric, boolean, check, varchar, primaryKey,
 } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 import type { EventType, FactionEventKind, WarLogKind, ClanNoticeKind, NoticeTarget, DormantReason, ViolationKind, BanStatus, BanReason, BanAnnouncementKind, BountyStatus, ShowStage, LiveEntryKind } from "@factions/domain";
@@ -1056,7 +1056,7 @@ export const vaultLocks = pgTable("vault_locks", {
   id: bigserial("id", { mode: "number" }).primaryKey(),
   factionId: bigint("faction_id", { mode: "number" }).notNull().references(() => factions.id, { onDelete: "cascade" }),
   name: text("name").notNull(),
-  code: char("code", { length: 4 }).notNull(),
+  code: varchar("code", { length: 6 }).notNull(),
   note: text("note"),
   minRole: text("min_role").notNull(),
   createdByDayzId: text("created_by_dayz_id").notNull(),
@@ -1067,7 +1067,7 @@ export const vaultLocks = pgTable("vault_locks", {
   exposedAt: timestamp("exposed_at", { withTimezone: true }),
 }, (t) => ({
   minRoleValid: check("vault_locks_min_role_valid", sql`${t.minRole} IN ('leader','officer','member')`),
-  codeDigits: check("vault_locks_code_digits", sql`${t.code} ~ '^[0-9]{4}$'`),
+  codeDigits: check("vault_locks_code_digits", sql`${t.code} ~ '^[0-9]{4,6}$'`),
   byFaction: index("vault_locks_faction_idx").on(t.factionId),
 }));
 

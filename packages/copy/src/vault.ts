@@ -20,7 +20,7 @@ const NOT_PERMITTED = "Only an officer or the leader can change the vault.";
 const NOT_VISIBLE = "That lock is above your rank.";
 const BAD_NAME = `A lock name is 1 to ${VAULT_NAME_MAX} characters.`;
 const BAD_NOTE = `A note is up to ${VAULT_NOTE_MAX} characters.`;
-const BAD_CODE = `A code is exactly ${VAULT_CODE_DIGITS} digits.`;
+const BAD_CODE = `A code is ${VAULT_CODE_DIGITS.min} to ${VAULT_CODE_DIGITS.max} digits.`;
 const GONE = "That lock no longer exists.";
 
 const ADD: Record<"ok" | "not-permitted" | "bad-name" | "bad-note" | "bad-code" | ActorRefusal, string> = {
