@@ -69,7 +69,7 @@ const add: Handler = async (_ctx, input) => {
     .addComponents(
       textRow("name", "What it locks", TextInputStyle.Short, VAULT_NAME_MAX, true),
       textRow("note", "Note (optional)", TextInputStyle.Paragraph, VAULT_NOTE_MAX, false),
-      textRow("code", `Code (${VAULT_CODE_DIGITS} digits — blank to generate)`, TextInputStyle.Short, VAULT_CODE_DIGITS, false),
+      textRow("code", `Code (${VAULT_CODE_DIGITS.min}–${VAULT_CODE_DIGITS.max} digits — blank to generate)`, TextInputStyle.Short, VAULT_CODE_DIGITS.max, false),
     );
   return { modal, ephemeral: true };
 };

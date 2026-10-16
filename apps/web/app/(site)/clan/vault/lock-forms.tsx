@@ -6,7 +6,7 @@ import { ConfirmButton, FieldError, Notice, SubmitButton, invalid, btnDanger, bt
 /** What a refused add or edit sent back (lib/form.ts readKept). ⚠️ Never a code: readKept cannot return one. */
 export type KeptLock = { name?: string; note?: string; minRole?: string };
 
-const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS}}`;
+const CODE_PATTERN = `\\d{${VAULT_CODE_DIGITS.min},${VAULT_CODE_DIGITS.max}}`;
 /** A fold's head: the mono caption with a chevron, 48px, full width. */
 export const fold = "flex min-h-[48px] cursor-pointer list-none items-center justify-between gap-3 px-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink [&::-webkit-details-marker]:hidden";
 export const Chevron = () => <><span aria-hidden="true" className="group-open:hidden">▾</span><span aria-hidden="true" className="hidden group-open:inline">▴</span></>;
@@ -23,7 +23,7 @@ export function VaultCodeField({ err }: { err: FieldErrorT | null }) {
   return (
     <label className="block"><span className={fieldLabel}>Code</span>
       <input {...invalid(err, "code")} className={`${field} ${invalid(err, "code").className ?? ""}`} name="code" pattern={CODE_PATTERN} inputMode="numeric"
-        title={`${VAULT_CODE_DIGITS} digits`} aria-describedby={err?.field === "code" ? "err-code code-note" : "code-note"}
+        title={`${VAULT_CODE_DIGITS.min} to ${VAULT_CODE_DIGITS.max} digits`} maxLength={VAULT_CODE_DIGITS.max} aria-describedby={err?.field === "code" ? "err-code code-note" : "code-note"}
         autoComplete="off" spellCheck={false} data-1p-ignore="true" data-lpignore="true" />
       <FieldError err={err} name="code" />
     </label>
@@ -44,7 +44,7 @@ export function AddLockForm({ err, kept, open }: { err: FieldErrorT | null; kept
           </select>
         </label>
         <VaultCodeField err={err} />
-        <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS} digits. Leave it blank and one is generated.</p>
+        <p id="code-note" className="-mt-1 text-xs text-muted">{VAULT_CODE_DIGITS.min} to {VAULT_CODE_DIGITS.max} digits. Leave it blank and a {VAULT_CODE_DIGITS.min}-digit one is generated.</p>
         <SubmitButton className={`${btnPrimary} self-start`}>Add lock</SubmitButton>
       </form>
     </details>

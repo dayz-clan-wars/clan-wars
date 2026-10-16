@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { vaultLocks, vaultHistory, players, factions } from "@factions/db";
-import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
-import { ROLE_RANK, VAULT_NAME_MAX, VAULT_NOTE_MAX, canSeeLock, randomVaultCode, type ClanRole, type VaultAction } from "@factions/domain";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { ROLE_RANK, VAULT_NAME_MAX, VAULT_NOTE_MAX, canSeeLock, randomVaultCode, VAULT_CODE_RE, type ClanRole, type VaultAction } from "@factions/domain";
 import { lockFactionTx, fullMemberTx } from "./leadership-store";
 import { noticeClanTx, noticeFullMembersTx } from "./notices";
 import { gamertagOrId } from "./feed-actor";
@@ -18,7 +18,6 @@ type Role = ClanRole;
 // read them without pulling a postgres client into a browser bundle.
 export { VAULT_NAME_MAX, VAULT_NOTE_MAX };
 
-const CODE_RE = /^[0-9]{4}$/u;
 const validName = (name: string) => name.length >= 1 && name.length <= VAULT_NAME_MAX;
 const validNote = (note: string | null) => note === null || note.length <= VAULT_NOTE_MAX;
 
@@ -82,7 +81,7 @@ export type VaultHistoryRow = { at: Date; action: VaultAction; lockName: string;
 export type VaultState = { locks: VaultLockView[]; history: VaultHistoryRow[] | null };
 
 /**
- * Add a lock. Officer+ only (guide ch. 8). `code` is caller-supplied (4
+ * Add a lock. Officer+ only (guide ch. 8). `code` is caller-supplied (4 to 6
  * digits) or generated with `randomVaultCode`; either way it never leaves
  * this call except through `revealLockDb`.
  */
@@ -98,7 +97,7 @@ export async function addLockDb(
     if (!me || ROLE_RANK[me.role] < ROLE_RANK.officer) return { outcome: "not-permitted" as const, lockId: null };
     if (!validName(a.name)) return { outcome: "bad-name" as const, lockId: null };
     if (!validNote(a.note)) return { outcome: "bad-note" as const, lockId: null };
-    if (a.code !== undefined && !CODE_RE.test(a.code)) return { outcome: "bad-code" as const, lockId: null };
+    if (a.code !== undefined && !VAULT_CODE_RE.test(a.code)) return { outcome: "bad-code" as const, lockId: null };
 
     const code = a.code ?? randomVaultCode(a.rng);
     const [row] = await tx.insert(vaultLocks).values({
@@ -226,12 +225,14 @@ export async function rotateLocksDb(
     const where = a.lockId === "all"
       ? eq(vaultLocks.factionId, actor.factionId)
       : and(eq(vaultLocks.id, a.lockId), eq(vaultLocks.factionId, actor.factionId));
-    const targets = await tx.select({ id: vaultLocks.id, name: vaultLocks.name }).from(vaultLocks).where(where).for("update");
+    // Only the code's LENGTH is read: a rotated lock keeps its length, so a
+    // 4-dial combination lock is never handed a code it cannot be set to.
+    const targets = await tx.select({ id: vaultLocks.id, name: vaultLocks.name, digits: sql<number>`length(${vaultLocks.code})` }).from(vaultLocks).where(where).for("update");
     if (a.lockId !== "all" && targets.length === 0) return { outcome: "gone" as const, rotated: 0 };
     if (targets.length === 0) return { outcome: "ok" as const, rotated: 0 };
 
     for (const t of targets) {
-      const code = randomVaultCode(a.rng);
+      const code = randomVaultCode(a.rng, Number(t.digits));
       await tx.update(vaultLocks).set({
         code, rotatedAt: a.at, rotatedByDayzId: me.dayzId, confirmedAt: null, exposedAt: null,
       }).where(eq(vaultLocks.id, t.id));

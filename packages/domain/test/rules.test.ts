@@ -49,7 +49,7 @@ describe("rules", () => {
     expect(R.CLAN_SIZE_CAP).toBe(10);
     expect(R.ALPHAS_PER_WEEK).toBe(3);
     expect(R.KD_MIN_KILLS).toBe(10);
-    expect(R.VAULT_CODE_DIGITS).toBe(4);
+    expect(R.VAULT_CODE_DIGITS).toEqual({ min: 4, max: 6 });
     expect(R.TRAVEL_POINTS).toBe(518);
     expect(R.HUB_DESTINATIONS).toBe(31);
     expect(R.WATCHTOWER_MAX_HEIGHT).toEqual({ grounded: 2, onStructure: 1 });

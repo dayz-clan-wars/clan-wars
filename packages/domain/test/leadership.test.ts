@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { voteThreshold, ROLE_RANK, canSeeLock, NICKNAME_MAX, nicknameFor, randomVaultCode } from "../src/leadership";
+import { voteThreshold, ROLE_RANK, canSeeLock, NICKNAME_MAX, nicknameFor, randomVaultCode, VAULT_CODE_RE } from "../src/leadership";
 
 describe("voteThreshold", () => {
   it("is ceil(2/3 x electorate size), from VOTE_THRESHOLD (spec §13)", () => {
@@ -37,13 +37,28 @@ describe("canSeeLock", () => {
 });
 
 describe("randomVaultCode", () => {
-  it("zero-pads to VAULT_CODE_DIGITS from the rng", () => {
+  it("zero-pads to the shortest length from the rng by default", () => {
     expect(randomVaultCode(() => 0)).toBe("0000");
     expect(randomVaultCode(() => 0.9999)).toBe("9999");
   });
-  it("always returns VAULT_CODE_DIGITS digits", () => {
+  it("always returns 4 digits by default — the one length every lock takes", () => {
     for (let i = 0; i < 200; i++) {
       expect(randomVaultCode()).toMatch(/^\d{4}$/u);
     }
+  });
+  it("returns the asked-for length, 4 to 6", () => {
+    expect(randomVaultCode(() => 0, 5)).toBe("00000");
+    expect(randomVaultCode(() => 0.999999, 6)).toBe("999999");
+  });
+  it("refuses a length outside 4 to 6", () => {
+    expect(() => randomVaultCode(Math.random, 3)).toThrow(RangeError);
+    expect(() => randomVaultCode(Math.random, 7)).toThrow(RangeError);
+  });
+});
+
+describe("VAULT_CODE_RE", () => {
+  it("takes 4, 5 and 6 digits and nothing else", () => {
+    for (const ok of ["0000", "12345", "999999"]) expect(VAULT_CODE_RE.test(ok), ok).toBe(true);
+    for (const bad of ["123", "1234567", "12a4", " 1234", "１２３４"]) expect(VAULT_CODE_RE.test(bad), bad).toBe(false);
   });
 });

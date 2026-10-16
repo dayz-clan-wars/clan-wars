@@ -1,11 +1,9 @@
 import type { NextRequest, NextResponse } from "next/server";
 import { addLock, VAULT_NAME_MAX, VAULT_NOTE_MAX } from "@factions/roster";
-import { VAULT_CODE_DIGITS } from "@factions/domain";
+import { VAULT_CODE_RE } from "@factions/domain";
 import { formAction, keepFrom, text, optionalText, type Redirect } from "@/lib/form";
 import { MIN_ROLE_MAX, minRoleFrom } from "@/lib/vault-form";
 import { vaultCode } from "@/lib/vault-copy";
-
-const CODE_RE = new RegExp(`^\\d{${VAULT_CODE_DIGITS}}$`, "u");
 
 /** POST from /clan/vault. Officer+; the code is caller-supplied or generated ("leave blank to generate"). */
 export async function POST(req: NextRequest): Promise<NextResponse> {
@@ -29,7 +27,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
     const rawCode = form.get("code");
     let code: string | undefined;
     if (typeof rawCode === "string" && rawCode.trim() !== "") {
-      if (!CODE_RE.test(rawCode.trim())) return refuse(vaultCode("add", "bad-code"));
+      if (!VAULT_CODE_RE.test(rawCode.trim())) return refuse(vaultCode("add", "bad-code"));
       code = rawCode.trim();
     }
     const { outcome } = await addLock(session.sub, { name, note, minRole, code });

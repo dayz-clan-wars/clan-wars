@@ -89,6 +89,14 @@ describe("vault store", () => {
 
     const badCode = await addLockDb(db, actor("O1"), { name: "Shed", note: null, minRole: "member", code: "12a4", at: now });
     expect(badCode.outcome).toBe("bad-code");
+    for (const code of ["123", "1234567"]) {
+      expect((await addLockDb(db, actor("O1"), { name: "Shed", note: null, minRole: "member", code, at: now })).outcome, code).toBe("bad-code");
+    }
+
+    // A digital code lock takes 4 to 6 digits.
+    const digital = await addLockDb(db, actor("O1"), { name: "Digital door", note: null, minRole: "member", code: "123456", at: now });
+    expect(digital.outcome).toBe("ok");
+    expect((await lockRow(digital.lockId!)).code).toBe("123456");
 
     const badNote = await addLockDb(db, actor("O1"), { name: "Shed", note: "x".repeat(141), minRole: "member", at: now });
     expect(badNote.outcome).toBe("bad-note");
@@ -168,6 +176,21 @@ describe("vault store", () => {
     const stateAfterConfirm = await vaultStateDb(db, actor("O1"));
     const view = stateAfterConfirm.locks.find((l) => l.id === memberLock)!;
     expect(view.changedInGame).toBe(false);
+  });
+
+  it("rotateLocks: each lock keeps its code length, so a 4-dial lock never gets a 5th digit", async () => {
+    const dial = (await addLockDb(db, actor("O1"), { name: "Dial gate", note: null, minRole: "member", code: "1234", at: now })).lockId!;
+    const five = (await addLockDb(db, actor("O1"), { name: "Shed", note: null, minRole: "member", code: "12345", at: now })).lockId!;
+    const six = (await addLockDb(db, actor("O1"), { name: "Digital door", note: null, minRole: "member", code: "123456", at: now })).lockId!;
+
+    expect(await rotateLocksDb(db, actor("O1"), { lockId: "all", at: now, rng: () => 0.9 })).toEqual({ outcome: "ok", rotated: 3 });
+    expect((await lockRow(dial)).code).toBe("9000");
+    expect((await lockRow(five)).code).toBe("90000");
+    expect((await lockRow(six)).code).toBe("900000");
+
+    // One lock at a time too.
+    expect(await rotateLocksDb(db, actor("O1"), { lockId: six, at: now, rng: () => 0.5 })).toEqual({ outcome: "ok", rotated: 1 });
+    expect((await lockRow(six)).code).toBe("500000");
   });
 
   // ------------------------------------------------------------- 5. deleteLock
