@@ -63,6 +63,17 @@ describe("migration 0028", () => {
       .rejects.toThrow(/faction_vote_ballots_uniq/u);
   });
 
+  it("vault_locks takes a 4- to 6-digit code and nothing shorter or longer", async () => {
+    for (const code of ["1234", "12345", "123456"]) {
+      await db.insert(vaultLocks).values({ factionId, name: `Len ${code.length}`, code, minRole: "member", createdByDayzId: UID, createdAt: now });
+    }
+    for (const code of ["123", "1234567"]) {
+      await expect(db.insert(vaultLocks).values({
+        factionId, name: "Main", code, minRole: "member", createdByDayzId: UID, createdAt: now,
+      })).rejects.toThrow(/vault_locks_code_digits|value too long/u);
+    }
+  });
+
   it("vault_locks rejects a non-digit code and an invalid min_role", async () => {
     await expect(db.insert(vaultLocks).values({
       factionId, name: "Main", code: "ab12", minRole: "member", createdByDayzId: UID, createdAt: now,

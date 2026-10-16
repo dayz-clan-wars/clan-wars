@@ -131,7 +131,8 @@ export const FAILED_VOTE_COOLDOWN_MS = 14 * DAY;
 export const RENAME_COOLDOWN_MS = 30 * DAY;
 export const REBIND_CONFIRM_MS = 24 * HOUR;
 export const REBIND_COOLDOWN_MS = 7 * DAY;
-export const VAULT_CODE_DIGITS = 4;
+/** A vault code is 4 to 6 digits: a 4-dial combination lock takes 4, a digital code lock 4 to 6. */
+export const VAULT_CODE_DIGITS = { min: 4, max: 6 } as const;
 
 // Discord
 export const GUEST_PASS_MS = 24 * HOUR;
