@@ -153,13 +153,14 @@ export type PinIcon = (typeof PIN_ICONS)[number];
 /** Pin note length cap, characters. UI + package share it. */
 export const PIN_NOTE_MAX = 140;
 /**
- * Chernarus, since 2026-10-07 (Livonia, 12800 m, before). The one map this
+ * Nasdara, since the 2026-10 swap (Chernarus, 15360 m, before that; Livonia,
+ * 12800 m, before that). The one map this
  * deployment runs: its edge for pins and fixes, the tile directory under
  * /tiles/ and the key into the web's place names. ⚠️ `servers.map` is a
  * separate statement of the same fact, set by hand on a map change.
  */
-export const WORLD_SIZE_M = 15360;
-export const WORLD_MAP = "chernarusplus";
+export const WORLD_SIZE_M = 16384;
+export const WORLD_MAP = "nasdara";
 
 /**
  * Vault lock label and note caps, characters.

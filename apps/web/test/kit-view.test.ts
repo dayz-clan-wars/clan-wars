@@ -40,7 +40,7 @@ describe("the kit page's view", () => {
    * copy of the world's geometry in the bundle of a page that needs one word.
    */
   it("names the nearest settlement to the spot", () => {
-    expect(kitView(view({ spot: { x: 6779, y: 10, z: 2322, placedAt: null } })).spot!.near).toBe("Chernogorsk");
+    expect(kitView(view({ spot: { x: 9632, y: 10, z: 4075, placedAt: null } })).spot!.near).toBe("Nasdara");
   });
 
   it("has no spot at all when none has been marked", () => {

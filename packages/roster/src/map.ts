@@ -17,7 +17,7 @@ export { WORLD_SIZE_M };
 
 export type MapFix = { x: number; z: number; at: Date };
 export type MapState = {
-  /** The map's side, metres (`WORLD_SIZE_M`: Chernarus since 2026-10-07). */
+  /** The map's side, metres (`WORLD_SIZE_M`: Nasdara since the 2026-10 swap). */
   world: { size: number };
   you: { gamertag: string; fix: MapFix | null };
   base: { x: number; z: number; radiusM: number; kind: "clan" | "solo" } | null;
