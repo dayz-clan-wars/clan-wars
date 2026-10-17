@@ -40,7 +40,7 @@ export const SOLO_LAPSE_MS = 7 * DAY;
 /**
  * An undeclared pole whose flag has not been raised for this long has
  * despawned in game, so it drops off the public-bases layer.
- * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the livonia repo's
+ * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the nasdara repo's
  * `db/globals.xml` — a different repo, so no test can hold the two together.
  * Retune one and the map either keeps drawing bases that are gone or drops
  * ones that are still standing.
