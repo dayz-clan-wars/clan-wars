@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players } from "@factions/db";
 import { publicPoles } from "@factions/declarations";
 import {
-  FAST_TRAVEL_POINTS, HOLDING_STATUSES, HUB_POSITION, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
+  HOLDING_STATUSES, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
 } from "@factions/domain";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { activeServerId } from "./server";
@@ -45,8 +45,6 @@ export type MapState = {
    * clanmates who did nothing.
    */
   bounties: { gamertag: string; reason: string; fix: MapFix }[];
-  travelPoints: readonly { x: number; z: number }[];
-  hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
 };
 export type DropPinOutcome = { ok: true; id: number } | { ok: false; reason: "not-linked" | "not-in-clan" | "pending" | "bad-icon" | "bad-note" | "off-map" };
@@ -124,8 +122,6 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
     publicBases,
     pins: pins.map((p) => ({ id: p.id, x: n(p.x), z: n(p.z), icon: p.icon as PinIcon, note: p.note, by: p.by, at: p.at, expiresAt: p.expiresAt })),
     bounties: wanted.flatMap((w) => { const f = wantedFixes.get(w.dayzId); return f ? [{ gamertag: w.gamertag ?? "someone", reason: w.reason, fix: f }] : []; }),
-    travelPoints: FAST_TRAVEL_POINTS,
-    hub: HUB_POSITION,
     layers: { base: decl !== undefined, clanmates: clan !== undefined, intruders: decl !== undefined, pins: clan !== undefined },
   };
 }

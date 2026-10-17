@@ -7,7 +7,7 @@ import { markerKey } from "@/lib/map-roster";
 import { popupOptions } from "@/lib/map-motion";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
-  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
+  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, youIcon,
 } from "@/lib/map-icons";
 
 /**
@@ -32,8 +32,6 @@ export type WireState = {
   publicBases: { x: number; z: number }[];
   pins: { id: number; x: number; z: number; icon: PinIcon; note: string | null; by: string | null; at: string; expiresAt: string }[];
   bounties: { gamertag: string; reason: string; fix: WireFix }[];
-  travelPoints: readonly { x: number; z: number }[];
-  hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
 };
 
@@ -98,12 +96,6 @@ export const COLOURS = {
 export function palette(): Palette {
   return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust2: COLOURS.rust2(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2() };
 }
-
-/** Leaflet's own pane sits at 400; travel points go under everything else at 350. */
-export const TRAVEL_PANE = "travel";
-/** Below this zoom a travel point is a dot; from it up, a glyph chip. Set as a class on the container. */
-export const TRAVEL_CHIP_ZOOM = 3;
-export const FAR_CLASS = "cw-far";
 
 /** A marker whose chip is one of the strings in map-icons.ts. Never a white box: `.cw-mk` in globals.css. */
 function chipIcon(L: typeof import("leaflet"), html: string, box: { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }, className: string): L.DivIcon {
@@ -408,17 +400,6 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
     marker.addTo(group);
     index.set(markerKey.pin(pin.id), marker);
     ages.push({ at: pin.at, layer: marker, popup: text, title: { marker, text: (a) => markerTitle.pin(label, pin.x, pin.z, a) }, last: age, lastPopup: html });
-  }
-}
-
-export function drawTravel({ L, group, pt, data, p }: Ctx): void {
-  // Dot or chip is the container's `cw-far` class, flipped on zoomend in
-  // map-view.tsx — 209 markers swap form with one class, none rebuilt.
-  const icon = chipIcon(L, travelIcon(p), ICON.travel, "cw-mk-travel");
-  // The Hub itself is not drawn: it is one fixed, well-known building, and a
-  // marker with a name tag at every zoom only covered the south-west corner.
-  for (const t of data.travelPoints) {
-    L.marker(pt(t.x, t.z), { pane: TRAVEL_PANE, icon, keyboard: false, interactive: false }).addTo(group);
   }
 }
 

@@ -47,7 +47,7 @@ export const SOLO_LAPSE_MS = 7 * DAY;
  */
 export const PUBLIC_BASE_DESPAWN_MS = 14 * DAY;
 /**
- * Chernarus's Fast Travel Hub arrival point (fast-travel-points.json, `hub`).
+ * Chernarus's Fast Travel Hub arrival point (the old fast-travel-points.json `hub`, deleted with the Nasdara swap).
  * History only: it no longer constrains where a base may sit.
  */
 export const HUB_POSITION = { x: 100, z: 93 } as const;
