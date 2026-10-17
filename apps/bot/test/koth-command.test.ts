@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  createClient, runMigrations, requireTestDatabaseUrl, airdropEvents, kothEvents, servers, admFiles, events, kills, players,
+  createClient, runMigrations, requireTestDatabaseUrl, kothEvents, servers, admFiles, events, kills, players,
   serverRestarts, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
@@ -28,7 +28,7 @@ describe("/koth", () => {
   });
 
   const ctx = (post: ((c: string) => Promise<void>) | null = vi.fn(async () => {}), now: Date = NOW) =>
-    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: post, kothVote: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now, bountiesEnabled: false, koth: post, kothVote: null, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (over: Partial<CommandInput> & { location?: string; at?: string; prize?: string } = {}) => ({
     actorDiscordId: "99", isAdmin: true,
     string: (n: string) => (n === "location" ? over.location ?? "berezino" : n === "prize" ? over.prize ?? "plate-carrier" : over.at ?? SLOT.toISOString()),
@@ -103,16 +103,6 @@ describe("/koth", () => {
     const reply = await schedule(ctx(), input());
     expect(reply.content).toMatch(/already/i);
     expect(await rows()).toHaveLength(1);
-  });
-
-  it("refuses a slot a bunker holds", async () => {
-    await db.insert(airdropEvents).values({
-      serverId, slotAt: SLOT, location: "dolnik", colour: "blue", decidedAt: NOW,
-      popAtDecision: 4, threshold: "0", state: "announced", announcedAt: NOW,
-    });
-    const reply = await schedule(ctx(), input());
-    expect(reply.content).toBe("A bunker is already set to come online that session. Pick another slot.");
-    expect(await rows()).toHaveLength(0);
   });
 
   it("marks the row failed and says so when the announcement cannot post", async () => {

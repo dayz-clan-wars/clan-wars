@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  createClient, runMigrations, requireTestDatabaseUrl, admFiles, airdropEvents, events, kothEvents, kothVotes,
+  createClient, runMigrations, requireTestDatabaseUrl, admFiles, events, kothEvents, kothVotes,
   playerSessions, servers, type Database,
 } from "@factions/db";
 import { sql } from "drizzle-orm";
@@ -23,7 +23,7 @@ describe("kothDecideTick", () => {
     await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: at("2026-09-01T00:00:00Z"), linesIngested: 0, complete: true });
   });
 
-  /** Same helper as airdrop-tick.test.ts: n sessions from `from` to `to`. */
+  /** n sessions from `from` to `to`. */
   async function online(n: number, from: string, to: string | null) {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles);
     for (let i = 0; i < n; i++) {
@@ -80,12 +80,6 @@ describe("kothDecideTick", () => {
     await db.insert(kothVotes).values({ ...vote, state: "open" });
     expect((await run()).decided).toBe(0);
     await db.execute(sql`update koth_votes set state = 'failed', closed_at = ${NOW.toISOString()}::timestamptz`);
-    expect((await run()).decided).toBe(0);
-  });
-
-  it("yields to a hand-placed airdrop for the slot", async () => {
-    await online(11, "2026-10-03T18:00:00Z", null);
-    await db.insert(airdropEvents).values({ serverId, slotAt: SLOT, location: "brena", colour: "blue", decidedAt: at("2026-10-03T12:00:00Z"), popAtDecision: 0, threshold: "0", state: "announced", manual: true, announcedAt: at("2026-10-03T12:00:00Z") });
     expect((await run()).decided).toBe(0);
   });
 

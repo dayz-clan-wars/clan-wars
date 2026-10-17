@@ -100,7 +100,7 @@ export function kothGapOk(slot: Date, lastSlotAt: Date | null): boolean {
 }
 
 /**
- * Spec §2.4, `chooseAirdrop`'s shape.
+ * Spec §2.4: skip the last few towns, fall back to the full list when all are recent.
  * ⚠️ The fallback is not padding: an empty pool indexes undefined and throws inside a tick.
  */
 export function chooseKothTown(recent: string[], rng: () => number): KothLocation {
@@ -112,7 +112,7 @@ export function chooseKothTown(recent: string[], rng: () => number): KothLocatio
 
 export type KothFireInput = {
   slot: Date;
-  /** A koth_events row holds the slot, or an announced/live airdrop does. */
+  /** A koth_events row holds the slot. */
   slotTaken: boolean;
   /** A vote for this slot is open or failed (§3.2). */
   voteBlocks: boolean;
@@ -123,7 +123,7 @@ export type KothFireInput = {
   weeklyCap: number;
   lastSlotAt: Date | null;
   pop: number;
-  /** ⚠️ Taken strictly before this decision instant — see airdrop-tick.ts. */
+  /** ⚠️ Taken strictly before this decision instant — see koth-decide-tick.ts. */
   threshold: number;
   minPop: number;
 };

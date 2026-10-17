@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
-  createClient, runMigrations, requireTestDatabaseUrl, admFiles, airdropEvents, events, identityLinks, kothEvents,
+  createClient, runMigrations, requireTestDatabaseUrl, admFiles, events, identityLinks, kothEvents,
   kothVotes, kothVoteVoters, playerSessions, servers, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
@@ -41,7 +41,7 @@ describe("/kothvote", () => {
     edit: vi.fn(async () => {}),
   }) as never;
   const ctx = (ch: KothVoteChannel = channel(), enabled = true, now = NOW) =>
-    ({ db, now, serverEvents: null, bountiesEnabled: false, koth: null, kothVote: { enabled, channel: ch }, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
+    ({ db, now, bountiesEnabled: false, koth: null, kothVote: { enabled, channel: ch }, roster: {} as never, siteBaseUrl: "https://x" }) as unknown as Ctx;
   const input = (actor = "d0") => ({ actorDiscordId: actor, isAdmin: false, string: () => null, integer: () => null, boolean: () => null, user: () => null }) as unknown as CommandInput;
 
   it("opens a vote: frozen electorate, the starter's Yes, the message posted", async () => {
@@ -90,11 +90,6 @@ describe("/kothvote", () => {
     await start(ctx(), input("d0"));
     await db.execute(sql`update koth_votes set state = 'failed', closed_at = now()`);
     expect((await start(ctx(), input("d1"))).content).toMatch(/already been a vote/i);
-  });
-  it("refuses a slot a bunker holds", async () => {
-    await populate(6, 5);
-    await db.insert(airdropEvents).values({ serverId, slotAt: SLOT, location: "brena", colour: "blue", decidedAt: NOW, popAtDecision: 0, threshold: "0", state: "announced", manual: true, announcedAt: NOW });
-    expect((await start(ctx(), input())).content).toMatch(/^A bunker comes online at the \d\d:\d\d UTC restart\.$/);
   });
   it("refuses inside the 24 h gap", async () => {
     await populate(6, 5);

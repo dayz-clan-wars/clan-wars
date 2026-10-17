@@ -33,7 +33,6 @@ import { announceTick } from "./announce-tick.js";
 import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
-import { airdropTick } from "./airdrop-tick.js";
 import { kothTick } from "./koth-tick.js";
 import { referralAwardTick } from "./referral-award-tick.js";
 import { kothVoteTick } from "./koth-vote-tick.js";
@@ -690,7 +689,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   let lastReferralAt = 0;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
-    db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
+    db,
     bountiesEnabled: cfg.bounties.enabled,
     koth: kothPoster,
     kothVote: kothVoteChannel ? { enabled: cfg.koth.vote.enabled, channel: kothVoteChannel } : null,
@@ -786,9 +785,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   // lifetime (owner, outranked, no permission) — shared between the
   // start-up pass and every tick pass so neither repeats the other's log.
   const nicknameNoRetry = new Set<string>();
-  // Slots whose "airdrop: skipped …: koth" line is already logged, so the 10 s tick
-  // says it once per slot. About a dozen keys a day, gone at the next bot restart.
-  const airdropSkipLogged = new Set<string>();
   // ⚠️ False until one `fetchAllMembers()` resolves. `guild.members.fetch()`
   // rejects with GuildMembersTimeout after 120s on a large or slow guild, and
   // without a retry the member cache stays whatever gateway events happen to
@@ -1731,7 +1727,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, airdrop: cfg.airdrop, koth: { open: cfg.koth.enabled } });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, koth: { open: cfg.koth.enabled } });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1760,10 +1756,9 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Vote tick → automatic decision → airdrop, in that order (tick-order.test.ts):
-    // a vote closing at T−30 inserts its row before the decision looks, and both
-    // before the airdrop, which yields to a scheduled KotH. Each its own try/catch:
-    // a throw here must leave the airdrop deciding as normal.
+    // ⚠️ Vote tick → automatic decision, in that order (tick-order.test.ts): a vote
+    // closing at T−30 inserts its row before the decision looks. Each its own
+    // try/catch: a throw in one must leave the other deciding as normal.
     if (kothVoteChannel) {
       try {
         const v = await kothVoteTick(db, kothVoteChannel, kothPoster!, { now: new Date(), enabled: cfg.koth.vote.enabled });
@@ -1778,21 +1773,6 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (d.decided + d.posted > 0) console.log(`koth: ${d.decided} decided automatically, ${d.posted} posted`);
       } catch (err) {
         console.error("koth decision tick failed", err);
-      }
-    }
-
-    // ⚠️ AFTER the restart tick, like the raid window and for the same reason: a
-    // slow Discord call must never delay a due restart. Its own try/catch.
-    // ⚠️ Gated on the flag alone — config load refuses AIRDROP_TICK without
-    // SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is non-null here.
-    if (cfg.airdrop.enabled) {
-      try {
-        const a = await airdropTick(db, serverEventsPoster!, {
-          now: new Date(), weeklyCap: cfg.airdrop.weeklyCap, minPop: cfg.airdrop.minPop, skipLogged: airdropSkipLogged,
-        });
-        if (a.decided + a.posted + a.failed > 0) console.log(`airdrop: ${a.decided} decided, ${a.posted} posted, ${a.failed} failed`);
-      } catch (err) {
-        console.error("airdrop tick failed", err);
       }
     }
 
@@ -1894,9 +1874,6 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
-
-    if (!cfg.airdrop.enabled) console.warn("AIRDROP_TICK is off: airdrops are not being placed automatically.");
-    else console.log(`airdrop automation on (cap ${cfg.airdrop.weeklyCap}/week, floor ${cfg.airdrop.minPop})`);
 
     if (cfg.koth.enabled) console.log("king of the hill on");
     else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");

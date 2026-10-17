@@ -1,5 +1,3 @@
-import { BUNKER_SPAWNER_PATH, type ActiveFlag } from "@factions/domain";
-
 /**
  * Set `GeneralData.disableBaseDamage` in the game server's cfggameplay.json,
  * returning the new document and whether anything actually changed.
@@ -88,138 +86,10 @@ export function setBaseDamageDisabled(json: string, wanted: boolean): { json: st
   return { json: next, changed: true };
 }
 
-/** The array body, bounded by its own brackets. Textual, like KEY_RE above. */
-const SPAWNERS_RE = /("objectSpawnersArr"\s*:\s*\[)([^\]]*)(\])/g;
-/**
- * What marks an element as this feature's. ⚠️ Both forms: a Livonia-era
- * `/airdrop-<loc>-<colour>.json` left in the file must be cleaned out by the next
- * bunker, not counted as a second registration and refused forever.
- */
-const isFeatureEntry = (e: string) => e.includes("/airdrop-") || e.endsWith("/bunker-online.json");
-/** The same test on a raw array-body line, which still carries its quotes and comma. */
-const isFeatureLine = (l: string) => l.includes("/airdrop-") || l.includes("/bunker-online.json\"");
-
 /** Is this array-body line an element, rather than the blank after `[` or the indent before `]`? */
 const isEntry = (line: string) => line.trim().startsWith('"');
 
-/**
- * Set whether `WorldsData.objectSpawnersArr` registers the bunker spawner,
- * returning the new document and whether anything actually changed.
- *
- * ⚠️ A targeted splice, NEVER a parse-and-reserialize, for the reason
- * `setBaseDamageDisabled` gives above: the live file is tab-indented with a
- * specific key order, and a round trip rewrites all 4,450 bytes. Only the lines
- * inside this one array are touched; every byte outside comes back identical.
- *
- * ⚠️ Same refuse-rather-than-guess discipline, and for the same reason: this is
- * the file whose corruption stops the server BOOTING, for every player. Refusing
- * costs one event; the next slot recomputes and retries.
- */
-export function setAirdropSpawner(json: string, on: boolean): { json: string; changed: boolean } {
-  let input: unknown;
-  try {
-    input = JSON.parse(json);
-  } catch (err) {
-    throw new Error(`cfggameplay.json: input did not parse — refusing to edit it (${(err as Error).message})`);
-  }
-
-  // ⚠️ The parsed array is the authority on the current state, never the regex:
-  // the regex finds bytes to splice and cannot tell WorldsData's key from one that
-  // has drifted elsewhere in the file.
-  const current = (input as { WorldsData?: { objectSpawnersArr?: unknown } })?.WorldsData?.objectSpawnersArr;
-  if (!Array.isArray(current) || current.some((e) => typeof e !== "string")) {
-    throw new Error(
-      "cfggameplay.json: WorldsData.objectSpawnersArr is missing or is not an array of strings — " +
-        "refusing to guess where the list the server reads went",
-    );
-  }
-
-  // ⚠️ Several feature entries are collapsed, never refused. There is one spawner
-  // path since bunker online (2026-10-07), so no guess is left to make, and refusing
-  // a Livonia `/airdrop-` leftover beside a registered bunker refused every later
-  // edit too, on and off, for good. The splice below drops every feature line.
-  const present = (current as string[]).filter((e) => isFeatureEntry(e));
-  const wanted = on ? BUNKER_SPAWNER_PATH : null;
-  if (present.length === (wanted ? 1 : 0) && (present[0] ?? null) === wanted) return { json, changed: false };
-
-  const matches = [...json.matchAll(SPAWNERS_RE)];
-  if (matches.length !== 1) {
-    throw new Error(
-      `cfggameplay.json: "objectSpawnersArr" appears ${matches.length}× — ` +
-        "refusing to guess which one the server reads",
-    );
-  }
-
-  const m = matches[0]!;
-  const [, head, body, tail] = m as unknown as [string, string, string, string];
-  const lines = body.split("\n");
-  const kept = lines.filter((l) => !isFeatureLine(l));
-  const firstEntry = kept.findIndex(isEntry);
-  const indent = (kept.find(isEntry) ?? '\t\t\t"').match(/^\s*/)![0];
-
-  let next = kept;
-  if (wanted) {
-    const line = `${indent}"${wanted}"`;
-    next = firstEntry === -1
-      // An empty array: the new element is the only one, and the blank line after
-      // `[` plus the indent before `]` are all that is around it.
-      ? [kept[0] ?? "", line, kept[kept.length - 1] ?? ""]
-      : [...kept.slice(0, firstEntry), line, ...kept.slice(firstEntry)];
-  }
-
-  // ⚠️ Commas are rebuilt across the element lines, not left where they fell.
-  // Deleting the LAST element otherwise leaves the one before it ending in `,`
-  // directly in front of `]` — a file that does not parse, which is exactly the
-  // failure this whole module exists to avoid.
-  const entries = next.filter(isEntry);
-  let seen = 0;
-  const rebuilt = next.map((l) => {
-    if (!isEntry(l)) return l;
-    seen += 1;
-    return l.replace(/,\s*$/, "") + (seen < entries.length ? "," : "");
-  });
-
-  const from = m.index!;
-  const nextJson = json.slice(0, from) + head + rebuilt.join("\n") + tail + json.slice(from + m[0].length);
-
-  // ⚠️ Guard 2, not redundant with the parse above, and it is the same one
-  // setBaseDamageDisabled carries: parsing proves the file is loadable, and only
-  // reading the value back proves the edit did what it meant to.
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(nextJson);
-  } catch (err) {
-    throw new Error(`cfggameplay.json: the edit produced a file that does not parse (${(err as Error).message})`);
-  }
-  const got = (parsed as { WorldsData?: { objectSpawnersArr?: string[] } })?.WorldsData?.objectSpawnersArr ?? [];
-  const after = got.filter((e) => isFeatureEntry(e));
-  if (after.length !== (wanted ? 1 : 0) || (wanted && after[0] !== wanted)) {
-    throw new Error(
-      `cfggameplay.json: after the edit objectSpawnersArr holds ${JSON.stringify(after)}, ` +
-        `not ${wanted ? JSON.stringify([wanted]) : "[]"} — the array that was edited is not the one the server reads`,
-    );
-  }
-
-  // ⚠️ The airdrop subset above is only half of "the array holds what was
-  // intended" (spec §5). The splice works on LINES, so two array elements sharing
-  // one line — which a reformat by Nitrado's web editor, a prettifier or a
-  // `livonia` Release can produce at any time — make removing the drop take its
-  // line-mate with it. The result parses, the airdrop check passes, and
-  // `teleports.json`, `faction-supplies.json` or `admin-castle.json` is silently
-  // gone, with nothing level-triggering it back.
-  const othersBefore = (current as string[]).filter((e) => !isFeatureEntry(e));
-  const othersAfter = got.filter((e) => !isFeatureEntry(e));
-  if (othersBefore.length !== othersAfter.length || othersBefore.some((e, i) => e !== othersAfter[i])) {
-    throw new Error(
-      `cfggameplay.json: after the edit objectSpawnersArr's other entries are ${JSON.stringify(othersAfter)}, ` +
-        `not ${JSON.stringify(othersBefore)} — the edit changed a spawner it does not own`,
-    );
-  }
-
-  return { json: nextJson, changed: true };
-}
-
-/** The array body, bounded by its own brackets. Textual, like SPAWNERS_RE. */
+/** The array body, bounded by its own brackets. Textual, like KEY_RE. */
 const PRESETS_RE = /("spawnGearPresetFiles"\s*:\s*\[)([^\]]*)(\])/g;
 
 /** The parsed `PlayerData.spawnGearPresetFiles` — the authority, never the regex. */

@@ -7,7 +7,7 @@ import type { KothVoteChannel } from "./koth-vote-channel.js";
 import { kothOpen, lastKothSlot, slotTakenBy } from "./koth-vote-store.js";
 
 type Vote = typeof kothVotes.$inferSelect;
-/** Same bound and reasoning as airdrop-tick's SCRUB_SCAN_MS: never resurrect a long-dead row. */
+/** Bound on how far back a result is posted: never resurrect a long-dead row. */
 const RESULT_SCAN_MS = 14 * 24 * 60 * 60 * 1000;
 
 async function tally(db: Database, voteId: number): Promise<Tally> {
@@ -27,8 +27,8 @@ const town = (v: Vote) => kothTownName(v.location);
  * ⚠️ Runs whether or not KOTH_VOTE is on (`enabled` only decides what a close
  * becomes): switching the feature off must finish a vote already running, and
  * never create an event from one.
- * ⚠️ Runs BEFORE kothDecideTick and airdropTick (tick-order.test.ts): a vote
- * closing at T−30 inserts its row before either looks at that slot.
+ * ⚠️ Runs BEFORE kothDecideTick (tick-order.test.ts): a vote
+ * closing at T−30 inserts its row before the decision looks at that slot.
  */
 export async function kothVoteTick(
   db: Database, channel: KothVoteChannel, announce: (c: string) => Promise<void>, opts: { now: Date; enabled: boolean },
@@ -76,10 +76,9 @@ async function close(db: Database, open: Vote, opts: { now: Date; enabled: boole
     if (!opts.enabled) { await done("void", { reason: "voting was switched off" }); return; }
     const r = voteOutcome({ cast: t.yes + t.no, yes: t.yes, floor: v.turnoutFloor });
     if (r.outcome === "failed") { await done("failed", { reason: r.reason }); return; }
-    // ⚠️ Re-checked under the lock: an admin may have scheduled, or an airdrop been
-    // placed, since the vote opened.
+    // ⚠️ Re-checked under the lock: an admin may have scheduled since the vote opened.
     const taken = await slotTakenBy(tx, v.serverId, v.slotAt);
-    if (taken) { await done("void", { reason: `${taken === "koth" ? "an event" : "a bunker"} took that restart` }); return; }
+    if (taken) { await done("void", { reason: "an event took that restart" }); return; }
     if (await kothOpen(tx, v.serverId)) { await done("void", { reason: "another King of the Hill was scheduled first" }); return; }
     if (!kothGapOk(v.slotAt, await lastKothSlot(tx, v.serverId, v.slotAt))) { await done("void", { reason: "another King of the Hill ran too recently" }); return; }
     const loc = kothLocation(v.location);

@@ -12,11 +12,10 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * The automatic KotH decision (spec 2026-09-24 §3).
  *
- * ⚠️ Runs BEFORE airdropTick in discord.ts (tick-order.test.ts): on a record night
- * both want the slot, and airdropTick yields to a scheduled KotH row — but only
- * if the row already exists when it looks.
+ * ⚠️ Runs after the vote tick in discord.ts (tick-order.test.ts): a vote closing
+ * at T−30 inserts its row before this looks at the slot.
  *
- * ⚠️ Row FIRST, post second — airdrop-tick's order, for its reason: posting first
+ * ⚠️ Row FIRST, post second, for its reason: posting first
  * and crashing leaves an event players were told about that nothing opens. An
  * unannounced row is harmless: `kothWanted` refuses it and koth-tick fails it.
  */
@@ -91,7 +90,7 @@ export async function kothDecideTick(
 
 /**
  * ⚠️ `reminded_at` is stamped WITH `announced_at`: this tick may decide anywhere in
- * [T-30, T), re-evaluating every tick like the airdrop, so the announcement can go
+ * [T-30, T), re-evaluating every tick, so the announcement can go
  * out any time from the reminder instant up to the slot itself — but never earlier
  * than the reminder instant. A separate reminder post would therefore only ever
  * repeat this one seconds-to-minutes later, so koth-tick is told the reminder is

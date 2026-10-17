@@ -1,4 +1,4 @@
-import { airdropEvents, identityLinks, kothEvents, playerSessions, type Database, type KothState } from "@factions/db";
+import { identityLinks, kothEvents, playerSessions, type Database, type KothState } from "@factions/db";
 import { and, desc, eq, inArray, isNull, lt, max } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -11,16 +11,12 @@ type Q = Database | Tx;
  */
 export const SLOT_HOLDING_STATES: readonly KothState[] = ["scheduled", "live", "awarded", "no_winner", "finished"];
 
-/** What holds `slot`, if anything (spec §2.5: an announced/live airdrop, or any KotH). */
-export async function slotTakenBy(db: Q, serverId: number, slot: Date): Promise<"koth" | "airdrop" | null> {
+/** What holds `slot`, if anything (spec §2.5: any KotH row in a slot-holding state). */
+export async function slotTakenBy(db: Q, serverId: number, slot: Date): Promise<"koth" | null> {
   const [k] = await db.select({ id: kothEvents.id }).from(kothEvents).where(and(
     eq(kothEvents.serverId, serverId), eq(kothEvents.slotAt, slot), inArray(kothEvents.state, [...SLOT_HOLDING_STATES]),
   )).limit(1);
-  if (k) return "koth";
-  const [a] = await db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
-    eq(airdropEvents.serverId, serverId), eq(airdropEvents.slotAt, slot), inArray(airdropEvents.state, ["announced", "live"]),
-  )).limit(1);
-  return a ? "airdrop" : null;
+  return k ? "koth" : null;
 }
 
 export async function kothOpen(db: Q, serverId: number): Promise<boolean> {
