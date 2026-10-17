@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The map-switch runbook now starts every clan's grace week before clearing bases, so no clan is marked dormant by mistake during a switch.
+
 ## [2.0.0] - 2026-10-17
 
 ### Changed
