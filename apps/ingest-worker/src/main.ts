@@ -4,7 +4,6 @@ import { NitradoClient } from "@factions/nitrado";
 import { loadConfig } from "./config.js";
 import { ingestSweep } from "./sweep.js";
 import { loadTemplate } from "./supplies.js";
-import { loadTravelTemplate } from "./travel.js";
 
 const cfg = loadConfig(process.env);
 const db = createClient(cfg.databaseUrl);
@@ -14,16 +13,6 @@ const db = createClient(cfg.databaseUrl);
 const offsets = loadTemplate(JSON.parse(
   readFileSync(new URL("../assets/flag-supplies.template.json", import.meta.url), "utf8"),
 ));
-
-// The fast-travel config, one template per map, same treatment: a broken
-// template stops the worker here. Each is that map's mission repo's
-// `custom/pra-teleport-hub.json` copied verbatim (chernarus, livonia), so a
-// fast-travel change there needs copying here too or the worker reverts it.
-const travelTemplates = Object.fromEntries(
-  ["dayzOffline.chernarusplus", "dayzOffline.enoch"].map((mission) => [mission, loadTravelTemplate(JSON.parse(
-    readFileSync(new URL(`../assets/travel/${mission}.json`, import.meta.url), "utf8"),
-  ))]),
-);
 
 // One client per service id, cached for the process lifetime. Typed to the
 // concrete NitradoClient (not the narrower NitradoLike) because it also
@@ -79,15 +68,6 @@ for (;;) {
           `found ${found}. Re-uploading.`,
         );
       },
-      // ⚠️ The file the mod reads for fast travel. Same name it has on the
-      // server today (pra-teleport-hub.json in the mission's custom dir); the
-      // template is that file verbatim, so with no active clan the upload is
-      // a no-op change.
-      travel: {
-        clientFor,
-        templates: travelTemplates,
-        fileName: "pra-teleport-hub.json",
-      },
       // ⚠️ The third projected file, and inert until an operator adds
       // ./custom/booster-kits.json to cfggameplay.json's objectSpawnersArr —
       // see docs/deploy/2026-09-19-booster-kits.md. Until then the worker
@@ -127,16 +107,6 @@ for (;;) {
       onHostnameError: (serverId, err) => console.error(`hostname read failed for server ${serverId}`, err),
       devices: { clientFor },
       onDeviceError: (serverId, err) => console.error(`device lookup failed for server ${serverId}:`, err),
-      onTravelError: (serverId, err) => console.error(`travel tick failed for server ${serverId}`, err),
-      onTravelUploaded: (serverId, r) =>
-        console.log(`travel file uploaded for server ${serverId}: ${r.poles} active clan poles (takes effect at the next server restart)`),
-      onTravelDrift: (serverId, d) => {
-        const found = d.found ? `size ${d.found.size}, mtime ${new Date(d.found.modifiedAtMs).toISOString()}` : "no such file";
-        console.error(
-          `travel file on server ${serverId} was changed outside this worker — ` +
-          `expected size ${d.expected.size}, mtime ${new Date(d.expected.modifiedAtMs).toISOString()}; found ${found}. Re-uploading.`,
-        );
-      },
     });
     console.log(`ingest sweep: ${r.servers} servers in ${Date.now() - started}ms`);
   } catch (err) {
