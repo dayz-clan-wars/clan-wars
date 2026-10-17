@@ -2,23 +2,33 @@
 
 Spec: `docs/superpowers/specs/2026-10-17-nasdara-swap-design.md`.
 
-Switch day is planned for 2026-10-18. Pick the cutover instant once, write it down,
-and use that SAME instant (`<cutover ISO>`, UTC, e.g. `2026-10-18T06:00:00Z`) in
-steps 4 and 5. ⚠️ `map-cutover --at` with a later instant than `clear-bases --before`
-silently lengthens every clan's grace.
+Switch day is planned for 2026-10-18.
 
-Every command below runs on the host, in `/opt/clan-wars`, with `.env` loaded
+⚠️ **Cutover race.** A Chernarus raise made after the cutover instant but before
+`clear-bases` runs is not cleared (`--before` excludes later declarations), and that
+base would carry onto Nasdara. So the Chernarus game server is STOPPED before the
+instant is taken, the instant is taken at the moment of the clear step, and steps 3
+to 6 run back to back. The Nitrado mission switch and start come last.
+
+Every `pnpm` command runs on the host, in `/opt/clan-wars`, with `.env` loaded
 (`. ./.env`, not `. .env`):
 
     cd /opt/clan-wars && set -a && . ./.env && set +a
 
-SQL runs against `factions_live` with psql (`sudo docker compose` in `/opt/clan-wars`, or
-`psql "$DATABASE_URL"` once `.env` is loaded).
+SQL runs against `factions_live` through the postgres container; each SQL block
+below is fed to it on stdin, for example:
+
+    cd /opt/clan-wars && sudo docker compose exec -T postgres psql -U factions -d factions_live -v ON_ERROR_STOP=1 <<'SQL'
+    select id, tag, reserved_until from factions where status = 'reserved';
+    SQL
+
+(Define once `psqlcw() { sudo docker compose exec -T postgres psql -U factions -d factions_live -v ON_ERROR_STOP=1; }`
+in the shell (from `/opt/clan-wars`); the blocks below use it as `psqlcw <<'SQL' ... SQL`.)
 
 ## 1. Before switch day
 
-1. **Release the nasdara mission.** In `dayz-one-life/nasdara`, Task 1's commit (the
-   object spawner files and the 14-day flag refresh) sits unreleased on `main`.
+1. **Release the nasdara mission.** In `dayz-one-life/nasdara`, the unreleased
+   change (the object spawner files and the 14-day flag refresh) sits on `main`.
    Publish a GitHub release `v1.0.1`. The deploy workflow uploads to the Clan Wars
    server (Nitrado 19831378) at `/dayzxb_missions/dayzOffline.nasdara/`. Confirm that
    folder holds `cfggameplay.json`, `db/globals.xml` and `koth/default/`.
@@ -37,50 +47,68 @@ SQL runs against `factions_live` with psql (`sudo docker compose` in `/opt/clan-
 
 ## 2. List what the wipe will cost
 
+    psqlcw <<'SQL'
     select id, tag, reserved_until from factions where status = 'reserved';
+    SQL
 
 A reserved clan's base is cleared with the rest, so it cannot activate (activation
 joins `declarations`) and lapses within 24 hours. Accepted: it re-founds on Nasdara.
 Tell those clans first.
 
-## 3. Close open events (at the switch restart window)
+## 3. Stop the server and take the cutover instant
 
+In Nitrado, STOP the Chernarus game server (19831378) so nobody can raise a flag.
+Then, on the host, take the instant once and keep it in the shell for steps 4 to 6:
+
+    CUT=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo "$CUT"
+
+Write it down. Use this SAME `$CUT` for `clear-bases` and `map-cutover`; ⚠️ a later
+instant for `map-cutover` silently lengthens every clan's grace. Do not leave a gap
+between here and step 6: run 4, 5 and 6 back to back.
+
+## 4. Close open events and clear placements
+
+    psqlcw <<'SQL'
     update koth_events set state = 'cancelled', cancel_posted_at = now()
       where server_id = 1 and state = 'scheduled';
     update koth_votes set state = 'void', closed_at = now() where state = 'open';
     update airdrop_events set state = 'ended', ended_at = now()
       where state in ('announced', 'live');
+    SQL
 
 A `live` KotH row is left alone: the restart tick's restore arm closes it.
 
-## 4. Clear placements
+    pnpm clear-bases --server 1 --before "$CUT" --dry-run
 
-    pnpm clear-bases --server 1 --before <cutover ISO> --dry-run
+Review the list: it should be every base on the server. Then the same command without
+`--dry-run`. It releases every declaration and cascades sightings, zone placements and
+incidents; rosters are untouched.
 
-Review the list: it should be every base on the server (the bot has one registered
-server). Then the same command without `--dry-run`. It releases every declaration and
-cascades sightings, zone placements and incidents; rosters are untouched.
-
+    psqlcw <<'SQL'
     update booster_kits set pos_x = null, pos_y = null, pos_z = null;
     update award_grants set pos_x = null, pos_y = null, pos_z = null
       where revoked_at is null;
     update booster_kit_challenges set closed_at = now() where closed_at is null;
     delete from clan_pins;
+    SQL
 
 ⚠️ Do NOT touch `award_grants.placed_at`. `awardState()` checks lapse before live, so
 nulling it on a grant past `place_by` ends a live award. Position columns only.
 
 ## 5. Map identity and dormancy grace
 
+    psqlcw <<'SQL'
     update servers set map = 'nasdara' where id = 1;
-    pnpm map-cutover --server 1 --at <cutover ISO>
+    SQL
+    pnpm map-cutover --server 1 --at "$CUT"
 
 The grace applies to active clans only. Each gets a week from the cutover to raise a
 flag again before dormancy counts.
 
-## 6. Operator: switch the mission
+## 6. Operator: switch the mission and start
 
-In Nitrado, set the mission to `dayzOffline.nasdara` on 19831378 and restart.
+Only now, in Nitrado, set the mission to `dayzOffline.nasdara` on 19831378 and START
+the server.
 
 ## 7. Guide channels
 
@@ -96,7 +124,7 @@ Read the dry run first: it should name the old chapter channels and nothing hand
 
 ## 8. Check
 
-- `select clock_offset_ms from servers where id = 1;` is still 25200000, and the worker
+- `select clock_offset_ms from servers where id = 1;` (via `psqlcw`) is still 25200000, and the worker
   logs no offset change. The offset belongs to the Nitrado box, not the map; new events'
   `occurred_at` should track wall-clock time.
 - The RPT names `dayzOffline.nasdara`, the three object spawner files load, and there
@@ -107,8 +135,10 @@ Read the dry run first: it should name the old chapter channels and nothing hand
   town list shows Nasdara towns.
 - No clan went dormant at the first ticks:
 
+      psqlcw <<SQL
       select tag, status, dormant_since from factions
-        where status = 'dormant' and dormant_since > '<cutover ISO>';  -- 0 rows
+        where status = 'dormant' and dormant_since > '$CUT';  -- 0 rows
+      SQL
 
 - Announce to players (separate from this work).
 
