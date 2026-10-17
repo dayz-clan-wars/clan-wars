@@ -107,7 +107,26 @@ Tell those clans first.
    instant for `map-cutover` silently lengthens every clan's grace. Do not leave a gap
    between here and step 6: run 4, 5 and 6 back to back.
 
-## 4. Close open events and clear placements
+## 4. Map identity and dormancy grace — BEFORE clearing anything
+
+    psqlcw <<'SQL'
+    update servers set map = 'nasdara' where id = 1;
+    SQL
+    pnpm map-cutover --server 1 --at "$CUT"
+
+The grace applies to active clans only. Each gets a week from the cutover to raise a
+flag again before dormancy counts.
+
+⚠️ This step comes BEFORE `clear-bases`, not after. The dormancy tick runs every few
+seconds: once a clan's base is cleared, its clock falls back to its activation and the
+season start, so an active clan whose last raise is more than a week old goes dormant
+on the very next tick unless `map_changed_at` is already set. That happened on
+2026-10-17: ADM and VOLK went dormant in the 15 s between `clear-bases` and
+`map-cutover`, posted to the feed and their channels, and had to be revived by hand
+(`PgDormancyStore.revive`). The grace reads only `map_changed_at`, so setting it first
+changes nothing until the bases are gone.
+
+## 5. Close open events and clear placements
 
     psqlcw <<'SQL'
     update koth_events set state = 'cancelled', cancel_posted_at = now()
@@ -131,7 +150,7 @@ incidents; rosters are untouched. Then:
 
 ⚠️ Anything but 0 means a declaration landed after `$CUT`: catch-up was not complete.
 Do NOT switch the mission. Go back to step 3.4, wait until it passes, take a NEW `$CUT`,
-re-run `clear-bases` with it, and use that new `$CUT` for `map-cutover` too.
+re-run `clear-bases` with it, and re-run step 4's `map-cutover` with that new `$CUT` too.
 
     psqlcw <<'SQL'
     update booster_kits set pos_x = null, pos_y = null, pos_z = null;
@@ -144,20 +163,10 @@ re-run `clear-bases` with it, and use that new `$CUT` for `map-cutover` too.
 ⚠️ Do NOT touch `award_grants.placed_at`. `awardState()` checks lapse before live, so
 nulling it on a grant past `place_by` ends a live award. Position columns only.
 
-## 5. Map identity and dormancy grace
-
-    psqlcw <<'SQL'
-    update servers set map = 'nasdara' where id = 1;
-    SQL
-    pnpm map-cutover --server 1 --at "$CUT"
-
-The grace applies to active clans only. Each gets a week from the cutover to raise a
-flag again before dormancy counts.
-
 ## 6. Operator: switch the mission and start
 
 First, the gate: `select count(*) from declarations where server_id = 1;` (via
-`psqlcw`) must still be 0. If not, back to step 3.4 as in step 4.
+`psqlcw`) must still be 0. If not, back to step 3.4 as in step 5.
 
 Only now, in Nitrado, set the mission to `dayzOffline.nasdara` on 19831378 and START
 the server.
