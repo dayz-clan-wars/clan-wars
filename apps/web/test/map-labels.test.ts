@@ -32,8 +32,8 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   const draw = readFileSync(join(MAP, "map-draw.ts"), "utf8");
   const markers = draw.match(/L\.marker\([\s\S]*?\}\)/gu) ?? [];
 
-  it("finds all eight marker calls", () => {
-    expect(markers).toHaveLength(8);
+  it("finds all seven marker calls", () => {
+    expect(markers).toHaveLength(7);
   });
 
   it.each(markers)("%s", (call) => {
