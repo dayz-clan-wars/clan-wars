@@ -1,11 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { setBaseDamageDisabled, setAirdropSpawner, readSpawnGearPresets, setSpawnGearPresets } from "../src/cfggameplay.js";
+import { setBaseDamageDisabled, readSpawnGearPresets, setSpawnGearPresets } from "../src/cfggameplay.js";
 
 const REAL = readFileSync(join(__dirname, "fixtures/cfggameplay.json"), "utf8");
-
-const spawners = (json: string) => JSON.parse(json).WorldsData.objectSpawnersArr as string[];
 
 describe("setBaseDamageDisabled", () => {
   it("opens the window by flipping true -> false", () => {
@@ -86,92 +84,6 @@ describe("setBaseDamageDisabled", () => {
       '"disableBaseDamage": "true"',
     ).replace('"VehicleData": {', '"SomeModData": {\n\t\t"disableBaseDamage": false\n\t},\n\t"VehicleData": {');
     expect(() => setBaseDamageDisabled(wrongType, false)).toThrow(/GeneralData\.disableBaseDamage/);
-  });
-});
-
-describe("setAirdropSpawner", () => {
-  it("adds the spawner and leaves the other four alone", () => {
-    const { json, changed } = setAirdropSpawner(REAL, true);
-    expect(changed).toBe(true);
-    expect(spawners(json)).toEqual([
-      "./custom/bunker-online.json",
-      "./custom/admin-castle.json",
-      "./custom/bunker-enhancements.json",
-      "./custom/faction-supplies.json",
-      "./custom/teleports.json",
-    ]);
-  });
-
-  it("⚠️ changes NOTHING outside the array — every other byte is identical", () => {
-    const { json } = setAirdropSpawner(REAL, true);
-    expect(json.replace('\t\t\t"./custom/bunker-online.json",\n', "")).toBe(REAL);
-  });
-
-  it("round-trips: add then remove returns the original bytes", () => {
-    const on = setAirdropSpawner(REAL, true).json;
-    expect(setAirdropSpawner(on, false).json).toBe(REAL);
-  });
-
-  it("removes a leftover Livonia airdrop entry when the bunker goes on, rather than refusing", () => {
-    const leftover = REAL.replace('"./custom/admin-castle.json"', '"./custom/airdrop-dolnik-blue.json",\n\t\t\t"./custom/admin-castle.json"');
-    const out = spawners(setAirdropSpawner(leftover, true).json);
-    expect(out).toContain("./custom/bunker-online.json");
-    expect(out.some((e) => e.includes("/airdrop-"))).toBe(false);
-  });
-
-  // ⚠️ The only-element case is the one that breaks a naive line delete: removing
-  // the last entry leaves the previous line's comma in front of `]`, which is a
-  // file that does not parse — the exact failure that stops the server booting.
-  it("removes a drop that is the only element without stranding a comma", () => {
-    const empty = REAL.replace(/("objectSpawnersArr"\s*:\s*\[)[^\]]*(\])/, "$1\n$2");
-    const one = setAirdropSpawner(empty, true).json;
-    expect(spawners(one)).toEqual(["./custom/bunker-online.json"]);
-    const off = setAirdropSpawner(one, false);
-    expect(spawners(off.json)).toEqual([]);
-    expect(off.json).toBe(empty);
-  });
-
-  it("reports changed=false and returns the input untouched when already correct", () => {
-    expect(setAirdropSpawner(REAL, false)).toEqual({ json: REAL, changed: false });
-    const on = setAirdropSpawner(REAL, true).json;
-    expect(setAirdropSpawner(on, true)).toEqual({ json: on, changed: false });
-  });
-
-  it("throws on input that does not parse", () => {
-    expect(() => setAirdropSpawner("{ nope", true)).toThrow(/did not parse/);
-  });
-
-  it("throws when objectSpawnersArr is missing or not an array of strings", () => {
-    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: {} }), true)).toThrow(/objectSpawnersArr/);
-    expect(() => setAirdropSpawner(JSON.stringify({ WorldsData: { objectSpawnersArr: [1] } }), true)).toThrow(/objectSpawnersArr/);
-  });
-
-  // Since bunker online there is one spawner path, so several feature entries never
-  // leave a guess to make: a Livonia-era `/airdrop-` leftover beside a registered
-  // bunker used to count as "2×" and refuse every edit, on and off, for good.
-  it("cleans a Livonia leftover out beside a registered bunker, on and off", () => {
-    const both = setAirdropSpawner(REAL, true).json
-      .replace('"./custom/admin-castle.json"', '"./custom/airdrop-lukow-orange.json",\n\t\t\t"./custom/admin-castle.json"');
-    const off = spawners(setAirdropSpawner(both, false).json);
-    expect(off.filter((e) => e.includes("/airdrop-") || e.endsWith("/bunker-online.json"))).toEqual([]);
-    expect(off).toContain("./custom/admin-castle.json");
-    const on = spawners(setAirdropSpawner(both, true).json);
-    expect(on.filter((e) => e.includes("/airdrop-") || e.endsWith("/bunker-online.json"))).toEqual(["./custom/bunker-online.json"]);
-  });
-
-  // ⚠️ The splice works on LINES. A reformat that puts two elements on one line
-  // (Nitrado's web editor, a prettifier, a `livonia` Release) makes removing the
-  // drop delete its line-mate too: the file still parses, the airdrop subset is
-  // still empty, `changed` is still true, and `admin-castle.json` is silently
-  // gone with nothing level-triggering it back. Without the non-airdrop identity
-  // check this returns [] instead of throwing.
-  it("⚠️ throws rather than taking an unrelated spawner with it when two elements share a line", () => {
-    const shared = REAL.replace(
-      /("objectSpawnersArr"\s*:\s*\[)[^\]]*(\])/,
-      '$1\n\t\t\t"./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"\n\t\t$2',
-    );
-    expect(spawners(shared)).toEqual(["./custom/admin-castle.json", "./custom/airdrop-dolnik-blue.json"]);
-    expect(() => setAirdropSpawner(shared, false)).toThrow(/does not own/);
   });
 });
 

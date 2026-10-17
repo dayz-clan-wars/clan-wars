@@ -25,7 +25,7 @@ export async function popsAt(db: Database, serverId: number, instants: Date[]): 
  * ⚠️ STRICTLY before `decisionInstant`. With a max rather than a percentile, a
  * window containing the current sample makes `pop >= max` true of every pop that
  * is its own maximum, and the rule fires on any new record, including a record of 1.
- * Shared by the airdrop and KotH triggers so both read one definition.
+ * KotH's automatic trigger reads its history through this.
  */
 export function historyInstants(decisionInstant: Date, windowMs: number): Date[] {
   const out: Date[] = [];

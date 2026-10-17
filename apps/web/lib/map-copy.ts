@@ -12,7 +12,7 @@ export { PIN_RESULT_COPY as RESULT_COPY, PIN_ICON_LABELS } from "@factions/copy"
 
 export const LAYER_LABELS = {
   you: "You", base: "Your base", clanmates: "Clanmates", intruders: "Intruders", bounties: "Bounties",
-  publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
+  publicBases: "Public bases", pins: "Pins", places: "Place names", terrain: "Terrain",
 } as const;
 
 /** Why a switch is missing from the layers panel (App Review §03): what would put the layer there. */
@@ -30,7 +30,7 @@ export const MAP_HINT = {
 } as const;
 
 /** The Leaflet container's accessible name: what it is, and how to move through it without a pointer. */
-export const MAP_REGION_LABEL = "Map of Chernarus. Tab moves between markers; Enter opens one.";
+export const MAP_REGION_LABEL = "Map of Nasdara. Tab moves between markers; Enter opens one.";
 
 /** The "On the map" list in the layers panel and sheet. */
 export const ROSTER_COPY = { heading: "On the map", empty: "Nothing of yours is on the map yet." } as const;

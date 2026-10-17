@@ -8,10 +8,11 @@ describe("map places", () => {
     // An unknown map yields no names, silently: the map renders, unlabelled.
     const all = placesFor(WORLD_MAP, MAX_ZOOM);
     expect(all.length).toBeGreaterThan(100);
-    const cherno = all.find((p) => p.name === "Chernogorsk")!;
-    const { x, z } = latLngToWorld(cherno.lat, cherno.lng, WORLD_SIZE_M);
-    expect(Math.abs(x - 6779)).toBeLessThan(50);
-    expect(Math.abs(z - 2322)).toBeLessThan(50);
+    expect(all.map((p) => p.name)).toContain("Dashtabad");
+    const home = all.find((p) => p.name === "Nasdara")!;
+    const { x, z } = latLngToWorld(home.lat, home.lng, WORLD_SIZE_M);
+    expect(Math.abs(x - 9632)).toBeLessThan(50);
+    expect(Math.abs(z - 4075)).toBeLessThan(50);
   });
 
   it("has Livonia's sixty places, every one inside the zoom-6 pyramid", () => {

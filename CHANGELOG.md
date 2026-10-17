@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Clan Wars moves to Nasdara. Bases are cleared; clans and members carry over, and every clan has a week to raise its flag again. King of the Hill runs on Nasdara's towns.
+
+### Removed
+
+- Bunker Online and fast travel. The Wanderer achievement can no longer be earned; anyone who has it keeps it.
+
 ## [1.64.0] - 2026-10-16
 
 ### Added

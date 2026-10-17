@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
+import retiredAssets from "../assets/koth-locations-retired.json";
 import {
   kothWanted, inKothZone, kothStandings, kothWinner, restoredPresets, isRestartSlot,
+  highWater, isoWeekStart, kothDecisionInstantFor, voteClosesAt,
   KOTH_LOCATIONS, kothLocation, kothTownName, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M, WORLD_SIZE_M,
 } from "../src/index.js";
 
@@ -80,14 +82,19 @@ describe("restoredPresets", () => {
 });
 
 describe("catalogue", () => {
-  it("has the 31 Chernarus towns and 44 presets, all flat in ./custom/ with the prefix", () => {
-    expect(KOTH_LOCATIONS).toHaveLength(31);
-    expect(kothLocation("novaya-petrovka")).toMatchObject({ name: "Novaya Petrovka", spawnGroup: "NovayaPetrovka" });
+  it("has the 66 Nasdara towns and 44 presets, all flat in ./custom/ with the prefix", () => {
+    expect(KOTH_LOCATIONS).toHaveLength(66);
+    expect(kothLocation("dar-e-ardis")).toMatchObject({ name: "Dar-e Ardis", spawnGroup: "DareArdis", centreX: 3436, centreZ: 4933 });
+    expect(kothLocation("okb-754")?.spawnGroup).toBe("OKB754");
     expect(kothLocation("narnia")).toBeNull();
     expect(KOTH_PRESET_FILES).toHaveLength(44);
     for (const p of KOTH_PRESET_FILES) expect(p).toMatch(/^\.\/custom\/koth-[a-z0-9-]+\.json$/);
   });
   // ⚠️ Review focus 4: past sessions are Livonia rows, and their names must survive the move.
+  it("names a retired Chernarus town but never offers one", () => {
+    expect(kothTownName("berezino")).toBe("Berezino");
+    expect(kothLocation("berezino")).toBeNull();
+  });
   it("names a retired Livonia town but never offers one", () => {
     expect(kothTownName("lembork")).toBe("Lembork");
     expect(kothTownName("adamow")).toBe("Adamów");
@@ -96,16 +103,53 @@ describe("catalogue", () => {
     expect(kothTownName("narnia")).toBe("narnia");
   });
   it("keeps slugs unique and every centre on the map", () => {
-    expect(new Set(KOTH_LOCATIONS.map((l) => l.slug)).size).toBe(31);
+    expect(new Set(KOTH_LOCATIONS.map((l) => l.slug)).size).toBe(66);
     for (const l of KOTH_LOCATIONS) {
-      expect(l.slug).toMatch(/^[a-z]+(-[a-z]+)*$/);
+      expect(l.slug).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(l.centreX).toBeGreaterThan(0); expect(l.centreX).toBeLessThan(WORLD_SIZE_M);
       expect(l.centreZ).toBeGreaterThan(0); expect(l.centreZ).toBeLessThan(WORLD_SIZE_M);
     }
+  });
+  // ⚠️ A slug in both lists would be offered and retired at once; a duplicate retired slug names the wrong town.
+  it("keeps live and retired slugs disjoint, and retired slugs unique", () => {
+    const retiredSlugs = (retiredAssets as { slug: string }[]).map((r) => r.slug);
+    expect(new Set(retiredSlugs).size).toBe(retiredSlugs.length);
+    for (const l of KOTH_LOCATIONS) expect(retiredSlugs).not.toContain(l.slug);
   });
   it("isRestartSlot is true on even UTC hours only", () => {
     expect(isRestartSlot(at("2026-10-03T20:00:00Z"))).toBe(true);
     expect(isRestartSlot(at("2026-10-03T21:00:00Z"))).toBe(false);
     expect(isRestartSlot(at("2026-10-03T20:00:01Z"))).toBe(false);
+  });
+});
+
+describe("highWater", () => {
+  it("is the peak, and is 0 on no history", () => {
+    // ⚠️ 0 on no history is load-bearing, not a convenience: it leaves
+    // `max(minPop, 0)` at the floor, which is the right bar on day one
+    // and through the first five days. Returning -Infinity (the naive Math.max
+    // of an empty list) would leave the floor governing too, but any later
+    // arithmetic on the recorded threshold would be poisoned by it.
+    expect(highWater([])).toBe(0);
+    expect(highWater([1, 1, 1, 1, 1, 1, 1, 1, 1, 10])).toBe(10);
+    expect(highWater([5])).toBe(5);
+    // ⚠️ One outlier sets the bar for the whole window. This is the accepted
+    // cost of the high-water rule (2026-09-21) — see the design's §3.1.
+    expect(highWater([2, 2, 11, 3, 2])).toBe(11);
+  });
+});
+
+
+describe("the calendar", () => {
+  it("starts the ISO week on Monday 00:00 UTC", () => {
+    expect(isoWeekStart(at("2026-09-21T19:30:00Z")).toISOString()).toBe("2026-09-21T00:00:00.000Z");
+    expect(isoWeekStart(at("2026-09-20T23:59:59Z")).toISOString()).toBe("2026-09-14T00:00:00.000Z");
+  });
+  it("puts the decision 30 minutes before the slot", () => {
+    expect(kothDecisionInstantFor(at("2026-10-17T12:00:00Z")).toISOString()).toBe("2026-10-17T11:30:00.000Z");
+  });
+  it("is the instant the vote closes", () => {
+    const slot = at("2026-10-17T12:00:00Z");
+    expect(kothDecisionInstantFor(slot).getTime()).toBe(voteClosesAt(slot).getTime());
   });
 });

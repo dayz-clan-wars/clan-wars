@@ -113,7 +113,7 @@ export async function grantAwardDb(db: Database, a: {
   if (!v.ok) return v;
   // ⚠️ `clan_notices.server_id` is NOT NULL, so the DM needs a server even
   // though an award belongs to no clan. The one active server, picked the way
-  // `/airdrop place` picks it.
+  // `/koth` picks it.
   const [server] = await db.select({ id: servers.id }).from(servers).where(eq(servers.active, true)).limit(1);
   if (!server) return { ok: false, reason: "no-server" };
   return db.transaction((tx) => grantAwardTx(tx, { ...a, serverId: server.id }));

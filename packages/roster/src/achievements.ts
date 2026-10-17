@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { achievementProgress, achievementUnlocks, factions, identityLinks, membershipHistory, players } from "@factions/db";
-import { ACHIEVEMENTS, type AchievementGroup, type AchievementKey, type AchievementOwner, type AchievementUnit } from "@factions/domain";
+import { ACHIEVEMENTS, isRetired, type AchievementGroup, type AchievementKey, type AchievementOwner, type AchievementUnit } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 
 export type AchievementTile = {
@@ -15,8 +15,8 @@ export type AchievementSubject = { gamertag: string } | { clanTag: string };
 /**
  * The wall (spec 2026-09-11 §8). A player's wall carries every player tile plus the team
  * tiles of clans they were a FULL member of at the moment the clan earned them — resolved
- * through membership_history, so later joins and leaves cannot edit the record. A clan's
- * wall is the 12 team tiles. Progress comes from the tick's cache, never recomputed here.
+ * through membership_history, so later joins and leaves cannot edit the record; a retired
+ * tile appears only for its holders. A clan's wall is the 12 team tiles. Progress comes from the tick's cache, never recomputed here.
  */
 export async function achievementsForDb(db: Database, subject: AchievementSubject, now: Date): Promise<AchievementWall | null> {
   if ("clanTag" in subject) {
@@ -48,6 +48,9 @@ async function wallFor(db: Database, owner: { kind: AchievementOwner; id: string
   const countBy = new Map(progress.map((p) => [p.key, p.count]));
   const tiles: AchievementTile[] = ACHIEVEMENTS
     .filter((a) => owner.kind === "player" || a.owner === "clan")
+    // A retired achievement (Wanderer) can no longer be earned: show it only to those who hold
+    // it, so nobody else sees a tile they can never fill. Being earned, it is never "closest".
+    .filter((a) => !isRetired(a) || earnedBy.has(a.key))
     .map((a) => {
       const e = earnedBy.get(a.key);
       // The tick's cached progress count is capped at the target once earned (nth()'s

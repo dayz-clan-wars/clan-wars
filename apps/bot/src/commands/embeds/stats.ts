@@ -79,7 +79,7 @@ export function boardEmbed(page: BoardPage, siteBaseUrl: string): EmbedBuilder {
  *
  * ⚠️ "Nothing earned yet" is not a domain outcome the way `EMPTY_BOARD` is —
  * the site never shows this sentence because it always renders the full
- * fifty-tile grid (mostly locked); a compact chat card is the only surface
+ * forty-nine-tile grid (mostly locked); a compact chat card is the only surface
  * that needs a stand-in for an empty earned list, so it is written here
  * rather than forked into `@factions/copy` for a sentence the site has no use for.
  */

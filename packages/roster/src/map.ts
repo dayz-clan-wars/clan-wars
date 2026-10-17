@@ -1,8 +1,8 @@
 import type { Database } from "@factions/db";
-import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players } from "@factions/db";
+import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players, servers } from "@factions/db";
 import { publicPoles } from "@factions/declarations";
 import {
-  FAST_TRAVEL_POINTS, HOLDING_STATUSES, HUB_POSITION, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
+  HOLDING_STATUSES, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
 } from "@factions/domain";
 import { and, asc, desc, eq, gt, inArray, sql } from "drizzle-orm";
 import { activeServerId } from "./server";
@@ -17,7 +17,7 @@ export { WORLD_SIZE_M };
 
 export type MapFix = { x: number; z: number; at: Date };
 export type MapState = {
-  /** The map's side, metres (`WORLD_SIZE_M`: Chernarus since 2026-10-07). */
+  /** The map's side, metres (`WORLD_SIZE_M`: Nasdara since the 2026-10 swap). */
   world: { size: number };
   you: { gamertag: string; fix: MapFix | null };
   base: { x: number; z: number; radiusM: number; kind: "clan" | "solo" } | null;
@@ -45,20 +45,32 @@ export type MapState = {
    * clanmates who did nothing.
    */
   bounties: { gamertag: string; reason: string; fix: MapFix }[];
-  travelPoints: readonly { x: number; z: number }[];
-  hub: { x: number; z: number };
   layers: { base: boolean; clanmates: boolean; intruders: boolean; pins: boolean };
 };
 export type DropPinOutcome = { ok: true; id: number } | { ok: false; reason: "not-linked" | "not-in-clan" | "pending" | "bad-icon" | "bad-note" | "off-map" };
 
 const n = (v: string | number) => Number(v);
 
-/** Newest fix per player among `dayzIds`, one query (DISTINCT ON over the (server, player, occurred_at desc) index). */
+/**
+ * Newest fix per player among `dayzIds`, one query (DISTINCT ON over the (server, player, occurred_at desc) index).
+ *
+ * ⚠️ Floored at the server's `map_changed_at` (null = no floor). Fixes are
+ * kept for `POSITION_RETENTION_MS` (30 days), so after a map change (the
+ * 2026-10 Nasdara swap) every player's last fix from the OLD map would draw on
+ * the new one, at coordinates that mean nothing there, until they logged in
+ * again. One helper serves `you`, clanmates and the bounty layer, so all three
+ * get the floor; it is a WHERE predicate, like every other rule in this file.
+ */
 async function lastFixes(db: Database, serverId: number, dayzIds: string[]): Promise<Map<string, MapFix>> {
   if (dayzIds.length === 0) return new Map();
   const rows = await db.selectDistinctOn([playerPositions.dayzId], { dayzId: playerPositions.dayzId, x: playerPositions.x, z: playerPositions.z, at: playerPositions.occurredAt })
     .from(playerPositions)
-    .where(and(eq(playerPositions.serverId, serverId), inArray(playerPositions.dayzId, dayzIds)))
+    .innerJoin(servers, eq(servers.id, playerPositions.serverId))
+    .where(and(
+      eq(playerPositions.serverId, serverId),
+      inArray(playerPositions.dayzId, dayzIds),
+      sql`(${servers.mapChangedAt} is null or ${playerPositions.occurredAt} >= ${servers.mapChangedAt})`,
+    ))
     .orderBy(asc(playerPositions.dayzId), desc(playerPositions.occurredAt));
   return new Map(rows.map((r) => [r.dayzId, { x: n(r.x), z: n(r.z), at: r.at }]));
 }
@@ -124,8 +136,6 @@ export async function mapStateDb(db: Database, discordId: string, now: Date): Pr
     publicBases,
     pins: pins.map((p) => ({ id: p.id, x: n(p.x), z: n(p.z), icon: p.icon as PinIcon, note: p.note, by: p.by, at: p.at, expiresAt: p.expiresAt })),
     bounties: wanted.flatMap((w) => { const f = wantedFixes.get(w.dayzId); return f ? [{ gamertag: w.gamertag ?? "someone", reason: w.reason, fix: f }] : []; }),
-    travelPoints: FAST_TRAVEL_POINTS,
-    hub: HUB_POSITION,
     layers: { base: decl !== undefined, clanmates: clan !== undefined, intruders: decl !== undefined, pins: clan !== undefined },
   };
 }

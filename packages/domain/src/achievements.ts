@@ -1,5 +1,7 @@
 /**
- * The fifty achievements — data, not code. The badge wall, the Discord line,
+ * The fifty achievements — data, not code. Forty-nine can still be earned; a
+ * `retired` one (Wanderer, fast travel, gone with the Nasdara swap) stays in the
+ * list so its holders keep it, its badge and its share card. The badge wall, the Discord line,
  * the guide chapter and the bot's rules all read THIS array; a threshold
  * changes here and nowhere else (spec 2026-09-11 §4).
  *
@@ -22,8 +24,8 @@ export const ACHIEVEMENT_GROUP_COLORS: Record<AchievementGroup, `#${string}`> = 
 export type AchievementOwner = "player" | "clan";
 export type AchievementUnit = "count" | "hours" | "days" | "m";
 
-const def = <K extends string>(key: K, name: string, description: string, group: AchievementGroup, target = 1, unit: AchievementUnit = "count") =>
-  ({ key, name, description, group, owner: group === "team" ? "clan" : "player", target, unit }) as const;
+const def = <K extends string, O extends { retired?: true } = {}>(key: K, name: string, description: string, group: AchievementGroup, target = 1, unit: AchievementUnit = "count", opts: O = {} as O) =>
+  ({ key, name, description, group, owner: group === "team" ? "clan" : "player", target, unit, ...opts }) as const;
 
 export const ACHIEVEMENTS = [
   // Solo — presence and progression
@@ -34,7 +36,9 @@ export const ACHIEVEMENTS = [
   def("long_haul", "Long Haul", "Play for 24 hours", "solo", 24, "hours"),
   def("veteran", "Veteran", "Play for 100 hours", "solo", 100, "hours"),
   def("regular", "Regular", "Play on 7 consecutive days", "solo", 7, "days"),
-  def("wanderer", "Wanderer", "Fast travel 10 times", "solo", 10),
+  // ⚠️ Retired: Nasdara has no fast travel. Never delete it — the unlock rows that cite
+  // this key are records, and the wall still shows it to the players who hold it.
+  def("wanderer", "Wanderer", "Fast travel 10 times", "solo", 10, "count", { retired: true }),
   def("explorer", "Explorer", "Seen in 50 different 1 km grid squares", "solo", 50),
   def("showman", "Showman", "Perform 50 emotes", "solo", 50),
   def("cartographer", "Cartographer", "Drop 10 map pins", "solo", 10),
@@ -86,3 +90,13 @@ export type Achievement = (typeof ACHIEVEMENTS)[number];
 export type AchievementKey = Achievement["key"];
 export const ACHIEVEMENT_BY_KEY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.key, a])) as Record<AchievementKey, Achievement>;
 export const ACHIEVEMENT_KEYS = ACHIEVEMENTS.map((a) => a.key) as readonly AchievementKey[];
+
+export const isRetired = (a: Achievement): boolean => "retired" in a && a.retired === true;
+export type EarnableAchievement = Exclude<Achievement, { retired: true }>;
+export type EarnableKey = EarnableAchievement["key"];
+/**
+ * What the tick evaluates and the guide lists. ⚠️ Retiring a key means filtering it HERE,
+ * never removing it from ACHIEVEMENTS: the glyphs, share PNGs and existing unlocks are keyed
+ * on the full list, and a holder's wall would lose the tile.
+ */
+export const EARNABLE_ACHIEVEMENTS = ACHIEVEMENTS.filter((a): a is EarnableAchievement => !isRetired(a));

@@ -8,21 +8,21 @@ import {
 import { nextRestartAt } from "./restarts";
 import { distance2d } from "./spacing";
 
-/** `spawnGroup` is the town's `<fresh>` group in the chernarus repo's cfgplayerspawnpoints.xml. */
+/** `spawnGroup` is the town's `<fresh>` group in the nasdara repo's cfgplayerspawnpoints.xml. */
 export type KothLocation = { name: string; slug: string; spawnGroup: string; centreX: number; centreZ: number };
 
 /**
- * The 31 Chernarus towns, generated from the chernarus repo's spawn groups;
+ * The 66 Nasdara towns, generated from the nasdara repo's spawn groups;
  * koth-drift.test.ts holds them together. The only towns a session may open at.
  */
 export const KOTH_LOCATIONS: readonly KothLocation[] = locations as KothLocation[];
 /**
- * Livonia's 31, retired 2026-10-07. Names only: past sessions store these slugs
+ * Livonia's 31 (retired 2026-10-07) and Chernarus's 31 (retired 2026-10-17). Names only: past sessions store these slugs
  * and must keep printing a town, never be offered again. Their scoring centres
  * are frozen in koth_events.centre_x/z, so nothing else needs them.
  */
 const RETIRED_LOCATIONS: readonly { name: string; slug: string }[] = retired;
-/** Vendored from livonia/custom/koth-*.json, carried by chernarus/custom since 2026-10-07. */
+/** Vendored from nasdara/custom/koth-*.json (the same 44 presets Livonia and Chernarus carried). */
 export const KOTH_PRESET_FILES: readonly string[] = presets as string[];
 
 /** ⚠️ Playable towns only: a retired slug is null, so nothing can schedule or open one. */
@@ -100,7 +100,7 @@ export function kothGapOk(slot: Date, lastSlotAt: Date | null): boolean {
 }
 
 /**
- * Spec §2.4, `chooseAirdrop`'s shape.
+ * Spec §2.4: skip the last few towns, fall back to the full list when all are recent.
  * ⚠️ The fallback is not padding: an empty pool indexes undefined and throws inside a tick.
  */
 export function chooseKothTown(recent: string[], rng: () => number): KothLocation {
@@ -112,7 +112,7 @@ export function chooseKothTown(recent: string[], rng: () => number): KothLocatio
 
 export type KothFireInput = {
   slot: Date;
-  /** A koth_events row holds the slot, or an announced/live airdrop does. */
+  /** A koth_events row holds the slot. */
   slotTaken: boolean;
   /** A vote for this slot is open or failed (§3.2). */
   voteBlocks: boolean;
@@ -123,7 +123,7 @@ export type KothFireInput = {
   weeklyCap: number;
   lastSlotAt: Date | null;
   pop: number;
-  /** ⚠️ Taken strictly before this decision instant — see airdrop-tick.ts. */
+  /** ⚠️ Taken strictly before this decision instant — see koth-decide-tick.ts. */
   threshold: number;
   minPop: number;
 };
@@ -153,6 +153,41 @@ export function voteOutcome(v: { cast: number; yes: number; floor: number }): Vo
 /** A vote closes when the reminder would go out: the announcement is the reminder. */
 export function voteClosesAt(slot: Date): Date {
   return new Date(slot.getTime() - KOTH_REMINDER_LEAD_MS);
+}
+
+/**
+ * The instant a slot's automatic decision is taken: the reminder instant.
+ *
+ * ⚠️ Defined as `voteClosesAt` on purpose. `koth-decide-tick.ts`'s `announce()` stamps
+ * `reminded_at` alongside `announced_at` on the assumption that the decision instant IS
+ * the reminder instant, so the two must be one statement, not two that can drift.
+ */
+export function kothDecisionInstantFor(slotStart: Date): Date {
+  return voteClosesAt(slotStart);
+}
+
+/** Monday 00:00 UTC of `now`'s ISO week. */
+export function isoWeekStart(now: Date): Date {
+  const utc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const backToMonday = (new Date(utc).getUTCDay() + 6) % 7;
+  return new Date(utc - backToMonday * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * The highest of the trailing samples — the bar an automatic session has to match.
+ *
+ * ⚠️ Computed here rather than with Postgres `max` so the threshold the row records
+ * and the threshold the rule applies are one statement, and so this can be tested
+ * without a database.
+ *
+ * ⚠️ `Math.max()` of an empty list is -Infinity, which is why this is not written as
+ * the one-liner. No history must return 0, so that `max(minPop, highWater)` sits at the
+ * floor — the correct bar on day one. -Infinity would leave the floor governing too, but
+ * it is also written into the row's `threshold`, and a numeric column does not take it.
+ */
+export function highWater(values: number[]): number {
+  if (values.length === 0) return 0;
+  return Math.max(...values);
 }
 
 /** The first slot whose vote would be open at least `KOTH_VOTE_MIN_OPEN_MS`. */

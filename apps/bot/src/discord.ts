@@ -26,14 +26,12 @@ import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
 import { pcBanTick } from "./pc-ban-tick.js";
-import { hubTick } from "./hub-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
 import { bountyTick } from "./bounty-tick.js";
 import { bountyAnnounceTick } from "./bounty-announce-tick.js";
 import { raidWindowTick } from "./raid-window-tick.js";
-import { airdropTick } from "./airdrop-tick.js";
 import { kothTick } from "./koth-tick.js";
 import { referralAwardTick } from "./referral-award-tick.js";
 import { kothVoteTick } from "./koth-vote-tick.js";
@@ -690,7 +688,7 @@ export async function start(cfg: BotConfig): Promise<void> {
   let lastReferralAt = 0;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
-    db, serverEvents: cfg.airdrop.enabled ? serverEventsPoster : null,
+    db,
     bountiesEnabled: cfg.bounties.enabled,
     koth: kothPoster,
     kothVote: kothVoteChannel ? { enabled: cfg.koth.vote.enabled, channel: kothVoteChannel } : null,
@@ -786,9 +784,6 @@ export async function start(cfg: BotConfig): Promise<void> {
   // lifetime (owner, outranked, no permission) — shared between the
   // start-up pass and every tick pass so neither repeats the other's log.
   const nicknameNoRetry = new Set<string>();
-  // Slots whose "airdrop: skipped …: koth" line is already logged, so the 10 s tick
-  // says it once per slot. About a dozen keys a day, gone at the next bot restart.
-  const airdropSkipLogged = new Set<string>();
   // ⚠️ False until one `fetchAllMembers()` resolves. `guild.members.fetch()`
   // rejects with GuildMembersTimeout after 120s on a large or slow guild, and
   // without a retry the member cache stays whatever gateway events happen to
@@ -1028,18 +1023,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       console.error("zone tick failed", err);
     }
-    // Every tick, beside zone: a Hub offence is written the tick it is read, so
-    // banTick's next 5-minute pass applies it.
-    if (cfg.hubBanTick) {
-      try {
-        const h = await hubTick(db, { now: new Date() });
-        if (h.seeded) console.log("hub watch: cursor seeded at the log head");
-        if (h.banned.length > 0) console.log(`hub watch: ${h.banned.length} ban(s) written: ${h.banned.map((b) => b.gamertag).join(", ")}`);
-      } catch (err) {
-        console.error("hub tick failed", err);
-      }
-    }
-
     // ⚠️ Right after zoneTick, every tick, gated on cfg.enforcementTick:
     // violationTick closes what zoneTick opens (an incident gone quiet past
     // VIOLATION_INCIDENT_GAP_MS) and queues the participant's warning DM. It
@@ -1731,7 +1714,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     // interval. Its own try/catch, like every other step.
     if (cfg.restartSchedule) {
       try {
-        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, airdrop: cfg.airdrop, koth: { open: cfg.koth.enabled } });
+        const r = await restartTick(db, nitradoFor, { now: new Date(), truckWipe: cfg.truckWipe, raidWindow: cfg.raidWindow, koth: { open: cfg.koth.enabled } });
         if (r.restarted + r.skipped + r.missed + r.failed > 0) console.log(`restart: ${r.restarted} restarted, ${r.skipped} skipped, ${r.missed} missed, ${r.failed} failed`);
       } catch (err) {
         console.error("restart tick failed", err);
@@ -1760,10 +1743,9 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
-    // ⚠️ Vote tick → automatic decision → airdrop, in that order (tick-order.test.ts):
-    // a vote closing at T−30 inserts its row before the decision looks, and both
-    // before the airdrop, which yields to a scheduled KotH. Each its own try/catch:
-    // a throw here must leave the airdrop deciding as normal.
+    // ⚠️ Vote tick → automatic decision, in that order (tick-order.test.ts): a vote
+    // closing at T−30 inserts its row before the decision looks. Each its own
+    // try/catch: a throw in one must leave the other deciding as normal.
     if (kothVoteChannel) {
       try {
         const v = await kothVoteTick(db, kothVoteChannel, kothPoster!, { now: new Date(), enabled: cfg.koth.vote.enabled });
@@ -1778,21 +1760,6 @@ export async function start(cfg: BotConfig): Promise<void> {
         if (d.decided + d.posted > 0) console.log(`koth: ${d.decided} decided automatically, ${d.posted} posted`);
       } catch (err) {
         console.error("koth decision tick failed", err);
-      }
-    }
-
-    // ⚠️ AFTER the restart tick, like the raid window and for the same reason: a
-    // slow Discord call must never delay a due restart. Its own try/catch.
-    // ⚠️ Gated on the flag alone — config load refuses AIRDROP_TICK without
-    // SERVER_EVENTS_CHANNEL_ID, so serverEventsPoster is non-null here.
-    if (cfg.airdrop.enabled) {
-      try {
-        const a = await airdropTick(db, serverEventsPoster!, {
-          now: new Date(), weeklyCap: cfg.airdrop.weeklyCap, minPop: cfg.airdrop.minPop, skipLogged: airdropSkipLogged,
-        });
-        if (a.decided + a.posted + a.failed > 0) console.log(`airdrop: ${a.decided} decided, ${a.posted} posted, ${a.failed} failed`);
-      } catch (err) {
-        console.error("airdrop tick failed", err);
       }
     }
 
@@ -1895,9 +1862,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
 
-    if (!cfg.airdrop.enabled) console.warn("AIRDROP_TICK is off: airdrops are not being placed automatically.");
-    else console.log(`airdrop automation on (cap ${cfg.airdrop.weeklyCap}/week, floor ${cfg.airdrop.minPop})`);
-
     if (cfg.koth.enabled) console.log("king of the hill on");
     else console.warn("KOTH_TICK is off: /koth schedule refuses and nothing opens; any unfinished KotH session is still restored at the next restart.");
     if (cfg.koth.auto.enabled) console.log(`king of the hill automation on (cap ${cfg.koth.auto.weeklyCap}/week, floor ${cfg.koth.auto.minPop})`);
@@ -1939,8 +1903,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     // effect short of watching for the first real ban.
     if (!cfg.unlinkedPcBan) console.warn("UNLINKED_PC_BAN is off: unlinked PC players are not being banned.");
     else console.log("UNLINKED_PC_BAN on: unlinked PC players are banned on sight (one lift on starting to link).");
-    if (!cfg.hubBanTick) console.warn("HUB_BAN_TICK is off: combat at the Fast Travel Hub is not being banned.");
-    else console.log("HUB_BAN_TICK on: a hit, kill or trap at the Hub is a one-hour ban.");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

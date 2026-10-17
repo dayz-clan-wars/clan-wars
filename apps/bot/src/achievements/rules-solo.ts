@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_BY_KEY, type AchievementKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { achievementCounters, ceremonyParticipants, events, factions, identityLinks, membershipHistory, playerSessions } from "@factions/db";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { nth, oneShot, type Rule } from "./types.js";
@@ -44,7 +44,7 @@ const counter = (key: AchievementKey): Rule => async (db, owner) => {
   return c.value >= target && crossedAt ? { count: c.value, target, earnedAt: crossedAt, evidence: { count: c.value } } : { count: c.value, target };
 };
 
-export const SOLO_RULES: Partial<Record<AchievementKey, Rule>> = {
+export const SOLO_RULES: Partial<Record<EarnableKey, Rule>> = {
   enlisted: async (db, owner) => {
     const [l] = await db.select({ id: identityLinks.id, at: identityLinks.verifiedAt }).from(identityLinks).where(eq(identityLinks.dayzId, owner.id));
     return oneShot(l ? { at: l.at, id: l.id } : undefined);
@@ -104,7 +104,6 @@ export const SOLO_RULES: Partial<Record<AchievementKey, Rule>> = {
     return { count: best, target };
   },
 
-  wanderer: async (db, owner) => nth(await ownEvents(db, "player.teleported", owner.id), T("wanderer")),
   showman: async (db, owner) => nth(await ownEvents(db, "emote.performed", owner.id), T("showman")),
   explorer: counter("explorer"),
   cartographer: counter("cartographer"),

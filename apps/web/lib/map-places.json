@@ -1568,5 +1568,943 @@
    "lng": 161.165,
    "name": "Zapadlisko"
   }
+ ],
+ "nasdara": [
+  {
+   "kind": "ruin",
+   "lat": -100.7712097,
+   "lng": 137.4366455,
+   "name": "Ak Hisar"
+  },
+  {
+   "kind": "village",
+   "lat": -114.1431122,
+   "lng": 86.5674438,
+   "name": "Anar Juy"
+  },
+  {
+   "kind": "local",
+   "lat": -213.0487518,
+   "lng": 204.8907318,
+   "name": "Ardis Vostok Wreck"
+  },
+  {
+   "kind": "village",
+   "lat": -77.9246216,
+   "lng": 133.9900665,
+   "name": "Bad Asyab"
+  },
+  {
+   "kind": "local",
+   "lat": -86.3805542,
+   "lng": 136.2002563,
+   "name": "Bad Asyab Wind Array"
+  },
+  {
+   "kind": "village",
+   "lat": -205.3217316,
+   "lng": 147.6543884,
+   "name": "Bagh-E Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -168.5282745,
+   "lng": 73.8997803,
+   "name": "Bagh-E Mir"
+  },
+  {
+   "kind": "local",
+   "lat": -181.2586823,
+   "lng": 134.1701813,
+   "name": "Bait Al-Aman"
+  },
+  {
+   "kind": "ruin",
+   "lat": -68.2727661,
+   "lng": 74.3802109,
+   "name": "Bala Hissar"
+  },
+  {
+   "kind": "village",
+   "lat": -137.1482086,
+   "lng": 69.9339905,
+   "name": "Bala Kalay"
+  },
+  {
+   "kind": "city",
+   "lat": -122.0690918,
+   "lng": 136.5567322,
+   "name": "Bam-E Sabz"
+  },
+  {
+   "kind": "village",
+   "lat": -51.0259552,
+   "lng": 114.5460358,
+   "name": "Bar Kalay"
+  },
+  {
+   "kind": "local",
+   "lat": -100.2725525,
+   "lng": 98.6374435,
+   "name": "Baza Zenit"
+  },
+  {
+   "kind": "village",
+   "lat": -130.8746948,
+   "lng": 124.5549622,
+   "name": "Bazar-E Kohna"
+  },
+  {
+   "kind": "city",
+   "lat": -167.84758,
+   "lng": 115.0083923,
+   "name": "Bustanshahr"
+  },
+  {
+   "kind": "village",
+   "lat": -118.9734039,
+   "lng": 126.223793,
+   "name": "Chahar Tut"
+  },
+  {
+   "kind": "local",
+   "lat": -198.1903839,
+   "lng": 107.8598557,
+   "name": "Chashme No"
+  },
+  {
+   "kind": "village",
+   "lat": -56.3344727,
+   "lng": 103.8981628,
+   "name": "Chashme Sabz"
+  },
+  {
+   "kind": "local",
+   "lat": -103.1192017,
+   "lng": 148.8654938,
+   "name": "Chuuya Kalay"
+  },
+  {
+   "kind": "local",
+   "lat": -70.8728638,
+   "lng": 121.0391617,
+   "name": "Cop Condor"
+  },
+  {
+   "kind": "local",
+   "lat": -53.1570282,
+   "lng": 66.8482056,
+   "name": "Cop Kestrel"
+  },
+  {
+   "kind": "local",
+   "lat": -151.8479767,
+   "lng": 200.4995422,
+   "name": "Cop Neptune"
+  },
+  {
+   "kind": "local",
+   "lat": -140.8093872,
+   "lng": 73.8655472,
+   "name": "Cop Razorback"
+  },
+  {
+   "kind": "village",
+   "lat": -71.5999756,
+   "lng": 159.5977173,
+   "name": "Dahana"
+  },
+  {
+   "kind": "village",
+   "lat": -216.7286377,
+   "lng": 175.7863312,
+   "name": "Dahaneh-E Kavir"
+  },
+  {
+   "kind": "local",
+   "lat": -164.8503418,
+   "lng": 185.8647308,
+   "name": "Damaged Oil Fields"
+  },
+  {
+   "kind": "city",
+   "lat": -178.9207001,
+   "lng": 53.6808128,
+   "name": "Dar-E Ardis"
+  },
+  {
+   "kind": "village",
+   "lat": -38.5631714,
+   "lng": 170.5707245,
+   "name": "Dara-E Nur"
+  },
+  {
+   "kind": "village",
+   "lat": -43.7145081,
+   "lng": 76.781929,
+   "name": "Darvazeh-E Gharb"
+  },
+  {
+   "kind": "city",
+   "lat": -87.3740387,
+   "lng": 166.4884949,
+   "name": "Dashtabad"
+  },
+  {
+   "kind": "village",
+   "lat": -89.1120453,
+   "lng": 187.0979614,
+   "name": "Dashtabad Airbase"
+  },
+  {
+   "kind": "local",
+   "lat": -141.1115418,
+   "lng": 182.3445587,
+   "name": "Deep-Dasht 12 Well"
+  },
+  {
+   "kind": "local",
+   "lat": -197.403595,
+   "lng": 135.4397278,
+   "name": "Deh-E Ramiro"
+  },
+  {
+   "kind": "village",
+   "lat": -91.5545654,
+   "lng": 155.7667542,
+   "name": "Dehqankalay"
+  },
+  {
+   "kind": "local",
+   "lat": -170.1626587,
+   "lng": 49.0645638,
+   "name": "Didban Ghar"
+  },
+  {
+   "kind": "ruin",
+   "lat": -133.8601532,
+   "lng": 130.0566254,
+   "name": "Didban Tapa"
+  },
+  {
+   "kind": "village",
+   "lat": -78.2658386,
+   "lng": 104.6574936,
+   "name": "Dost Kalay"
+  },
+  {
+   "kind": "local",
+   "lat": -111.2601471,
+   "lng": 158.5895233,
+   "name": "Dukan Kalay"
+  },
+  {
+   "kind": "local",
+   "lat": -139.5997314,
+   "lng": 115.2006455,
+   "name": "Fateh Manzil"
+  },
+  {
+   "kind": "local",
+   "lat": -166.4893646,
+   "lng": 130.7309265,
+   "name": "Fob Atlas"
+  },
+  {
+   "kind": "local",
+   "lat": -168.4029388,
+   "lng": 84.7660141,
+   "name": "Fostkova Mehran Tunnel"
+  },
+  {
+   "kind": "city",
+   "lat": -61.0397644,
+   "lng": 122.9891129,
+   "name": "Gandomabad"
+  },
+  {
+   "kind": "city",
+   "lat": -136.8158264,
+   "lng": 173.1925049,
+   "name": "Gard Abad"
+  },
+  {
+   "kind": "local",
+   "lat": -144.6672668,
+   "lng": 58.0659332,
+   "name": "Ghar-E Siyah"
+  },
+  {
+   "kind": "local",
+   "lat": -222.2484894,
+   "lng": 190.539032,
+   "name": "Gharibabad"
+  },
+  {
+   "kind": "village",
+   "lat": -187.1828918,
+   "lng": 109.8433609,
+   "name": "Gul Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -154.5194244,
+   "lng": 79.0711517,
+   "name": "Gul Zar"
+  },
+  {
+   "kind": "marine",
+   "lat": -225.4251404,
+   "lng": 224.6340942,
+   "name": "Hamoon-E Sarman"
+  },
+  {
+   "kind": "local",
+   "lat": -142.8258514,
+   "lng": 149.2306213,
+   "name": "Helios Solar I"
+  },
+  {
+   "kind": "local",
+   "lat": -139.7497101,
+   "lng": 165.9984436,
+   "name": "Helios Solar Ii"
+  },
+  {
+   "kind": "local",
+   "lat": -141.6904297,
+   "lng": 169.1860962,
+   "name": "Helios Solar Iii"
+  },
+  {
+   "kind": "local",
+   "lat": -190.5673065,
+   "lng": 177.0437164,
+   "name": "Helios Solar Iv"
+  },
+  {
+   "kind": "local",
+   "lat": -46.6686096,
+   "lng": 219.5189209,
+   "name": "Jakhzar"
+  },
+  {
+   "kind": "city",
+   "lat": -182.3817444,
+   "lng": 143.5903931,
+   "name": "Jui Bar District"
+  },
+  {
+   "kind": "city",
+   "lat": -69.679718,
+   "lng": 147.3793488,
+   "name": "Kamar Zir"
+  },
+  {
+   "kind": "village",
+   "lat": -122.0017395,
+   "lng": 168.6769714,
+   "name": "Kariz-E Marz"
+  },
+  {
+   "kind": "village",
+   "lat": -55.7658997,
+   "lng": 55.1778145,
+   "name": "Karizak"
+  },
+  {
+   "kind": "city",
+   "lat": -190.0797119,
+   "lng": 142.9744568,
+   "name": "Karkhana District"
+  },
+  {
+   "kind": "village",
+   "lat": -71.3570862,
+   "lng": 97.0670471,
+   "name": "Kati Golzar"
+  },
+  {
+   "kind": "city",
+   "lat": -86.726654,
+   "lng": 72.4034271,
+   "name": "Khorramabad"
+  },
+  {
+   "kind": "local",
+   "lat": -140.2563171,
+   "lng": 80.7449799,
+   "name": "Khwakay"
+  },
+  {
+   "kind": "local",
+   "lat": -30.043045,
+   "lng": 68.970993,
+   "name": "Kotal-E Khushk"
+  },
+  {
+   "kind": "city",
+   "lat": -97.4292297,
+   "lng": 70.4922256,
+   "name": "Kucha Dar"
+  },
+  {
+   "kind": "hill",
+   "lat": -19.128128,
+   "lng": 136.2413483,
+   "name": "Kuh-E Shamal"
+  },
+  {
+   "kind": "hill",
+   "lat": -71.6844482,
+   "lng": 109.6330414,
+   "name": "Loy Tapa"
+  },
+  {
+   "kind": "local",
+   "lat": -171.2876434,
+   "lng": 81.117981,
+   "name": "M12 Bagh-E Mir"
+  },
+  {
+   "kind": "local",
+   "lat": -205.7625084,
+   "lng": 169.2081299,
+   "name": "M12 Nasdara-East"
+  },
+  {
+   "kind": "local",
+   "lat": -191.7682724,
+   "lng": 142.9549103,
+   "name": "M12 Nasdara-West"
+  },
+  {
+   "kind": "local",
+   "lat": -176.8172913,
+   "lng": 107.8563614,
+   "name": "M12 No Abad"
+  },
+  {
+   "kind": "local",
+   "lat": -185.0528717,
+   "lng": 51.673008,
+   "name": "Ma'bar Ardistan"
+  },
+  {
+   "kind": "village",
+   "lat": -117.4592895,
+   "lng": 149.9315033,
+   "name": "Mal Kalay"
+  },
+  {
+   "kind": "village",
+   "lat": -90.1429749,
+   "lng": 83.8780365,
+   "name": "Manda Marz"
+  },
+  {
+   "kind": "local",
+   "lat": -33.8328552,
+   "lng": 57.2393723,
+   "name": "Marek Barq Hydroelectric Plant"
+  },
+  {
+   "kind": "village",
+   "lat": -56.6088562,
+   "lng": 215.3063049,
+   "name": "Marz-E Lut"
+  },
+  {
+   "kind": "local",
+   "lat": -57.4867706,
+   "lng": 99.0389481,
+   "name": "Mel Benazir"
+  },
+  {
+   "kind": "village",
+   "lat": -60.8042145,
+   "lng": 138.5970764,
+   "name": "Mian Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -190.9856873,
+   "lng": 114.4703827,
+   "name": "Mian Deh"
+  },
+  {
+   "kind": "ruin",
+   "lat": -116.3837585,
+   "lng": 116.314621,
+   "name": "Mik Dakharti"
+  },
+  {
+   "kind": "local",
+   "lat": -142.5678711,
+   "lng": 156.8929901,
+   "name": "Nasdar-01 Well"
+  },
+  {
+   "kind": "village",
+   "lat": -153.4488983,
+   "lng": 151.6589508,
+   "name": "Nasdar-Beton Factory"
+  },
+  {
+   "kind": "local",
+   "lat": -193.9773102,
+   "lng": 139.7098846,
+   "name": "Nasdar-Beton Factory"
+  },
+  {
+   "kind": "local",
+   "lat": -133.5906372,
+   "lng": 100.387413,
+   "name": "Nasdar-Beton Quarry"
+  },
+  {
+   "kind": "capital",
+   "lat": -192.3230438,
+   "lng": 150.4990997,
+   "name": "Nasdara"
+  },
+  {
+   "kind": "ruin",
+   "lat": -172.0908508,
+   "lng": 74.784584,
+   "name": "Nazar Gah"
+  },
+  {
+   "kind": "local",
+   "lat": -128.6479492,
+   "lng": 110.51548,
+   "name": "Nejcheh"
+  },
+  {
+   "kind": "local",
+   "lat": -111.1886139,
+   "lng": 95.7394104,
+   "name": "Nii-Mirnyy"
+  },
+  {
+   "kind": "city",
+   "lat": -177.5803223,
+   "lng": 109.7011337,
+   "name": "No Abad"
+  },
+  {
+   "kind": "city",
+   "lat": -98.8364258,
+   "lng": 107.932106,
+   "name": "Okb-754"
+  },
+  {
+   "kind": "village",
+   "lat": -44.1408691,
+   "lng": 91.085762,
+   "name": "Panj Asyab"
+  },
+  {
+   "kind": "village",
+   "lat": -166.4403534,
+   "lng": 98.6212235,
+   "name": "Pay-E Kuh"
+  },
+  {
+   "kind": "village",
+   "lat": -138.3860168,
+   "lng": 145.7484436,
+   "name": "Payan Kalay"
+  },
+  {
+   "kind": "village",
+   "lat": -107.937027,
+   "lng": 177.3519745,
+   "name": "Pesh Dasht"
+  },
+  {
+   "kind": "city",
+   "lat": -85.2896423,
+   "lng": 58.0343018,
+   "name": "Pesh Kuh"
+  },
+  {
+   "kind": "village",
+   "lat": -120.5515442,
+   "lng": 119.8213959,
+   "name": "Pir Kalay"
+  },
+  {
+   "kind": "local",
+   "lat": -97.3638916,
+   "lng": 111.2536545,
+   "name": "Proval-754"
+  },
+  {
+   "kind": "village",
+   "lat": -64.9331665,
+   "lng": 70.1763535,
+   "name": "Qala-E Kuhna"
+  },
+  {
+   "kind": "ruin",
+   "lat": -160.5063171,
+   "lng": 85.3178253,
+   "name": "Qalat-E Bala"
+  },
+  {
+   "kind": "ruin",
+   "lat": -133.9379578,
+   "lng": 232.0119782,
+   "name": "Qalat-E Lut"
+  },
+  {
+   "kind": "city",
+   "lat": -182.8871155,
+   "lng": 166.9252167,
+   "name": "Registan District"
+  },
+  {
+   "kind": "local",
+   "lat": -160.956604,
+   "lng": 154.9565125,
+   "name": "Rig-E Siyah Terminal"
+  },
+  {
+   "kind": "local",
+   "lat": -80.5324097,
+   "lng": 152.0573883,
+   "name": "Sabz Juy"
+  },
+  {
+   "kind": "village",
+   "lat": -72.8197327,
+   "lng": 71.415184,
+   "name": "Sabz Pashan"
+  },
+  {
+   "kind": "hill",
+   "lat": -151.2715607,
+   "lng": 129.6908569,
+   "name": "Sabz Tapa"
+  },
+  {
+   "kind": "city",
+   "lat": -140.3132172,
+   "lng": 107.0864029,
+   "name": "Sabzabad"
+  },
+  {
+   "kind": "marine",
+   "lat": -25.2585754,
+   "lng": 45.5132065,
+   "name": "Sadd-E Marek"
+  },
+  {
+   "kind": "village",
+   "lat": -105.8330688,
+   "lng": 123.8024673,
+   "name": "Salar Abad"
+  },
+  {
+   "kind": "hill",
+   "lat": -246.6699219,
+   "lng": 14.1085081,
+   "name": "Sar-E Band"
+  },
+  {
+   "kind": "village",
+   "lat": -157.9208069,
+   "lng": 46.9532776,
+   "name": "Sar-E Deh"
+  },
+  {
+   "kind": "local",
+   "lat": -9.8731079,
+   "lng": 46.6060677,
+   "name": "Sard Sarhad"
+  },
+  {
+   "kind": "local",
+   "lat": -162.6950531,
+   "lng": 44.9774437,
+   "name": "Sarkay"
+  },
+  {
+   "kind": "local",
+   "lat": -185.9979248,
+   "lng": 141.9408875,
+   "name": "Sarman-Naft Filtration Plant"
+  },
+  {
+   "kind": "village",
+   "lat": -163.3926392,
+   "lng": 168.2297058,
+   "name": "Sarman-Naft Refinery"
+  },
+  {
+   "kind": "hill",
+   "lat": -224.0166931,
+   "lng": 85.0058441,
+   "name": "Se Khah"
+  },
+  {
+   "kind": "local",
+   "lat": -127.888916,
+   "lng": 97.9645157,
+   "name": "Se Rah"
+  },
+  {
+   "kind": "marine",
+   "lat": -180.4041901,
+   "lng": 161.3640595,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -163.4196014,
+   "lng": 152.7606354,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -143.1446228,
+   "lng": 146.062973,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -137.0847321,
+   "lng": 159.3130188,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -118.0357361,
+   "lng": 162.0233917,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -97.7711029,
+   "lng": 166.0353699,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -75.526001,
+   "lng": 159.918396,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -63.0367737,
+   "lng": 139.1953125,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -50.9500275,
+   "lng": 99.7977676,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -46.0834656,
+   "lng": 87.6247864,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -43.2805176,
+   "lng": 68.1628799,
+   "name": "Sefid Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -63.139267,
+   "lng": 118.2928772,
+   "name": "Sefid-Darya"
+  },
+  {
+   "kind": "city",
+   "lat": -127.4707031,
+   "lng": 161.4617004,
+   "name": "Shah Yailaq"
+  },
+  {
+   "kind": "hill",
+   "lat": -223.9904785,
+   "lng": 85.0027008,
+   "name": "Shana Kuh"
+  },
+  {
+   "kind": "village",
+   "lat": -97.2583466,
+   "lng": 131.0313873,
+   "name": "Shinkalay"
+  },
+  {
+   "kind": "village",
+   "lat": -68.1755066,
+   "lng": 110.0066833,
+   "name": "Shinkay Wadi"
+  },
+  {
+   "kind": "marine",
+   "lat": -171.1694489,
+   "lng": 111.5302734,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -179.7024536,
+   "lng": 122.8559036,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -174.757431,
+   "lng": 138.4429474,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -162.0776672,
+   "lng": 96.5225601,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -155.1177063,
+   "lng": 86.3435211,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -173.7774811,
+   "lng": 70.7286758,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -181.2086029,
+   "lng": 46.1904869,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -186.0092621,
+   "lng": 21.8742199,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "marine",
+   "lat": -181.8153229,
+   "lng": 149.477829,
+   "name": "Siyah Darya"
+  },
+  {
+   "kind": "local",
+   "lat": -94.2607422,
+   "lng": 103.3753204,
+   "name": "Spets-Stvol 754"
+  },
+  {
+   "kind": "hill",
+   "lat": -104.997345,
+   "lng": 86.1236954,
+   "name": "Spinkay Tapa"
+  },
+  {
+   "kind": "village",
+   "lat": -59.3479462,
+   "lng": 89.98246,
+   "name": "Suvin Shahr"
+  },
+  {
+   "kind": "hill",
+   "lat": -97.1276398,
+   "lng": 145.0371704,
+   "name": "Tak Tapa"
+  },
+  {
+   "kind": "city",
+   "lat": -196.474823,
+   "lng": 170.6455078,
+   "name": "Terminal Nas"
+  },
+  {
+   "kind": "village",
+   "lat": -110.3178101,
+   "lng": 65.0774613,
+   "name": "Tor Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -129.969574,
+   "lng": 85.6915512,
+   "name": "Tut Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -150.2072754,
+   "lng": 123.6785049,
+   "name": "Tut Mian"
+  },
+  {
+   "kind": "village",
+   "lat": -66.6913452,
+   "lng": 209.328537,
+   "name": "Varzaneh"
+  },
+  {
+   "kind": "local",
+   "lat": -57.8807373,
+   "lng": 193.7367554,
+   "name": "Wacha Wadi"
+  },
+  {
+   "kind": "local",
+   "lat": -72.345398,
+   "lng": 175.2987671,
+   "name": "Wachakalay"
+  },
+  {
+   "kind": "village",
+   "lat": -104.5887756,
+   "lng": 91.0219345,
+   "name": "Yak Chinar"
+  },
+  {
+   "kind": "hill",
+   "lat": -145.1247406,
+   "lng": 20.2525253,
+   "name": "Zanu Ghar"
+  },
+  {
+   "kind": "city",
+   "lat": -190.9496155,
+   "lng": 158.326767,
+   "name": "Ziarat District"
+  },
+  {
+   "kind": "local",
+   "lat": -57.1307068,
+   "lng": 158.6532135,
+   "name": "Zir Dara"
+  },
+  {
+   "kind": "village",
+   "lat": -104.5523376,
+   "lng": 42.129425,
+   "name": "Zulfiqar Missile Base"
+  },
+  {
+   "kind": "local",
+   "lat": -182.3468933,
+   "lng": 75.3745804,
+   "name": "Zun Dara"
+  }
  ]
 }

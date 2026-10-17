@@ -16,6 +16,12 @@ const config: NextConfig = {
   // the server bundle rather than letting Next try to compile it.
   serverExternalPackages: ["postgres"],
 
+  // The Getting around chapter went with fast travel in the Nasdara swap. Old
+  // Discord posts and search results still link to it; a 308 sends them to the
+  // guide's front page instead of a 404.
+  async redirects() {
+    return [{ source: "/guide/getting-around", destination: "/guide", permanent: true }];
+  },
 };
 
 export default config;

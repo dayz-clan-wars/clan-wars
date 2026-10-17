@@ -37,7 +37,7 @@ function summarize(r: AwardListRow, mention: boolean): string {
  * Hand an event winner an award.
  *
  * ⚠️ `isAdmin` is checked here as well as by `setDefaultMemberPermissions`,
- * for `/airdrop place`'s reason: a channel permission overwrite can put the
+ * for the same reason as `/koth`: a channel permission overwrite can put the
  * command back in front of a member, and granting loot is not something a
  * member gets to do by finding a gap in a UI.
  */

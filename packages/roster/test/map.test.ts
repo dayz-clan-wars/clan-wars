@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, events, factionMembers, identityLinks, players, playerPositions, playerSessions, poles, intruderSightings, declarations, clanPins, bounties, type Database } from "@factions/db";
-import { HUB_POSITION, PIN_TTL_MS, TRAVEL_POINTS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M } from "@factions/domain";
+import { PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState } from "../src/map";
 import { seedFaction } from "./seed";
@@ -53,7 +53,7 @@ describe("mapState / dropPin / deletePin", () => {
     await db.insert(poles).values({ serverId, map: "livonia", poleKey: "2000.00:100.00:2000.00", x: "2000", y: "100", z: "2000", currentTexture: "Flag_Pirates", flagRaised: true, firstSeenAt: ago(10 * 86_400_000), lastSeenAt: now, graceUntil: ago(1) });
   });
 
-  it("a clan member sees themself, the base, full clanmates, intruders in their zone, public bases, pins, travel points", async () => {
+  it("a clan member sees themself, the base, full clanmates, intruders in their zone, public bases, pins", async () => {
     const s = await mapStateDb(db, "1", now);
     if (s === "not-linked") throw new Error("linked");
     expect(s.you).toEqual({ gamertag: "Ann", fix: { x: 5200, z: 5200, at: ago(60_000) } });
@@ -61,8 +61,8 @@ describe("mapState / dropPin / deletePin", () => {
     expect(s.clanmates.map((m) => [m.gamertag, m.fix.x])).toEqual([["Ben", 6000]]);      // not Ann (that is `you`), not Pat (pending), not Rex, not Xed
     expect(s.intruders).toEqual([{ gamertag: "Xed", x: 5030, z: 5030, lastSeenAt: ago(300_000), distanceM: 40 }]);
     expect(s.publicBases).toEqual([{ x: 2000, z: 2000 }]);
-    expect(s.travelPoints).toHaveLength(TRAVEL_POINTS);
-    expect(s.hub).toEqual(HUB_POSITION);
+    expect("travelPoints" in s).toBe(false);
+    expect("hub" in s).toBe(false);
     expect(s.layers).toEqual({ base: true, clanmates: true, intruders: true, pins: true });
   });
 
@@ -75,7 +75,7 @@ describe("mapState / dropPin / deletePin", () => {
     expect(s.pins).toEqual([]);
   });
 
-  it("a linked player outside any clan sees only themself, public bases and travel points; a pending member the same", async () => {
+  it("a linked player outside any clan sees only themself, public bases; a pending member the same", async () => {
     for (const id of ["5", "3"]) {
       const s = await mapStateDb(db, id, now);
       if (s === "not-linked") throw new Error("linked");
@@ -117,6 +117,20 @@ describe("mapState / dropPin / deletePin", () => {
     expect(await deletePinDb(db, "4", ok.id)).toEqual({ deleted: false });
     expect(await deletePinDb(db, "2", ok.id)).toEqual({ deleted: true });
     expect(await db.select().from(clanPins)).toEqual([]);
+  });
+
+  it("⚠️ after a map change, a fix from before map_changed_at is not drawn; one after it is", async () => {
+    // Fixes are kept up to 30 days, so on switch day every player's last
+    // Chernarus fix would draw on Nasdara until they logged in again. Ann's
+    // newest fix is 60 s old and Ben's is a day old: a cutover 30 min ago hides
+    // Ben entirely and leaves Ann at her post-cutover fix.
+    await db.update(servers).set({ mapChangedAt: ago(30 * 60_000) }).where(eq(servers.id, serverId));
+    const s = await mapStateDb(db, "1", now) as MapState;
+    expect(s.you.fix).toEqual({ x: 5200, z: 5200, at: ago(60_000) });
+    expect(s.clanmates).toEqual([]);
+    // A cutover after every fix leaves "you" with no fix at all — not the old-map one.
+    await db.update(servers).set({ mapChangedAt: ago(1000) }).where(eq(servers.id, serverId));
+    expect((await mapStateDb(db, "1", now) as MapState).you.fix).toBeNull();
   });
 
   describe("bounties layer", () => {
@@ -198,6 +212,18 @@ describe("mapState / dropPin / deletePin", () => {
         const s = await mapStateDb(db, "5", now) as MapState;
         expect(s.bounties, `status=${status}`).toEqual([]);
       }
+    });
+
+    it("⚠️ omits a target whose only fix predates the server's map change", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty-cutover.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(3600_000));   // on the old map
+      await connect(file!.id, T, ago(120_000));
+      await db.insert(bounties).values(openBounty(T));
+      await db.update(servers).set({ mapChangedAt: ago(30 * 60_000) }).where(eq(servers.id, serverId));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
     });
 
     it("omits a target with no fix", async () => {

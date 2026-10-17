@@ -39,7 +39,7 @@ export async function revokeAchievements(db: Database, opts: { apply: boolean; n
   for (const [ownerId, held] of byOwner) {
     out.owners++;
     for (const u of held) {
-      const key = u.key as AchievementKey;
+      const key = u.key as (typeof REVOCABLE_KEYS)[number];
       let r;
       // ⚠️ A throw is NOT "no longer earned": skip, count, report. Treating it as
       // a revocation would strip every badge on one bad query.

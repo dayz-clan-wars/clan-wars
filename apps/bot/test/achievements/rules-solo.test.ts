@@ -1,7 +1,8 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, achievementCounters, ceremonies, ceremonyParticipants, factions, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, achievementCounters, achievementUnlocks, ceremonies, ceremonyParticipants, factions, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { SOLO_RULES } from "../../src/achievements/rules-solo.js";
+import { achievementsTick } from "../../src/achievements/tick.js";
 import { seedServer, seedLink, seedSession, seedEvent, seedMembership, seedFaction, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
@@ -75,10 +76,21 @@ describe("solo rules", () => {
     expect(await rule("regular")(db, player, ctx)).toMatchObject({ count: 7, earnedAt: h(24 * 10 + 1) });
   });
 
-  it("wanderer / showman: counted from the player's own events", async () => {
+  it("wanderer is retired: the tick never unlocks it from teleports, and an existing unlock survives", async () => {
+    const B = "B".repeat(36);
+    await seedLink(db, { dayzId: A, discordId: "1", gamertag: "Ann", verifiedAt: t0 });
+    await seedLink(db, { dayzId: B, discordId: "2", gamertag: "Ben", verifiedAt: t0 });
     for (let i = 0; i < 10; i++) await seedEvent(db, { serverId, type: "player.teleported", at: h(i), payload: { dayzId: A, gamertag: "Ann" } });
-    await seedEvent(db, { serverId, type: "player.teleported", at: h(20), payload: { dayzId: "B".repeat(36), gamertag: "Ben" } });
-    expect(await rule("wanderer")(db, player, ctx)).toMatchObject({ count: 10, earnedAt: h(9) });
+    await db.insert(achievementUnlocks).values({ ownerKind: "player", ownerId: B, key: "wanderer", earnedAt: t0 });
+    expect(rule("wanderer")).toBeUndefined();
+    await achievementsTick(db, { now: ctx.now, everyone: true, announce: false });
+    const wanderers = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.key, "wanderer"));
+    expect(wanderers.map((u) => u.ownerId)).toEqual([B]);
+    // The tick did run for both: their enlisted unlocks landed.
+    expect((await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.key, "enlisted"))).length).toBe(2);
+  });
+
+  it("showman: counted from the player's own events", async () => {
     for (let i = 0; i < 49; i++) await seedEvent(db, { serverId, type: "emote.performed", at: h(i), payload: { dayzId: A, gamertag: "Ann", emote: "EmoteWave" } });
     expect(await rule("showman")(db, player, ctx)).toMatchObject({ count: 49, target: 50 });
   });

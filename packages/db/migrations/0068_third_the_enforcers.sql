@@ -1,0 +1,1 @@
+ALTER TABLE "servers" ADD COLUMN "map_changed_at" timestamp with time zone;

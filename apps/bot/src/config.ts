@@ -154,14 +154,6 @@ export type BotConfig = {
    */
   raidWindow: { enabled: boolean };
   /**
-   * Gates the airdrop decision tick. Off by default, same reasoning as
-   * `raidWindow`: a drop is only ever placed at a restart, so it rides on
-   * `restartSchedule` and is refused without it. `weeklyCap` is a ceiling on
-   * how many drops can be decided in a rolling week, never a quota to hit;
-   * `minPop` is the floor under the trailing high-water population a drop requires.
-   */
-  airdrop: { enabled: boolean; weeklyCap: number; minPop: number };
-  /**
    * Gates the bounty tick and its poster (spec 2026-09-23-bounties). `/bounty place`
    * refuses while it is off. Requires `SERVER_EVENTS_CHANNEL_ID` — see the check below.
    */
@@ -178,8 +170,9 @@ export type BotConfig = {
    */
   referralAward: { enabled: boolean; intervalMs: number };
   /**
-   * Where the airdrop tick announces a drop's location. Fatal when the tick
-   * is on and this is unset — see the load-time check below.
+   * Where the raid window, the weekly vehicle wipe, bounties, King of the Hill
+   * and referral payouts announce themselves. Fatal when any gated one is on and
+   * this is unset — see the load-time checks below.
    */
   serverEventsChannelId: string | undefined;
   /**
@@ -210,12 +203,6 @@ export type BotConfig = {
    * is a deliberate act on a chosen day, never a side effect of a deploy.
    */
   unlinkedPcBan: boolean;
-  /**
-   * No combat at the Fast Travel Hub. Writes `hub_combat` bans for `banTick`.
-   * ⚠️ BAN_DRY_RUN is false in production, so the first Hub ban is REAL the
-   * moment this is set — a deliberate act on a chosen day, never a deploy's.
-   */
-  hubBanTick: boolean;
   /**
    * The public #bans channel — enforced bans and unbans, announced. Undefined
    * means it is OFF: `ban_announcements` rows keep queuing (written whether or
@@ -490,11 +477,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
       rotation: ["1", "true"].includes((env.WEEKLY_VEHICLE_WIPE ?? "").toLowerCase()),
     },
     raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
-    airdrop: {
-      enabled: ["1", "true"].includes((env.AIRDROP_TICK ?? "").toLowerCase()),
-      weeklyCap: positiveInt(env, "AIRDROP_WEEKLY_CAP", 2),
-      minPop: positiveInt(env, "AIRDROP_MIN_POP", 5),
-    },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
     koth: {
       enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()),
@@ -524,7 +506,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
     unlinkedPcBan: ["1", "true"].includes((env.UNLINKED_PC_BAN ?? "").toLowerCase()),
-    hubBanTick: ["1", "true"].includes((env.HUB_BAN_TICK ?? "").toLowerCase()),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
@@ -550,10 +531,6 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // be applied: a silent success from the operator's point of view.
   if (config.unlinkedPcBan && !config.enforcementTick) {
     throw new Error("UNLINKED_PC_BAN is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
-  }
-  // ⚠️ Same reason: hubTick only writes rows, banTick applies them.
-  if (config.hubBanTick && !config.enforcementTick) {
-    throw new Error("HUB_BAN_TICK is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule
@@ -586,30 +563,17 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.truckWipe.rotation && !config.serverEventsChannelId) {
     throw new Error("WEEKLY_VEHICLE_WIPE is on but SERVER_EVENTS_CHANNEL_ID is unset — the Sunday notice is the only warning a player gets before their vehicle is cleared.");
   }
-  // ⚠️ Same failure shape as RAID_WINDOW_TICK's check: the spawner only takes
-  // effect when the server restarts, and restarts come from the restart slots. On
-  // without RESTART_SCHEDULE would decide events nothing ever places.
-  if (config.airdrop.enabled && !config.restartSchedule) {
-    throw new Error("AIRDROP_TICK is on but RESTART_SCHEDULE is off — a drop is only ever placed at a restart, so nothing would ever apply it.");
-  }
-  // ⚠️ Fatal, following RAID_WINDOW_TICK/SERVER_EVENTS_CHANNEL_ID, and spec §9
-  // makes it doubly so: only the location is announced and there is no in-world
-  // marker, so a drop nobody was told about is one nobody ever finds. With no
-  // channel this feature cannot work at all, rather than working less well.
-  if (config.airdrop.enabled && !config.serverEventsChannelId) {
-    throw new Error("AIRDROP_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — the location announcement is the only way a drop is ever found, so with no channel to post it this is misconfigured, not merely degraded.");
-  }
   // ⚠️ Fatal, like WEEKLY_VEHICLE_WIPE: the announcement is the whole point of a
   // bounty — a punishment nobody is told about is not one.
   if (config.bounties.enabled && !config.serverEventsChannelId) {
     throw new Error("BOUNTY_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — a bounty is announced there, and an unannounced bounty is a punishment nobody knows about.");
   }
-  // ⚠️ Same failure shape as RAID_WINDOW_TICK/AIRDROP_TICK: a session only
+  // ⚠️ Same failure shape as RAID_WINDOW_TICK: a session only
   // opens at a restart, so with RESTART_SCHEDULE off nothing would ever apply it.
   if (config.koth.enabled && !config.restartSchedule) {
     throw new Error("KOTH_TICK is on but RESTART_SCHEDULE is off — a session only opens at a restart, so nothing would ever apply it.");
   }
-  // ⚠️ Fatal, like AIRDROP_TICK/BOUNTY_TICK: an unannounced event is one nobody
+  // ⚠️ Fatal, like BOUNTY_TICK: an unannounced event is one nobody
   // comes to, so with no channel to post it this is misconfigured, not merely degraded.
   if (config.koth.enabled && !config.serverEventsChannelId) {
     throw new Error("KOTH_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset — an unannounced event is one nobody comes to.");
@@ -620,7 +584,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   if (config.koth.vote.enabled && !config.koth.enabled) {
     throw new Error("KOTH_VOTE is on but KOTH_TICK is off — a passed vote would announce an event nothing ever opens.");
   }
-  // ⚠️ Fatal, like KOTH_TICK/AIRDROP_TICK: the weekly winner is a public announcement,
+  // ⚠️ Fatal, like KOTH_TICK: the weekly winner is a public announcement,
   // and with no channel to post it the payout would run silently forever.
   if (config.referralAward.enabled && !config.serverEventsChannelId) {
     throw new Error("REFERRAL_AWARD_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset. The weekly winner would never be announced.");

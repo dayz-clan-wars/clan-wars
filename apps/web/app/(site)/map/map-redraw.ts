@@ -7,14 +7,14 @@ import { layerOfKey } from "@/lib/map-roster";
  * ⚠️ Why this exists. Every poll used to clear and rebuild EVERY group, and
  * Leaflet closes a popup whose marker is removed. A player reading a pin
  * note, or halfway through the two-tap Delete, lost the card every five
- * minutes and on every Refresh, and 209 static travel markers were rebuilt
+ * minutes and on every Refresh, and every static marker was rebuilt
  * each time. Now a group is rebuilt only when its own slice of the data
  * changed, so an open popup on an unchanged layer is never touched at all.
  *
  * Terrain and place names are not here: the grid is drawn once, and places
  * follow the zoom, not the data.
  */
-export const DATA_LAYERS = ["you", "base", "clanmates", "intruders", "bounties", "publicBases", "pins", "travel"] as const;
+export const DATA_LAYERS = ["you", "base", "clanmates", "intruders", "bounties", "publicBases", "pins"] as const;
 export type DataLayer = (typeof DATA_LAYERS)[number];
 export type Signatures = Record<DataLayer, string>;
 
@@ -29,7 +29,6 @@ export function layerSignatures(d: MapData, hint: boolean): Signatures {
     bounties: JSON.stringify(d.bounties),
     publicBases: JSON.stringify(d.publicBases),
     pins: JSON.stringify(d.pins),
-    travel: JSON.stringify(d.travelPoints),
   };
 }
 

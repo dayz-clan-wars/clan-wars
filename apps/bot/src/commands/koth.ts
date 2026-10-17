@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
-import { airdropEvents, kothEvents, servers } from "@factions/db";
+import { kothEvents, servers } from "@factions/db";
 import {
   KOTH_LOCATIONS, KOTH_MIN_GAP_MS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothGapOk, kothLocation, kothTownName, kothStandings, nextRestartAt,
   restartSlot,
@@ -44,8 +44,8 @@ async function activeServer(ctx: Ctx) {
 }
 
 /**
- * ⚠️ Row first, post second, and FAILED if the post throws — `/airdrop place`'s
- * shape, for its reason: an event nobody was told about is one nobody comes to,
+ * ⚠️ Row first, post second, and FAILED if the post throws — the usual
+ * shape for an admin-scheduled event, for its reason: an event nobody was told about is one nobody comes to,
  * and `kothWanted` refuses to open a row with no `announced_at`.
  */
 async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
@@ -72,11 +72,6 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (!kothGapOk(slot, await lastKothSlot(ctx.db, server.id, slot))) {
     return reply(`That is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill. Pick a later slot.`);
   }
-  // ⚠️ Spec §2.12: one session cannot hold both. The airdrop side refuses too.
-  const drop = await ctx.db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents).where(and(
-    eq(airdropEvents.serverId, server.id), eq(airdropEvents.slotAt, slot), inArray(airdropEvents.state, ["announced", "live"]),
-  ));
-  if (drop.length > 0) return reply("A bunker is already set to come online that session. Pick another slot.");
 
   let row: { id: number } | undefined;
   try {

@@ -1,219 +1,464 @@
 [
   {
-    "name": "Balota",
-    "slug": "balota",
-    "spawnGroup": "Balota",
-    "centreX": 4465,
-    "centreZ": 2448
+    "name": "Anar Juy",
+    "slug": "anar-juy",
+    "spawnGroup": "AnarJuy",
+    "centreX": 5540,
+    "centreZ": 9079
   },
   {
-    "name": "Berezino",
-    "slug": "berezino",
-    "spawnGroup": "Berezino",
-    "centreX": 12866,
-    "centreZ": 10119
+    "name": "Bad Asyab",
+    "slug": "bad-asyab",
+    "spawnGroup": "BadAsyab",
+    "centreX": 8575,
+    "centreZ": 11397
   },
   {
-    "name": "Chernogorsk",
-    "slug": "chernogorsk",
-    "spawnGroup": "Chernogorsk",
-    "centreX": 6514,
-    "centreZ": 2568
+    "name": "Bagh-e Dara",
+    "slug": "bagh-e-dara",
+    "spawnGroup": "BagheDara",
+    "centreX": 9450,
+    "centreZ": 3243
   },
   {
-    "name": "Dolina",
-    "slug": "dolina",
-    "spawnGroup": "Dolina",
-    "centreX": 11326,
-    "centreZ": 6591
+    "name": "Bagh-e Mir",
+    "slug": "bagh-e-mir",
+    "spawnGroup": "BagheMir",
+    "centreX": 4730,
+    "centreZ": 5598
   },
   {
-    "name": "Elektrozavodsk",
-    "slug": "elektrozavodsk",
-    "spawnGroup": "Elektrozavodsk",
-    "centreX": 10467,
-    "centreZ": 2208
+    "name": "Bala Kalay",
+    "slug": "bala-kalay",
+    "spawnGroup": "BalaKalay",
+    "centreX": 4476,
+    "centreZ": 7607
   },
   {
-    "name": "Gorka",
-    "slug": "gorka",
-    "spawnGroup": "Gorka",
-    "centreX": 9531,
-    "centreZ": 8836
+    "name": "Bam-e Sabz",
+    "slug": "bam-e-sabz",
+    "spawnGroup": "BameSabz",
+    "centreX": 8740,
+    "centreZ": 8572
   },
   {
-    "name": "Grishino",
-    "slug": "grishino",
-    "spawnGroup": "Grishino",
-    "centreX": 5973,
-    "centreZ": 10306
+    "name": "Bar Kalay",
+    "slug": "bar-kalay",
+    "spawnGroup": "BarKalay",
+    "centreX": 7331,
+    "centreZ": 13118
   },
   {
-    "name": "Kamenka",
-    "slug": "kamenka",
-    "spawnGroup": "Kamenka",
-    "centreX": 1837,
-    "centreZ": 2235
+    "name": "Bazar-e Kohna",
+    "slug": "bazar-e-kohna",
+    "spawnGroup": "BazareKohna",
+    "centreX": 7972,
+    "centreZ": 8008
   },
   {
-    "name": "Kamensk",
-    "slug": "kamensk",
-    "spawnGroup": "Kamensk",
-    "centreX": 6660,
-    "centreZ": 14418
+    "name": "Bustanshahr",
+    "slug": "bustanshahr",
+    "spawnGroup": "Bustanshahr",
+    "centreX": 7361,
+    "centreZ": 5642
   },
   {
-    "name": "Kamyshovo",
-    "slug": "kamyshovo",
-    "spawnGroup": "Kamyshovo",
-    "centreX": 12038,
-    "centreZ": 3524
+    "name": "Chahar Tut",
+    "slug": "chahar-tut",
+    "spawnGroup": "ChaharTut",
+    "centreX": 8078,
+    "centreZ": 8770
   },
   {
-    "name": "Krasnostav",
-    "slug": "krasnostav",
-    "spawnGroup": "Krasnostav",
-    "centreX": 11183,
-    "centreZ": 12273
+    "name": "Chashme Sabz",
+    "slug": "chashme-sabz",
+    "spawnGroup": "ChashmeSabz",
+    "centreX": 6649,
+    "centreZ": 12779
   },
   {
-    "name": "Lopatino",
-    "slug": "lopatino",
-    "spawnGroup": "Lopatino",
-    "centreX": 2747,
-    "centreZ": 9916
+    "name": "Dahana",
+    "slug": "dahana",
+    "spawnGroup": "Dahana",
+    "centreX": 10214,
+    "centreZ": 11802
   },
   {
-    "name": "Mogilevka",
-    "slug": "mogilevka",
-    "spawnGroup": "Mogilevka",
-    "centreX": 7557,
-    "centreZ": 5140
+    "name": "Dahaneh-e Kavir",
+    "slug": "dahaneh-e-kavir",
+    "spawnGroup": "DahaneheKavir",
+    "centreX": 11250,
+    "centreZ": 2513
   },
   {
-    "name": "Nagornoye",
-    "slug": "nagornoye",
-    "spawnGroup": "Nagornoye",
-    "centreX": 9301,
-    "centreZ": 14602
+    "name": "Dar-e Ardis",
+    "slug": "dar-e-ardis",
+    "spawnGroup": "DareArdis",
+    "centreX": 3436,
+    "centreZ": 4933
   },
   {
-    "name": "Nizhneye",
-    "slug": "nizhneye",
-    "spawnGroup": "Nizhneye",
-    "centreX": 12887,
-    "centreZ": 8124
+    "name": "Dara-e Nur",
+    "slug": "dara-e-nur",
+    "spawnGroup": "DaraeNur",
+    "centreX": 10917,
+    "centreZ": 13916
   },
   {
-    "name": "Novaya Petrovka",
-    "slug": "novaya-petrovka",
-    "spawnGroup": "NovayaPetrovka",
-    "centreX": 3369,
-    "centreZ": 13046
+    "name": "Darvazeh-e Gharb",
+    "slug": "darvazeh-e-gharb",
+    "spawnGroup": "DarvazeheGharb",
+    "centreX": 4914,
+    "centreZ": 13586
   },
   {
-    "name": "Novodmitrovsk",
-    "slug": "novodmitrovsk",
-    "spawnGroup": "Novodmitrovsk",
-    "centreX": 11506,
-    "centreZ": 14511
+    "name": "Dashtabad",
+    "slug": "dashtabad",
+    "spawnGroup": "Dashtabad",
+    "centreX": 10655,
+    "centreZ": 10792
   },
   {
-    "name": "Novy Sobor",
-    "slug": "novy-sobor",
-    "spawnGroup": "NovySobor",
-    "centreX": 7088,
-    "centreZ": 7700
+    "name": "Dashtabad Airbase",
+    "slug": "dashtabad-airbase",
+    "spawnGroup": "DashtabadAirbase",
+    "centreX": 11974,
+    "centreZ": 10681
   },
   {
-    "name": "Polyana",
-    "slug": "polyana",
-    "spawnGroup": "Polyana",
-    "centreX": 10664,
-    "centreZ": 8093
+    "name": "Dehqankalay",
+    "slug": "dehqankalay",
+    "spawnGroup": "Dehqankalay",
+    "centreX": 9969,
+    "centreZ": 10525
   },
   {
-    "name": "Prigorodki",
-    "slug": "prigorodki",
-    "spawnGroup": "Prigorodki",
-    "centreX": 7853,
-    "centreZ": 3155
+    "name": "Dost Kalay",
+    "slug": "dost-kalay",
+    "spawnGroup": "DostKalay",
+    "centreX": 6698,
+    "centreZ": 11375
   },
   {
-    "name": "Pustoshka",
-    "slug": "pustoshka",
-    "spawnGroup": "Pustoshka",
-    "centreX": 3067,
-    "centreZ": 7901
+    "name": "Gandomabad",
+    "slug": "gandomabad",
+    "spawnGroup": "Gandomabad",
+    "centreX": 7871,
+    "centreZ": 12477
   },
   {
-    "name": "Severograd",
-    "slug": "severograd",
-    "spawnGroup": "Severograd",
-    "centreX": 7939,
-    "centreZ": 12685
+    "name": "Gard Abad",
+    "slug": "gard-abad",
+    "spawnGroup": "GardAbad",
+    "centreX": 11084,
+    "centreZ": 7628
   },
   {
-    "name": "Solnechny",
-    "slug": "solnechny",
-    "spawnGroup": "Solnechny",
-    "centreX": 13401,
-    "centreZ": 6293
+    "name": "Gul Dara",
+    "slug": "gul-dara",
+    "spawnGroup": "GulDara",
+    "centreX": 7030,
+    "centreZ": 4404
   },
   {
-    "name": "Staroye",
-    "slug": "staroye",
-    "spawnGroup": "Staroye",
-    "centreX": 10145,
-    "centreZ": 5501
+    "name": "Gul Zar",
+    "slug": "gul-zar",
+    "spawnGroup": "GulZar",
+    "centreX": 5061,
+    "centreZ": 6495
   },
   {
-    "name": "Stary Sobor",
-    "slug": "stary-sobor",
-    "spawnGroup": "StarySobor",
-    "centreX": 6105,
-    "centreZ": 7766
+    "name": "Jui Bar District",
+    "slug": "jui-bar-district",
+    "spawnGroup": "JuiBarDistrict",
+    "centreX": 9190,
+    "centreZ": 4712
   },
   {
-    "name": "Stary Yar",
-    "slug": "stary-yar",
-    "spawnGroup": "StaryYar",
-    "centreX": 4990,
-    "centreZ": 15073
+    "name": "Kamar Zir",
+    "slug": "kamar-zir",
+    "spawnGroup": "KamarZir",
+    "centreX": 9432,
+    "centreZ": 11924
   },
   {
-    "name": "Svergino",
-    "slug": "svergino",
-    "spawnGroup": "Svergino",
-    "centreX": 9591,
-    "centreZ": 13787
+    "name": "Kariz-e Marz",
+    "slug": "kariz-e-marz",
+    "spawnGroup": "KarizeMarz",
+    "centreX": 10795,
+    "centreZ": 8576
   },
   {
-    "name": "Svetloyarsk",
-    "slug": "svetloyarsk",
-    "spawnGroup": "Svetloyarsk",
-    "centreX": 13890,
-    "centreZ": 13250
+    "name": "Karizak",
+    "slug": "karizak",
+    "spawnGroup": "Karizak",
+    "centreX": 3531,
+    "centreZ": 12815
   },
   {
-    "name": "Vavilovo",
-    "slug": "vavilovo",
-    "spawnGroup": "Vavilovo",
-    "centreX": 2313,
-    "centreZ": 11087
+    "name": "Karkhana District",
+    "slug": "karkhana-district",
+    "spawnGroup": "KarkhanaDistrict",
+    "centreX": 9150,
+    "centreZ": 4219
   },
   {
-    "name": "Vybor",
-    "slug": "vybor",
-    "spawnGroup": "Vybor",
-    "centreX": 3815,
-    "centreZ": 8935
+    "name": "Kati Golzar",
+    "slug": "kati-golzar",
+    "spawnGroup": "KatiGolzar",
+    "centreX": 6212,
+    "centreZ": 11817
   },
   {
-    "name": "Zelenogorsk",
-    "slug": "zelenogorsk",
-    "spawnGroup": "Zelenogorsk",
-    "centreX": 2648,
-    "centreZ": 5201
+    "name": "Khorramabad",
+    "slug": "khorramabad",
+    "spawnGroup": "Khorramabad",
+    "centreX": 4634,
+    "centreZ": 10833
+  },
+  {
+    "name": "Kucha Dar",
+    "slug": "kucha-dar",
+    "spawnGroup": "KuchaDar",
+    "centreX": 4512,
+    "centreZ": 10149
+  },
+  {
+    "name": "Mal Kalay",
+    "slug": "mal-kalay",
+    "spawnGroup": "MalKalay",
+    "centreX": 9596,
+    "centreZ": 8867
+  },
+  {
+    "name": "Manda Marz",
+    "slug": "manda-marz",
+    "spawnGroup": "MandaMarz",
+    "centreX": 5368,
+    "centreZ": 10615
+  },
+  {
+    "name": "Marz-e Lut",
+    "slug": "marz-e-lut",
+    "spawnGroup": "MarzeLut",
+    "centreX": 13780,
+    "centreZ": 12761
+  },
+  {
+    "name": "Mian Dara",
+    "slug": "mian-dara",
+    "spawnGroup": "MianDara",
+    "centreX": 8870,
+    "centreZ": 12493
+  },
+  {
+    "name": "Mian Deh",
+    "slug": "mian-deh",
+    "spawnGroup": "MianDeh",
+    "centreX": 7326,
+    "centreZ": 4161
+  },
+  {
+    "name": "Nasdar-Beton Factory",
+    "slug": "nasdar-beton-factory",
+    "spawnGroup": "NasdarBetonFactory",
+    "centreX": 9706,
+    "centreZ": 6563
+  },
+  {
+    "name": "Nasdara",
+    "slug": "nasdara",
+    "spawnGroup": "Nasdara",
+    "centreX": 9632,
+    "centreZ": 4075
+  },
+  {
+    "name": "No Abad",
+    "slug": "no-abad",
+    "spawnGroup": "NoAbad",
+    "centreX": 7021,
+    "centreZ": 5019
+  },
+  {
+    "name": "OKB-754",
+    "slug": "okb-754",
+    "spawnGroup": "OKB754",
+    "centreX": 6908,
+    "centreZ": 10058
+  },
+  {
+    "name": "Panj Asyab",
+    "slug": "panj-asyab",
+    "spawnGroup": "PanjAsyab",
+    "centreX": 5829,
+    "centreZ": 13559
+  },
+  {
+    "name": "Pay-e Kuh",
+    "slug": "pay-e-kuh",
+    "spawnGroup": "PayeKuh",
+    "centreX": 6312,
+    "centreZ": 5732
+  },
+  {
+    "name": "Payan Kalay",
+    "slug": "payan-kalay",
+    "spawnGroup": "PayanKalay",
+    "centreX": 9328,
+    "centreZ": 7527
+  },
+  {
+    "name": "Pesh Dasht",
+    "slug": "pesh-dasht",
+    "spawnGroup": "PeshDasht",
+    "centreX": 11351,
+    "centreZ": 9476
+  },
+  {
+    "name": "Pesh Kuh",
+    "slug": "pesh-kuh",
+    "spawnGroup": "PeshKuh",
+    "centreX": 3714,
+    "centreZ": 10925
+  },
+  {
+    "name": "Pir Kalay",
+    "slug": "pir-kalay",
+    "spawnGroup": "PirKalay",
+    "centreX": 7669,
+    "centreZ": 8669
+  },
+  {
+    "name": "Qala-e Kuhna",
+    "slug": "qala-e-kuhna",
+    "spawnGroup": "QalaeKuhna",
+    "centreX": 4491,
+    "centreZ": 12228
+  },
+  {
+    "name": "Registan District",
+    "slug": "registan-district",
+    "spawnGroup": "RegistanDistrict",
+    "centreX": 10683,
+    "centreZ": 4679
+  },
+  {
+    "name": "Sabz Pashan",
+    "slug": "sabz-pashan",
+    "spawnGroup": "SabzPashan",
+    "centreX": 4571,
+    "centreZ": 11724
+  },
+  {
+    "name": "Sabzabad",
+    "slug": "sabzabad",
+    "spawnGroup": "Sabzabad",
+    "centreX": 6854,
+    "centreZ": 7404
+  },
+  {
+    "name": "Salar Abad",
+    "slug": "salar-abad",
+    "spawnGroup": "SalarAbad",
+    "centreX": 7923,
+    "centreZ": 9611
+  },
+  {
+    "name": "Sar-e Deh",
+    "slug": "sar-e-deh",
+    "spawnGroup": "SareDeh",
+    "centreX": 3005,
+    "centreZ": 6277
+  },
+  {
+    "name": "Sarman-Naft Refinery",
+    "slug": "sarman-naft-refinery",
+    "spawnGroup": "SarmanNaftRefinery",
+    "centreX": 10767,
+    "centreZ": 5927
+  },
+  {
+    "name": "Shah Yailaq",
+    "slug": "shah-yailaq",
+    "spawnGroup": "ShahYailaq",
+    "centreX": 10334,
+    "centreZ": 8226
+  },
+  {
+    "name": "Shinkalay",
+    "slug": "shinkalay",
+    "spawnGroup": "Shinkalay",
+    "centreX": 8386,
+    "centreZ": 10159
+  },
+  {
+    "name": "Shinkay Wadi",
+    "slug": "shinkay-wadi",
+    "spawnGroup": "ShinkayWadi",
+    "centreX": 7040,
+    "centreZ": 12021
+  },
+  {
+    "name": "Suvin Shahr",
+    "slug": "suvin-shahr",
+    "spawnGroup": "SuvinShahr",
+    "centreX": 5759,
+    "centreZ": 12586
+  },
+  {
+    "name": "Terminal Nas",
+    "slug": "terminal-nas",
+    "spawnGroup": "TerminalNas",
+    "centreX": 10921,
+    "centreZ": 3810
+  },
+  {
+    "name": "Tor Dara",
+    "slug": "tor-dara",
+    "spawnGroup": "TorDara",
+    "centreX": 4165,
+    "centreZ": 9324
+  },
+  {
+    "name": "Tut Dara",
+    "slug": "tut-dara",
+    "spawnGroup": "TutDara",
+    "centreX": 5484,
+    "centreZ": 8066
+  },
+  {
+    "name": "Tut Mian",
+    "slug": "tut-mian",
+    "spawnGroup": "TutMian",
+    "centreX": 7915,
+    "centreZ": 6771
+  },
+  {
+    "name": "Varzaneh",
+    "slug": "varzaneh",
+    "spawnGroup": "Varzaneh",
+    "centreX": 13397,
+    "centreZ": 12116
+  },
+  {
+    "name": "Yak Chinar",
+    "slug": "yak-chinar",
+    "spawnGroup": "YakChinar",
+    "centreX": 5825,
+    "centreZ": 9690
+  },
+  {
+    "name": "Ziarat District",
+    "slug": "ziarat-district",
+    "spawnGroup": "ZiaratDistrict",
+    "centreX": 10133,
+    "centreZ": 4163
+  },
+  {
+    "name": "Zulfiqar Missile Base",
+    "slug": "zulfiqar-missile-base",
+    "spawnGroup": "ZulfiqarMissileBase",
+    "centreX": 2696,
+    "centreZ": 9693
   }
 ]

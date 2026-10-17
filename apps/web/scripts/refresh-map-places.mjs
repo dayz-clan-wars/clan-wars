@@ -7,8 +7,8 @@
 // Run by hand after a DayZ terrain update, on the same cadence as deploy/mirror-tiles.sh
 // — place names change with the game, not with our releases:
 //
-//   node apps/web/scripts/refresh-map-places.mjs            # current pinned version
-//   node apps/web/scripts/refresh-map-places.mjs 1.30-1     # after a DayZ update
+//   node apps/web/scripts/refresh-map-places.mjs            # each map's pinned version
+//   node apps/web/scripts/refresh-map-places.mjs 1.30-1     # override every map's version
 //
 // ⚠️ FINDING THE VERSION SEGMENT. The URL is
 // `https://static.xam.nu/dayz/json/<map>/<version>-<iteration>.json` and the host answers
@@ -28,12 +28,14 @@ import { writeFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 
-const VERSION = process.argv[2] ?? "1.29-7";
-// [our servers.map codename, DZMap's publishing name]
+// [our servers.map codename, DZMap's publishing name, pinned version]. Versions are per map
+// because DZMap versions each map's data on its own; a CLI argument overrides all of them.
 const MAPS = [
-  ["chernarusplus", "chernarusplus"],
-  ["enoch", "livonia"],
+  ["chernarusplus", "chernarusplus", "1.29-7"],
+  ["enoch", "livonia", "1.29-7"],
+  ["nasdara", "nasdara", "1.30-6"],
 ];
+const OVERRIDE = process.argv[2];
 
 /** Lowercase source name → display casing. Every word, including after a `(` or `-`. */
 function titleCase(raw) {
@@ -43,21 +45,23 @@ function titleCase(raw) {
   return clean.replace(/(^|[\s(\-])(\p{Ll})/gu, (_m, lead, ch) => lead + ch.toUpperCase());
 }
 
-function assertNonEmpty(text, url) {
+function assertNonEmpty(text, url, version) {
   // static.xam.nu answers an unknown path with 200 + an empty body, so a stale version
   // segment would otherwise silently write a file with zero places for that map.
   if (text.trim().length === 0) {
-    throw new Error(`empty body from ${url} — the version segment "${VERSION}" is probably stale (see the header comment)`);
+    throw new Error(`empty body from ${url} — the version segment "${version}" is probably stale (see the header comment)`);
   }
 }
 
 const out = {};
-for (const [codename, upstream] of MAPS) {
-  const url = `https://static.xam.nu/dayz/json/${upstream}/${VERSION}.json`;
-  const res = await fetch(url);
+for (const [codename, upstream, pinned] of MAPS) {
+  const version = OVERRIDE ?? pinned;
+  const url = `https://static.xam.nu/dayz/json/${upstream}/${version}.json`;
+  // ⚠️ static.xam.nu answers 403 to a bare fetch; it wants a browser UA and the site as Referer.
+  const res = await fetch(url, { headers: { "user-agent": "Mozilla/5.0 (Macintosh) AppleWebKit/537.36 Chrome/120 Safari/537.36", referer: "https://dayz.xam.nu/" } });
   if (!res.ok) throw new Error(`${url} → HTTP ${res.status}`);
   const text = await res.text();
-  assertNonEmpty(text, url);
+  assertNonEmpty(text, url, version);
   const locations = JSON.parse(text).markers?.locations;
   if (!Array.isArray(locations) || locations.length === 0) {
     throw new Error(`${url} has no markers.locations array`);

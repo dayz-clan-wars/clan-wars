@@ -40,21 +40,20 @@ export const SOLO_LAPSE_MS = 7 * DAY;
 /**
  * An undeclared pole whose flag has not been raised for this long has
  * despawned in game, so it drops off the public-bases layer.
- * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the livonia repo's
+ * ⚠️ Mirrors `FlagRefreshMaxDuration` (1209600 s) in the nasdara repo's
  * `db/globals.xml` — a different repo, so no test can hold the two together.
  * Retune one and the map either keeps drawing bases that are gone or drops
  * ones that are still standing.
  */
 export const PUBLIC_BASE_DESPAWN_MS = 14 * DAY;
 /**
- * The Fast Travel Hub's arrival point (fast-travel-points.json, `hub`). The
- * 200 m rule treats it as a declaration that always exists and is never
- * published, so no base can sit inside the one place every traveller lands.
+ * Chernarus's Fast Travel Hub arrival point (the old fast-travel-points.json `hub`, deleted with the Nasdara swap).
+ * History only: it no longer constrains where a base may sit.
  */
 export const HUB_POSITION = { x: 100, z: 93 } as const;
 
 /**
- * The Hub's no-combat zone (spec 2026-09-22-hub-combat §2.1): a CYLINDER, not a
+ * Chernarus's Hub no-combat zone, history only (spec 2026-09-22-hub-combat §2.1): a CYLINDER, not a
  * circle. The Hub floats — floor 997.5 m, doors 998.6 m, every door within 22 m
  * of HUB_POSITION — and the ground directly beneath it is ordinary map where a
  * fight is legal.
@@ -73,24 +72,6 @@ export const HUB_ZONE_MIN_ALTITUDE_M = 900;
  * rebuild, silently.
  */
 export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
-/** Every hit, kill or trap at the Hub. Measured from when the bot PROCESSES it — log delay must not eat the hour. */
-export const HUB_BAN_MS = 1 * HOUR;
-/** Self-defence: A may hit B back this long after B hit A. Per pair. */
-export const HUB_RETALIATION_WINDOW_MS = 2 * MIN;
-/**
- * ⚠️ Not about the sentence. An unseeded or rewound `hub-watch` cursor would
- * otherwise replay the whole log into bans — including the 2026-09-20 brawl,
- * from before the rule existed. Far longer than any log delay seen.
- */
-export const HUB_OFFENCE_MAX_AGE_MS = 24 * HOUR;
-/**
- * Placing one of these at the Hub is an offence. The first five were read off
- * `item.placed` payloads in factions_live on 2026-09-22.
- * ⚠️ `Plastic_Explosive` has NEVER been placed on this server — vanilla, and
- * included on that basis; confirm its classname the first time it appears.
- * A missing classname here is a trap the rule silently allows.
- */
-export const HUB_TRAP_CLASSES = ["BearTrap", "LandMineTrap", "TripwireTrap", "ImprovisedExplosive", "ClaymoreMine", "Plastic_Explosive"] as const;
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
@@ -153,13 +134,14 @@ export type PinIcon = (typeof PIN_ICONS)[number];
 /** Pin note length cap, characters. UI + package share it. */
 export const PIN_NOTE_MAX = 140;
 /**
- * Chernarus, since 2026-10-07 (Livonia, 12800 m, before). The one map this
+ * Nasdara, since the 2026-10 swap (Chernarus, 15360 m, before that; Livonia,
+ * 12800 m, before that). The one map this
  * deployment runs: its edge for pins and fixes, the tile directory under
  * /tiles/ and the key into the web's place names. ⚠️ `servers.map` is a
  * separate statement of the same fact, set by hand on a map change.
  */
-export const WORLD_SIZE_M = 15360;
-export const WORLD_MAP = "chernarusplus";
+export const WORLD_SIZE_M = 16384;
+export const WORLD_MAP = "nasdara";
 
 /**
  * Vault lock label and note caps, characters.
@@ -174,10 +156,6 @@ export const WORLD_MAP = "chernarusplus";
  */
 export const VAULT_NAME_MAX = 40;
 export const VAULT_NOTE_MAX = 140;
-
-// Getting around
-export const TRAVEL_POINTS = 518;
-export const HUB_DESTINATIONS = 31;
 
 // Fair play
 export const COMBAT_LOG_MS = 10 * MIN;
@@ -385,32 +363,6 @@ export const BOUNTY_REASON_MAX = 200;
  */
 export const AWARD_REMOVAL_LEAD_MS = 15 * MIN;
 
-/** How many recent locations are excluded from the draw (spec §3.3). */
-export const AIRDROP_NO_REPEAT = 5;
-
-/** How long before a restart slot the decision is taken (spec §3.1). */
-export const AIRDROP_DECIDE_LEAD_MS = 30 * 60 * 1000;
-
-/** Minimum gap between two drops (spec §3.1). */
-export const AIRDROP_MIN_GAP_MS = 24 * 60 * 60 * 1000;
-
-/**
- * How far back the trailing high-water mark looks (spec §3.1, amended 2026-09-21).
- *
- * The window changed job when the percentile became a max. Under a p90 a longer
- * window was simply steadier; under a MAX it is also the lockout length, because a
- * record blocks every later slot until it ages out.
- *
- * ⚠️ In practice, on this server, that matters far less than it sounds. Replayed
- * against the real session history (253 decision instants, 2026-09-01 to 09-22) the
- * window length is nearly inert: 3d and 5d both fire 5 times, 7d/10d/14d fire 4.
- * The peaks recur often enough that a stale record rarely blocks anything. Do not
- * reach for this constant to change how often drops happen — `AIRDROP_MIN_POP` is
- * the lever that actually moves it (floor 5 → 5 drops, 6 → 3, 7 → 2 over the same
- * three weeks), and it is an env var rather than a code change.
- */
-export const AIRDROP_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
-
 // ─── King of the Hill (spec 2026-09-23-king-of-the-hill) ───────────────────
 /** A kill scores if its VICTIM was this close to the hill's centre (2-D). */
 export const KOTH_ZONE_RADIUS_M = 500;
@@ -439,8 +391,9 @@ export const KOTH_GLOBALS: Readonly<Record<string, number>> = {
 /** Every KotH, whatever started it, is at least this long after the last one's slot (§2.2). */
 export const KOTH_MIN_GAP_MS = 24 * 60 * 60 * 1000;
 /**
- * The automatic trigger's high-water window (§3). Same length as the airdrop's,
- * and the same caveat: `KOTH_AUTO_MIN_POP` is the lever, not this.
+ * The automatic trigger's high-water window (§3). It is also the lockout length,
+ * because a record blocks every later slot until it ages out; the lever for how
+ * often events fire is `KOTH_AUTO_MIN_POP`, not this.
  */
 export const KOTH_HISTORY_MS = 5 * 24 * 60 * 60 * 1000;
 /** How many recent towns the draw excludes (§2.4). */

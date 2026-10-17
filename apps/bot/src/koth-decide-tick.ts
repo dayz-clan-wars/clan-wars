@@ -1,6 +1,6 @@
 import { kothEvents, kothVotes, servers, type Database } from "@factions/db";
 import {
-  KOTH_HISTORY_MS, chooseKothTown, decisionInstantFor, highWater, isoWeekStart, kothTownName, nextRestartAt, shouldFireKoth,
+  KOTH_HISTORY_MS, chooseKothTown, highWater, isoWeekStart, kothDecisionInstantFor, kothTownName, nextRestartAt, shouldFireKoth,
 } from "@factions/domain";
 import { and, eq, gt, gte, inArray, isNull, lt, notInArray } from "drizzle-orm";
 import { scheduledText } from "./koth-text.js";
@@ -12,11 +12,10 @@ const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 /**
  * The automatic KotH decision (spec 2026-09-24 §3).
  *
- * ⚠️ Runs BEFORE airdropTick in discord.ts (tick-order.test.ts): on a record night
- * both want the slot, and airdropTick yields to a scheduled KotH row — but only
- * if the row already exists when it looks.
+ * ⚠️ Runs after the vote tick in discord.ts (tick-order.test.ts): a vote closing
+ * at T−30 inserts its row before this looks at the slot.
  *
- * ⚠️ Row FIRST, post second — airdrop-tick's order, for its reason: posting first
+ * ⚠️ Row FIRST, post second, for its reason: posting first
  * and crashing leaves an event players were told about that nothing opens. An
  * unannounced row is harmless: `kothWanted` refuses it and koth-tick fails it.
  */
@@ -39,10 +38,9 @@ export async function kothDecideTick(
 
       // 2. A new decision.
       const slot = nextRestartAt(opts.now);
-      // ⚠️ `decisionInstantFor` uses AIRDROP_DECIDE_LEAD_MS, and `announce()` below
-      // stamps `reminded_at` on the assumption that IS KOTH_REMINDER_LEAD_MS — held
-      // equal by `packages/domain/test/koth-auto.test.ts`.
-      if (opts.now < decisionInstantFor(slot)) continue;
+      // ⚠️ `kothDecisionInstantFor` IS the reminder instant (it is `voteClosesAt`), and
+      // `announce()` below stamps `reminded_at` on that assumption.
+      if (opts.now < kothDecisionInstantFor(slot)) continue;
       // ⚠️ ANY row for this slot — cancelled or failed included — means the slot has
       // already been decided once and must not be decided again. `slotTakenBy` only
       // counts SLOT_HOLDING_STATES on purpose (so /kothvote and this tick's own vote
@@ -64,7 +62,7 @@ export async function kothDecideTick(
         )),
       ]);
       const pop = await onlineNow(db, s.id, opts.now);
-      const threshold = highWater(await popsAt(db, s.id, historyInstants(decisionInstantFor(slot), KOTH_HISTORY_MS)));
+      const threshold = highWater(await popsAt(db, s.id, historyInstants(kothDecisionInstantFor(slot), KOTH_HISTORY_MS)));
       if (!shouldFireKoth({
         slot, slotTaken: (await slotTakenBy(db, s.id, slot)) !== null, voteBlocks: votes.length > 0,
         openEvent: await kothOpen(db, s.id), weekCount: week.length, weeklyCap: opts.weeklyCap,
@@ -92,7 +90,7 @@ export async function kothDecideTick(
 
 /**
  * ⚠️ `reminded_at` is stamped WITH `announced_at`: this tick may decide anywhere in
- * [T-30, T), re-evaluating every tick like the airdrop, so the announcement can go
+ * [T-30, T), re-evaluating every tick, so the announcement can go
  * out any time from the reminder instant up to the slot itself — but never earlier
  * than the reminder instant. A separate reminder post would therefore only ever
  * repeat this one seconds-to-minutes later, so koth-tick is told the reminder is

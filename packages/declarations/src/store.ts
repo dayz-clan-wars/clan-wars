@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, events, factionMembers, identityLinks, poles } from "@factions/db";
+import { declarations, events, factionMembers, identityLinks, poles, servers } from "@factions/db";
 import { tooClose, distance2d, PUBLIC_BASE_DESPAWN_MS, RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { and, desc, eq, gt, isNotNull, isNull, lt, sql } from "drizzle-orm";
 
@@ -364,20 +364,25 @@ export async function lapseSolos(
  * when it falls within `WATCH_ZONE_RADIUS_M` of ANY declaration on the
  * server, not just one sharing its `poleKey` — the same "inside someone's
  * base" radius the zone-enforcement watch already uses, not a new number.
- * Deliberately `distance2d`, not `tooClose`: `tooClose` also checks against
- * `HUB_POSITION`, which is right for deciding where a base may be declared
- * but would suppress genuinely abandoned poles near the Hub here, for a
- * reason that has nothing to do with anyone's base.
+ * Deliberately `distance2d`, not `tooClose`: `tooClose` applies the 200 m
+ * base-spacing radius, a different number from the watch-zone radius used here.
  *
  * A pole whose flag has not gone up for `PUBLIC_BASE_DESPAWN_MS` has
  * despawned in game and is left off. `last_seen_at` is the last raise here:
  * pole-tick moves it on every raise and lower, never backwards, and a pole
  * whose last event was a lower is already excluded by `flag_raised`. A read,
  * not a delete, so a fresh raise at the same pole publishes it again.
+ *
+ * ⚠️ Only poles on the server's CURRENT map (`poles.map = servers.map`). A
+ * map change (the 2026-10 Nasdara swap) releases every declaration but leaves
+ * `poles` alone, and `last_seen_at` stays inside the despawn window for two
+ * weeks — without this join every raised pole from the old map would draw on
+ * the new one, at coordinates that mean nothing there.
  */
 export async function publicPoles(db: Database | Tx, serverId: number, now: Date) {
   const candidates = await db.select({ poleKey: poles.poleKey, x: poles.x, y: poles.y, z: poles.z, texture: poles.currentTexture })
     .from(poles)
+    .innerJoin(servers, and(eq(servers.id, poles.serverId), eq(servers.map, poles.map)))
     .leftJoin(declarations, and(eq(declarations.serverId, poles.serverId), eq(declarations.poleKey, poles.poleKey)))
     .where(and(
       eq(poles.serverId, serverId),

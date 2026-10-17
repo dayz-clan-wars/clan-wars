@@ -349,32 +349,6 @@ describe("loadConfig", () => {
     });
   });
 
-  describe("AIRDROP_TICK", () => {
-    it("⚠️ refuses AIRDROP_TICK without RESTART_SCHEDULE", () => {
-      // Same failure shape as RAID_WINDOW_TICK without RESTART_SCHEDULE: a
-      // drop is only ever placed at a restart, so nothing would ever apply it.
-      expect(() => loadConfig({ ...OK, AIRDROP_TICK: "true", RESTART_SCHEDULE: "false" }))
-        .toThrow(/AIRDROP_TICK is on but RESTART_SCHEDULE is off/u);
-    });
-
-    // ⚠️ Fatal, exactly like RAID_WINDOW_TICK without SERVER_EVENTS_CHANNEL_ID, and
-    // doubly so: spec §9 makes a drop that cannot be announced a drop that does not
-    // happen, so nowhere to post is misconfigured, not degraded.
-    it("⚠️ refuses AIRDROP_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
-      expect(() => loadConfig({
-        ...OK, AIRDROP_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t", SERVER_EVENTS_CHANNEL_ID: "",
-      })).toThrow(/AIRDROP_TICK is on but SERVER_EVENTS_CHANNEL_ID is unset/u);
-    });
-
-    it("defaults the cap to 2 and the floor to 5", () => {
-      const cfg = loadConfig({
-        ...OK, AIRDROP_TICK: "true", RESTART_SCHEDULE: "true", NITRADO_TOKEN: "t",
-        SERVER_EVENTS_CHANNEL_ID: "123456789012345678",
-      });
-      expect(cfg.airdrop).toEqual({ enabled: true, weeklyCap: 2, minPop: 5 });
-    });
-  });
-
   describe("BOUNTY_TICK", () => {
     it("refuses BOUNTY_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
       expect(() => loadConfig({ ...OK, BOUNTY_TICK: "true", SERVER_EVENTS_CHANNEL_ID: undefined })).toThrow(/BOUNTY_TICK/u);
@@ -609,18 +583,6 @@ describe("loadConfig", () => {
 
     it("on with ENFORCEMENT_TICK (and its NITRADO_TOKEN requirement satisfied) loads fine", () => {
       expect(() => loadConfig({ ...OK, UNLINKED_PC_BAN: "1", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" })).not.toThrow();
-    });
-  });
-
-  describe("HUB_BAN_TICK", () => {
-    it("defaults off", () => {
-      expect(loadConfig(OK).hubBanTick).toBe(false);
-    });
-    it("⚠️ on without ENFORCEMENT_TICK refuses to load — hubTick's rows would never be applied", () => {
-      expect(() => loadConfig({ ...OK, HUB_BAN_TICK: "true" })).toThrow(/HUB_BAN_TICK is on but ENFORCEMENT_TICK is off/u);
-    });
-    it("on with ENFORCEMENT_TICK loads", () => {
-      expect(loadConfig({ ...OK, HUB_BAN_TICK: "true", ENFORCEMENT_TICK: "1", NITRADO_TOKEN: "nt" }).hubBanTick).toBe(true);
     });
   });
 

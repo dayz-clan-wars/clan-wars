@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS } from "../src/achievements";
+import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEMENTS, isRetired } from "../src/achievements";
 
 describe("the achievement definitions", () => {
   it("are exactly fifty, keyed uniquely in snake_case", () => {
@@ -8,6 +8,13 @@ describe("the achievement definitions", () => {
     expect(new Set(keys).size).toBe(50);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
+  });
+
+  it("forty-nine can be earned: Wanderer is retired with fast travel, but stays defined for its holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(49);
+    expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain("wanderer");
+    expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer"]);
+    expect(ACHIEVEMENT_BY_KEY.wanderer.name).toBe("Wanderer");
   });
 
   it("split 11 solo, 12 pve, 15 pvp, 12 team; team is clan-owned and nothing else is", () => {

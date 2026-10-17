@@ -1,9 +1,8 @@
 import { describe, it, expect } from "vitest";
-import { atHub, hubKillDiscredited, hubOffence, readVec3 } from "../src/hub";
+import { atHub, hubKillDiscredited, readVec3 } from "../src/hub";
 import { HUB_COMBAT_FROM } from "../src/rules";
-import { HUB_POSITION, HUB_TRAP_CLASSES } from "../src/rules";
+import { HUB_POSITION } from "../src/rules";
 
-const A = "A".repeat(40), B = "B".repeat(40);
 const HUB = { x: 100, y: 998.6, z: 93 };
 const GROUND = { x: 100, y: 310, z: 93 };
 
@@ -43,36 +42,4 @@ describe("hubKillDiscredited", () => {
     expect(hubKillDiscredited(false, HUB_COMBAT_FROM)).toBe(false);
     expect(hubKillDiscredited(false, before)).toBe(false);
   });
-});
-
-describe("hubOffence", () => {
-  const hit = (over: Record<string, unknown> = {}) => ({
-    victimDayzId: B, victimGamertag: "Bee", attackerType: "player", attackerDayzId: A, attackerGamertag: "Ay",
-    victimPos: HUB, attackerPos: HUB, ...over,
-  });
-  it("a player hit at the Hub: the attacker offends against the victim", () => {
-    expect(hubOffence("player.hit", hit())).toEqual({ offender: A, gamertag: "Ay", victim: B });
-  });
-  it("either party inside is enough", () => {
-    expect(hubOffence("player.hit", hit({ attackerPos: GROUND }))).not.toBeNull();
-    expect(hubOffence("player.hit", hit({ victimPos: GROUND }))).not.toBeNull();
-    expect(hubOffence("player.hit", hit({ victimPos: GROUND, attackerPos: GROUND }))).toBeNull();
-  });
-  it("infected, environment and self-inflicted hits are never offences", () => {
-    expect(hubOffence("player.hit", hit({ attackerType: "infected", attackerDayzId: null }))).toBeNull();
-    expect(hubOffence("player.hit", hit({ attackerType: "environment", attackerDayzId: null }))).toBeNull();
-    expect(hubOffence("player.hit", hit({ attackerDayzId: B }))).toBeNull();
-  });
-  it("a kill at the Hub: the killer offends", () => {
-    expect(hubOffence("player.killed", { victimDayzId: B, killerDayzId: A, killerGamertag: "Ay", victimPos: HUB, killerPos: GROUND }))
-      .toEqual({ offender: A, gamertag: "Ay", victim: B });
-  });
-  it("a trap placed at the Hub offends with no victim; a tent does not", () => {
-    for (const itemClass of HUB_TRAP_CLASSES) {
-      expect(hubOffence("item.placed", { dayzId: A, gamertag: "Ay", itemClass, pos: HUB })).toEqual({ offender: A, gamertag: "Ay", victim: null });
-    }
-    expect(hubOffence("item.placed", { dayzId: A, gamertag: "Ay", itemClass: "LargeTent", pos: HUB })).toBeNull();
-    expect(hubOffence("item.placed", { dayzId: A, gamertag: "Ay", itemClass: "BearTrap", pos: GROUND })).toBeNull();
-  });
-  it("any other event type is never an offence", () => expect(hubOffence("player.died", hit())).toBeNull());
 });

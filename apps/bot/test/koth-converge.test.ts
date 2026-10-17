@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, serverRestarts, servers, type Database } from "@factions/db";
-import { KOTH_LOCATIONS, KOTH_PRESET_FILES } from "@factions/domain";
+import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, raidWindowFlips, serverRestarts, servers, type Database } from "@factions/db";
+import { KOTH_LOCATIONS, KOTH_PRESET_FILES, kothTownName } from "@factions/domain";
 import { eq, sql } from "drizzle-orm";
 import { planKoth, convergeKothFiles } from "../src/koth-converge.js";
+import { cancelledText } from "../src/koth-text.js";
 import { narrowFreshSpawns } from "../src/spawn-points.js";
 import { restartTick, type RestartTarget } from "../src/restart-tick.js";
 
@@ -21,17 +22,17 @@ const GLOBALS = (player: number, infected: number, avoid: number) => `<variables
 const SPAWNS = `<playerspawnpoints>
     <fresh>
         <generator_posbubbles>
-            <group name="Balota">
+            <group name="Dashtabad">
                 <pos x="4491.000000" z="2312.000000" />
             </group>
-            <group name="Berezino">
+            <group name="Khorramabad">
                 <pos x="12928.000000" z="9906.000000" />
             </group>
         </generator_posbubbles>
     </fresh>
 </playerspawnpoints>
 `;
-const BEREZINO = narrowFreshSpawns(SPAWNS, "Berezino");
+const DASHTABAD = narrowFreshSpawns(SPAWNS, "Dashtabad");
 
 /** A mission on a fake Nitrado: every KotH source and default present unless `over` removes it. */
 function mission(over: Record<string, string | undefined> = {}) {
@@ -69,7 +70,7 @@ beforeEach(async () => {
   serverId = s!.id;
 });
 const schedule = (over: Record<string, unknown> = {}) => db.insert(kothEvents).values({
-  serverId, slotAt: SLOT, location: "berezino", centreX: "12900", centreZ: "9900", state: "scheduled",
+  serverId, slotAt: SLOT, location: "dashtabad", centreX: "12900", centreZ: "9900", state: "scheduled",
   scheduledByDiscordId: "1", announcedAt: at("2026-10-01T00:00:00Z"), ...over,
 }).returning().then((r) => r[0]!);
 const kothGameplay = GAMEPLAY.replace("./custom/loadout.json", "./custom/koth-ak74-svd.json");
@@ -86,7 +87,7 @@ describe("planKoth", () => {
     expect(p.opening?.id).toBe(row.id);
     expect(p.presets).toEqual([...KOTH_PRESET_FILES]);
     expect(p.files).toEqual([
-      { dir: "/m", name: "cfgplayerspawnpoints.xml", content: BEREZINO },
+      { dir: "/m", name: "cfgplayerspawnpoints.xml", content: DASHTABAD },
       { dir: "/m/db", name: "globals.xml", content: GLOBALS(30, 10, 5) },
     ]);
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
@@ -97,7 +98,7 @@ describe("planKoth", () => {
   for (const [what, over, msg] of [
     ["a missing default spawn file", { "/m/koth/default/cfgplayerspawnpoints.xml": undefined }, /koth\/default\/cfgplayerspawnpoints\.xml/],
     ["an empty default spawn file", { "/m/koth/default/cfgplayerspawnpoints.xml": "  \n" }, /is empty/],
-    ["a default spawn file without the town's group", { "/m/koth/default/cfgplayerspawnpoints.xml": SPAWNS.replace(/<group name="Berezino">[\s\S]*?<\/group>\n/, "") }, /no group "Berezino"/],
+    ["a default spawn file without the town's group", { "/m/koth/default/cfgplayerspawnpoints.xml": SPAWNS.replace(/<group name="Dashtabad">[\s\S]*?<\/group>\n/, "") }, /no group "Dashtabad"/],
     ["a missing default globals.xml", { "/m/koth/default/globals.xml": undefined }, /koth\/default\/globals\.xml/],
     ["a default globals.xml without CleanupAvoidance", { "/m/koth/default/globals.xml": GLOBALS(3600, 330, 100).replace(/.*CleanupAvoidance.*\n/, "") }, /CleanupAvoidance/],
     ["a missing preset", { [`/m/custom/${KOTH_PRESET_FILES[0]!.slice(9)}`]: undefined }, /preset/],
@@ -116,12 +117,24 @@ describe("planKoth", () => {
     });
   }
 
-  // ⚠️ Review focus 3: a row scheduled on Livonia reaching its slot on Chernarus.
+  // ⚠️ Review focus 3: a row scheduled on an earlier map reaching its slot on Nasdara.
   it("a retired Livonia town refuses with a reason rather than throwing", async () => {
     await schedule({ location: "adamow" });
     const p = (await planKoth(db, mission().target, serverId, SLOT, { allowOpen: true }))!;
     expect(p.failure).toContain(`adamow is not one of the ${KOTH_LOCATIONS.length} KotH towns`);
     expect(p.opening).toBeNull();
+  });
+
+  it("a row scheduled on Chernarus fails at its slot with a reason", async () => {
+    const row = await schedule({ location: "berezino" });
+    const p = (await planKoth(db, mission().target, serverId, SLOT, { allowOpen: true }))!;
+    expect(p.failure).toContain(`berezino is not one of the ${KOTH_LOCATIONS.length} KotH towns`);
+    expect(p.opening).toBeNull();
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(saved!.state).toBe("failed");
+    // koth-tick names the town through kothTownName; players read it, not the slug.
+    expect(kothTownName("berezino")).toBe("Berezino");
+    expect(cancelledText(kothTownName(saved!.location), SLOT)).toContain("BEREZINO");
   });
 
   // ⚠️ Spec §2.5 of the original: a retried open must never snapshot KotH's own state as the default.
@@ -134,7 +147,7 @@ describe("planKoth", () => {
 
   it("restores at the next slot: snapshot presets, default spawn file, default globals", async () => {
     await schedule({ state: "live", openedAt: SLOT, loadoutSnapshot: ["./custom/loadout.json"] });
-    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": BEREZINO, "/m/db/globals.xml": GLOBALS(30, 10, 5) });
+    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": DASHTABAD, "/m/db/globals.xml": GLOBALS(30, 10, 5) });
     const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.opening).toBeNull();
     expect(p.presets).toEqual(["./custom/loadout.json"]);
@@ -154,7 +167,7 @@ describe("planKoth", () => {
   // ⚠️ Skip, never blank.
   it("a missing default spawn file at restore skips it and records why; globals still restore", async () => {
     const row = await schedule({ state: "live", openedAt: SLOT });
-    const m = mission({ "/m/cfgplayerspawnpoints.xml": BEREZINO, "/m/db/globals.xml": GLOBALS(30, 10, 5),
+    const m = mission({ "/m/cfgplayerspawnpoints.xml": DASHTABAD, "/m/db/globals.xml": GLOBALS(30, 10, 5),
       "/m/koth/default/cfgplayerspawnpoints.xml": undefined });
     const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.files).toEqual([{ dir: "/m/db", name: "globals.xml", content: GLOBALS(3600, 330, 100) }]);
@@ -165,7 +178,7 @@ describe("planKoth", () => {
   // ⚠️ A refused preset restore leaves ONLY the preset list alone.
   it("a refused preset restore leaves the list alone and records why; the spawn file still restores", async () => {
     const row = await schedule({ state: "live", openedAt: SLOT });
-    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": BEREZINO });
+    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": DASHTABAD });
     const p = (await planKoth(db, m.target, serverId, NEXT, { allowOpen: true }))!;
     expect(p.presets).toBeNull();
     expect(p.files).toEqual([{ dir: "/m", name: "cfgplayerspawnpoints.xml", content: SPAWNS }]);
@@ -192,25 +205,25 @@ describe("convergeKothFiles", () => {
     });
     const r = await convergeKothFiles(m.target, [
       { dir: "/m/db", name: "globals.xml", content: GLOBALS(30, 10, 5) },
-      { dir: "/m", name: "cfgplayerspawnpoints.xml", content: BEREZINO },
+      { dir: "/m", name: "cfgplayerspawnpoints.xml", content: DASHTABAD },
     ]);
     expect(r.uploaded).toBe(1);
     expect(r.errors).toEqual([expect.stringMatching(/\/m\/db\/globals\.xml: ftp refused/)]);
-    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(BEREZINO);
+    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(DASHTABAD);
   });
 });
 
 describe("restartTick with KotH", () => {
   it("opens at the slot and goes live only after the restart POST; restores at the next slot", async () => {
-    const row = await schedule({ location: "novaya-petrovka" });
-    const spawns = SPAWNS.replace('"Berezino"', '"NovayaPetrovka"');
+    const row = await schedule({ location: "dar-e-ardis" });
+    const spawns = SPAWNS.replace('"Khorramabad"', '"DareArdis"');
     const m = mission({ "/m/cfgplayerspawnpoints.xml": spawns, "/m/koth/default/cfgplayerspawnpoints.xml": spawns });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
     await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     // ⚠️ Review focus 5: the display name, never a capitalised slug.
-    expect(restart).toHaveBeenCalledWith(expect.stringContaining("King of the Hill at Novaya Petrovka"));
-    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(narrowFreshSpawns(spawns, "NovayaPetrovka"));
+    expect(restart).toHaveBeenCalledWith(expect.stringContaining("King of the Hill at Dar-e Ardis"));
+    expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(narrowFreshSpawns(spawns, "DareArdis"));
     expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
     expect(m.read("/m/db/globals.xml")).toBe(GLOBALS(30, 10, 5));
     let [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
@@ -229,7 +242,7 @@ describe("restartTick with KotH", () => {
   it("with KOTH_TICK off, a due row is not opened and stays scheduled; an earlier session still restores", async () => {
     await schedule({ slotAt: at("2026-10-03T18:00:00Z"), state: "no_winner", openedAt: at("2026-10-03T18:00:00Z"), loadoutSnapshot: ["./custom/loadout.json"] });
     const row = await schedule();
-    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": BEREZINO });
+    const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": DASHTABAD });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
     for (const koth of [{ open: false }, undefined]) {
@@ -262,6 +275,35 @@ describe("restartTick with KotH", () => {
     expect(m.uploadFile).not.toHaveBeenCalled();
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("failed");
+  });
+
+  // ⚠️ Regression guard for restart-tick's `setWhere` on `flip.changed` (not on
+  // `gameplay.uploaded`). A KotH opening inside an already-open raid window
+  // uploads cfggameplay.json while the raid splice changes nothing. Keyed on
+  // `uploaded`, that slot would overwrite Friday's real rollback copy and
+  // `applied_at` with Saturday's already-flipped file, silently.
+  it("a KotH opening on an applied raid boundary leaves the flip's previousContent and applied_at alone", async () => {
+    const withRaid = GAMEPLAY.replace('"PlayerData"', '"GeneralData": {\n\t\t"disableBaseDamage": true\n\t},\n\t"PlayerData"');
+    const SAT = at("2026-09-19T12:00:00Z");
+    await schedule({ slotAt: SAT });
+    const m = mission({ "/m/cfggameplay.json": withRaid });
+    const target = { ...m.target, status: async () => "started", restart: async () => {} } as unknown as RestartTarget;
+    const opts = { lastError: new Map<number, string>(), raidWindow: { enabled: true }, koth: { open: true } };
+
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-18T00:00:03Z") });
+    const [fri] = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(fri).toMatchObject({ boundaryAt: at("2026-09-18T00:00:00Z"), outcome: "applied" });
+    expect(fri!.previousContent).toBe(withRaid);
+    expect(fri!.appliedAt).not.toBeNull();
+
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-19T12:00:03Z") });
+    // Premise: the KotH opening really did upload cfggameplay.json this slot.
+    expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
+    const rows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.outcome).toBe("applied");
+    expect(rows[0]!.previousContent).toBe(fri!.previousContent);
+    expect(rows[0]!.appliedAt).toEqual(fri!.appliedAt);
   });
 
   it("a refused preset splice fails the row, never advertises it, and still restarts", async () => {

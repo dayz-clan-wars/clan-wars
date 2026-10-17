@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, declarations, poles, events, admFiles, ceremonies, zoneIncidents, bans, type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS, HUB_POSITION, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
 import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/store";
 
@@ -41,9 +41,9 @@ describe("declaration store", () => {
     ceremonyId = c!.id;
   });
 
-  const seedPole = (x: number, z: number, o: { texture?: string; raised?: boolean; graceUntil?: Date; lastSeenAt?: Date } = {}) =>
+  const seedPole = (x: number, z: number, o: { texture?: string; raised?: boolean; graceUntil?: Date; lastSeenAt?: Date; map?: string } = {}) =>
     db.insert(poles).values({
-      serverId, map: "livonia", poleKey: key(x, z), x: x.toFixed(2), y: "100.00", z: z.toFixed(2),
+      serverId, map: o.map ?? "livonia", poleKey: key(x, z), x: x.toFixed(2), y: "100.00", z: z.toFixed(2),
       currentTexture: o.texture ?? "Flag_White", flagRaised: o.raised ?? true,
       firstSeenAt: o.lastSeenAt ?? now, lastSeenAt: o.lastSeenAt ?? now, graceUntil: o.graceUntil ?? new Date(now.getTime() - 1),
     });
@@ -66,8 +66,8 @@ describe("declaration store", () => {
     expect(await solo(5150, 5000, "B")).toEqual({ ok: false, reason: "too-close" });
   });
 
-  it("⚠️ refuses a pole within 200 m of the Hub even with no declarations", async () => {
-    expect(await solo(HUB_POSITION.x + 10, HUB_POSITION.z)).toEqual({ ok: false, reason: "too-close" });
+  it("declares a pole where the old Hub stood (no Hub rule)", async () => {
+    expect(await solo(110, 93)).toEqual({ ok: true, id: expect.any(Number) });
   });
 
   it("refuses a second base for the same owner", async () => {
@@ -214,6 +214,16 @@ describe("declaration store", () => {
       // What pole-tick's upsert does on a fresh flag.raised.
       await db.update(poles).set({ lastSeenAt: now, flagRaised: true }).where(eq(poles.poleKey, key(5000, 5000)));
       expect(await publicPoles(db, serverId, now)).toHaveLength(1);
+    });
+
+    it("⚠️ after a map change, a raised pole from the old map is not published on the new one", async () => {
+      // The Nasdara swap: clear-bases releases declarations but leaves `poles`,
+      // so every raised Chernarus pole would land on Nasdara's public layer at
+      // Chernarus coordinates. Only poles on the server's CURRENT map count.
+      await db.update(servers).set({ map: "nasdara" }).where(eq(servers.id, serverId));
+      await seedPole(5000, 5000, { map: "chernarusplus" });
+      await seedPole(6000, 6000, { map: "nasdara" });
+      expect((await publicPoles(db, serverId, now)).map((p) => p.poleKey)).toEqual([key(6000, 6000)]);
     });
 
     it("still publishes a stale raised pole well outside every declaration's 100 m watch zone", async () => {

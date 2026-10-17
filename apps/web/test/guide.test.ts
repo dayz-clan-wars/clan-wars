@@ -15,15 +15,17 @@ import { GUIDE_NUMBER_KEYS, guideNumber } from "@factions/domain";
  * `.html` page is a link to the old, dead host.
  */
 describe("the guide manifest", () => {
-  it("has 15 chapters, unique slugs, chapter 1 at /guide, the numbers appendix last", () => {
-    expect(CHAPTERS).toHaveLength(15);
-    expect(new Set(CHAPTERS.map((c) => c.slug)).size).toBe(15);
+  it("has 14 chapters, unique slugs, chapter 1 at /guide, the numbers appendix last", () => {
+    expect(CHAPTERS).toHaveLength(14);
+    expect(new Set(CHAPTERS.map((c) => c.slug)).size).toBe(14);
     expect(CHAPTERS[0]!.slug).toBe("");
     expect(hrefFor(CHAPTERS[0]!)).toBe("/guide");
-    expect(CHAPTERS[14]!.slug).toBe("numbers");
-    expect(hrefFor(CHAPTERS[14]!)).toBe("/guide/numbers");
-    expect(CHAPTERS.slice(0, 14).map((c) => c.number)).toEqual(Array.from({ length: 14 }, (_, i) => String(i + 1)));
-    expect(CHAPTERS[14]!.number).toBe("A");
+    expect(CHAPTERS[13]!.slug).toBe("numbers");
+    expect(hrefFor(CHAPTERS[13]!)).toBe("/guide/numbers");
+    expect(CHAPTERS.slice(0, 13).map((c) => c.number)).toEqual(Array.from({ length: 13 }, (_, i) => String(i + 1)));
+    expect(CHAPTERS[13]!.number).toBe("A");
+    // Nasdara has no fast travel: the Getting around chapter is gone, not hidden.
+    expect(chapterBySlug("getting-around")).toBeUndefined();
   });
 
   it("looks chapters up by slug and walks neighbours", () => {
@@ -31,20 +33,24 @@ describe("the guide manifest", () => {
     expect(chapterBySlug("bases")?.title).toBe("Bases");
     expect(chapterBySlug("nope")).toBeUndefined();
     expect(neighbours(CHAPTERS[0]!)).toEqual({ prev: undefined, next: CHAPTERS[1] });
-    expect(neighbours(CHAPTERS[14]!)).toEqual({ prev: CHAPTERS[13], next: undefined });
+    expect(neighbours(CHAPTERS[13]!)).toEqual({ prev: CHAPTERS[12], next: undefined });
   });
 
-  it("chapter 14 is Achievements, and its table is generated from the definitions, not typed", () => {
+  it("chapter 13 is Achievements, and its table is generated from the earnable definitions, not typed", () => {
     const c = CHAPTERS.find((x) => x.slug === "achievements")!;
-    expect(c).toMatchObject({ number: "14", file: "14-achievements.html" });
-    expect(CHAPTERS).toHaveLength(15);
-    expect(CHAPTERS[14]!.file).toBeNull();   // the appendix stays last
+    expect(c).toMatchObject({ number: "13", file: "13-achievements.html" });
+    expect(CHAPTERS).toHaveLength(14);
+    expect(CHAPTERS[13]!.file).toBeNull();   // the appendix stays last
     const raw = readFileSync(join(CONTENT_DIR, c.file!), "utf8");
     expect(raw).toContain("{{ACHIEVEMENTS}}");
     const { html } = renderFragment(raw);
     expect(html).toContain("Sniper");
     expect(html).toContain("A kill from 300 m or more");
-    expect((html.match(/<tr>/gu) ?? []).length).toBeGreaterThanOrEqual(50);
+    // Forty-nine: the retired Wanderer is not listed, since nobody can earn it now.
+    expect((html.match(/<tr>/gu) ?? []).length).toBe(49);
+    expect(html).not.toContain("Wanderer");
+    expect(html).not.toMatch(/fifty/iu);
+    expect(html).toMatch(/forty-nine/iu);
   });
 });
 
@@ -129,8 +135,13 @@ describe("guide.css rides on @theme", () => {
 });
 
 describe("the site serves the guide itself", () => {
-  it("has no redirects — /guide used to hand off to fieldguide.dayzclanwars.com", () => {
-    expect(config.redirects).toBeUndefined();
+  it("redirects only the retired Getting around chapter — /guide used to hand off to fieldguide.dayzclanwars.com", async () => {
+    // Nasdara has no fast travel, so the chapter is gone; links to it in old
+    // Discord posts and search results land on the guide's front page rather
+    // than a 404. Nothing else redirects: the site serves the guide itself.
+    expect(await config.redirects?.()).toEqual([
+      { source: "/guide/getting-around", destination: "/guide", permanent: true },
+    ]);
   });
 });
 
@@ -181,13 +192,3 @@ describe("the search index", () => {
   });
 });
 
-describe("the Hub rule's rendered copy", () => {
-  // A {{KEY|hours}} token after a counting word reads "one 1 hour ban" once rendered.
-  it("never doubles the count around a rendered duration", () => {
-    for (const file of ["11-getting-around.html", "12-fair-play.html", "13-rules-on-one-page.html"]) {
-      const html = renderFragment(readFileSync(join(CONTENT_DIR, file), "utf8")).html;
-      expect(html, file).not.toMatch(/\b(one|a|an) 1 hour\b/u);
-      expect(html, file).toMatch(/1 hour ban/u);
-    }
-  });
-});

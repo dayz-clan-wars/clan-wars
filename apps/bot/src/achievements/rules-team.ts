@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_BY_KEY, HOLDING_STATUSES, type AchievementKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, HOLDING_STATUSES, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { alphaWeeks, defenses, factions, membershipHistory, raids, seasonResults, seasons } from "@factions/db";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
 import { clanId, nth, oneShot, type Rule } from "./types.js";
@@ -20,7 +20,7 @@ async function closedSeasons(db: Parameters<Rule>[0], factionId: number) {
 }
 const raidCount = (key: AchievementKey): Rule => async (db, owner) => nth(await ownRaids(db, clanId(owner)), T(key), (r) => ({ raids: r.length }));
 
-export const TEAM_RULES: Partial<Record<AchievementKey, Rule>> = {
+export const TEAM_RULES: Partial<Record<EarnableKey, Rule>> = {
   colors_raised: async (db, owner) => {
     const [f] = await db.select({ id: factions.id, at: factions.activatedAt, serverId: factions.serverId, tag: factions.tag }).from(factions).where(eq(factions.id, clanId(owner)));
     return oneShot(f?.at ? { at: f.at, id: f.id, serverId: f.serverId, evidence: { tag: f.tag } } : undefined);

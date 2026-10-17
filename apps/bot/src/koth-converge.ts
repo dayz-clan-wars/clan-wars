@@ -53,7 +53,7 @@ async function globalsEdit(nitrado: RestartTarget, dbDir: string, wanted: (name:
 }
 
 /**
- * What King of the Hill wants from this slot (spec 2026-10-07-koth-chernarus §3).
+ * What King of the Hill wants from this slot (spec 2026-10-07-koth-chernarus §3, unchanged by the Nasdara swap).
  * Null when no KotH row has EVER existed — the only case the restore arm may skip.
  *
  * ⚠️ Not gated on KOTH_TICK by the caller: switching the feature off mid-event
@@ -81,7 +81,7 @@ export async function planKoth(
   let failure: string | null = null;
   if (opening) {
     try {
-      // ⚠️ A row scheduled before the move to Chernarus names a Livonia town:
+      // ⚠️ A row scheduled before the move to Nasdara names a Chernarus or Livonia town:
       // refused here with a reason, never a throw out of planKoth.
       const loc = kothLocation(opening.location);
       if (!loc) throw new Error(`${opening.location} is not one of the ${KOTH_LOCATIONS.length} KotH towns on this map`);

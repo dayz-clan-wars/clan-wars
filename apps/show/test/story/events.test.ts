@@ -74,7 +74,7 @@ describe("events and the previous episode", () => {
 
   // ⚠️ The script model gets a town name, never a slug: "novaya-petrovka" would
   // reach Boris and Pavel's lines as written.
-  it("KotH gives the town's display name, Chernarus and retired Livonia alike", async () => {
+  it("KotH gives the town's display name, Nasdara and retired Chernarus and Livonia alike", async () => {
     await fx.koth({ location: "novaya-petrovka", slotAt: at(3, 20), top: [] });
     await fx.koth({ location: "adamow", slotAt: at(4, 20), top: [] });
     expect((await kothForWeek(db, read())).map((k) => k.location)).toEqual(["Novaya Petrovka", "Adamów"]);

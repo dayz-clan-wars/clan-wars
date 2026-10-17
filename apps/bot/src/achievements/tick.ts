@@ -1,4 +1,4 @@
-import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, HOLDING_STATUSES, type AchievementKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, EARNABLE_ACHIEVEMENTS, HOLDING_STATUSES, type AchievementKey } from "@factions/domain";
 import { achievementProgress, achievementUnlocks, factionMembers, factions, identityLinks, membershipHistory, players, servers, type Database } from "@factions/db";
 import { and, asc, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 import { appendClanNoticeTx, noticeClanTx, noticeFullMembersTx, noticeUserTx } from "@factions/roster/internal";
@@ -23,9 +23,11 @@ export type AchievementsTickOpts = {
 };
 export type AchievementsTickResult = { evaluated: number; unlocked: number; carried: number; failed: number };
 
+// Earnable keys only: a retired key has no rule and must never be evaluated again. Its
+// unlock rows are left alone (this tick only ever inserts), so its holders keep it.
 const KEYS_FOR = {
-  player: ACHIEVEMENTS.filter((a) => a.owner === "player").map((a) => a.key),
-  clan: ACHIEVEMENTS.filter((a) => a.owner === "clan").map((a) => a.key),
+  player: EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "player").map((a) => a.key),
+  clan: EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "clan").map((a) => a.key),
 } as const;
 
 /** Every rule of the owner's kind; a throw is reported per key and skips only that key. */
@@ -33,7 +35,7 @@ export async function evaluateOwner(db: Database, owner: Owner, now: Date, onErr
   const out: { key: AchievementKey; result: RuleResult }[] = [];
   for (const key of KEYS_FOR[owner.kind]) {
     // ⚠️ Per key, not per owner: one broken rule must never cost an owner the
-    // other 37 — the pass reports it in `failed` and carries on.
+    // other 36 — the pass reports it in `failed` and carries on.
     try { out.push({ key, result: await RULES[key](db, owner, { now }) }); }
     catch (err) { onError?.(owner, key, err); }
   }

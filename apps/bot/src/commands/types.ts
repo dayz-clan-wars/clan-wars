@@ -64,15 +64,13 @@ export type Ctx = {
   now: Date;
   siteBaseUrl: string;
   /**
-   * ⚠️ The only command that touches this is `/airdrop place`, which has no
-   * roster call to make: an airdrop is server state, not clan state, so there is
-   * nothing for `@factions/roster` to export. Do not reach for it from a clan
-   * command — those go through `roster`, which is what keeps the site and the
+   * ⚠️ Only the admin event commands (`/koth`, `/bounty`, `/award`) touch this:
+   * they have no roster call to make, since an event is server state, not clan
+   * state, so there is nothing for `@factions/roster` to export. Do not reach for
+   * it from a clan command — those go through `roster`, which is what keeps the site and the
    * commands one set of rules rather than two.
    */
   db: Database;
-  /** The `SERVER_EVENTS_CHANNEL_ID` poster, or null when `AIRDROP_TICK` is off. */
-  serverEvents: ((content: string) => Promise<void>) | null;
   /**
    * `BOUNTY_TICK`. `/bounty place` refuses when it is off: with no tick and no
    * poster, a bounty would be a punishment nobody is told about and nobody can collect.

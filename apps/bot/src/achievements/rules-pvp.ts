@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_BY_KEY, streakOf, type AchievementKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, streakOf, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { defenses, kills, playerSessions, raids } from "@factions/db";
 import { and, asc, eq, ne, isNotNull, or, sql } from "drizzle-orm";
 import { nth, oneShot, type Rule, type RuleResult } from "./types.js";
@@ -69,7 +69,7 @@ function streak(key: AchievementKey): Rule {
   };
 }
 
-export const PVP_RULES: Partial<Record<AchievementKey, Rule>> = {
+export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
   first_blood: killCount("first_blood"),
   ten_down: killCount("ten_down"),
   centurion: killCount("centurion"),

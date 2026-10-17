@@ -264,6 +264,58 @@ describe("PgDormancyStore", () => {
       expect(decide(c!, now, W)).toBeNull();
     });
 
+    // The map change (Nasdara swap, spec §H): clear-bases deletes every
+    // declaration, so LAST_RAISE has no pole to look at and the clock falls
+    // back to activated_at — weeks old for any established clan.
+    const DAY = 86_400_000;
+    const seedUndeclared = async (o: Parameters<typeof seedFaction>[0] = {}) => {
+      const f = await seedFaction(o);
+      await db.delete(declarations).where(eq(declarations.ownerFactionId, f.id));
+      return f;
+    };
+    // A recent event of any type, so the disband liveness gate reads the
+    // server as watched and `decide` gets as far as the age check.
+    const serverIsLive = () => seedRaise({ poleKey: "elsewhere", texture: "Flag_Other", at: ago(60_000), dayzId: "Z" });
+
+    it("⚠️ the map change floors an active clan's clock", async () => {
+      // Its last raise was 20 days ago and the season is as old; without the
+      // floor, clearing its base on switch day makes it dormant on the next tick.
+      await seedUndeclared({ tag: "BEAR", activatedAt: ago(20 * DAY), createdAt: ago(30 * DAY) });
+      await seedRaise({ poleKey: "1:2:3", texture: "Flag_Bear", at: ago(20 * DAY), dayzId: "A" });
+      await db.insert(seasons).values({ serverId, number: 1, startedAt: ago(20 * DAY) });
+      await db.update(servers).set({ mapChangedAt: ago(DAY) }).where(eq(servers.id, serverId));
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(DAY));
+      expect(decide(c!, now, W)).toBeNull();
+    });
+
+    it("⚠️ a clan dormant at the map change stays dormant", async () => {
+      // A cutover newer than dormant_since would read as a raise after the
+      // clan went dormant and revive it (dormancy.ts), with nobody raising.
+      await seedUndeclared({ tag: "BEAR", status: "dormant", dormantSince: ago(3 * DAY), activatedAt: ago(30 * DAY), createdAt: ago(30 * DAY) });
+      await serverIsLive();
+      await db.update(servers).set({ mapChangedAt: ago(DAY) }).where(eq(servers.id, serverId));
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(30 * DAY));
+      expect(decide(c!, now, W)).not.toBe("revive");
+      // The disband countdown still runs from dormant_since: 14 days after it,
+      // 11 from now, it disbands.
+      expect(c!.dormantSince).toEqual(ago(3 * DAY));
+      const later = new Date(now.getTime() + 11 * DAY);
+      expect(decide({ ...c!, serverLastEventAt: later }, later, W)).toBe("disband");
+    });
+
+    it("the grace runs out", async () => {
+      await seedUndeclared({ tag: "BEAR", activatedAt: ago(20 * DAY), createdAt: ago(30 * DAY) });
+      await db.update(servers).set({ mapChangedAt: ago(8 * DAY) }).where(eq(servers.id, serverId));
+
+      const [c] = await store.clocks();
+      expect(c!.lastRaiseAt).toEqual(ago(8 * DAY));
+      expect(decide(c!, now, W)).toBe("dormant");
+    });
+
     it("with no open season, the old behaviour holds — a raise 20 days old is dormant", async () => {
       // Base declared before the raise: declared_at also floors the clock now.
       await seedFaction({ tag: "BEAR", createdAt: ago(30 * 86_400_000) });
