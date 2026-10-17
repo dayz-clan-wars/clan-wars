@@ -7,6 +7,7 @@ describe("bountyPostText", () => {
     const t = bountyPostText({ kind: "placed", target: "Bob", reason: "Combat logging", hours: 72, prize: null }, SITE);
     expect(t).toContain("**Bob**"); expect(t).toContain("Combat logging"); expect(t).toContain("72 h"); expect(t).toContain(`${SITE}/map`);
     expect(t).toMatch(/friendly fire/iu);
+    expect(t).not.toMatch(/Hub/u);   // Nasdara has no Hub
   });
   it("credits the killer, with the weapon when known", () => {
     expect(bountyPostText({ kind: "claimed", target: "Bob", killer: "Ann", weapon: "M4-A1", prize: null, prizeState: "unlinked" as const }, SITE)).toBe("💀 **Ann** collected the bounty on **Bob** with M4-A1.");

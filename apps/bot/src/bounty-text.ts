@@ -33,7 +33,7 @@ export function bountyPostText(p: BountyPost, siteBaseUrl: string): string {
       return `🎯 **WANTED:** ${b(p.target)} — ${escapeMarkdown(p.reason)}.\n`
         + `Their position shows on the map while they're online, until someone kills them or they have played ${p.hours} h online: ${siteBaseUrl}/map\n`
         + (p.prize ? `🏆 Reward: ${b(p.prize.label)}, respawning every restart at a spot the winner picks for ${days(p.prize.days)}.\n` : "")
-        + "Friendly fire and kills at the Hub don't count.";
+        + "Friendly fire doesn't count.";
     case "claimed": {
       const head = `💀 ${b(p.killer)} collected the bounty on ${b(p.target)}${p.weapon ? ` with ${escapeMarkdown(p.weapon)}` : ""}.`;
       if (!p.prize) return head;

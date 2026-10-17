@@ -20,13 +20,15 @@ describe("the show prompt", () => {
   it("carries the standing rules (spec §2.3)", () => {
     expect(RULES).toMatch(/seated at a news desk/u);
     expect(RULES).toMatch(/No props/u);
-    // The server moved from Livonia to Chernarus on 2026-10-07. Earlier, Boris's KOTH backstory
-    // made the model place a Livonia show in Chernarus; the place rule guards the reverse now.
-    expect(HOSTS).toMatch(/on the Chernarus map/u);
-    expect(HOSTS).not.toMatch(/Livonia map/u);
-    expect(RULES).toMatch(/map is Chernarus/u);
-    // The week of 2026-10-05 straddles the move: its data holds both maps.
-    expect(RULES).toMatch(/moved from Livonia to Chernarus on 7 October 2026/u);
+    // The server moved from Livonia to Chernarus on 2026-10-07 and to Nasdara on 2026-10-18.
+    // Earlier, Boris's KOTH backstory made the model place a Livonia show in Chernarus; the
+    // place rule guards against naming an old map's towns now.
+    expect(HOSTS).toMatch(/on the Nasdara map/u);
+    expect(HOSTS).not.toMatch(/Chernarus|Livonia map/u);
+    expect(RULES).toMatch(/map is Nasdara/u);
+    // A week that straddles a move holds two maps in its data.
+    expect(RULES).toMatch(/moved from Chernarus to Nasdara on 18 October 2026/u);
+    expect(RULES).toMatch(/Livonia before 7 October 2026/u);
     // A render had Pavel read out "a field literally called raidedThisClanEarlier".
     expect(RULES).toMatch(/never mention the data, JSON, field names/u);
     // Week 1 said a clan "died nine times each" (one player's number, spread over a clan) and
@@ -37,8 +39,9 @@ describe("the show prompt", () => {
     // Week 1 read "Tuesday twenty-three forty-six" and "seven hundred and twenty-five minutes" aloud.
     expect(DATA_DICTIONARY).toMatch(/longer ones rounded to hours/u);
     expect(DATA_DICTIONARY).toMatch(/raidsByPlayer/u);
-    expect(RULES).toMatch(/Boris's old war stories included, is in Chernarus/u);
-    expect(RULES).toMatch(/Never name a Livonia place \(Topolin/u);
+    expect(RULES).toMatch(/Boris's old war stories included, is in Nasdara/u);
+    expect(RULES).toMatch(/Dashtabad, Khorramabad, Bustanshahr, Sabzabad, Gandomabad, Kamar Zir, Shah Yailaq, Bam-e Sabz, the Marek Barq dam/u);
+    expect(RULES).toMatch(/Never name a Chernarus or Livonia place \(Elektrozavodsk/u);
     expect(RULES).toMatch(/unless the data names it/u);
     expect(HOSTS).toMatch(/ex-Livonian military/u);
     expect(RULES).toMatch(/Raiders are the heroes/u);
