@@ -13,7 +13,7 @@ export type Source = (typeof SOURCES)[number];
 export type Watermarks = Record<Source, number>;
 export const CURSOR_PREFIX = "achievements:";
 /** The event types any rule reads; other types never touch an owner. */
-const RULE_EVENT_TYPES = ["base.built", "player.teleported", "emote.performed", "player.unconscious"] as const;
+const RULE_EVENT_TYPES = ["base.built", "emote.performed", "player.unconscious"] as const;
 
 export type PositionRow = { id: number; dayzId: string; x: number; z: number; at: Date };
 export type PinRow = { id: number; dayzId: string; at: Date };

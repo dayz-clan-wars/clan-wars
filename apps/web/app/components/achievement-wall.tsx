@@ -54,8 +54,9 @@ export function Tile({ t }: { t: AchievementTile }) {
 }
 
 /**
- * The wall: fifty tiles (twelve on a clan's), grouped, earned in the group's
- * colour, in progress with a ring on the badge, locked in grey. `id="achievements"` is what the owner's
+ * The wall: forty-nine tiles (fifty for a holder of the retired Wanderer, twelve
+ * on a clan's), grouped, earned in the group's colour, in progress with a ring
+ * on the badge, locked in grey. `id="achievements"` is what the owner's
  * closest-to-unlocking panel links down to.
  *
  * ⚠️ A tile carries a name, a description, a count and a date — never a

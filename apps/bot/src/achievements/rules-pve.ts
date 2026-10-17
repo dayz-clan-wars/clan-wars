@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_BY_KEY, type AchievementKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { events, kills, playerSessions } from "@factions/db";
 import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { nth, oneShot, type Rule } from "./types.js";
@@ -29,7 +29,7 @@ const deathBy = (cause: string): Rule => async (db, owner) => {
   return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { cause } } : undefined);
 };
 
-export const PVE_RULES: Partial<Record<AchievementKey, Rule>> = {
+export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   foundation: built("foundation"),
   builder: built("builder"),
   architect: built("architect"),

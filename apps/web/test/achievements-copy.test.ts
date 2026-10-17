@@ -39,13 +39,13 @@ describe("freshUnlocks — what the owner's page toasts", () => {
       tile({ key: "enlisted", earnedAt: at(1) }),
       tile({ key: "first_blood", earnedAt: at(0.5) }),
       tile({ key: "ten_down", earnedAt: at(6.9) }),
-      tile({ key: "wanderer", earnedAt: at(3) }),
+      tile({ key: "showman", earnedAt: at(3) }),
       tile({ key: "veteran", earnedAt: at(8) }),                      // last week is a tile, not a toast
       tile({ key: "champions", group: "team", owner: "clan", earnedAt: at(0.1), clanTag: "BEAR" }),   // the clan's, not the viewer's
       tile({ key: "sniper", earnedAt: null }),
     ];
-    expect(freshUnlocks(tiles, now).map((t) => t.key)).toEqual(["first_blood", "enlisted", "wanderer"]);
-    expect(freshUnlocks(tiles, now, 10).map((t) => t.key)).toEqual(["first_blood", "enlisted", "wanderer", "ten_down"]);
+    expect(freshUnlocks(tiles, now).map((t) => t.key)).toEqual(["first_blood", "enlisted", "showman"]);
+    expect(freshUnlocks(tiles, now, 10).map((t) => t.key)).toEqual(["first_blood", "enlisted", "showman", "ten_down"]);
   });
   it("says which group in the kicker", () => {
     expect(TOAST.kicker("pvp")).toBe("Achievement unlocked · Combat");
