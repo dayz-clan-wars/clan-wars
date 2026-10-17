@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart, shouldFire,
+  AIRDROP_MIN_GAP_MS, AIRDROP_NO_REPEAT, chooseAirdrop, shouldFire,
 } from "../src/airdrops";
 import { BUNKER_KINDS, BUNKER_ROOMS } from "../src/bunker";
 
@@ -31,22 +31,6 @@ describe("chooseAirdrop", () => {
   });
 });
 
-describe("highWater", () => {
-  it("is the peak, and is 0 on no history", () => {
-    // ⚠️ 0 on no history is load-bearing, not a convenience: it leaves
-    // `max(AIRDROP_MIN_POP, 0)` at the floor, which is the right bar on day one
-    // and through the first five days. Returning -Infinity (the naive Math.max
-    // of an empty list) would leave the floor governing too, but any later
-    // arithmetic on the recorded threshold would be poisoned by it.
-    expect(highWater([])).toBe(0);
-    expect(highWater([1, 1, 1, 1, 1, 1, 1, 1, 1, 10])).toBe(10);
-    expect(highWater([5])).toBe(5);
-    // ⚠️ One outlier sets the bar for the whole window. This is the accepted
-    // cost of the high-water rule (2026-09-21) — see the design's §3.1.
-    expect(highWater([2, 2, 11, 3, 2])).toBe(11);
-  });
-});
-
 describe("shouldFire", () => {
   it("fires at a real peak", () => expect(fire()).toBe(true));
   it("holds the floor when the high-water mark has collapsed", () =>
@@ -68,14 +52,4 @@ describe("shouldFire", () => {
   });
   it("refuses while another drop is announced or live", () =>
     expect(fire({ openEvent: true })).toBe(false));
-});
-
-describe("the calendar", () => {
-  it("starts the ISO week on Monday 00:00 UTC", () => {
-    expect(isoWeekStart(at("2026-09-21T19:30:00Z")).toISOString()).toBe("2026-09-21T00:00:00.000Z");
-    expect(isoWeekStart(at("2026-09-20T23:59:59Z")).toISOString()).toBe("2026-09-14T00:00:00.000Z");
-  });
-  it("puts the decision 30 minutes before the slot", () => {
-    expect(decisionInstantFor(at("2026-09-21T20:00:00Z")).toISOString()).toBe("2026-09-21T19:30:00.000Z");
-  });
 });

@@ -26,25 +26,6 @@ export function chooseAirdrop(recentLocations: string[], rng: () => number): { l
   return { location, kind };
 }
 
-/**
- * The highest of the trailing samples — the bar a drop has to match (spec §3.1,
- * amended 2026-09-21; this replaced a linear-interpolated p90).
- *
- * ⚠️ Computed here rather than with Postgres `max` so the threshold the row records
- * and the threshold the rule applies are one statement, and so this can be tested
- * without a database.
- *
- * ⚠️ `Math.max()` of an empty list is -Infinity, which is why this is not written as
- * the one-liner. No history must return 0, so that `max(AIRDROP_MIN_POP, highWater)`
- * sits at the floor — the correct bar on day one and through the first five days.
- * -Infinity would leave the floor governing too, but it is also written into
- * `airdrop_events.threshold`, and a numeric column does not take it.
- */
-export function highWater(values: number[]): number {
-  if (values.length === 0) return 0;
-  return Math.max(...values);
-}
-
 export type FireInput = {
   /** Players online at the decision instant. */
   pop: number;
@@ -70,16 +51,4 @@ export function shouldFire(i: FireInput): boolean {
   if (i.weekCount >= i.weeklyCap) return false;
   if (i.lastFireAt && i.now.getTime() - i.lastFireAt.getTime() < AIRDROP_MIN_GAP_MS) return false;
   return i.pop >= Math.max(i.minPop, i.threshold);
-}
-
-/** Monday 00:00 UTC of `now`'s ISO week. */
-export function isoWeekStart(now: Date): Date {
-  const utc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const backToMonday = (new Date(utc).getUTCDay() + 6) % 7;
-  return new Date(utc - backToMonday * 24 * 60 * 60 * 1000);
-}
-
-/** The instant a slot's decision is taken: `AIRDROP_DECIDE_LEAD_MS` before it. */
-export function decisionInstantFor(slotStart: Date): Date {
-  return new Date(slotStart.getTime() - AIRDROP_DECIDE_LEAD_MS);
 }

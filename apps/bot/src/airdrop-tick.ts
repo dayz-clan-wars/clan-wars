@@ -1,6 +1,6 @@
 import { airdropEvents, kothEvents, servers, type Database } from "@factions/db";
 import {
-  AIRDROP_HISTORY_MS, bunkerRoomName, chooseAirdrop, decisionInstantFor, highWater, isoWeekStart,
+  AIRDROP_HISTORY_MS, bunkerRoomName, chooseAirdrop, highWater, isoWeekStart, kothDecisionInstantFor,
   nextRestartAt, shouldFire,
 } from "@factions/domain";
 import { and, eq, gte, inArray, isNotNull, isNull, ne, sql } from "drizzle-orm";
@@ -128,7 +128,7 @@ export async function airdropTick(
       if (pending.length > 0) continue;
 
       // 2. A new decision, at or after T-30min and not yet taken for this slot.
-      if (opts.now < decisionInstantFor(slot)) continue;
+      if (opts.now < kothDecisionInstantFor(slot)) continue;
       const [already] = await db.select({ slotAt: airdropEvents.slotAt }).from(airdropEvents)
         .where(and(eq(airdropEvents.serverId, s.id), eq(airdropEvents.slotAt, slot))).limit(1);
       if (already) continue;
@@ -166,7 +166,7 @@ export async function airdropTick(
 
       // The trailing history: every decision instant on the slot grid, five days back.
       // ⚠️ Strictly before this slot's own decision instant — see historyInstants.
-      const instants = historyInstants(decisionInstantFor(slot), AIRDROP_HISTORY_MS);
+      const instants = historyInstants(kothDecisionInstantFor(slot), AIRDROP_HISTORY_MS);
       const [pop] = await popsAt(db, s.id, [opts.now]);
       const threshold = highWater(await popsAt(db, s.id, instants));
 

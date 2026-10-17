@@ -155,6 +155,41 @@ export function voteClosesAt(slot: Date): Date {
   return new Date(slot.getTime() - KOTH_REMINDER_LEAD_MS);
 }
 
+/**
+ * The instant a slot's automatic decision is taken: the reminder instant.
+ *
+ * ⚠️ Defined as `voteClosesAt` on purpose. `koth-decide-tick.ts`'s `announce()` stamps
+ * `reminded_at` alongside `announced_at` on the assumption that the decision instant IS
+ * the reminder instant, so the two must be one statement, not two that can drift.
+ */
+export function kothDecisionInstantFor(slotStart: Date): Date {
+  return voteClosesAt(slotStart);
+}
+
+/** Monday 00:00 UTC of `now`'s ISO week. */
+export function isoWeekStart(now: Date): Date {
+  const utc = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+  const backToMonday = (new Date(utc).getUTCDay() + 6) % 7;
+  return new Date(utc - backToMonday * 24 * 60 * 60 * 1000);
+}
+
+/**
+ * The highest of the trailing samples — the bar an automatic session has to match.
+ *
+ * ⚠️ Computed here rather than with Postgres `max` so the threshold the row records
+ * and the threshold the rule applies are one statement, and so this can be tested
+ * without a database.
+ *
+ * ⚠️ `Math.max()` of an empty list is -Infinity, which is why this is not written as
+ * the one-liner. No history must return 0, so that `max(minPop, highWater)` sits at the
+ * floor — the correct bar on day one. -Infinity would leave the floor governing too, but
+ * it is also written into the row's `threshold`, and a numeric column does not take it.
+ */
+export function highWater(values: number[]): number {
+  if (values.length === 0) return 0;
+  return Math.max(...values);
+}
+
 /** The first slot whose vote would be open at least `KOTH_VOTE_MIN_OPEN_MS`. */
 export function voteTargetSlot(now: Date): Date {
   let slot = nextRestartAt(now);

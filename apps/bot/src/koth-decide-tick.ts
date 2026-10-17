@@ -1,6 +1,6 @@
 import { kothEvents, kothVotes, servers, type Database } from "@factions/db";
 import {
-  KOTH_HISTORY_MS, chooseKothTown, decisionInstantFor, highWater, isoWeekStart, kothTownName, nextRestartAt, shouldFireKoth,
+  KOTH_HISTORY_MS, chooseKothTown, highWater, isoWeekStart, kothDecisionInstantFor, kothTownName, nextRestartAt, shouldFireKoth,
 } from "@factions/domain";
 import { and, eq, gt, gte, inArray, isNull, lt, notInArray } from "drizzle-orm";
 import { scheduledText } from "./koth-text.js";
@@ -39,10 +39,9 @@ export async function kothDecideTick(
 
       // 2. A new decision.
       const slot = nextRestartAt(opts.now);
-      // ⚠️ `decisionInstantFor` uses AIRDROP_DECIDE_LEAD_MS, and `announce()` below
-      // stamps `reminded_at` on the assumption that IS KOTH_REMINDER_LEAD_MS — held
-      // equal by `packages/domain/test/koth-auto.test.ts`.
-      if (opts.now < decisionInstantFor(slot)) continue;
+      // ⚠️ `kothDecisionInstantFor` IS the reminder instant (it is `voteClosesAt`), and
+      // `announce()` below stamps `reminded_at` on that assumption.
+      if (opts.now < kothDecisionInstantFor(slot)) continue;
       // ⚠️ ANY row for this slot — cancelled or failed included — means the slot has
       // already been decided once and must not be decided again. `slotTakenBy` only
       // counts SLOT_HOLDING_STATES on purpose (so /kothvote and this tick's own vote
@@ -64,7 +63,7 @@ export async function kothDecideTick(
         )),
       ]);
       const pop = await onlineNow(db, s.id, opts.now);
-      const threshold = highWater(await popsAt(db, s.id, historyInstants(decisionInstantFor(slot), KOTH_HISTORY_MS)));
+      const threshold = highWater(await popsAt(db, s.id, historyInstants(kothDecisionInstantFor(slot), KOTH_HISTORY_MS)));
       if (!shouldFireKoth({
         slot, slotTaken: (await slotTakenBy(db, s.id, slot)) !== null, voteBlocks: votes.length > 0,
         openEvent: await kothOpen(db, s.id), weekCount: week.length, weeklyCap: opts.weeklyCap,

@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   kothWanted, inKothZone, kothStandings, kothWinner, restoredPresets, isRestartSlot,
+  highWater, isoWeekStart, kothDecisionInstantFor, voteClosesAt,
   KOTH_LOCATIONS, kothLocation, kothTownName, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M, WORLD_SIZE_M,
 } from "../src/index.js";
 
@@ -107,5 +108,36 @@ describe("catalogue", () => {
     expect(isRestartSlot(at("2026-10-03T20:00:00Z"))).toBe(true);
     expect(isRestartSlot(at("2026-10-03T21:00:00Z"))).toBe(false);
     expect(isRestartSlot(at("2026-10-03T20:00:01Z"))).toBe(false);
+  });
+});
+
+describe("highWater", () => {
+  it("is the peak, and is 0 on no history", () => {
+    // ⚠️ 0 on no history is load-bearing, not a convenience: it leaves
+    // `max(minPop, 0)` at the floor, which is the right bar on day one
+    // and through the first five days. Returning -Infinity (the naive Math.max
+    // of an empty list) would leave the floor governing too, but any later
+    // arithmetic on the recorded threshold would be poisoned by it.
+    expect(highWater([])).toBe(0);
+    expect(highWater([1, 1, 1, 1, 1, 1, 1, 1, 1, 10])).toBe(10);
+    expect(highWater([5])).toBe(5);
+    // ⚠️ One outlier sets the bar for the whole window. This is the accepted
+    // cost of the high-water rule (2026-09-21) — see the design's §3.1.
+    expect(highWater([2, 2, 11, 3, 2])).toBe(11);
+  });
+});
+
+
+describe("the calendar", () => {
+  it("starts the ISO week on Monday 00:00 UTC", () => {
+    expect(isoWeekStart(at("2026-09-21T19:30:00Z")).toISOString()).toBe("2026-09-21T00:00:00.000Z");
+    expect(isoWeekStart(at("2026-09-20T23:59:59Z")).toISOString()).toBe("2026-09-14T00:00:00.000Z");
+  });
+  it("puts the decision 30 minutes before the slot", () => {
+    expect(kothDecisionInstantFor(at("2026-10-17T12:00:00Z")).toISOString()).toBe("2026-10-17T11:30:00.000Z");
+  });
+  it("is the instant the vote closes", () => {
+    const slot = at("2026-10-17T12:00:00Z");
+    expect(kothDecisionInstantFor(slot).getTime()).toBe(voteClosesAt(slot).getTime());
   });
 });
