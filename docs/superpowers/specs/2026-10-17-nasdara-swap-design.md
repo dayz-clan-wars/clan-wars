@@ -282,3 +282,21 @@ Written as `docs/deploy/2026-10-xx-nasdara-swap.md`, in the style of
 ## Open questions
 
 None.
+
+## Amendments from planning (2026-10-17)
+
+- **Dormancy grace applies to active clans only.** Folding the cutover into the
+  clock for every clan would make a clan dormant at the cutover read
+  `lastRaiseAt > dormant_since` and revive (`dormancy.ts`). The clamp is
+  `CASE WHEN status = 'active' THEN servers.map_changed_at END`.
+- **Award positions are cleared without touching `placed_at`.** `awardState()`
+  checks lapse before live, so nulling `placed_at` on a grant past `place_by`
+  ends a live award. Null `pos_x/y/z` only.
+- **Reserved clans lapse.** A clan still `reserved` at the cutover loses its base
+  with the rest and cannot activate (activation joins `declarations`), so it
+  lapses within 24 hours and re-founds on Nasdara. The runbook lists them first.
+- **The Hub zone rule stays as history.** `atHub` and `HUB_COMBAT_FROM` remain so
+  `rebuild:kills` reproduces past scoring; Nasdara has no sky platform at the
+  Hub's position, so no new kill matches it. The Hub ban tick goes.
+- **Wanderer:** retired with a `retired` flag; holders keep it, nobody can earn
+  it, and it is hidden from those who never did.
