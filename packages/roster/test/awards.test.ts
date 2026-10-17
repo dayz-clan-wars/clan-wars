@@ -112,6 +112,23 @@ describe("the award page's reads and writes", () => {
     expect(await cancelAwardPlacementDb(db, { discordId: "1", grantId, now })).toBe(true);
   });
 
+  it("⚠️ a live award whose spot the map change cleared stays live and can be placed again", async () => {
+    // Switch day nulls pos_x/y/z (the old map's spot means nothing on the new
+    // one) and leaves placed_at alone: awardState checks lapse before live, so
+    // a null placed_at past place_by would end a prize the winner still holds.
+    const past = new Date(now.getTime() - 86_400_000);
+    await db.update(awardGrants).set({
+      placedAt: past, liveFrom: past, expiresAt: new Date(now.getTime() + 3 * 86_400_000),
+      placeBy: past, posX: null, posY: null, posZ: null,
+    }).where(eq(awardGrants.id, grantId));
+    expect((await awardForDb(db, "1", grantId, now))!.state).toBe("live");
+
+    await link(); await pickAll();
+    expect(await place()).toEqual({ ok: true });
+    const [c] = await db.select().from(boosterKitChallenges);
+    expect(c).toMatchObject({ awardGrantId: grantId, closedAt: null });
+  });
+
   it("shows the spot as numbers only when all three coordinates are set", async () => {
     await db.update(awardGrants).set({ posX: "100.00", posY: "5.00", posZ: "200.00", placedAt: now }).where(eq(awardGrants.id, grantId));
     const v = await awardForDb(db, "1", grantId, now);

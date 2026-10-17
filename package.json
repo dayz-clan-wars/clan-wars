@@ -22,6 +22,7 @@
     "wipe": "tsx scripts/wipe.ts",
     "launch": "tsx scripts/launch.ts",
     "clear-bases": "tsx scripts/clear-bases.ts",
+    "map-cutover": "tsx scripts/map-cutover.ts",
     "raid:skip": "tsx scripts/raid-skip.ts",
     "flag:change": "tsx scripts/flag-change.ts",
     "release:sync": "tsx scripts/release-sync.ts",

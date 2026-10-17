@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { declarations, factions, seasons } from "@factions/db";
+import { declarations, factions, seasons, servers } from "@factions/db";
 import { and, eq, inArray, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import type { FactionClock } from "./dormancy.js";
 import type { DormantReason } from "@factions/domain";
@@ -185,7 +185,17 @@ export function clockQuery(db: Database) {
     // clan gets the normal window to raise its own flag there. `declared_at`
     // is a plain column of the row already joined, so it costs nothing next
     // to LAST_RAISE's index plan.
-    lastRaiseAt: sql<Date | null>`greatest(coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt}), ${declarations.declaredAt}, ${seasons.startedAt})`,
+    //
+    // ⚠️ And GREATEST against the server's `map_changed_at`, for ACTIVE clans
+    // only (Nasdara swap, spec §H): switch day clears every base, so
+    // LAST_RAISE has no pole to look at and every established clan would
+    // read as weeks stale — dormant on the next tick. The cutover gives them
+    // the normal window to raise on the new map. The CASE is load-bearing: a
+    // clan already dormant at the cutover would otherwise read a
+    // `lastRaiseAt` newer than its `dormant_since` and revive (dormancy.ts)
+    // with nobody raising anything. Its disband countdown runs from
+    // `dormant_since` alone and is untouched. A LEFT JOIN, like `seasons`.
+    lastRaiseAt: sql<Date | null>`greatest(coalesce(${LAST_RAISE}, ${factions.activatedAt}, ${factions.createdAt}), ${declarations.declaredAt}, ${seasons.startedAt}, case when ${factions.status} = 'active' then ${servers.mapChangedAt} end)`,
     serverLastEventAt: SERVER_LAST_EVENT,
     flagDownSince: factions.flagDownSince,
     disbandWarnedAt: factions.disbandWarnedAt,
@@ -197,6 +207,9 @@ export function clockQuery(db: Database) {
     // season 1) still has a clock; seasons.started_at is simply null and
     // greatest() falls through to the coalesce.
     .leftJoin(seasons, and(eq(seasons.serverId, factions.serverId), isNull(seasons.endedAt)))
+    // LEFT for symmetry with seasons; every faction has a server, and a null
+    // map_changed_at (no cutover yet) falls through greatest() unchanged.
+    .leftJoin(servers, eq(servers.id, factions.serverId))
     .where(inArray(factions.status, EXAMINED));
 }
 

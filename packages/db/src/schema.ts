@@ -60,6 +60,14 @@ export const servers = pgTable("servers", {
    */
   hostname: text("hostname"),
   hostnameSeenAt: timestamp("hostname_seen_at", { withTimezone: true }),
+  /**
+   * When this server last changed map (`pnpm map-cutover`). The dormancy clock
+   * floors an ACTIVE clan's last raise at it: switch day clears every base,
+   * which erases each clan's raise history from the clock, and without the
+   * floor every established clan would go dormant on the next tick. Null means
+   * no grace.
+   */
+  mapChangedAt: timestamp("map_changed_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (t) => ({
   uniqNameMap: uniqueIndex("servers_name_map_uniq").on(t.name, t.map),

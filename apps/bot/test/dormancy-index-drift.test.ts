@@ -98,7 +98,7 @@ describe("the dormancy clock's raise lookup is index-backed", () => {
              jsonb_build_object('dayzId', format('p%s_%s', g % ${CLANS}, g % ${MEMBERS_PER_CLAN}))
       from generate_series(1, ${OTHER_EVENTS}) g
     `);
-    await db.execute(sql`analyze events, factions, declarations, faction_members, seasons`);
+    await db.execute(sql`analyze events, factions, declarations, faction_members, seasons, servers`);
   }, 60_000);
 
   it("resolves both payload keys through the index, not a filter", async () => {
