@@ -34,7 +34,8 @@ describe("guide → Discord", () => {
     const plain = names.map(canonicalChannelName);
     expect(plain[0]).toBe("00-start-here");
     expect(plain).toContain("01-what-this-is");
-    expect(plain).toContain("13-rules-on-one-page");
+    expect(plain).toContain("12-rules-on-one-page");
+    expect(plain).not.toContain("11-getting-around");
     expect(plain).toContain("a-numbers");
     expect(new Set(names).size).toBe(names.length);
     expect(new Set(plain).size).toBe(plain.length);
@@ -46,8 +47,8 @@ describe("guide → Discord", () => {
   it("turns a chapter link into that chapter's channel, or the site when the channel is unknown", () => {
     const c = CHAPTERS.find((x) => x.slug === "bases")!;
     const fragment = readFileSync(join(CONTENT_DIR, c.file!), "utf8");
-    expect(chapterMessages(c, fragment, ids).join("\n")).toContain(`travel point <#${ids.get("getting-around")}>`);
-    expect(chapterMessages(c, fragment, new Map()).join("\n")).toContain("travel point (https://dayzclanwars.com/guide/getting-around)");
+    expect(chapterMessages(c, fragment, ids).join("\n")).toContain(`See Defending <#${ids.get("defending")}>`);
+    expect(chapterMessages(c, fragment, new Map()).join("\n")).toContain("See Defending (https://dayzclanwars.com/guide/defending)");
   });
 
   it("renders the boxes as quotes, a wide table as bullet rows and a short one as a code block", () => {
@@ -57,8 +58,6 @@ describe("guide → Discord", () => {
     expect(map).toContain("*Layer — Who sees it — What is on it*");
     expect(map).toContain("- **You** — everyone linked — your last known position");
     expect(map).toContain("> 🛰️ **What the server can see**");
-    const around = chapterMessages(CHAPTERS.find((x) => x.slug === "getting-around")!, readFileSync(join(CONTENT_DIR, "11-getting-around.html"), "utf8"), ids).join("\n");
-    expect(around).toMatch(/```\n#\s+Town\s+X \/ Z\n— Left arm —\n1\s+Balota\s+4491 \/ 2312/u);
   });
 
   it("escapes what Discord would style, and never lets an @ become a mention", () => {

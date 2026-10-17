@@ -72,11 +72,6 @@ export const HUB_ZONE_MIN_ALTITUDE_M = 900;
  * rebuild, silently.
  */
 export const HUB_COMBAT_FROM = new Date("2026-09-23T02:17:03Z");
-/** Every hit, kill or trap at the Hub. Measured from when the bot PROCESSES it — log delay must not eat the hour. */
-export const HUB_BAN_MS = 1 * HOUR;
-/** Self-defence: A may hit B back this long after B hit A. Per pair. */
-export const HUB_RETALIATION_WINDOW_MS = 2 * MIN;
-// The Hub ban tick is gone; these two stay only until the guide chapters that cite them are rewritten.
 
 // Raiding
 export const RAID_DEDUP_MS = 24 * HOUR;
@@ -161,10 +156,6 @@ export const WORLD_MAP = "nasdara";
  */
 export const VAULT_NAME_MAX = 40;
 export const VAULT_NOTE_MAX = 140;
-
-// Getting around
-export const TRAVEL_POINTS = 518;
-export const HUB_DESTINATIONS = 31;
 
 // Fair play
 export const COMBAT_LOG_MS = 10 * MIN;

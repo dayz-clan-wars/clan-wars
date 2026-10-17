@@ -34,10 +34,8 @@ const SCALARS: Record<string, number> = {
   RENAME_COOLDOWN_MS: R.RENAME_COOLDOWN_MS, FLAG_CHANGE_WINDOW_MS: R.FLAG_CHANGE_WINDOW_MS, OLD_FLAG_HOLD_MS: R.OLD_FLAG_HOLD_MS, REBIND_CONFIRM_MS: R.REBIND_CONFIRM_MS, REBIND_COOLDOWN_MS: R.REBIND_COOLDOWN_MS,
   GUEST_PASS_MS: R.GUEST_PASS_MS,
   POSITION_FIX_MS: R.POSITION_FIX_MS, INTRUDER_ALERT_COOLDOWN_MS: R.INTRUDER_ALERT_COOLDOWN_MS, INTRUDER_PIN_TTL_MS: R.INTRUDER_PIN_TTL_MS, PIN_TTL_MS: R.PIN_TTL_MS,
-  TRAVEL_POINTS: R.TRAVEL_POINTS, HUB_DESTINATIONS: R.HUB_DESTINATIONS,
   COMBAT_LOG_MS: R.COMBAT_LOG_MS,
   VIOLATION_REPORT_WINDOW_MS: R.VIOLATION_REPORT_WINDOW_MS,
-  HUB_BAN_MS: R.HUB_BAN_MS, HUB_RETALIATION_WINDOW_MS: R.HUB_RETALIATION_WINDOW_MS, HUB_ZONE_RADIUS_M: R.HUB_ZONE_RADIUS_M,
   BOUNTY_DEFAULT_MS: R.BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS: R.BOUNTY_MAX_MS, BOUNTY_DEADLINE_MS: R.BOUNTY_DEADLINE_MS,
 };
 
@@ -123,7 +121,6 @@ const COMPOSITE: Record<string, string> = {
   VAULT_CODE: `${R.VAULT_CODE_DIGITS.min}–${R.VAULT_CODE_DIGITS.max} digits`,
   GUEST_PASS: `${appendixValueOf(R.GUEST_PASS_MS)}, voice only`,
   POSITION_FIX: `${appendixValueOf(R.POSITION_FIX_MS)} (set by the server)`,
-  HUB_DESTINATIONS_TOWNS: `${R.HUB_DESTINATIONS} towns`,
   COMBAT_LOG: `${appendixValueOf(R.COMBAT_LOG_MS)} after contact`,
   WATCHTOWER: `${R.WATCHTOWER_MAX_HEIGHT.grounded} (${R.WATCHTOWER_MAX_HEIGHT.onStructure} on a structure)`,
 };
@@ -133,7 +130,7 @@ function appendixValueOf(ms: number): string {
   return unit === "day" ? `${n} days` : unit === "hour" ? `${n} h` : `${n} min`;
 }
 
-export const GUIDE_GROUPS = ["Getting in", "Founding", "Bases", "Raiding", "Defending", "The scoreboard", "Running a clan", "Discord", "The map", "Getting around", "Fair play"] as const;
+export const GUIDE_GROUPS = ["Getting in", "Founding", "Bases", "Raiding", "Defending", "The scoreboard", "Running a clan", "Discord", "The map", "Fair play"] as const;
 
 const row = (group: (typeof GUIDE_GROUPS)[number], label: string, key: string): GuideNumber => ({ key, group, label, value: guideNumber(key) });
 
@@ -188,14 +185,9 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("The map", "Intruder: alert cooldown per player", "INTRUDER_ALERT_COOLDOWN_MS"),
   row("The map", "Intruder: pin drops off after", "INTRUDER_PIN_TTL_MS"),
   row("The map", "Pin lifetime", "PIN_TTL_MS"),
-  row("Getting around", "Fast travel points (outhouses, wells)", "TRAVEL_POINTS"),
-  row("Getting around", "Hub destinations", "HUB_DESTINATIONS_TOWNS"),
   row("Fair play", "Combat log rule", "COMBAT_LOG"),
   row("Fair play", "Watchtower height", "WATCHTOWER"),
   row("Fair play", "Window to press charges on a closed zone incident", "VIOLATION_REPORT_WINDOW_MS"),
-  row("Fair play", "Hub: combat ban", "HUB_BAN_MS"),
-  row("Fair play", "Hub: self-defence window", "HUB_RETALIATION_WINDOW_MS"),
-  row("Fair play", "Hub: no-combat radius", "HUB_ZONE_RADIUS_M"),
   row("Fair play", "Bounty: online time to serve (default)", "BOUNTY_DEFAULT_MS"),
   row("Fair play", "Bounty: longest an admin can set", "BOUNTY_MAX_MS"),
   row("Fair play", "Bounty: closes regardless after", "BOUNTY_DEADLINE_MS"),

@@ -1,4 +1,4 @@
-import { ACHIEVEMENTS, ACHIEVEMENT_GROUPS, guideNumber, type Format } from "@factions/domain";
+import { ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEMENTS, guideNumber, type Format } from "@factions/domain";
 import { GROUP_LABELS } from "@/lib/achievements-copy";
 
 /**
@@ -28,18 +28,19 @@ function escape(s: string): string {
 }
 
 /**
- * The fifty achievements, rendered from `@factions/domain`'s `ACHIEVEMENTS` —
- * never typed here, so a threshold or a new achievement in rules.ts shows up
- * in the guide without an edit. One table, grouped exactly the way the
+ * The forty-nine earnable achievements, rendered from `@factions/domain`'s
+ * `EARNABLE_ACHIEVEMENTS` — a retired one (Wanderer) is not listed, because the
+ * guide tells you what you can earn, not what others once did. Never typed
+ * here, so a threshold or a new achievement shows up in the guide without an edit. One table, grouped exactly the way the
  * appendix groups `GUIDE_NUMBERS` (a `tr.group` divider row, plain `<table>`
  * inside `.tablewrap` — the same CSS the "Every number" table rides on, and
  * the same shape guide-discord.ts's table parser already understands).
  */
 export function achievementsTable(): string {
-  const row = (a: (typeof ACHIEVEMENTS)[number]) => `<tr><td>${escape(a.name)}</td><td>${escape(a.description)}</td></tr>`;
+  const row = (a: (typeof EARNABLE_ACHIEVEMENTS)[number]) => `<tr><td>${escape(a.name)}</td><td>${escape(a.description)}</td></tr>`;
   const groupRows = (g: (typeof ACHIEVEMENT_GROUPS)[number]) =>
     `<tr class="group"><td colspan="2">${escape(GROUP_LABELS[g])}</td></tr>` +
-    ACHIEVEMENTS.filter((a) => a.group === g).map(row).join("");
+    EARNABLE_ACHIEVEMENTS.filter((a) => a.group === g).map(row).join("");
   return `<div class="tablewrap"><table><tbody>${ACHIEVEMENT_GROUPS.map(groupRows).join("")}</tbody></table></div>`;
 }
 
