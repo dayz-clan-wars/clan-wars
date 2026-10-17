@@ -300,3 +300,9 @@ None.
   Hub's position, so no new kill matches it. The Hub ban tick goes.
 - **Wanderer:** retired with a `retired` flag; holders keep it, nobody can earn
   it, and it is hidden from those who never did.
+- **The bot ships on switch day, after Chernarus stops** (amends the checklist's
+  "Before switch day" step 3, found by the final review): a Nasdara bot on a live
+  Chernarus server would pick Nasdara KotH towns, drop the Hub ban early and announce
+  the move before it happens. The runbook (`docs/deploy/2026-10-18-nasdara-swap.md`)
+  carries the order, plus a wait for the raise and pole consumers to catch up before
+  the cutover instant is taken.
