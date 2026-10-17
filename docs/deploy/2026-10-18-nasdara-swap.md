@@ -4,11 +4,20 @@ Spec: `docs/superpowers/specs/2026-10-17-nasdara-swap-design.md`.
 
 Switch day is planned for 2026-10-18.
 
-⚠️ **Cutover race.** A Chernarus raise made after the cutover instant but before
-`clear-bases` runs is not cleared (`--before` excludes later declarations), and that
-base would carry onto Nasdara. So the Chernarus game server is STOPPED before the
-instant is taken, the instant is taken at the moment of the clear step, and steps 3
-to 6 run back to back. The Nitrado mission switch and start come last.
+⚠️ **Cutover race.** A Chernarus raise declared after the cutover instant is not
+cleared (`--before` excludes later declarations), and that base would carry onto
+Nasdara. Stopping the server is not enough on its own: the worker fetches the ADM
+on its own schedule and the bot's consumers fold it in after that, so a raise made
+in the last minute of the session can still become a declaration minutes after the
+stop. So the Chernarus game server is STOPPED, the bot release ships, ingestion and
+the raise consumer are proved caught up, and only THEN is the instant taken. Steps 3
+to 6 run back to back; the Nitrado mission switch and start come last, behind a
+zero-declarations check.
+
+⚠️ **The bot ships on switch day, not before.** This branch's bot is the Nasdara bot:
+on a live Chernarus server it would pick Nasdara towns for KotH, drop the Hub ban, and
+`release:sync` would announce the move in Discord before it happens. So it deploys in
+step 3, after the Chernarus server is stopped.
 
 Every `pnpm` command runs on the host, in `/opt/clan-wars`, with `.env` loaded
 (`. ./.env`, not `. .env`):
@@ -38,12 +47,10 @@ in the shell (from `/opt/clan-wars`); the blocks below use it as `psqlcw <<'SQL'
        sudo ./deploy/mirror-tiles.sh -p 4
        ls -l /var/www/tiles/nasdara/topographic/0/0/0.webp
 
-3. **Ship this branch's release** with the usual flow. Migration 0068
-   (`servers.map_changed_at`, nullable, additive) applies on deploy via
-   `deploy-release.sh`. Nothing reads it until step 5.
-4. **Tidy `.env`.** Delete `AIRDROP_TICK`, `AIRDROP_WEEKLY_CAP`, `AIRDROP_MIN_POP` and
-   `HUB_BAN_TICK` from `/opt/clan-wars/.env`. The bot no longer reads them; leaving
-   them is harmless but misleading.
+3. **Prepare this branch's release, but do not tag it.** Merge the
+   `release/x.y.z` changelog PR as usual; the tag is pushed in step 3, after the
+   Chernarus server is stopped (see the warning at the top). The deploy timer ships
+   whatever tag it sees, so a tag pushed early ships the Nasdara bot onto Chernarus.
 
 ## 2. List what the wipe will cost
 
@@ -55,16 +62,50 @@ A reserved clan's base is cleared with the rest, so it cannot activate (activati
 joins `declarations`) and lapses within 24 hours. Accepted: it re-founds on Nasdara.
 Tell those clans first.
 
-## 3. Stop the server and take the cutover instant
+## 3. Stop the server, ship the bot, wait for catch-up, take the cutover instant
 
-In Nitrado, STOP the Chernarus game server (19831378) so nobody can raise a flag.
-Then, on the host, take the instant once and keep it in the shell for steps 4 to 6:
+1. **Stop.** In Nitrado, STOP the Chernarus game server (19831378) so nobody can
+   raise a flag. Confirm the Nitrado panel shows the server **stopped** (not
+   "stopping" or "restarting") before going on.
+2. **Tidy `.env`.** Delete `AIRDROP_TICK`, `AIRDROP_WEEKLY_CAP`, `AIRDROP_MIN_POP` and
+   `HUB_BAN_TICK` from `/opt/clan-wars/.env`. The new bot no longer reads them;
+   leaving them is harmless but misleading.
+3. **Ship the bot.** Push the release tag. Within two minutes the deploy timer runs
+   `deploy-release.sh`, which stops the bot, web and worker, dumps `factions_live`,
+   applies migration 0068 (`servers.map_changed_at`, nullable, additive) and starts
+   everything again. Watch it through:
 
-    CUT=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo "$CUT"
+       journalctl -u clan-wars-deploy -f
+       sudo -u acab journalctl -u clan-wars-bot -n 1   # "bot ready as"
 
-Write it down. Use this SAME `$CUT` for `clear-bases` and `map-cutover`; ⚠️ a later
-instant for `map-cutover` silently lengthens every clan's grace. Do not leave a gap
-between here and step 6: run 4, 5 and 6 back to back.
+   `release:sync` queues the changelog now, so the release post lands as the move
+   happens, not before.
+4. **Wait for catch-up.** The worker must have fetched the stopped session's final
+   ADM, and the raise and pole consumers must have folded every event of it. Run this
+   twice, at least two minutes apart (the worker sweeps every 60 s):
+
+       psqlcw <<'SQL'
+       select (select max(id) from events where server_id = 1) as last_event_id,
+              (select max(occurred_at) from events where server_id = 1) as last_event_at,
+              (select lines_ingested from adm_files where server_id = 1 order by id desc limit 1) as newest_adm_lines,
+              c.consumer_name, c.last_event_id as cursor
+       from consumer_cursors c
+       where c.consumer_name in ('raise-consumer', 'pole-projector-bot');
+       SQL
+
+   Caught up means all of: `last_event_id` and `newest_adm_lines` did not change
+   between the two runs; `last_event_at` is about when the server stopped; and BOTH
+   cursors are at or past `last_event_id`. ⚠️ The pole cursor matters as much as the
+   raise cursor: `pole-tick` stamps each pole with `servers.map` as it reads it, so a
+   Chernarus raise folded after step 5 is filed as a Nasdara pole.
+5. **Take the instant.** Only now, take it once and keep it in the shell for steps 4
+   to 6:
+
+       CUT=$(date -u +%Y-%m-%dT%H:%M:%SZ); echo "$CUT"
+
+   Write it down. Use this SAME `$CUT` for `clear-bases` and `map-cutover`; ⚠️ a later
+   instant for `map-cutover` silently lengthens every clan's grace. Do not leave a gap
+   between here and step 6: run 4, 5 and 6 back to back.
 
 ## 4. Close open events and clear placements
 
@@ -82,7 +123,15 @@ A `live` KotH row is left alone: the restart tick's restore arm closes it.
 
 Review the list: it should be every base on the server. Then the same command without
 `--dry-run`. It releases every declaration and cascades sightings, zone placements and
-incidents; rosters are untouched.
+incidents; rosters are untouched. Then:
+
+    psqlcw <<'SQL'
+    select count(*) from declarations where server_id = 1;  -- 0
+    SQL
+
+⚠️ Anything but 0 means a declaration landed after `$CUT`: catch-up was not complete.
+Do NOT switch the mission. Go back to step 3.4, wait until it passes, take a NEW `$CUT`,
+re-run `clear-bases` with it, and use that new `$CUT` for `map-cutover` too.
 
     psqlcw <<'SQL'
     update booster_kits set pos_x = null, pos_y = null, pos_z = null;
@@ -106,6 +155,9 @@ The grace applies to active clans only. Each gets a week from the cutover to rai
 flag again before dormancy counts.
 
 ## 6. Operator: switch the mission and start
+
+First, the gate: `select count(*) from declarations where server_id = 1;` (via
+`psqlcw`) must still be 0. If not, back to step 3.4 as in step 4.
 
 Only now, in Nitrado, set the mission to `dayzOffline.nasdara` on 19831378 and START
 the server.
@@ -133,7 +185,8 @@ Read the dry run first: it should name the old chapter channels and nothing hand
   errors. The restart tick ran clean and found `koth/default/`.
 - The site map shows Nasdara tiles and place names, with no travel layer; the KotH
   town list shows Nasdara towns.
-- No clan went dormant at the first ticks:
+- No clan went dormant at the first ticks (`$CUT`, or paste the written-down instant
+  if this is a new shell):
 
       psqlcw <<SQL
       select tag, status, dormant_since from factions
