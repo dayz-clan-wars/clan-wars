@@ -119,6 +119,20 @@ describe("mapState / dropPin / deletePin", () => {
     expect(await db.select().from(clanPins)).toEqual([]);
   });
 
+  it("⚠️ after a map change, a fix from before map_changed_at is not drawn; one after it is", async () => {
+    // Fixes are kept up to 30 days, so on switch day every player's last
+    // Chernarus fix would draw on Nasdara until they logged in again. Ann's
+    // newest fix is 60 s old and Ben's is a day old: a cutover 30 min ago hides
+    // Ben entirely and leaves Ann at her post-cutover fix.
+    await db.update(servers).set({ mapChangedAt: ago(30 * 60_000) }).where(eq(servers.id, serverId));
+    const s = await mapStateDb(db, "1", now) as MapState;
+    expect(s.you.fix).toEqual({ x: 5200, z: 5200, at: ago(60_000) });
+    expect(s.clanmates).toEqual([]);
+    // A cutover after every fix leaves "you" with no fix at all — not the old-map one.
+    await db.update(servers).set({ mapChangedAt: ago(1000) }).where(eq(servers.id, serverId));
+    expect((await mapStateDb(db, "1", now) as MapState).you.fix).toBeNull();
+  });
+
   describe("bounties layer", () => {
     const T = "T".repeat(40);
     const U = "U".repeat(40);
@@ -198,6 +212,18 @@ describe("mapState / dropPin / deletePin", () => {
         const s = await mapStateDb(db, "5", now) as MapState;
         expect(s.bounties, `status=${status}`).toEqual([]);
       }
+    });
+
+    it("⚠️ omits a target whose only fix predates the server's map change", async () => {
+      await db.insert(players).values({ dayzId: T, gamertag: "Target", firstSeenAt: now, lastSeenAt: now });
+      const [file] = await db.insert(admFiles).values({ serverId, filename: "bounty-cutover.ADM", bootAt: now, linesIngested: 0, complete: true }).returning();
+      await fix(file!.id, T, 500, 600, ago(3600_000));   // on the old map
+      await connect(file!.id, T, ago(120_000));
+      await db.insert(bounties).values(openBounty(T));
+      await db.update(servers).set({ mapChangedAt: ago(30 * 60_000) }).where(eq(servers.id, serverId));
+
+      const s = await mapStateDb(db, "5", now) as MapState;
+      expect(s.bounties).toEqual([]);
     });
 
     it("omits a target with no fix", async () => {

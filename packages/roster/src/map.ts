@@ -1,5 +1,5 @@
 import type { Database } from "@factions/db";
-import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players } from "@factions/db";
+import { bounties, clanPins, declarations, factionMembers, factions, identityLinks, intruderSightings, playerPositions, playerSessions, players, servers } from "@factions/db";
 import { publicPoles } from "@factions/declarations";
 import {
   HOLDING_STATUSES, INTRUDER_PIN_TTL_MS, PIN_ICONS, PIN_NOTE_MAX, PIN_TTL_MS, WATCH_ZONE_RADIUS_M, WORLD_SIZE_M, type PinIcon,
@@ -51,12 +51,26 @@ export type DropPinOutcome = { ok: true; id: number } | { ok: false; reason: "no
 
 const n = (v: string | number) => Number(v);
 
-/** Newest fix per player among `dayzIds`, one query (DISTINCT ON over the (server, player, occurred_at desc) index). */
+/**
+ * Newest fix per player among `dayzIds`, one query (DISTINCT ON over the (server, player, occurred_at desc) index).
+ *
+ * ⚠️ Floored at the server's `map_changed_at` (null = no floor). Fixes are
+ * kept for `POSITION_RETENTION_MS` (30 days), so after a map change (the
+ * 2026-10 Nasdara swap) every player's last fix from the OLD map would draw on
+ * the new one, at coordinates that mean nothing there, until they logged in
+ * again. One helper serves `you`, clanmates and the bounty layer, so all three
+ * get the floor; it is a WHERE predicate, like every other rule in this file.
+ */
 async function lastFixes(db: Database, serverId: number, dayzIds: string[]): Promise<Map<string, MapFix>> {
   if (dayzIds.length === 0) return new Map();
   const rows = await db.selectDistinctOn([playerPositions.dayzId], { dayzId: playerPositions.dayzId, x: playerPositions.x, z: playerPositions.z, at: playerPositions.occurredAt })
     .from(playerPositions)
-    .where(and(eq(playerPositions.serverId, serverId), inArray(playerPositions.dayzId, dayzIds)))
+    .innerJoin(servers, eq(servers.id, playerPositions.serverId))
+    .where(and(
+      eq(playerPositions.serverId, serverId),
+      inArray(playerPositions.dayzId, dayzIds),
+      sql`(${servers.mapChangedAt} is null or ${playerPositions.occurredAt} >= ${servers.mapChangedAt})`,
+    ))
     .orderBy(asc(playerPositions.dayzId), desc(playerPositions.occurredAt));
   return new Map(rows.map((r) => [r.dayzId, { x: n(r.x), z: n(r.z), at: r.at }]));
 }
