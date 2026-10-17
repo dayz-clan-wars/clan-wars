@@ -21,7 +21,7 @@ describe("kothVoteTick", () => {
     serverId = s!.id;
     await db.insert(identityLinks).values({ discordId: "d0", dayzId: "z0", gamertag: "Mina", verifiedAt: CLOSE });
     const [v] = await db.insert(kothVotes).values({
-      serverId, slotAt: SLOT, location: "berezino", startedByDiscordId: "d0", openedAt: at("2026-10-03T15:00:00Z"),
+      serverId, slotAt: SLOT, location: "dashtabad", startedByDiscordId: "d0", openedAt: at("2026-10-03T15:00:00Z"),
       closesAt: CLOSE, electorateSize: 6, turnoutFloor: 5, state: "open", channelId: "c1", messageId: "m1", tallyText: "old",
     }).returning();
     voteId = v!.id;
@@ -59,7 +59,7 @@ describe("kothVoteTick", () => {
     const v = await vote();
     expect(v.state).toBe("passed");
     const [ev] = await db.select().from(kothEvents);
-    expect(ev).toMatchObject({ id: v.kothEventId, origin: "vote", scheduledByDiscordId: "d0", slotAt: SLOT, location: "berezino", awardKey: null, state: "scheduled" });
+    expect(ev).toMatchObject({ id: v.kothEventId, origin: "vote", scheduledByDiscordId: "d0", slotAt: SLOT, location: "dashtabad", awardKey: null, state: "scheduled" });
     expect(ev!.announcedAt).toEqual(CLOSE);
     expect(ev!.remindedAt).toEqual(CLOSE);
     expect(announce.mock.calls[0]![0]).toContain("The vote passed (Yes 4 · No 1)");

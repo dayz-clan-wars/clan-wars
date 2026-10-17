@@ -82,7 +82,7 @@ async function close(db: Database, open: Vote, opts: { now: Date; enabled: boole
     if (await kothOpen(tx, v.serverId)) { await done("void", { reason: "another King of the Hill was scheduled first" }); return; }
     if (!kothGapOk(v.slotAt, await lastKothSlot(tx, v.serverId, v.slotAt))) { await done("void", { reason: "another King of the Hill ran too recently" }); return; }
     const loc = kothLocation(v.location);
-    // ⚠️ A vote opened before the move to Chernarus names a Livonia town; it can no longer open.
+    // ⚠️ A vote opened before the move to Nasdara names a Chernarus or Livonia town; it can no longer open.
     if (!loc) { await done("void", { reason: "that town is not on this map any more" }); return; }
     const [ev] = await tx.insert(kothEvents).values({
       serverId: v.serverId, slotAt: v.slotAt, location: v.location, centreX: String(loc.centreX), centreZ: String(loc.centreZ),

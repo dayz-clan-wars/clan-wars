@@ -8,21 +8,21 @@ import {
 import { nextRestartAt } from "./restarts";
 import { distance2d } from "./spacing";
 
-/** `spawnGroup` is the town's `<fresh>` group in the chernarus repo's cfgplayerspawnpoints.xml. */
+/** `spawnGroup` is the town's `<fresh>` group in the nasdara repo's cfgplayerspawnpoints.xml. */
 export type KothLocation = { name: string; slug: string; spawnGroup: string; centreX: number; centreZ: number };
 
 /**
- * The 31 Chernarus towns, generated from the chernarus repo's spawn groups;
+ * The 66 Nasdara towns, generated from the nasdara repo's spawn groups;
  * koth-drift.test.ts holds them together. The only towns a session may open at.
  */
 export const KOTH_LOCATIONS: readonly KothLocation[] = locations as KothLocation[];
 /**
- * Livonia's 31, retired 2026-10-07. Names only: past sessions store these slugs
+ * Livonia's 31 (retired 2026-10-07) and Chernarus's 31 (retired 2026-10-17). Names only: past sessions store these slugs
  * and must keep printing a town, never be offered again. Their scoring centres
  * are frozen in koth_events.centre_x/z, so nothing else needs them.
  */
 const RETIRED_LOCATIONS: readonly { name: string; slug: string }[] = retired;
-/** Vendored from livonia/custom/koth-*.json, carried by chernarus/custom since 2026-10-07. */
+/** Vendored from nasdara/custom/koth-*.json (the same 44 presets Livonia and Chernarus carried). */
 export const KOTH_PRESET_FILES: readonly string[] = presets as string[];
 
 /** ⚠️ Playable towns only: a retired slug is null, so nothing can schedule or open one. */

@@ -184,5 +184,191 @@
     "slug": "zapadlisko",
     "centreX": 8053,
     "centreZ": 8710
+  },
+  {
+    "name": "Balota",
+    "slug": "balota",
+    "centreX": 4465,
+    "centreZ": 2448
+  },
+  {
+    "name": "Berezino",
+    "slug": "berezino",
+    "centreX": 12866,
+    "centreZ": 10119
+  },
+  {
+    "name": "Chernogorsk",
+    "slug": "chernogorsk",
+    "centreX": 6514,
+    "centreZ": 2568
+  },
+  {
+    "name": "Dolina",
+    "slug": "dolina",
+    "centreX": 11326,
+    "centreZ": 6591
+  },
+  {
+    "name": "Elektrozavodsk",
+    "slug": "elektrozavodsk",
+    "centreX": 10467,
+    "centreZ": 2208
+  },
+  {
+    "name": "Gorka",
+    "slug": "gorka",
+    "centreX": 9531,
+    "centreZ": 8836
+  },
+  {
+    "name": "Grishino",
+    "slug": "grishino",
+    "centreX": 5973,
+    "centreZ": 10306
+  },
+  {
+    "name": "Kamenka",
+    "slug": "kamenka",
+    "centreX": 1837,
+    "centreZ": 2235
+  },
+  {
+    "name": "Kamensk",
+    "slug": "kamensk",
+    "centreX": 6660,
+    "centreZ": 14418
+  },
+  {
+    "name": "Kamyshovo",
+    "slug": "kamyshovo",
+    "centreX": 12038,
+    "centreZ": 3524
+  },
+  {
+    "name": "Krasnostav",
+    "slug": "krasnostav",
+    "centreX": 11183,
+    "centreZ": 12273
+  },
+  {
+    "name": "Lopatino",
+    "slug": "lopatino",
+    "centreX": 2747,
+    "centreZ": 9916
+  },
+  {
+    "name": "Mogilevka",
+    "slug": "mogilevka",
+    "centreX": 7557,
+    "centreZ": 5140
+  },
+  {
+    "name": "Nagornoye",
+    "slug": "nagornoye",
+    "centreX": 9301,
+    "centreZ": 14602
+  },
+  {
+    "name": "Nizhneye",
+    "slug": "nizhneye",
+    "centreX": 12887,
+    "centreZ": 8124
+  },
+  {
+    "name": "Novaya Petrovka",
+    "slug": "novaya-petrovka",
+    "centreX": 3369,
+    "centreZ": 13046
+  },
+  {
+    "name": "Novodmitrovsk",
+    "slug": "novodmitrovsk",
+    "centreX": 11506,
+    "centreZ": 14511
+  },
+  {
+    "name": "Novy Sobor",
+    "slug": "novy-sobor",
+    "centreX": 7088,
+    "centreZ": 7700
+  },
+  {
+    "name": "Polyana",
+    "slug": "polyana",
+    "centreX": 10664,
+    "centreZ": 8093
+  },
+  {
+    "name": "Prigorodki",
+    "slug": "prigorodki",
+    "centreX": 7853,
+    "centreZ": 3155
+  },
+  {
+    "name": "Pustoshka",
+    "slug": "pustoshka",
+    "centreX": 3067,
+    "centreZ": 7901
+  },
+  {
+    "name": "Severograd",
+    "slug": "severograd",
+    "centreX": 7939,
+    "centreZ": 12685
+  },
+  {
+    "name": "Solnechny",
+    "slug": "solnechny",
+    "centreX": 13401,
+    "centreZ": 6293
+  },
+  {
+    "name": "Staroye",
+    "slug": "staroye",
+    "centreX": 10145,
+    "centreZ": 5501
+  },
+  {
+    "name": "Stary Sobor",
+    "slug": "stary-sobor",
+    "centreX": 6105,
+    "centreZ": 7766
+  },
+  {
+    "name": "Stary Yar",
+    "slug": "stary-yar",
+    "centreX": 4990,
+    "centreZ": 15073
+  },
+  {
+    "name": "Svergino",
+    "slug": "svergino",
+    "centreX": 9591,
+    "centreZ": 13787
+  },
+  {
+    "name": "Svetloyarsk",
+    "slug": "svetloyarsk",
+    "centreX": 13890,
+    "centreZ": 13250
+  },
+  {
+    "name": "Vavilovo",
+    "slug": "vavilovo",
+    "centreX": 2313,
+    "centreZ": 11087
+  },
+  {
+    "name": "Vybor",
+    "slug": "vybor",
+    "centreX": 3815,
+    "centreZ": 8935
+  },
+  {
+    "name": "Zelenogorsk",
+    "slug": "zelenogorsk",
+    "centreX": 2648,
+    "centreZ": 5201
   }
 ]

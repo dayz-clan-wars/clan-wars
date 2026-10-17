@@ -4,10 +4,10 @@ import { maskComments } from "./events-xml.js";
  * cfgplayerspawnpoints.xml with every `<group>` inside `<fresh>`'s
  * `<generator_posbubbles>` removed except `group`: a King of the Hill session
  * spawns every fresh character at that one town's spots (spec
- * 2026-10-07-koth-chernarus §3.1).
+ * 2026-10-07-koth-chernarus §3.1; the same splice now serves Nasdara).
  *
  * ⚠️ A targeted splice, never a parse-and-reserialize: the file belongs to the
- * chernarus repo, and everything but the removed group lines comes back
+ * nasdara repo, and everything but the removed group lines comes back
  * byte-identical, `<hop>`/`<travel>` groups of the same name included.
  * Located in the comment-masked text, so a commented-out group is neither taken
  * for the real one nor counted as a duplicate.
