@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, serverRestarts, servers, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, kothEvents, raidWindowFlips, serverRestarts, servers, type Database } from "@factions/db";
 import { KOTH_LOCATIONS, KOTH_PRESET_FILES } from "@factions/domain";
 import { eq, sql } from "drizzle-orm";
 import { planKoth, convergeKothFiles } from "../src/koth-converge.js";
@@ -262,6 +262,35 @@ describe("restartTick with KotH", () => {
     expect(m.uploadFile).not.toHaveBeenCalled();
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("failed");
+  });
+
+  // ⚠️ Regression guard for restart-tick's `setWhere` on `flip.changed` (not on
+  // `gameplay.uploaded`). A KotH opening inside an already-open raid window
+  // uploads cfggameplay.json while the raid splice changes nothing. Keyed on
+  // `uploaded`, that slot would overwrite Friday's real rollback copy and
+  // `applied_at` with Saturday's already-flipped file, silently.
+  it("a KotH opening on an applied raid boundary leaves the flip's previousContent and applied_at alone", async () => {
+    const withRaid = GAMEPLAY.replace('"PlayerData"', '"GeneralData": {\n\t\t"disableBaseDamage": true\n\t},\n\t"PlayerData"');
+    const SAT = at("2026-09-19T12:00:00Z");
+    await schedule({ slotAt: SAT });
+    const m = mission({ "/m/cfggameplay.json": withRaid });
+    const target = { ...m.target, status: async () => "started", restart: async () => {} } as unknown as RestartTarget;
+    const opts = { lastError: new Map<number, string>(), raidWindow: { enabled: true }, koth: { open: true } };
+
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-18T00:00:03Z") });
+    const [fri] = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(fri).toMatchObject({ boundaryAt: at("2026-09-18T00:00:00Z"), outcome: "applied" });
+    expect(fri!.previousContent).toBe(withRaid);
+    expect(fri!.appliedAt).not.toBeNull();
+
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-19T12:00:03Z") });
+    // Premise: the KotH opening really did upload cfggameplay.json this slot.
+    expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
+    const rows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.outcome).toBe("applied");
+    expect(rows[0]!.previousContent).toBe(fri!.previousContent);
+    expect(rows[0]!.appliedAt).toEqual(fri!.appliedAt);
   });
 
   it("a refused preset splice fails the row, never advertises it, and still restarts", async () => {
