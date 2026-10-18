@@ -96,25 +96,22 @@ it("the committed catalogue has no duplicate label in any slot", () => {
 });
 
 /**
- * ⚠️ 1.30 items neither wiki has art for yet. They render as "No art" tiles.
- * Remove a class from here when its image lands.
+ * ⚠️ Items neither wiki has art for (mostly Nasdara 1.30 additions, plus FNOJacket and
+ * FNOPants). They render as "No art" tiles. Remove a class from here when its image lands.
  */
 const NO_ART_YET = [
   "Keffiyeh_Black", "Keffiyeh_Blue", "Keffiyeh_Brown", "Keffiyeh_Gray", "Keffiyeh_LightBlue",
   "Keffiyeh_LightBrown", "Keffiyeh_LightRed", "Keffiyeh_Red", "DustGoggles_Black",
-  "DustGoggles_Transparent", "BallisticHelmet_UN", "BallisticHelmet_Black",
-  "BallisticHelmet_Green", "MilitaryBeret_TK", "BallisticHelmet_BDU", "BallisticHelmet_Desert",
-  "BallisticHelmet_Navy", "BallisticHelmet_Winter", "BallisticHelmet_Woodland",
-  "GhillieHood_Desert", "OBRCap_Beige", "OBRCap_Olive", "PakolHat_Beige", "PakolHat_Black",
-  "PakolHat_Brown", "PakolHat_Grey", "PakolHat_White", "T56TankerHelmet_Olive",
-  "T56TankerHelmet_Tan", "Mich2001Helmet", "TurbanHat_Beige", "TurbanHat_Black", "TurbanHat_Brown",
-  "TurbanHat_Green", "TurbanHat_Grey", "TurbanHat_NavyBlue", "TurbanHat_Pink", "TurbanHat_Purple",
-  "TurbanHat_Red", "TurbanHat_Skyblue", "TurbanHat_White", "TurbanHat_Yellow", "FNOJacket",
-  "HuntingJacket_Desert", "KameezShirt_Beige", "KameezShirt_Black", "KameezShirt_BlueFlowers",
-  "KameezShirt_Brown", "KameezShirt_Grey", "KameezShirt_NavyBlue", "KameezShirt_Olive",
-  "KameezShirt_Orange", "KameezShirt_Pink", "KameezShirt_Purple", "KameezShirt_Red",
-  "KameezShirt_SkyBlue", "KameezShirt_White", "KameezShirt_Yellow", "OBRJacket_Beige",
-  "OBRJacket_Officer", "OBRJacket_Olive", "PoliceShortSleeveShirt", "ShortSleeveShirt_Black",
+  "DustGoggles_Transparent", "MilitaryBeret_TK", "GhillieHood_Desert", "OBRCap_Beige",
+  "OBRCap_Olive", "PakolHat_Beige", "PakolHat_Black", "PakolHat_Brown", "PakolHat_Grey",
+  "PakolHat_White", "TurbanHat_Beige", "TurbanHat_Black", "TurbanHat_Brown", "TurbanHat_Green",
+  "TurbanHat_Grey", "TurbanHat_NavyBlue", "TurbanHat_Pink", "TurbanHat_Purple", "TurbanHat_Red",
+  "TurbanHat_Skyblue", "TurbanHat_White", "TurbanHat_Yellow", "FNOJacket", "HuntingJacket_Desert",
+  "KameezShirt_Beige", "KameezShirt_Black", "KameezShirt_BlueFlowers", "KameezShirt_Brown",
+  "KameezShirt_Grey", "KameezShirt_NavyBlue", "KameezShirt_Olive", "KameezShirt_Orange",
+  "KameezShirt_Pink", "KameezShirt_Purple", "KameezShirt_Red", "KameezShirt_SkyBlue",
+  "KameezShirt_White", "KameezShirt_Yellow", "OBRJacket_Beige", "OBRJacket_Officer",
+  "OBRJacket_Olive", "PoliceShortSleeveShirt", "ShortSleeveShirt_Black",
   "ShortSleeveShirt_BlueRectangles", "ShortSleeveShirt_CreamSquares", "ShortSleeveShirt_Green",
   "ShortSleeveShirt_Hawaiian_Black", "ShortSleeveShirt_Hawaiian_Blue",
   "ShortSleeveShirt_Hawaiian_White", "ShortSleeveShirt_Waves", "ShortSleeveShirt_White",

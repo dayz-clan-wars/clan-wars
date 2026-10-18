@@ -266,15 +266,18 @@
   "hat": [
     {
       "className": "BallisticHelmet_UN",
-      "label": "Ballistic Helmet (AN)"
+      "label": "Ballistic Helmet (AN)",
+      "image": "items/BallisticHelmet_UN.webp"
     },
     {
       "className": "BallisticHelmet_Black",
-      "label": "Ballistic Helmet (Black)"
+      "label": "Ballistic Helmet (Black)",
+      "image": "items/BallisticHelmet_Black.webp"
     },
     {
       "className": "BallisticHelmet_Green",
-      "label": "Ballistic Helmet (Green)"
+      "label": "Ballistic Helmet (Green)",
+      "image": "items/BallisticHelmet_Green.webp"
     },
     {
       "className": "MilitaryBeret_TK",
@@ -282,23 +285,28 @@
     },
     {
       "className": "BallisticHelmet_BDU",
-      "label": "Camouflage Helmet (BDU)"
+      "label": "Camouflage Helmet (BDU)",
+      "image": "items/BallisticHelmet_BDU.webp"
     },
     {
       "className": "BallisticHelmet_Desert",
-      "label": "Camouflage Helmet (Desert)"
+      "label": "Camouflage Helmet (Desert)",
+      "image": "items/BallisticHelmet_Desert.webp"
     },
     {
       "className": "BallisticHelmet_Navy",
-      "label": "Camouflage Helmet (Navy)"
+      "label": "Camouflage Helmet (Navy)",
+      "image": "items/BallisticHelmet_Navy.webp"
     },
     {
       "className": "BallisticHelmet_Winter",
-      "label": "Camouflage Helmet (Winter)"
+      "label": "Camouflage Helmet (Winter)",
+      "image": "items/BallisticHelmet_Winter.webp"
     },
     {
       "className": "BallisticHelmet_Woodland",
-      "label": "Camouflage Helmet (Woodland)"
+      "label": "Camouflage Helmet (Woodland)",
+      "image": "items/BallisticHelmet_Woodland.webp"
     },
     {
       "className": "CowboyHat_black",
@@ -429,15 +437,18 @@
     },
     {
       "className": "T56TankerHelmet_Olive",
-      "label": "T65 Helmet (Olive)"
+      "label": "T65 Helmet (Olive)",
+      "image": "items/T56TankerHelmet_Olive.webp"
     },
     {
       "className": "T56TankerHelmet_Tan",
-      "label": "T65 Helmet (Tan)"
+      "label": "T65 Helmet (Tan)",
+      "image": "items/T56TankerHelmet_Tan.webp"
     },
     {
       "className": "Mich2001Helmet",
       "label": "Tactical Helmet",
+      "image": "items/Mich2001Helmet.webp",
       "extras": [
         "NVGoggles",
         "UniversalLight",
