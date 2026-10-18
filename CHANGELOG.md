@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The booster kit now offers the Fishtail Night Ops Jacket and Fishtail Night Ops Pants. They show without a picture until one is available.
+
 ### Fixed
 
 - The map-switch runbook now starts every clan's grace week before clearing bases, so no clan is marked dormant by mistake during a switch.

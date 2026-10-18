@@ -78,10 +78,16 @@ it("the committed catalogue has no duplicate label in any slot", () => {
   }
 });
 
-it("every committed entry carries an image", () => {
+/**
+ * ⚠️ 1.30 items neither wiki has art for yet. They render as "No art" tiles.
+ * Remove a class from here when its image lands.
+ */
+const NO_ART_YET = ["FNOJacket", "FNOPants"];
+
+it("every committed entry carries an image, bar the known gaps", () => {
   const c = loadCatalogue(catalogue);
   const missing = KIT_SLOTS.flatMap((s) => c[s].filter((e) => !e.image).map((e) => e.className));
-  expect(missing).toEqual([]);
+  expect(missing).toEqual(NO_ART_YET);
 });
 
 describe("boosterCatalogue()", () => {

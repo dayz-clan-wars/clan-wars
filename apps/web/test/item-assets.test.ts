@@ -38,7 +38,7 @@ describe("item images match the catalogue", () => {
   });
 
   it("every file belongs to a catalogue entry", () => {
-    const known = new Set(entries.map((e) => e.className));
+    const known = new Set(entries.filter((e) => e.image).map((e) => e.className));
     const orphans = files.filter((f) => !known.has(f.replace(/\.webp$/u, "")));
     expect(orphans).toEqual([]);
   });
@@ -46,7 +46,8 @@ describe("item images match the catalogue", () => {
   it("there is one per catalogue entry", () => {
     // By class name: the booster-kit award lists the kit's own items, so a
     // file serves both entries.
-    expect(files).toHaveLength(new Set(entries.map((e) => e.className)).size);
+    // Entries with no art yet have no file to count.
+    expect(files).toHaveLength(new Set(entries.filter((e) => e.image).map((e) => e.className)).size);
   });
 
   it("⚠️ every image was actually normalised, not committed raw", () => {
