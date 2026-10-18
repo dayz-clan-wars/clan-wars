@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- Your awards page only shows awards you can still use. One that runs out, is taken back or is not placed in time drops off the list.
+
+### Removed
+
+- PC players are no longer banned automatically for not linking, and the existing PC bans have been lifted.
+
 ## [2.3.2] - 2026-10-18
 
 ### Changed

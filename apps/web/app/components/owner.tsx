@@ -55,7 +55,7 @@ export async function loadOwner(session: Session, viewer?: Viewer): Promise<Owne
   });
   return {
     session, viewer, invites, requests, claim, next, showInvites, boosting: kit.boosting,
-    openAwards: won.filter((a) => a.state === "unplaced" || a.state === "waiting" || a.state === "live").length,
+    openAwards: won.length, // `awards()` returns open grants only
     referrals,
   };
 }

@@ -25,7 +25,6 @@ import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
-import { pcBanTick } from "./pc-ban-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
@@ -1379,49 +1378,6 @@ export async function start(cfg: BotConfig): Promise<void> {
       // server's own NitradoClient (via nitradoFor, the same map restartTick
       // shares) so a slow or failing call to one server's ban list can never
       // touch another's.
-      //
-      // ⚠️ Before banTick, in the same block: this writes the rows banTick
-      // applies, so running it afterwards would delay every PC ban by a
-      // whole five-minute cycle.
-      if (cfg.unlinkedPcBan) {
-        // Same null-poster fallback the raid-window tick uses: with no
-        // OPS_CHANNEL_ID a ban still happens, and must still be visible
-        // somewhere, so it goes to the log at error level.
-        const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-        try {
-          const pcServers = await db.select({ id: servers.id })
-            .from(servers).where(and(eq(servers.active, true), isNotNull(servers.nitradoServiceId)));
-          for (const s of pcServers) {
-            try {
-              const r = await pcBanTick(db, { serverId: s.id, now: new Date() });
-              // ⚠️ Each post is isolated. The `bans` rows are ALREADY COMMITTED
-              // and `banTick` will apply them to Nitrado on this same pass, so
-              // a failed notification (revoked permission, deleted channel, a
-              // Discord blip) must never swallow the rest — the runbook tells
-              // the operator to watch this channel, and losing the whole
-              // batch hides bans precisely while bans are happening. Nothing
-              // retries these, so a failure falls back to the log.
-              const post = async (content: string) => {
-                try {
-                  await ops(content);
-                } catch (err) {
-                  console.error(`pc ban tick: ops post failed, the ban still stands: ${content}`, err);
-                }
-              };
-              for (const b of r.banned) {
-                await post(`🚫 PC ban queued: **${b.gamertag}** (\`${b.dayzId}\`) plays on PC and has not linked.`);
-              }
-              for (const b of r.lifted) {
-                await post(`🔓 PC ban lifting: **${b.gamertag}** (\`${b.dayzId}\`) has started linking — this is their one lift.`);
-              }
-            } catch (err) {
-              console.error(`pc ban tick failed for server ${s.id}`, err);
-            }
-          }
-        } catch (err) {
-          console.error("pc ban tick: could not list servers", err);
-        }
-      }
 
       // `since` is `now - BAN_APPLY_LOOKBACK_MS` (24h), NEVER the bot's
       // process start time — see the comment on `BAN_APPLY_LOOKBACK_MS` in
@@ -1896,13 +1852,6 @@ export async function start(cfg: BotConfig): Promise<void> {
     } else {
       console.log("public ban announcements on: #bans");
     }
-
-    // ⚠️ Added 2026-09-18: this gate previously had no startup line at all,
-    // unlike every other gated feature above — "silence is not success"
-    // (CLAUDE.md). An operator flipping it on had no confirmation it took
-    // effect short of watching for the first real ban.
-    if (!cfg.unlinkedPcBan) console.warn("UNLINKED_PC_BAN is off: unlinked PC players are not being banned.");
-    else console.log("UNLINKED_PC_BAN on: unlinked PC players are banned on sight (one lift on starting to link).");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

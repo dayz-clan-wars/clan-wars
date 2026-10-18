@@ -225,7 +225,7 @@ export function warLogLine(kind: WarLogKind, p: Record<string, unknown>, occurre
 export function banLine(a: { kind: BanAnnouncementKind; gamertag: string; reason: BanReason; expiresAt: string | null }): Line {
   const tag: Seg = { bold: [{ text: a.gamertag }] };
   if (a.kind === "expired") return ["🔓 ", tag, " unbanned — ban served."];
-  if (a.kind === "lifted") return a.reason === "unlinked_pc" ? ["🔓 ", tag, " unbanned — account linked."] : ["🔓 ", tag, " unbanned."];
+  if (a.kind === "lifted") return ["🔓 ", tag, " unbanned."];
   if (a.reason === "unlinked_pc") return ["🔨 ", tag, " banned — playing on PC without a linked account. Link your account to lift it."];
   if (a.expiresAt === null) return ["🔨 ", tag, ` banned permanently — ${BAN_REASON_TEXT[a.reason]}.`];
   const t = instant(a.expiresAt, "at");
