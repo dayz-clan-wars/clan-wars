@@ -72,6 +72,15 @@ describe("notice copy", () => {
     }
   });
 
+  it("says which way the build supplies were turned, and who turned them", () => {
+    const off = noticeCopy("supplies_toggled", { gamertag: "Ada", enabled: false }, "channel");
+    expect(off.title).toBe("Build supplies off");
+    expect(off.body).toBe("Ada turned build supplies off. From the next restart, only your clan flags spawn at your pole.");
+    const on = noticeCopy("supplies_toggled", { gamertag: "Ada", enabled: true }, "channel");
+    expect(on.title).toBe("Build supplies back on");
+    expect(on.body).toBe("Ada turned build supplies back on. The full kit spawns again from the next restart.");
+  });
+
   it("names the player when the payload has one", () => {
     expect(noticeCopy("promoted", { gamertag: "Ada" }).body).toContain("Ada");
   });

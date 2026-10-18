@@ -25,6 +25,8 @@ export type ClanView = {
     id: number; name: string; tag: string; texture: string; status: string;
     createdAt: Date; activatedAt: Date | null; recruiting: boolean;
     playWindow: string | null; language: string | null; pitch: string | null;
+    /** Whether the crate and build kit spawn (the flags always do). Officer+ flips it on /clan/settings or `/clan supplies`. */
+    buildSupplies: boolean;
     /** The clan's declared pole, for its own members' eyes (the hero's "Base at"). Null while reserved. */
     base: { x: number; z: number } | null;
   };
@@ -146,7 +148,8 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const [clan] = await db.select({
     id: factions.id, name: factions.name, tag: factions.tag, texture: factions.texture, status: factions.status,
     createdAt: factions.createdAt, activatedAt: factions.activatedAt, recruiting: factions.recruiting,
-    playWindow: factions.playWindow, language: factions.language, pitch: factions.pitch, serverId: factions.serverId,
+    playWindow: factions.playWindow, language: factions.language, pitch: factions.pitch, buildSupplies: factions.buildSupplies,
+    serverId: factions.serverId,
   }).from(factions).where(eq(factions.id, m.factionId));
   // serverId is for the rebrand pool below, not part of the clan card.
   const { serverId, ...card } = clan!;

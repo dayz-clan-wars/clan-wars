@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, factionInvites, identityHolds, rosterCooldowns, identityLinks, players,
-  poles, events, admFiles, declarations, ceremonies, ceremonyParticipants, successionClaims,
+  poles, events, admFiles, declarations, ceremonies, ceremonyParticipants, successionClaims, clanNotices,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
@@ -10,9 +10,10 @@ import {
   PENDING_EXPIRY_MS, ROSTER_COOLDOWN_MS, ACTIVATION_WINDOW_MS, RELEASED_POLE_GRACE_MS, LEADER_SILENT_MS,
 } from "@factions/domain";
 import { actorFor } from "../src/actor";
+import { PgRosterStore } from "../src/internal";
 import {
   inviteDb, acceptInviteDb, leaveDb, requestJoinDbByTag, decideRequestDbFor,
-  kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb,
+  kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, setRecruitingPostDb, setSuppliesDb,
   claimCeremonyDb, confirmRebindDb,
 } from "../src/writes";
 import { claimSuccessionDbFor, openVoteDbFor, castVoteDbFor } from "../src/leadership";
@@ -141,6 +142,46 @@ describe("roster package writes", () => {
     expect(await db.select().from(factionMembers).where(eq(factionMembers.discordId, "d2"))).toEqual([]);
     const [cd] = await db.select().from(rosterCooldowns).where(eq(rosterCooldowns.dayzId, UID_O));
     expect(cd!.until.getTime()).toBe(now.getTime() + ROSTER_COOLDOWN_MS);
+  });
+
+  describe("setSupplies", () => {
+    const supplies = async () => (await db.select({ on: factions.buildSupplies }).from(factions).where(eq(factions.id, factionId)))[0]!.on;
+    const notices = () => db.select().from(clanNotices).where(eq(clanNotices.kind, "supplies_toggled"));
+
+    it("defaults on, and a leader turns it off with one channel notice naming them", async () => {
+      expect(await supplies()).toBe(true);
+      expect(await setSuppliesDb(db, now, "d1", false)).toBe("off");
+      expect(await supplies()).toBe(false);
+      const rows = await notices();
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({ factionId, serverId, target: "channel", occurredAt: now, payload: { gamertag: "Leo", enabled: false } });
+    });
+
+    it("an officer can turn it back on", async () => {
+      await db.insert(factionMembers).values({ factionId, serverId, dayzId: UID_O, discordId: "d2", role: "officer", joinedAt: now, status: "full" });
+      await setSuppliesDb(db, now, "d1", false);
+      expect(await setSuppliesDb(db, now, "d2", true)).toBe("on");
+      expect(await supplies()).toBe(true);
+      const rows = await notices();
+      expect(rows.map((r) => r.payload)).toEqual([{ gamertag: "Leo", enabled: false }, { gamertag: "Otto", enabled: true }]);
+    });
+
+    it("⚠️ a re-save of the current state queues no notice", async () => {
+      expect(await setSuppliesDb(db, now, "d1", true)).toBe("on");
+      await setSuppliesDb(db, now, "d1", false);
+      expect(await setSuppliesDb(db, now, "d1", false)).toBe("off");
+      expect(await notices()).toHaveLength(1);
+    });
+
+    it("refuses a plain member and a non-member, and changes nothing", async () => {
+      expect(await setSuppliesDb(db, now, "d3", false)).toBe("not-permitted");
+      // Not in any clan: refused at the actor, before the store.
+      expect(await setSuppliesDb(db, now, "d2", false)).toBe("not-in-clan");
+      // The store's own gate, for a caller that names this clan without a seat in it.
+      expect(await new PgRosterStore(db).setSupplies({ factionId, actorDiscordId: "d2", enabled: false, at: now })).toBe("not-permitted");
+      expect(await supplies()).toBe(true);
+      expect(await notices()).toHaveLength(0);
+    });
   });
 
   it("requestJoin refuses a non-recruiting clan; an officer decides once it recruits; an unknown tag is refused", async () => {

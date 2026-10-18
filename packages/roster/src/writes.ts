@@ -8,7 +8,7 @@ import { and, eq, inArray, sql } from "drizzle-orm";
 import {
   PgRosterStore, PgFactionStore, PgRebindStore, selectCandidates, requestJoinDb, decideRequestDb, withdrawRequestDb, siteBaseUrl, cancelFlagChangeDb,
   type CreateInviteOutcome, type AcceptInviteOutcome, type KickOutcome, type LeaveOutcome, type SetRoleOutcome, type TransferOutcome, type RenameOutcome,
-  type RequestJoinOutcome, type DecideRequestOutcome,
+  type RequestJoinOutcome, type DecideRequestOutcome, type SuppliesOutcome,
 } from "./internal";
 import { actorFor, isRefusal, type ActorRefusal } from "./actor";
 
@@ -133,6 +133,12 @@ export async function setRecruitingPostDb(db: Database, actorDiscordId: string, 
   const a = await actorFor(db, actorDiscordId);
   if (isRefusal(a)) return a;
   return new PgRosterStore(db).setRecruitingPost({ factionId: a.factionId, actorDiscordId, ...post });
+}
+/** Turn the clan's build supplies off or on. Officer+, same gate as the recruiting post. */
+export async function setSuppliesDb(db: Database, now: Date, actorDiscordId: string, enabled: boolean): Promise<SuppliesOutcome | ActorRefusal> {
+  const a = await actorFor(db, actorDiscordId);
+  if (isRefusal(a)) return a;
+  return new PgRosterStore(db).setSupplies({ factionId: a.factionId, actorDiscordId, enabled, at: now });
 }
 
 /**
