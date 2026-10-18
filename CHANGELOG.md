@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-18
+
 ### Added
 
 - The booster kit has a Vest slot: plate carriers, chest rigs, linen vests, robes and more. Plate carriers come with matching pouches and a holster, and the Tactical Helmet comes with night vision, a light and batteries. They all spawn loose in the pile, for you to fit in game.
