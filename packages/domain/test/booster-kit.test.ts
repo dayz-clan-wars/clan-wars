@@ -6,7 +6,7 @@ import catalogue from "../assets/booster-catalogue.json";
 const GOOD = {
   mask: [{ className: "GasMask", label: "Gas Mask" }],
   jacket: [{ className: "GorkaEJacket_Summer", label: "Gorka Jacket" }],
-  eyewear: [], hat: [], pants: [], boots: [], gloves: [], hipPack: [], backpack: [],
+  eyewear: [], hat: [], pants: [], boots: [], gloves: [], hipPack: [], backpack: [], vest: [],
 };
 
 describe("loadCatalogue", () => {
@@ -23,6 +23,23 @@ describe("loadCatalogue", () => {
   it("throws on a duplicate class name within a slot", () => {
     const dup = { ...GOOD, mask: [...GOOD.mask, { className: "GasMask", label: "Again" }] };
     expect(() => loadCatalogue(dup)).toThrow(/GasMask/);
+  });
+});
+
+describe("loadCatalogue extras", () => {
+  const vest = (extras: unknown) => ({ ...GOOD, vest: [{ className: "PlateCarrierVest", label: "Plate Carrier", extras }] });
+
+  it("accepts an entry with extras", () => {
+    const c = loadCatalogue(vest(["PlateCarrierPouches", "PlateCarrierHolster"]));
+    expect(c.vest[0]!.extras).toEqual(["PlateCarrierPouches", "PlateCarrierHolster"]);
+  });
+
+  it("throws on empty extras, naming the class", () => {
+    expect(() => loadCatalogue(vest([]))).toThrow(/PlateCarrierVest/);
+  });
+
+  it("throws on a non-string extra", () => {
+    expect(() => loadCatalogue(vest([7]))).toThrow(/PlateCarrierVest/);
   });
 });
 

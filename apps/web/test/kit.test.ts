@@ -63,6 +63,7 @@ describe("the kit page's copy", () => {
     expect([...KIT_GRID_ORDER].sort()).toEqual([...KIT_SLOTS].sort());
     expect(KIT_GRID_ORDER).toHaveLength(KIT_SLOTS.length);
     expect([...KIT_GRID_ORDER]).not.toEqual([...KIT_SLOTS]);
+    expect(KIT_GRID_ORDER.indexOf("vest")).toBe(KIT_GRID_ORDER.indexOf("jacket") + 1);
   });
 
   it("uses no em dash anywhere the player can read", () => {

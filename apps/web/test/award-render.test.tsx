@@ -21,11 +21,11 @@ describe("the award page", () => {
     expect(render(view({ state: "live", expiresAt: "2026-09-29T14:00:00.000Z" }))).not.toContain("It runs for");
   });
 
-  it("lays the booster kit award out as the kit page's nine slots", () => {
+  it("lays the booster kit award out as the kit page's ten slots", () => {
     const kit = awardsCatalogue()["booster-kit"]!;
     const html = renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Booster Kit" }), def: kit }));
     for (const s of Object.values(kit.slots)) expect(html).toContain(s.label);
-    expect(Object.keys(kit.slots)).toHaveLength(9);
+    expect(Object.keys(kit.slots)).toHaveLength(10);
   });
 
   it("shows one tile per slot, and holds Place until every slot is picked", () => {

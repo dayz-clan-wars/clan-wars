@@ -180,29 +180,29 @@ const flow = (over: Partial<KitView> = {}, withCatalogue = true) => {
 };
 
 describe("the kit page, rendered", () => {
-  it("gives a booster with a linked character all nine tiles", () => {
+  it("gives a booster with a linked character every tile", () => {
     const html = flow();
     for (const slot of KIT_SLOTS) expect([slot, html.includes(SLOT_LABELS[slot])]).toEqual([slot, true]);
     expect(html.match(/>Empty</gu) ?? []).toHaveLength(KIT_SLOTS.length);
-    expect(html).toContain('>0<span class="text-dim">/9</span>');
+    expect(html).toContain(`>0<span class="text-dim">/${KIT_SLOTS.length}</span>`);
   });
 
   it("shows a filled slot by its picture and its name, and counts it", () => {
     const html = flow({ slots: { ...EMPTY_SLOTS, jacket: "GorkaEJacket_Summer" } });
     expect(html).toContain("items/GorkaEJacket_Summer.webp");
     expect(html).toContain("Patrol Jacket (Summer)");
-    expect(html).toContain('>1<span class="text-dim">/9</span>');
+    expect(html).toContain(`>1<span class="text-dim">/${KIT_SLOTS.length}</span>`);
   });
 
   /**
    * ⚠️ The count is taken through the same lookup that draws the tiles. A
    * pick whose item has since left the catalogue draws as an empty tile, and
-   * counting it as worn would read "1/9" over nine empty tiles and send the
+   * counting it as worn would read "1/10" over ten empty tiles and send the
    * player looking for a piece that is not there.
    */
   it("does not count a pick whose item has left the catalogue", () => {
     const html = flow({ slots: { ...EMPTY_SLOTS, jacket: "RetiredJacket_Gone" } });
-    expect(html).toContain('>0<span class="text-dim">/9</span>');
+    expect(html).toContain(`>0<span class="text-dim">/${KIT_SLOTS.length}</span>`);
     expect(html.match(/>Empty</gu) ?? []).toHaveLength(KIT_SLOTS.length);
   });
 

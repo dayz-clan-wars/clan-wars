@@ -1421,6 +1421,7 @@ export const boosterKits = pgTable("booster_kits", {
   gloves: text("gloves"),
   hipPack: text("hip_pack"),
   backpack: text("backpack"),
+  vest: text("vest"),
   placedAt: timestamp("placed_at", { withTimezone: true }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });

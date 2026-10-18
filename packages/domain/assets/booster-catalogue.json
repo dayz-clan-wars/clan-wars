@@ -1024,5 +1024,52 @@
       "label": "Tactical Backpack (Winter)",
       "image": "items/CoyoteBag_Winter.webp"
     }
+  ],
+  "vest": [
+    {
+      "className": "PlateCarrierVest_Black",
+      "label": "Plate Carrier (Black)",
+      "image": "items/PlateCarrierVest_Black.webp",
+      "extras": [
+        "PlateCarrierPouches_Black",
+        "PlateCarrierHolster_Black"
+      ]
+    },
+    {
+      "className": "PlateCarrierVest_Camo",
+      "label": "Plate Carrier (Camo)",
+      "image": "items/PlateCarrierVest_Camo.webp",
+      "extras": [
+        "PlateCarrierPouches_Camo",
+        "PlateCarrierHolster_Camo"
+      ]
+    },
+    {
+      "className": "PlateCarrierVest_Green",
+      "label": "Plate Carrier (Green)",
+      "image": "items/PlateCarrierVest_Green.webp",
+      "extras": [
+        "PlateCarrierPouches_Green",
+        "PlateCarrierHolster_Green"
+      ]
+    },
+    {
+      "className": "PlateCarrierVest",
+      "label": "Plate Carrier (Standard)",
+      "image": "items/PlateCarrierVest.webp",
+      "extras": [
+        "PlateCarrierPouches",
+        "PlateCarrierHolster"
+      ]
+    },
+    {
+      "className": "PlateCarrierVest_Winter",
+      "label": "Plate Carrier (Winter)",
+      "image": "items/PlateCarrierVest_Winter.webp",
+      "extras": [
+        "PlateCarrierPouches_Winter",
+        "PlateCarrierHolster_Winter"
+      ]
+    }
   ]
 }

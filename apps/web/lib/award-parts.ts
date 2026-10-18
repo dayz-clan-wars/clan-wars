@@ -31,6 +31,16 @@ export const PART_LABELS: Record<string, string> = {
   Mag_SVD_10Rnd: "10-round SVD mag",
   Mag_M14_20Rnd: "20-round M14 mag",
   Mag_SV98_10Rnd: "10-round SV98 mag",
+  PlateCarrierPouches: "Plate carrier pouches",
+  PlateCarrierHolster: "Plate carrier holster",
+  PlateCarrierPouches_Black: "Plate carrier pouches (black)",
+  PlateCarrierHolster_Black: "Plate carrier holster (black)",
+  PlateCarrierPouches_Camo: "Plate carrier pouches (camo)",
+  PlateCarrierHolster_Camo: "Plate carrier holster (camo)",
+  PlateCarrierPouches_Green: "Plate carrier pouches (green)",
+  PlateCarrierHolster_Green: "Plate carrier holster (green)",
+  PlateCarrierPouches_Winter: "Plate carrier pouches (winter)",
+  PlateCarrierHolster_Winter: "Plate carrier holster (winter)",
 };
 
 /** "Kobra sight, 9V battery, 2× 75-round AKM drum": repeats counted, first-seen order. */

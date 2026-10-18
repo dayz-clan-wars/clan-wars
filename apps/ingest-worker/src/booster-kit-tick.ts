@@ -50,7 +50,7 @@ export async function boosterKitTick(db: Database, deps: {
     gamertag: identityLinks.gamertag,
     texture: factions.texture,
     posX: boosterKits.posX, posY: boosterKits.posY, posZ: boosterKits.posZ,
-    // ⚠️ These nine keys ARE the `KIT_SLOTS` strings, which is the only thing
+    // ⚠️ These ten keys ARE the `KIT_SLOTS` strings, which is the only thing
     // that makes the `r[slot]` lookup below work. Rename one — or select it
     // under any other alias — and that slot silently never spawns for anyone.
     mask: boosterKits.mask,
@@ -62,6 +62,7 @@ export async function boosterKitTick(db: Database, deps: {
     gloves: boosterKits.gloves,
     hipPack: boosterKits.hipPack,
     backpack: boosterKits.backpack,
+    vest: boosterKits.vest,
   }).from(boosterKits)
     // ⚠️ INNER, and this is the whole of revocation: `discord_boosters` rows
     // are DELETED when someone stops boosting, so the kit leaves the file on
@@ -117,7 +118,12 @@ export async function boosterKitTick(db: Database, deps: {
         // skipped, not fatal: a catalogue edit must never be able to stop a
         // kit spawning outright.
         .filter((s) => isAllowed(CATALOGUE, s.slot, s.className))
-        .map((s) => s.className),
+        // Same expansion as award-tick.ts, pick first: a plate carrier's
+        // pouches and holster spawn right after it.
+        .flatMap((s) => {
+          const entry = CATALOGUE[s.slot].find((e) => e.className === s.className);
+          return [s.className, ...(entry?.extras ?? [])];
+        }),
     }))
     // ⚠️ After catalogue filtering, not before: a kit whose only slot holds a
     // class name that has since left the catalogue has nothing to spawn.

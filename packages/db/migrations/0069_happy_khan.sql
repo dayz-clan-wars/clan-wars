@@ -1,0 +1,1 @@
+ALTER TABLE "booster_kits" ADD COLUMN "vest" text;
