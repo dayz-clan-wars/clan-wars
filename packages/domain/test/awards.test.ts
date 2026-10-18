@@ -204,7 +204,7 @@ describe("the weapon kit award", () => {
 
   // ⚠️ The loadouts the owner signed off on one by one (spec §3). A change
   // here is a balance change, so it has to be made on purpose.
-  it("has the twelve signed-off loadouts", () => {
+  it("has the thirteen signed-off loadouts", () => {
     const loadouts = Object.fromEntries(kit.slots.weapon!.items.map((i) => [i.className, i.extras]));
     expect(loadouts).toEqual({
       M4A1_Green: ["M4_OEBttstck", "M4_RISHndgrd_Green", "ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
@@ -214,6 +214,7 @@ describe("the weapon kit award", () => {
       AK74_Green: ["AK_PlasticBttstck_Green", "AK_RailHndgrd_Green", "KobraOptic", "Battery9V", "AK_Suppressor", "Mag_AK74_45Rnd", "Mag_AK74_45Rnd"],
       FAL: ["Fal_OeBttstck", "ACOGOptic_6x", "Mag_FAL_20Rnd", "Mag_FAL_20Rnd"],
       SCARH: ["SCAR_PrecisionBttstck", "ACOGOptic_6x", "Mag_SCARH_20Rnd", "Mag_SCARH_20Rnd"],
+      SCARL: ["SCAR_PrecisionBttstck", "ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
       Aug: ["ACOGOptic_6x", "M4_Suppressor", "Mag_STANAG_60Rnd", "Mag_STANAG_60Rnd"],
       ASVAL: ["ACOGOptic_6x", "Mag_Vikhr_30Rnd", "Mag_Vikhr_30Rnd"],
       SVD: ["PSO6Optic", "Battery9V", "AK_Suppressor", "Mag_SVD_10Rnd", "Mag_SVD_10Rnd"],
@@ -222,8 +223,13 @@ describe("the weapon kit award", () => {
     });
   });
 
-  it("has art for every gun", () => {
-    for (const i of kit.slots.weapon!.items) expect(i.image).toBe(`items/${i.className}.webp`);
+  // SCARL came with Nasdara and neither wiki has its art yet; it renders as the
+  // "No art" tile. Drop it from here when its image lands.
+  const NO_ART_YET = ["SCARL"];
+  it("has art for every gun, bar the known gaps", () => {
+    for (const i of kit.slots.weapon!.items) {
+      expect(i.image).toBe(NO_ART_YET.includes(i.className) ? undefined : `items/${i.className}.webp`);
+    }
   });
 });
 
