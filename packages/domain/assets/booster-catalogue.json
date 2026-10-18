@@ -442,6 +442,10 @@
       "image": "items/M65Jacket_Tan.webp"
     },
     {
+      "className": "FNOJacket",
+      "label": "Fishtail Night Ops Jacket"
+    },
+    {
       "className": "HikingJacket_Black",
       "label": "Hiking Jacket (Black)",
       "image": "items/HikingJacket_Black.webp"
@@ -677,6 +681,10 @@
       "className": "TTSKOPants",
       "label": "Combat Pants",
       "image": "items/TTSKOPants.webp"
+    },
+    {
+      "className": "FNOPants",
+      "label": "Fishtail Night Ops Pants"
     },
     {
       "className": "HunterPants_Autumn",
