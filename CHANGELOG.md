@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-10-18
+
 ### Added
 
 - The booster kit now offers the OBR Pants, in beige and olive, to go with the OBR cap and jacket.
