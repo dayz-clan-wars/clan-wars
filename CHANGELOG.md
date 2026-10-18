@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.3] - 2026-10-18
+
 ### Changed
 
 - Your awards page only shows awards you can still use. One that runs out, is taken back or is not placed in time drops off the list.
