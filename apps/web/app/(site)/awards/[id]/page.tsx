@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { award } from "@factions/roster";
+import { isOpenAward } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { currentSession } from "@/lib/viewer";
 import { awardPageView } from "@/lib/award-view";
@@ -23,6 +24,9 @@ export default async function AwardPage({ params }: { params: Promise<{ id: stri
   if (!Number.isInteger(id) || id <= 0) notFound();
   const v = await award(session.sub, id);
   if (!v) notFound();
+  // An award that ended, lapsed or was taken back is gone from the list, so
+  // an old link goes back to it too.
+  if (!isOpenAward(v.state)) redirect("/awards");
   const def = awardsCatalogue()[v.awardKey];
   if (!def) notFound();
   return <AwardFlow initial={awardPageView(v, new Date())} def={def} />;

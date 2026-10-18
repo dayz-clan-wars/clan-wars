@@ -8,7 +8,7 @@ export const metadata: Metadata = { title: "Clan Wars — your awards", robots: 
 /** ⚠️ Rendered per request, after the middleware. See lib/viewer.ts. */
 export const dynamic = "force-dynamic";
 
-/** Every award the viewer has won, newest first, ended ones included with the reason they ended. */
+/** The awards the viewer can still use, newest first. Ended, lapsed and revoked ones are not shown. */
 export default async function AwardsPage() {
   const session = await currentSession();
   if (!session) return <SessionLost next="/awards" />;
@@ -18,7 +18,7 @@ export default async function AwardsPage() {
       <PageHead kicker="Event awards" title="Your awards" />
       <Body>
         {list.length === 0
-          ? <p className="text-sm text-ink-2">You have not won an award yet. Winners of community events get one.</p>
+          ? <p className="text-sm text-ink-2">You have no awards right now. Winners of community events get one.</p>
           : (
             <ul className="flex flex-col gap-3">
               {list.map((a) => (

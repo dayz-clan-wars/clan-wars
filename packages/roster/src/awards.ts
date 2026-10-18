@@ -52,10 +52,14 @@ function owned(db: Database, discordId: string, grantId: number) {
   return db.select().from(awardGrants).where(and(eq(awardGrants.id, grantId), eq(awardGrants.discordId, discordId)));
 }
 
-/** Every grant the viewer holds, newest first, ended ones included (the page says why they ended). */
+/**
+ * The grants the viewer can still use, newest first. One that ended, lapsed
+ * or was taken back just goes away. Filtered after the read because the state
+ * depends on `now`, not on a column.
+ */
 export async function awardsForDb(db: Database, discordId: string, now: Date): Promise<AwardSummary[]> {
   const rows = await db.select().from(awardGrants).where(eq(awardGrants.discordId, discordId)).orderBy(desc(awardGrants.id));
-  return rows.map((g) => summary(g, now));
+  return rows.map((g) => summary(g, now)).filter((a) => isOpenAward(a.state));
 }
 
 /** One grant's page, or null for a grant that is not the viewer's. */

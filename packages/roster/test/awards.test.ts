@@ -44,6 +44,15 @@ describe("the award page's reads and writes", () => {
     expect(await awardsForDb(db, "2", now)).toEqual([]);
   });
 
+  it("drops a grant from the list once it is taken back, runs out or lapses", async () => {
+    await db.update(awardGrants).set({ revokedAt: now }).where(eq(awardGrants.id, grantId));
+    expect(await awardsForDb(db, "1", now)).toEqual([]);
+    await db.update(awardGrants).set({ revokedAt: null, placedAt: now, liveFrom: now, expiresAt: now }).where(eq(awardGrants.id, grantId));
+    expect(await awardsForDb(db, "1", now)).toEqual([]);
+    await db.update(awardGrants).set({ placedAt: null, liveFrom: null, expiresAt: null }).where(eq(awardGrants.id, grantId));
+    expect(await awardsForDb(db, "1", new Date("2026-09-29T12:00:00Z"))).toEqual([]);
+  });
+
   it("⚠️ another player's grant reads as missing", async () => {
     expect(await awardForDb(db, "2", grantId, now)).toBeNull();
     expect(await awardForDb(db, "1", 999, now)).toBeNull();
