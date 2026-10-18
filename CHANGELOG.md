@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.2] - 2026-10-18
+
 ### Changed
 
 - A rebrand no longer holds anything back. The old name and tag are free for any clan the moment you save, and the old flag the moment your new one is raised. A disbanded clan's name and tag are still held until the season ends.
