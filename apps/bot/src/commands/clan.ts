@@ -49,6 +49,13 @@ const recruiting: Handler = async (ctx, input) => {
   return { content: discordCopy("recruiting", outcome), ephemeral: true };
 };
 
+/** ⚠️ `on` is required, so a missing value is a Discord bug, not "off" — refuse rather than strip the crate. */
+const supplies: Handler = async (ctx, input) => {
+  const on = input.boolean("on");
+  if (on === null) return { content: "Say whether build supplies should be on or off.", ephemeral: true };
+  return { content: discordCopy("supplies", await ctx.roster.setSupplies(input.actorDiscordId, on)), ephemeral: true };
+};
+
 const rebind: Handler = async (ctx, input) => {
   const pole = input.string("pole");
   if (!pole) return { content: "Pick a pole from the list.", ephemeral: true };
@@ -84,6 +91,8 @@ export const clanGroup: CommandGroup = {
       .addStringOption((o) => o.setName("hours").setDescription("Play window").setRequired(false))
       .addStringOption((o) => o.setName("language").setDescription("Language").setRequired(false))
       .addStringOption((o) => o.setName("pitch").setDescription("Pitch").setRequired(false)))
+    .addSubcommand((s) => s.setName("supplies").setDescription("Turn your clan's build supplies off or on. The flags always spawn")
+      .addBooleanOption((o) => o.setName("on").setDescription("True for the full kit, false for flags only").setRequired(true)))
     .addSubcommand((s) => s.setName("rebind").setDescription("Move your base to a pole your flag was raised at")
       .addStringOption((o) => o.setName("pole").setDescription("Which pole").setRequired(true).setAutocomplete(true)))
     .addSubcommand((s) => s.setName("disband").setDescription("Disband the clan")),
@@ -93,6 +102,7 @@ export const clanGroup: CommandGroup = {
     { path: "clan rename", handler: rename, autocomplete: { flag: flags } },
     { path: "clan rebrand-cancel", handler: rebrandCancel },
     { path: "clan recruiting", handler: recruiting },
+    { path: "clan supplies", handler: supplies },
     { path: "clan rebind", handler: rebind, autocomplete: { pole: poles } },
     { path: "clan disband", handler: disband },
   ],

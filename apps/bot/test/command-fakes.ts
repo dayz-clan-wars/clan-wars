@@ -70,7 +70,7 @@ export function viewFixture(over: Partial<ClanView> = {}): ClanView {
     clan: {
       id: 1, name: "Wolves", tag: "WLF", texture: "wolf", status: "active",
       createdAt: new Date("2026-01-01T00:00:00Z"), activatedAt: new Date("2026-01-01T00:00:00Z"), recruiting: false,
-      playWindow: null, language: null, pitch: null, base: null,
+      playWindow: null, language: null, pitch: null, buildSupplies: true, base: null,
     },
     me: { role: "leader", status: "full" },
     roster: [],

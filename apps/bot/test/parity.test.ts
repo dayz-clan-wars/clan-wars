@@ -25,7 +25,7 @@ const COMMANDS: Record<string, string> = {
   acceptInvite: "me accept", declineInvite: "me decline", withdrawRequest: "me withdraw",
   invite: "roster invite", revokeInvite: "roster revoke", decideRequest: "roster decide",
   kick: "roster kick", promote: "roster promote", demote: "roster demote", transfer: "roster transfer",
-  leave: "clan leave", rename: "clan rename", cancelRebrand: "clan rebrand-cancel", setRecruitingPost: "clan recruiting",
+  leave: "clan leave", rename: "clan rename", cancelRebrand: "clan rebrand-cancel", setRecruitingPost: "clan recruiting", setSupplies: "clan supplies",
   confirmRebind: "clan rebind", disband: "clan disband",
   requestJoin: "clans join",
   claimSuccession: "lead claim", openVote: "lead vote", castVote: "lead ballot",
