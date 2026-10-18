@@ -331,9 +331,9 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
         // list entry (two concurrent bans share ONE entry), so this row closing
         // frees nobody — announcing "unbanned" here would publicly say
         // something untrue about a real player, who would then try to rejoin
-        // and find themselves still banned. Reachable today: a `zone` ban plus
-        // a permanent `unlinked_pc` one, since `pc-ban-tick.ts`'s duplicate
-        // check only looks at `reason = 'unlinked_pc'` rows. Tying the
+        // and find themselves still banned. Reachable whenever two bans overlap,
+        // e.g. a `zone` ban plus a permanent `conduct` one (and, until 2.3.3,
+        // the PC auto-ban's `unlinked_pc`). Tying the
         // announcement to the Nitrado removal instead yields exactly ONE unban
         // message per account, posted when the LAST active ban actually lifts.
         //

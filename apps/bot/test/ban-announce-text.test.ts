@@ -55,9 +55,12 @@ describe("banAnnouncementText", () => {
     expect(line).not.toMatch(/\]\(</);
   });
 
-  it("lifted / unlinked_pc: account linked", () => {
+  // ⚠️ No "account linked": the 18 PC bans were lifted when the auto-ban was
+  // removed (2.3.3), not because anyone linked, and the site renders old rows
+  // with today's wording.
+  it("lifted / unlinked_pc: plain unbanned", () => {
     const a: BanAnnouncement = { kind: "lifted", gamertag: "Wolfie", reason: "unlinked_pc", expiresAt: null };
-    expect(banAnnouncementText(a)).toBe("🔓 **Wolfie** unbanned — account linked.");
+    expect(banAnnouncementText(a)).toBe("🔓 **Wolfie** unbanned.");
   });
 
   it("lifted / zone: does not claim a reason it does not know", () => {

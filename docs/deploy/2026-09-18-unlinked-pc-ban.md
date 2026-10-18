@@ -1,5 +1,7 @@
 # Banning unlinked PC players — deploy
 
+> **Removed in 2.3.3 (2026-10-18).** The tick, the rule and `UNLINKED_PC_BAN` are gone, and every applied `unlinked_pc` ban was lifted. Kept as history.
+
 This server is for Xbox. A PC player is welcome if we know who they are; the ban is
 what makes linking non-optional for the ones we don't. Design and rule:
 `packages/domain/src/pc-gate.ts` (`pcGateAction`, `PcGateFacts`). Tick:
