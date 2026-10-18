@@ -36,7 +36,7 @@ describe("boosterKitTick", () => {
    */
   const seedEligibleBooster = async (a: {
     discordId: string; gamertag: string; pos: [number, number, number] | null;
-    mask?: string; jacket?: string;
+    mask?: string; jacket?: string; vest?: string;
   }) => {
     await db.insert(discordBoosters).values({ discordId: a.discordId, premiumSince: now, observedAt: now });
     await db.insert(identityLinks).values({
@@ -47,7 +47,7 @@ describe("boosterKitTick", () => {
       posX: a.pos ? a.pos[0].toFixed(2) : null,
       posY: a.pos ? a.pos[1].toFixed(2) : null,
       posZ: a.pos ? a.pos[2].toFixed(2) : null,
-      mask: a.mask ?? null, jacket: a.jacket ?? null,
+      mask: a.mask ?? null, jacket: a.jacket ?? null, vest: a.vest ?? null,
     });
   };
 
@@ -82,6 +82,28 @@ describe("boosterKitTick", () => {
     expect(objects[0].pos).toEqual([1, 2.25, 3]);
     expect(objects[0].name).toBe("BalaclavaMask_Black");
     expect(objects[0].customString).toBe("Bob");
+  });
+
+  it("spawns a pick's extras right after it, and nothing for an empty vest", async () => {
+    await seedEligibleBooster({ discordId: "1", gamertag: "Bob", pos: [1, 2, 3], mask: "BalaclavaMask_Black" });
+    await seedEligibleBooster({ discordId: "2", gamertag: "Al", pos: [4, 5, 6], mask: "BalaclavaMask_Black", vest: "PlateCarrierVest" });
+    const client = fakeUploader();
+    const r = await tick(client);
+    expect(r.kits).toBe(2);
+    const names = JSON.parse(client.uploaded[0]!.content).Objects.map((o: { name: string }) => o.name);
+    // Bob's vest is null: just the mask, no error. Al's carrier is followed by its pouches and holster.
+    expect(names).toEqual([
+      "BalaclavaMask_Black",
+      "BalaclavaMask_Black", "PlateCarrierVest", "PlateCarrierPouches", "PlateCarrierHolster",
+    ]);
+  });
+
+  it("drops a retired pick together with its extras", async () => {
+    await seedEligibleBooster({ discordId: "1", gamertag: "Bob", pos: [1, 2, 3], mask: "BalaclavaMask_Black", vest: "PlateCarrierVest_Retired" });
+    const client = fakeUploader();
+    await tick(client);
+    const names = JSON.parse(client.uploaded[0]!.content).Objects.map((o: { name: string }) => o.name);
+    expect(names).toEqual(["BalaclavaMask_Black"]);
   });
 
   it("excludes a booster who stopped boosting", async () => {

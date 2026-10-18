@@ -5,7 +5,7 @@ import { KIT_SLOTS, KIT_SLOT_LABELS as SLOT_LABELS, type KitSlot } from "@factio
  * vault-copy.ts hold theirs.
  *
  * Voice rules for this page, from the design: plain sentences, no em dashes,
- * and nothing that frames the kit as protected. The kit is a pile of clothing
+ * and nothing that frames the kit as protected. The kit is a pile of gear
  * on the ground. Anyone who walks past it can take it, and it is back at the
  * next restart. Saying so plainly is the point: a player who thinks the spot
  * is defended will pick a worse one.
@@ -13,14 +13,14 @@ import { KIT_SLOTS, KIT_SLOT_LABELS as SLOT_LABELS, type KitSlot } from "@factio
 
 /**
  * The slot names and the 3x3 reading order live in `@factions/domain` since the
- * booster kit became an award too: the award page lays the same nine slots out
+ * booster kit became an award too: the award page lays the same ten slots out
  * from the catalogue, and one statement of each keeps the two pages the same.
  */
 export { KIT_SLOT_LABELS as SLOT_LABELS, KIT_GRID_ORDER } from "@factions/domain";
 
 /** The three sentences the page must say plainly, wherever the kit is described. */
 export const GROUND_RULES = [
-  "The kit spawns on the ground where you marked it, in the open, as a pile of clothing.",
+  "The kit spawns on the ground where you marked it, in the open, as a pile of gear.",
   "Anyone who finds it can take it. It is loot like any other loot.",
   "It comes back at the next restart, in the same spot, for as long as you keep boosting.",
 ] as const;
@@ -36,7 +36,7 @@ export const GROUND_RULES = [
  */
 export const RESULT_COPY: Record<string, string> = {
   "bad-pick": "That item is not on the list for that slot, so nothing was saved. Pick one of the listed options.",
-  "bad-slot": "That is not one of the nine slots, so nothing was saved.",
+  "bad-slot": "That is not one of the ten slots, so nothing was saved.",
   "not-linked": "Link your character first. The spot is marked in game, so we need to know which character is yours.",
   "not-boosting": "Your kit is for server boosters. Nothing was saved.",
   // The page saves as you pick, so a failed save is the one thing a player
@@ -57,5 +57,5 @@ export function savedToast(slot: KitSlot, itemLabel: string | null): string {
     : `${SLOT_LABELS[slot]} set to ${itemLabel}. Saved.`;
 }
 
-/** The count beside the grid: how many of the nine are filled. */
+/** The count beside the grid: how many of the ten are filled. */
 export const KIT_PIECES = KIT_SLOTS.length;

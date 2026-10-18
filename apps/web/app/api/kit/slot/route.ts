@@ -3,7 +3,7 @@ import { json } from "@/lib/api";
 import { boosterOnly, freshView } from "../guard";
 
 /**
- * Save one of the nine slots. The page saves as you pick, so this is the
+ * Save one of the ten slots. The page saves as you pick, so this is the
  * write every tap goes through.
  *
  * ⚠️ `slot` and `className` are read as strings and handed STRAIGHT to

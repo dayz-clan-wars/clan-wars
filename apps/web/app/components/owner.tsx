@@ -160,7 +160,7 @@ export function BoosterKitPanel({ owner }: { owner: Owner }) {
     <Panel title="Booster kit">
       <PanelBody>
         <p className="text-sm leading-relaxed text-ink-2">
-          Thanks for boosting. Pick the nine pieces you respawn with, and the spot they wait at.
+          Thanks for boosting. Pick the ten pieces you respawn with, and the spot they wait at.
         </p>
         <a href="/kit" className={`mt-3 ${btnPrimary}`}>Open your kit</a>
       </PanelBody>

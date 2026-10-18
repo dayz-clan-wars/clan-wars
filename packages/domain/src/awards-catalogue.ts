@@ -1,5 +1,5 @@
 import { loadAwards, type Awards, type AwardSlot } from "./awards";
-import { KIT_GRID_ORDER, KIT_SLOT_LABELS, loadCatalogue } from "./booster-kit";
+import { KIT_AWARD_OPTIONAL_SLOTS, KIT_GRID_ORDER, KIT_SLOT_LABELS, loadCatalogue } from "./booster-kit";
 import raw from "../assets/awards.json";
 import boosterRaw from "../assets/booster-catalogue.json";
 
@@ -8,7 +8,7 @@ const BOOSTER_SLOTS = "booster-catalogue";
 
 /**
  * Fill every `"slotsFrom": "booster-catalogue"` entry with the booster kit's
- * nine slots, in the kit page's reading order.
+ * ten slots, in the kit page's reading order.
  *
  * ⚠️ Derived, never copied into awards.json: the kit catalogue is ~200 items
  * that change as the mission's types.xml does, and a second copy would drift
@@ -28,7 +28,13 @@ function expandSlots(json: Record<string, Record<string, unknown>>): Record<stri
     if (rest.slots !== undefined) throw new Error(`awards: ${key} has both slots and slotsFrom`);
     const kit = loadCatalogue(boosterRaw);
     const slots: Record<string, AwardSlot> = {};
-    for (const slot of KIT_GRID_ORDER) slots[slot] = { label: KIT_SLOT_LABELS[slot], items: kit[slot] };
+    // ⚠️ `optional` here, not in awards.json (the slots are derived). Without
+    // it every live booster-kit grant, placed with nine picks, would fail
+    // `picksComplete` the moment the vest slot was added and leave the award
+    // file at the next sweep.
+    for (const slot of KIT_GRID_ORDER) {
+      slots[slot] = { label: KIT_SLOT_LABELS[slot], items: kit[slot], ...(KIT_AWARD_OPTIONAL_SLOTS.includes(slot) ? { optional: true as const } : {}) };
+    }
     out[key] = { ...rest, slots };
   }
   return out;

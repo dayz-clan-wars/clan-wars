@@ -1,13 +1,23 @@
 /**
- * The nine slots a booster chooses. The tenth item in a kit is the clan
+ * The ten slots a booster chooses. The item after them in a kit is the clan
  * armband, which is DERIVED from the faction's texture (armbandFor) and is
  * deliberately not a slot: storing it would go stale the moment a clan
  * changes flag.
  */
-export const KIT_SLOTS = ["mask", "eyewear", "hat", "jacket", "pants", "boots", "gloves", "hipPack", "backpack"] as const;
+export const KIT_SLOTS = ["mask", "eyewear", "hat", "jacket", "pants", "boots", "gloves", "hipPack", "backpack", "vest"] as const;
 export type KitSlot = (typeof KIT_SLOTS)[number];
 
-/** What each of the nine slots is called on the page. Keyed by KIT_SLOTS. */
+/**
+ * Kit slots the booster-kit AWARD does not require.
+ *
+ * ⚠️ Added when the Vest slot was. Live booster-kit grants were placed before
+ * it existed and hold nine picks; with the vest required, every one would fail
+ * `picksComplete` and leave the spawner file on the next sweep. The kit page
+ * is unaffected: a booster's own kit never required any slot.
+ */
+export const KIT_AWARD_OPTIONAL_SLOTS: readonly KitSlot[] = ["vest"];
+
+/** What each of the ten slots is called on the page. Keyed by KIT_SLOTS. */
 export const KIT_SLOT_LABELS: Record<KitSlot, string> = {
   mask: "Mask",
   eyewear: "Eyewear",
@@ -18,26 +28,37 @@ export const KIT_SLOT_LABELS: Record<KitSlot, string> = {
   gloves: "Gloves",
   hipPack: "Hip pack",
   backpack: "Backpack",
+  vest: "Vest",
 };
 
 /**
- * The nine tiles' reading order, which is NOT `KIT_SLOTS`.
+ * The ten tiles' reading order, which is NOT `KIT_SLOTS`.
  *
  * ⚠️ A separate list on purpose. `KIT_SLOTS` is the write layer's order (the
  * columns on `booster_kits`, the loop every save and every catalogue check
  * runs) and reordering it to suit a grid would silently reorder them all.
- * This is the 3x3 the design lays out: the pieces that decide whether a kit
- * is worth walking to on the top row, the small ones last. apps/web/test/kit.test.ts pins
- * it as a permutation of KIT_SLOTS, so a slot can never be dropped from the
+ * This is the grid the design lays out: the pieces that decide whether a kit
+ * is worth walking to on the top row (the vest beside the jacket), the small
+ * ones last. apps/web/test/kit.test.ts pins it as a permutation of KIT_SLOTS, so a slot can never be dropped from the
  * page by editing only this line.
  */
 export const KIT_GRID_ORDER = [
-  "jacket", "pants", "backpack",
-  "hipPack", "boots", "gloves",
-  "hat", "mask", "eyewear",
+  "jacket", "vest", "pants", "backpack",
+  "hipPack", "boots", "gloves", "hat",
+  "mask", "eyewear",
 ] as const satisfies readonly KitSlot[];
 
-export type CatalogueEntry = { className: string; label: string; image?: string };
+export type CatalogueEntry = {
+  className: string;
+  label: string;
+  image?: string;
+  /**
+   * Class names that spawn beside this pick (a plate carrier's pouches and
+   * holster). Same meaning as `AwardItem.extras`; never chosen, so never a
+   * slot of their own.
+   */
+  extras?: string[];
+};
 export type Catalogue = Record<KitSlot, CatalogueEntry[]>;
 
 /**
@@ -68,6 +89,13 @@ export function loadCatalogue(json: unknown): Catalogue {
       // and BalaclavaMask_White. Unique class names hid it completely.
       if (seenLabels.has(e.label)) throw new Error(`booster catalogue: slot ${slot} lists the label ${e.label} twice`);
       seenLabels.add(e.label);
+      // ⚠️ Same rule and message shape as `loadAwards`: empty is refused
+      // rather than read as "none", so there is one way to say it.
+      if (e.extras !== undefined
+        && (!Array.isArray(e.extras) || e.extras.length === 0
+          || !e.extras.every((x: unknown) => typeof x === "string" && x !== ""))) {
+        throw new Error(`booster catalogue: ${e.className} extras must be a non-empty list of class names`);
+      }
       if (e.image !== undefined) {
         // ⚠️ Named after OUR class name, checked here rather than trusted: the
         // path is what the picker renders and what item-assets.test.ts pins

@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Catalogue, CatalogueEntry, KitSlot } from "@factions/domain";
 import { lookupCopy } from "@/lib/copy-lookup";
+import { comesWith } from "@/lib/award-parts";
 import { GROUND_RULES, KIT_GRID_ORDER, KIT_PIECES, RESULT_COPY, SLOT_LABELS, savedToast } from "@/lib/kit-copy";
 import { dismissTimer, UNDO_MS } from "@/lib/dismiss-timer";
 import { visiblePoll } from "@/lib/visible-poll";
@@ -21,7 +22,7 @@ import { SequenceCard } from "./sequence-card";
  * on purpose (design, 2026-09-19); what replaced them is a write per pick and
  * an Undo beside the confirmation.
  *
- * ⚠️ `view` is the ONLY source of truth for the nine picks, and every write
+ * ⚠️ `view` is the ONLY source of truth for the ten picks, and every write
  * replaces it with the server's own re-read. Nothing here patches a slot
  * locally and hopes: a pick that was refused, or a spot a tick marked while
  * the page was open, would otherwise sit wrong on screen until a reload.
@@ -171,7 +172,7 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
   /**
    * ⚠️ Counted through `entryFor`, exactly as the tiles are drawn, not from
    * the raw class names. A pick whose item has since left the catalogue draws
-   * as an empty tile; counting it as filled would read "5/9" over four
+   * as an empty tile; counting it as filled would read "5/10" over four
    * pictures and send the player looking for a fifth that is not there.
    */
   const chosen = catalogue ? KIT_GRID_ORDER.filter((s) => entryFor(catalogue, s, view.slots[s])).length : 0;
@@ -235,6 +236,14 @@ export function KitFlow({ initial, catalogue }: { initial: KitView; catalogue: C
                 <HowThisWorks open={help} onToggle={() => setHelp((v) => !v)} />
               </div>
             </div>
+
+            {/* What a pick spawns beside it, in grid order. Loose in the pile: the player fits it in game. */}
+            {KIT_GRID_ORDER.map((slot) => {
+              const e = entryFor(catalogue, slot, view.slots[slot]);
+              return e?.extras
+                ? <p key={slot} className="mt-3 max-w-[34rem] text-[13px] leading-relaxed text-ink-2">{`${e.label} comes with: ${comesWith(e.extras)}`}</p>
+                : null;
+            })}
           </div>
         )}
       </Page>
@@ -346,7 +355,7 @@ function entryFor(catalogue: Catalogue, slot: KitSlot, className: string | null)
  *
  * ⚠️ Sticky at `top-bar`, under the 52px site bar and below its z-index. It
  * is the one thing on the page a booster opens it to check, and the grid
- * below is nine tiles tall on a phone.
+ * below is ten tiles tall on a phone.
  */
 function SpotStrip({ view, busy, onDraw }: { view: KitView; busy: boolean; onDraw: () => void }) {
   const waiting = view.challenge !== null;
@@ -375,7 +384,7 @@ function SpotStrip({ view, busy, onDraw }: { view: KitView; busy: boolean; onDra
   );
 }
 
-/** One of the nine tiles. Filled tiles are framed; an empty one is dashed with a plus. */
+/** One of the ten tiles. Filled tiles are framed; an empty one is dashed with a plus. */
 function SlotTile({ slot, entry, onOpen }: { slot: KitSlot; entry: CatalogueEntry | null; onOpen: () => void }) {
   return (
     <button type="button" onClick={onOpen}
@@ -408,13 +417,13 @@ function HowThisWorks({ open, onToggle }: { open: boolean; onToggle: () => void 
       {open && (
         <div className="border-t border-rule-2 p-3.5">
           <p className="text-[13px] leading-relaxed text-ink-2">
-            Boost the Discord and you get a kit. You pick nine pieces of clothing here, then mark a spot in game with a short emote sequence. The kit spawns there every restart for as long as you keep boosting.
+            Boost the Discord and you get a kit. You pick ten pieces of gear here, then mark a spot in game with a short emote sequence. The kit spawns there every restart for as long as you keep boosting.
           </p>
           <ul className="mt-3 flex flex-col gap-2 text-[13px] leading-relaxed text-ink-2">
             {GROUND_RULES.map((line) => <li key={line}>{line}</li>)}
           </ul>
           <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-            Pick your spot with that in mind. Somewhere quiet gets you your clothes back. Somewhere obvious hands them to whoever gets there first, which is a fine thing to do on purpose.
+            Pick your spot with that in mind. Somewhere quiet gets you your gear back. Somewhere obvious hands it to whoever gets there first, which is a fine thing to do on purpose.
           </p>
           <p className="mt-3 text-[11px] leading-relaxed text-dim">
             Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.
@@ -436,10 +445,10 @@ function NotBoosting() {
     <div className="px-4 pb-16 pt-6 lg:px-8">
       <div className={kicker}>Booster kit</div>
       <h1 className="mt-1.5 font-display text-[38px] uppercase leading-[.9] tracking-[-0.02em] text-ink lg:text-[56px]">
-        Nine pieces,<br />your spot
+        Ten pieces,<br />your spot
       </h1>
       <p className="mt-3.5 max-w-[34rem] text-sm leading-relaxed text-ink-2">
-        Boost the Discord and you get a kit: nine pieces of clothing you pick, dropped where you marked them, every restart.
+        Boost the Discord and you get a kit: ten pieces of gear you pick, dropped where you marked them, every restart.
       </p>
       <div className="mt-5 grid max-w-[34rem] grid-cols-3 gap-2 opacity-45">
         {["MilitaryCap_Woodland", "GorkaEJacket_Summer", "AliceBag_Green"].map((c) => (
@@ -453,7 +462,7 @@ function NotBoosting() {
         Open the Discord server, tap the server name at the top, and choose Boosts. Discord charges you, not us. Boosts also raise the whole server, so everyone gets the upload limits and the audio quality.
       </p>
       <p className="mt-3 max-w-[34rem] text-sm leading-relaxed text-ink-2">
-        We check Discord for new boosts on a timer, so your kit turns on at the next check rather than the instant you boost, and the pickers appear on this page then. Stop boosting and the kit stops spawning at the next restart. Your nine picks are kept, so it comes straight back if you boost again.
+        We check Discord for new boosts on a timer, so your kit turns on at the next check rather than the instant you boost, and the pickers appear on this page then. Stop boosting and the kit stops spawning at the next restart. Your ten picks are kept, so it comes straight back if you boost again.
       </p>
       <div className="mt-6 max-w-[34rem]"><HowThisWorks open={help} onToggle={() => setHelp((v) => !v)} /></div>
     </div>
@@ -475,7 +484,7 @@ function NotLinked() {
       <a className={`mt-5 max-w-[34rem] ${btnCta}`} href="/link">
         Link your character <span className="font-mono normal-case">&rarr;</span>
       </a>
-      <p className="mt-3.5 max-w-[34rem] text-sm leading-relaxed text-dim">Come back here afterwards and your nine pickers appear.</p>
+      <p className="mt-3.5 max-w-[34rem] text-sm leading-relaxed text-dim">Come back here afterwards and your ten pickers appear.</p>
       <div className="mt-6 max-w-[34rem]"><HowThisWorks open={help} onToggle={() => setHelp((v) => !v)} /></div>
     </div>
   );

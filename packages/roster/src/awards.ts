@@ -124,7 +124,7 @@ export async function saveAwardPickDb(db: Database, a: {
 /**
  * Draw the emote sequence that marks where the award spawns.
  *
- * ⚠️ Refused until every slot is picked (spec §4.4). An award placed with a
+ * ⚠️ Refused until every required slot is picked (spec §4.4). An award placed with a
  * gap would spawn part of a prize, which reads as a bug to the winner.
  */
 export async function startAwardPlacementDb(db: Database, a: {

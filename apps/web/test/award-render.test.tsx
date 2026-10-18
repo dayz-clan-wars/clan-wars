@@ -21,11 +21,11 @@ describe("the award page", () => {
     expect(render(view({ state: "live", expiresAt: "2026-09-29T14:00:00.000Z" }))).not.toContain("It runs for");
   });
 
-  it("lays the booster kit award out as the kit page's nine slots", () => {
+  it("lays the booster kit award out as the kit page's ten slots", () => {
     const kit = awardsCatalogue()["booster-kit"]!;
     const html = renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Booster Kit" }), def: kit }));
     for (const s of Object.values(kit.slots)) expect(html).toContain(s.label);
-    expect(Object.keys(kit.slots)).toHaveLength(9);
+    expect(Object.keys(kit.slots)).toHaveLength(10);
   });
 
   it("shows one tile per slot, and holds Place until every slot is picked", () => {
@@ -39,12 +39,22 @@ describe("the award page", () => {
     expect(html).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
   });
 
+  it("enables Place on the booster kit award with every slot but the vest picked", () => {
+    const kit = awardsCatalogue()["booster-kit"]!;
+    const at = (skip: string) => {
+      const picks = Object.fromEntries(Object.entries(kit.slots).filter(([k]) => k !== skip).map(([k, s]) => [k, s.items[0]!.className]));
+      return renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Booster Kit", gamertag: "Ron", picks }), def: kit }));
+    };
+    expect(at("vest")).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
+    expect(at("jacket")).toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
+  });
+
   it("says what a picked weapon comes with, and nothing before a pick", () => {
     const kit = awardsCatalogue()["weapon-kit"]!;
     const at = (picks: Record<string, string>) =>
       renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Weapon Kit", durationDays: 3, picks }), def: kit }));
-    expect(at({ weapon: "AKM" })).toContain("Comes with: AK plastic buttstock, AK plastic handguard, Kobra sight, 9V battery, AK suppressor, 2× 75-round AKM drum");
-    expect(at({})).not.toContain("Comes with");
+    expect(at({ weapon: "AKM" })).toContain("AKM comes with: AK plastic buttstock, AK plastic handguard, Kobra sight, 9V battery, AK suppressor, 2× 75-round AKM drum");
+    expect(at({})).not.toContain("comes with");
   });
 
   it("does not show the empty-slot + on a picked item with no art", () => {

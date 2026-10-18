@@ -38,6 +38,7 @@ describe("the booster kit page's reads and writes", () => {
     mask: "BalaclavaMask_BDU", eyewear: "SportGlasses_Black", hat: "ChristmasHeadband_Antlers",
     jacket: "BDUJacket", pants: "BDUPants", boots: "MilitaryBoots_Beige",
     gloves: "OMNOGloves_Brown", hipPack: "HipPack_Black", backpack: "TortillaBag",
+    vest: "PlateCarrierVest",
   };
   const saveAll = (picks: Record<KitSlot, string> = ALL_PICKS) =>
     saveBoosterKitDb(db, { discordId: "1", picks, now });
@@ -62,7 +63,7 @@ describe("the booster kit page's reads and writes", () => {
       expect(await db.select().from(boosterKits)).toEqual([]);
     });
 
-    it("rejects a slot that is not one of the nine", async () => {
+    it("rejects a slot that is not one of the ten", async () => {
       expect(await save("armband", "Armband_Zenit")).toEqual({ ok: false, reason: "bad-slot" });
       expect(await db.select().from(boosterKits)).toEqual([]);
     });
@@ -122,7 +123,7 @@ describe("the booster kit page's reads and writes", () => {
   });
 
   describe("saveBoosterKitDb", () => {
-    it("writes all nine slots in one call", async () => {
+    it("writes all ten slots in one call", async () => {
       expect(await saveAll()).toEqual({ ok: true });
       const [row] = await db.select().from(boosterKits);
       for (const slot of KIT_SLOTS) expect([slot, row![slot]]).toEqual([slot, ALL_PICKS[slot]]);
@@ -203,7 +204,7 @@ describe("the booster kit page's reads and writes", () => {
       expect(view.linked).toBeNull();
     });
 
-    it("returns the nine slots, the spot, and the clan's armband derived from its flag", async () => {
+    it("returns the ten slots, the spot, and the clan's armband derived from its flag", async () => {
       await boost();
       await link();
       const [f] = await db.insert(factions).values({

@@ -4,6 +4,7 @@ import {
   servers, awardGrants, awardUploads, identityLinks, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
+import { awardsCatalogue } from "@factions/domain/awards";
 import { awardTick } from "../src/award-tick.js";
 
 const DB_URL = requireTestDatabaseUrl();
@@ -171,6 +172,16 @@ describe("awardTick", () => {
     const client = fakeUploader();
     expect(await tick(client)).toMatchObject({ awards: 0, dropped: [g!.id] });
     expect(client.uploaded).toEqual(['{"Objects":[]}']);
+  });
+
+  it("⚠️ keeps a booster kit grant that has no vest, and spawns its nine picks", async () => {
+    const slots = awardsCatalogue()["booster-kit"]!.slots;
+    const picks = Object.fromEntries(Object.entries(slots).filter(([k]) => k !== "vest").map(([k, s]) => [k, s.items[0]!.className]));
+    await seed({ awardKey: "booster-kit", picks });
+    const client = fakeUploader();
+    const out = await tick(client);
+    expect(out).toMatchObject({ awards: 1, dropped: [] });
+    expect(objects(client.uploaded[0]!).map((o) => o.name).sort()).toEqual(Object.values(picks).sort());
   });
 
   it("writes a plate carrier exactly as before: one object per pick, in slot order", async () => {

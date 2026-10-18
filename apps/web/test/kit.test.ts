@@ -49,7 +49,7 @@ const SOURCES = { "page.tsx": PAGE, "kit-flow.tsx": FLOW, "pick-sheet.tsx": SHEE
 const PLAYER_COPY = [...Object.values(RESULT_COPY), ...GROUND_RULES, ...Object.values(SLOT_LABELS)];
 
 describe("the kit page's copy", () => {
-  it("names all nine slots, and nothing else", () => {
+  it("names all ten slots, and nothing else", () => {
     expect(Object.keys(SLOT_LABELS).sort()).toEqual([...KIT_SLOTS].sort());
   });
 
@@ -63,6 +63,7 @@ describe("the kit page's copy", () => {
     expect([...KIT_GRID_ORDER].sort()).toEqual([...KIT_SLOTS].sort());
     expect(KIT_GRID_ORDER).toHaveLength(KIT_SLOTS.length);
     expect([...KIT_GRID_ORDER]).not.toEqual([...KIT_SLOTS]);
+    expect(KIT_GRID_ORDER.indexOf("vest")).toBe(KIT_GRID_ORDER.indexOf("jacket") + 1);
   });
 
   it("uses no em dash anywhere the player can read", () => {
@@ -168,7 +169,7 @@ describe("the kit page's states", () => {
     expect(FLOW).toContain('href="/link"');
   });
 
-  it("gives a boosting, linked visitor the nine tiles and the sequence card", () => {
+  it("gives a boosting, linked visitor the ten tiles and the sequence card", () => {
     expect(FLOW).toContain("KIT_GRID_ORDER.map((slot) =>");
     expect(FLOW).toContain("<SequenceCard");
     expect(FLOW).toContain("<PickSheet");
