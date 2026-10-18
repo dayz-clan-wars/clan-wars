@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.1] - 2026-10-18
+
 ### Added
 
 - The weapon kit now offers the SCAR-L, set up like the AUG: ACOG, suppressor and two 60-round mags, plus a precision buttstock. It shows without a picture until one is available.
