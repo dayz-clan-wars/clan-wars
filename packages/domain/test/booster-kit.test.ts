@@ -99,7 +99,39 @@ it("the committed catalogue has no duplicate label in any slot", () => {
  * ⚠️ 1.30 items neither wiki has art for yet. They render as "No art" tiles.
  * Remove a class from here when its image lands.
  */
-const NO_ART_YET = ["FNOJacket", "FNOPants"];
+const NO_ART_YET = [
+  "Keffiyeh_Black", "Keffiyeh_Blue", "Keffiyeh_Brown", "Keffiyeh_Gray", "Keffiyeh_LightBlue",
+  "Keffiyeh_LightBrown", "Keffiyeh_LightRed", "Keffiyeh_Red", "DustGoggles_Black",
+  "DustGoggles_Transparent", "BallisticHelmet_UN", "BallisticHelmet_Black",
+  "BallisticHelmet_Green", "MilitaryBeret_TK", "BallisticHelmet_BDU", "BallisticHelmet_Desert",
+  "BallisticHelmet_Navy", "BallisticHelmet_Winter", "BallisticHelmet_Woodland",
+  "GhillieHood_Desert", "OBRCap_Beige", "OBRCap_Olive", "PakolHat_Beige", "PakolHat_Black",
+  "PakolHat_Brown", "PakolHat_Grey", "PakolHat_White", "T56TankerHelmet_Olive",
+  "T56TankerHelmet_Tan", "Mich2001Helmet", "TurbanHat_Beige", "TurbanHat_Black", "TurbanHat_Brown",
+  "TurbanHat_Green", "TurbanHat_Grey", "TurbanHat_NavyBlue", "TurbanHat_Pink", "TurbanHat_Purple",
+  "TurbanHat_Red", "TurbanHat_Skyblue", "TurbanHat_White", "TurbanHat_Yellow", "FNOJacket",
+  "HuntingJacket_Desert", "KameezShirt_Beige", "KameezShirt_Black", "KameezShirt_BlueFlowers",
+  "KameezShirt_Brown", "KameezShirt_Grey", "KameezShirt_NavyBlue", "KameezShirt_Olive",
+  "KameezShirt_Orange", "KameezShirt_Pink", "KameezShirt_Purple", "KameezShirt_Red",
+  "KameezShirt_SkyBlue", "KameezShirt_White", "KameezShirt_Yellow", "OBRJacket_Beige",
+  "OBRJacket_Officer", "OBRJacket_Olive", "PoliceShortSleeveShirt", "ShortSleeveShirt_Black",
+  "ShortSleeveShirt_BlueRectangles", "ShortSleeveShirt_CreamSquares", "ShortSleeveShirt_Green",
+  "ShortSleeveShirt_Hawaiian_Black", "ShortSleeveShirt_Hawaiian_Blue",
+  "ShortSleeveShirt_Hawaiian_White", "ShortSleeveShirt_Waves", "ShortSleeveShirt_White",
+  "TacticalShirt_ION_Olive", "TacticalShirt_ION_Tan", "FNOPants", "HunterPants_Desert",
+  "MensShalwarPants_Beige", "MensShalwarPants_Black", "MensShalwarPants_Brown",
+  "MensShalwarPants_Grey", "MensShalwarPants_NavyBlue", "MensShalwarPants_SkyBlue",
+  "MensShalwarPants_White", "WomensShalwarPants_NavyBlue", "WomensShalwarPants_Olive",
+  "WomensShalwarPants_Orange", "WomensShalwarPants_Pink", "WomensShalwarPants_Purple",
+  "WomensShalwarPants_Red", "SandalsShoes_Black", "SandalsShoes_Brown", "SandalsShoes_Grey",
+  "SandalsShoes_BlueNavy", "TraditionalSandalShoes_Black", "TraditionalSandalShoes_Brown",
+  "TraditionalSandalShoes_LightBrown", "TraditionalSandalShoes_NavyBlue", "AssaultBag_Desert",
+  "GhillieTop_Desert", "GhillieSuit_Desert", "CoyoteBag_Desert", "ChestRigVest_Khaki",
+  "ChestRigVest_Olive", "ChestRigVest_Tan", "UKAssVest_Desert", "HuntingVest_Desert",
+  "LinenVest_Black", "LinenVest_Brown", "LinenVest_DarkGrey", "LinenVest_Green", "LinenVest_Grey",
+  "LinenVest_NavyBlue", "RobeVest_Beige", "RobeVest_Brown", "RobeVest_Green", "RobeVest_Grey",
+  "RobeVest_Navy", "HighCapacityVest_ION",
+];
 
 it("every committed entry carries an image, bar the known gaps", () => {
   const c = loadCatalogue(catalogue);

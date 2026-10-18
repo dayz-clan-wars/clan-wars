@@ -1,59 +1,9 @@
 {
   "mask": [
     {
-      "className": "BalaclavaMask_BDU",
-      "label": "Ski Mask (BDU)",
-      "image": "items/BalaclavaMask_BDU.webp"
-    },
-    {
-      "className": "BalaclavaMask_Beige",
-      "label": "Ski Mask (Beige)",
-      "image": "items/BalaclavaMask_Beige.webp"
-    },
-    {
-      "className": "BalaclavaMask_Black",
-      "label": "Ski Mask (Black)",
-      "image": "items/BalaclavaMask_Black.webp"
-    },
-    {
-      "className": "BalaclavaMask_Blackskull",
-      "label": "Ski Mask (Blackskull)",
-      "image": "items/BalaclavaMask_Blackskull.webp"
-    },
-    {
-      "className": "BalaclavaMask_Blue",
-      "label": "Ski Mask (Blue)",
-      "image": "items/BalaclavaMask_Blue.webp"
-    },
-    {
-      "className": "BalaclavaMask_Chain",
-      "label": "Ski Mask (Chain)",
-      "image": "items/BalaclavaMask_Chain.webp"
-    },
-    {
-      "className": "BalaclavaMask_Green",
-      "label": "Ski Mask (Green)",
-      "image": "items/BalaclavaMask_Green.webp"
-    },
-    {
-      "className": "BalaclavaMask_Pig",
-      "label": "Ski Mask (Pig)",
-      "image": "items/BalaclavaMask_Pig.webp"
-    },
-    {
-      "className": "BalaclavaMask_Pink",
-      "label": "Ski Mask (Pink)",
-      "image": "items/BalaclavaMask_Pink.webp"
-    },
-    {
       "className": "Balaclava3Holes_White",
       "label": "Balaclava (White)",
       "image": "items/Balaclava3Holes_White.webp"
-    },
-    {
-      "className": "BalaclavaMask_White",
-      "label": "Ski Mask (White)",
-      "image": "items/BalaclavaMask_White.webp"
     },
     {
       "className": "Bandana_Blackpattern",
@@ -101,6 +51,38 @@
       "image": "items/PaydayMask_Hoxton.webp"
     },
     {
+      "className": "Keffiyeh_Black",
+      "label": "Keffiyeh (Black)"
+    },
+    {
+      "className": "Keffiyeh_Blue",
+      "label": "Keffiyeh (Blue)"
+    },
+    {
+      "className": "Keffiyeh_Brown",
+      "label": "Keffiyeh (Brown)"
+    },
+    {
+      "className": "Keffiyeh_Gray",
+      "label": "Keffiyeh (Gray)"
+    },
+    {
+      "className": "Keffiyeh_LightBlue",
+      "label": "Keffiyeh (Light Blue)"
+    },
+    {
+      "className": "Keffiyeh_LightBrown",
+      "label": "Keffiyeh (Light Brown)"
+    },
+    {
+      "className": "Keffiyeh_LightRed",
+      "label": "Keffiyeh (Light Red)"
+    },
+    {
+      "className": "Keffiyeh_Red",
+      "label": "Keffiyeh (Red)"
+    },
+    {
       "className": "MimeMask_Female",
       "label": "Mime Mask (Female)",
       "image": "items/MimeMask_Female.webp"
@@ -114,6 +96,56 @@
       "className": "SantasBeard",
       "label": "Santa Beard",
       "image": "items/SantasBeard.webp"
+    },
+    {
+      "className": "BalaclavaMask_BDU",
+      "label": "Ski Mask (BDU)",
+      "image": "items/BalaclavaMask_BDU.webp"
+    },
+    {
+      "className": "BalaclavaMask_Beige",
+      "label": "Ski Mask (Beige)",
+      "image": "items/BalaclavaMask_Beige.webp"
+    },
+    {
+      "className": "BalaclavaMask_Black",
+      "label": "Ski Mask (Black)",
+      "image": "items/BalaclavaMask_Black.webp"
+    },
+    {
+      "className": "BalaclavaMask_Blackskull",
+      "label": "Ski Mask (Blackskull)",
+      "image": "items/BalaclavaMask_Blackskull.webp"
+    },
+    {
+      "className": "BalaclavaMask_Blue",
+      "label": "Ski Mask (Blue)",
+      "image": "items/BalaclavaMask_Blue.webp"
+    },
+    {
+      "className": "BalaclavaMask_Chain",
+      "label": "Ski Mask (Chain)",
+      "image": "items/BalaclavaMask_Chain.webp"
+    },
+    {
+      "className": "BalaclavaMask_Green",
+      "label": "Ski Mask (Green)",
+      "image": "items/BalaclavaMask_Green.webp"
+    },
+    {
+      "className": "BalaclavaMask_Pig",
+      "label": "Ski Mask (Pig)",
+      "image": "items/BalaclavaMask_Pig.webp"
+    },
+    {
+      "className": "BalaclavaMask_Pink",
+      "label": "Ski Mask (Pink)",
+      "image": "items/BalaclavaMask_Pink.webp"
+    },
+    {
+      "className": "BalaclavaMask_White",
+      "label": "Ski Mask (White)",
+      "image": "items/BalaclavaMask_White.webp"
     },
     {
       "className": "PaydayMask_Wolf",
@@ -198,6 +230,14 @@
       "image": "items/ThickFramesGlasses.webp"
     },
     {
+      "className": "DustGoggles_Black",
+      "label": "Dust Goggles (Black)"
+    },
+    {
+      "className": "DustGoggles_Transparent",
+      "label": "Dust Goggles (Transparent)"
+    },
+    {
       "className": "SkiGoggles_BlackYellow",
       "label": "Ski Goggles (Black Yellow)",
       "image": "items/SkiGoggles_BlackYellow.webp"
@@ -225,19 +265,40 @@
   ],
   "hat": [
     {
-      "className": "ChristmasHeadband_Antlers",
-      "label": "Festive Headband (Antlers)",
-      "image": "items/ChristmasHeadband_Antlers.webp"
+      "className": "BallisticHelmet_UN",
+      "label": "Ballistic Helmet (AN)"
     },
     {
-      "className": "ChristmasHeadband_Gingerbread",
-      "label": "Festive Headband (Gingerbread)",
-      "image": "items/ChristmasHeadband_Gingerbread.webp"
+      "className": "BallisticHelmet_Black",
+      "label": "Ballistic Helmet (Black)"
     },
     {
-      "className": "ChristmasHeadband_Trees",
-      "label": "Festive Headband (Trees)",
-      "image": "items/ChristmasHeadband_Trees.webp"
+      "className": "BallisticHelmet_Green",
+      "label": "Ballistic Helmet (Green)"
+    },
+    {
+      "className": "MilitaryBeret_TK",
+      "label": "Beret (TK)"
+    },
+    {
+      "className": "BallisticHelmet_BDU",
+      "label": "Camouflage Helmet (BDU)"
+    },
+    {
+      "className": "BallisticHelmet_Desert",
+      "label": "Camouflage Helmet (Desert)"
+    },
+    {
+      "className": "BallisticHelmet_Navy",
+      "label": "Camouflage Helmet (Navy)"
+    },
+    {
+      "className": "BallisticHelmet_Winter",
+      "label": "Camouflage Helmet (Winter)"
+    },
+    {
+      "className": "BallisticHelmet_Woodland",
+      "label": "Camouflage Helmet (Woodland)"
     },
     {
       "className": "CowboyHat_black",
@@ -258,6 +319,25 @@
       "className": "CowboyHat_green",
       "label": "Cowboy Hat (Green)",
       "image": "items/CowboyHat_green.webp"
+    },
+    {
+      "className": "ChristmasHeadband_Antlers",
+      "label": "Festive Headband (Antlers)",
+      "image": "items/ChristmasHeadband_Antlers.webp"
+    },
+    {
+      "className": "ChristmasHeadband_Gingerbread",
+      "label": "Festive Headband (Gingerbread)",
+      "image": "items/ChristmasHeadband_Gingerbread.webp"
+    },
+    {
+      "className": "ChristmasHeadband_Trees",
+      "label": "Festive Headband (Trees)",
+      "image": "items/ChristmasHeadband_Trees.webp"
+    },
+    {
+      "className": "GhillieHood_Desert",
+      "label": "Ghillie Hood (Desert)"
     },
     {
       "className": "Headdress_Bear",
@@ -315,9 +395,103 @@
       "image": "items/MorozkoHat.webp"
     },
     {
+      "className": "OBRCap_Beige",
+      "label": "OBR Cap (Beige)"
+    },
+    {
+      "className": "OBRCap_Olive",
+      "label": "OBR Cap (Olive)"
+    },
+    {
+      "className": "PakolHat_Beige",
+      "label": "Pakol (Beige)"
+    },
+    {
+      "className": "PakolHat_Black",
+      "label": "Pakol (Black)"
+    },
+    {
+      "className": "PakolHat_Brown",
+      "label": "Pakol (Brown)"
+    },
+    {
+      "className": "PakolHat_Grey",
+      "label": "Pakol (Grey)"
+    },
+    {
+      "className": "PakolHat_White",
+      "label": "Pakol (White)"
+    },
+    {
       "className": "SantasHat",
       "label": "Santa Hat",
       "image": "items/SantasHat.webp"
+    },
+    {
+      "className": "T56TankerHelmet_Olive",
+      "label": "T65 Helmet (Olive)"
+    },
+    {
+      "className": "T56TankerHelmet_Tan",
+      "label": "T65 Helmet (Tan)"
+    },
+    {
+      "className": "Mich2001Helmet",
+      "label": "Tactical Helmet",
+      "extras": [
+        "NVGoggles",
+        "UniversalLight",
+        "Battery9V",
+        "Battery9V"
+      ]
+    },
+    {
+      "className": "TurbanHat_Beige",
+      "label": "Turban (Beige)"
+    },
+    {
+      "className": "TurbanHat_Black",
+      "label": "Turban (Black)"
+    },
+    {
+      "className": "TurbanHat_Brown",
+      "label": "Turban (Brown)"
+    },
+    {
+      "className": "TurbanHat_Green",
+      "label": "Turban (Green)"
+    },
+    {
+      "className": "TurbanHat_Grey",
+      "label": "Turban (Grey)"
+    },
+    {
+      "className": "TurbanHat_NavyBlue",
+      "label": "Turban (Navy Blue)"
+    },
+    {
+      "className": "TurbanHat_Pink",
+      "label": "Turban (Pink)"
+    },
+    {
+      "className": "TurbanHat_Purple",
+      "label": "Turban (Purple)"
+    },
+    {
+      "className": "TurbanHat_Red",
+      "label": "Turban (Red)"
+    },
+    {
+      "className": "TurbanHat_Skyblue",
+      "label": "Turban (Sky Blue)"
+    },
+    {
+      "className": "TurbanHat_White",
+      "label": "Turban (White)"
+    },
+    {
+      "className": "TurbanHat_Yellow",
+      "label": "Turban (Yellow)"
     },
     {
       "className": "WitchHat",
@@ -476,6 +650,10 @@
       "image": "items/HuntingJacket_Brown.webp"
     },
     {
+      "className": "HuntingJacket_Desert",
+      "label": "Hunter Jacket (Desert)"
+    },
+    {
       "className": "HuntingJacket_Spring",
       "label": "Hunter Jacket (Spring)",
       "image": "items/HuntingJacket_Spring.webp"
@@ -489,6 +667,62 @@
       "className": "HuntingJacket_Winter",
       "label": "Hunter Jacket (Winter)",
       "image": "items/HuntingJacket_Winter.webp"
+    },
+    {
+      "className": "KameezShirt_Beige",
+      "label": "Kameez (Beige)"
+    },
+    {
+      "className": "KameezShirt_Black",
+      "label": "Kameez (Black)"
+    },
+    {
+      "className": "KameezShirt_BlueFlowers",
+      "label": "Kameez (Blue Flowers)"
+    },
+    {
+      "className": "KameezShirt_Brown",
+      "label": "Kameez (Brown)"
+    },
+    {
+      "className": "KameezShirt_Grey",
+      "label": "Kameez (Grey)"
+    },
+    {
+      "className": "KameezShirt_NavyBlue",
+      "label": "Kameez (Navy Blue)"
+    },
+    {
+      "className": "KameezShirt_Olive",
+      "label": "Kameez (Olive)"
+    },
+    {
+      "className": "KameezShirt_Orange",
+      "label": "Kameez (Orange)"
+    },
+    {
+      "className": "KameezShirt_Pink",
+      "label": "Kameez (Pink)"
+    },
+    {
+      "className": "KameezShirt_Purple",
+      "label": "Kameez (Purple)"
+    },
+    {
+      "className": "KameezShirt_Red",
+      "label": "Kameez (Red)"
+    },
+    {
+      "className": "KameezShirt_SkyBlue",
+      "label": "Kameez (Sky Blue)"
+    },
+    {
+      "className": "KameezShirt_White",
+      "label": "Kameez (White)"
+    },
+    {
+      "className": "KameezShirt_Yellow",
+      "label": "Kameez (Yellow)"
     },
     {
       "className": "WinterMilitaryCoat_Brown",
@@ -509,6 +743,18 @@
       "className": "NavyUniformJacket",
       "label": "Navy Uniform Jacket",
       "image": "items/NavyUniformJacket.webp"
+    },
+    {
+      "className": "OBRJacket_Beige",
+      "label": "OBR Jacket (Beige)"
+    },
+    {
+      "className": "OBRJacket_Officer",
+      "label": "OBR Jacket (Officer)"
+    },
+    {
+      "className": "OBRJacket_Olive",
+      "label": "OBR Jacket (Olive)"
     },
     {
       "className": "OMKJacket_Navy",
@@ -556,6 +802,10 @@
       "image": "items/PilotJacket_Yellow.webp"
     },
     {
+      "className": "PoliceShortSleeveShirt",
+      "label": "Police Short Sleeve Shirt"
+    },
+    {
       "className": "QuiltedJacket_Black",
       "label": "Quilted Jacket (Black)",
       "image": "items/QuiltedJacket_Black.webp"
@@ -601,6 +851,42 @@
       "image": "items/RidersJacket_Black.webp"
     },
     {
+      "className": "ShortSleeveShirt_Black",
+      "label": "Short Sleeve Shirt (Black)"
+    },
+    {
+      "className": "ShortSleeveShirt_BlueRectangles",
+      "label": "Short Sleeve Shirt (Blue Rectangles)"
+    },
+    {
+      "className": "ShortSleeveShirt_CreamSquares",
+      "label": "Short Sleeve Shirt (Cream Squares)"
+    },
+    {
+      "className": "ShortSleeveShirt_Green",
+      "label": "Short Sleeve Shirt (Green)"
+    },
+    {
+      "className": "ShortSleeveShirt_Hawaiian_Black",
+      "label": "Short Sleeve Shirt (Hawaiian Black)"
+    },
+    {
+      "className": "ShortSleeveShirt_Hawaiian_Blue",
+      "label": "Short Sleeve Shirt (Hawaiian Blue)"
+    },
+    {
+      "className": "ShortSleeveShirt_Hawaiian_White",
+      "label": "Short Sleeve Shirt (Hawaiian White)"
+    },
+    {
+      "className": "ShortSleeveShirt_Waves",
+      "label": "Short Sleeve Shirt (Waves)"
+    },
+    {
+      "className": "ShortSleeveShirt_White",
+      "label": "Short Sleeve Shirt (White)"
+    },
+    {
       "className": "Sweater_ChristmasBlue",
       "label": "Sweater (Christmas Blue)",
       "image": "items/Sweater_ChristmasBlue.webp"
@@ -624,6 +910,14 @@
       "className": "TacticalShirt_Grey",
       "label": "Tactical Shirt (Grey)",
       "image": "items/TacticalShirt_Grey.webp"
+    },
+    {
+      "className": "TacticalShirt_ION_Olive",
+      "label": "Tactical Shirt (ION Olive)"
+    },
+    {
+      "className": "TacticalShirt_ION_Tan",
+      "label": "Tactical Shirt (ION Tan)"
     },
     {
       "className": "TacticalShirt_Olive",
@@ -697,6 +991,10 @@
       "image": "items/HunterPants_Brown.webp"
     },
     {
+      "className": "HunterPants_Desert",
+      "label": "Hunter Pants (Desert)"
+    },
+    {
       "className": "HunterPants_Spring",
       "label": "Hunter Pants (Spring)",
       "image": "items/HunterPants_Spring.webp"
@@ -710,6 +1008,34 @@
       "className": "HunterPants_Winter",
       "label": "Hunter Pants (Winter)",
       "image": "items/HunterPants_Winter.webp"
+    },
+    {
+      "className": "MensShalwarPants_Beige",
+      "label": "Men's Shalwar Pants (Beige)"
+    },
+    {
+      "className": "MensShalwarPants_Black",
+      "label": "Men's Shalwar Pants (Black)"
+    },
+    {
+      "className": "MensShalwarPants_Brown",
+      "label": "Men's Shalwar Pants (Brown)"
+    },
+    {
+      "className": "MensShalwarPants_Grey",
+      "label": "Men's Shalwar Pants (Grey)"
+    },
+    {
+      "className": "MensShalwarPants_NavyBlue",
+      "label": "Men's Shalwar Pants (Navy Blue)"
+    },
+    {
+      "className": "MensShalwarPants_SkyBlue",
+      "label": "Men's Shalwar Pants (Sky Blue)"
+    },
+    {
+      "className": "MensShalwarPants_White",
+      "label": "Men's Shalwar Pants (White)"
     },
     {
       "className": "NavyUniformPants",
@@ -745,6 +1071,30 @@
       "className": "GorkaPants_Winter",
       "label": "Patrol Pants (Winter)",
       "image": "items/GorkaPants_Winter.webp"
+    },
+    {
+      "className": "WomensShalwarPants_NavyBlue",
+      "label": "Women's Shalwar Pants (Navy Blue)"
+    },
+    {
+      "className": "WomensShalwarPants_Olive",
+      "label": "Women's Shalwar Pants (Olive)"
+    },
+    {
+      "className": "WomensShalwarPants_Orange",
+      "label": "Women's Shalwar Pants (Orange)"
+    },
+    {
+      "className": "WomensShalwarPants_Pink",
+      "label": "Women's Shalwar Pants (Pink)"
+    },
+    {
+      "className": "WomensShalwarPants_Purple",
+      "label": "Women's Shalwar Pants (Purple)"
+    },
+    {
+      "className": "WomensShalwarPants_Red",
+      "label": "Women's Shalwar Pants (Red)"
     }
   ],
   "boots": [
@@ -772,6 +1122,16 @@
       "className": "MilitaryBoots_Redpunk",
       "label": "Assault Boots (Redpunk)",
       "image": "items/MilitaryBoots_Redpunk.webp"
+    },
+    {
+      "className": "TraditionalBoots_Beige",
+      "label": "Fur Boots (Beige)",
+      "image": "items/TraditionalBoots_Beige.webp"
+    },
+    {
+      "className": "TraditionalBoots_DarkBrown",
+      "label": "Fur Boots (Dark Brown)",
+      "image": "items/TraditionalBoots_DarkBrown.webp"
     },
     {
       "className": "CombatBoots_Beige",
@@ -839,14 +1199,36 @@
       "image": "items/ColdOperationBoots_Grey.webp"
     },
     {
-      "className": "TraditionalBoots_Beige",
-      "label": "Fur Boots (Beige)",
-      "image": "items/TraditionalBoots_Beige.webp"
+      "className": "SandalsShoes_Black",
+      "label": "Sandals (Black)"
     },
     {
-      "className": "TraditionalBoots_DarkBrown",
-      "label": "Fur Boots (Dark Brown)",
-      "image": "items/TraditionalBoots_DarkBrown.webp"
+      "className": "SandalsShoes_Brown",
+      "label": "Sandals (Brown)"
+    },
+    {
+      "className": "SandalsShoes_Grey",
+      "label": "Sandals (Grey)"
+    },
+    {
+      "className": "SandalsShoes_BlueNavy",
+      "label": "Sandals (Navy Blue)"
+    },
+    {
+      "className": "TraditionalSandalShoes_Black",
+      "label": "Traditional Sandals (Black)"
+    },
+    {
+      "className": "TraditionalSandalShoes_Brown",
+      "label": "Traditional Sandals (Brown)"
+    },
+    {
+      "className": "TraditionalSandalShoes_LightBrown",
+      "label": "Traditional Sandals (Light Brown)"
+    },
+    {
+      "className": "TraditionalSandalShoes_NavyBlue",
+      "label": "Traditional Sandals (Navy Blue)"
     }
   ],
   "gloves": [
@@ -950,6 +1332,10 @@
   ],
   "backpack": [
     {
+      "className": "AssaultBag_Desert",
+      "label": "Assault Backpack (Desert)"
+    },
+    {
       "className": "TortillaBag",
       "label": "Combat Backpack",
       "image": "items/TortillaBag.webp"
@@ -978,6 +1364,14 @@
       "className": "AliceBag_Green",
       "label": "Field Backpack (Green)",
       "image": "items/AliceBag_Green.webp"
+    },
+    {
+      "className": "GhillieTop_Desert",
+      "label": "Ghillie Cloak (Desert)"
+    },
+    {
+      "className": "GhillieSuit_Desert",
+      "label": "Ghillie Suit (Desert)"
     },
     {
       "className": "HuntingBag",
@@ -1015,6 +1409,10 @@
       "image": "items/CoyoteBag_Brown.webp"
     },
     {
+      "className": "CoyoteBag_Desert",
+      "label": "Tactical Backpack (Desert)"
+    },
+    {
       "className": "CoyoteBag_Green",
       "label": "Tactical Backpack (Green)",
       "image": "items/CoyoteBag_Green.webp"
@@ -1026,6 +1424,50 @@
     }
   ],
   "vest": [
+    {
+      "className": "ChestRigVest_Khaki",
+      "label": "Chest Rig (Khaki)"
+    },
+    {
+      "className": "ChestRigVest_Olive",
+      "label": "Chest Rig (Olive)"
+    },
+    {
+      "className": "ChestRigVest_Tan",
+      "label": "Chest Rig (Tan)"
+    },
+    {
+      "className": "UKAssVest_Desert",
+      "label": "Field Vest (Desert)"
+    },
+    {
+      "className": "HuntingVest_Desert",
+      "label": "Hunter Vest (Desert)"
+    },
+    {
+      "className": "LinenVest_Black",
+      "label": "Linen Vest (Black)"
+    },
+    {
+      "className": "LinenVest_Brown",
+      "label": "Linen Vest (Brown)"
+    },
+    {
+      "className": "LinenVest_DarkGrey",
+      "label": "Linen Vest (Dark Grey)"
+    },
+    {
+      "className": "LinenVest_Green",
+      "label": "Linen Vest (Green)"
+    },
+    {
+      "className": "LinenVest_Grey",
+      "label": "Linen Vest (Grey)"
+    },
+    {
+      "className": "LinenVest_NavyBlue",
+      "label": "Linen Vest (Navy Blue)"
+    },
     {
       "className": "PlateCarrierVest_Black",
       "label": "Plate Carrier (Black)",
@@ -1070,6 +1512,30 @@
         "PlateCarrierPouches_Winter",
         "PlateCarrierHolster_Winter"
       ]
+    },
+    {
+      "className": "RobeVest_Beige",
+      "label": "Robe (Beige)"
+    },
+    {
+      "className": "RobeVest_Brown",
+      "label": "Robe (Brown)"
+    },
+    {
+      "className": "RobeVest_Green",
+      "label": "Robe (Green)"
+    },
+    {
+      "className": "RobeVest_Grey",
+      "label": "Robe (Grey)"
+    },
+    {
+      "className": "RobeVest_Navy",
+      "label": "Robe (Navy)"
+    },
+    {
+      "className": "HighCapacityVest_ION",
+      "label": "Tactical Vest (ION)"
     }
   ]
 }

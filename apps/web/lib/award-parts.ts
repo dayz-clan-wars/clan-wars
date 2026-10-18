@@ -41,6 +41,8 @@ export const PART_LABELS: Record<string, string> = {
   PlateCarrierHolster_Green: "Plate carrier holster (green)",
   PlateCarrierPouches_Winter: "Plate carrier pouches (winter)",
   PlateCarrierHolster_Winter: "Plate carrier holster (winter)",
+  NVGoggles: "Night vision goggles",
+  UniversalLight: "Universal light",
 };
 
 /** "Kobra sight, 9V battery, 2× 75-round AKM drum": repeats counted, first-seen order. */
