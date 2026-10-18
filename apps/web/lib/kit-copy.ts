@@ -5,7 +5,7 @@ import { KIT_SLOTS, KIT_SLOT_LABELS as SLOT_LABELS, type KitSlot } from "@factio
  * vault-copy.ts hold theirs.
  *
  * Voice rules for this page, from the design: plain sentences, no em dashes,
- * and nothing that frames the kit as protected. The kit is a pile of clothing
+ * and nothing that frames the kit as protected. The kit is a pile of gear
  * on the ground. Anyone who walks past it can take it, and it is back at the
  * next restart. Saying so plainly is the point: a player who thinks the spot
  * is defended will pick a worse one.
@@ -20,7 +20,7 @@ export { KIT_SLOT_LABELS as SLOT_LABELS, KIT_GRID_ORDER } from "@factions/domain
 
 /** The three sentences the page must say plainly, wherever the kit is described. */
 export const GROUND_RULES = [
-  "The kit spawns on the ground where you marked it, in the open, as a pile of clothing.",
+  "The kit spawns on the ground where you marked it, in the open, as a pile of gear.",
   "Anyone who finds it can take it. It is loot like any other loot.",
   "It comes back at the next restart, in the same spot, for as long as you keep boosting.",
 ] as const;

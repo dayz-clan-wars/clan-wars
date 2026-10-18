@@ -149,7 +149,7 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
           {slots.map(([slot]) => {
             const e = entry(slot);
             return e?.extras
-              ? <p key={slot} className="mt-3 max-w-[34rem] text-[13px] leading-relaxed text-ink-2">Comes with: {comesWith(e.extras)}</p>
+              ? <p key={slot} className="mt-3 max-w-[34rem] text-[13px] leading-relaxed text-ink-2">{`${e.label} comes with: ${comesWith(e.extras)}`}</p>
               : null;
           })}
 

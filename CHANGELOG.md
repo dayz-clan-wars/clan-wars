@@ -7,7 +7,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ### Added
 
-- The booster kit has a Vest slot: plate carriers, chest rigs, linen vests, robes and more. Plate carriers come with matching pouches and a holster, and the Tactical (MICH) helmet comes with night vision, a light and batteries. They all spawn loose in the pile, for you to fit in game.
+- The booster kit has a Vest slot: plate carriers, chest rigs, linen vests, robes and more. Plate carriers come with matching pouches and a holster, and the Tactical Helmet comes with night vision, a light and batteries. They all spawn loose in the pile, for you to fit in game.
 - The kit also offers more of Nasdara's own gear: pakols, turbans, OBR caps, the desert hunting set and others, in every colour.
 - The booster kit award gains the same items. Its vest is optional, so kits already placed by current winners keep spawning.
 

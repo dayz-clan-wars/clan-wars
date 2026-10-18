@@ -423,7 +423,7 @@ function HowThisWorks({ open, onToggle }: { open: boolean; onToggle: () => void 
             {GROUND_RULES.map((line) => <li key={line}>{line}</li>)}
           </ul>
           <p className="mt-3 text-[13px] leading-relaxed text-ink-2">
-            Pick your spot with that in mind. Somewhere quiet gets you your clothes back. Somewhere obvious hands them to whoever gets there first, which is a fine thing to do on purpose.
+            Pick your spot with that in mind. Somewhere quiet gets you your gear back. Somewhere obvious hands it to whoever gets there first, which is a fine thing to do on purpose.
           </p>
           <p className="mt-3 text-[11px] leading-relaxed text-dim">
             Item pictures come from the <a className={link} href="https://dayz.wiki.gg">DayZ wiki</a> and <a className={link} href="https://dayz.fandom.com">DayZ Fandom wiki</a>, used under CC BY-SA until we make our own.

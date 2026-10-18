@@ -53,8 +53,8 @@ describe("the award page", () => {
     const kit = awardsCatalogue()["weapon-kit"]!;
     const at = (picks: Record<string, string>) =>
       renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Weapon Kit", durationDays: 3, picks }), def: kit }));
-    expect(at({ weapon: "AKM" })).toContain("Comes with: AK plastic buttstock, AK plastic handguard, Kobra sight, 9V battery, AK suppressor, 2× 75-round AKM drum");
-    expect(at({})).not.toContain("Comes with");
+    expect(at({ weapon: "AKM" })).toContain("AKM comes with: AK plastic buttstock, AK plastic handguard, Kobra sight, 9V battery, AK suppressor, 2× 75-round AKM drum");
+    expect(at({})).not.toContain("comes with");
   });
 
   it("does not show the empty-slot + on a picked item with no art", () => {
