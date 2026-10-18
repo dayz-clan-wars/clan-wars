@@ -86,7 +86,7 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
   const slots = Object.entries(def.slots);
   const entry = (slot: string): AwardItem | null =>
     def.slots[slot]!.items.find((i) => i.className === view.picks[slot]) ?? null;
-  const complete = slots.every(([s]) => entry(s) !== null);
+  const complete = slots.every(([s, d]) => d.optional === true || entry(s) !== null);
   const state = STATE_COPY[view.state];
 
   return (
@@ -179,7 +179,7 @@ export function AwardFlow({ initial, def }: { initial: AwardPageView; def: Award
           query={query}
           onQuery={setQuery}
           busy={busy}
-          allowEmpty={false}
+          allowEmpty={def.slots[open]!.optional === true}
           onChoose={(className) => { setOpen(null); void post("pick", { slot: open, className }); }}
           onClose={() => setOpen(null)}
         />

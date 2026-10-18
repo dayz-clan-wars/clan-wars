@@ -39,6 +39,16 @@ describe("the award page", () => {
     expect(html).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
   });
 
+  it("enables Place on the booster kit award with every slot but the vest picked", () => {
+    const kit = awardsCatalogue()["booster-kit"]!;
+    const at = (skip: string) => {
+      const picks = Object.fromEntries(Object.entries(kit.slots).filter(([k]) => k !== skip).map(([k, s]) => [k, s.items[0]!.className]));
+      return renderToStaticMarkup(createElement(AwardFlow, { initial: view({ label: "Booster Kit", gamertag: "Ron", picks }), def: kit }));
+    };
+    expect(at("vest")).not.toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
+    expect(at("jacket")).toMatch(/<button[^>]*\sdisabled=""[^>]*>[^<]*Place in game/u);
+  });
+
   it("says what a picked weapon comes with, and nothing before a pick", () => {
     const kit = awardsCatalogue()["weapon-kit"]!;
     const at = (picks: Record<string, string>) =>

@@ -5,7 +5,8 @@ const DAY_MS = 86_400_000;
 const HOUR_MS = 3_600_000;
 
 export type AwardItem = { className: string; label: string; image?: string; extras?: string[] };
-export type AwardSlot = { label: string; items: AwardItem[] };
+/** `optional` slots may be left empty: a grant without a pick there is still whole. */
+export type AwardSlot = { label: string; items: AwardItem[]; optional?: true };
 export type AwardDef = { key: string; label: string; durationDays: number; slots: Record<string, AwardSlot> };
 export type Awards = Record<string, AwardDef>;
 
@@ -45,6 +46,10 @@ export function loadAwards(json: unknown): Awards {
       if (typeof s?.label !== "string" || !Array.isArray(s.items) || s.items.length === 0) {
         throw new Error(`awards: ${key} slot ${slot} needs a label and at least one item`);
       }
+      // ⚠️ Only `true` or absent. `false` would read as "required" and a typo
+      // like "yes" as "optional", and a slot silently becoming optional
+      // means a half-empty prize spawns as if whole.
+      if (s.optional !== undefined && s.optional !== true) throw new Error(`awards: ${key} slot ${slot} optional must be true or left out`);
       const names = new Set<string>();
       const labels = new Set<string>();
       for (const item of s.items) {
@@ -80,9 +85,20 @@ export function isAwardPick(def: AwardDef, slot: string, className: string): boo
   return Object.hasOwn(def.slots, slot) && def.slots[slot]!.items.some((i) => i.className === className);
 }
 
-/** Every slot holds an allowed pick. Placement and the spawner file both require it. */
+/**
+ * Every required slot holds an allowed pick. Placement and the spawner file
+ * both require it.
+ *
+ * ⚠️ An optional slot may be empty, but a pick that IS there must still be
+ * in the catalogue: a retired class name would spawn nothing, silently, so it
+ * fails the grant exactly as it does in a required slot.
+ */
 export function picksComplete(def: AwardDef, picks: Record<string, string>): boolean {
-  return Object.keys(def.slots).every((slot) => typeof picks[slot] === "string" && isAwardPick(def, slot, picks[slot]!));
+  return Object.entries(def.slots).every(([slot, s]) => {
+    const pick = picks[slot];
+    if (pick === undefined || pick === "") return s.optional === true;
+    return isAwardPick(def, slot, pick);
+  });
 }
 
 export type AwardTimes = {

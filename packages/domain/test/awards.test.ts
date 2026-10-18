@@ -92,6 +92,40 @@ describe("the booster kit award", () => {
   });
 });
 
+describe("the booster kit award's optional Vest", () => {
+  const def = () => awardsCatalogue()["booster-kit"]!;
+  const firsts = (skip?: string) =>
+    Object.fromEntries(Object.entries(def().slots).filter(([k]) => k !== skip).map(([k, s]) => [k, s.items[0]!.className]));
+
+  it("marks the vest optional, and nothing else", () => {
+    const slots = def().slots;
+    expect(Object.entries(slots).filter(([, s]) => s.optional).map(([k]) => k)).toEqual(["vest"]);
+  });
+  it("counts a grant with every slot but the vest as complete", () => {
+    expect(picksComplete(def(), firsts("vest"))).toBe(true);
+  });
+  it("counts a grant with a vest as complete too", () => {
+    expect(picksComplete(def(), firsts())).toBe(true);
+  });
+  it("does not count an optional slot holding a retired class as complete", () => {
+    expect(picksComplete(def(), { ...firsts(), vest: "NotAThing" })).toBe(false);
+  });
+  it("still requires every non-optional slot", () => {
+    expect(picksComplete(def(), firsts("jacket"))).toBe(false);
+  });
+  it.each([false, "yes"])("refuses optional: %j on a hand-written slot", (v) => {
+    const j = clone();
+    j["plate-carrier"].slots.holster.optional = v;
+    expect(() => loadAwards(j)).toThrow(/holster/);
+  });
+  it("accepts optional: true on a hand-written slot", () => {
+    const j = clone();
+    j["plate-carrier"].slots.holster.optional = true;
+    const d = loadAwards(j)["plate-carrier"]!;
+    expect(picksComplete(d, { vest: "PlateCarrierVest_Black" })).toBe(true);
+  });
+});
+
 describe("isAwardPick / picksComplete", () => {
   const def = loadAwards(GOOD)["plate-carrier"]!;
   it("allows a class name listed in that slot only", () => {

@@ -7,6 +7,16 @@
 export const KIT_SLOTS = ["mask", "eyewear", "hat", "jacket", "pants", "boots", "gloves", "hipPack", "backpack", "vest"] as const;
 export type KitSlot = (typeof KIT_SLOTS)[number];
 
+/**
+ * Kit slots the booster-kit AWARD does not require.
+ *
+ * ⚠️ Added when the Vest slot was. Live booster-kit grants were placed before
+ * it existed and hold nine picks; with the vest required, every one would fail
+ * `picksComplete` and leave the spawner file on the next sweep. The kit page
+ * is unaffected: a booster's own kit never required any slot.
+ */
+export const KIT_AWARD_OPTIONAL_SLOTS: readonly KitSlot[] = ["vest"];
+
 /** What each of the ten slots is called on the page. Keyed by KIT_SLOTS. */
 export const KIT_SLOT_LABELS: Record<KitSlot, string> = {
   mask: "Mask",
