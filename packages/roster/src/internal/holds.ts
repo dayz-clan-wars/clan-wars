@@ -28,6 +28,8 @@ export async function lockIdentity(tx: Tx, serverId: number): Promise<void> {
 
 /**
  * Hold a clan's name and/or tag until season end (spec §4.4; guide ch. 8).
+ * Only a disband holds since 2.3.2; a rename gives its old identity straight
+ * back. Rows with reason `renamed` from before then still hold until the wipe.
  *
  * `held_until` is `'infinity'` until the wipe script rewrites it to the
  * season's end (spec §8.5). Upsert: a value can be held again later by

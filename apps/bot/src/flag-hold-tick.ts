@@ -6,7 +6,8 @@ import { eq } from "drizzle-orm";
 import { RAISE_CONSUMER } from "./raise-tick.js";
 
 /**
- * Lapse pending flag changes and release old flags (spec 2026-10-13 §2).
+ * Lapse pending flag changes (spec 2026-10-13 §2), and clear any `released`
+ * hold left from before old flags returned to the pool at once.
  *
  * ⚠️ `foldedThrough` is the time of the last event the RAISE consumer
  * committed, not now: a pending change lapses only once every raise that

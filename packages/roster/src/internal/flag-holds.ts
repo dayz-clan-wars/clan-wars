@@ -1,7 +1,7 @@
 import type { Tx } from "@factions/declarations";
 import type { Database } from "@factions/db";
 import { factions, factionTextures, flagHolds } from "@factions/db";
-import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES, OLD_FLAG_HOLD_MS } from "@factions/domain";
+import { CLAIMABLE_FLAGS, FLAG_CHANGE_WINDOW_MS, HOLDING_STATUSES } from "@factions/domain";
 import { and, eq, exists, gt, inArray, isNull, lte, ne, or, sql, type SQL } from "drizzle-orm";
 import { appendFactionEventTx } from "./feed-store";
 import { noticeClanTx, noticeUserTx } from "./notices";
@@ -95,7 +95,8 @@ export async function cancelFlagChangeDb(db: Database, factionId: number): Promi
 
 /**
  * Spec §3: a full member raised the clan's pending flag at its home pole.
- * Promote it. The caller holds the clan's `factions` row FOR UPDATE.
+ * Promote it. The caller holds the clan's `factions` row FOR UPDATE. The old
+ * flag goes straight back to the pool: no `released` hold is written for it.
  *
  * Writes `factions` → `flag_holds` → `faction_textures`, the §4.12 order.
  * Takes no new flag (the pending hold already reserved it), so no identity
@@ -129,10 +130,6 @@ export async function completeFlagChangeTx(tx: Tx, a: { factionId: number; serve
     .set({ texture: a.texture, ...(hold.stampsCooldown ? { renamedAt: a.at } : {}) })
     .where(eq(factions.id, a.factionId));
   await tx.delete(flagHolds).where(eq(flagHolds.id, hold.id));
-  await tx.insert(flagHolds).values({
-    serverId: a.serverId, texture: before!.texture, factionId: a.factionId, kind: "released",
-    until: new Date(a.at.getTime() + OLD_FLAG_HOLD_MS), createdAt: a.at,
-  });
   await tx.update(factionTextures).set({ toAt: a.at })
     .where(and(eq(factionTextures.factionId, a.factionId), isNull(factionTextures.toAt)));
   await tx.insert(factionTextures).values({ factionId: a.factionId, texture: a.texture, fromAt: a.at });

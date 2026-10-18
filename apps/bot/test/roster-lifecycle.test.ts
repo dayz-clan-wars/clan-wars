@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, factionMembers, rosterCooldowns,
+  servers, factions, factionMembers, rosterCooldowns, identityHolds,
   declarations, poles, events, admFiles, clanNotices,
   type Database,
 } from "@factions/db";
@@ -221,25 +221,20 @@ describe("PgRosterStore disband and rename", () => {
       expect(f!.name).toBe("Second");
     });
 
-    it("rename holds the OLD name (and old tag when it changes) and refuses a held or taken identity", async () => {
+    it("rename holds nothing: the old name and tag are free for another clan at once", async () => {
       expect(await store.rename({ factionId, discordId: LEADER, name: "Grizzlies", tag: "GRIZ", at: t0, notBefore: past })).toBe("ok");
-      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
-      expect(holds).toEqual([{ kind: "name", value_lower: "bears", reason: "renamed" }, { kind: "tag", value_lower: "bear", reason: "renamed" }]);
-      // Renaming back to the held name is refused — even for the clan that held it? No: exceptFactionId frees your own holds.
+      expect(await db.select().from(identityHolds)).toEqual([]);
+      expect(await db.transaction((tx) => identityTakenTx(tx, { serverId, name: "Bears", tag: "BEAR" }))).toBeNull();
+      // And the clan itself can rename straight back.
       await db.update(factions).set({ renamedAt: null }).where(eq(factions.id, factionId));
-      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", at: t0, notBefore: past })).toBe("ok");
+      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", tag: "BEAR", at: t0, notBefore: past })).toBe("ok");
     });
 
-    it("a name-only rename holds only the old name, not the unchanged tag", async () => {
-      expect(await store.rename({ factionId, discordId: LEADER, name: "Grizzlies", at: t0, notBefore: past })).toBe("ok");
-      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
-      expect(holds).toEqual([{ kind: "name", value_lower: "bears", reason: "renamed" }]);
-    });
-
-    it("a tag-only rename holds only the old tag, not the unchanged name", async () => {
-      expect(await store.rename({ factionId, discordId: LEADER, name: "Bears", tag: "GRIZ", at: t0, notBefore: past })).toBe("ok");
-      const holds = await db.execute(sql`select kind, value_lower, reason from identity_holds order by kind`);
-      expect(holds).toEqual([{ kind: "tag", value_lower: "bear", reason: "renamed" }]);
+    it("an older rename hold still refuses another clan until the wipe", async () => {
+      await db.insert(identityHolds).values({ serverId, kind: "name", valueLower: "ursa", factionId, reason: "renamed", heldUntil: new Date("9999-01-01") });
+      await seedFaction(db, { serverId, tag: "WOLF", name: "Wolves", texture: "Flag_Wolf", createdAt: t0, poleKey: "9000.00:100.00:9000.00", x: 9000, z: 9000 });
+      const [wolf] = await db.select({ id: factions.id }).from(factions).where(eq(factions.tag, "WOLF"));
+      expect(await db.transaction((tx) => identityTakenTx(tx, { serverId, name: "Ursa", tag: "URS", exceptFactionId: wolf!.id }))).toBe("name-held");
     });
 
     it("rename refuses another holding clan's name or tag", async () => {

@@ -220,10 +220,9 @@ describe("roster package writes", () => {
     expect(await transferDb(db, now, "d3", "d2")).toBe("target-not-member");
   });
 
-  it("rename holds up the old identity and validates the new one", async () => {
+  it("rename frees the old identity and validates the new one", async () => {
     expect(await renameDb(db, now, "d1", { name: "Grizzlies", tag: "GRIZ" })).toBe("ok");
-    const holds = await db.select().from(identityHolds).where(eq(identityHolds.serverId, serverId));
-    expect(holds.map((h) => h.valueLower).sort()).toEqual(["bear", "bears"]);
+    expect(await db.select().from(identityHolds).where(eq(identityHolds.serverId, serverId))).toEqual([]);
 
     expect(await renameDb(db, now, "d1", { name: "ab" })).toBe("bad-name");
     expect(await renameDb(db, now, "d1", { name: "Fine", tag: "T@G" })).toBe("bad-tag");

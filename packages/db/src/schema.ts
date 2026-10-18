@@ -710,7 +710,8 @@ export const factions = pgTable("factions", {
 
 /**
  * Flags held OUTSIDE `factions.texture` (spec 2026-10-13 §2): a rebrand's
- * pending flag, and a completed rebrand's old flag for OLD_FLAG_HOLD_MS.
+ * pending flag. (`released` rows held a completed rebrand's old flag until
+ * 2.3.2; nothing writes them now, but the sweep still clears any left over.)
  *
  * ⚠️ `flag_holds_texture_uniq` is unconditional: a row exists only while its
  * hold is live, and `sweepFlagHoldsDb` deletes it after. A partial index on

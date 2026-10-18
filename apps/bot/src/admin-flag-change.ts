@@ -13,7 +13,7 @@ export type AdminFlagChangeOutcome =
  * An operator starts a clan's flag change, skipping the leader and the rename
  * cooldown (`pnpm flag:change`). Everything after the start is the ordinary
  * rebrand: the kit delivers the flag, a member raises it at home within
- * FLAG_CHANGE_WINDOW_MS, and the old flag is held OLD_FLAG_HOLD_MS.
+ * FLAG_CHANGE_WINDOW_MS, and the old flag goes straight back to the pool.
  *
  * Same refusals and the same lock order as `PgRosterStore.rename`'s flag
  * branch (`factions` FOR UPDATE, then `lockIdentity`), because the flag rules
