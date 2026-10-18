@@ -72,7 +72,7 @@ export async function boosterKitTick(db: Database, deps: {
     // stamps each object with the owner's name, and a kit for a character we
     // can no longer name belongs to nobody. Unlinking therefore revokes too.
     .innerJoin(identityLinks, eq(identityLinks.discordId, boosterKits.discordId))
-    // LEFT, unlike the two above: a booster in no clan still gets their nine
+    // LEFT, unlike the two above: a booster in no clan still gets their ten
     // pieces, just no armband. Joined live rather than stored, so a clan
     // change or a rebind corrects itself at the next restart.
     .leftJoin(factionMembers, and(

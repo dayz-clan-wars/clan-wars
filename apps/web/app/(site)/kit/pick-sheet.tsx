@@ -100,7 +100,7 @@ export function PickSheet({ label, options, current, query, busy, onQuery, onCho
    * so the lock cannot live anywhere but here.
    *
    * ⚠️ `aria-modal` is a claim, not a mechanism. Without the Tab cycle below
-   * it the browser walks straight out of the dialog into the nine tiles
+   * it the browser walks straight out of the dialog into the ten tiles
    * underneath, which are covered on screen and unreachable by mouse.
    */
   useEffect(() => {
@@ -123,7 +123,7 @@ export function PickSheet({ label, options, current, query, busy, onQuery, onCho
       // ⚠️ The hole every naive trap has: focus sitting on <body> because the
       // player clicked a gap in the panel, or because the tile they were on
       // went `disabled` when a save started. Neither is `first` nor `last`, so
-      // a trap that only guards those two ends lets Tab walk into the nine
+      // a trap that only guards those two ends lets Tab walk into the ten
       // tiles behind the sheet, which are covered on screen and unreachable.
       if (!here || !panel.current.contains(here)) { e.preventDefault(); first.focus(); return; }
       if (e.shiftKey && here === first) { e.preventDefault(); last.focus(); }

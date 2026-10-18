@@ -284,7 +284,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   } },
   booster_kit_unchosen: { group: "Roster", render: () => ({
     kicker: "Booster kit", title: "You have a booster kit waiting",
-    body: "Pick the nine pieces you respawn with, and the spot they wait at. Nothing is chosen yet, so nothing will spawn.",
+    body: "Pick the ten pieces you respawn with, and the spot they wait at. Nothing is chosen yet, so nothing will spawn.",
     cta: { label: "Choose your kit", href: "/kit" } }) },
   award_granted: { group: "Roster", render: (p) => ({
     kicker: "Award",

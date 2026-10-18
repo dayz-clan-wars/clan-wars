@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * The booster kit page: nine picks, a spot marked in game, and the sequence
+ * The booster kit page: ten picks, a spot marked in game, and the sequence
  * that marks it. Everything a player touches lives in kit-flow.tsx, which is
  * a client component; this is the one read that feeds it.
  *

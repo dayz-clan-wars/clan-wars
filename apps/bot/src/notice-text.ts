@@ -227,7 +227,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       : `⛔ You are banned from the server for a limited time — ${p.reason}.`;
   },
   booster_kit_unchosen: () =>
-    "Thanks for boosting. You have a kit waiting: nine pieces of clothing that respawn "
+    "Thanks for boosting. You have a kit waiting: ten pieces of gear that respawn "
     + "at a spot you pick, every restart, for as long as you keep boosting. Nothing is "
     + "chosen yet, so nothing will spawn.",
   award_granted: (p) => {

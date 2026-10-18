@@ -80,8 +80,9 @@ export async function awardTick(db: Database, deps: {
     // Each pick spawns with its extras (a gun's parts and mags), gun first.
     // `complete` has already checked every pick is in the catalogue, so the
     // lookups cannot miss. ⚠️ An optional slot with no pick (a booster kit
-    // granted before the Vest existed) contributes nothing, not `undefined`. An item with no extras writes exactly one object,
-    // so every award before the weapon kit produces the same bytes as before.
+    // granted before the Vest existed) contributes nothing, not `undefined`.
+    // An item with no extras writes exactly one object, so every award before
+    // the weapon kit produces the same bytes as before.
     items: Object.entries(AWARDS[r.awardKey]!.slots).flatMap(([slot, s]) => {
       const pick = r.picks[slot];
       if (!pick) return [];

@@ -8,7 +8,7 @@ const BOOSTER_SLOTS = "booster-catalogue";
 
 /**
  * Fill every `"slotsFrom": "booster-catalogue"` entry with the booster kit's
- * nine slots, in the kit page's reading order.
+ * ten slots, in the kit page's reading order.
  *
  * ⚠️ Derived, never copied into awards.json: the kit catalogue is ~200 items
  * that change as the mission's types.xml does, and a second copy would drift

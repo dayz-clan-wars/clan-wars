@@ -104,7 +104,7 @@ export async function boosterKitForDb(db: Database, discordId: string, now: Date
 }
 
 /**
- * Write one of the nine slots.
+ * Write one of the ten slots.
  *
  * ⚠️ `isAllowed` against the committed catalogue is the ONLY thing standing
  * between a form POST and an arbitrary class name reaching the server's
@@ -133,15 +133,15 @@ export async function saveBoosterKitSlotDb(db: Database, a: {
 }
 
 /**
- * Write all nine slots in ONE upsert, for the single kit-wide Save.
+ * Write all ten slots in ONE upsert, for the single kit-wide Save.
  *
  * ⚠️ Every pick is checked against the committed catalogue BEFORE any write,
  * same as `saveBoosterKitSlotDb` — the first bad one refuses the whole kit
- * and nothing is written. Doing it slot-by-slot (nine calls to the single-
+ * and nothing is written. Doing it slot-by-slot (ten calls to the single-
  * slot save) would let an early slot land while a later one is refused,
  * leaving the row half-updated with no way for the page to say which half.
  *
- * ⚠️ Writes the nine slot columns and `updated_at`, and NOTHING else — same
+ * ⚠️ Writes the ten slot columns and `updated_at`, and NOTHING else — same
  * reason as the single-slot save: the position columns belong to the
  * placement challenge (spec §2.6), and spelling out the whole row would
  * reset a spot the player already marked.

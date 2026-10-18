@@ -104,7 +104,7 @@ describe("the pick sheet", () => {
   /**
    * ⚠️ A dialog, labelled by the slot it is picking for. It covers the whole
    * screen on a phone, so a screen reader that treated it as part of the page
-   * behind it would read nine tiles the user cannot reach.
+   * behind it would read ten tiles the user cannot reach.
    */
   it("is a labelled modal dialog", () => {
     const html = sheet(null);
@@ -180,6 +180,16 @@ const flow = (over: Partial<KitView> = {}, withCatalogue = true) => {
 };
 
 describe("the kit page, rendered", () => {
+  it("says what a pick comes with, beside the grid", () => {
+    const html = flow({ slots: { ...EMPTY_SLOTS, vest: "PlateCarrierVest" } });
+    expect(html).toContain("Plate Carrier (Standard) comes with: Plate carrier pouches, Plate carrier holster");
+  });
+
+  it("says nothing of the kind when no pick has extras", () => {
+    expect(flow()).not.toContain("comes with");
+    expect(flow({ slots: { ...EMPTY_SLOTS, jacket: "GorkaEJacket_Summer" } })).not.toContain("comes with");
+  });
+
   it("gives a booster with a linked character every tile", () => {
     const html = flow();
     for (const slot of KIT_SLOTS) expect([slot, html.includes(SLOT_LABELS[slot])]).toEqual([slot, true]);

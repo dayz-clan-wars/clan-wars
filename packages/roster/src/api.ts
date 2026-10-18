@@ -311,12 +311,12 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     reportIncident: (discordId: string, incidentId: number, chargedDayzIds: string[]): Promise<ReportOutcome> =>
       reportIncidentDb(getDb(), getNow(), discordId, incidentId, chargedDayzIds),
 
-    /** The booster kit page's one read: boosting, linked, the nine picks, the spot, the armband, any open sequence. */
+    /** The booster kit page's one read: boosting, linked, the ten picks, the spot, the armband, any open sequence. */
     boosterKit: (discordId: string): Promise<BoosterKitView> => boosterKitForDb(getDb(), discordId, getNow()),
-    /** Save one of the nine slots, checked against the committed catalogue. Refusals are an outcome; never writes the kit's position. */
+    /** Save one of the ten slots, checked against the committed catalogue. Refusals are an outcome; never writes the kit's position. */
     saveBoosterKitSlot: (discordId: string, slot: string, className: string): Promise<SaveKitOutcome> =>
       saveBoosterKitSlotDb(getDb(), { discordId, slot, className, now: getNow() }),
-    /** Save all nine slots in one write, for the kit page's single Save button. Same catalogue check; refuses the whole kit rather than write half of it. */
+    /** Save all ten slots in one write, for the kit page's single Save button. Same catalogue check; refuses the whole kit rather than write half of it. */
     saveBoosterKit: (discordId: string, picks: Record<KitSlot, string>): Promise<SaveKitOutcome> =>
       saveBoosterKitDb(getDb(), { discordId, picks, now: getNow() }),
     /** Draw the emote sequence that marks where the kit spawns; null for an account with no linked character. */

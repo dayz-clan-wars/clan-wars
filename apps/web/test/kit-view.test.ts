@@ -77,7 +77,7 @@ describe("the kit page's view", () => {
     expect(JSON.parse(JSON.stringify(out))).toEqual(out);
   });
 
-  it("carries the nine picks through untouched", () => {
+  it("carries the ten picks through untouched", () => {
     const slots = { ...EMPTY, jacket: "GorkaEJacket_Summer" };
     expect(kitView(view({ slots })).slots).toEqual(slots);
   });
