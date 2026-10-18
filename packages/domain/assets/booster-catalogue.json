@@ -1054,6 +1054,14 @@
       "image": "items/NavyUniformPants.webp"
     },
     {
+      "className": "OBRPants_Beige",
+      "label": "OBR Pants (Beige)"
+    },
+    {
+      "className": "OBRPants_Olive",
+      "label": "OBR Pants (Olive)"
+    },
+    {
       "className": "OMKPants_Navy",
       "label": "OMK Pants (Navy)",
       "image": "items/OMKPants_Navy.webp"
