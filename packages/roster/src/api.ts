@@ -14,12 +14,12 @@ import { baseForDb, declareSoloDb, releaseSoloDb, type BaseView, type DeclareSol
 import type { IssueOutcome, IssueOutcomeKind } from "@factions/verification";
 import {
   inviteDb, revokeInviteDb, acceptInviteDb, declineInviteDb, requestJoinDbByTag, withdrawRequestDbFor, decideRequestDbFor,
-  leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, cancelRebrandDb, setRecruitingPostDb, claimCeremonyDb, confirmRebindDb,
+  leaveDb, kickDb, promoteDb, demoteDb, transferDb, disbandDb, renameDb, cancelRebrandDb, setRecruitingPostDb, setSuppliesDb, claimCeremonyDb, confirmRebindDb,
   type InviteOutcome, type InviteeRef, type ReserveOutcome, type CancelRebrandOutcome,
 } from "./writes";
 import type {
   CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome, SetRoleOutcome, TransferOutcome, RenameOutcome,
-  RequestJoinOutcome, DecideRequestOutcome,
+  RequestJoinOutcome, DecideRequestOutcome, SuppliesOutcome,
 } from "./internal";
 import type { ActorRefusal } from "./actor";
 import {
@@ -79,7 +79,7 @@ export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView };
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason };
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome, SuppliesOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
@@ -198,6 +198,8 @@ export function makeRoster(getDb: () => Database, getNow: () => Date = () => new
     /** Edit your clan's recruiting post. Officer+ only. */
     setRecruitingPost: (actorDiscordId: string, post: { recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }) =>
       setRecruitingPostDb(getDb(), actorDiscordId, post),
+    /** Turn your clan's build supplies off or on from the next restart; the flags spawn either way. Officer+ only. */
+    setSupplies: (actorDiscordId: string, enabled: boolean) => setSuppliesDb(getDb(), getNow(), actorDiscordId, enabled),
     /** Claim a ceremony: name, tag, flag, and a roster pruned to real participants. */
     claimCeremony: (discordId: string, ceremonyId: number, a: { name: string; tag: string; texture: string; memberDayzIds: string[] }) =>
       claimCeremonyDb(getDb(), getNow(), discordId, ceremonyId, a),

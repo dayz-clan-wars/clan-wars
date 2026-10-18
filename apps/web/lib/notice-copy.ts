@@ -246,6 +246,17 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
     kicker: "Base", title: "Your flag is flying somewhere else",
     body: `${who(p.gamertag)} raised it at a pole that is not yours.` }) },
 
+  // `enabled` is frozen at write time (roster-store.ts `setSupplies`); the
+  // bot's notice-text.ts says the same, so read both when you change either.
+  supplies_toggled: { group: "Base", render: (p) => p.enabled === false
+    ? { kicker: "Supplies", title: "Build supplies off",
+        body: `${who(p.gamertag)} turned build supplies off. From the next restart, only your clan flags spawn at your pole.` }
+    : p.enabled === true
+      ? { kicker: "Supplies", title: "Build supplies back on",
+          body: `${who(p.gamertag)} turned build supplies back on. The full kit spawns again from the next restart.` }
+      : { kicker: "Supplies", title: "Build supplies changed",
+          body: `${who(p.gamertag)} changed the build supplies. Clan settings shows whether they are on.` } },
+
   // ---- Rebind ----
   rebind_proposed: { group: "Rebind", render: (p) => ({
     kicker: "Rebind", title: "A move was proposed for your pole",

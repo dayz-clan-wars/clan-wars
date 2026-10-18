@@ -28,7 +28,7 @@ export type { AddReferrerOutcome, ReferrerRefusal, ReferralsView } from "./api";
 export type { BaseView, DeclareSoloOutcome, DeclareSoloReason } from "./api";
 export type {
   ActorRefusal, InviteOutcome, InviteeRef, ReserveOutcome, CreateInviteOutcome, AcceptInviteOutcome, KickOutcome, LeaveOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome, SuppliesOutcome,
 } from "./api";
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest } from "./api";
 export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter } from "./api";
@@ -55,7 +55,7 @@ export const {
   markAllNoticesRead, markNoticeRead,
   myInvites, myRequests, notificationsFor, onlineNow, openVote, playerBoards, playerFeed, playerProfile, promote, referralsFor, referralsForDayzId, releaseSolo, rename,
   reportIncident, requestJoin, restartsScheduled, revealLock, revokeGuestPass, revokeInvite, rotateLocks, saveAwardPick, saveBoosterKit, saveBoosterKitSlot, scoreboard, searchGamertags, seasons,
-  setRecruitingPost, startAwardPlacement, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
+  setRecruitingPost, setSupplies, startAwardPlacement, startKitPlacement, startLink, suggestGamertags, transfer, unlink, vaultFor, viewerFor, warLog, withdrawRequest,
 } = makeRoster(db);
 
 export { SUGGEST_SCOPES, type SuggestScope } from "./api";

@@ -195,6 +195,30 @@ describe("/clan recruiting", () => {
   });
 });
 
+describe("/clan supplies", () => {
+  it("passes the chosen state through", async () => {
+    const seen: unknown[] = [];
+    const ctx = ctxWith({ setSupplies: async (a: string, on: boolean) => { seen.push([a, on]); return on ? "on" : "off"; } });
+    await spec("clan supplies").handler(ctx, input({ on: false }));
+    await spec("clan supplies").handler(ctx, input({ on: true }));
+    expect(seen).toEqual([["111", false], ["111", true]]);
+  });
+
+  it("⚠️ refuses a missing option rather than reading it as off", async () => {
+    const seen: unknown[] = [];
+    const ctx = ctxWith({ setSupplies: async () => { seen.push("ran"); return "off"; } });
+    await spec("clan supplies").handler(ctx, input({}));
+    expect(seen).toEqual([]);
+  });
+
+  it("renders every outcome, including the shared actor refusals", async () => {
+    for (const o of ["on", "off", "not-permitted", "not-linked", "not-in-clan", "pending"] as const) {
+      const ctx = ctxWith({ setSupplies: async () => o });
+      expect((await spec("clan supplies").handler(ctx, input({ on: true }))).content, o).toBe(discordCopy("supplies", o));
+    }
+  });
+});
+
 describe("/clan rebind", () => {
   it("refuses without a chosen pole, without calling the roster", async () => {
     const seen: unknown[] = [];
@@ -240,11 +264,12 @@ describe("clan reply ephemerality", () => {
     const view = viewFixture();
     const ctx = ctxWith({
       clanFor: async () => view, leave: async () => "ok", rename: async () => "ok",
-      setRecruitingPost: async () => "ok", confirmRebind: async () => "ok", disband: async () => "ok",
+      setRecruitingPost: async () => "ok", setSupplies: async () => "off", confirmRebind: async () => "ok", disband: async () => "ok",
     });
-    for (const path of ["clan info", "clan leave", "clan rename", "clan recruiting", "clan rebind"]) {
+    for (const path of ["clan info", "clan leave", "clan rename", "clan recruiting", "clan supplies", "clan rebind"]) {
       const opts = path === "clan rename" ? { name: "Wolves" }
         : path === "clan recruiting" ? { open: true }
+        : path === "clan supplies" ? { on: false }
         : path === "clan rebind" ? { pole: "3021_9944" }
         : {};
       const reply = await spec(path).handler(ctx, input(opts));

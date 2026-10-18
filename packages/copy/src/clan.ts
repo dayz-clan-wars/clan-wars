@@ -4,7 +4,7 @@ import {
 } from "@factions/domain";
 import type {
   ActorRefusal, InviteOutcome, AcceptInviteOutcome, RequestJoinOutcome, DecideRequestOutcome, LeaveOutcome, KickOutcome,
-  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, ReserveOutcome, GuestGrantOutcome,
+  SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, ReserveOutcome, GuestGrantOutcome, SuppliesOutcome,
 } from "@factions/roster";
 import { days, hours } from "./format";
 
@@ -123,6 +123,13 @@ const REBRAND_CANCEL: Record<CancelRebrandOutcome | ActorRefusal, string> = {
   "nothing-pending": "There is no flag change to cancel.",
 };
 const RECRUITING: Record<"ok" | "not-permitted" | ActorRefusal, string> = { ...REFUSAL, ok: "Recruiting post saved.", "not-permitted": "Only an officer or the leader can edit the recruiting post." };
+/** The outcome names the state after the save, so a re-save of the same state confirms it rather than claiming a change. */
+const SUPPLIES: Record<SuppliesOutcome | ActorRefusal, string> = {
+  ...REFUSAL,
+  on: "Build supplies are on. The full kit spawns from the next restart.",
+  off: "Build supplies are off. From the next restart, only your clan flags spawn at your pole.",
+  "not-permitted": "Only an officer or the leader can turn the build supplies off or on.",
+};
 const REBIND: Record<"ok" | "refused" | "too-close" | "no-candidate" | "not-leader" | ActorRefusal, string> = {
   ...REFUSAL,
   ok: "Moved. Your base is the new pole; the old one goes public after its grace period.",
@@ -175,7 +182,7 @@ const REVOKE_GUEST: Record<"ok" | "not-permitted" | "gone" | ActorRefusal, strin
 
 export const TABLES = {
   invite: INVITE, revoke: REVOKE, accept: ACCEPT, decline: DECLINE, request: REQUEST, withdraw: WITHDRAW, decide: DECIDE,
-  leave: LEAVE, kick: KICK, role: ROLE, transfer: TRANSFER, disband: DISBAND, rename: RENAME, recruiting: RECRUITING, rebind: REBIND, claim: CLAIM, input: INPUT,
+  leave: LEAVE, kick: KICK, role: ROLE, transfer: TRANSFER, disband: DISBAND, rename: RENAME, recruiting: RECRUITING, supplies: SUPPLIES, rebind: REBIND, claim: CLAIM, input: INPUT,
   guest: GUEST, "revoke-guest": REVOKE_GUEST, "rebrand-cancel": REBRAND_CANCEL,
 } as const;
 export type Action = keyof typeof TABLES;

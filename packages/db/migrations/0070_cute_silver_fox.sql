@@ -1,0 +1,1 @@
+ALTER TABLE "factions" ADD COLUMN "build_supplies" boolean DEFAULT true NOT NULL;

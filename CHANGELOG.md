@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Clans can turn their build supplies off once their base is built, to cut the clutter and lag. Your clan flags still spawn at your pole. Turn the supplies back on from clan settings or `/clan supplies` when you need to repair.
+
 ## [2.2.1] - 2026-10-18
 
 ### Added

@@ -197,6 +197,16 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     ctx.target === "channel"
       ? `🔐 Codes rotated by ${person(p.gamertag, ctx.site)} — see the vault.`
       : `**${p.clan}** rotated its codes. See the vault: [open it](<${p.link}>)`,
+  // `enabled` is the state the officer set, frozen at write time
+  // (roster-store.ts `setSupplies`). The web's notice-copy.ts says the same;
+  // read both when you change either. A payload without it names no direction
+  // rather than guessing one.
+  supplies_toggled: (p, ctx) => {
+    const who = person(p.gamertag, ctx.site);
+    if (p.enabled === false) return `📦 ${who} turned build supplies off. From the next restart, only your clan flags spawn at your pole.`;
+    if (p.enabled === true) return `📦 ${who} turned build supplies back on. The full kit spawns again from the next restart.`;
+    return `📦 ${who} changed the build supplies. Clan settings shows whether they are on.`;
+  },
   guest: (p, ctx) => `🎟️ ${person(p.officer, ctx.site)} gave ${person(p.user, ctx.site)} a ${hours(GUEST_PASS_MS)}h voice guest pass.`,
   achievement: (p, ctx) => {
     // The clan-owner case DOES carry `clanTag` (achievements/tick.ts) — link

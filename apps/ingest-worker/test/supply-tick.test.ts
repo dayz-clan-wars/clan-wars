@@ -235,6 +235,45 @@ describe("supplyTick", () => {
     expect(JSON.parse(bodies[1]!).Objects).toHaveLength(103);
   });
 
+  it("⚠️ gives a clan that turned its build supplies off its flags, and nothing but its flags", async () => {
+    // The toggle cuts the crate, never the flags: the kit is the only source
+    // of a clan's flag in game, so dropping the clan from the file would
+    // leave it nothing to raise after a raid.
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.update(factions).set({ buildSupplies: false }).where(eq(factions.id, f.id));
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 0, flagsOnly: 1, uploaded: true });
+    const objects = JSON.parse(bodies[0]!).Objects;
+    expect(objects).toHaveLength(2);
+    expect(objects.every((o: any) => o.name === "Flag_Rooster")).toBe(true);
+  });
+
+  it("gives the full kit back when the build supplies are turned on again", async () => {
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.update(factions).set({ buildSupplies: false }).where(eq(factions.id, f.id));
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    await db.update(factions).set({ buildSupplies: true }).where(eq(factions.id, f.id));
+    const back = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(back).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
+    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(103);
+  });
+
+  it("⚠️ keeps a raided clan on flags only even with its build supplies on", async () => {
+    // The toggle is ANDed with raid state, never ORed: turning supplies on
+    // must not buy a raided clan its crate back before it raises.
+    const f = await seedFaction({ tag: "COK", texture: "Flag_Rooster", x: "5551.69", y: "311.63", z: "8790.97", status: "active" });
+    await db.update(factions).set({ flagDownSince: now, buildSupplies: true }).where(eq(factions.id, f.id));
+    const bodies: string[] = [];
+    const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
+    const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
+    expect(r).toEqual({ factions: 0, flagsOnly: 1, uploaded: true });
+    expect(JSON.parse(bodies[0]!).Objects).toHaveLength(2);
+  });
+
   it("⚠️ omits a clan whose flag is down and holds no declaration", async () => {
     // The flag half joins declarations INNER for the same reason the kit half
     // does: flags spawn AT THE POLE, and a clan with no pole has nowhere to

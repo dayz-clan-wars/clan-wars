@@ -64,7 +64,23 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
           </PanelBody>
         </Panel>
 
-        <Panel num="02" title="Guest passes" aside={guestPasses.length > 0 ? `${guestPasses.length} open` : undefined}>
+        <Panel num="02" title="Build supplies" aside={clan.buildSupplies ? "on" : "off"}>
+          <PanelBody>
+            {/* The flags spawn either way: the kit is the only source of a clan's flag, so turning supplies off never takes those. */}
+            <p className="text-sm leading-relaxed text-ink-2">
+              {clan.buildSupplies
+                ? "On: the full kit spawns at your pole every restart. Once your base is built you can turn it off to cut the clutter and lag. Your two clan flags keep spawning."
+                : "Off: only your two clan flags spawn at your pole. Turn the supplies back on when you need to repair."}
+            </p>
+            <form className="mt-3" action="/api/clan/supplies" method="post">
+              <input type="hidden" name="supplies" value={clan.buildSupplies ? "off" : "on"} />
+              <SubmitButton className={btnPrimary}>{clan.buildSupplies ? "Turn supplies off" : "Turn supplies back on"}</SubmitButton>
+            </form>
+            <p className="mt-2 text-sm text-ink-2">Takes effect from the next restart. The clan channel is told who changed it.</p>
+          </PanelBody>
+        </Panel>
+
+        <Panel num="03" title="Guest passes" aside={guestPasses.length > 0 ? `${guestPasses.length} open` : undefined}>
           <PanelBody>
             <p id="guest-note" className="text-sm leading-relaxed text-ink-2">A pass shows the voice channel only, for {hours(GUEST_PASS_MS)}; joining the clan makes it the real role.</p>
             <form className="mt-3 flex flex-col gap-3" action="/api/clan/guest" method="post">
@@ -77,13 +93,13 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
 
         {leader && (
           <>
-            <Panel num="03" title="Rebrand" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
+            <Panel num="04" title="Rebrand" aside={`once every ${days(RENAME_COOLDOWN_MS)}`}>
               <PanelBody>
                 <RebrandForm name={clan.name} tag={clan.tag} texture={clan.texture} freeFlags={view.rebrand?.freeFlags ?? []} pending={view.rebrand?.pending ?? null} err={err} kept={{ name: kept.get("name"), tag: kept.get("tag"), texture: kept.get("texture") }} />
               </PanelBody>
             </Panel>
 
-            <Panel num="04" title="Transfer leadership">
+            <Panel num="05" title="Transfer leadership">
               <PanelBody>
                 {others.length === 0 ? <p className="text-sm text-ink-2">No other full member to hand over to.</p> : (
                   <form className="flex flex-col gap-3" action="/api/clan/transfer" method="post">
@@ -99,7 +115,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
               </PanelBody>
             </Panel>
 
-            <Panel num="05" title="Move the base" aside={`one move per ${days(REBIND_COOLDOWN_MS)}`}>
+            <Panel num="06" title="Move the base" aside={`one move per ${days(REBIND_COOLDOWN_MS)}`}>
               <PanelBody>
                 <p className="text-sm leading-relaxed text-ink-2">When a member raises your flag at another pole, it appears here for {hours(REBIND_CONFIRM_MS)}. Confirming moves the base; the old pole goes public after {days(RELEASED_POLE_GRACE_MS)}.</p>
                 {rebindCandidates.length === 0 && <p className="mt-2 text-sm text-ink-2">No recent raise elsewhere.</p>}
@@ -118,7 +134,7 @@ export default async function SettingsPage({ searchParams }: { searchParams: Pro
             </Panel>
 
             {/* Rust: the one irreversible act on the page. */}
-            <Panel num="06" title="Disband" tone="rust">
+            <Panel num="07" title="Disband" tone="rust">
               <PanelBody>
                 <p className="text-sm leading-relaxed text-ink-2">Irreversible. The flag and the pole return to the pool for anyone to claim; the name and tag are held so nobody can impersonate you. Every member is out, with no cooldown.</p>
                 <p className="mt-2 text-sm leading-relaxed text-ink-2">{DISBAND_WARNING}</p>

@@ -197,6 +197,22 @@ describe("noticeText", () => {
   });
 });
 
+describe("supplies_toggled", () => {
+  const now = new Date("2026-09-05T12:00:00Z");
+  const site = "https://dayzclanwars.com";
+  it("says which way the officer turned the build supplies, and that the flags keep spawning", () => {
+    expect(noticeText({ kind: "supplies_toggled", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", enabled: false } }, site, 1))
+      .toBe(`📦 [Bear1](<${site}/players/Bear1>) turned build supplies off. From the next restart, only your clan flags spawn at your pole.`);
+    expect(noticeText({ kind: "supplies_toggled", target: "channel", occurredAt: now, payload: { gamertag: "Bear1", enabled: true } }, site, 1))
+      .toBe(`📦 [Bear1](<${site}/players/Bear1>) turned build supplies back on. The full kit spawns again from the next restart.`);
+  });
+
+  it("names no direction when the payload lacks one", () => {
+    const text = noticeText({ kind: "supplies_toggled", target: "channel", occurredAt: now, payload: { gamertag: "Bear1" } }, site, 1);
+    expect(text).not.toMatch(/ off\.| back on\./u);
+  });
+});
+
 describe("duration", () => {
   it("renders hours and minutes", () => {
     expect(duration(11700)).toBe("3h 15m");

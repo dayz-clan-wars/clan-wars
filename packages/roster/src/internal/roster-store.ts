@@ -16,6 +16,9 @@ import { exposeLocksTx } from "./vault-store";
 // but drizzle's inArray() requires a plain mutable array.
 const HOLDING: string[] = [...HOLDING_STATUSES];
 
+/** The clan's build supplies after the call (`on`/`off`), so both surfaces can say which. */
+export type SuppliesOutcome = "on" | "off" | "not-permitted";
+
 export type Role = "leader" | "officer" | "member";
 
 export type Membership = {
@@ -109,6 +112,7 @@ export interface RosterStore {
   revokeInvite(a: { inviteId: number; factionId: number; actorDiscordId: string; at: Date }): Promise<"ok" | "not-permitted" | "gone">;
   invitesOut(factionId: number, at: Date): Promise<(PendingInvite & { inviteeDiscordId: string; inviteeGamertag: string | null })[]>;
   setRecruitingPost(a: { factionId: number; actorDiscordId: string; recruiting: boolean; playWindow: string | null; language: string | null; pitch: string | null }): Promise<"ok" | "not-permitted">;
+  setSupplies(a: { factionId: number; actorDiscordId: string; enabled: boolean; at: Date }): Promise<SuppliesOutcome>;
 }
 
 // Leader, then officer, then member — matches the ordering rosterOf promises.
@@ -1179,5 +1183,39 @@ export class PgRosterStore implements RosterStore {
       .where(and(eq(factions.id, a.factionId), inArray(factions.status, HOLDING), sql`${actorRole} in ('leader','officer')`))
       .returning({ id: factions.id });
     return rows.length > 0 ? "ok" : "not-permitted";
+  }
+
+  /**
+   * Officer+ turns the clan's build supplies off or on (the worker reads
+   * `build_supplies`; the flags spawn either way). Same gate as the
+   * recruiting post. Lock order (§4.12): the `factions` row first, then the
+   * channel notice last.
+   *
+   * ⚠️ A re-save of the current state writes nothing and queues nothing: the
+   * notice is the clan's record of who flipped it, and a no-op form submit
+   * must not post "turned build supplies off" twice.
+   */
+  async setSupplies(a: { factionId: number; actorDiscordId: string; enabled: boolean; at: Date }): Promise<SuppliesOutcome> {
+    return this.db.transaction(async (tx) => {
+      const [clan] = await tx.select({ serverId: factions.serverId, buildSupplies: factions.buildSupplies }).from(factions)
+        .where(and(eq(factions.id, a.factionId), inArray(factions.status, HOLDING))).for("update");
+      if (!clan) return "not-permitted" as const;
+      // A plain read, no FOR UPDATE: nothing on faction_members is written
+      // here, so no lock is taken on a table later in the order.
+      const [seat] = await tx.select({ role: factionMembers.role }).from(factionMembers)
+        .where(and(eq(factionMembers.factionId, a.factionId), eq(factionMembers.discordId, a.actorDiscordId), eq(factionMembers.status, "full")));
+      if (seat?.role !== "leader" && seat?.role !== "officer") return "not-permitted" as const;
+      const state = a.enabled ? "on" as const : "off" as const;
+      if (clan.buildSupplies === a.enabled) return state;
+
+      await tx.update(factions).set({ buildSupplies: a.enabled }).where(eq(factions.id, a.factionId));
+      // Frozen at write time: a late post must name who flipped it and to what,
+      // not whatever the column says by then.
+      await noticeClanTx(tx, {
+        serverId: clan.serverId, factionId: a.factionId, kind: "supplies_toggled", occurredAt: a.at,
+        payload: { gamertag: await gamertagOrId(tx, a.actorDiscordId), enabled: a.enabled },
+      });
+      return state;
+    });
   }
 }

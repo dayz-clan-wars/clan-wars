@@ -37,7 +37,7 @@ export async function supplyTick(db: Database, deps: {
     // the only source of a clan flag in game, so without this there is
     // nothing to raise and every flag change lapses (spec 2026-10-13 §4).
     tag: factions.tag, texture: sql<string>`coalesce(${flagHolds.texture}, ${factions.texture})`,
-    status: factions.status, flagDownSince: factions.flagDownSince,
+    status: factions.status, flagDownSince: factions.flagDownSince, buildSupplies: factions.buildSupplies,
     x: declarations.x, y: declarations.y, z: declarations.z,
   }).from(factions)
     // ⚠️ INNER on purpose, and it governs the flags as much as the kit: both
@@ -77,7 +77,13 @@ export async function supplyTick(db: Database, deps: {
   const list: SupplyFaction[] = rows.map((r) => ({
     tag: r.tag, texture: r.texture,
     x: Number(r.x), y: Number(r.y), z: Number(r.z),
-    supplied: isSupplied(r.status, r.flagDownSince),
+    // ⚠️ Two facts ANDed here, and only here: `isSupplied` is raid state
+    // (pinned to SUPPLIED_PREDICATE by a drift test, so it must not learn
+    // about the toggle), `buildSupplies` is the clan's own choice. Either one
+    // false means flags only — never out of the file, or it loses its flags.
+    // A raided clan stays flags-only whatever the toggle says, and gets back
+    // whatever the toggle says once its flag is up again.
+    supplied: isSupplied(r.status, r.flagDownSince) && r.buildSupplies,
   }));
 
   const content = generateSupplies(deps.offsets, list);
