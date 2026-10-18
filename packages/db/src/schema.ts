@@ -656,6 +656,19 @@ export const factions = pgTable("factions", {
   playWindow: text("play_window"),
   language: text("language"),
   pitch: text("pitch"),
+  /**
+   * Whether the clan wants its build supplies (crate, barrels, materials,
+   * tools, kits). Off, the worker spawns its two flags and nothing else — a
+   * built base can shed the clutter and come back for repairs. Written only
+   * by `PgRosterStore.setSupplies` (officer+), which queues a channel notice.
+   *
+   * ⚠️ This is a CHOICE, not raid state: `isSupplied`/`SUPPLIED_PREDICATE`
+   * deliberately do not read it, and `supply-tick.ts` ANDs the two. It never
+   * removes the flags — a clan without a flag in game cannot raise.
+   * ⚠️ `DEFAULT true` is the whole migration plan: every existing clan keeps
+   * its kit until someone flips it, and old code never selects the column.
+   */
+  buildSupplies: boolean("build_supplies").notNull().default(true),
   /** Spec §5.8: set by a non-member's lower at the declared pole while active; cleared by a member's raise (defense) or the dormancy transition. */
   flagDownSince: timestamp("flag_down_since", { withTimezone: true }),
   flagDownByDayzId: text("flag_down_by_dayz_id"),
