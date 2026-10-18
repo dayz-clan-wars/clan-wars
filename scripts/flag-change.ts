@@ -7,8 +7,8 @@
  * Everything after the start is the ordinary rebrand (spec
  * docs/superpowers/specs/2026-10-13-clan-rebrand-flag-design.md): the clan's
  * channel is told, the kit delivers the flag at the next restart, a member must
- * raise it at home within 24 hours or it lapses, and the old flag is held for
- * 3 days. Completing it does NOT restart the clan's own rebrand cooldown.
+ * raise it at home within 24 hours or it lapses, and the old flag goes straight
+ * back to the pool. Completing it does NOT restart the clan's own rebrand cooldown.
  *
  * ⚠️ Refuses a DATABASE_URL that does not end in `/factions_live` unless
  * `--allow-test-db` is passed — same guard as `scripts/wipe.ts`.

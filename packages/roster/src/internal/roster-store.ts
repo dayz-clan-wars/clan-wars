@@ -1066,7 +1066,7 @@ export class PgRosterStore implements RosterStore {
       }
 
       // ⚠️ Order (§4.12): every roster-table write first — factions,
-      // identity_holds, flag_holds — then the feed row, then notices.
+      // flag_holds — then the feed row, then notices.
       let updated: { id: number; serverId: number; tag: string; texture: string } | undefined;
       if (identityChanged) {
         [updated] = await tx.update(factions)
@@ -1083,18 +1083,8 @@ export class PgRosterStore implements RosterStore {
           });
 
         if (!updated) return null;
-
-        // Hold only what was actually given up (guide ch. 8: "so nobody can
-        // impersonate you") — a rename that only changes the tag must not also
-        // stamp a hold on the unchanged name, and vice versa. `exceptFactionId`
-        // above already let this same clan rename back into a name or tag it
-        // once held itself.
-        await writeHoldsTx(tx, {
-          serverId: updated.serverId, factionId: updated.id,
-          name: before.name === a.name ? null : before.name,
-          tag: before.tag === newTag ? null : before.tag,
-          reason: "renamed",
-        });
+        // No hold: the old name and tag go straight back to the pool (2.3.2).
+        // Only a disband holds them.
       } else {
         // ⚠️ Flag only: nothing on `factions` changes, but the leader and
         // cooldown guards still apply — the same predicate the update uses.

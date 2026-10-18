@@ -154,7 +154,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
     body: "It arrives in your kit at the next restart. Raise it at your pole to make it yours." }) },
   flag_changed: { group: "Roster", render: (p) => ({
     kicker: "Rebrand", title: `New colors: ${flagName(p.texture)}`,
-    body: `${who(p.gamertag)} raised it. ${flagName(p.previousTexture)} is held for a few days, then goes back to the pool.` }) },
+    body: `${who(p.gamertag)} raised it. ${flagName(p.previousTexture)} is back in the pool.` }) },
   flag_change_lapsed: { group: "Roster", render: (p) => ({
     kicker: "Rebrand", title: "The flag change lapsed",
     body: `Nobody raised ${flagName(p.texture)} in time. It is back in the pool, and the clan keeps its flag.` }) },

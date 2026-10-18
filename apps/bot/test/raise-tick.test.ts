@@ -6,7 +6,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { FLAG_CHANGE_WINDOW_MS, FLAG_DOWN_MS, OLD_FLAG_HOLD_MS } from "@factions/domain";
+import { FLAG_CHANGE_WINDOW_MS, FLAG_DOWN_MS } from "@factions/domain";
 import { declarationForFaction } from "@factions/declarations";
 import { raiseTick } from "../src/raise-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
@@ -520,8 +520,8 @@ describe("raiseTick", () => {
       await raise(B1, "Bear1", "Flag_Wolf", P1, now);
       await raiseTick(db, { siteBaseUrl: SITE });
       expect(await bearRow()).toMatchObject({ texture: "Flag_Wolf", renamedAt: now });
-      expect(await db.select({ texture: flagHolds.texture, kind: flagHolds.kind, until: flagHolds.until }).from(flagHolds))
-        .toEqual([{ texture: "Flag_Bear", kind: "released", until: new Date(now.getTime() + OLD_FLAG_HOLD_MS) }]);
+      // The old flag is back in the pool at once: no hold of any kind is left.
+      expect(await db.select().from(flagHolds)).toEqual([]);
       const hist = await db.select().from(factionTextures).where(eq(factionTextures.factionId, BEAR)).orderBy(factionTextures.fromAt);
       expect(hist.map((h) => [h.texture, h.toAt])).toEqual([["Flag_Bear", now], ["Flag_Wolf", null]]);
       const [fe] = await db.select().from(factionEvents).where(eq(factionEvents.kind, "flag_changed"));
