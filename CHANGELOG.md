@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.0] - 2026-10-19
+
 ### Added
 
 - Fast travel is back, on Nasdara. Log out in any wooden shed, or beside your own active clan's flagpole, and you log back in at the Hub; pick a town's door and relog again. The sheds are a layer on the map (clan flagpoles never are), and the guide's Getting around chapter lists all 31 destinations.
