@@ -25,6 +25,7 @@ import { zoneTick } from "./zone-tick.js";
 import { violationTick } from "./violation-tick.js";
 import { banTick } from "./ban-tick.js";
 import { banAnnounceTick, countUnpostedBanAnnouncements } from "./ban-announce-tick.js";
+import { hubTick } from "./hub-tick.js";
 import { reaperTick } from "./reaper-tick.js";
 import { restartTick, type RestartTarget } from "./restart-tick.js";
 import { announceTick } from "./announce-tick.js";
@@ -1022,6 +1023,18 @@ export async function start(cfg: BotConfig): Promise<void> {
     } catch (err) {
       console.error("zone tick failed", err);
     }
+    // Every tick, beside zone: a Hub offence is written the tick it is read, so
+    // banTick's next 5-minute pass applies it.
+    if (cfg.hubBanTick) {
+      try {
+        const h = await hubTick(db, { now: new Date() });
+        if (h.seeded) console.log("hub watch: cursor seeded at the log head");
+        if (h.banned.length > 0) console.log(`hub watch: ${h.banned.length} ban(s) written: ${h.banned.map((b) => b.gamertag).join(", ")}`);
+      } catch (err) {
+        console.error("hub tick failed", err);
+      }
+    }
+
     // ⚠️ Right after zoneTick, every tick, gated on cfg.enforcementTick:
     // violationTick closes what zoneTick opens (an incident gone quiet past
     // VIOLATION_INCIDENT_GAP_MS) and queues the participant's warning DM. It
@@ -1852,6 +1865,9 @@ export async function start(cfg: BotConfig): Promise<void> {
     } else {
       console.log("public ban announcements on: #bans");
     }
+
+    if (!cfg.hubBanTick) console.warn("HUB_BAN_TICK is off: combat at the Fast Travel Hub is not being banned.");
+    else console.log("HUB_BAN_TICK on: a hit, kill or trap at the Hub is a one-hour ban.");
 
     // §9.1 "reconciled on start": populate the member cache and run one
     // structure pass before the interval starts. `runStructure` fetches the

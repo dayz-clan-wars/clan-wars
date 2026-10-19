@@ -34,8 +34,8 @@ describe("guide → Discord", () => {
     const plain = names.map(canonicalChannelName);
     expect(plain[0]).toBe("00-start-here");
     expect(plain).toContain("01-what-this-is");
-    expect(plain).toContain("12-rules-on-one-page");
-    expect(plain).not.toContain("11-getting-around");
+    expect(plain).toContain("13-rules-on-one-page");
+    expect(plain).toContain("11-getting-around");
     expect(plain).toContain("a-numbers");
     expect(new Set(names).size).toBe(names.length);
     expect(new Set(plain).size).toBe(plain.length);
@@ -58,6 +58,8 @@ describe("guide → Discord", () => {
     expect(map).toContain("*Layer — Who sees it — What is on it*");
     expect(map).toContain("- **You** — everyone linked — your last known position");
     expect(map).toContain("> 🛰️ **What the server can see**");
+    const around = chapterMessages(CHAPTERS.find((x) => x.slug === "getting-around")!, readFileSync(join(CONTENT_DIR, "11-getting-around.html"), "utf8"), ids).join("\n");
+    expect(around).toMatch(/```\n#\s+Town\s+X \/ Z\n— Left arm —\n1\s+Bagh-e Mir\s+4730 \/ 5598/u);
   });
 
   it("escapes what Discord would style, and never lets an @ become a mention", () => {

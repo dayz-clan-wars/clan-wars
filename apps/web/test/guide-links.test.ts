@@ -33,6 +33,6 @@ describe("GUIDE_LINKS", () => {
   });
   it("throws on an unknown chapter", () => {
     expect(() => guideLink({ slug: "nope" })).toThrow();
-    expect(CHAPTERS.length).toBe(14);
+    expect(CHAPTERS.length).toBe(15);
   });
 });

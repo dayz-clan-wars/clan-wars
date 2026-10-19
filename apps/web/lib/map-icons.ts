@@ -41,6 +41,7 @@ export const ICON = {
   bounty: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   /** Same chip and same foot as `base` — an abandoned pole is still a pole. */
   publicBase: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
+  travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   pin: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
 } as const satisfies Record<string, { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }>;
 
@@ -136,6 +137,20 @@ export function publicBaseIcon(p: Palette): string {
 }
 
 /**
+ * A travel point. Both forms are in the markup: below zoom 3 a black 10px
+ * dot with an olive core, from zoom 3 up the glyph in a chip so a player can
+ * see the point before walking. The container's `cw-far` class picks.
+ *
+ * The glyph is a bolt — the points are fast travel, and every point is a shed.
+ */
+export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
+
+export function travelIcon(p: Palette): string {
+  return `<svg class="cw-tp-dot" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="5" fill="${p.frame}"/><circle cx="14" cy="14" r="2.5" fill="${p.olive}"/></svg>` +
+    `<span class="cw-tp-chip">${chip(p, p.olive, BOLT.replaceAll("{a}", p.olive))}</span>`;
+}
+
+/**
  * The layers panel's row icons: the marker's own glyph, bare, 20px, so the
  * panel is a legend. Keys are `LAYER_LABELS`'s.
  */
@@ -149,6 +164,7 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "bounties": return `${open(` stroke="${p.rust2}"`)}<circle cx="14" cy="14" r="7"/><path d="M14 2v7M14 19v7M2 14h7M19 14h7"/></svg>`;
     case "publicBases": return `${open(` stroke="${p.ink}"`)}<path d="M7 26V3M7 4h14v9H7"/></svg>`;
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
+    case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;
     case "places": return `${open(` stroke="${p.ink}"`)}<path d="M3 8h16l6 6-6 6H3z" fill="${p.frame}"/><path d="M7 14h9"/></svg>`;
     default: return `${open(` stroke="${p.ink2}"`)}<path d="M3 3h22v22H3zM3 14h22M14 3v22"/></svg>`;
   }

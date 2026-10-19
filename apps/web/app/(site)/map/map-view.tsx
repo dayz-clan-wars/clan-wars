@@ -20,8 +20,8 @@ import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type 
 import { MapRoster } from "./map-roster";
 import { PinSheet } from "./pin-sheet";
 import {
-  type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
+  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -51,14 +51,14 @@ const BLANK_TILE = "data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAA
 const LAYER_STORAGE_KEY = "clan-wars.map.layers";
 /** The world this map draws; the place names are keyed on it. */
 const MAP = WORLD_MAP;
-/** Place names sit over the tiles (200) and under every player marker (overlay 400, markers 600). */
+/** Place names sit over the travel points (350) and under every player marker (overlay 400, markers 600). */
 const PLACE_PANE = "places";
 /** Ages are recomputed far more often than positions are fetched, so a label never goes stale. */
 const AGE_TICK_MS = 30_000;
 
 type LayerKey = keyof typeof LAYER_LABELS;
 /** The six every linked viewer has; the other four are gated on `layers.*`. */
-const ALWAYS: LayerKey[] = ["you", "publicBases", "places", "terrain", "bounties"];
+const ALWAYS: LayerKey[] = ["you", "publicBases", "travel", "places", "terrain", "bounties"];
 const ALL_KEYS = Object.keys(LAYER_LABELS) as LayerKey[];
 const ALL_ON = Object.fromEntries(ALL_KEYS.map((k) => [k, true])) as Record<LayerKey, boolean>;
 
@@ -479,6 +479,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       bounties: () => drawBounties(ctx("bounties")),
       publicBases: () => drawPublicBases(ctx("publicBases")),
       pins: () => drawPins(ctx("pins")),
+      travel: () => drawTravel(ctx("travel")),
     };
     for (const key of changed) draws[key]();
     // The grid never changes, so it is drawn once — redrawing 26 polylines
@@ -523,6 +524,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         const world = Lm.latLngBounds([ll(0, 0), ll(size, size)]);
         m.setMaxBounds(world);
 
+        // Under the overlay pane (400) that holds the dots, over the tiles
+        // (200): 519 travel points must never cover the one dot someone opened
+        // the map to find.
+        const pane = m.createPane(TRAVEL_PANE);
+        if (pane) pane.style.zIndex = "350";
         const placePane = m.createPane(PLACE_PANE);
         if (placePane) placePane.style.zIndex = "360";
 
@@ -556,6 +562,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         };
         m.on("zoomend", drawPlaces);
 
+        // Travel points are a dot when zoomed out and a glyph chip from
+        // TRAVEL_CHIP_ZOOM up. Both forms are in every marker's markup; one
+        // class on the container picks, so 519 markers swap with no rebuild.
+        const far = () => m.getContainer().classList.toggle(FAR_CLASS, m.getZoom() < TRAVEL_CHIP_ZOOM);
+        m.on("zoomend", far);
+
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
         Lm.tileLayer(`/tiles/${MAP}/topographic/{z}/{x}/{y}.webp`, {
           minZoom: 0, maxZoom: MAX_ZOOM, noWrap: true,
@@ -570,6 +582,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         m.fitBounds(world);
         const open = parseGridRef(atRef.current, size);
         if (open) m.setView(ll(open.x, open.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: false });
+        far();
         drawPlaces();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
