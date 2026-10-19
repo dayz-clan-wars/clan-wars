@@ -1,0 +1,16 @@
+{
+  "slug": "2026-10-nasdara",
+  "code": "Special",
+  "subtitle": "New to Clan Wars? Start here",
+  "descriptionLead": "Clan Wars moved to Nasdara. Boris and Pavel explain the server.\nJoin the Discord: https://discord.gg/TJu4XP25nr\nLink your gamertag: https://dayzclanwars.com",
+  "facebookLines": ["Clan Wars moved to Nasdara. Boris and Pavel explain the server in two minutes."],
+  "cards": [
+    { "header": "CLAN WARS", "title": "FOUND A CLAN", "rows": [{ "name": "Players", "value": "3" }, { "name": "Flags", "value": "33" }] },
+    { "header": "CLAN WARS", "title": "RAID WEEKEND", "rows": [{ "name": "Opens", "value": "Fri 00:00" }, { "name": "Closes", "value": "Mon 00:00" }] },
+    { "header": "CLAN WARS", "title": "WATCH ZONE", "rows": [{ "name": "Radius", "value": "100 m" }] },
+    { "header": "NASDARA", "title": "LOOT", "rows": [{ "name": "Guns", "value": "x2.5" }, { "name": "Loot", "value": "Pristine" }] },
+    { "header": "NASDARA", "title": "FAST TRAVEL", "rows": [{ "name": "From", "value": "Any shed" }, { "name": "Hub", "value": "No combat" }] }
+  ],
+  "marquee": [".::CLAN WARS::. on Xbox", "dayzclanwars.com", "discord.gg/TJu4XP25nr", "Raid weekend Fri to Mon UTC", "Fast travel from any shed"],
+  "pronounce": ["Nasdara", "Bustanshahr", "pakol", "kameez"]
+}
