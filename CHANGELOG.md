@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The special episode runbook's publish command now finds pnpm on the host.
+
 ## [2.5.0] - 2026-10-19
 
 ### Added
