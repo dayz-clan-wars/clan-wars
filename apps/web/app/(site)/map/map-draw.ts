@@ -116,7 +116,7 @@ function chipIcon(L: typeof import("leaflet"), html: string, box: { size: readon
  * ⚠️ This registry is why the age tick does NOT rebuild the layers. Clearing
  * and redrawing every group each tick tore down whatever was open: a player
  * halfway through reading a pin note lost the note and its Delete button
- * within 30 seconds, and 519 travel markers were rebuilt for nothing. So the
+ * within 30 seconds, and 2,189 travel markers were rebuilt for nothing. So the
  * structural draw happens on new DATA only, and a tick calls `refreshAges`,
  * which rewrites content in place — Leaflet's `setTooltipContent` and
  * `setPopupContent` update an OPEN tooltip or popup without closing it.
@@ -413,7 +413,7 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
 
 export function drawTravel({ L, group, pt, data, p }: Ctx): void {
   // Dot or chip is the container's `cw-far` class, flipped on zoomend in
-  // map-view.tsx — 519 markers swap form with one class, none rebuilt.
+  // map-view.tsx — 2,189 markers swap form with one class, none rebuilt.
   const icon = chipIcon(L, travelIcon(p), ICON.travel, "cw-mk-travel");
   // The Hub itself is not drawn: it is one fixed, well-known building, and a
   // marker with a name tag at every zoom only covered the south-west corner.

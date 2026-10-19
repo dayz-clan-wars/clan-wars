@@ -1,6 +1,6 @@
 /**
  * The fast-travel config (`pra-teleport-hub.json`) as a projection: the
- * fixed points from the template (Nasdara's 519 sheds), then one box per ACTIVE clan's
+ * fixed points from the template (every Nasdara shed, 2,189), then one box per ACTIVE clan's
  * declared pole, so a clan can relog at its own flag and arrive at the Hub.
  *
  * The file is the mod's own format, kept verbatim: `areaName`, `PRABoxes`

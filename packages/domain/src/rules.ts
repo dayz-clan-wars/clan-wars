@@ -175,8 +175,8 @@ export const VAULT_NAME_MAX = 40;
 export const VAULT_NOTE_MAX = 140;
 
 // Getting around
-/** Nasdara's wooden sheds (FAST_TRAVEL_POINTS, travel.test.ts holds them equal). Clan poles are extra and never counted. */
-export const TRAVEL_POINTS = 519;
+/** Nasdara's sheds, every Land_Shed_* (FAST_TRAVEL_POINTS, travel.test.ts holds them equal). Clan poles are extra and never counted. */
+export const TRAVEL_POINTS = 2189;
 export const HUB_DESTINATIONS = 31;
 
 // Fair play

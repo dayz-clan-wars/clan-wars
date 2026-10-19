@@ -187,7 +187,7 @@ export const GUIDE_NUMBERS: readonly GuideNumber[] = [
   row("The map", "Intruder: alert cooldown per player", "INTRUDER_ALERT_COOLDOWN_MS"),
   row("The map", "Intruder: pin drops off after", "INTRUDER_PIN_TTL_MS"),
   row("The map", "Pin lifetime", "PIN_TTL_MS"),
-  row("Getting around", "Fast travel points (wooden sheds)", "TRAVEL_POINTS"),
+  row("Getting around", "Fast travel points (sheds)", "TRAVEL_POINTS"),
   row("Getting around", "Hub destinations", "HUB_DESTINATIONS_TOWNS"),
   row("Fair play", "Combat log rule", "COMBAT_LOG"),
   row("Fair play", "Watchtower height", "WATCHTOWER"),
