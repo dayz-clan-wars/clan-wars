@@ -63,8 +63,11 @@ describe("the template for a server's map", () => {
 // generated upload, and the layer is built from the template alone.
 describe("the website's travel layer", () => {
   it("is exactly the template's sheds, and nothing else", () => {
-    const fromTemplate = RAW.PRABoxes.map((b: number[][]) => `${b[2]![0]!.toFixed(1)}:${b[2]![2]!.toFixed(1)}`).sort();
-    const onTheMap = FAST_TRAVEL_POINTS.map((p) => `${p.x.toFixed(1)}:${p.z.toFixed(1)}`).sort();
-    expect(onTheMap).toEqual(fromTemplate);
+    // The layer keeps one decimal, so match each shed within rounding.
+    const sheds = RAW.PRABoxes.map((b: number[][]) => ({ x: b[2]![0]!, z: b[2]![2]! }));
+    expect(FAST_TRAVEL_POINTS).toHaveLength(sheds.length);
+    const unmatched = sheds.filter((s: { x: number; z: number }) =>
+      !FAST_TRAVEL_POINTS.some((p) => Math.abs(p.x - s.x) <= 0.06 && Math.abs(p.z - s.z) <= 0.06));
+    expect(unmatched).toEqual([]);
   });
 });

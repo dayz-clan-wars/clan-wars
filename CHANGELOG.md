@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Fast travel is back, on Nasdara. Log out in any wooden shed, or beside your own active clan's flagpole, and you log back in at the Hub; pick a town's door and relog again. The sheds are a layer on the map (clan flagpoles never are), and the guide's Getting around chapter lists all 31 destinations.
+- The Hub is a no-combat zone again: a hit, a kill or a trap there is an automatic 1-hour ban, with two minutes to hit back if someone hits you first. Kills at the Hub count for nothing. No base can be declared within 200 m of the Hub.
+
 ## [2.3.5] - 2026-10-19
 
 ### Changed
