@@ -17,10 +17,10 @@ const offsets = loadTemplate(JSON.parse(
 
 // The fast-travel config, one template per map, same treatment: a broken
 // template stops the worker here. Each is that map's mission repo's
-// `custom/pra-teleport-hub.json` copied verbatim (chernarus, livonia), so a
-// fast-travel change there needs copying here too or the worker reverts it.
+// `custom/pra-teleport-hub.json` copied verbatim (nasdara: the 519 sheds), so
+// a fast-travel change there needs copying here too or the worker reverts it.
 const travelTemplates = Object.fromEntries(
-  ["dayzOffline.chernarusplus", "dayzOffline.enoch"].map((mission) => [mission, loadTravelTemplate(JSON.parse(
+  ["dayzOffline.nasdara"].map((mission) => [mission, loadTravelTemplate(JSON.parse(
     readFileSync(new URL(`../assets/travel/${mission}.json`, import.meta.url), "utf8"),
   ))]),
 );

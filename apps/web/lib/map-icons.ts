@@ -141,8 +141,7 @@ export function publicBaseIcon(p: Palette): string {
  * dot with an olive core, from zoom 3 up the glyph in a chip so a player can
  * see the point before walking. The container's `cw-far` class picks.
  *
- * The glyph is a bolt — the points are fast travel, and the data carries no
- * kind (outhouse / well) to draw instead.
+ * The glyph is a bolt — the points are fast travel, and every point is a shed.
  */
 export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
 

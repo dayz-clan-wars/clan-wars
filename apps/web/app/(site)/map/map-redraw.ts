@@ -7,7 +7,7 @@ import { layerOfKey } from "@/lib/map-roster";
  * ⚠️ Why this exists. Every poll used to clear and rebuild EVERY group, and
  * Leaflet closes a popup whose marker is removed. A player reading a pin
  * note, or halfway through the two-tap Delete, lost the card every five
- * minutes and on every Refresh, and 209 static travel markers were rebuilt
+ * minutes and on every Refresh, and 519 static travel markers were rebuilt
  * each time. Now a group is rebuilt only when its own slice of the data
  * changed, so an open popup on an unchanged layer is never touched at all.
  *

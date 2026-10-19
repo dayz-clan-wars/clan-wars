@@ -7,7 +7,7 @@ import { loadTravelTemplate } from "../src/travel.js";
 import { travelTick } from "../src/travel-tick.js";
 
 const DB_URL = requireTestDatabaseUrl();
-const template = loadTravelTemplate(JSON.parse(readFileSync(new URL("../assets/travel/dayzOffline.enoch.json", import.meta.url), "utf8")));
+const template = loadTravelTemplate(JSON.parse(readFileSync(new URL("../assets/travel/dayzOffline.nasdara.json", import.meta.url), "utf8")));
 const now = new Date("2026-09-09T12:00:00Z");
 const FIXED = template.PRABoxes.length;
 
@@ -35,7 +35,7 @@ describe("travelTick", () => {
       await tx.execute(sql`set local client_min_messages = warning`);
       await tx.execute(sql`truncate table travel_uploads, supply_uploads, declarations, poles, events, adm_files, factions, servers restart identity cascade`);
     });
-    const [s] = await db.insert(servers).values({ name: "S", map: "enoch", clockOffsetMs: 0 }).returning();
+    const [s] = await db.insert(servers).values({ name: "S", map: "nasdara", clockOffsetMs: 0 }).returning();
     serverId = s!.id;
   });
 

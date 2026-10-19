@@ -1,6 +1,6 @@
 /**
  * The fast-travel config (`pra-teleport-hub.json`) as a projection: the
- * 209 fixed points from the template, then one box per ACTIVE clan's
+ * fixed points from the template (Nasdara's 519 sheds), then one box per ACTIVE clan's
  * declared pole, so a clan can relog at its own flag and arrive at the Hub.
  *
  * The file is the mod's own format, kept verbatim: `areaName`, `PRABoxes`
@@ -12,7 +12,7 @@ export type TravelTemplate = { areaName: string; PRABoxes: TravelBox[]; safePosi
 export type TravelPole = { tag: string; x: number; y: number; z: number };
 
 /**
- * The box around a pole. The template's boxes are 2 × 1.5 × 2, an outhouse's
+ * The box around a pole. The template's boxes are 3 × 6 × 3, a shed's
  * inside; a player stands BESIDE a flagpole, not in it, so the pole's box is
  * wider — anywhere within two metres of it counts.
  */
@@ -29,7 +29,7 @@ export function loadTravelTemplate(json: unknown): TravelTemplate {
 
 /**
  * The template for the map a server is running, keyed by mission name
- * (`dayzOffline.chernarusplus`), the folder `missionCustomDir()` resolved:
+ * (`dayzOffline.nasdara`), the folder `missionCustomDir()` resolved:
  * `/games/<user>/ftproot/<game>_missions/<mission>/custom`.
  *
  * ⚠️ Read from the directory the file is about to be written to, never from
