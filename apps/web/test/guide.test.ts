@@ -135,13 +135,8 @@ describe("guide.css rides on @theme", () => {
 });
 
 describe("the site serves the guide itself", () => {
-  it("redirects only the retired Getting around chapter — /guide used to hand off to fieldguide.dayzclanwars.com", async () => {
-    // Nasdara has no fast travel, so the chapter is gone; links to it in old
-    // Discord posts and search results land on the guide's front page rather
-    // than a 404. Nothing else redirects: the site serves the guide itself.
-    expect(await config.redirects?.()).toEqual([
-      { source: "/guide/getting-around", destination: "/guide", permanent: true },
-    ]);
+  it("has no redirects — /guide used to hand off to fieldguide.dayzclanwars.com", () => {
+    expect(config.redirects).toBeUndefined();
   });
 });
 
