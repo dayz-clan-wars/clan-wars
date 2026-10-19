@@ -12,7 +12,7 @@ export { PIN_RESULT_COPY as RESULT_COPY, PIN_ICON_LABELS } from "@factions/copy"
 
 export const LAYER_LABELS = {
   you: "You", base: "Your base", clanmates: "Clanmates", intruders: "Intruders", bounties: "Bounties",
-  publicBases: "Public bases", pins: "Pins", places: "Place names", terrain: "Terrain",
+  publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
 } as const;
 
 /** Why a switch is missing from the layers panel (App Review §03): what would put the layer there. */

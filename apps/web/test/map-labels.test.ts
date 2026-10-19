@@ -37,6 +37,11 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   });
 
   it.each(markers)("%s", (call) => {
+    // Travel points are not interactive: 209 tab stops with nothing to open.
+    if (call.includes("TRAVEL_PANE")) {
+      expect(call).toContain("keyboard: false");
+      return;
+    }
     // Public bases open nothing (a tooltip, no popup) and are not in the "On
     // the map" list, so as tab stops they only interleaved strangers' bases
     // with the player's own markers. Still named, for a pointer's hover.
