@@ -3,6 +3,7 @@ import { dispatch } from "./dispatch.js";
 import { runDryRun } from "./dry-run.js";
 import { serviceMain } from "./service.js";
 import { runSpecialPublish } from "./special/publish-cli.js";
+import { fromInvocationDir } from "./special/paths.js";
 import { runSpecialRender } from "./special/render-cli.js";
 import { parseWeekArg } from "./weeks.js";
 
@@ -29,9 +30,9 @@ if (d.kind === "usage") {
 }
 
 if (d.kind === "special-render") {
-  process.exitCode = await runSpecialRender({ dir: values.special!, out: values.render! });
+  process.exitCode = await runSpecialRender({ dir: fromInvocationDir(values.special!), out: fromInvocationDir(values.render!) });
 } else if (d.kind === "special-publish") {
-  process.exitCode = await runSpecialPublish({ dir: values.special!, out: values.publish! });
+  process.exitCode = await runSpecialPublish({ dir: fromInvocationDir(values.special!), out: fromInvocationDir(values.publish!) });
 } else if (d.kind === "review") {
   process.exitCode = await runDryRun({ week: values.week, printPrompt: values["print-prompt"], render: values.render });
 } else {

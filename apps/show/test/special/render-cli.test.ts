@@ -3,6 +3,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { cutHash } from "../../src/engine/animation/episodeCache.js";
+import { loadSpecial } from "../../src/special/load.js";
 import { runSpecialRender, specialCacheKeyWeek, type SpecialRenderIo } from "../../src/special/render-cli.js";
 
 const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../specials/2026-10-nasdara");
@@ -40,6 +42,8 @@ describe("runSpecialRender", () => {
     expect(await runSpecialRender({ dir: REAL, out: f.out }, f.io)).toBe(0);
     expect(fs.readFileSync(path.join(f.out, "episode.mp3"), "utf8")).toBe("MP3");
     expect(fs.readFileSync(path.join(f.out, "video.mp4"), "utf8")).toBe("MP4");
+    // The cut stamp the publish checks the host's script against.
+    expect(fs.readFileSync(path.join(f.out, "cut.txt"), "utf8")).toBe(cutHash(loadSpecial(REAL).narrative));
     expect(f.calls.screened[0]).toContain("Boris:");
     expect(f.calls.voice[0].weekStart).toBe(specialCacheKeyWeek("2026-10-nasdara"));
     expect(f.calls.voice[0].weekStart).toBe("special:2026-10-nasdara");

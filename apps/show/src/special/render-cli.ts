@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cutHash } from "../engine/animation/episodeCache.js";
 import { DEFAULT_MODEL, loadRenderConfig } from "../config.js";
 import { MemoryPronunciationStore } from "../engine/audio/pronunciationStore.js";
 import { createChat } from "../engine/llm/openrouter.js";
@@ -76,6 +77,9 @@ export async function runSpecialRender(o: { dir: string; out: string }, io?: Spe
   const outMp4 = path.join(o.out, "video.mp4");
   fs.copyFileSync(voiced.mp3Path, outMp3);
   fs.copyFileSync(videoPath, outMp4);
+  // ⚠️ The cut this audio was voiced from. The publish refuses a host script that differs, so a
+  // late edit can never put a new transcript beside old audio.
+  fs.writeFileSync(path.join(o.out, "cut.txt"), cutHash(special.narrative));
   deps.log(`RENDERED\n${outMp3}\n${outMp4}\nduration: ${voiced.totalSec.toFixed(1)}s`);
   return 0;
 }

@@ -72,7 +72,7 @@ Rendering and publishing are two separate commands:
     # Local. Needs no database, only OPENROUTER_API_KEY and the --render keys below.
     pnpm run show --special $PWD/apps/show/specials/<slug> --render ~/show-special-<slug>
 
-    # On the host, after copying episode.mp3 and video.mp4 into <out>. Run it again after the ✅.
+    # On the host, after copying episode.mp3, video.mp4 and cut.txt into <out>. Run it again after the ✅.
     pnpm run show --special apps/show/specials/<slug> --publish <out>
 
 **The render** screens the script with the weekly output screen (blocklist and moderation)
@@ -91,8 +91,8 @@ and fails closed. Then it voices the script and renders it.
 re-run adopts an earlier upload, draft or thread instead of posting it twice. ⚠️ A
 special never writes a `show_episodes` row. That table is keyed by week, and a row
 there would collide with a real week or turn up in the next "Previously on". ⚠️ If the
-script changes after a publish has started, that `<out>` refuses it (exit 2). A new cut
-needs a new `--publish` directory and its own ✅.
+script on the host does not match the render's `cut.txt`, or changes after a publish has started, the publish refuses it (exit 2). A new cut needs a new render, a new `--publish` directory and its own ✅. Relative paths
+are read from the directory `pnpm` was run in (`INIT_CWD`), not `apps/show`.
 
 Runbook: `docs/deploy/2026-10-19-special-episode.md`.
 

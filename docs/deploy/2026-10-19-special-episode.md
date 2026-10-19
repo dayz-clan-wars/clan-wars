@@ -16,7 +16,7 @@ Discord credentials exist only in `/opt/clan-wars/.env`.
        pnpm run show --special $PWD/apps/show/specials/2026-10-nasdara --render ~/show-special-2026-10-nasdara
 
 Exit 1 means the script screen held it, and the reasons are printed. The output folder
-gets `episode.mp3` and `video.mp4`, and the printed duration should be 2:00 to 2:30 of
+gets `episode.mp3`, `video.mp4` and `cut.txt`, and the printed duration should be 2:00 to 2:30 of
 dialogue plus the jingles.
 
 ## 2. Review
@@ -31,9 +31,11 @@ Run the usual release flow (release PR, tag) so the host has the `--special` com
 ## 4. Copy the reviewed render to the host
 
     ssh acab@regime.fi 'sudo install -d -o acab /var/lib/clan-wars-show/specials/2026-10-nasdara'
-    scp ~/show-special-2026-10-nasdara/{episode.mp3,video.mp4} acab@regime.fi:/var/lib/clan-wars-show/specials/2026-10-nasdara/
+    scp ~/show-special-2026-10-nasdara/{episode.mp3,video.mp4,cut.txt} acab@regime.fi:/var/lib/clan-wars-show/specials/2026-10-nasdara/
 
 ⚠️ Publish the files you reviewed. Re-rendering on the host would voice a different take.
+⚠️ `cut.txt` is the hash of the script the audio was voiced from. The publish refuses (exit 2)
+when the host's `script.txt` does not match it. A late script change needs a new render.
 
 ## 5. Publish (first run)
 

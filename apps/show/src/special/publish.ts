@@ -30,13 +30,17 @@ export type SpecialState = {
 };
 export type SpecialPublishDeps = Pick<StageDeps, "youtube" | "discord" | "facebook" | "cfg" | "now" | "log" | "readFile">;
 export type SpecialOutcome = "done" | "waiting" | "rejected" | "cut-mismatch";
-export type SpecialOut = { videoPath: string; mp3Path: string; statePath: string };
+export type SpecialOut = { videoPath: string; mp3Path: string; statePath: string; cutPath: string };
 
 const watchUrl = (id: string) => `https://youtu.be/${id}`;
 const CODE = "Special";
 
 export async function publishSpecial(deps: SpecialPublishDeps, s: Special, out: SpecialOut): Promise<SpecialOutcome> {
   const cut = cutHash(s.narrative);
+  // ⚠️ The render stamps the cut it voiced. A script changed after the render (a fix in the release
+  // PR, an uncommitted working copy) would otherwise publish its transcript beside the old audio.
+  const rendered = fs.existsSync(out.cutPath) ? fs.readFileSync(out.cutPath, "utf8").trim() : null;
+  if (rendered !== cut) return "cut-mismatch";
   let st: SpecialState = fs.existsSync(out.statePath) ? JSON.parse(fs.readFileSync(out.statePath, "utf8")) : { cut };
   // ⚠️ The ✅ was given to one cut. A changed script must never ride on that approval, or on that
   // cut's upload and thread: it gets a fresh --publish directory and its own review.

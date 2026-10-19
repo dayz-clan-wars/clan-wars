@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Database } from "@factions/db";
+import { cutHash } from "../../src/engine/animation/episodeCache.js";
 import { publishSpecial, type SpecialState } from "../../src/special/publish.js";
 import { specialMarker } from "../../src/special/text.js";
 import { loadSpecial, type Special } from "../../src/special/load.js";
@@ -14,11 +15,12 @@ const REAL = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../s
 const THREAD = "Clan Wars Special · New to Clan Wars? Start here";
 
 let special: Special;
-let out: { videoPath: string; mp3Path: string; statePath: string };
+let out: { videoPath: string; mp3Path: string; statePath: string; cutPath: string };
 beforeEach(() => {
   special = loadSpecial(REAL);
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "special-pub-"));
-  out = { videoPath: path.join(dir, "video.mp4"), mp3Path: path.join(dir, "episode.mp3"), statePath: path.join(dir, "publish-state.json") };
+  out = { videoPath: path.join(dir, "video.mp4"), mp3Path: path.join(dir, "episode.mp3"), statePath: path.join(dir, "publish-state.json"), cutPath: path.join(dir, "cut.txt") };
+  fs.writeFileSync(out.cutPath, cutHash(special.narrative));
 });
 
 const harness = () => fakeDeps({} as Database);
@@ -126,5 +128,20 @@ describe("publishSpecial", () => {
     h.deps.cfg = { ...h.deps.cfg, opsChannelId: null };
     await expect(publishSpecial(h.deps, special, out)).rejects.toThrow(/OPS_CHANNEL_ID/);
     expect(h.publicIds.size).toBe(0);
+  });
+
+  it("a script changed between the render and the first publish is refused before any upload", async () => {
+    const h = harness();
+    const changed = { ...special, narrative: `${special.narrative}\nBoris: A late typo fix.` };
+    expect(await publishSpecial(h.deps, changed, out)).toBe("cut-mismatch");
+    expect(h.uploads).toHaveLength(0);
+    expect(h.posted).toHaveLength(0);
+  });
+
+  it("a render with no cut stamp is refused before any upload", async () => {
+    const h = harness();
+    fs.rmSync(out.cutPath);
+    expect(await publishSpecial(h.deps, special, out)).toBe("cut-mismatch");
+    expect(h.uploads).toHaveLength(0);
   });
 });
