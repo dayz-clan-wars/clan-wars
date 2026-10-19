@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The guide's rules match the new #rules post. No building at points of interest, military bases, underground or in tunnels, and don't block water trucks. Boosting with stacked fireplaces, garden plots or tents is now a permanent ban, and the building rule about medical and hunting loot buildings is gone.
+
 ## [2.3.3] - 2026-10-18
 
 ### Changed
