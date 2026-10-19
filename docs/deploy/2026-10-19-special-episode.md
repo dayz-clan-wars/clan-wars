@@ -39,7 +39,11 @@ when the host's `script.txt` does not match it. A late script change needs a new
 
 ## 5. Publish (first run)
 
-    ssh acab@regime.fi "sudo -u acab bash -c 'cd /opt/clan-wars && set -a && . ./.env && set +a && pnpm run show --special apps/show/specials/2026-10-nasdara --publish /var/lib/clan-wars-show/specials/2026-10-nasdara'"
+    ssh acab@regime.fi "sudo -u acab bash -c 'cd /opt/clan-wars && set -a && . ./.env && set +a && export PATH=/home/acab/.local/bin:\$PATH && pnpm run show --special apps/show/specials/2026-10-nasdara --publish /var/lib/clan-wars-show/specials/2026-10-nasdara'"
+
+⚠️ `pnpm` lives in `/home/acab/.local/bin`, which is not on the PATH of a `sudo -u acab` shell
+(the systemd unit names it in full). Without the `export PATH` the command fails with
+`pnpm: command not found`.
 
 Expected: `special 2026-10-nasdara: waiting`. The video is uploaded unlisted, and the ops
 channel has a draft marked `show:special:2026-10-nasdara:<hash>`.
