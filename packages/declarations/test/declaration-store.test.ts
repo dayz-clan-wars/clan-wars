@@ -3,7 +3,7 @@ import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, declarations, poles, events, admFiles, ceremonies, zoneIncidents, bans, type Database,
 } from "@factions/db";
-import { RELEASED_POLE_GRACE_MS, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
+import { RELEASED_POLE_GRACE_MS, HUB_POSITION, PUBLIC_BASE_DESPAWN_MS } from "@factions/domain";
 import { sql, eq, and } from "drizzle-orm";
 import { declareTx, releaseTx, declarationForFaction, declarationForPlayer, publicPoles } from "../src/store";
 
@@ -66,8 +66,8 @@ describe("declaration store", () => {
     expect(await solo(5150, 5000, "B")).toEqual({ ok: false, reason: "too-close" });
   });
 
-  it("declares a pole where the old Hub stood (no Hub rule)", async () => {
-    expect(await solo(110, 93)).toEqual({ ok: true, id: expect.any(Number) });
+  it("⚠️ refuses a pole within 200 m of the Hub even with no declarations", async () => {
+    expect(await solo(HUB_POSITION.x + 10, HUB_POSITION.z)).toEqual({ ok: false, reason: "too-close" });
   });
 
   it("refuses a second base for the same owner", async () => {

@@ -198,6 +198,12 @@ export type BotConfig = {
   /** Gates the ban-reconciliation tick itself. Off by default, same reasoning as `achievementsTick`. */
   enforcementTick: boolean;
   /**
+   * No combat at the Fast Travel Hub. Writes `hub_combat` bans for `banTick`.
+   * ⚠️ BAN_DRY_RUN is false in production, so the first Hub ban is REAL the
+   * moment this is set — a deliberate act on a chosen day, never a deploy's.
+   */
+  hubBanTick: boolean;
+  /**
    * The public #bans channel — enforced bans and unbans, announced. Undefined
    * means it is OFF: `ban_announcements` rows keep queuing (written whether or
    * not this is set) and nothing posts, same degrade-not-refuse shape as
@@ -499,6 +505,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     // `ENFORCEMENT_TICK=true` used to silently leave the tick off because only
     // the literal `"1"` was accepted.
     enforcementTick: ["1", "true"].includes((env.ENFORCEMENT_TICK ?? "").toLowerCase()),
+    hubBanTick: ["1", "true"].includes((env.HUB_BAN_TICK ?? "").toLowerCase()),
     bansChannelId: optionalSnowflake(env, "BANS_CHANNEL_ID"),
   };
 
@@ -517,6 +524,13 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // bans it was supposed to place, silently.
   if (config.enforcementTick && !config.nitradoToken) {
     throw new Error("ENFORCEMENT_TICK is on but NITRADO_TOKEN is unset — the bot cannot reach the ban list it cannot authenticate to.");
+  }
+
+  // ⚠️ hubTick only ever writes `bans` rows — banTick is what applies them
+  // to Nitrado. Without enforcementTick on too, rows would pile up and never
+  // be applied: a silent success from the operator's point of view.
+  if (config.hubBanTick && !config.enforcementTick) {
+    throw new Error("HUB_BAN_TICK is on but ENFORCEMENT_TICK is off — ban rows would be written and never applied.");
   }
 
   // ⚠️ Both halves ride on the restart tick's slots. Configured without the schedule

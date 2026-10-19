@@ -364,8 +364,10 @@ export async function lapseSolos(
  * when it falls within `WATCH_ZONE_RADIUS_M` of ANY declaration on the
  * server, not just one sharing its `poleKey` — the same "inside someone's
  * base" radius the zone-enforcement watch already uses, not a new number.
- * Deliberately `distance2d`, not `tooClose`: `tooClose` applies the 200 m
- * base-spacing radius, a different number from the watch-zone radius used here.
+ * Deliberately `distance2d`, not `tooClose`: `tooClose` also checks against
+ * `HUB_POSITION`, which is right for deciding where a base may be declared
+ * but would suppress genuinely abandoned poles near the Hub here, for a
+ * reason that has nothing to do with anyone's base.
  *
  * A pole whose flag has not gone up for `PUBLIC_BASE_DESPAWN_MS` has
  * despawned in game and is left off. `last_seen_at` is the last raise here:
