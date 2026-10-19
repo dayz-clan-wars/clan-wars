@@ -137,17 +137,15 @@ export function publicBaseIcon(p: Palette): string {
 }
 
 /**
- * A travel point. Both forms are in the markup: below zoom 3 a black 10px
- * dot with an olive core, from zoom 3 up the glyph in a chip so a player can
- * see the point before walking. The container's `cw-far` class picks.
+ * A travel point: the glyph in a chip. Drawn only when zoomed in
+ * (TRAVEL_MIN_ZOOM in map-draw.ts), so there is no zoomed-out form.
  *
  * The glyph is a bolt — the points are fast travel, and every point is a shed.
  */
 export const BOLT = `<path d="M15.5 4L8 15.5h5.5L11.5 24 20 12.5h-5.5z" fill="{a}" stroke="none"/>`;
 
 export function travelIcon(p: Palette): string {
-  return `<svg class="cw-tp-dot" width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"><circle cx="14" cy="14" r="5" fill="${p.frame}"/><circle cx="14" cy="14" r="2.5" fill="${p.olive}"/></svg>` +
-    `<span class="cw-tp-chip">${chip(p, p.olive, BOLT.replaceAll("{a}", p.olive))}</span>`;
+  return chip(p, p.olive, BOLT.replaceAll("{a}", p.olive));
 }
 
 /**
