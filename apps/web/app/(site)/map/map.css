@@ -80,9 +80,6 @@
   100% { transform: rotate(45deg) scale(1.2); opacity: 0; }
 }
 @media (prefers-reduced-motion: reduce) { .cw-ring { animation: none; } }
-/* Travel points: a dot below zoom 3 (`cw-far` on the container), a glyph chip from zoom 3 up. */
-.leaflet-container.cw-far .cw-tp-chip { display: none; }
-.leaflet-container:not(.cw-far) .cw-tp-dot { display: none; }
 /*
  * Place names (lib/map-places.ts). ⚠️ The box goes on the CHIP, never on the
  * root: the root carries Leaflet's inline `width: 0; height: 0` from

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The map's travel layer shows sheds only once you zoom in, and only the ones near your screen, so the map stays quick on phones.
+
 ## [2.4.1] - 2026-10-19
 
 ### Changed

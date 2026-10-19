@@ -101,9 +101,15 @@ export function palette(): Palette {
 
 /** Leaflet's own pane sits at 400; travel points go under everything else at 350. */
 export const TRAVEL_PANE = "travel";
-/** Below this zoom a travel point is a dot; from it up, a glyph chip. Set as a class on the container. */
-export const TRAVEL_CHIP_ZOOM = 3;
-export const FAR_CLASS = "cw-far";
+/**
+ * Travel points are drawn from this zoom up, and only those in view. Below it
+ * the layer is empty: 2,189 sheds on a phone's whole-map view were a marker
+ * per few pixels and the slowest thing on the page. 4 is past every screen's
+ * zoom floor (a 1920 px desktop's is 3), so "zoomed in" means it everywhere.
+ */
+export const TRAVEL_MIN_ZOOM = 4;
+/** How far past the visible edge to draw, as a fraction of the view, so a short pan shows sheds before the redraw lands. */
+export const TRAVEL_VIEW_PAD = 0.25;
 
 /** A marker whose chip is one of the strings in map-icons.ts. Never a white box: `.cw-mk` in globals.css. */
 function chipIcon(L: typeof import("leaflet"), html: string, box: { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }, className: string): L.DivIcon {
@@ -411,15 +417,25 @@ export function drawPins({ L, group, pt, data, now, ages, index, p }: Ctx): void
   }
 }
 
-export function drawTravel({ L, group, pt, data, p }: Ctx): void {
-  // Dot or chip is the container's `cw-far` class, flipped on zoomend in
-  // map-view.tsx — 2,189 markers swap form with one class, none rebuilt.
+/**
+ * The travel points inside `view`, or none when `view` is null (zoomed out).
+ * map-view.tsx passes the padded bounds and redraws on every moveend, so the
+ * group only ever holds the sheds near the screen.
+ */
+export function drawTravel({ L, group, pt, data, p }: Pick<Ctx, "L" | "group" | "pt" | "data" | "p">, view: L.LatLngBounds | null): void {
+  if (view === null) return;
   const icon = chipIcon(L, travelIcon(p), ICON.travel, "cw-mk-travel");
   // The Hub itself is not drawn: it is one fixed, well-known building, and a
   // marker with a name tag at every zoom only covered the south-west corner.
   for (const t of data.travelPoints) {
-    L.marker(pt(t.x, t.z), { pane: TRAVEL_PANE, icon, keyboard: false, interactive: false }).addTo(group);
+    const at = pt(t.x, t.z);
+    if (view.contains(at)) L.marker(at, { pane: TRAVEL_PANE, icon, keyboard: false, interactive: false }).addTo(group);
   }
+}
+
+/** The bounds to draw travel points in, or null below TRAVEL_MIN_ZOOM. */
+export function travelView(m: L.Map): L.LatLngBounds | null {
+  return m.getZoom() >= TRAVEL_MIN_ZOOM ? m.getBounds().pad(TRAVEL_VIEW_PAD) : null;
 }
 
 /** A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in. */

@@ -20,8 +20,8 @@ import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type 
 import { MapRoster } from "./map-roster";
 import { PinSheet } from "./pin-sheet";
 import {
-  FAR_CLASS, TRAVEL_CHIP_ZOOM, TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
+  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -479,7 +479,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       bounties: () => drawBounties(ctx("bounties")),
       publicBases: () => drawPublicBases(ctx("publicBases")),
       pins: () => drawPins(ctx("pins")),
-      travel: () => drawTravel(ctx("travel")),
+      travel: () => drawTravel(ctx("travel"), travelView(m)),
     };
     for (const key of changed) draws[key]();
     // The grid never changes, so it is drawn once — redrawing 26 polylines
@@ -562,11 +562,16 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         };
         m.on("zoomend", drawPlaces);
 
-        // Travel points are a dot when zoomed out and a glyph chip from
-        // TRAVEL_CHIP_ZOOM up. Both forms are in every marker's markup; one
-        // class on the container picks, so 2,189 markers swap with no rebuild.
-        const far = () => m.getContainer().classList.toggle(FAR_CLASS, m.getZoom() < TRAVEL_CHIP_ZOOM);
-        m.on("zoomend", far);
+        // Travel points follow the view: none below TRAVEL_MIN_ZOOM, and above
+        // it only the sheds near the screen, redrawn on every pan and zoom
+        // (moveend fires for both). The poll's redraw draws the same set.
+        const redrawTravel = () => {
+          const g = groups.current.travel, d = dataRef.current;
+          if (!g || !d) return;
+          g.clearLayers();
+          drawTravel({ L: Lm, group: g, pt: ptFor(Lm, d.world.size), data: d, p: palette() }, travelView(m));
+        };
+        m.on("moveend", redrawTravel);
 
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
         Lm.tileLayer(`/tiles/${MAP}/topographic/{z}/{x}/{y}.webp`, {
@@ -582,7 +587,6 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         m.fitBounds(world);
         const open = parseGridRef(atRef.current, size);
         if (open) m.setView(ll(open.x, open.z), Math.max(RECENTRE_ZOOM, m.getMinZoom()), { animate: false });
-        far();
         drawPlaces();
         redraw();
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
