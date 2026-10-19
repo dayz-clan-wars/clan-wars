@@ -14,8 +14,6 @@ export const CLOCK_OFFSET_MS_BY_MAP: Record<string, number> = {
   chernarus: 4 * 60 * 60 * 1000,
   livonia: 7 * 60 * 60 * 1000,
   sakhal: 7 * 60 * 60 * 1000,
-  // Measured on the One Life box (same Nitrado box offset, logs UTC-7) on 2026-10-17.
-  nasdara: 7 * 60 * 60 * 1000,
 };
 
 /**

@@ -6,7 +6,6 @@ describe("clockOffsetMsFor", () => {
     expect(clockOffsetMsFor("chernarus")).toBe(4 * 60 * 60 * 1000);
     expect(clockOffsetMsFor("livonia")).toBe(7 * 60 * 60 * 1000);
     expect(clockOffsetMsFor("sakhal")).toBe(7 * 60 * 60 * 1000);
-    expect(clockOffsetMsFor("nasdara")).toBe(7 * 60 * 60 * 1000);
   });
 
   it("throws on an unknown map rather than defaulting to a zero offset", () => {
