@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.5.0] - 2026-10-19
+
 ### Added
 
 - The Bloodbag and Painkiller Show can now air a one-off special episode from a hand-written script. It goes through the same review in the ops channel as a weekly episode before anything is public.
