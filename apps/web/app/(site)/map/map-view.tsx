@@ -525,7 +525,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         m.setMaxBounds(world);
 
         // Under the overlay pane (400) that holds the dots, over the tiles
-        // (200): 519 travel points must never cover the one dot someone opened
+        // (200): 2,189 travel points must never cover the one dot someone opened
         // the map to find.
         const pane = m.createPane(TRAVEL_PANE);
         if (pane) pane.style.zIndex = "350";
@@ -564,7 +564,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
         // Travel points are a dot when zoomed out and a glyph chip from
         // TRAVEL_CHIP_ZOOM up. Both forms are in every marker's markup; one
-        // class on the container picks, so 519 markers swap with no rebuild.
+        // class on the container picks, so 2,189 markers swap with no rebuild.
         const far = () => m.getContainer().classList.toggle(FAR_CLASS, m.getZoom() < TRAVEL_CHIP_ZOOM);
         m.on("zoomend", far);
 

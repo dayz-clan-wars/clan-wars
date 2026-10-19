@@ -9,20 +9,20 @@ const RAW = asset("dayzOffline.nasdara");
 describe("the fast-travel projection", () => {
   const template = loadTravelTemplate(RAW);
 
-  it("keeps the template's 519 sheds and the Hub's arrival spots", () => {
-    expect(template.PRABoxes).toHaveLength(519);
+  it("keeps the template's 2,189 sheds and the Hub's arrival spots", () => {
+    expect(template.PRABoxes).toHaveLength(2189);
     expect(template.areaName).toBe("TeleportToHub");
     const out = JSON.parse(generateTravel(template, []));
-    expect(out.PRABoxes).toHaveLength(519);
+    expect(out.PRABoxes).toHaveLength(2189);
     expect(out.safePositions3D).toEqual(RAW.safePositions3D);
     expect(out.PRABoxes[0]).toEqual(RAW.PRABoxes[0]);
   });
 
   it("appends one wider box per pole, after the fixed points, in the order given", () => {
     const out = JSON.parse(generateTravel(template, [{ tag: "BEAR", x: 5551.69, y: 311.63, z: 8790.97 }, { tag: "COK", x: 1, y: 2, z: 3 }]));
-    expect(out.PRABoxes).toHaveLength(521);
-    expect(out.PRABoxes[519]).toEqual([POLE_BOX, [0, 0, 0], [5551.69, 311.63, 8790.97]]);
-    expect(out.PRABoxes[520]).toEqual([POLE_BOX, [0, 0, 0], [1, 2, 3]]);
+    expect(out.PRABoxes).toHaveLength(2191);
+    expect(out.PRABoxes[2189]).toEqual([POLE_BOX, [0, 0, 0], [5551.69, 311.63, 8790.97]]);
+    expect(out.PRABoxes[2190]).toEqual([POLE_BOX, [0, 0, 0], [1, 2, 3]]);
   });
 
   it("is byte-stable for the same input", () => {
@@ -42,8 +42,8 @@ describe("the template for a server's map", () => {
   };
   const dir = (mission: string) => `/games/ni11558038_4/ftproot/dayzxb_missions/${mission}/custom`;
 
-  it("picks Nasdara's 519 sheds for the Nasdara mission", () => {
-    expect(travelTemplateFor(templates, dir("dayzOffline.nasdara")).PRABoxes).toHaveLength(519);
+  it("picks Nasdara's 2,189 sheds for the Nasdara mission", () => {
+    expect(travelTemplateFor(templates, dir("dayzOffline.nasdara")).PRABoxes).toHaveLength(2189);
   });
 
   it("⚠️ refuses a map it has no template for, rather than sending another map's points", () => {

@@ -37,7 +37,7 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   });
 
   it.each(markers)("%s", (call) => {
-    // Travel points are not interactive: 519 tab stops with nothing to open.
+    // Travel points are not interactive: 2,189 tab stops with nothing to open.
     if (call.includes("TRAVEL_PANE")) {
       expect(call).toContain("keyboard: false");
       return;
