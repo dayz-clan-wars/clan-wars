@@ -5,7 +5,14 @@ export function dispatch(values: {
   render?: string;
   force?: boolean;
   repost?: boolean;
-}): { kind: "review" | "service" } | { kind: "usage"; message: string } {
+  week?: string;
+  special?: string;
+  publish?: string;
+}): { kind: "review" | "service" | "special-render" | "special-publish" } | { kind: "usage"; message: string } {
+  // A special (spec 2026-10-19-nasdara-promo-episode-design.md) is its own mode: it never touches
+  // a week, so every weekly flag is refused rather than silently ignored.
+  if (values.special !== undefined || values.publish !== undefined) return dispatchSpecial(values);
+
   // ⚠️ `--print-prompt` must pair with at least one review mode (--dry-run or --render).
   if (values["print-prompt"] && !values["dry-run"] && values.render === undefined) {
     return { kind: "usage", message: "--print-prompt must go with --dry-run or --render" };
@@ -29,4 +36,17 @@ export function dispatch(values: {
 
   // Otherwise, this is a service run.
   return { kind: "service" };
+}
+
+function dispatchSpecial(values: Parameters<typeof dispatch>[0]): ReturnType<typeof dispatch> {
+  const usage = (message: string) => ({ kind: "usage" as const, message });
+  if (!values.special) return usage("--publish needs --special <dir>, and --special needs a directory path");
+  if (values.week !== undefined || values["dry-run"] || values["print-prompt"] || values.force || values.repost) {
+    return usage("--special takes only --render <dir> or --publish <dir>");
+  }
+  const render = values.render !== undefined;
+  const publish = values.publish !== undefined;
+  if (render === publish) return usage("--special needs exactly one of --render <dir> or --publish <dir>");
+  if (values.render === "" || values.publish === "") return usage("--render and --publish need a directory path, not empty");
+  return { kind: render ? "special-render" : "special-publish" };
 }

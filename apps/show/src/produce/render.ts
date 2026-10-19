@@ -8,7 +8,7 @@ import { buildCards, buildMarqueeItems, buildOutroBoard } from "../cards/cards.j
 import { rasterizePng, renderSegment } from "../engine/animation/compositor.js";
 import { frameStates } from "../engine/animation/motion.js";
 import { BORIS_RIG, PAVEL_RIG } from "../engine/animation/rigManifest.js";
-import { buildScreenClip } from "../engine/animation/screenWall.js";
+import { buildScreenClip, type Card } from "../engine/animation/screenWall.js";
 import { buildMarqueePng } from "../engine/animation/marquee.js";
 import { readEpisodeVideoPath, writeEpisodeVideo } from "../engine/animation/episodeCache.js";
 import { renderOutroBoardPng } from "../engine/video/outroBoard.js";
@@ -31,6 +31,13 @@ export type AnyResvgCtor = new (svg: string, opts: any) => {
   render: () => { asPng: () => Buffer };
   innerBBox?: () => { x: number; width: number } | null;
 };
+
+/**
+ * A special episode's visuals, in place of the weekly StoryContext's (spec
+ * 2026-10-19-nasdara-promo-episode-design.md §5.1): its own intro and outro stills, a fixed set of
+ * screen-wall cards and the marquee items. The outro still is used as given, with no board drawn on it.
+ */
+export type SpecialVisuals = { introScreenPath: string; outroStillPath: string; cards: Card[]; marqueeItems: string[] };
 
 /** The node:fs subset renderEpisode and everything it drives needs (real `fs` satisfies it). */
 export type RenderFs = {
@@ -61,10 +68,15 @@ export type RenderDeps = {
  * `<cacheDir>/<key>/`; a second call for the same key returns it without rendering. Throws on any
  * failure (KOTH fell back to a static title card; that path is not ported, spec §11.2).
  */
-export async function renderEpisode(deps: RenderDeps, ep: { voiced: VoicedEpisode; context: StoryContext }): Promise<string> {
+export async function renderEpisode(
+  deps: RenderDeps,
+  ep: { voiced: VoicedEpisode } & ({ context: StoryContext } | { special: SpecialVisuals }),
+): Promise<string> {
   const { cacheDir, discordInvite, runImpl = spawnRun, ResvgImpl } = deps;
   const fsImpl: RenderFs = deps.fsImpl ?? fs;
-  const { voiced, context } = ep;
+  const { voiced } = ep;
+  const special = "special" in ep ? ep.special : null;
+  const context = "context" in ep ? ep.context : null;
   const { key } = voiced;
 
   const cached = readEpisodeVideoPath({ fsImpl }, { cacheDir, key });
@@ -75,12 +87,17 @@ export async function renderEpisode(deps: RenderDeps, ep: { voiced: VoicedEpisod
     const fonts = { displayFontPath: ASSETS.fonts.display, gamertagFontPath: ASSETS.fonts.gamertag };
     const rig = (p: string) => fsImpl.readFileSync(p).toString("utf8");
 
-    // Outro board (season standings) over the outro screen.
-    const boardPath = path.join(workDir, "board.png");
-    fsImpl.writeFileSync(
-      boardPath,
-      renderOutroBoardPng({ board: buildOutroBoard(context), backgroundPath: ASSETS.outroScreen, ...fonts }, { fsImpl, ResvgImpl }),
-    );
+    // Outro board (season standings) over the outro screen; a special brings its own finished still.
+    let boardPath: string;
+    if (special) {
+      boardPath = special.outroStillPath;
+    } else {
+      boardPath = path.join(workDir, "board.png");
+      fsImpl.writeFileSync(
+        boardPath,
+        renderOutroBoardPng({ board: buildOutroBoard(context!), backgroundPath: ASSETS.outroScreen, ...fonts }, { fsImpl, ResvgImpl }),
+      );
+    }
 
     // Static back (Background + Chairs) and front (Desk) layers.
     const backBg = path.join(workDir, "back_bg.png");
@@ -97,14 +114,14 @@ export async function renderEpisode(deps: RenderDeps, ep: { voiced: VoicedEpisod
     const screenOut = path.join(workDir, "screen_0.mp4");
     await buildScreenClip(
       { ResvgImpl, runImpl, fsImpl },
-      { cards: buildCards(context), durSec: clipDur, fps: FPS, outPath: screenOut, workDir, ...fonts },
+      { cards: special ? special.cards : buildCards(context!), durSec: clipDur, fps: FPS, outPath: screenOut, workDir, ...fonts },
     );
 
     const marqueePng = path.join(workDir, "marquee.png");
     const { width: stripW } = buildMarqueePng(
       { ResvgImpl, fsImpl },
       {
-        items: buildMarqueeItems(context, { discordInvite }),
+        items: special ? special.marqueeItems : buildMarqueeItems(context!, { discordInvite }),
         height: MARQUEE.height,
         family: MARQUEE.family,
         fontPath: ASSETS.fonts.gamertag,
@@ -140,7 +157,7 @@ export async function renderEpisode(deps: RenderDeps, ep: { voiced: VoicedEpisod
     const outPath = path.join(workDir, "video.mp4");
     await renderAnimatedShowVideo({
       audioPath: voiced.mp3Path,
-      introScreenPath: ASSETS.introScreen,
+      introScreenPath: special ? special.introScreenPath : ASSETS.introScreen,
       outroBoardPath: boardPath,
       segmentClipPath: segmentClip,
       segASpan: voiced.segASpan,

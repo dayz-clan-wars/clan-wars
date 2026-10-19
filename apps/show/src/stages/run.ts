@@ -12,6 +12,7 @@ import { buildStoryContext } from "../story/context.js";
 import type { StoryContext } from "../story/types.js";
 import { episodeCode } from "../weeks.js";
 import { advance, createEpisode, getEpisode, recordFailure, setFields, TERMINAL_STAGES, type EpisodeRow } from "./store.js";
+import { APPROVE, REJECT, decideDraft } from "./approval.js";
 import { alertMessage, draftMarker, draftMessage, forumThreadName, heldMessage, publicCopy, transcriptMessages } from "./text.js";
 
 export type YouTubeOps = {
@@ -96,8 +97,7 @@ const rendered: Step = async (deps, row) => {
   return advance(deps.db, row.weekStart, "rendered");
 };
 
-export const APPROVE = "✅";
-export const REJECT = "❌";
+export { APPROVE, REJECT } from "./approval.js";
 const watchUrl = (id: string) => `https://youtu.be/${id}`;
 
 const uploaded: Step = async (deps, row) => {
@@ -148,16 +148,9 @@ const approved: Step = async (deps, row) => {
   }
   const ops = deps.cfg.opsChannelId;
   if (!ops) throw new Error("a draft is awaiting approval but OPS_CHANNEL_ID is unset");
-  const me = await deps.discord.me();
-  const approvers = new Set(deps.cfg.approverIds);
-  // ⚠️ The bot's own reaction (added as a convenience so an approver can click rather than hunt
-  // for the emoji) is never a vote, even if the bot's id somehow ends up in approverIds.
-  const by = async (emoji: string) => (await deps.discord.reactionUserIds(ops, draft, emoji)).filter((u) => u !== me).find((u) => approvers.has(u)) ?? null;
-  // ⚠️ ❌ is read first and wins: when two approvers disagree, nothing goes public.
-  const rejecter = await by(REJECT);
-  if (rejecter) return advance(deps.db, row.weekStart, "rejected", { rejectedByDiscordId: rejecter, rejectedAt: deps.now() });
-  const approver = await by(APPROVE);
-  if (approver) return advance(deps.db, row.weekStart, "approved", { approvedByDiscordId: approver, approvedAt: deps.now() });
+  const d = await decideDraft({ discord: deps.discord, approverIds: deps.cfg.approverIds }, ops, draft);
+  if (d?.decision === "rejected") return advance(deps.db, row.weekStart, "rejected", { rejectedByDiscordId: d.by, rejectedAt: deps.now() });
+  if (d?.decision === "approved") return advance(deps.db, row.weekStart, "approved", { approvedByDiscordId: d.by, approvedAt: deps.now() });
   return "wait";
 };
 

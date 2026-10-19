@@ -80,11 +80,11 @@ const spanOf = (m: Span | undefined): ClipSpan | null => (m ? { startSec: m.star
  */
 export async function voiceEpisode(
   deps: VoiceDeps,
-  ep: { weekStart: string; narrative: string; context: StoryContext },
+  ep: { weekStart: string; narrative: string } & ({ context: StoryContext } | { names: { names: string[]; aliases: string[] } }),
 ): Promise<VoicedEpisode> {
   const { cacheDir, runImpl = spawnRun, fetchImpl, borisVoiceId, pavelVoiceId } = deps;
   const fsImpl: VoiceFs = deps.fsImpl ?? fs;
-  const { weekStart, narrative, context } = ep;
+  const { weekStart, narrative } = ep;
 
   const key = episodeCacheKey({ weekStart, narrative });
   const mp3Path = path.join(cacheDir, key, "episode.mp3");
@@ -107,7 +107,8 @@ export async function voiceEpisode(
   // Aliases are resolved to their spoken form and replaced in speech like any name. Any alias the
   // script uses that the context does not carry is picked up from the narrative too, so the TTS
   // never reads a raw `REDACTED_*`.
-  const { names, aliases } = collectNames(context);
+  // A special has no StoryContext: it names the words to pronounce itself.
+  const { names, aliases } = "context" in ep ? collectNames(ep.context) : ep.names;
   const narrativeAliases = narrative.match(REDACTED_IN_TEXT) ?? [];
   const allAliases = [...new Set([...aliases, ...narrativeAliases])];
   const tags = [...new Set([...names, ...allAliases])];
