@@ -118,6 +118,22 @@ describe("voiceEpisode", () => {
     for (const c of h.chats) expect(JSON.stringify(c)).not.toContain("REDACTED_");
   });
 
+  it("uses the given names when no context is passed (a special)", async () => {
+    const h = harness();
+    const narrative = "Boris: Welcome to Nasdara.\nPavel: Yes.";
+    await voiceEpisode(h.deps, { weekStart: "special:x", narrative, names: { names: ["Nasdara"], aliases: [] } });
+    expect(h.chats).toHaveLength(1);
+    expect(JSON.stringify(h.chats[0])).toContain("Nasdara");
+    expect(JSON.stringify(h.chats[0])).not.toContain("Xx5n1perXx");
+  });
+
+  it("no names and no context: nothing is sent to the pronouncer", async () => {
+    const h = harness();
+    await voiceEpisode(h.deps, { weekStart: "special:x", narrative: "Boris: Hi.\nPavel: Yes.", names: { names: [], aliases: [] } });
+    expect(h.chats).toHaveLength(0);
+    expect(h.fetchBodies).toHaveLength(2);
+  });
+
   it("an alias only in the narrative is still spoken, never read raw", async () => {
     const h = harness();
     const narrative = "Boris: REDACTED_PLAYER_7 showed up.\nPavel: Right.";

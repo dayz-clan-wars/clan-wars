@@ -103,4 +103,27 @@ describe("renderEpisode", () => {
     await renderEpisode(h.deps, { voiced: { ...VOICED, key: "2026-09-21-def456" }, context: CONTEXT });
     expect(h.runs.filter((a) => a.includes("aac"))).toHaveLength(1);
   });
+
+  it("a special uses its own stills, cards and marquee, and draws no outro board", async () => {
+    const h = harness();
+    h.fsImpl.writeFileSync("/special/intro.png", Buffer.from("I"));
+    h.fsImpl.writeFileSync("/special/outro.png", Buffer.from("O"));
+    const special = {
+      introScreenPath: "/special/intro.png",
+      outroStillPath: "/special/outro.png",
+      cards: [{ header: "NASDARA", title: "FAST TRAVEL", rows: [{ name: "From", value: "Any shed" }] }],
+      marqueeItems: ["dayzclanwars.com", "Raid weekend Fri to Mon UTC"],
+    };
+    await renderEpisode(h.deps, { voiced: VOICED, special });
+    const stitch = h.runs.find((a) => a.includes("aac"))!;
+    expect(stitch).toContain("/special/intro.png");
+    expect(stitch).toContain("/special/outro.png");
+    expect(stitch).not.toContain(ASSETS.introScreen);
+    const all = h.svgs.join("\n");
+    expect(all).toContain("FAST TRAVEL");
+    expect(all).toContain("Raid weekend Fri to Mon UTC");
+    // No weekly board: neither the board headline nor the weekly outro screen is drawn.
+    expect(all).not.toContain("AFTER WEEK");
+    expect([...h.fsImpl.files.keys()].some((k) => k.endsWith("board.png"))).toBe(false);
+  });
 });
