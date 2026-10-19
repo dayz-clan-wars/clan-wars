@@ -55,6 +55,47 @@ pipeline's cache. Before any LLM call it creates the cache directory and checks 
 `ffmpeg -version` and `rhubarb --version` run, and stops with a message naming the
 missing binary if either does not. The CLI creates `<dir>` if it does not exist.
 
+## Special episodes
+
+A special is a one-off, hand-written episode, such as the Nasdara promo (spec
+`docs/superpowers/specs/2026-10-19-nasdara-promo-episode-design.md`). Each one is a
+directory under `specials/<slug>/`:
+
+| File | What it holds |
+|---|---|
+| `script.txt` | The script: `Boris: ` / `Pavel: ` lines only, no em or en dash, at most 3,300 characters |
+| `meta.json` | The slug, `"code": "Special"`, the subtitle, the YouTube description lead, the Facebook lines, the screen-wall cards, the marquee items, and the words to pronounce |
+| `intro.png`, `outro.png` | The special's own stills, used in place of the weekly intro screen and outro board |
+
+Rendering and publishing are two separate commands:
+
+    # Local. Needs no database, only OPENROUTER_API_KEY and the --render keys below.
+    pnpm run show --special $PWD/apps/show/specials/<slug> --render ~/show-special-<slug>
+
+    # On the host, after copying episode.mp3 and video.mp4 into <out>. Run it again after the ✅.
+    pnpm run show --special apps/show/specials/<slug> --publish <out>
+
+**The render** screens the script with the weekly output screen (blocklist and moderation)
+and fails closed. Then it voices the script and renders it.
+
+**The publish** runs these steps in order:
+
+1. Uploads the video unlisted.
+2. Posts a draft to the ops channel.
+3. Stops until an approver reacts ✅. The rule is the weekly one (`stages/approval.ts`).
+4. Makes the video public and adds it to the playlist.
+5. Opens a forum thread and posts the transcript.
+6. Posts to Facebook.
+
+**Its state** is kept in `<out>/publish-state.json`. Every step can be run again: a
+re-run adopts an earlier upload, draft or thread instead of posting it twice. ⚠️ A
+special never writes a `show_episodes` row. That table is keyed by week, and a row
+there would collide with a real week or turn up in the next "Previously on". ⚠️ If the
+script changes after a publish has started, that `<out>` refuses it (exit 2). A new cut
+needs a new `--publish` directory and its own ✅.
+
+Runbook: `docs/deploy/2026-10-19-special-episode.md`.
+
 ## Running the scheduled service
 
 `pnpm run show` with no flags is one run: the same thing the timer does every 10 minutes
