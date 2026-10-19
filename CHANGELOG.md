@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-10-19
+
 ### Changed
 
 - Every shed on Nasdara is now a fast-travel entrance, wooden or metal: 2,189 of them, all on the map's travel layer.
