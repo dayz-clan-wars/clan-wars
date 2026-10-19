@@ -2,6 +2,7 @@ import { parseArgs } from "node:util";
 import { dispatch } from "./dispatch.js";
 import { runDryRun } from "./dry-run.js";
 import { serviceMain } from "./service.js";
+import { runSpecialRender } from "./special/render-cli.js";
 import { parseWeekArg } from "./weeks.js";
 
 // `pnpm run show` is one timer run; `--dry-run` and `--render <dir>` are the read-only
@@ -15,6 +16,8 @@ const { values } = parseArgs({
     render: { type: "string" },
     force: { type: "boolean", default: false },
     repost: { type: "boolean", default: false },
+    special: { type: "string" },
+    publish: { type: "string" },
   },
 });
 
@@ -24,7 +27,12 @@ if (d.kind === "usage") {
   process.exit(2);
 }
 
-if (d.kind === "review") {
+if (d.kind === "special-render") {
+  process.exitCode = await runSpecialRender({ dir: values.special!, out: values.render! });
+} else if (d.kind === "special-publish") {
+  process.stderr.write("--publish is not built yet\n");
+  process.exitCode = 2;
+} else if (d.kind === "review") {
   process.exitCode = await runDryRun({ week: values.week, printPrompt: values["print-prompt"], render: values.render });
 } else {
   process.exitCode = await serviceMain({ week: values.week ? parseWeekArg(values.week) : undefined, force: values.force, repost: values.repost });
