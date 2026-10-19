@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.3.5] - 2026-10-19
+
 ### Changed
 
 - Watchtowers are no longer a legal way to boost into someone else's base. Building there isn't allowed, so the guide now lists only two-player boosts and vehicles.
