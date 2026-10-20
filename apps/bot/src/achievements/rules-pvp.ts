@@ -1,7 +1,7 @@
 import { ACHIEVEMENT_BY_KEY, streakOf, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { defenses, kills, playerSessions, raids } from "@factions/db";
 import { and, asc, eq, ne, isNotNull, or, sql } from "drizzle-orm";
-import { nth, oneShot, type Rule, type RuleResult } from "./types.js";
+import { nth, oneShot, type Rule, type RuleCtx, type RuleResult } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
 
@@ -13,16 +13,19 @@ type KillRow = { id: number; at: Date; serverId: number; victim: string; weapon:
 async function pvpKills(db: Parameters<Rule>[0], dayzId: string): Promise<KillRow[]> {
   return db.select(killCols).from(kills).where(pvpBy(dayzId)).orderBy(asc(kills.occurredAt), asc(kills.id));
 }
-const killCount = (key: AchievementKey): Rule => async (db, owner) => nth(await pvpKills(db, owner.id), T(key), (r) => ({ kills: r.length }));
+/** The owner's scoring PvP kills, read once per owner per pass and shared between every rule that wants them. */
+export const ownPvpKills = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string): Promise<KillRow[]> =>
+  ctx.memo("pvpKills", () => pvpKills(db, dayzId));
+const killCount = (key: AchievementKey): Rule => async (db, owner, ctx) => nth(await ownPvpKills(db, ctx, owner.id), T(key), (r) => ({ kills: r.length }));
 
 /**
  * Longer-range rules (marksman, sniper): the target is a distance in metres, so the
  * count IS that distance — best-so-far as progress, floored, never from a null distance.
  */
-const distance = (key: AchievementKey): Rule => async (db, owner) => {
+const distance = (key: AchievementKey): Rule => async (db, owner, ctx) => {
   const target = T(key);
   let best = 0;
-  for (const k of await pvpKills(db, owner.id)) {
+  for (const k of await ownPvpKills(db, ctx, owner.id)) {
     if (k.distanceM === null) continue;
     const d = Number(k.distanceM);
     if (d > best) best = d;
@@ -44,9 +47,9 @@ const distance = (key: AchievementKey): Rule => async (db, owner) => {
  * copy suppresses a progress line for this key rather than rendering "0 / 5" against a
  * count that can never mean "0 of 5 metres."
  */
-const pointBlank = (key: AchievementKey): Rule => async (db, owner) => {
+const pointBlank = (key: AchievementKey): Rule => async (db, owner, ctx) => {
   const threshold = T(key);
-  const hit = (await pvpKills(db, owner.id)).find((k) => k.distanceM !== null && Number(k.distanceM) < threshold);
+  const hit = (await ownPvpKills(db, ctx, owner.id)).find((k) => k.distanceM !== null && Number(k.distanceM) < threshold);
   return oneShot(hit ? { at: hit.at, id: hit.id, serverId: hit.serverId, evidence: { distanceM: Math.floor(Number(hit.distanceM)), weapon: hit.weapon } } : undefined);
 };
 
@@ -77,10 +80,10 @@ export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
   sniper: distance("sniper"),
   point_blank: pointBlank("point_blank"),
 
-  arsenal: async (db, owner) => {
+  arsenal: async (db, owner, ctx) => {
     const target = T("arsenal");
     const seen = new Set<string>();
-    for (const k of await pvpKills(db, owner.id)) {
+    for (const k of await ownPvpKills(db, ctx, owner.id)) {
       if (!k.weapon || seen.has(k.weapon)) continue;
       seen.add(k.weapon);
       if (seen.size === target) return { count: target, target, earnedAt: k.at, evidenceId: k.id, evidence: { weapons: [...seen].join(", ") }, serverId: k.serverId };
@@ -118,11 +121,11 @@ export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
   // Ben)" hands out a grudge list the game never surfaces; the same applies to `blue_on_blue`
   // below, where the victim is a clanmate. If a renderer ever wants evidence, these two keys
   // must be excluded or the id resolved away first.
-  nemesis: async (db, owner) => {
+  nemesis: async (db, owner, ctx) => {
     const target = T("nemesis");
     const per = new Map<string, number>();
     let best = 0;
-    for (const k of await pvpKills(db, owner.id)) {
+    for (const k of await ownPvpKills(db, ctx, owner.id)) {
       const n = (per.get(k.victim) ?? 0) + 1;
       per.set(k.victim, n);
       if (n > best) best = n;

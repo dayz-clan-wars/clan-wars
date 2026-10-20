@@ -1,0 +1,3 @@
+CREATE INDEX IF NOT EXISTS "events_hit_victim_idx" ON "events" USING btree (("payload"->>'victimDayzId')) WHERE "events"."type" = 'player.hit';--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "events_hit_attacker_idx" ON "events" USING btree (("payload"->>'attackerDayzId')) WHERE "events"."type" = 'player.hit';--> statement-breakpoint
+CREATE INDEX IF NOT EXISTS "events_type_player_idx" ON "events" USING btree ("type",("payload"->>'dayzId'));

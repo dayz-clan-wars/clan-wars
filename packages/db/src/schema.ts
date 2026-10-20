@@ -155,6 +155,13 @@ export const events = pgTable("events", {
   // is `(server_id, occurred_at)` and cannot answer an unqualified global max;
   // without this, that's a full sequential scan of `events` every such tick.
   byOccurred: index("events_occurred_idx").on(t.occurredAt),
+  // ⚠️ Achievement rules ask "hits where this player was the victim / the attacker" per
+  // owner per pass. Both are equality on one payload key within `player.hit`, so a partial
+  // expression index each keeps the read off a scan of every hit ever logged.
+  byHitVictim: index("events_hit_victim_idx").on(sql`(${t.payload}->>'victimDayzId')`).where(sql`${t.type} = 'player.hit'`),
+  byHitAttacker: index("events_hit_attacker_idx").on(sql`(${t.payload}->>'attackerDayzId')`).where(sql`${t.type} = 'player.hit'`),
+  // One player's events of one type (item.placed, item.packed, player.conscious, emotes …).
+  byTypePlayer: index("events_type_player_idx").on(t.type, sql`(${t.payload}->>'dayzId')`),
 }));
 
 export const consumerCursors = pgTable("consumer_cursors", {

@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, membershipHistory, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { makeCtx } from "../../src/achievements/types.js";
 import { collectTouched, headWatermarks, readWatermarks, ownerKey } from "../../src/achievements/touched.js";
-import { seedServer, seedFaction, seedMembership, seedKill, TRUNCATE } from "./seed.js";
+import { seedServer, seedFaction, seedMembership, seedKill, seedEvent, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const t0 = new Date("2026-08-01T10:00:00Z");
@@ -48,5 +49,32 @@ describe("collectTouched", () => {
     expect(heads.membershipClosed).toBe(m(9).getTime());
     expect(heads.activations).toBe(t0.getTime());
     expect(heads).toEqual(collected.next);
+  });
+
+  describe("event sources", () => {
+    const A = "A".repeat(36), B = "B".repeat(36), C = "C".repeat(36);
+    const players = async () => (await collectTouched(db, await readWatermarks(db), 100)).owners.map(ownerKey).filter((k) => k.startsWith("player:")).sort();
+
+    it("a hit touches its victim and its player attacker", async () => {
+      await seedEvent(db, { serverId, type: "player.hit", at: m(1), payload: { victimDayzId: A, attackerDayzId: B, attackerType: "player" } });
+      await seedEvent(db, { serverId, type: "player.hit", at: m(2), payload: { victimDayzId: C, attackerDayzId: null, attackerLabel: "Doberman" } });
+      expect(await players()).toEqual([`player:${A}`, `player:${B}`, `player:${C}`]);
+    });
+    it.each(["item.placed", "item.packed", "player.conscious"])("%s touches its player", async (type) => {
+      await seedEvent(db, { serverId, type, at: m(1), payload: { dayzId: A } });
+      expect(await players()).toEqual([`player:${A}`]);
+    });
+    it("headWatermarks counts the new types so a backfill does not replay them", async () => {
+      const e = await seedEvent(db, { serverId, type: "player.hit", at: m(1), payload: { victimDayzId: A } });
+      expect((await headWatermarks(db)).events).toBe(e.id);
+    });
+  });
+
+  it("memo: two rules asking for the same key share one read", async () => {
+    let reads = 0; const ctx = makeCtx(t0);
+    const [a, b] = await Promise.all([ctx.memo("k", async () => ++reads), ctx.memo("k", async () => ++reads)]);
+    expect(reads).toBe(1);
+    expect([a, b]).toEqual([1, 1]);
+    expect(await makeCtx(t0).memo("k", async () => 7)).toBe(7);
   });
 });

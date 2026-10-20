@@ -8,7 +8,7 @@ import {
   clearResume, collectEveryone, collectTouched, headWatermarks, ownerKey, pinsAfter, positionsAfter, readResume, readWatermarks,
   writeResume, writeWatermarks, type Watermarks,
 } from "./touched.js";
-import type { Owner, RuleResult } from "./types.js";
+import { makeCtx, type Owner, type RuleResult } from "./types.js";
 
 export type AchievementsTickOpts = {
   now?: Date;
@@ -33,10 +33,11 @@ const KEYS_FOR = {
 /** Every rule of the owner's kind; a throw is reported per key and skips only that key. */
 export async function evaluateOwner(db: Database, owner: Owner, now: Date, onError?: AchievementsTickOpts["onError"]): Promise<{ key: AchievementKey; result: RuleResult }[]> {
   const out: { key: AchievementKey; result: RuleResult }[] = [];
+  const ctx = makeCtx(now);
   for (const key of KEYS_FOR[owner.kind]) {
     // ⚠️ Per key, not per owner: one broken rule must never cost an owner the
     // other 36 — the pass reports it in `failed` and carries on.
-    try { out.push({ key, result: await RULES[key](db, owner, { now }) }); }
+    try { out.push({ key, result: await RULES[key](db, owner, ctx) }); }
     catch (err) { onError?.(owner, key, err); }
   }
   return out;

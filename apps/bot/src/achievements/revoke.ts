@@ -2,6 +2,7 @@ import type { AchievementKey } from "@factions/domain";
 import { achievementProgress, achievementUnlocks, type Database } from "@factions/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { PVP_RULES } from "./rules-pvp.js";
+import { makeCtx } from "./types.js";
 
 /**
  * The achievements a discredited kill can have earned (spec 2026-09-22-hub-combat §2.8).
@@ -43,7 +44,7 @@ export async function revokeAchievements(db: Database, opts: { apply: boolean; n
       let r;
       // ⚠️ A throw is NOT "no longer earned": skip, count, report. Treating it as
       // a revocation would strip every badge on one bad query.
-      try { r = await PVP_RULES[key]!(db, { kind: "player", id: ownerId }, { now }); }
+      try { r = await PVP_RULES[key]!(db, { kind: "player", id: ownerId }, makeCtx(now)); }
       catch (err) { out.failed++; opts.onError?.(ownerId, key, err); continue; }
 
       const earned = r.earnedAt !== undefined && r.count >= r.target;

@@ -13,7 +13,7 @@ export type Source = (typeof SOURCES)[number];
 export type Watermarks = Record<Source, number>;
 export const CURSOR_PREFIX = "achievements:";
 /** The event types any rule reads; other types never touch an owner. */
-const RULE_EVENT_TYPES = ["base.built", "emote.performed", "player.unconscious"] as const;
+const RULE_EVENT_TYPES = ["base.built", "emote.performed", "player.unconscious", "player.hit", "item.placed", "item.packed", "player.conscious"] as const;
 
 export type PositionRow = { id: number; dayzId: string; x: number; z: number; at: Date };
 export type PinRow = { id: number; dayzId: string; at: Date };
@@ -122,9 +122,10 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
   if (closed.length) next.sessions = closed[closed.length - 1]!.at!.getTime();
   if (closed.length === limit) carried = true;
 
-  for (const e of advance("events", await db.select({ id: events.id, dayzId: sql<string>`${events.payload}->>'dayzId'` }).from(events)
+  for (const e of advance("events", await db.select({ id: events.id, dayzId: sql<string | null>`${events.payload}->>'dayzId'`, victim: sql<string | null>`${events.payload}->>'victimDayzId'`, attacker: sql<string | null>`${events.payload}->>'attackerDayzId'` }).from(events)
     .where(and(gt(events.id, wm.events), inArray(events.type, [...RULE_EVENT_TYPES] as never[]))).orderBy(asc(events.id)).limit(limit))) {
-    if (e.dayzId) add(player(e.dayzId));
+    // Most types carry `dayzId`; a hit carries `victimDayzId` and, for a player attacker, `attackerDayzId`.
+    for (const id of new Set([e.dayzId, e.victim, e.attacker])) if (id) add(player(id));
   }
   for (const r of advance("raids", await db.select({ id: raids.id, raider: raids.raiderDayzId, clan: raids.raiderFactionId }).from(raids).where(gt(raids.id, wm.raids)).orderBy(asc(raids.id)).limit(limit))) {
     add(player(r.raider)); if (r.clan) add(clan(r.clan));
