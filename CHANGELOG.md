@@ -5,6 +5,16 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Waking up from unconsciousness and packing a tent are now recorded.
+
+### Fixed
+
+- Motorbike deaths now count as vehicle deaths, so they count toward Sunday Driver.
+- A death after dog bites is now recognised as a dog death.
+- Ruin repairs on Nasdara no longer count as base-building points.
+
 ## [2.5.0] - 2026-10-19
 
 ### Added
