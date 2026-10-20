@@ -101,3 +101,19 @@ describe("finishedBy: a bare death credited to the player who shot them", () => 
     expect(f).toMatchObject({ attackerId: "K2", weapon: "SCR 17" });
   });
 });
+
+describe("classifyDeath: dogs", () => {
+  const dogHit = (s: number, hp: number): RecentHit => ({ attackerType: "environment", attackerLabel: "Doberman", victimHp: hp, secondsBeforeDeath: s });
+  const infHit = (s: number, hp: number): RecentHit => ({ attackerType: "infected", attackerLabel: "Infected", victimHp: hp, secondsBeforeDeath: s });
+  const facts = (o: Partial<typeof plain>) => ({ ...plain, ...o });
+  it("a bare died after dog bites, bleeding: dog", () => {
+    expect(classifyDeath({ mechanism: "died", water: 1000, energy: 1000, bleedSources: 2 }, [dogHit(5, 30)], [])).toBe("dog");
+  });
+  it("dog and infected both in the window: the lower-HP hit's attacker decides", () => {
+    expect(classifyDeath(facts({ bleedSources: 1 }), [dogHit(8, 40), infHit(3, 4)], [])).toBe("mauled");
+    expect(classifyDeath(facts({ bleedSources: 1 }), [dogHit(3, 4), infHit(8, 40)], [])).toBe("dog");
+  });
+  it("a dog bite with no corroboration is not a dog death", () => {
+    expect(classifyDeath(facts({ bleedSources: 0 }), [dogHit(60, 90)], [])).toBe("died");
+  });
+});

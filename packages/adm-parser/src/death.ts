@@ -1,7 +1,7 @@
 import { classifyEntityLabel, type Vec3 } from "@factions/domain";
 import { posInIdentity } from "./coords.js";
 
-export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "explosion" | "environment" | "died";
+export type DeathCause = "bled_out" | "drowned" | "suicide" | "infected" | "animal" | "wolf" | "bear" | "dog" | "fall" | "vehicle" | "explosion" | "environment" | "died";
 export type DeathLine =
   /** `victimPos`/`killerPos`: each from its own identity block — the Hub rule reads them (spec 2026-09-22-hub-combat). */
   | { kind: "killed"; victimDayzId: string; victimGamertag: string; killerDayzId: string; killerGamertag: string; weapon: string | null; distanceM: number | null; victimPos: Vec3 | null; killerPos: Vec3 | null }
@@ -18,20 +18,17 @@ const KILL_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})([^)]*)\\) 
 const DEATH_RE = new RegExp(`Player "([^"]+)" \\(DEAD\\) \\(id=(${ID})([^)]*)\\)(.*)$`, "u");
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
 const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
+const NO_DRIVER_RE = /killed by NO DRIVER \((\w+)\)/u;
 const VERB_RE = /\b(died|committed suicide|bled out|drowned|killed by)\b/u;
 // "killed by 6-M7 Frag Grenade", "killed by EGD-5 Frag Grenade", a landmine: the thrower is never on the line.
 const EXPLOSION_RE = /killed by .*(grenade|explosi|mine\b|claymore)/iu;
 const STATS_RE = /Stats>\s*Water:\s*([\d.]+)\s*Energy:\s*([\d.]+)\s*Bleed sources:\s*(\d+)/u;
-// Animals go through @factions/domain's classifyEntityLabel first (wolf, bear, animal) — the same
+// Animals go through @factions/domain's classifyEntityLabel first (wolf, bear, dog, animal) — the same
 // rules the verdict applies to hit labels — so the prefixes here are disjoint from `Animal_`.
 const ENTITY_CAUSES: readonly [RegExp, DeathCause][] = [
   [/^Zmb/u, "infected"], [/^FallDamage$/u, "fall"],
-  [/^(CivilianSedan|Hatchback_|Sedan_|Offroad|Truck_|Boat_)/u, "vehicle"],
+  [/^(CivilianSedan|Hatchback_|Sedan_|Offroad|Truck_|Boat_|Motorbike_)/u, "vehicle"],
 ];
-
-// ⚠️ A dog is its own class to the hit verdict, but DeathCause has no dog word and a dog's kill was "animal" before dogs
-// were split out; keep stored causes and consumers unchanged.
-const dogAsAnimal = (c: ReturnType<typeof classifyEntityLabel>) => (c === "dog" ? "animal" : c);
 
 export function parseDeath(raw: string): DeathLine | null {
   if (raw.includes(" hit by ") || raw.includes(" is unconscious")) return null;
@@ -46,11 +43,12 @@ export function parseDeath(raw: string): DeathLine | null {
   if (!m) return null;
   const tail = m[4]!; const lower = tail.toLowerCase();
   if (!VERB_RE.test(lower)) return null;      // a corpse re-listed by the PlayerList is not a death
-  const entity = ENTITY_RE.exec(tail)?.[1] ?? null;
+  // "killed by NO DRIVER (Motorbike_02_Yellow)": the vehicle's class is the entity, not the word "NO".
+  const entity = NO_DRIVER_RE.exec(tail)?.[1] ?? ENTITY_RE.exec(tail)?.[1] ?? null;
   const cause: DeathCause =
     lower.includes("bled out") ? "bled_out" : lower.includes("drowned") ? "drowned" : lower.includes("committed suicide") ? "suicide"
     : EXPLOSION_RE.test(tail) ? "explosion"
-    : lower.includes("killed by") ? (entity ? (dogAsAnimal(classifyEntityLabel(entity)) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
+    : lower.includes("killed by") ? (entity ? (classifyEntityLabel(entity) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
     : "died";
   const s = STATS_RE.exec(tail);
   return { kind: "died", victimGamertag: m[1]!, victimDayzId: m[2]!, cause, entity: lower.includes("killed by") ? entity : null,

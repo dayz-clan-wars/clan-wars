@@ -57,4 +57,12 @@ describe("parseDeath", () => {
     const d = parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Player "Kil" (DEAD) (id=${K} pos=<4.0, 5.0, 6.0>) with SCR 17`)!;
     expect(d).toMatchObject({ kind: "killed", killerPos: { x: 4, y: 6, z: 5 } });
   });
+  it("killed by NO DRIVER (Motorbike…): a vehicle death with the class as entity", () => {
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<10113.2, 11865.4, 208.6>) killed by NO DRIVER (Motorbike_02_Yellow)`))
+      .toMatchObject({ kind: "died", cause: "vehicle", entity: "Motorbike_02_Yellow" });
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<1, 2, 3>) killed by NO DRIVER (Hatchback_02)`)).toMatchObject({ cause: "vehicle", entity: "Hatchback_02" });
+  });
+  it("a stated dog kill", () => {
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<1, 2, 3>) killed by Animal_CanisFamiliaris_Shepherd`)).toMatchObject({ cause: "dog" });
+  });
 });
