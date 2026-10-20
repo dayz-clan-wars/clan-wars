@@ -59,13 +59,15 @@ export const TERMINAL_HP_MAX = 1;
 export const FINISH_HP_MAX = 25;
 
 /** Class-name prefixes for the animals the log names as killers or hitters; first match wins. */
-const ANIMALS: readonly [RegExp, "wolf" | "bear" | "animal"][] = [
-  [/^Animal_CanisLupus/u, "wolf"],
-  [/^Animal_UrsusArctos/u, "bear"],
+const ANIMALS: readonly [RegExp, "wolf" | "bear" | "dog" | "animal"][] = [
+  // Dogs first: their hit lines carry a display name ("Doberman"), not an Animal_ class, and they bite with a wolf's MeleeWolf.
+  [/^(Animal_CanisFamiliaris|Doberman$|German Shepherd$)/u, "dog"],
+  [/^(Animal_CanisLupus|Wolf$)/u, "wolf"],
+  [/^(Animal_UrsusArctos|Brown Bear$)/u, "bear"],
   [/^Animal_/u, "animal"],
 ];
 
-export function classifyEntityLabel(label: string | null): "wolf" | "bear" | "animal" | null {
+export function classifyEntityLabel(label: string | null): "wolf" | "bear" | "dog" | "animal" | null {
   if (!label) return null;
   return ANIMALS.find(([re]) => re.test(label))?.[1] ?? null;
 }

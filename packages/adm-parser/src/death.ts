@@ -29,6 +29,10 @@ const ENTITY_CAUSES: readonly [RegExp, DeathCause][] = [
   [/^(CivilianSedan|Hatchback_|Sedan_|Offroad|Truck_|Boat_)/u, "vehicle"],
 ];
 
+// ⚠️ A dog is its own class to the hit verdict, but DeathCause has no dog word and a dog's kill was "animal" before dogs
+// were split out; keep stored causes and consumers unchanged.
+const dogAsAnimal = (c: ReturnType<typeof classifyEntityLabel>) => (c === "dog" ? "animal" : c);
+
 export function parseDeath(raw: string): DeathLine | null {
   if (raw.includes(" hit by ") || raw.includes(" is unconscious")) return null;
   const k = KILL_RE.exec(raw);
@@ -46,7 +50,7 @@ export function parseDeath(raw: string): DeathLine | null {
   const cause: DeathCause =
     lower.includes("bled out") ? "bled_out" : lower.includes("drowned") ? "drowned" : lower.includes("committed suicide") ? "suicide"
     : EXPLOSION_RE.test(tail) ? "explosion"
-    : lower.includes("killed by") ? (entity ? (classifyEntityLabel(entity) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
+    : lower.includes("killed by") ? (entity ? (dogAsAnimal(classifyEntityLabel(entity)) ?? ENTITY_CAUSES.find(([re]) => re.test(entity))?.[1] ?? "environment") : "environment")
     : "died";
   const s = STATS_RE.exec(tail);
   return { kind: "died", victimGamertag: m[1]!, victimDayzId: m[2]!, cause, entity: lower.includes("killed by") ? entity : null,

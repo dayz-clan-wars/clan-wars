@@ -5,6 +5,15 @@ const hit = (o: Partial<RecentHit>): RecentHit => ({ attackerType: "infected", a
 const plain = { mechanism: "died", energy: 500, water: 500, bleedSources: 0 };
 
 describe("classifyEntityLabel", () => {
+  it("names dogs, and the display-name labels a hit line carries", () => {
+    expect(classifyEntityLabel("Doberman")).toBe("dog");
+    expect(classifyEntityLabel("German Shepherd")).toBe("dog");
+    expect(classifyEntityLabel("Animal_CanisFamiliaris_Doberman")).toBe("dog");
+    expect(classifyEntityLabel("Wolf")).toBe("wolf");
+    expect(classifyEntityLabel("Brown Bear")).toBe("bear");
+    expect(classifyEntityLabel("Animal_CanisLupus_White")).toBe("wolf");
+    expect(classifyEntityLabel("Saiga")).toBe(null); // a hit label that is not an Animal_ class stays unclassified
+  });
   it("names wolves and bears, groups the rest of the animals", () => {
     expect(classifyEntityLabel("Animal_CanisLupus_Grey")).toBe("wolf");
     expect(classifyEntityLabel("Animal_UrsusArctos")).toBe("bear");
