@@ -7,6 +7,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "dev": "next dev",
+    "achievements:png": "tsx scripts/render-achievement-pngs.ts",
     "prebuild": "tsx scripts/build-achievement-glyphs.ts",
     "build": "next build",
     "start": "next start",
