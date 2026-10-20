@@ -40,7 +40,7 @@ describe("pve rules", () => {
   });
 
   it.each([
-    ["wolf_bait", "wolf"], ["bear_necessities", "bear"], ["brains", "infected"], ["gravity_check", "fall"],
+    ["brains", "infected"], ["gravity_check", "fall"],
     ["sunday_driver", "vehicle"], ["should_have_bandaged", "bled_out"],
   ])("%s: a death with cause %s and no killer", async (key, cause) => {
     await seedKill(db, { serverId, killer: B, victim: A, at: h(0) });                       // a PvP death: not this

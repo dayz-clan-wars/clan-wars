@@ -8,6 +8,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - Waking up from unconsciousness and packing a tent are now recorded.
+- 59 new achievements: one for a PvP kill with each of the 52 firearms on Nasdara, one for every gun in each class, and Full Armory for all 52.
+
+### Changed
+
+- Wolf Bait and Bear Necessities can no longer be earned, since Nasdara has no wolves or bears. Anyone who has one keeps it.
 
 ### Fixed
 

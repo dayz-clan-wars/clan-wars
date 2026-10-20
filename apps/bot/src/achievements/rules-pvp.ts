@@ -1,4 +1,4 @@
-import { ACHIEVEMENT_BY_KEY, streakOf, type AchievementKey, type EarnableKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, FIREARMS, createFirearmLookup, firearmOf, motorbikeOfWeapon, streakOf, type AchievementKey, type EarnableKey, type FirearmClass, type FirearmKey } from "@factions/domain";
 import { defenses, kills, playerSessions, raids } from "@factions/db";
 import { and, asc, eq, ne, isNotNull, or, sql } from "drizzle-orm";
 import { nth, oneShot, type Rule, type RuleCtx, type RuleResult } from "./types.js";
@@ -14,9 +14,79 @@ async function pvpKills(db: Parameters<Rule>[0], dayzId: string): Promise<KillRo
   return db.select(killCols).from(kills).where(pvpBy(dayzId)).orderBy(asc(kills.occurredAt), asc(kills.id));
 }
 /** The owner's scoring PvP kills, read once per owner per pass and shared between every rule that wants them. */
+// ⚠️ The memo key carries the id: a ctx is per owner today, but a constant key would hand a
+// second owner sharing one ctx the first owner's kills, silently.
 export const ownPvpKills = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string): Promise<KillRow[]> =>
-  ctx.memo("pvpKills", () => pvpKills(db, dayzId));
+  ctx.memo(`pvpKills:${dayzId}`, () => pvpKills(db, dayzId));
 const killCount = (key: AchievementKey): Rule => async (db, owner, ctx) => nth(await ownPvpKills(db, ctx, owner.id), T(key), (r) => ({ kills: r.length }));
+
+// ── The armory (spec 2026-10-20-achievements-150 §2.2, §2.3) ──────────────────
+
+/**
+ * ONE lookup for the process, so an unmapped display name is logged once, not once per
+ * owner per pass (spec §2.2: an unknown name counts toward nothing and must be logged, or a
+ * misspelled catalogue row silently makes a tile unearnable).
+ */
+const firearmLookup = createFirearmLookup((message) => console.warn(message));
+
+/**
+ * The firearm a scoring kill was made with, or null. A name the catalogue knows is credited
+ * whatever else the row says. An unknown name is only reported when the kill is plausibly a
+ * gun kill: it has a range (every gun kill line carries `from N meters`; melee lines never do,
+ * spec §2.4) and is not a vehicle. ⚠️ Not `meleeWeaponOf` alone: it calls every unknown string
+ * melee, so gating on it would mean an unmapped gun is never reported.
+ */
+function firearmOfKill(k: KillRow): FirearmKey | null {
+  const known = firearmOf(k.weapon);
+  if (known) return known;
+  const w = k.weapon?.trim() ?? "";
+  if (!w || k.distanceM === null || motorbikeOfWeapon(w) || w.startsWith("TransportHit")) return null;
+  return firearmLookup(w);
+}
+
+/**
+ * Each firearm's FIRST scoring kill (time order), shared by every gun, class and Full Armory
+ * rule of one owner in one pass. Built from `ownPvpKills`, so `pvpBy` is the only filter.
+ */
+export const gunSet = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string): Promise<Map<FirearmKey, KillRow>> =>
+  ctx.memo(`gunSet:${dayzId}`, async () => {
+    const firsts = new Map<FirearmKey, KillRow>();
+    for (const k of await ownPvpKills(db, ctx, dayzId)) {
+      const f = firearmOfKill(k);
+      if (f && !firsts.has(f)) firsts.set(f, k);
+    }
+    return firsts;
+  });
+
+const gun = (key: FirearmKey): Rule => async (db, owner, ctx) => {
+  const k = (await gunSet(db, ctx, owner.id)).get(key);
+  return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { weapon: k.weapon } } : undefined);
+};
+
+/**
+ * A set of firearms: progress is how many have a kill; earned at the kill that completed the
+ * set, the latest of the set's first kills (id breaks a same-second tie, as the kill order does).
+ */
+const gunsOf = (key: AchievementKey, members: readonly FirearmKey[]): Rule => async (db, owner, ctx) => {
+  const target = T(key);
+  const set = await gunSet(db, ctx, owner.id);
+  const firsts = members.flatMap((f) => set.get(f) ?? []);
+  if (firsts.length < target) return { count: firsts.length, target };
+  const last = firsts.reduce((a, b) => (b.at.getTime() > a.at.getTime() || (b.at.getTime() === a.at.getTime() && b.id > a.id) ? b : a));
+  return { count: target, target, earnedAt: last.at, evidenceId: last.id, evidence: { firearms: target }, serverId: last.serverId };
+};
+const ofClass = (c: FirearmClass): FirearmKey[] => FIREARMS.filter((f) => f.class === c).map((f) => f.key);
+
+const ARMORY_RULES = {
+  ...Object.fromEntries(FIREARMS.map((f) => [`gun_${f.key}`, gun(f.key)])),
+  class_pistols: gunsOf("class_pistols", ofClass("pistol")),
+  class_smgs: gunsOf("class_smgs", ofClass("smg")),
+  class_shotguns: gunsOf("class_shotguns", ofClass("shotgun")),
+  class_assault_rifles: gunsOf("class_assault_rifles", ofClass("assault_rifle")),
+  class_rifles: gunsOf("class_rifles", ofClass("rifle")),
+  class_snipers: gunsOf("class_snipers", ofClass("sniper")),
+  full_armory: gunsOf("full_armory", FIREARMS.map((f) => f.key)),
+} as Partial<Record<EarnableKey, Rule>>;
 
 /**
  * Longer-range rules (marksman, sniper): the target is a distance in metres, so the
@@ -73,6 +143,7 @@ function streak(key: AchievementKey): Rule {
 }
 
 export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
+  ...ARMORY_RULES,
   first_blood: killCount("first_blood"),
   ten_down: killCount("ten_down"),
   centurion: killCount("centurion"),

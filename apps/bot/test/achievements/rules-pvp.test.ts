@@ -1,7 +1,7 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
-import { PVP_RULES } from "../../src/achievements/rules-pvp.js";
+import { PVP_RULES, gunSet, ownPvpKills } from "../../src/achievements/rules-pvp.js";
 import { makeCtx } from "../../src/achievements/types.js";
 import { seedServer, seedKill, seedSession, seedRaid, seedDefense, seedFaction, seedSeason, TRUNCATE } from "./seed.js";
 
@@ -117,5 +117,74 @@ describe("pvp rules", () => {
     await seedKill(db, { serverId, killer: B, victim: A, at: m(5), atHub: true });
     for (let i = 0; i < 2; i++) await seedKill(db, { serverId, killer: A, victim: C, at: m(10 + i) });
     expect((await rule("killing_spree")(db, player, mk())).count).toBe(5);
+  });
+
+  // ── The armory (spec 2026-10-20-achievements-150 §2.2, §2.3) ────────────────
+
+  it("gun tile: the first scoring kill with that firearm, variants merged", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(0), weapon: "KA-M", friendlyFire: true }); // does not count
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), weapon: "KA-M", atHub: true });       // does not count
+    expect((await rule("gun_akm")(db, player, mk())).count).toBe(0);
+    const k = await seedKill(db, { serverId, killer: A, victim: C, at: m(2), weapon: "KA-M", distanceM: 42 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(3), weapon: "KA-M", distanceM: 10 });
+    expect(await rule("gun_akm")(db, player, mk())).toMatchObject({ count: 1, target: 1, earnedAt: m(2), evidenceId: k.id, evidence: { weapon: "KA-M" } });
+    // A sawed-off counts toward its parent firearm, and a finish variant shares its gun's tile.
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(4), weapon: "Sawed-off Mosin 91/30", distanceM: 15 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(5), weapon: "Engraved Kolt 1911", distanceM: 8 });
+    expect(await rule("gun_mosin")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(4) });
+    expect(await rule("gun_colt1911")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(5) });
+    // Someone else's kill with a gun earns the owner nothing.
+    await seedKill(db, { serverId, killer: B, victim: C, at: m(6), weapon: "VSS", distanceM: 200 });
+    expect((await rule("gun_vss")(db, player, mk())).count).toBe(0);
+  });
+
+  it("class tile: n of N, earned at the kill completing the class", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), weapon: "VSD", distanceM: 300 });
+    expect(await rule("class_snipers")(db, player, mk())).toMatchObject({ count: 1, target: 2 });
+    expect((await rule("class_snipers")(db, player, mk())).earnedAt).toBeUndefined();
+    const vss = await seedKill(db, { serverId, killer: A, victim: C, at: m(5), weapon: "VSS", distanceM: 120 });
+    await seedKill(db, { serverId, killer: A, victim: C, at: m(9), weapon: "VSD", distanceM: 250 });   // a repeat changes nothing
+    expect(await rule("class_snipers")(db, player, mk())).toMatchObject({ count: 2, target: 2, earnedAt: m(5), evidenceId: vss.id });
+    expect(await rule("class_pistols")(db, player, mk())).toMatchObject({ count: 0, target: 12 });
+  });
+
+  it("full_armory progress is distinct firearms of 52", async () => {
+    for (const [i, w] of ["KA-M", "VSD", "BK-133", "KA-M"].entries()) await seedKill(db, { serverId, killer: A, victim: B, at: m(i), weapon: w, distanceM: 30 });
+    expect(await rule("full_armory")(db, player, mk())).toEqual({ count: 3, target: 52 });
+  });
+
+  it("gunSet is the owner's first scoring kill per firearm, read once per owner per pass", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(0), weapon: "KA-M", distanceM: 30 });
+    await seedKill(db, { serverId, killer: B, victim: A, at: m(1), weapon: "VSS", distanceM: 30 });
+    const ctx = mk();
+    const a = await gunSet(db, ctx, A);
+    expect([...a.keys()]).toEqual(["akm"]);
+    expect(await gunSet(db, ctx, A)).toBe(a);   // memoised
+    // ⚠️ The memo key carries the owner: a second owner in one ctx gets their own kills, not A's.
+    expect([...(await gunSet(db, ctx, B)).keys()]).toEqual(["vss"]);
+    expect((await ownPvpKills(db, ctx, B)).map((k) => k.weapon)).toEqual(["VSS"]);
+  });
+
+  it("an unmapped display name counts for nothing and warns once", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      await seedKill(db, { serverId, killer: A, victim: B, at: m(0), weapon: "Mystery 9000", distanceM: 40 });
+      await seedKill(db, { serverId, killer: A, victim: C, at: m(1), weapon: "Mystery 9000", distanceM: 41 });
+      // A near-miss of a real name credits nothing either: no neighbouring gun.
+      await seedKill(db, { serverId, killer: A, victim: C, at: m(2), weapon: "KA-M2", distanceM: 41 });
+      // Melee and vehicle kills carry no range and are never guns: never warned about.
+      await seedKill(db, { serverId, killer: A, victim: C, at: m(3), weapon: "Hunting Knife", distanceM: null });
+      await seedKill(db, { serverId, killer: A, victim: C, at: m(4), weapon: "TransportHit (Motorbike_02_Red)", distanceM: null });
+      // A known off-catalogue gun is deliberately unmapped: no tile, no warning.
+      await seedKill(db, { serverId, killer: A, victim: C, at: m(5), weapon: "DMR", distanceM: 300 });
+      expect((await rule("full_armory")(db, player, mk())).count).toBe(0);
+      expect((await rule("gun_akm")(db, player, mk())).count).toBe(0);
+      expect((await rule("full_armory")(db, player, mk())).count).toBe(0);   // a second pass: still one warning
+      expect((await rule("arsenal")(db, player, mk())).count).toBe(5);       // Arsenal still counts the five raw strings
+      const about = (name: string) => warn.mock.calls.filter((c) => String(c[0]).includes(JSON.stringify(name)));
+      expect(about("Mystery 9000")).toHaveLength(1);
+      expect(about("KA-M2")).toHaveLength(1);
+      for (const n of ["Hunting Knife", "TransportHit (Motorbike_02_Red)", "DMR"]) expect(about(n)).toHaveLength(0);
+    } finally { warn.mockRestore(); }
   });
 });

@@ -36,7 +36,7 @@ export async function evaluateOwner(db: Database, owner: Owner, now: Date, onErr
   const ctx = makeCtx(now);
   for (const key of KEYS_FOR[owner.kind]) {
     // ⚠️ Per key, not per owner: one broken rule must never cost an owner the
-    // other 36 — the pass reports it in `failed` and carries on.
+    // other rules — the pass reports it in `failed` and carries on.
     try { out.push({ key, result: await RULES[key](db, owner, ctx) }); }
     catch (err) { onError?.(owner, key, err); }
   }

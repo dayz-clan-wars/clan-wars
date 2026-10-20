@@ -1,7 +1,9 @@
+import { FIREARMS, FIREARM_CLASSES } from "./firearms";
+
 /**
- * The fifty achievements — data, not code. Forty-nine can still be earned; a
- * `retired` one (Wanderer, fast travel, gone with the Nasdara swap) stays in the
- * list so its holders keep it, its badge and its share card. The badge wall, the Discord line,
+ * The achievements — data, not code. A `retired` one (Wanderer, fast travel;
+ * Wolf Bait and Bear Necessities, no wolves or bears: all gone with the Nasdara
+ * swap) stays in the list so its holders keep it, its badge and its share card. The badge wall, the Discord line,
  * the guide chapter and the bot's rules all read THIS array; a threshold
  * changes here and nowhere else (spec 2026-09-11 §4).
  *
@@ -24,8 +26,19 @@ export const ACHIEVEMENT_GROUP_COLORS: Record<AchievementGroup, `#${string}`> = 
 export type AchievementOwner = "player" | "clan";
 export type AchievementUnit = "count" | "hours" | "days" | "m";
 
-const def = <K extends string, O extends { retired?: true } = {}>(key: K, name: string, description: string, group: AchievementGroup, target = 1, unit: AchievementUnit = "count", opts: O = {} as O) =>
+/**
+ * `section` groups tiles on the wall (spec 2026-10-20-achievements-150): "armory" marks the
+ * 59 gun, class and Full Armory tiles. Optional, like `retired`, so the other tiles' types are unchanged.
+ */
+type DefOpts = { retired?: true; section?: "armory" };
+const def = <K extends string, O extends DefOpts = {}>(key: K, name: string, description: string, group: AchievementGroup, target = 1, unit: AchievementUnit = "count", opts: O = {} as O) =>
   ({ key, name, description, group, owner: group === "team" ? "clan" : "player", target, unit, ...opts }) as const;
+
+const ARMORY = { section: "armory" } as const;
+/** The class sizes come from the catalogue, never a typed number: a gun added to a class moves its target. */
+const classSize = (c: (typeof FIREARM_CLASSES)[number]): number => FIREARMS.filter((f) => f.class === c).length;
+const classTile = <K extends string>(key: K, name: string, description: string, c: (typeof FIREARM_CLASSES)[number]) =>
+  def(key, name, description, "pvp", classSize(c), "count", ARMORY);
 
 export const ACHIEVEMENTS = [
   // Solo — presence and progression
@@ -47,8 +60,9 @@ export const ACHIEVEMENTS = [
   def("builder", "Builder", "Earn 100 build points", "pve", 100),
   def("architect", "Architect", "Earn 500 build points", "pve", 500),
   def("ironman", "Ironman", "Play for 5 hours without dying", "pve", 5, "hours"),
-  def("wolf_bait", "Wolf Bait", "Get killed by a wolf", "pve"),
-  def("bear_necessities", "Bear Necessities", "Get killed by a bear", "pve"),
+  // ⚠️ Retired: Nasdara has no wolves or bears. Kept, like Wanderer, for their holders.
+  def("wolf_bait", "Wolf Bait", "Get killed by a wolf", "pve", 1, "count", { retired: true }),
+  def("bear_necessities", "Bear Necessities", "Get killed by a bear", "pve", 1, "count", { retired: true }),
   def("brains", "Brains", "Get killed by infected", "pve"),
   def("gravity_check", "Gravity Check", "Die to a fall", "pve"),
   def("sunday_driver", "Sunday Driver", "Get killed by a vehicle", "pve"),
@@ -71,6 +85,17 @@ export const ACHIEVEMENTS = [
   def("flag_thief", "Flag Thief", "Lower an enemy flag yourself in a scored raid", "pvp"),
   def("home_defender", "Home Defender", "Make the raise that ends a siege", "pvp"),
   def("blue_on_blue", "Blue on Blue", "Kill a clanmate", "pvp"),
+  // PvP — the armory: one tile per firearm, generated from the catalogue IN ITS ORDER, so a
+  // gun added to firearms.ts gets its tile (and the rules-test diff demands its rule) at once.
+  // ⚠️ A key is `gun_<firearm key>` and stable forever once shipped: never rename a firearm key.
+  ...FIREARMS.map((f) => def(`gun_${f.key}` as `gun_${typeof f.key}`, f.name, `A PvP kill with the ${f.name}`, "pvp", 1, "count", ARMORY)),
+  classTile("class_pistols", "Sidearms", "A PvP kill with every pistol", "pistol"),
+  classTile("class_smgs", "Spray and Pray", "A PvP kill with every SMG", "smg"),
+  classTile("class_shotguns", "Buckshot", "A PvP kill with every shotgun", "shotgun"),
+  classTile("class_assault_rifles", "Rifleman", "A PvP kill with every assault rifle", "assault_rifle"),
+  classTile("class_rifles", "Hunter", "A PvP kill with every rifle", "rifle"),
+  classTile("class_snipers", "Overwatch", "A PvP kill with every sniper rifle", "sniper"),
+  def("full_armory", "Full Armory", "A PvP kill with every firearm on Nasdara", "pvp", FIREARMS.length, "count", ARMORY),
   // Team — the clan's record
   def("colors_raised", "Colors Raised", "Found the clan and get it activated", "team"),
   def("full_strength", "Full Strength", "Have 10 full members at once", "team", 10),

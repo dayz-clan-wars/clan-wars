@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, achievementProgress, clanNotices, consumerCursors, factions, playerPositions, clanPins, type Database } from "@factions/db";
 import { sql, eq, and } from "drizzle-orm";
+import { EARNABLE_ACHIEVEMENTS } from "@factions/domain";
 import { achievementsTick } from "../../src/achievements/tick.js";
 import { RULES } from "../../src/achievements/rules.js";
 import { seedServer, seedLink, seedKill, seedFaction, seedMembership, seedEvent, TRUNCATE } from "./seed.js";
@@ -39,8 +40,8 @@ describe("achievementsTick", () => {
     // ⚠️ A linked player's ownerName is their DISCORD ID, not their gamertag: notice-text's
     // `person()` turns an all-digit value into a mention, and a mention is the point.
     expect(notices[0]!.payload).toMatchObject({ key: "sniper", name: "Sniper", ownerKind: "player", ownerName: "111111111111111111", clanTag: "BEAR" });
-    // progress cached for every earnable key of the owner's kind (38 less the retired Wanderer)
-    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, A))).length).toBe(37);
+    // progress cached for every earnable key of the owner's kind (38 less the three retired, plus the 59 armory tiles)
+    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, A))).length).toBe(94);
     // second pass: nothing new touched, nothing evaluated, nothing duplicated
     const again = await achievementsTick(db, { now: m(11), achievementsChannelId: CH });
     expect(again).toMatchObject({ evaluated: 0, unlocked: 0 });
@@ -97,7 +98,7 @@ describe("achievementsTick", () => {
     // B — collected in the same pass, after A in key order — was evaluated and committed anyway.
     const bUnlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, B));
     expect(bUnlocks.map((u) => u.key)).toContain("enlisted");
-    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, B))).length).toBe(37);
+    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, B))).length).toBe(94);
 
     // And the engine is not stuck on A: the drain finished, so the watermarks advanced and the
     // resume marker was cleared. The next pass — rules restored — finds nothing left to do.
@@ -127,7 +128,7 @@ describe("achievementsTick", () => {
     // Every one of the ten players the kills touched has a cached progress row.
     for (let i = 0; i < 5; i++) {
       for (const id of [`${i}`.padStart(36, "K"), `${i}`.padStart(36, "V")]) {
-        expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(37);
+        expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(94);
       }
     }
   });
@@ -153,7 +154,7 @@ describe("achievementsTick", () => {
     const r = await achievementsTick(db, { now: m(10), everyone: true, announce: false, batch: 3 });
     expect(r.evaluated).toBeGreaterThanOrEqual(8);   // 7 players + the clan + A
     for (const id of ids) {
-      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(37);
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(94);
       const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, id));
       expect(unlocks.map((u) => u.key)).toContain("enlisted");
     }
@@ -222,7 +223,7 @@ describe("achievementsTick", () => {
       if (r.evaluated === 0) break;
     }
     for (const id of early) {
-      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(37);
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(94);
     }
     expect(await readResume(db)).toBeNull();   // the drain finished and cleaned up after itself
   });
@@ -235,5 +236,29 @@ describe("achievementsTick", () => {
     const progress = await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, A));
     expect(progress.find((p) => p.key === "explorer")).toMatchObject({ count: 1, target: 50 });
     expect(progress.find((p) => p.key === "cartographer")).toMatchObject({ count: 1, target: 10 });
+  });
+
+  it("wolf_bait and bear_necessities are retired: holders keep them, the tick never evaluates them", async () => {
+    const earnable = EARNABLE_ACHIEVEMENTS.map((a) => a.key as string);
+    expect(earnable).not.toContain("wolf_bait");
+    expect(earnable).not.toContain("bear_necessities");
+    expect(Object.keys(RULES)).not.toContain("wolf_bait");
+    expect(Object.keys(RULES)).not.toContain("bear_necessities");
+    // A holds both from before the retirement; B dies to a wolf and a bear after it.
+    await db.insert(achievementUnlocks).values([
+      { ownerKind: "player", ownerId: A, key: "wolf_bait", earnedAt: t0 },
+      { ownerKind: "player", ownerId: A, key: "bear_necessities", earnedAt: t0 },
+    ]);
+    await seedLink(db, { dayzId: B, discordId: "222222222222222222", gamertag: "Ben", verifiedAt: t0 });
+    await seedKill(db, { serverId, killer: null, victim: B, at: m(1), cause: "wolf" });
+    await seedKill(db, { serverId, killer: null, victim: B, at: m(2), cause: "bear" });
+    await seedKill(db, { serverId, killer: null, victim: A, at: m(3), cause: "bear" });
+    await achievementsTick(db, { now: m(10), everyone: true, announce: false });
+    const held = await db.select().from(achievementUnlocks).where(sql`${achievementUnlocks.key} in ('wolf_bait', 'bear_necessities')`);
+    expect(held.map((u) => [u.ownerId, u.key, u.earnedAt]).sort()).toEqual([[A, "bear_necessities", t0], [A, "wolf_bait", t0]].sort());
+    // Nobody gets a progress row for a retired key, so it can never surface as "closest".
+    expect(await db.select().from(achievementProgress).where(sql`${achievementProgress.key} in ('wolf_bait', 'bear_necessities')`)).toEqual([]);
+    // The tick did run for both: their enlisted unlocks landed.
+    expect((await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.key, "enlisted"))).length).toBe(2);
   });
 });

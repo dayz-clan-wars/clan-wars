@@ -35,8 +35,8 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   builder: built("builder"),
   architect: built("architect"),
 
-  wolf_bait: deathBy("wolf"),
-  bear_necessities: deathBy("bear"),
+  // wolf_bait and bear_necessities are retired (no wolves or bears on Nasdara): no rule, so
+  // nothing unlocks them again, and their holders' rows are never touched.
   brains: deathBy("infected"),
   gravity_check: deathBy("fall"),
   sunday_driver: deathBy("vehicle"),
