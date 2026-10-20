@@ -31,7 +31,7 @@ describe("zoneTick", () => {
   const fix = (dayzId: string, x: number, z: number, when = now, gamertag = "Sasha") => db.insert(events).values({
     serverId, admFileId, lineIndex: line++, type: "player.position", occurredAt: when, payload: { dayzId, gamertag, pos: { x, y: 100, z } },
   }).returning({ id: events.id });
-  const built = (dayzId: string, x: number, z: number, part: string, structure = "Fence", type: "base.built" | "base.dismantled" = "base.built") => db.insert(events).values({
+  const built = (dayzId: string, x: number, z: number, part: string, structure: string | null = "Fence", type: "base.built" | "base.dismantled" = "base.built") => db.insert(events).values({
     serverId, admFileId, lineIndex: line++, type, occurredAt: now, payload: { dayzId, gamertag: "Sasha", action: type === "base.built" ? "built" : "dismantled", part, structure, tool: null, pos: { x, y: 100, z } },
   }).returning({ id: events.id });
   const notices = () => db.select({ kind: clanNotices.kind, target: clanNotices.target, payload: clanNotices.payload, to: clanNotices.discordTargetId }).from(clanNotices).orderBy(clanNotices.id);
@@ -87,6 +87,12 @@ describe("zoneTick", () => {
       ["built", { gamertag: "Sasha", part: "wall_base_up" }],
     ]);
     expect(await db.select().from(intruderSightings)).toHaveLength(0);   // a build is not a sighting
+  });
+
+  it("⚠️ a ruin repair (structure null) by a non-member inside a zone still alerts as a build", async () => {
+    await built(STRANGER, 5010, 5010, "door1_metal", null);
+    expect((await zoneTick(db, { now, enforcementEnabled: true })).alerts).toBe(1);
+    expect((await notices()).map((n) => n.payload)).toEqual([expect.objectContaining({ gamertag: "Sasha", part: "door1_metal" })]);
   });
 
   it("a solo owner sees solo_built for an ordinary non-gate build", async () => {

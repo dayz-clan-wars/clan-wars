@@ -205,6 +205,8 @@ describe("roster player stats", () => {
     await mkEvent({ type: "base.built", at: h(t50, 8), payload: { dayzId: R, gamertag: "Romeo", action: "built", part: "base", structure: "Fence" } });
     await mkEvent({ type: "base.built", at: h(t50, 9), payload: { dayzId: R, gamertag: "Romeo", action: "built", part: "level_1_base", structure: "Watchtower" } });
     await mkEvent({ type: "base.built", at: h(t0, 13), payload: { dayzId: N, gamertag: "November", action: "built", part: "base", structure: "Fence" } });
+    // Ruin repairs (structure null) earn nothing: 5 for A must leave A on 4.
+    for (let i = 0; i < 5; i++) await mkEvent({ type: "base.built", at: h(t0, 15 + i), payload: { dayzId: A, gamertag: "Alpha", action: "built", part: "door1_metal", structure: null, tool: "Hammer" } });
     await mkEvent({ type: "base.dismantled", at: h(t0, 14), payload: { dayzId: A, gamertag: "Alpha", action: "dismantled", part: "wall_base_down", structure: "Fence" } });
     // B: inside the first span, in the gap after they left, inside the second.
     await mkEvent({ type: "flag.raised", at: h(t0, 55), payload: { dayzId: B, gamertag: "Bravo", texture: "Flag_Bear", poleKey: "BEAR:0:0" } });

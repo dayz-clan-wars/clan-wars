@@ -386,8 +386,14 @@ async function longestKillBoard(db: Database, serverId: number, w: Window, roste
 
 /** The builder's id lives in the event payload; the board keys on it the way the others key on a column. */
 const builderId = sql<string>`${events.payload}->>'dayzId'`;
+/**
+ * ⚠️ A ruin repair is a `base.built` with `structure: null`; it must earn no build points on
+ * any board or achievement, yet stays an event so base-zone enforcement still sees it.
+ * Shared with the bot's `built()` rule so the two can never disagree.
+ */
+export const isBaseBuild = sql`${events.payload}->>'structure' is not null`;
 const builtInScope = (serverId: number, w: Window): SQL =>
-  and(eq(events.serverId, serverId), eq(events.type, "base.built"), inWindow(events.occurredAt, w))!;
+  and(eq(events.serverId, serverId), eq(events.type, "base.built"), isBaseBuild, inWindow(events.occurredAt, w))!;
 
 /** Build points: `count(*)` of `base.built` per builder, joined to `players` for the name. */
 async function buildersBoard(db: Database, serverId: number, w: Window, roster: string[] | null, limit: number, offset = 0): Promise<BoardRow[]> {
@@ -848,7 +854,7 @@ export async function playerFeedDb(
       union all
       select case when ${events.type} = 'base.built' then 'built' else 'dismantled' end, max(${events.occurredAt}), null, null, null, false, false, null, null, null, count(*)::int
       from ${events}
-      where ${events.serverId} = ${serverId} and ${events.type} in ('base.built', 'base.dismantled') and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
+      where ${events.serverId} = ${serverId} and ${events.type} in ('base.built', 'base.dismantled') and (${events.type} <> 'base.built' or ${isBaseBuild}) and ${events.payload}->>'dayzId' = ${me} and ${inWindow(events.occurredAt, w)}
       group by ${events.type}, date_trunc('hour', ${events.occurredAt})
     ) feed
     order by at desc

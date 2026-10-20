@@ -1,5 +1,6 @@
 import { ACHIEVEMENT_BY_KEY, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { events, kills, playerSessions } from "@factions/db";
+import { isBaseBuild } from "@factions/roster/internal";
 import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { nth, oneShot, type Rule } from "./types.js";
 
@@ -12,7 +13,7 @@ async function ownEvents(db: Parameters<Rule>[0], type: string, dayzId: string, 
     .where(and(eq(events.type, type as never), sql`${events.payload}->>'dayzId' = ${dayzId}`, extra))
     .orderBy(asc(events.occurredAt), asc(events.id));
 }
-const built = (key: AchievementKey): Rule => async (db, owner) => nth(await ownEvents(db, "base.built", owner.id), T(key), (rows) => ({ buildPoints: rows.length }));
+const built = (key: AchievementKey): Rule => async (db, owner) => nth(await ownEvents(db, "base.built", owner.id, isBaseBuild), T(key), (rows) => ({ buildPoints: rows.length }));
 
 /**
  * A death to the environment with the named cause; killer is null for every non-player death.
