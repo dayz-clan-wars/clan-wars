@@ -125,3 +125,19 @@ describe("eventTypeFor", () => {
     expect(eventTypeFor(out[0]!)).toBe("player.unconscious");
   });
 });
+
+describe("parseLine: conscious and packed", () => {
+  const V = "A".repeat(40);
+  it("yields one conscious line", () => {
+    const lines = parseLine(`12:57:10 | Player "Vic" (id=${V} pos=<1, 2, 3>) regained consciousness`);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.kind).toBe("conscious");
+    expect(eventTypeFor(lines[0]!)).toBe("player.conscious");
+  });
+  it("yields one packed line", () => {
+    const lines = parseLine(`12:57:10 | Player "Vic" (id=${V} pos=<1, 2, 3>) packed Large Tent with Hands `);
+    expect(lines).toHaveLength(1);
+    expect(lines[0]!.kind).toBe("packed");
+    expect(eventTypeFor(lines[0]!)).toBe("item.packed");
+  });
+});

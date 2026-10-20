@@ -218,6 +218,13 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
         gamertag: line.event.gamertag, dayzId: line.event.dayzId,
         item: line.event.item, itemClass: line.event.itemClass, pos: line.event.pos,
       };
+    case "conscious":
+      return { dayzId: line.event.dayzId, gamertag: line.event.gamertag };
+    case "packed":
+      return {
+        dayzId: line.event.dayzId, gamertag: line.event.gamertag,
+        item: line.event.item, pos: line.event.pos,
+      };
     default: {
       // ⚠️ Exhaustiveness guard. `toPayload` returns `unknown` and the repo does not
       // set `noImplicitReturns`, so before this existed a new ParsedLine kind fell
