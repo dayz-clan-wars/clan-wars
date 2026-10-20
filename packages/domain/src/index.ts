@@ -27,3 +27,5 @@ export * from "./bounties";
 export * from "./koth";
 export * from "./show";
 export * from "./live-feed";
+export * from "./firearms";
+export * from "./achievement-evidence";
