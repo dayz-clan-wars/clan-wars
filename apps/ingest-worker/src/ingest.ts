@@ -136,7 +136,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
 }
 
 /** Flatten a ParsedLine into the jsonb payload shape the projector reads. */
-function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
+export function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
   switch (line.kind) {
     case "flag":
       return {
