@@ -21,9 +21,10 @@ only kills and hits.
 
        sudo docker compose exec -T postgres pg_dump -U factions -Fc factions_live > ~/factions_live-pre-nasdara-fixes.dump
 
-2. **Deploy the worker and the bot** (`sudo docker compose build ingest-worker && sudo docker
-   compose up -d ingest-worker`, `sudo systemctl restart clan-wars-bot`). From here new lines
-   parse correctly; stored events are untouched until step 4.
+2. **Deploy.** This is the release deploy: once the tag lands, `clan-wars-deploy.timer` runs
+   `deploy/deploy-release.sh`, which rebuilds and restarts the worker and the bot. Do not rebuild
+   by hand. From here new lines parse correctly; stored events are untouched until step 4.
+   Continue from step 3 once the deploy has finished.
 
 3. **Count before.** Run each with `sudo docker compose exec -T postgres psql -U factions -d
    factions_live`. Measured 2026-10-20; re-measure, as the numbers move with the log:
@@ -44,22 +45,26 @@ only kills and hits.
    value immediately after it: `--types player.hit --apply`. `--types --apply` swallows `--apply`
    as the type list and you get a dry run that looks like it did nothing.
 
-5. **Reparse, to backfill the two new shapes.** `player.conscious` and `item.packed` lines have
-   no event yet, and a reparse skips any line that already has one (the idempotency index is on
-   file + line), so only these are added:
+5. **Stop the bot, then reparse to backfill the two new shapes.** `player.conscious` and
+   `item.packed` lines have no event yet, and a reparse skips any line that already has one (the
+   idempotency index is on file + line), so only these are added. Repayload (step 4) moved no ids,
+   so stopping here is early enough.
 
+   ⚠️ The reparse appends at the **head** of the log with brand-new ids and their true, old
+   `occurred_at`. The bot runs throughout and its posters keep ticking; `hit-feed-poster` reads
+   `events` by id, so any `player.hit` the reparse newly appends would post to #hit-feed. Stop the
+   bot first, and note the four poster cursors:
+
+       sudo systemctl stop clan-wars-bot
+       select consumer_name, last_event_id from consumer_cursors where consumer_name like '%feed-poster%';
+
+       set -a; . ./.env; set +a
        (cd apps/ingest-worker && npx tsx src/reparse-main.ts)
 
-   ⚠️ It appends at the **head** of the log with brand-new ids and their true, old
-   `occurred_at`. The four feed consumers (`kill-feed-poster`, `hit-feed-poster`,
-   `killstreak-feed-poster`, `long-range-feed-poster`) read only kills and hits, so the new types
-   do not post. Step 6 parks the cursors anyway, because it also rebuilds `kills`.
+   The four feed consumers read only kills and hits, so the new event types themselves do not post.
 
-6. **Rebuild kills.** Motorbike and dog deaths move from `died` to `vehicle` and `dog`.
-   ⚠️ Before this step, park the feed cursors so nothing from the rebuild posts as if it
-   happened today:
-
-       select consumer_name, last_event_id from consumer_cursors where consumer_name like '%feed-poster%';
+6. **Rebuild kills, park the cursors, resync the Live page, start the bot.** Motorbike and dog
+   deaths move from `died` to `vehicle` and `dog`. The bot stays stopped until the end of this step.
 
    ⚠️ There are FOUR feed consumers, not one (a `'%kill%'` match catches only two):
 
@@ -70,11 +75,6 @@ only kills and hits.
    | `killstreak-feed-poster` | #killstreaks | a `kills.event_id` |
    | `long-range-feed-poster` | #long-range | a `kills.event_id` |
 
-   Note each value, run the rebuild, then restore any feed you do not want posting history:
-   `update consumer_cursors set last_event_id = <max> where consumer_name = '<name>'`, where
-   `<max>` is `select max(event_id) from kills` for the three kill-derived feeds and `select
-   max(id) from events where type = 'player.hit'` for `hit-feed-poster`.
-
    `pnpm rebuild:kills` fails from the workspace root (`drizzle-orm` is not resolvable); use the
    bot-package form:
 
@@ -83,13 +83,26 @@ only kills and hits.
          import { createClient } from "@factions/db"; import { rebuildKills } from "./src/kills-tick.js";
          const db = createClient(process.env.DATABASE_URL); console.log(await rebuildKills(db, 1)); await db.$client.end();'
 
-   Notes:
-   - ⚠️ **Bounty claims are frozen when written** and have no cursor over `kills`, so the
-     renumbering does not touch them. Nothing to park or resync.
-   - ⚠️ **Live page resync.** The Live page's kill, killstreak and long-range rows come from
-     `feed_entries`. Delete those three feeds' `feed_entries` rows and the three recorder cursors
-     (the `*-feed-recorder` consumers for kills, killstreaks and long range); the recorders
-     backfill again from the rebuilt `kills`. Leave the hit feed's rows alone.
+   Then park all four cursors explicitly, so nothing posts history:
+
+       update consumer_cursors set last_event_id = (select max(event_id) from kills)
+         where consumer_name in ('kill-feed-poster','killstreak-feed-poster','long-range-feed-poster');
+       update consumer_cursors set last_event_id = (select max(id) from events where type = 'player.hit')
+         where consumer_name = 'hit-feed-poster';
+
+   Then resync the Live page's kill-derived feeds (`feed_entries` rows and recorder cursors; the
+   recorders backfill again from the rebuilt `kills`):
+
+       delete from feed_entries where kind in ('kill','killstreak','long_range');
+       delete from consumer_cursors where consumer_name in ('kill-feed-recorder','killstreak-feed-recorder','long-range-feed-recorder');
+
+   `hit-feed-recorder` and the hit entries stay as they are; stale hit `feed_entries` payloads
+   (an old "German" label, say) are left as they are.
+
+   Now start the bot: `sudo systemctl start clan-wars-bot`.
+
+   ⚠️ **Bounty claims are frozen when written** and have no cursor over `kills`, so the
+   renumbering does not touch them. Nothing to park or resync.
 
 7. **Verify.** Re-run step 3: the first three must return **0**, and the vehicle count must be
    at least 11 (the three `NO` deaths move in). Then:
