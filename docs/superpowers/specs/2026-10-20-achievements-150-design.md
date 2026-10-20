@@ -273,8 +273,9 @@ A test pins `EARNABLE_ACHIEVEMENTS.length === 150`.
 `environment`, and `ENTITY_CAUSES` has no `Motorbike_` prefix anyway. Sunday
 Driver has missed every one. Production holds 3 events with entity `NO`.
 Fix: read the parenthesised class after `NO DRIVER`, add `Motorbike_` to the
-vehicle prefixes. Then rebuild kills (`rebuild:kills`, existing runbook) so
-history re-classifies.
+vehicle prefixes. Then rewrite the stored payloads in place (§3.3) and rebuild kills
+(`rebuild:kills`, existing runbook, with its feed-cursor parking) so history
+re-classifies.
 
 ### 3.2 Dog deaths are not recognised
 
@@ -292,21 +293,23 @@ Fix: label up to ` into ` / ` with ` / ` (`. The builder decides whether
 `structure.ts`'s `BUILT_RE` (`Built (\S+) on (.+?)(?: with (.+?))?`) reads
 `Built door1_metal on  with Hammer` as structure `" with Hammer"`, tool null.
 These are currently stored as `base.built` and count as build points.
-Fix: a ruin shape (empty object) becomes its own event type (e.g.
-`building.repaired`, payload: part, tool, pos, player). *My call:* ruin repairs **stop** counting as build points, for the
-achievements and the builders board (`packages/roster/src/stats.ts`), since
-they are not base building; no revocation of any `foundation`/`builder`/
-`architect` already earned. ⚠️ But base-zone enforcement **must keep
-treating them as it does today**: `zone-tick.ts` flags a non-member's
+Fix (amended 2026-10-20 while planning): a ruin repair **stays a
+`base.built` event** whose payload has `structure: null` (the object the log
+leaves blank) and the real `tool`. Keeping the type is what keeps base-zone
+enforcement exactly as it is today: `zone-tick.ts` flags a non-member's
 `base.built` inside a zone as a breach and alerts the owner, and on Nasdara
-clans may base inside repaired ruins. Feed `building.repaired` into
-`zone-tick.ts` with the same handling, so enforcement does not weaken. Zone
-violations reference the misparsed event ids: the delete-then-reparse must
-re-point or re-record them, never drop them.
-⚠️ A reparse never corrects a misparsed line (idempotency is on file + line),
-so the runbook must delete the misparsed `base.built` events first, the same
-discipline as `docs/deploy/2026-09-10-credited-kills.md`. Watch the FKs into
-`events` (kills, feed_entries, positions…) when deleting.
+clans may base inside repaired ruins. *My call:* ruin repairs **stop**
+counting as build points, for the achievements and the builders board
+(`packages/roster/src/stats.ts`), by excluding `structure is null`; no
+revocation of any `foundation`/`builder`/`architect` already earned.
+
+History is fixed **in place**: a script re-parses each stored event's raw
+line (`raw_lines` by `adm_file_id` + `line_index`) with the fixed parser and
+rewrites the payload when it differs and the event type is unchanged. No
+event is deleted, no id moves, so no feed cursor, zone violation or position
+row is disturbed. The same script fixes §3.1's death payloads and §3.2's hit
+labels. (This replaces an earlier draft's delete-then-reparse and a separate
+`building.repaired` type.)
 
 ### 3.4 New shapes to parse
 
