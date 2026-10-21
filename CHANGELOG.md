@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.8.0] - 2026-10-21
+
 ### Added
 
 - The map has world layers: bunkers, vehicle and crash-site spawns, wrecks, contaminated areas, where infected and animals spawn, and loot buildings by type and tier, from our own server files. Find them under the layers button.
