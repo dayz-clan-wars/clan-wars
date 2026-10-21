@@ -4,7 +4,11 @@ import { parseIdentity } from "./identity.js";
 
 export type StructureEvent = {
   gamertag: string; dayzId: string; action: "built" | "dismantled";
-  part: string; structure: string; tool: string | null; pos: Vec3;
+  part: string;
+  /** ⚠️ null for a ruin repair: the log prints the object empty (`Built door1_metal on  with Hammer`).
+   *  It stays a `base.built` so zone enforcement still sees it, but it is not a base build. */
+  structure: string | null;
+   tool: string | null; pos: Vec3;
 };
 
 // ⚠️ Anchored on the identity block's OWN closing paren — `\(id=[0-9A-F]{40}[^)]*\)` —
@@ -17,6 +21,9 @@ export type StructureEvent = {
 // flagpole.ts already yields `flagpole.*` for it and parseLine tries that parser
 // first; this guard is belt-and-braces.
 const BUILT_RE = /\(id=[0-9A-F]{40}[^)]*\)\s*Built (\S+) on (.+?)(?: with (.+?))?\s*$/u;
+// A ruin repair: TWO spaces after "on" (blank object). Tried first and kept behind the same
+// identity-block anchor — without it BUILT_RE reads the blank as structure "with Hammer".
+const RUIN_RE = /\(id=[0-9A-F]{40}[^)]*\)\s*Built (\S+) on {2}with (.+?)\s*$/u;
 const DISMANTLED_RE = /\(id=[0-9A-F]{40}[^)]*\)\s*Dismantled (\S+) from (.+?)(?: with (.+?))?\s*$/u;
 
 export function parseStructure(raw: string): StructureEvent | null {
@@ -24,6 +31,13 @@ export function parseStructure(raw: string): StructureEvent | null {
   if (!who) return null;
   const pos = parsePlayerPos(raw);
   if (!pos) return null;
+  const ruin = RUIN_RE.exec(raw);
+  if (ruin) {
+    return {
+      gamertag: who.gamertag, dayzId: who.dayzId, action: "built",
+      part: ruin[1]!, structure: null, tool: ruin[2]!.trim(), pos,
+    };
+  }
   const built = BUILT_RE.exec(raw);
   const m = built ?? DISMANTLED_RE.exec(raw);
   if (!m) return null;

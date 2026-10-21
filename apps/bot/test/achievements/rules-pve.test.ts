@@ -30,6 +30,13 @@ describe("pve rules", () => {
     expect(await rule("architect")(db, player, ctx)).toMatchObject({ count: 100, target: 500 });
   });
 
+  it("ruin repairs (structure null) are not build points", async () => {
+    for (let i = 0; i < 3; i++) await seedEvent(db, { serverId, type: "base.built", at: h(i), payload: { dayzId: A, gamertag: "Ann", part: "Wall", structure: "Fence" } });
+    for (let i = 3; i < 8; i++) await seedEvent(db, { serverId, type: "base.built", at: h(i), payload: { dayzId: A, gamertag: "Ann", part: "door1_metal", structure: null, tool: "Hammer" } });
+    expect(await rule("foundation")(db, player, ctx)).toMatchObject({ count: 1, earnedAt: h(0) });
+    expect((await rule("builder")(db, player, ctx)).count).toBe(3);
+  });
+
   it.each([
     ["wolf_bait", "wolf"], ["bear_necessities", "bear"], ["brains", "infected"], ["gravity_check", "fall"],
     ["sunday_driver", "vehicle"], ["should_have_bandaged", "bled_out"],

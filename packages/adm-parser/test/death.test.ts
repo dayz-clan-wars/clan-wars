@@ -14,6 +14,12 @@ describe("parseDeath", () => {
     expect(parseDeath(`17:44:37 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by 6-M7 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion", entity: "6" });
     expect(parseDeath(`15:19:45 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by EGD-5 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion" });
   });
+  it("a land mine logs as LandMineTrap: an explosion, not the environment", () => {
+    expect(parseDeath(`18:59:19 | Player "Vic" (DEAD) (id=${V} pos=<5574.4, 8817.2, 310.6>) killed by LandMineTrap`))
+      .toMatchObject({ kind: "died", cause: "explosion", entity: "LandMineTrap" });
+    // The word boundary still guards a name that merely contains "mine".
+    expect(parseDeath(`18:59:19 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Minefield_Sign`)).toMatchObject({ cause: "environment" });
+  });
   it("reads a PvP kill without distance (melee)", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V}) killed by Player "Kil" (id=${K}) with Knife`)).toMatchObject({ kind: "killed", weapon: "Knife", distanceM: null });
   });
@@ -56,5 +62,13 @@ describe("parseDeath", () => {
   it("a mutual kill (killer also DEAD) keeps the killer's position", () => {
     const d = parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Player "Kil" (DEAD) (id=${K} pos=<4.0, 5.0, 6.0>) with SCR 17`)!;
     expect(d).toMatchObject({ kind: "killed", killerPos: { x: 4, y: 6, z: 5 } });
+  });
+  it("killed by NO DRIVER (Motorbike…): a vehicle death with the class as entity", () => {
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<10113.2, 11865.4, 208.6>) killed by NO DRIVER (Motorbike_02_Yellow)`))
+      .toMatchObject({ kind: "died", cause: "vehicle", entity: "Motorbike_02_Yellow" });
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<1, 2, 3>) killed by NO DRIVER (Hatchback_02)`)).toMatchObject({ cause: "vehicle", entity: "Hatchback_02" });
+  });
+  it("a stated dog kill", () => {
+    expect(parseDeath(`01:06:20 | Player "Vic" (DEAD) (id=${V} pos=<1, 2, 3>) killed by Animal_CanisFamiliaris_Shepherd`)).toMatchObject({ cause: "dog" });
   });
 });

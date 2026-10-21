@@ -9,7 +9,7 @@ import { rows, tsz, iso, whenLabel, UNKNOWN_PLAYER } from "./sql.js";
 export type WeekRead = { serverId: number; from: Date; to: Date; texts: PlayerTexts };
 
 /** Deaths worth a joke. `died` (cause unknown) and `bled_out` are not. */
-const ODD_CAUSES = ["wolf", "bear", "animal", "mauled", "drowned", "fall", "dehydration", "starvation", "vehicle", "explosion"] satisfies readonly DeathCauseWord[];
+const ODD_CAUSES = ["wolf", "bear", "dog", "animal", "mauled", "drowned", "fall", "dehydration", "starvation", "vehicle", "explosion"] satisfies readonly DeathCauseWord[];
 
 /**
  * Each player's clan DURING the week, for the tag beside their name: the latest

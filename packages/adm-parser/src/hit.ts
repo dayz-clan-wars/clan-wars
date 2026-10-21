@@ -7,8 +7,10 @@ export type HitLine = {
   victimHp: number | null;
   attackerType: "player" | "infected" | "environment";
   attackerDayzId: string | null; attackerGamertag: string | null;
-  /** A non-player attacker's class name: "Infected", "FallDamageHealth", "Fence", a vehicle or animal class. */
+  /** A non-player attacker's name: "Infected", "FallDamageHealth", "Fence", a vehicle class, or an animal's whole display name ("German Shepherd"). */
   attackerLabel: string | null;
+  /** A non-player hit's mechanism, the word after ` with ` ("BarbedWireHit", "TransportHit"); null for a player hit or an animal/infected strike. */
+  cause: string | null;
   damage: number | null; bodyPart: string | null;
   /** What a player hit with, and from how far — the `with … from … meters` tail, as on a kill line. */
   weapon: string | null; distanceM: number | null;
@@ -24,7 +26,12 @@ const VICTIM_RE = new RegExp(`Player "([^"]+)" \\(id=(${ID})([^)]*)\\)\\[HP: ([\
 // and without it the line reads as `hit by Player` — an environment hit labelled "Player" (same trap as death.ts).
 const BY_PLAYER_RE = new RegExp(`^Player "([^"]+)" (?:\\(DEAD\\) )?\\(id=(${ID})([^)]*)\\)(.*)$`, "u");
 const WEAPON_RE = /with (.+?)(?: from ([\d.]+) meters)?\s*$/u;
-const BY_OTHER_RE = /^([A-Za-z0-9_]+)/u;
+// ⚠️ A driverless vehicle logs `NO DRIVER with TransportHit (Class)`; matched first, or the label reads "NO".
+const NO_DRIVER_RE = /^NO DRIVER with ([A-Za-z0-9_]+) \(([A-Za-z0-9_]+)\)/u;
+// Animals are logged by display name ("German Shepherd", "Brown Bear"), so the label runs to the first
+// ` into `, ` with `, ` (` or end of line rather than stopping at the first space.
+const BY_OTHER_RE = /^(.+?)(?= into | with | \(|$)/u;
+const CAUSE_RE = / with ([A-Za-z0-9_]+)/u;
 const INTO_RE = /into ([A-Za-z]+)(?:\(\d+\))?/u;
 const DAMAGE_RE = /for ([\d.]+) damage/u;
 
@@ -44,11 +51,13 @@ export function parseHit(raw: string): HitLine | null {
   const p = BY_PLAYER_RE.exec(rest);
   if (p) {
     const w = WEAPON_RE.exec(p[4]!);
-    return { ...base, attackerType: "player", attackerGamertag: p[1]!, attackerDayzId: p[2]!, attackerLabel: null, attackerPos: posInIdentity(p[3]!),
+    return { ...base, attackerType: "player", attackerGamertag: p[1]!, attackerDayzId: p[2]!, attackerLabel: null, cause: null, attackerPos: posInIdentity(p[3]!),
       weapon: w ? w[1]!.trim() : null, distanceM: w?.[2] ? parseFloat(w[2]) : null };
   }
-  const label = BY_OTHER_RE.exec(rest)?.[1] ?? null;
+  const nd = NO_DRIVER_RE.exec(rest);
+  const label = nd ? nd[2]! : BY_OTHER_RE.exec(rest)?.[1]?.trim() ?? null;
+  const cause = nd ? nd[1]! : CAUSE_RE.exec(rest)?.[1] ?? null;
   const attackerType = label === "Infected" ? "infected" : "environment";
   // Animals are the environment to the log; the label carries which one (the verdict's classifyEntityLabel reads it).
-  return { ...base, attackerType, attackerGamertag: null, attackerDayzId: null, attackerLabel: label, attackerPos: null, weapon: null, distanceM: null };
+  return { ...base, attackerType, attackerGamertag: null, attackerDayzId: null, attackerLabel: label, cause, attackerPos: null, weapon: null, distanceM: null };
 }

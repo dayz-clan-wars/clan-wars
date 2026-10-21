@@ -4,7 +4,7 @@ const V = "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA", K = "BBBBBBBBBBBBBBBBBBBBB
 describe("parseHit", () => {
   it("a player's hit: attacker anchored on their id, HP after, damage, body part", () => {
     expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 61.9] hit by Player "Kil" (id=${K} pos=<4.0, 5.0, 6.0>) into Torso(1) for 38.1 damage (Bullet_556x45) with M4A1 from 12.3 meters`))
-      .toEqual({ victimDayzId: V, victimGamertag: "Vic", victimHp: 61.9, attackerType: "player", attackerDayzId: K, attackerGamertag: "Kil", attackerLabel: null, damage: 38.1, bodyPart: "Torso", weapon: "M4A1", distanceM: 12.3, victimPos: { x: 1, y: 3, z: 2 }, attackerPos: { x: 4, y: 6, z: 5 } });
+      .toEqual({ victimDayzId: V, victimGamertag: "Vic", victimHp: 61.9, attackerType: "player", attackerDayzId: K, attackerGamertag: "Kil", attackerLabel: null, cause: null, damage: 38.1, bodyPart: "Torso", weapon: "M4A1", distanceM: 12.3, victimPos: { x: 1, y: 3, z: 2 }, attackerPos: { x: 4, y: 6, z: 5 } });
   });
   it("⚠️ a hit from a player who is (DEAD) themselves is still that player's hit", () => {
     expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 20.5] hit by Player "Kil" (DEAD) (id=${K} pos=<4.0, 5.0, 6.0>) into Torso(1) for 38.59 damage (Bullet_9x19) with SCR 17`))
@@ -48,5 +48,29 @@ describe("parseHit", () => {
     const h = parseHit(`10:00:00 | Player "x pos=<100.0, 93.0, 998.0>" (id=${V} pos=<5000.0, 5000.0, 300.0>)[HP: 50] hit by Player "y pos=<100.0, 93.0, 998.0>" (id=${K} pos=<5001.0, 5000.0, 300.0>) into Torso(1) for 5 damage (MeleeFist)`)!;
     expect(h.victimPos).toEqual({ x: 5000, y: 300, z: 5000 });
     expect(h.attackerPos).toEqual({ x: 5001, y: 300, z: 5000 });
+  });
+  it("multi-word animal labels are kept whole", () => {
+    expect(parseHit(`19:35:14 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 71.59] hit by German Shepherd into Head(0) for 10 damage (MeleeWolf)`))
+      .toMatchObject({ attackerType: "environment", attackerLabel: "German Shepherd", damage: 10, bodyPart: "Head" });
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 80] hit by Brown Bear into Torso(1) for 20 damage (MeleeBear)`)?.attackerLabel).toBe("Brown Bear");
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 93] hit by Doberman into Head(0) for 3.5 damage (MeleeWolf)`)?.attackerLabel).toBe("Doberman");
+    // A label that runs to the end of the line keeps no trailing space.
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 93] hit by Brown Bear `)?.attackerLabel).toBe("Brown Bear");
+  });
+  it("a vehicle with no driver: the label is the vehicle class, not 'NO'", () => {
+    expect(parseHit(`20:58:42 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 53.2977] hit by NO DRIVER with TransportHit (Motorbike_02_Yellow)`))
+      .toMatchObject({ attackerType: "environment", attackerLabel: "Motorbike_02_Yellow", cause: "TransportHit" });
+  });
+  it("a driven vehicle: the player is the attacker and the weapon carries the class", () => {
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 70] hit by Player "Kil" (id=${K} pos=<4.0, 5.0, 6.0>) with TransportHit (Motorbike_02_Red)`))
+      .toMatchObject({ attackerType: "player", attackerDayzId: K, weapon: "TransportHit (Motorbike_02_Red)" });
+  });
+  it("a non-player hit keeps its `with` tail as cause", () => {
+    expect(parseHit(`12:32:01 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 99.85] hit by Fence with BarbedWireHit`)).toMatchObject({ attackerLabel: "Fence", cause: "BarbedWireHit" });
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 90] hit by Infected into Torso(1) for 5 damage (MeleeInfected)`)).toMatchObject({ attackerLabel: "Infected", cause: null });
+  });
+  it("other existing labels are unchanged", () => {
+    for (const label of ["BearTrap", "TripwireTrap", "Fireplace", "ChickenBreastMeat", "explosion"])
+      expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 90] hit by ${label} with SomeHit`)?.attackerLabel).toBe(label);
   });
 });

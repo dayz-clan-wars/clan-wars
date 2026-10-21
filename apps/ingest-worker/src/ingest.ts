@@ -136,7 +136,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
 }
 
 /** Flatten a ParsedLine into the jsonb payload shape the projector reads. */
-function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
+export function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
   switch (line.kind) {
     case "flag":
       return {
@@ -217,6 +217,13 @@ function toPayload(line: ReturnType<typeof parseLine>[number]): unknown {
       return {
         gamertag: line.event.gamertag, dayzId: line.event.dayzId,
         item: line.event.item, itemClass: line.event.itemClass, pos: line.event.pos,
+      };
+    case "conscious":
+      return { dayzId: line.event.dayzId, gamertag: line.event.gamertag };
+    case "packed":
+      return {
+        dayzId: line.event.dayzId, gamertag: line.event.gamertag,
+        item: line.event.item, pos: line.event.pos,
       };
     default: {
       // ⚠️ Exhaustiveness guard. `toPayload` returns `unknown` and the repo does not

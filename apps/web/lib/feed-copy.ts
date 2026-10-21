@@ -34,6 +34,7 @@ export const DEATH_CAUSE: Record<string, string> = {
   animal: "to an animal",
   wolf: "to a wolf",
   bear: "to a bear",
+  dog: "to a dog",
   fall: "from a fall",
   vehicle: "under a vehicle",
   starvation: "of starvation",

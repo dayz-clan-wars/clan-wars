@@ -10,6 +10,8 @@ import { parseUnconscious, type UnconsciousLine } from "./unconscious.js";
 import { parseSession, type SessionEvent } from "./session.js";
 import { parseTeleport, type TeleportEvent } from "./teleport.js";
 import { parsePlacement, type PlacementEvent } from "./placement.js";
+import { parseConscious, type ConsciousLine } from "./conscious.js";
+import { parsePacked, type PackedEvent } from "./packed.js";
 
 export type ParsedLine =
   | { kind: "flag"; change: FlagChange }
@@ -23,7 +25,9 @@ export type ParsedLine =
   | { kind: "unconscious"; event: UnconsciousLine }
   | { kind: "session"; event: SessionEvent }
   | { kind: "teleport"; event: TeleportEvent }
-  | { kind: "placement"; event: PlacementEvent };
+  | { kind: "placement"; event: PlacementEvent }
+  | { kind: "conscious"; event: ConsciousLine }
+  | { kind: "packed"; event: PackedEvent };
 
 /**
  * Every ParsedLine a single raw line yields, in a FIXED order.
@@ -70,6 +74,14 @@ export function parseLine(raw: string): ParsedLine[] {
   const placement = parsePlacement(raw);
   if (placement) return [{ kind: "placement", event: placement }];
 
+  // ⚠️ Appended at the END: each raw line yields one ParsedLine, so no existing
+  // line's output (or subIndex) changes.
+  const conscious = parseConscious(raw);
+  if (conscious) return [{ kind: "conscious", event: conscious }];
+
+  const packed = parsePacked(raw);
+  if (packed) return [{ kind: "packed", event: packed }];
+
   return [];
 }
 
@@ -104,6 +116,10 @@ export function eventTypeFor(line: ParsedLine): EventType | null {
       return "player.teleported";
     case "placement":
       return "item.placed";
+    case "conscious":
+      return "player.conscious";
+    case "packed":
+      return "item.packed";
     case "roster":
       return null;
   }

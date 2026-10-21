@@ -6,7 +6,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "start": "tsx src/main.ts"
+    "start": "tsx src/main.ts",
+    "repayload": "tsx src/repayload-main.ts"
   },
   "dependencies": {
     "@factions/adm-parser": "workspace:*",

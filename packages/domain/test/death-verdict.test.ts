@@ -5,6 +5,15 @@ const hit = (o: Partial<RecentHit>): RecentHit => ({ attackerType: "infected", a
 const plain = { mechanism: "died", energy: 500, water: 500, bleedSources: 0 };
 
 describe("classifyEntityLabel", () => {
+  it("names dogs, and the display-name labels a hit line carries", () => {
+    expect(classifyEntityLabel("Doberman")).toBe("dog");
+    expect(classifyEntityLabel("German Shepherd")).toBe("dog");
+    expect(classifyEntityLabel("Animal_CanisFamiliaris_Doberman")).toBe("dog");
+    expect(classifyEntityLabel("Wolf")).toBe("wolf");
+    expect(classifyEntityLabel("Brown Bear")).toBe("bear");
+    expect(classifyEntityLabel("Animal_CanisLupus_White")).toBe("wolf");
+    expect(classifyEntityLabel("Saiga")).toBe(null); // a hit label that is not an Animal_ class stays unclassified
+  });
   it("names wolves and bears, groups the rest of the animals", () => {
     expect(classifyEntityLabel("Animal_CanisLupus_Grey")).toBe("wolf");
     expect(classifyEntityLabel("Animal_UrsusArctos")).toBe("bear");
@@ -90,5 +99,21 @@ describe("finishedBy: a bare death credited to the player who shot them", () => 
   it("the credit goes to the LAST player to hit them, with that hit's weapon", () => {
     const f = finishedBy([shot({ secondsBeforeDeath: 80, victimHp: 30, attackerId: "K1", weapon: "KA-74" }), shot({ secondsBeforeDeath: 20, victimHp: 4, attackerId: "K2", weapon: "SCR 17" })], []);
     expect(f).toMatchObject({ attackerId: "K2", weapon: "SCR 17" });
+  });
+});
+
+describe("classifyDeath: dogs", () => {
+  const dogHit = (s: number, hp: number): RecentHit => ({ attackerType: "environment", attackerLabel: "Doberman", victimHp: hp, secondsBeforeDeath: s });
+  const infHit = (s: number, hp: number): RecentHit => ({ attackerType: "infected", attackerLabel: "Infected", victimHp: hp, secondsBeforeDeath: s });
+  const facts = (o: Partial<typeof plain>) => ({ ...plain, ...o });
+  it("a bare died after dog bites, bleeding: dog", () => {
+    expect(classifyDeath({ mechanism: "died", water: 1000, energy: 1000, bleedSources: 2 }, [dogHit(5, 30)], [])).toBe("dog");
+  });
+  it("dog and infected both in the window: the lower-HP hit's attacker decides", () => {
+    expect(classifyDeath(facts({ bleedSources: 1 }), [dogHit(8, 40), infHit(3, 4)], [])).toBe("mauled");
+    expect(classifyDeath(facts({ bleedSources: 1 }), [dogHit(3, 4), infHit(8, 40)], [])).toBe("dog");
+  });
+  it("a dog bite with no corroboration is not a dog death", () => {
+    expect(classifyDeath(facts({ bleedSources: 0 }), [dogHit(60, 90)], [])).toBe("died");
   });
 });

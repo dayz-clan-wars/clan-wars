@@ -49,3 +49,5 @@ export {
   type PlaceBountyOutcome, type OpenBounty,
 } from "./bounty-admin";
 export { scoringKill, scoringKillAnyTeam } from "../stats";
+// The builders-board predicate, reused by the bot's achievement rules (ruin repairs earn nothing).
+export { isBaseBuild } from "../stats";

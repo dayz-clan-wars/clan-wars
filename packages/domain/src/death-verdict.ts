@@ -13,14 +13,14 @@
  */
 
 /** The parser's stated mechanisms (`DeathCause` in @factions/adm-parser) and the kills consumer's `pvp`. */
-export type StatedCause = "pvp" | "suicide" | "bled_out" | "drowned" | "environment" | "explosion" | "infected" | "animal" | "wolf" | "bear" | "fall" | "vehicle" | "died";
+export type StatedCause = "pvp" | "suicide" | "bled_out" | "drowned" | "environment" | "explosion" | "infected" | "animal" | "wolf" | "bear" | "dog" | "fall" | "vehicle" | "died";
 /** Inferred here, for a bare `died`. `finished` is a credited kill (finishedBy): the row carries a killer. */
-export type InferredCause = "starvation" | "dehydration" | "mauled" | "finished";
+export type InferredCause = "starvation" | "dehydration" | "mauled" | "dog" | "finished";
 export type DeathCauseWord = StatedCause | InferredCause;
 
 /** Every value `kills.cause` may hold. apps/web's feed copy is held to this set. */
 export const DEATH_CAUSES: ReadonlySet<string> = new Set<DeathCauseWord>([
-  "pvp", "suicide", "bled_out", "drowned", "environment", "explosion", "infected", "animal", "wolf", "bear", "fall", "vehicle", "died",
+  "pvp", "suicide", "bled_out", "drowned", "environment", "explosion", "infected", "animal", "wolf", "bear", "dog", "fall", "vehicle", "died",
   "starvation", "dehydration", "mauled", "finished",
 ]);
 
@@ -59,13 +59,15 @@ export const TERMINAL_HP_MAX = 1;
 export const FINISH_HP_MAX = 25;
 
 /** Class-name prefixes for the animals the log names as killers or hitters; first match wins. */
-const ANIMALS: readonly [RegExp, "wolf" | "bear" | "animal"][] = [
-  [/^Animal_CanisLupus/u, "wolf"],
-  [/^Animal_UrsusArctos/u, "bear"],
+const ANIMALS: readonly [RegExp, "wolf" | "bear" | "dog" | "animal"][] = [
+  // Dogs first: their hit lines carry a display name ("Doberman"), not an Animal_ class, and they bite with a wolf's MeleeWolf.
+  [/^(Animal_CanisFamiliaris|Doberman$|German Shepherd$)/u, "dog"],
+  [/^(Animal_CanisLupus|Wolf$)/u, "wolf"],
+  [/^(Animal_UrsusArctos|Brown Bear$)/u, "bear"],
   [/^Animal_/u, "animal"],
 ];
 
-export function classifyEntityLabel(label: string | null): "wolf" | "bear" | "animal" | null {
+export function classifyEntityLabel(label: string | null): "wolf" | "bear" | "dog" | "animal" | null {
   if (!label) return null;
   return ANIMALS.find(([re]) => re.test(label))?.[1] ?? null;
 }
@@ -92,15 +94,22 @@ export function classifyDeath(facts: DeathFacts, recentHits: RecentHit[], recent
   if (facts.water != null && facts.water <= DEHYDRATE_WATER_MAX) return "dehydration";
 
   // Infected deal shock, which never shows in `[HP: …]`, and their bleeds often close before the
-  // death — so an infected hit is the gate and any one of three corroborations will do.
-  // ⚠️ The terminal-HP corroboration rests on the INFECTED hits only: a player's shot or a fire
+  // death — so a hunting hit is the gate and any one of three corroborations will do. Dogs hunt the
+  // same way (a bite bleeds, the log goes quiet), so a dog's hit is hunting evidence too.
+  // ⚠️ The terminal-HP corroboration rests on the HUNTING hits only: a player's shot or a fire
   // tick that left the victim at ~0 HP must not be corroborated by an unrelated scratch elsewhere
   // in the window — that misattribution was reproduced upstream three times before this guard.
   const bleeding = facts.bleedSources != null && facts.bleedSources > 0;
-  const infectedHps = recent.filter((h) => h.attackerType === "infected").map((h) => h.victimHp).filter((n): n is number => n != null);
-  const hunted = recent.some((h) => h.attackerType === "infected");
-  const terminal = infectedHps.length > 0 && Math.min(...infectedHps) <= TERMINAL_HP_MAX; // min, not last: hits arrive with jitter
-  if (hunted && (bleeding || knockedOut || terminal)) return "mauled";
+  const hunting = recent.filter((h) => h.attackerType === "infected" || classifyEntityLabel(h.attackerLabel) === "dog");
+  const huntHps = hunting.map((h) => h.victimHp).filter((n): n is number => n != null);
+  const terminal = huntHps.length > 0 && Math.min(...huntHps) <= TERMINAL_HP_MAX; // min, not last: hits arrive with jitter
+  if (hunting.length > 0 && (bleeding || knockedOut || terminal)) {
+    // Both kinds in the window: the lowest-HP hit is the last blow (HP only falls), and its attacker is the killer.
+    // Ties on HP go to the later hit, then to the infected.
+    const last = [...hunting].sort((a, b) => (a.victimHp ?? Infinity) - (b.victimHp ?? Infinity) || a.secondsBeforeDeath - b.secondsBeforeDeath
+      || Number(b.attackerType === "infected") - Number(a.attackerType === "infected"))[0]!;
+    return last.attackerType === "infected" ? "mauled" : "dog";
+  }
 
   if (bleeding && recent.length > 0) return "bled_out";
   return "died";
