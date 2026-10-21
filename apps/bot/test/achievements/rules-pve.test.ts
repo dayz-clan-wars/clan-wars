@@ -189,4 +189,126 @@ describe("pve rules", () => {
     const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(3), cause: "vehicle", entity: "Motorbike_02_Yellow" });
     expect(await rule("wipeout")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: k.id, evidence: { vehicle: "Motorbike_02_Yellow" } });
   });
+
+  // ── Ruins (§2.7) ────────────────────────────────────────────────────────────
+
+  const repair = (at: Date, part: string, who = A) =>
+    seedEvent(db, { serverId, type: "base.built", at, payload: { dayzId: who, gamertag: "Ann", part, structure: null, tool: "Hammer" } });
+  const build = (at: Date, who = A) =>
+    seedEvent(db, { serverId, type: "base.built", at, payload: { dayzId: who, gamertag: "Ann", part: "Wall", structure: "Fence", tool: "Hammer" } });
+
+  it("squatter: the first ruin repair; a Fence build, or someone else's repair, earns no ruin tile", async () => {
+    await build(h(0)); await repair(h(1), "door1_metal", B);
+    for (const k of ["squatter", "rubble_rouser", "renovator", "fixer_upper"]) expect((await rule(k)(db, player, mk())).count).toBe(0);
+    const r = await repair(h(2), "roof1");
+    expect(await rule("squatter")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(2), evidenceId: r.id });
+  });
+
+  it("rubble_rouser: 10 rubble piles; 10 repairs that are not rubble do not earn it", async () => {
+    for (let i = 0; i < 10; i++) await repair(h(i), i % 2 ? "door2_wood" : "wall1_window_wood");
+    for (let i = 10; i < 19; i++) await repair(h(i), `rubble_rubble${i}`);
+    expect(await rule("rubble_rouser")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    const tenth = await repair(h(30), "rubble_rubble1");
+    expect(await rule("rubble_rouser")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(30), evidenceId: tenth.id });
+  });
+
+  it("renovator: 25 ruin repairs of any part, each line one repair; builds do not count", async () => {
+    for (let i = 0; i < 30; i++) await build(h(i));
+    for (let i = 0; i < 24; i++) await repair(h(40 + i), i % 3 ? "rubble_rubble1" : "ladder_rebuild");
+    expect(await rule("renovator")(db, player, mk())).toMatchObject({ count: 24, target: 25 });
+    await repair(h(70), "rubble_rubble1");
+    expect(await rule("renovator")(db, player, mk())).toMatchObject({ count: 25, earnedAt: h(70) });
+  });
+
+  it("fixer_upper: earned at the repair that completes door, window and roof; walls with windows are walls", async () => {
+    await repair(h(0), "door1_metal"); await repair(h(1), "door2_wood");
+    await repair(h(2), "wall2_window_wood"); await repair(h(3), "wall1_door_wood"); await repair(h(4), "rubble_rubble1");
+    await repair(h(5), "roof1");
+    expect(await rule("fixer_upper")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+    const w = await repair(h(6), "window4_metal");
+    await repair(h(7), "window1_wood");
+    expect(await rule("fixer_upper")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(6), evidenceId: w.id });
+  });
+
+  // ── Traps and explosives (§2.8) ─────────────────────────────────────────────
+
+  it.each([["snapped", "BearTrap"], ["tripped", "TripwireTrap"]])("%s: hit by a %s", async (key, label) => {
+    await seedHit(db, { serverId, at: sec(0), victim: B, attackerLabel: label });
+    await seedHit(db, { serverId, at: sec(1), victim: A, attackerLabel: "Fence", cause: "BarbedWireHit" });
+    expect((await rule(key)(db, player, mk())).count).toBe(0);
+    const hit = await seedHit(db, { serverId, at: sec(5), victim: A, attackerLabel: label });
+    expect(await rule(key)(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(5), evidenceId: hit.id });
+  });
+
+  it("snagged: a BarbedWireHit from a fence, watchtower or gate; a bear trap or a dog is not", async () => {
+    await seedHit(db, { serverId, at: sec(0), victim: A, attackerLabel: "BearTrap" });
+    await seedHit(db, { serverId, at: sec(1), victim: A, attackerLabel: "Doberman" });
+    await seedHit(db, { serverId, at: sec(2), victim: B, attackerLabel: "Fence", cause: "BarbedWireHit" });
+    expect((await rule("snagged")(db, player, mk())).count).toBe(0);
+    const hit = await seedHit(db, { serverId, at: sec(3), victim: A, attackerLabel: "Watchtower", cause: "BarbedWireHit" });
+    expect(await rule("snagged")(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(3), evidenceId: hit.id });
+  });
+
+  it("minesweeper: a no-killer death whose entity is a land mine or claymore; a grenade, or a credited kill, is not", async () => {
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(0), cause: "explosion", entity: "M67Grenade" });
+    await seedKill(db, { serverId, killer: B, victim: A, at: h(1), cause: "explosion", entity: "LandMineTrap" });
+    await seedKill(db, { serverId, killer: null, victim: B, at: h(2), cause: "explosion", entity: "Claymore" });
+    expect(await rule("minesweeper")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+    // ⚠️ `killed by LandMineTrap` is filed "environment", not "explosion" (EXPLOSION_RE's `mine\b`
+    // cannot match inside "MineTrap"), so the rule must read the entity, never the cause.
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(3), cause: "environment", entity: "LandMineTrap" });
+    expect(await rule("minesweeper")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: k.id, evidence: { entity: "LandMineTrap" } });
+  });
+
+  it("minesweeper: a claymore death counts too", async () => {
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(3), cause: "explosion", entity: "Claymore" });
+    expect(await rule("minesweeper")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: k.id, evidence: { entity: "Claymore" } });
+  });
+
+  it("frag_out: a no-killer explosion death by a grenade entity; a mine, plastic or a credited kill is not", async () => {
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(0), cause: "explosion", entity: "LandMineTrap" });
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(1), cause: "explosion", entity: "Plastic" });
+    await seedKill(db, { serverId, killer: B, victim: A, at: h(2), cause: "explosion", entity: "RGD" });
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(3), cause: "environment", entity: null });   // not an explosion
+    expect(await rule("frag_out")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(4), cause: "explosion", entity: "6" });   // "6-M7 Frag Grenade", cut at the hyphen
+    expect(await rule("frag_out")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(4), evidenceId: k.id });
+  });
+
+  it("frag_out: an M79 death with the thrower lost (`killed by  with 40mm …`, null entity) counts", async () => {
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(1), cause: "explosion", entity: null });
+    expect(await rule("frag_out")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(1), evidenceId: k.id });
+    expect((await rule("minesweeper")(db, player, mk())).count).toBe(0);
+  });
+
+  // ── Camp (§2.9) ─────────────────────────────────────────────────────────────
+
+  const placed = (at: Date, item: string, who = A) =>
+    seedEvent(db, { serverId, type: "item.placed", at, payload: { dayzId: who, gamertag: "Ann", item, itemClass: item.replace(/ /gu, ""), pos: { x: 1, y: 2, z: 3 } } });
+  const packed = (at: Date, item: string, who = A) =>
+    seedEvent(db, { serverId, type: "item.packed", at, payload: { dayzId: who, gamertag: "Ann", item, pos: { x: 1, y: 2, z: 3 } } });
+
+  it("barrel_hoarder: 10 barrels placed; other items and other players do not count", async () => {
+    await placed(h(0), "Sea Chest"); await placed(h(1), "Barrel", B); await placed(h(2), "Wooden Crate");
+    for (let i = 0; i < 9; i++) await placed(h(10 + i), "Barrel");
+    expect(await rule("barrel_hoarder")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    const tenth = await placed(h(30), "Barrel");
+    expect(await rule("barrel_hoarder")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(30), evidenceId: tenth.id });
+  });
+
+  it("pack_up: 10 tents packed, any kind in TENTS; a packed non-tent, or a placed tent, does not count", async () => {
+    await packed(h(0), "Garden Plot"); await placed(h(1), "Large Tent"); await packed(h(2), "Large Tent", B);
+    const kinds = ["Large Tent", "Car Tent", "Medium Tent", "Improvised Shelter", "Tarp Shelter", "Party Tent", "Canopy Tent"];
+    for (let i = 0; i < 9; i++) await packed(h(10 + i), kinds[i % kinds.length]!);
+    expect(await rule("pack_up")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    const tenth = await packed(h(30), "Medium Tent");
+    expect(await rule("pack_up")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(30), evidenceId: tenth.id });
+  });
+
+  it.each([["sea_legs", "Sea Chest"], ["minefield", "Land Mine"]])("%s: place a %s", async (key, item) => {
+    await placed(h(0), "Barrel"); await placed(h(1), item, B); await packed(h(2), item);
+    expect((await rule(key)(db, player, mk())).count).toBe(0);
+    const e = await placed(h(3), item);
+    expect(await rule(key)(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: e.id });
+  });
 });

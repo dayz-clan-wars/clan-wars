@@ -40,8 +40,8 @@ describe("achievementsTick", () => {
     // ⚠️ A linked player's ownerName is their DISCORD ID, not their gamertag: notice-text's
     // `person()` turns an all-digit value into a mention, and a mention is the point.
     expect(notices[0]!.payload).toMatchObject({ key: "sniper", name: "Sniper", ownerKind: "player", ownerName: "111111111111111111", clanTag: "BEAR" });
-    // progress cached for every earnable key of the owner's kind (38 less the three retired, plus the 59 armory tiles and 11 melee, dog and motorbike tiles)
-    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, A))).length).toBe(105);
+    // progress cached for every earnable key of the owner's kind (38 less the three retired, plus the 59 armory tiles, 11 melee, dog and motorbike tiles and 13 ruin, trap and camp tiles)
+    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, A))).length).toBe(118);
     // second pass: nothing new touched, nothing evaluated, nothing duplicated
     const again = await achievementsTick(db, { now: m(11), achievementsChannelId: CH });
     expect(again).toMatchObject({ evaluated: 0, unlocked: 0 });
@@ -98,7 +98,7 @@ describe("achievementsTick", () => {
     // B — collected in the same pass, after A in key order — was evaluated and committed anyway.
     const bUnlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, B));
     expect(bUnlocks.map((u) => u.key)).toContain("enlisted");
-    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, B))).length).toBe(105);
+    expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, B))).length).toBe(118);
 
     // And the engine is not stuck on A: the drain finished, so the watermarks advanced and the
     // resume marker was cleared. The next pass — rules restored — finds nothing left to do.
@@ -128,7 +128,7 @@ describe("achievementsTick", () => {
     // Every one of the ten players the kills touched has a cached progress row.
     for (let i = 0; i < 5; i++) {
       for (const id of [`${i}`.padStart(36, "K"), `${i}`.padStart(36, "V")]) {
-        expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(105);
+        expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(118);
       }
     }
   });
@@ -154,7 +154,7 @@ describe("achievementsTick", () => {
     const r = await achievementsTick(db, { now: m(10), everyone: true, announce: false, batch: 3 });
     expect(r.evaluated).toBeGreaterThanOrEqual(8);   // 7 players + the clan + A
     for (const id of ids) {
-      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(105);
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(118);
       const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, id));
       expect(unlocks.map((u) => u.key)).toContain("enlisted");
     }
@@ -223,7 +223,7 @@ describe("achievementsTick", () => {
       if (r.evaluated === 0) break;
     }
     for (const id of early) {
-      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(105);
+      expect((await db.select().from(achievementProgress).where(eq(achievementProgress.ownerId, id))).length).toBe(118);
     }
     expect(await readResume(db)).toBeNull();   // the drain finished and cleaned up after itself
   });

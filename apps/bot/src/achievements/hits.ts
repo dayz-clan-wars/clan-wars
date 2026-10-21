@@ -6,6 +6,8 @@ import type { Hit, Rule, RuleCtx } from "./types.js";
 export type HitRow = {
   id: number; at: Date; serverId: number;
   attackerLabel: string | null; attackerType: string | null; weapon: string | null; victimDayzId: string;
+  /** A non-player hit's mechanism, the word after ` with ` ("BarbedWireHit"); null for a player hit or an animal. */
+  cause: string | null;
 };
 export type HitSide = "victim" | "attacker";
 
@@ -29,7 +31,7 @@ export const ownHits = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string, s
       .orderBy(asc(events.occurredAt), asc(events.id));
     return rows.map((r) => {
       const p = r.payload as Record<string, unknown>;
-      return { id: r.id, at: r.at, serverId: r.serverId, attackerLabel: str(p.attackerLabel), attackerType: str(p.attackerType), weapon: str(p.weapon), victimDayzId: str(p.victimDayzId) ?? "" };
+      return { id: r.id, at: r.at, serverId: r.serverId, attackerLabel: str(p.attackerLabel), attackerType: str(p.attackerType), weapon: str(p.weapon), victimDayzId: str(p.victimDayzId) ?? "", cause: str(p.cause) };
     });
   });
 

@@ -10,6 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Waking up from unconsciousness and packing a tent are now recorded.
 - 59 new achievements: one for a PvP kill with each of the 52 firearms on Nasdara, one for every gun in each class, and Full Armory for all 52.
 - 11 new achievements up close: knife, fist and sledgehammer kills, kills with 5 different melee weapons, three for dogs (killed by one, surviving one, 10 bites), and four for motorbikes (hurt by one, killed by one, hitting a player with one, a kill with one).
+- 13 new achievements for ruins, traps and camp: repairing ruined buildings (a first repair, 10 rubble piles, 25 repairs, and a door, a window and a roof), stepping in a bear trap, setting off a tripwire, getting caught in barbed wire, dying to a mine or a grenade, placing 10 barrels, a sea chest or a land mine, and packing 10 tents.
 
 ### Changed
 

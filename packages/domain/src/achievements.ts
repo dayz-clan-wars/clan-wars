@@ -75,6 +75,22 @@ export const ACHIEVEMENTS = [
   def("chew_toy", "Chew Toy", "Take 10 dog bites", "pve", 10),
   def("road_rash", "Road Rash", "Get hurt by a motorbike", "pve"),
   def("wipeout", "Wipeout", "Get killed by a motorbike", "pve"),
+  // PvE — ruins (§2.7): repairs of Nasdara's ruined buildings, never build points
+  def("squatter", "Squatter", "Repair a ruined building", "pve"),
+  def("rubble_rouser", "Rubble Rouser", "Clear 10 rubble piles", "pve", 10),
+  def("renovator", "Renovator", "Make 25 ruin repairs", "pve", 25),
+  def("fixer_upper", "Fixer-Upper", "Repair a door, a window and a roof", "pve"),
+  // PvE — traps and explosives (§2.8)
+  def("snapped", "Snapped", "Step in a bear trap", "pve"),
+  def("tripped", "Tripped", "Set off a tripwire", "pve"),
+  def("snagged", "Snagged", "Get caught in barbed wire", "pve"),
+  def("minesweeper", "Minesweeper", "Get killed by a mine or claymore", "pve"),
+  def("frag_out", "Frag Out", "Get killed by a grenade", "pve"),
+  // PvE — camp (§2.9)
+  def("barrel_hoarder", "Hoarder", "Place 10 barrels", "pve", 10),
+  def("pack_up", "Pack Up", "Pack 10 tents", "pve", 10),
+  def("sea_legs", "Sea Legs", "Place a sea chest", "pve"),
+  def("minefield", "Minefield", "Place a land mine", "pve"),
   // PvP — kills, streaks, and flags taken by hand
   def("first_blood", "First Blood", "Your first PvP kill", "pvp"),
   def("ten_down", "Ten Down", "Get 10 PvP kills", "pvp", 10),

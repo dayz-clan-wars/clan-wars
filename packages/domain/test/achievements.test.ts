@@ -3,25 +3,25 @@ import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEM
 import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
 
 describe("the achievement definitions", () => {
-  it("are exactly 120, keyed uniquely in snake_case", () => {
-    expect(ACHIEVEMENTS).toHaveLength(120);
+  it("are exactly 133, keyed uniquely in snake_case", () => {
+    expect(ACHIEVEMENTS).toHaveLength(133);
     const keys = ACHIEVEMENTS.map((a) => a.key);
-    expect(new Set(keys).size).toBe(120);
+    expect(new Set(keys).size).toBe(133);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
   });
 
-  it("117 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
-    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(117);
+  it("130 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(130);
     for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain(k);
     expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer", "wolf_bait", "bear_necessities"]);
     expect(ACHIEVEMENT_BY_KEY.wanderer.name).toBe("Wanderer");
     expect([ACHIEVEMENT_BY_KEY.wolf_bait.name, ACHIEVEMENT_BY_KEY.bear_necessities.name]).toEqual(["Wolf Bait", "Bear Necessities"]);
   });
 
-  it("split 11 solo, 17 pve, 80 pvp, 12 team; team is clan-owned and nothing else is", () => {
+  it("split 11 solo, 30 pve, 80 pvp, 12 team; team is clan-owned and nothing else is", () => {
     const by = (g: string) => ACHIEVEMENTS.filter((a) => a.group === g);
-    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([11, 17, 80, 12]);
+    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([11, 30, 80, 12]);
     for (const a of ACHIEVEMENTS) expect(a.owner).toBe(a.group === "team" ? "clan" : "player");
     expect(ACHIEVEMENT_GROUPS).toEqual(["solo", "pve", "pvp", "team"]);
   });
@@ -64,7 +64,7 @@ describe("the achievement definitions", () => {
     // One statement of a class's size: the target is the catalogue's count, never a typed number.
     FIREARM_CLASSES.forEach((c, i) => expect(classes[i]!.target).toBe(FIREARMS.filter((f) => f.class === c).length));
     expect(ACHIEVEMENT_BY_KEY.full_armory).toMatchObject({ name: "Full Armory", description: "A PvP kill with every firearm on Nasdara", target: 52 });
-    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(61);
+    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(74);
   });
 
   it("melee, dogs and motorbikes: the eleven tiles as agreed", () => {
@@ -81,6 +81,25 @@ describe("the achievement definitions", () => {
       ["wipeout", "Wipeout", "Get killed by a motorbike", "pve", 1],
       ["hit_and_run", "Hit and Run", "Hit a player with a motorbike", "pvp", 1],
       ["roadkill", "Roadkill", "A PvP kill with a motorbike", "pvp", 1],
+    ]);
+  });
+
+  it("ruins, traps and explosives, camp: the thirteen tiles as agreed", () => {
+    const row = (k: string) => { const a = ACHIEVEMENT_BY_KEY[k as keyof typeof ACHIEVEMENT_BY_KEY]; return [a.key, a.name, a.description, a.group, a.target]; };
+    expect(["squatter", "rubble_rouser", "renovator", "fixer_upper", "snapped", "tripped", "snagged", "minesweeper", "frag_out", "barrel_hoarder", "pack_up", "sea_legs", "minefield"].map(row)).toEqual([
+      ["squatter", "Squatter", "Repair a ruined building", "pve", 1],
+      ["rubble_rouser", "Rubble Rouser", "Clear 10 rubble piles", "pve", 10],
+      ["renovator", "Renovator", "Make 25 ruin repairs", "pve", 25],
+      ["fixer_upper", "Fixer-Upper", "Repair a door, a window and a roof", "pve", 1],
+      ["snapped", "Snapped", "Step in a bear trap", "pve", 1],
+      ["tripped", "Tripped", "Set off a tripwire", "pve", 1],
+      ["snagged", "Snagged", "Get caught in barbed wire", "pve", 1],
+      ["minesweeper", "Minesweeper", "Get killed by a mine or claymore", "pve", 1],
+      ["frag_out", "Frag Out", "Get killed by a grenade", "pve", 1],
+      ["barrel_hoarder", "Hoarder", "Place 10 barrels", "pve", 10],
+      ["pack_up", "Pack Up", "Pack 10 tents", "pve", 10],
+      ["sea_legs", "Sea Legs", "Place a sea chest", "pve", 1],
+      ["minefield", "Minefield", "Place a land mine", "pve", 1],
     ]);
   });
 });

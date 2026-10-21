@@ -1,9 +1,12 @@
-import { ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, isDogLabel, isMotorbikeClass, type AchievementKey, type EarnableKey } from "@factions/domain";
+import {
+  ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, GRENADE_ENTITY_RE, MINE_ENTITIES, RUIN_KIND, TENTS, isDogLabel, isMotorbikeClass,
+  type AchievementKey, type EarnableKey, type RuinKind,
+} from "@factions/domain";
 import { events, kills, playerSessions } from "@factions/db";
-import { isBaseBuild } from "@factions/roster/internal";
-import { and, asc, eq, isNull, isNotNull, sql } from "drizzle-orm";
-import { incidents, ownHits } from "./hits.js";
-import { nth, oneShot, type Rule } from "./types.js";
+import { isBaseBuild, isRuinRepair } from "@factions/roster/internal";
+import { and, asc, eq, inArray, isNull, isNotNull, sql } from "drizzle-orm";
+import { incidents, ownHits, type HitRow } from "./hits.js";
+import { nth, oneShot, type Hit, type Rule } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
 const HOUR = 3_600_000;
@@ -30,6 +33,45 @@ const deathBy = (cause: string): Rule => async (db, owner) => {
     .orderBy(asc(kills.occurredAt), asc(kills.id)).limit(1);
   return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { cause } } : undefined);
 };
+
+/**
+ * The owner's deaths with no killer, each with its death EVENT's `entity` (what the log says killed
+ * them: `Motorbike_02_Yellow`, `LandMineTrap`, `M67Grenade`), in time order. The entity is not on
+ * the kill row, so it is read through `kills.event_id`.
+ *
+ * ⚠️ `killer_dayz_id IS NULL` as in deathBy: a death a player is credited with is theirs, never
+ * the bike's, the mine's or the grenade's.
+ */
+const noKillerDeaths = async (db: Parameters<Rule>[0], dayzId: string, cause?: string) =>
+  db.select({ id: kills.id, at: kills.occurredAt, serverId: kills.serverId, cause: kills.cause, entity: sql<string | null>`${events.payload}->>'entity'` })
+    .from(kills).innerJoin(events, eq(events.id, kills.eventId))
+    .where(and(eq(kills.victimDayzId, dayzId), isNull(kills.killerDayzId), cause === undefined ? undefined : eq(kills.cause, cause)))
+    .orderBy(asc(kills.occurredAt), asc(kills.id));
+
+/** Ruin repairs: every `base.built` line with no structure is one (spec §2.7), memoised for the four ruin rules. */
+const ruinRepairs = (db: Parameters<Rule>[0], ctx: Parameters<Rule>[2], dayzId: string) =>
+  ctx.memo(`ruins:${dayzId}`, async () => {
+    const rows = await db.select({ id: events.id, at: events.occurredAt, serverId: events.serverId, part: sql<string | null>`${events.payload}->>'part'` }).from(events)
+      .where(and(eq(events.type, "base.built"), sql`${events.payload}->>'dayzId' = ${dayzId}`, isRuinRepair))
+      .orderBy(asc(events.occurredAt), asc(events.id));
+    return rows.map((r) => ({ id: r.id, at: r.at, serverId: r.serverId, kind: r.part ? RUIN_KIND(r.part) : null }));
+  });
+
+/** A trap or wire hit the owner took: the first one matching. */
+const hitBy = (match: (h: HitRow) => boolean, evidence: (h: HitRow) => Hit["evidence"]): Rule =>
+  async (db, owner, ctx) => {
+    const h = (await ownHits(db, ctx, owner.id, "victim")).find((r) => r.attackerType !== "player" && match(r));
+    return oneShot(h ? { at: h.at, id: h.id, serverId: h.serverId, evidence: evidence(h) } : undefined);
+  };
+
+/** Items the owner placed (`item.placed`) or packed (`item.packed`), by display name. */
+const ownItems = (db: Parameters<Rule>[0], type: "item.placed" | "item.packed", dayzId: string, items: readonly string[]) =>
+  ownEvents(db, type, dayzId, inArray(sql<string>`${events.payload}->>'item'`, [...items]));
+const items = (key: AchievementKey, type: "item.placed" | "item.packed", names: readonly string[]): Rule =>
+  async (db, owner) => nth(await ownItems(db, type, owner.id, names), T(key), (r) => ({ count: r.length }));
+
+const MINE_SET = new Set<string>(MINE_ENTITIES);
+const FIXER_KINDS: readonly RuinKind[] = ["door", "window", "roof"];
 
 /** Dog bites the owner took, every line (Chew Toy counts lines, not attacks: spec §2.5). */
 const dogBites = async (db: Parameters<Rule>[0], ctx: Parameters<Rule>[2], dayzId: string) =>
@@ -85,13 +127,57 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
     // The bike's class is on the death EVENT (`killed by NO DRIVER (Motorbike_02_Yellow)` → entity),
     // not on the kill row, whose cause is the plain "vehicle" every car death also gets.
     // Filtered here, not in SQL, so `isMotorbikeClass` stays the one statement of "a motorbike".
-    const rows = await db.select({ id: kills.id, at: kills.occurredAt, serverId: kills.serverId, entity: sql<string | null>`${events.payload}->>'entity'` })
-      .from(kills).innerJoin(events, eq(events.id, kills.eventId))
-      .where(and(eq(kills.victimDayzId, owner.id), isNull(kills.killerDayzId), eq(kills.cause, "vehicle")))
-      .orderBy(asc(kills.occurredAt), asc(kills.id));
-    const k = rows.find((r) => isMotorbikeClass(r.entity));
+    const k = (await noKillerDeaths(db, owner.id, "vehicle")).find((r) => isMotorbikeClass(r.entity));
     return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { vehicle: k.entity } } : undefined);
   },
+
+  // ── Ruins (spec 2026-10-20-achievements-150 §2.7) ─────────────────────────
+  // ⚠️ `isRuinRepair`, the complement of the build-point rule's `isBaseBuild`: a Fence build is
+  // never a ruin repair, and a ruin repair is never a build point.
+  squatter: async (db, owner, ctx) => nth(await ruinRepairs(db, ctx, owner.id), T("squatter"), (r) => ({ repairs: r.length })),
+  renovator: async (db, owner, ctx) => nth(await ruinRepairs(db, ctx, owner.id), T("renovator"), (r) => ({ repairs: r.length })),
+  rubble_rouser: async (db, owner, ctx) =>
+    nth((await ruinRepairs(db, ctx, owner.id)).filter((r) => r.kind === "rubble"), T("rubble_rouser"), (r) => ({ rubble: r.length })),
+
+  /** Earned at the repair that completes {door, window, roof}, on any buildings: the log names no building. */
+  fixer_upper: async (db, owner, ctx) => {
+    const seen = new Set<RuinKind>();
+    for (const r of await ruinRepairs(db, ctx, owner.id)) {
+      if (!r.kind || !FIXER_KINDS.includes(r.kind)) continue;
+      seen.add(r.kind);
+      if (seen.size === FIXER_KINDS.length) return oneShot({ at: r.at, id: r.id, serverId: r.serverId, evidence: { parts: FIXER_KINDS.join(",") } });
+    }
+    return { count: 0, target: 1 };
+  },
+
+  // ── Traps and explosives (§2.8) ────────────────────────────────────────────
+  snapped: hitBy((h) => h.attackerLabel === "BearTrap", (h) => ({ trap: h.attackerLabel })),
+  tripped: hitBy((h) => h.attackerLabel === "TripwireTrap", (h) => ({ trap: h.attackerLabel })),
+  // The wire is the mechanism, not the label: barbed wire hangs on a Fence, Watchtower or Gate.
+  snagged: hitBy((h) => h.cause === "BarbedWireHit", (h) => ({ on: h.attackerLabel })),
+
+  minesweeper: async (db, owner) => {
+    // ⚠️ Read the entity, never the cause: `killed by LandMineTrap` is filed "environment" (the
+    // parser's `mine\b` cannot match inside "MineTrap"), only a Claymore is filed "explosion".
+    const k = (await noKillerDeaths(db, owner.id)).find((r) => r.entity != null && MINE_SET.has(r.entity));
+    return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { entity: k.entity } } : undefined);
+  },
+
+  frag_out: async (db, owner) => {
+    // A grenade's entity is its display name cut at the first hyphen or space ("6", "RGD") or its
+    // classname ("M67Grenade"); GRENADE_ENTITY_RE is the one statement of that. An M79 death prints
+    // `killed by  with 40mm Explosive Grenade` and stores no entity, the thrower lost: it counts too.
+    // ⚠️ The null-entity arm needs cause "explosion": every bare `died.` also stores a null entity.
+    const k = (await noKillerDeaths(db, owner.id)).find((r) =>
+      r.entity != null ? GRENADE_ENTITY_RE.test(r.entity) : r.cause === "explosion");
+    return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { entity: k.entity } } : undefined);
+  },
+
+  // ── Camp (§2.9) ────────────────────────────────────────────────────────────
+  barrel_hoarder: items("barrel_hoarder", "item.placed", ["Barrel"]),
+  pack_up: items("pack_up", "item.packed", TENTS),
+  sea_legs: items("sea_legs", "item.placed", ["Sea Chest"]),
+  minefield: items("minefield", "item.placed", ["Land Mine"]),
 
   lights_out: async (db, owner) =>
     nth(await ownEvents(db, "player.unconscious", owner.id, sql`coalesce((${events.payload}->>'disconnecting')::boolean, false) = false`), T("lights_out")),
