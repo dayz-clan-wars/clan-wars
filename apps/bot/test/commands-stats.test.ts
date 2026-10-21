@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { REFERRERS_WEEK_NOTE } from "@factions/copy";
+import { EARNABLE_ACHIEVEMENTS } from "@factions/domain";
 import type { AchievementTile, AchievementWall, BoardPage, PlayerProfile, StatScope } from "@factions/roster";
 import { achievementsGroup, boardGroup, playerGroup } from "../src/commands/stats.js";
 import { ctxWith, input, sourceOf, specOf } from "./command-fakes.js";
@@ -173,6 +174,34 @@ describe("/achievements", () => {
     expect(j.title).toContain("1 earned");
     expect(JSON.stringify(j.fields)).toContain("First Blood");
     expect(JSON.stringify(j.fields)).toContain("Veteran — 40/100 hours");
+  });
+
+  /**
+   * ⚠️ 150 tiles, every one earned: the card must still be accepted by Discord (25 fields,
+   * 6000 characters), and the 59 armory tiles are one count, not 59 lines of gun names.
+   */
+  it("fits a full 150-tile wall, the armory summarised as a count", async () => {
+    const at = new Date("2026-10-01T00:00:00Z");
+    const tiles = EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "player").map((a) => tile({ key: a.key, name: a.name, group: a.group, target: a.target, earnedAt: a.key === "gun_akm" ? null : at, count: a.target }));
+    const ctx = ctxWith({ achievementsFor: async () => wall({ tiles, closest: [] }) });
+    const reply = await specOf(achievementsGroup, "achievements").handler(ctx, input({ gamertag: "Ada" }));
+    const j = reply.embeds![0]!.toJSON();
+    const fields = j.fields ?? [];
+    expect(fields.length).toBeLessThanOrEqual(25);
+    const total = (j.title?.length ?? 0) + (j.description?.length ?? 0) + fields.reduce((n, f) => n + f.name.length + f.value.length, 0);
+    expect(total).toBeLessThanOrEqual(6000);
+    expect(fields.find((f) => f.name === "Armory")?.value).toBe("58 of 59");
+    const listed = JSON.stringify(fields.filter((f) => f.name !== "Armory"));
+    expect(listed).not.toContain("Mosin 91/30");
+    expect(listed).not.toContain("Full Armory");
+    expect(listed).toContain("First Blood");
+    expect(listed).not.toContain("more — see the site");   // the 91 others fit without truncating
+  });
+
+  it("names no armory field for a wall without armory tiles", async () => {
+    const ctx = ctxWith({ achievementsFor: async () => wall() });
+    const reply = await specOf(achievementsGroup, "achievements").handler(ctx, input({ gamertag: "Ada" }));
+    expect((reply.embeds![0]!.toJSON().fields ?? []).map((f) => f.name)).not.toContain("Armory");
   });
 
   it("reads a clan's wall when clan: is given", async () => {

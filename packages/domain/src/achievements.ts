@@ -182,3 +182,29 @@ export type EarnableKey = EarnableAchievement["key"];
  * on the full list, and a holder's wall would lose the tile.
  */
 export const EARNABLE_ACHIEVEMENTS = ACHIEVEMENTS.filter((a): a is EarnableAchievement => !isRetired(a));
+
+/** A tile in the wall's Armory section: the 59 gun, class and Full Armory tiles. */
+export const isArmory = (a: Achievement): boolean => "section" in a && a.section === "armory";
+export const ARMORY_KEYS = ACHIEVEMENTS.filter(isArmory).map((a) => a.key) as readonly AchievementKey[];
+
+/**
+ * The fifty keys the launch shipped (2026-09-12), as they were then. A literal on
+ * purpose: it is a record of what existed, not something to derive, and the October
+ * release is defined against it.
+ */
+const LAUNCH_KEYS: ReadonlySet<string> = new Set([
+  "enlisted", "squad_up", "founder", "loyalist", "long_haul", "veteran", "regular", "wanderer", "explorer", "showman",
+  "cartographer", "foundation", "builder", "architect", "ironman", "wolf_bait", "bear_necessities", "brains", "gravity_check", "sunday_driver",
+  "lights_out", "should_have_bandaged", "nine_lives", "first_blood", "ten_down", "centurion", "marksman", "sniper", "point_blank", "arsenal",
+  "hat_trick", "killing_spree", "unstoppable", "nemesis", "payback", "flag_thief", "home_defender", "blue_on_blue", "colors_raised", "full_strength",
+  "first_raid", "warpath", "giant_killer", "wide_net", "fortress", "podium", "alpha", "dynasty", "untouched", "champions",
+]);
+
+/**
+ * The 103 tiles the October 2026 release added (spec 2026-10-20-achievements-150): every
+ * earnable key the launch did not have. The summary DM counts a player's unlocks among
+ * these. ⚠️ Derived, not listed, so it cannot miss a tile — but that also means a tile
+ * added AFTER this release would join it; freeze it into a literal before the next
+ * release adds any (the test pins its length at 103 to catch exactly that).
+ */
+export const ACHIEVEMENTS_2026_10: readonly AchievementKey[] = EARNABLE_ACHIEVEMENTS.map((a) => a.key).filter((k) => !LAUNCH_KEYS.has(k));

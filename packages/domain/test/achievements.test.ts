@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
-import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, ACHIEVEMENT_KEYS, CLASS_TILE_KEYS, EARNABLE_ACHIEVEMENTS, isRetired } from "../src/achievements";
+import { ACHIEVEMENTS, ACHIEVEMENTS_2026_10, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, ACHIEVEMENT_KEYS, ARMORY_KEYS, CLASS_TILE_KEYS, EARNABLE_ACHIEVEMENTS, isArmory, isRetired } from "../src/achievements";
+import { guideNumber } from "../src/guide-numbers";
 import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
 import { EMOTES } from "../src/achievement-evidence";
 
@@ -141,5 +142,42 @@ describe("the achievement definitions", () => {
     // Full Repertoire's target is the list's length, never a typed 36: an emote added there moves it.
     expect(ACHIEVEMENT_BY_KEY.full_repertoire.target).toBe(36);
     expect(ACHIEVEMENTS.map((a) => a.key)).not.toContain("tenderized");
+  });
+});
+
+/**
+ * The October 2026 release (spec 2026-10-20-achievements-150): the keys the summary DM
+ * counts. Every earnable key the launch's fifty did not have.
+ */
+describe("ACHIEVEMENTS_2026_10", () => {
+  it("is the 103 tiles new in this release: hipster in, tenderized never, no launch tile, no retired one", () => {
+    expect(ACHIEVEMENTS_2026_10).toHaveLength(103);
+    expect(new Set(ACHIEVEMENTS_2026_10).size).toBe(103);
+    expect(ACHIEVEMENTS_2026_10).toContain("hipster");
+    expect(ACHIEVEMENTS_2026_10).toContain("full_armory");
+    expect(ACHIEVEMENTS_2026_10).toContain("clan_warband");
+    expect(ACHIEVEMENTS_2026_10).not.toContain("tenderized" as never);
+    for (const k of ["first_blood", "sniper", "champions", "enlisted", "wanderer", "wolf_bait", "bear_necessities"]) expect(ACHIEVEMENTS_2026_10).not.toContain(k);
+    const earnable = new Set(EARNABLE_ACHIEVEMENTS.map((a) => a.key));
+    for (const k of ACHIEVEMENTS_2026_10) expect(earnable.has(k as never), k).toBe(true);
+  });
+});
+
+describe("the armory section", () => {
+  it("isArmory marks exactly the 59 gun, class and Full Armory tiles", () => {
+    expect(ARMORY_KEYS).toHaveLength(59);
+    expect(ARMORY_KEYS).toContain("full_armory");
+    expect(ARMORY_KEYS).toContain("class_snipers");
+    expect(isArmory(ACHIEVEMENT_BY_KEY.full_armory)).toBe(true);
+    expect(isArmory(ACHIEVEMENT_BY_KEY.arsenal)).toBe(false);
+    expect(isArmory(ACHIEVEMENT_BY_KEY.clan_armory)).toBe(false);   // the clan tile lives on the clan's wall, not in the section
+  });
+});
+
+describe("the guide's achievement counts", () => {
+  it("come from the catalogue, never a typed number", () => {
+    expect(guideNumber("ACHIEVEMENTS_EARNABLE", "n")).toBe(String(EARNABLE_ACHIEVEMENTS.length));
+    expect(guideNumber("ACHIEVEMENTS_EARNABLE", "n")).toBe("150");
+    expect(guideNumber("ACHIEVEMENTS_CLAN", "n")).toBe("16");
   });
 });

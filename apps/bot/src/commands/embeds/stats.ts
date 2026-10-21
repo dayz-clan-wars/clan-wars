@@ -1,6 +1,7 @@
 import { EmbedBuilder } from "discord.js";
 import type { AchievementWall, BoardPage, PlayerProfile } from "@factions/roster";
-import { ACHIEVEMENT_CLOSEST, BOARD_LABELS, EMPTY_BOARD, boardHeading, playTime, scopeLabel } from "@factions/copy";
+import { ACHIEVEMENT_BY_KEY, ARMORY_KEYS, isArmory } from "@factions/domain";
+import { ACHIEVEMENT_CLOSEST, ARMORY_LABEL, armoryCount, BOARD_LABELS, EMPTY_BOARD, boardHeading, playTime, scopeLabel } from "@factions/copy";
 import { budget } from "./budget.js";
 import { clanLink, playerLink } from "../../site-links.js";
 
@@ -96,9 +97,15 @@ export function achievementsEmbed(wall: AchievementWall, subject: string, url: s
   const embed = new EmbedBuilder().setColor(GOLD).setTitle(title).setURL(url);
   const b = budget(title.length);
 
-  const earned = wall.tiles.filter((t) => t.earnedAt !== null).map((t) => `• ${t.name}`);
+  // ⚠️ The 59 armory tiles are one count, not 59 lines: listed by name, a full wall's
+  // gun tiles alone would spend most of the card's 6000 characters and push everything
+  // else under "+N more". The site's wall folds them the same way.
+  const armory = wall.tiles.filter((t) => isArmory(ACHIEVEMENT_BY_KEY[t.key]));
+  const earned = wall.tiles.filter((t) => t.earnedAt !== null && !isArmory(ACHIEVEMENT_BY_KEY[t.key])).map((t) => `• ${t.name}`);
+  const armoryEarned = armory.filter((t) => t.earnedAt !== null).length;
   if (earned.length > 0) b.list(embed, "Earned", earned, (n) => `+${n} more — see the site.`);
-  else embed.setDescription(NOTHING_EARNED);
+  else if (armoryEarned === 0) embed.setDescription(NOTHING_EARNED);
+  if (armory.length > 0) b.field(embed, ARMORY_LABEL, armoryCount(armoryEarned, ARMORY_KEYS.length), true);
 
   if (wall.closest.length > 0) {
     const lines = wall.closest.map((t) => `• ${t.name} — ${t.count}/${t.target} ${t.unit}`).join("\n");

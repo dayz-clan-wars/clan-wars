@@ -1,6 +1,6 @@
 import { FLAG_DOWN_MS, DORMANT_AFTER_MS, INTRUDER_PIN_TTL_MS, timeLeftText, type ClanNoticeKind, type NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster";
-import { flagLabel } from "@factions/copy";
+import { flagLabel, achievementSummaryLine } from "@factions/copy";
 
 /**
  * The site's rendering of a clan notice: a kicker, a title, and a sentence.
@@ -276,6 +276,17 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
       body: `${owner} unlocked it.${p.description ? ` ${String(p.description)}` : ""}`,
     };
   } },
+
+  // The summary DM after a release's backfill (apps/bot/src/achievements/summary.ts).
+  // ⚠️ The sentence is @factions/copy's, which the bot's notice-text.ts says too; both
+  // tests pin it. The wall is the call to action, built from the gamertag, never the
+  // payload's absolute URL (no bare URLs on a page).
+  achievement_summary: { group: "Achievement", render: (p) => ({
+    kicker: "Achievement", title: "New achievements",
+    body: achievementSummaryLine(typeof p.count === "number" ? p.count : Number.NaN),
+    ...(typeof p.gamertag === "string" && p.gamertag
+      ? { cta: { label: "See your wall", href: `/players/${encodeURIComponent(p.gamertag)}#achievements` } } : {}),
+  }) },
 
   // ---- Enforcement ----
   zone_warning: { group: "Enforcement", render: (p) => {

@@ -1,4 +1,5 @@
 import * as R from "./rules";
+import { EARNABLE_ACHIEVEMENTS } from "./achievements";
 
 /**
  * Every number the player's guide promises, stated ONCE, computed from
@@ -39,6 +40,10 @@ const SCALARS: Record<string, number> = {
   VIOLATION_REPORT_WINDOW_MS: R.VIOLATION_REPORT_WINDOW_MS,
   HUB_BAN_MS: R.HUB_BAN_MS, HUB_RETALIATION_WINDOW_MS: R.HUB_RETALIATION_WINDOW_MS, HUB_ZONE_RADIUS_M: R.HUB_ZONE_RADIUS_M,
   BOUNTY_DEFAULT_MS: R.BOUNTY_DEFAULT_MS, BOUNTY_MAX_MS: R.BOUNTY_MAX_MS, BOUNTY_DEADLINE_MS: R.BOUNTY_DEADLINE_MS,
+  // ⚠️ Counted off the catalogue, not stated in rules.ts: the number of tiles IS the
+  // catalogue's length, and a typed constant beside it would be a second statement to drift.
+  ACHIEVEMENTS_EARNABLE: EARNABLE_ACHIEVEMENTS.length,
+  ACHIEVEMENTS_CLAN: EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "clan").length,
 };
 
 type Unit = "ms" | "m" | "count";

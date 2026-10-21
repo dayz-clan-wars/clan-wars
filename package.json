@@ -19,6 +19,7 @@
     "revoke:achievements": "tsx scripts/revoke-achievements.ts",
     "backfill:hub-positions": "tsx scripts/backfill-hub-positions.ts",
     "backfill:achievement-notices": "tsx scripts/backfill-achievement-notices.ts",
+    "announce:achievement-summary": "tsx scripts/announce-achievement-summary.ts",
     "wipe": "tsx scripts/wipe.ts",
     "launch": "tsx scripts/launch.ts",
     "clear-bases": "tsx scripts/clear-bases.ts",

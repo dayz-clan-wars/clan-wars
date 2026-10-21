@@ -51,6 +51,21 @@ describe("achievementsForDb", () => {
     expect(wall.closest.map((t) => t.key)).toEqual(["veteran", "ten_down", "builder"]);   // by count/target, desc
   });
 
+  /**
+   * ⚠️ A two-gun class tile one kill from done reads as 50%: without this, the armory's
+   * 59 tiles would fill the panel with gun chores and push every other goal out.
+   */
+  it("an armory tile is never 'closest', however near it is", async () => {
+    await db.insert(achievementProgress).values([
+      { ownerKind: "player", ownerId: A, key: "class_snipers", count: 2, target: 3, computedAt: d(30) },
+      { ownerKind: "player", ownerId: A, key: "full_armory", count: 51, target: 52, computedAt: d(30) },
+      { ownerKind: "player", ownerId: A, key: "ten_down", count: 1, target: 10, computedAt: d(30) },
+    ]);
+    const wall = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
+    expect(wall.closest.map((t) => t.key)).toEqual(["ten_down"]);
+    expect(wall.tiles.find((t) => t.key === "full_armory")).toMatchObject({ count: 51 });   // still on the wall
+  });
+
   it("a retired achievement shows only to a holder, earned, and is never 'closest'", async () => {
     await db.insert(achievementProgress).values({ ownerKind: "player", ownerId: A, key: "wanderer", count: 9, target: 10, computedAt: d(30) });
     const before = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;

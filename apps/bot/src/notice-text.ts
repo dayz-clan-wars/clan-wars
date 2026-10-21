@@ -1,7 +1,7 @@
 import { RELEASED_POLE_GRACE_MS, SOLO_LAPSE_MS, SUCCESSION_WINDOW_MS, GUEST_PASS_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS, FLAG_CHANGE_WINDOW_MS, timeLeftText } from "@factions/domain";
 import type { ClanNoticeKind, NoticeTarget } from "@factions/domain";
 import type { NoticePayload } from "@factions/roster/internal";
-import { rel, at, atRel, flagLabel } from "@factions/copy";
+import { rel, at, atRel, flagLabel, achievementSummaryLine } from "@factions/copy";
 import { playerLink, clanLink } from "./site-links.js";
 
 const DAY_MS = 86_400_000;
@@ -216,6 +216,14 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
       ? (p.clanTag ? clanLink(ctx.site, String(p.clanTag), String(p.ownerName)) : `**${p.ownerName}**`)
       : person(String(p.ownerName), ctx.site);
     return `🏆 ${owner}${p.clanTag && p.ownerKind === "player" && p.public ? ` [${p.clanTag}]` : ""} earned **${p.name}** — ${p.description}.`;
+  },
+  // The one DM per player after a release's silent backfill (summary.ts). ⚠️ The sentence
+  // is @factions/copy's, which the web's notice-copy.ts renders too; both tests pin it.
+  // `<url>`: Discord shows the link without the brackets and draws no preview card.
+  // A payload without a wall URL loses the link clause rather than print a broken one.
+  achievement_summary: (p) => {
+    const line = achievementSummaryLine(typeof p.count === "number" ? p.count : Number.NaN);
+    return typeof p.wallUrl === "string" && p.wallUrl ? `${line} See your wall: <${p.wallUrl}>` : line;
   },
   zone_warning: (p, ctx) => {
     const acts = [

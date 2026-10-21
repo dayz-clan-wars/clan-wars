@@ -1,6 +1,6 @@
 import type { Database } from "@factions/db";
 import { achievementProgress, achievementUnlocks, factions, identityLinks, membershipHistory, players } from "@factions/db";
-import { ACHIEVEMENTS, isRetired, type AchievementGroup, type AchievementKey, type AchievementOwner, type AchievementUnit } from "@factions/domain";
+import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, isArmory, isRetired, type AchievementGroup, type AchievementKey, type AchievementOwner, type AchievementUnit } from "@factions/domain";
 import { and, eq, sql } from "drizzle-orm";
 
 export type AchievementTile = {
@@ -16,7 +16,7 @@ export type AchievementSubject = { gamertag: string } | { clanTag: string };
  * The wall (spec 2026-09-11 §8). A player's wall carries every player tile plus the team
  * tiles of clans they were a FULL member of at the moment the clan earned them — resolved
  * through membership_history, so later joins and leaves cannot edit the record; a retired
- * tile appears only for its holders. A clan's wall is the 12 team tiles. Progress comes from the tick's cache, never recomputed here.
+ * tile appears only for its holders. A clan's wall is the 16 team tiles. Progress comes from the tick's cache, never recomputed here.
  */
 export async function achievementsForDb(db: Database, subject: AchievementSubject, now: Date): Promise<AchievementWall | null> {
   if ("clanTag" in subject) {
@@ -58,8 +58,11 @@ async function wallFor(db: Database, owner: { kind: AchievementOwner; id: string
       return { key: a.key, name: a.name, description: a.description, group: a.group, owner: a.owner, target: a.target, unit: a.unit,
         earnedAt: e?.at ?? null, count: e ? a.target : (countBy.get(a.key) ?? 0), clanTag: e?.tag ?? null };
     });
+  // ⚠️ Armory tiles are never "closest": a two-gun class tile one kill in reads as 50%, and
+  // with 59 of them the panel would be all gun chores, crowding out every other goal.
+  // They stay on the wall, in their own section.
   const closest = owner.kind === "player"
-    ? tiles.filter((t) => !t.earnedAt && t.target > 1 && t.count > 0).sort((x, y) => y.count / y.target - x.count / x.target).slice(0, 3)
+    ? tiles.filter((t) => !t.earnedAt && t.target > 1 && t.count > 0 && !isArmory(ACHIEVEMENT_BY_KEY[t.key])).sort((x, y) => y.count / y.target - x.count / x.target).slice(0, 3)
     : [];
   return { tiles, earned: tiles.filter((t) => t.earnedAt).length, closest };
 }
