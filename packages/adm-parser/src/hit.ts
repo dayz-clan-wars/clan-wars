@@ -55,7 +55,7 @@ export function parseHit(raw: string): HitLine | null {
       weapon: w ? w[1]!.trim() : null, distanceM: w?.[2] ? parseFloat(w[2]) : null };
   }
   const nd = NO_DRIVER_RE.exec(rest);
-  const label = nd ? nd[2]! : BY_OTHER_RE.exec(rest)?.[1] ?? null;
+  const label = nd ? nd[2]! : BY_OTHER_RE.exec(rest)?.[1]?.trim() ?? null;
   const cause = nd ? nd[1]! : CAUSE_RE.exec(rest)?.[1] ?? null;
   const attackerType = label === "Infected" ? "infected" : "environment";
   // Animals are the environment to the log; the label carries which one (the verdict's classifyEntityLabel reads it).

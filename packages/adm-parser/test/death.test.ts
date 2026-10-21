@@ -14,6 +14,12 @@ describe("parseDeath", () => {
     expect(parseDeath(`17:44:37 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by 6-M7 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion", entity: "6" });
     expect(parseDeath(`15:19:45 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by EGD-5 Frag Grenade`)).toMatchObject({ kind: "died", cause: "explosion" });
   });
+  it("a land mine logs as LandMineTrap: an explosion, not the environment", () => {
+    expect(parseDeath(`18:59:19 | Player "Vic" (DEAD) (id=${V} pos=<5574.4, 8817.2, 310.6>) killed by LandMineTrap`))
+      .toMatchObject({ kind: "died", cause: "explosion", entity: "LandMineTrap" });
+    // The word boundary still guards a name that merely contains "mine".
+    expect(parseDeath(`18:59:19 | Player "Vic" (DEAD) (id=${V} pos=<1.0, 2.0, 3.0>) killed by Minefield_Sign`)).toMatchObject({ cause: "environment" });
+  });
   it("reads a PvP kill without distance (melee)", () => {
     expect(parseDeath(`10:00:00 | Player "Vic" (DEAD) (id=${V}) killed by Player "Kil" (id=${K}) with Knife`)).toMatchObject({ kind: "killed", weapon: "Knife", distanceM: null });
   });
