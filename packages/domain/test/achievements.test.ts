@@ -1,28 +1,30 @@
 import { describe, it, expect } from "vitest";
-import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEMENTS, isRetired } from "../src/achievements";
+import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, ACHIEVEMENT_KEYS, CLASS_TILE_KEYS, EARNABLE_ACHIEVEMENTS, isRetired } from "../src/achievements";
 import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
 import { EMOTES } from "../src/achievement-evidence";
 
 describe("the achievement definitions", () => {
-  it("are exactly 149, keyed uniquely in snake_case", () => {
-    expect(ACHIEVEMENTS).toHaveLength(149);
+  it("are exactly 153, keyed uniquely in snake_case", () => {
+    expect(ACHIEVEMENTS).toHaveLength(153);
     const keys = ACHIEVEMENTS.map((a) => a.key);
-    expect(new Set(keys).size).toBe(149);
+    expect(new Set(keys).size).toBe(153);
+    expect(new Set(ACHIEVEMENT_KEYS).size).toBe(153);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
   });
 
-  it("146 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
-    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(146);
+  it("150 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(150);
+    expect(EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "clan")).toHaveLength(16);
     for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain(k);
     expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer", "wolf_bait", "bear_necessities"]);
     expect(ACHIEVEMENT_BY_KEY.wanderer.name).toBe("Wanderer");
     expect([ACHIEVEMENT_BY_KEY.wolf_bait.name, ACHIEVEMENT_BY_KEY.bear_necessities.name]).toEqual(["Wolf Bait", "Bear Necessities"]);
   });
 
-  it("split 18 solo, 36 pve, 83 pvp, 12 team; team is clan-owned and nothing else is", () => {
+  it("split 18 solo, 36 pve, 83 pvp, 16 team; team is clan-owned and nothing else is", () => {
     const by = (g: string) => ACHIEVEMENTS.filter((a) => a.group === g);
-    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([18, 36, 83, 12]);
+    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([18, 36, 83, 16]);
     for (const a of ACHIEVEMENTS) expect(a.owner).toBe(a.group === "team" ? "clan" : "player");
     expect(ACHIEVEMENT_GROUPS).toEqual(["solo", "pve", "pvp", "team"]);
   });
@@ -65,7 +67,19 @@ describe("the achievement definitions", () => {
     // One statement of a class's size: the target is the catalogue's count, never a typed number.
     FIREARM_CLASSES.forEach((c, i) => expect(classes[i]!.target).toBe(FIREARMS.filter((f) => f.class === c).length));
     expect(ACHIEVEMENT_BY_KEY.full_armory).toMatchObject({ name: "Full Armory", description: "A PvP kill with every firearm on Nasdara", target: 52 });
-    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(90);
+    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(94);
+  });
+
+  it("the four clan tiles as agreed; Every Class Covered needs one tile per gun class", () => {
+    const row = (k: string) => { const a = ACHIEVEMENT_BY_KEY[k as keyof typeof ACHIEVEMENT_BY_KEY]; return [a.key, a.name, a.description, a.group, a.owner, a.target]; };
+    expect(["clan_armory", "clan_renovators", "clan_warband", "clan_arsenal"].map(row)).toEqual([
+      ["clan_armory", "Armory", "Members get PvP kills with 25 different firearms", "team", "clan", 25],
+      ["clan_renovators", "Renovators", "Make 50 ruin repairs as a clan", "team", "clan", 50],
+      ["clan_warband", "Warband", "Get 250 PvP kills as a clan", "team", "clan", 250],
+      ["clan_arsenal", "Every Class Covered", "Members earn every gun-class tile", "team", "clan", 6],
+    ]);
+    expect(ACHIEVEMENT_BY_KEY.clan_arsenal.target).toBe(FIREARM_CLASSES.length);
+    expect(CLASS_TILE_KEYS).toEqual(["class_pistols", "class_smgs", "class_shotguns", "class_assault_rifles", "class_rifles", "class_snipers"]);
   });
 
   it("melee, dogs and motorbikes: the eleven tiles as agreed", () => {

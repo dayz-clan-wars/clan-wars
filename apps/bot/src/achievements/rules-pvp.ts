@@ -6,10 +6,18 @@ import { nth, oneShot, type Rule, type RuleCtx, type RuleResult } from "./types.
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
 
-/** A PvP kill: another player did it, it was not friendly fire (Global Constraints), and it was not at the Hub (spec 2026-09-22-hub-combat). */
-const pvpBy = (dayzId: string) => and(eq(kills.killerDayzId, dayzId), ne(kills.victimDayzId, dayzId), eq(kills.friendlyFire, false), eq(kills.atHub, false));
+/**
+ * A scoring PvP kill, whoever made it: another player did it, it was not friendly fire (Global
+ * Constraints), and it was not at the Hub (spec 2026-09-22-hub-combat).
+ * ⚠️ The ONE statement of those conditions for the achievements: `pvpBy` (a player's kills) and
+ * `pvpByClan` (the clan tiles) both add only "who gets the credit" to it, so the two can never drift.
+ */
+const scoringPvp = and(isNotNull(kills.killerDayzId), ne(kills.victimDayzId, kills.killerDayzId), eq(kills.friendlyFire, false), eq(kills.atHub, false));
+const pvpBy = (dayzId: string) => and(eq(kills.killerDayzId, dayzId), scoringPvp);
+/** The clan's scoring kills: credited by `killer_faction_id`, the killer's clan resolved at the kill (kills-tick's `membershipAt`). */
+const pvpByClan = (factionId: number) => and(eq(kills.killerFactionId, factionId), scoringPvp);
 const killCols = { id: kills.id, at: kills.occurredAt, serverId: kills.serverId, victim: kills.victimDayzId, weapon: kills.weapon, distanceM: kills.distanceM };
-type KillRow = { id: number; at: Date; serverId: number; victim: string; weapon: string | null; distanceM: string | null };
+export type KillRow = { id: number; at: Date; serverId: number; victim: string; weapon: string | null; distanceM: string | null };
 
 async function pvpKills(db: Parameters<Rule>[0], dayzId: string): Promise<KillRow[]> {
   return db.select(killCols).from(kills).where(pvpBy(dayzId)).orderBy(asc(kills.occurredAt), asc(kills.id));
@@ -19,6 +27,9 @@ async function pvpKills(db: Parameters<Rule>[0], dayzId: string): Promise<KillRo
 // second owner sharing one ctx the first owner's kills, silently.
 export const ownPvpKills = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string): Promise<KillRow[]> =>
   ctx.memo(`pvpKills:${dayzId}`, () => pvpKills(db, dayzId));
+/** The clan's scoring PvP kills in time order, shared by Warband and Armory in one pass. Memo key carries the id, as above. */
+export const clanPvpKills = (db: Parameters<Rule>[0], ctx: RuleCtx, factionId: number): Promise<KillRow[]> =>
+  ctx.memo(`clanPvpKills:${factionId}`, () => db.select(killCols).from(kills).where(pvpByClan(factionId)).orderBy(asc(kills.occurredAt), asc(kills.id)));
 const killCount = (key: AchievementKey): Rule => async (db, owner, ctx) => nth(await ownPvpKills(db, ctx, owner.id), T(key), (r) => ({ kills: r.length }));
 
 // ── The armory (spec 2026-10-20-achievements-150 §2.2, §2.3) ──────────────────
@@ -50,14 +61,21 @@ function firearmOfKill(k: KillRow): FirearmKey | null {
  * rule of one owner in one pass. Built from `ownPvpKills`, so `pvpBy` is the only filter.
  */
 export const gunSet = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string): Promise<Map<FirearmKey, KillRow>> =>
-  ctx.memo(`gunSet:${dayzId}`, async () => {
-    const firsts = new Map<FirearmKey, KillRow>();
-    for (const k of await ownPvpKills(db, ctx, dayzId)) {
-      const f = firearmOfKill(k);
-      if (f && !firsts.has(f)) firsts.set(f, k);
-    }
-    return firsts;
-  });
+  ctx.memo(`gunSet:${dayzId}`, async () => firstsByFirearm(await ownPvpKills(db, ctx, dayzId)));
+
+/**
+ * Each firearm's first kill among `rows` (already in time order), in the order the firearms
+ * were first used — so the n-th entry is the kill that made n. Shared with the clan's Armory,
+ * so an unmapped name is judged (and logged, once per process) the same way for both.
+ */
+export function firstsByFirearm(rows: readonly KillRow[]): Map<FirearmKey, KillRow> {
+  const firsts = new Map<FirearmKey, KillRow>();
+  for (const k of rows) {
+    const f = firearmOfKill(k);
+    if (f && !firsts.has(f)) firsts.set(f, k);
+  }
+  return firsts;
+}
 
 const gun = (key: FirearmKey): Rule => async (db, owner, ctx) => {
   const k = (await gunSet(db, ctx, owner.id)).get(key);

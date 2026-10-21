@@ -212,6 +212,11 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
     await backfillCounters(db, wm, batch * 5);
     const all = [...(await collectEveryone(db))].sort((a, b) => ownerKey(a).localeCompare(ownerKey(b)));
     for (const owner of all) await runOwner(owner);
+    // ⚠️ The clans again, now that every player is done: Every Class Covered reads the members'
+    // class-tile unlocks, and clans sort before players, so the first walk saw none of the ones
+    // this backfill wrote. Left to the live tick (`classUnlocks`), those clans would unlock — and
+    // ANNOUNCE — history on the first pass after a silent backfill. A clan is a few cheap reads.
+    for (const owner of all) if (owner.kind === "clan") await runOwner(owner);
     await db.transaction(async (tx) => { await writeWatermarks(tx, heads); await clearResume(tx); });
     return result;
   }

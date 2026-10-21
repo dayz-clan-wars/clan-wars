@@ -12,6 +12,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - 11 new achievements up close: knife, fist and sledgehammer kills, kills with 5 different melee weapons, three for dogs (killed by one, surviving one, 10 bites), and four for motorbikes (hurt by one, killed by one, hitting a player with one, a kill with one).
 - 13 new achievements for ruins, traps and camp: repairing ruined buildings (a first repair, 10 rubble piles, 25 repairs, and a door, a window and a roof), stepping in a bear trap, setting off a tripwire, getting caught in barbed wire, dying to a mine or a grenade, placing 10 barrels, a sea chest or a land mine, and packing 10 tents.
 - 16 new achievements for emotes, oddities and milestones: 10 different emotes, every emote, 10 games of rock-paper-scissors and 500 emotes; getting burned by a fire, eating food while it is still too hot, coming round 10 times after a knockout, and drowning; 250 PvP kills, a kill from 500 m, and kills on 25 different players; 500 hours played, 30 days in a row, 150 grid squares, 2,000 build points, and 100 deaths.
+- 4 new clan achievements: members getting PvP kills with 25 different firearms, 50 ruin repairs, 250 PvP kills, and members earning every gun-class achievement while in the clan.
 
 ### Changed
 

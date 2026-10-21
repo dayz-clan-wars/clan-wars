@@ -238,6 +238,36 @@ describe("achievementsTick", () => {
     expect(progress.find((p) => p.key === "cartographer")).toMatchObject({ count: 1, target: 10 });
   });
 
+  it("a member's class tile re-evaluates the clan: Every Class Covered lands on the pass after the sixth class", async () => {
+    const others = ["class_pistols", "class_smgs", "class_shotguns", "class_assault_rifles", "class_rifles"];
+    await db.insert(achievementUnlocks).values(others.map((key, i) => ({ ownerKind: "player" as const, ownerId: A, key, earnedAt: m(i) })));
+    await achievementsTick(db, { now: m(9), announce: false });   // settle: the clan and A are evaluated, five classes
+    expect(await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.key, "clan_arsenal"))).toEqual([]);
+    // Both sniper rifles: A earns Overwatch on the next pass. Clans sort before players, so the
+    // clan evaluated in that same pass cannot see it yet; the unlock itself must touch the clan.
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(20), weapon: "VSD", distanceM: 200 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(21), weapon: "VSS", distanceM: 90 });
+    await achievementsTick(db, { now: m(30), announce: false });
+    expect((await db.select().from(achievementUnlocks).where(and(eq(achievementUnlocks.ownerId, A), eq(achievementUnlocks.key, "class_snipers")))).length).toBe(1);
+    await achievementsTick(db, { now: m(31), announce: false });
+    const [u] = await db.select().from(achievementUnlocks).where(and(eq(achievementUnlocks.ownerId, String(bear)), eq(achievementUnlocks.key, "clan_arsenal")));
+    expect(u).toMatchObject({ ownerKind: "clan", earnedAt: m(21) });
+  });
+
+  it("backfill: a member's class tile earned during the backfill still lands Every Class Covered in that same, silent run", async () => {
+    const others = ["class_pistols", "class_smgs", "class_shotguns", "class_assault_rifles", "class_rifles"];
+    await db.insert(achievementUnlocks).values(others.map((key, i) => ({ ownerKind: "player" as const, ownerId: A, key, earnedAt: m(i) })));
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(20), weapon: "VSD", distanceM: 200 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(21), weapon: "VSS", distanceM: 90 });
+    await achievementsTick(db, { now: m(30), everyone: true, announce: false });
+    // ⚠️ Otherwise the first LIVE pass after the backfill would find it, and announce history.
+    const [u] = await db.select().from(achievementUnlocks).where(and(eq(achievementUnlocks.ownerId, String(bear)), eq(achievementUnlocks.key, "clan_arsenal")));
+    expect(u).toMatchObject({ ownerKind: "clan", earnedAt: m(21) });
+    const live = await achievementsTick(db, { now: m(31), achievementsChannelId: CH });
+    expect(live.unlocked).toBe(0);
+    expect(await db.select().from(clanNotices)).toEqual([]);
+  });
+
   it("wolf_bait and bear_necessities are retired: holders keep them, the tick never evaluates them", async () => {
     const earnable = EARNABLE_ACHIEVEMENTS.map((a) => a.key as string);
     expect(earnable).not.toContain("wolf_bait");

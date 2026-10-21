@@ -45,9 +45,9 @@ describe("the guide manifest", () => {
     const { html } = renderFragment(raw);
     expect(html).toContain("Sniper");
     expect(html).toContain("A kill from 300 m or more");
-    // 146 rows: the retired Wanderer, Wolf Bait and Bear Necessities are not listed, since nobody
+    // 150 rows: the retired Wanderer, Wolf Bait and Bear Necessities are not listed, since nobody
     // can earn them now. (The chapter's copy still says forty-nine until its rewrite.)
-    expect((html.match(/<tr>/gu) ?? []).length).toBe(146);
+    expect((html.match(/<tr>/gu) ?? []).length).toBe(150);
     for (const retired of ["Wanderer", "Wolf Bait", "Bear Necessities"]) expect(html).not.toContain(retired);
     expect(html).not.toMatch(/fifty/iu);
     expect(html).toMatch(/forty-nine/iu);

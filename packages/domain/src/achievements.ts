@@ -157,12 +157,21 @@ export const ACHIEVEMENTS = [
   def("dynasty", "Dynasty", "Alpha 4 weeks running", "team", 4),
   def("untouched", "Untouched", "A whole season without being raided", "team"),
   def("champions", "Champions", "Win a season", "team"),
+  // Team — the clan's members together (spec 2026-10-20-achievements-150, Task B8)
+  def("clan_armory", "Armory", "Members get PvP kills with 25 different firearms", "team", 25),
+  def("clan_renovators", "Renovators", "Make 50 ruin repairs as a clan", "team", 50),
+  def("clan_warband", "Warband", "Get 250 PvP kills as a clan", "team", 250),
+  // One per gun class, from the catalogue's class list, never a typed 6: a class added there moves it.
+  def("clan_arsenal", "Every Class Covered", "Members earn every gun-class tile", "team", FIREARM_CLASSES.length),
 ] as const;
 
 export type Achievement = (typeof ACHIEVEMENTS)[number];
 export type AchievementKey = Achievement["key"];
 export const ACHIEVEMENT_BY_KEY = Object.fromEntries(ACHIEVEMENTS.map((a) => [a.key, a])) as Record<AchievementKey, Achievement>;
 export const ACHIEVEMENT_KEYS = ACHIEVEMENTS.map((a) => a.key) as readonly AchievementKey[];
+
+/** The six gun-class tiles, which Every Class Covered reads from the members' unlocks. */
+export const CLASS_TILE_KEYS = ACHIEVEMENT_KEYS.filter((k): k is Extract<AchievementKey, `class_${string}`> => k.startsWith("class_"));
 
 export const isRetired = (a: Achievement): boolean => "retired" in a && a.retired === true;
 export type EarnableAchievement = Exclude<Achievement, { retired: true }>;
