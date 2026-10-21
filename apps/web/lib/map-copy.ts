@@ -15,6 +15,59 @@ export const LAYER_LABELS = {
   publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
 } as const;
 
+/**
+ * The world layers' section headings, in panel order. Names follow iZurvive's,
+ * so a player moving over finds things where they expect them.
+ */
+export const WORLD_GROUPS = ["Bunkers", "Vehicles", "Crash sites", "Loot buildings", "Wrecks", "World"] as const;
+export type WorldGroup = (typeof WORLD_GROUPS)[number];
+
+/**
+ * What each cfgeventspawns event is called on the map, and where it sits. An
+ * event missing here still gets a World toggle under its raw name, and
+ * test/world-layers.test.ts lists the mission's events so a new one is noticed.
+ * Order within a group is the panel's order.
+ */
+export const EVENT_LAYERS: Record<string, { group: WorldGroup; label: string }> = {
+  StaticWaterTruck: { group: "Vehicles", label: "Water truck" },
+  VehicleTruck01: { group: "Vehicles", label: "Truck" },
+  VehicleCivilianSedan: { group: "Vehicles", label: "Olga" },
+  VehicleHatchback02: { group: "Vehicles", label: "Gunter" },
+  VehicleSedan02: { group: "Vehicles", label: "Sarka" },
+  VehicleOffroadHatchback: { group: "Vehicles", label: "Ada" },
+  VehicleOffroad02: { group: "Vehicles", label: "Hummer" },
+  VehicleMotorbike: { group: "Vehicles", label: "Motorbike" },
+  StaticHeliCrash: { group: "Crash sites", label: "Heli crash" },
+  StaticHeliCrashBig: { group: "Crash sites", label: "Chinook crash" },
+  StaticMilitaryConvoy: { group: "Crash sites", label: "Military convoy" },
+  StaticPoliceCar: { group: "Crash sites", label: "Police car" },
+  StaticContainerLocked: { group: "Crash sites", label: "Locked container" },
+  ItemBricks: { group: "World", label: "Bricks" },
+  TrajectoryFig: { group: "World", label: "Fig trees" },
+  Loot: { group: "World", label: "Loot piles" },
+};
+
+/** The world layers that are not one event or one loot group. */
+export const WORLD_LABELS = {
+  bunkers: "Bunkers",
+  wrecks: "Wrecks",
+  animals: "Animals",
+  spawns: "Player spawns",
+  contaminated: "Contaminated areas",
+} as const;
+
+/** The world section's own lines in the layers panel. */
+export const WORLD_COPY = {
+  failed: "World layers could not load.",
+  zoom: "Bunkers and contaminated areas show at every zoom. The rest show once you zoom in.",
+  tiers: "Tiers",
+} as const;
+
+/** "Tier1" → "Tier 1". "Unique" stays as it is. */
+export function tierLabel(name: string): string {
+  return name.replace(/^Tier(\d)$/u, "Tier $1");
+}
+
 /** Why a switch is missing from the layers panel (App Review §03): what would put the layer there. */
 export const LAYER_REASONS: Record<"base" | "clanmates" | "intruders" | "pins", string> = {
   base: "declare a base", clanmates: "join a clan", intruders: "declare a base", pins: "join a clan",

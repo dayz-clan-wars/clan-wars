@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The map has world layers: bunkers, vehicle and crash-site spawns, wrecks, contaminated areas, and loot buildings by type and tier, from our own server files. Find them under the layers button.
+
 ### Changed
 
 - Grid references on the site now match the in-game GPS. Older map links may point somewhere else.

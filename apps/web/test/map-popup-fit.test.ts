@@ -118,7 +118,10 @@ describe("every popup on the map opts into the fit", () => {
   });
 
   it("marks every popup's marker open, so a hidden tip still has a tie", () => {
-    expect(draw.match(/markOpen\(/gu)?.length).toBe(bindings.length + 1); // +1 for the declaration
+    // A contaminated area's circle has a popup but no chip to mark, so it is the one exception.
+    const circles = draw.match(/L\.circle\([^;]*\.bindPopup\(/gu)?.length ?? 0;
+    expect(circles).toBe(1);
+    expect(draw.match(/markOpen\(/gu)?.length).toBe(bindings.length - circles + 1); // +1 for the declaration
   });
 
   it("styles the open frame for any chip, not just a pin's", () => {

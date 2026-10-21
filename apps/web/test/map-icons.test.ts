@@ -1,11 +1,13 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it, expect } from "vitest";
-import { ICON, baseIcon, bountyIcon, intruderIcon, layerIcon, pinIcon, publicBaseIcon, type Palette } from "@/lib/map-icons";
+import { ICON, baseIcon, bountyIcon, intruderIcon, layerIcon, pinIcon, publicBaseIcon, worldIcon, type Palette } from "@/lib/map-icons";
+import { worldLayers } from "@/lib/world-layers";
+import type { WorldFile } from "@/lib/map-world";
 
 const p: Palette = {
   gold: "#c8a24a", ink: "#e8e4dc", ink2: "#8b867c", rust2: "#d4623a",
-  olive: "#6b7a4a", frame: "#12110f", rule2: "#2a2824",
+  olive: "#6b7a4a", frame: "#12110f", rule2: "#2a2824", military: "#e0457b",
 };
 
 describe("the public-base marker", () => {
@@ -65,5 +67,30 @@ describe("the map's rust markers are rust-2", () => {
     expect(draw).not.toContain('token("--color-rust",');
     const css = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map.css"), "utf8");
     expect(css).toContain(".cw-map-tag-intruder { border-color: var(--color-rust-2); }");
+  });
+});
+
+describe("the world layers' icons", () => {
+  const world = JSON.parse(readFileSync(join(import.meta.dirname, "..", "public", "map-data", "nasdara", "world.json"), "utf8")) as WorldFile;
+  const keys = worldLayers(world).map((l) => l.key);
+  const GRID = layerIcon(p, "no-such-layer");
+
+  it("covers every layer the committed world offers", () => expect(keys.length).toBeGreaterThan(20));
+
+  it.each(keys)("%s has a map chip and its own legend glyph", (key) => {
+    expect(worldIcon(p, key)).toMatch(/^<svg[^>]*>.*<path|<circle/su);
+    expect(worldIcon(p, key)).toContain(`width="${ICON.world.size[0]}"`);
+    const legend = layerIcon(p, key);
+    expect(legend).toContain("<svg");
+    expect(legend).not.toBe(GRID);
+  });
+
+  it("gives Military its own accent, which no other layer uses", () => {
+    expect(worldIcon(p, "loot:military")).toContain(p.military);
+    for (const key of keys.filter((k) => k !== "loot:military")) expect(worldIcon(p, key), key).not.toContain(p.military);
+  });
+
+  it("never draws a world layer in gold, which on this map means yours", () => {
+    for (const key of keys) expect(worldIcon(p, key), key).not.toContain(p.gold);
   });
 });

@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type * as L from "leaflet";
 /**
@@ -18,10 +18,16 @@ import { layerOfKey, rosterRows } from "@/lib/map-roster";
 import { motionOptions, prefersReducedMotion } from "@/lib/map-motion";
 import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
+import { WorldPanel } from "./world-panel";
+import { loadWorld, type WorldFile } from "@/lib/map-world";
+import {
+  WORLD_STORAGE_KEY, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  type WorldItem, type WorldLayerKey, type WorldSwitches,
+} from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
 import {
-  TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  TRAVEL_PANE, WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
+  drawWorld, worldView, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -168,6 +174,21 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The layers live behind a sprocket. Closed by default: the map is the
   // page, and a panel that stays open covers the terrain a player came for.
   const [layersOpen, setLayersOpen] = useState(false);
+  // The world layers (lib/world-layers.ts): static mission data, fetched once the map exists.
+  const [world, setWorld] = useState<WorldFile | null>(null);
+  const [worldFailed, setWorldFailed] = useState(false);
+  const [worldSw, setWorldSw] = useState<WorldSwitches | null>(null);
+  const worldList = useMemo(() => (world ? worldLayers(world) : []), [world]);
+  const worldTiers = useMemo(() => (world ? presentTiers(world) : []), [world]);
+  // Per-row counts follow the tier filter: a loot row says how many buildings it would draw.
+  const worldCounts = useMemo(
+    () => (world && worldSw ? Object.fromEntries(worldList.map((l) => [l.key, pointsFor(world, l.key, worldSw.tiers).length])) : {}),
+    [world, worldList, worldSw],
+  );
+  const worldNow = useMemo<WorldItem[]>(
+    () => (world && worldSw ? worldItems(world, new Set(Object.keys(worldSw.on).filter((k) => worldSw.on[k])), worldSw.tiers) : []),
+    [world, worldSw],
+  );
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
   // The switches that would do nothing, with what would put them there.
@@ -352,6 +373,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     });
   };
 
+  const saveWorld = (next: WorldSwitches) => {
+    if (world) try { window.localStorage.setItem(WORLD_STORAGE_KEY, writeWorldSwitches(next.on, next.tiers, world)); } catch { /* storage is a convenience */ }
+    return next;
+  };
+  const toggleWorld = (key: WorldLayerKey) => setWorldSw((prev) => (prev ? saveWorld({ ...prev, on: { ...prev.on, [key]: !prev.on[key] } }) : prev));
+  const toggleTier = (bit: number) => setWorldSw((prev) => (prev ? saveWorld({ ...prev, tiers: prev.tiers ^ bit }) : prev));
+  const worldStatus = worldFailed ? "failed" : world && worldSw ? "ready" : "loading";
+
   // ── Leaflet ───────────────────────────────────────────────────────────────
   const leaflet = useRef<LeafletModule | null>(null);
   const map = useRef<L.Map | null>(null);
@@ -494,6 +523,23 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     }
   }, []);
 
+  // One group per world layer, by key, and what drawWorld has put in them (map-draw.ts).
+  const worldGroups = useRef(new Map<WorldLayerKey, L.LayerGroup>());
+  const worldDrawn = useRef<WorldDrawn>(new Map());
+  const worldNowRef = useRef(worldNow);
+  worldNowRef.current = worldNow;
+  // Reads everything through refs: it is called from the map's moveend as well as from the effect below.
+  const redrawWorld = useCallback(() => {
+    const Lm = leaflet.current, m = map.current, d = dataRef.current;
+    if (!Lm || !m || !d) return;
+    const group = (key: WorldLayerKey) => {
+      let g = worldGroups.current.get(key);
+      if (!g) { g = Lm.layerGroup(); worldGroups.current.set(key, g); }
+      return g;
+    };
+    drawWorld({ L: Lm, group, pt: ptFor(Lm, d.world.size), p: palette(), size: d.world.size }, worldNowRef.current, worldView(m), worldDrawn.current);
+  }, []);
+
   useEffect(() => {
     if (!el.current || size === null) return;
     let cancelled = false;
@@ -531,6 +577,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         if (pane) pane.style.zIndex = "350";
         const placePane = m.createPane(PLACE_PANE);
         if (placePane) placePane.style.zIndex = "360";
+        // Under the travel points: a world marker is background, never over a shed or a player.
+        const worldPane = m.createPane(WORLD_PANE);
+        if (worldPane) worldPane.style.zIndex = "340";
 
         // ⚠️ The zoom floor: never a view with anything but map in it. Set
         // from the container's size, and again on every resize, because the
@@ -572,6 +621,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           drawTravel({ L: Lm, group: g, pt: ptFor(Lm, d.world.size), data: d, p: palette() }, travelView(m));
         };
         m.on("moveend", redrawTravel);
+        // World markers follow the view the same way (worldView): none of the dense layers zoomed out.
+        m.on("moveend", redrawWorld);
 
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
         Lm.tileLayer(`/tiles/${MAP}/topographic/{z}/{x}/{y}.webp`, {
@@ -592,6 +643,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
         setMapReady(true);
         setChunkFailures(0);
+        // ⚠️ A failure here is one line in the panel, never the map's own error state:
+        // the clan layers do not depend on the world file and must keep working without it.
+        loadWorld().then((w) => { if (!cancelled) setWorld(w); }, () => { if (!cancelled) setWorldFailed(true); });
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
@@ -661,6 +715,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       fitPopupNow.current = () => {};
       groups.current = {};
       index.current = {};
+      worldGroups.current = new Map();
+      worldDrawn.current = new Map();
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
       ages.current = {};
@@ -687,6 +743,29 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // A rewritten age can change the card's height (an expiry wrapping to a
   // second line), so the fit is taken again — never the layers.
   useEffect(() => { refreshAges(allAges(), now); fitPopupNow.current(); }, [now]);
+
+  // The world switches, read once the file is in: the defaults come from the layers it offers.
+  useEffect(() => {
+    if (!world) return;
+    let raw: string | null = null;
+    try { raw = window.localStorage.getItem(WORLD_STORAGE_KEY); } catch { /* private window: defaults */ }
+    setWorldSw(readWorldSwitches(raw, worldLayers(world), world));
+  }, [world]);
+
+  // Each world layer's group on the map or off it with its switch, then the markers for
+  // what is on now. A loot switch can move a building to another group (world-layers.ts
+  // worldItems), so every change redraws rather than only adding or removing a group.
+  useEffect(() => {
+    const m = map.current, Lm = leaflet.current;
+    if (!m || !Lm || !mapReady || !worldSw) return;
+    for (const l of worldList) {
+      let g = worldGroups.current.get(l.key);
+      if (!g) { g = Lm.layerGroup(); worldGroups.current.set(l.key, g); }
+      if (worldSw.on[l.key] && !m.hasLayer(g)) m.addLayer(g);
+      if (!worldSw.on[l.key] && m.hasLayer(g)) m.removeLayer(g);
+    }
+    redrawWorld();
+  }, [mapReady, worldList, worldSw, worldNow, redrawWorld]);
 
   // One group per layer, added and removed on its switch.
   useEffect(() => {
@@ -820,7 +899,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               <span className="sr-only">Layers</span>
             </button>
             {layersOpen && (
-              <aside id="map-layers" className="w-[300px] border-2 border-rule-2 bg-frame">
+              <aside id="map-layers" className="max-h-[calc(100dvh-14rem)] w-[300px] overflow-y-auto border-2 border-rule-2 bg-frame">
                 <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
                   <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
                   <span className="font-mono text-[11px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
@@ -847,6 +926,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                     ))}
                   </ul>
                 )}
+                <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
+                  tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} variant="panel" />
                 <MapRoster rows={rows} onGo={goTo} />
                 <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">{MAP_LEGEND}{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
@@ -910,6 +991,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
+              <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
+                tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} variant="sheet" />
               {/* `nested`: the sheet scrolls; a second scroller inside it trapped a swipe. */}
               <MapRoster rows={rows} onGo={goTo} nested />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">

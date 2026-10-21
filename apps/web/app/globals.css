@@ -35,6 +35,8 @@
   /* Rust as TEXT. --color-rust is 2.6:1 on the frame and is for edges only; this is the same hue at 5:1. */
   --color-rust-2: #d4623a;
   --color-olive: #8fa36a;
+  /* Military loot buildings on the map, and nothing else: the one hue no other marker uses (5:1 on the frame). */
+  --color-military: #e0457b;
   --color-terrain: #111110;
   /* Page ground, below --color-frame, deliberately. */
   --color-ground: #050505;

@@ -32,8 +32,8 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   const draw = readFileSync(join(MAP, "map-draw.ts"), "utf8");
   const markers = draw.match(/L\.marker\([\s\S]*?\}\)/gu) ?? [];
 
-  it("finds all eight marker calls", () => {
-    expect(markers).toHaveLength(8);
+  it("finds all nine marker calls", () => {
+    expect(markers).toHaveLength(9);
   });
 
   it.each(markers)("%s", (call) => {
@@ -48,6 +48,13 @@ describe("every marker a player can open is reachable by keyboard and named", ()
     if (call.includes("markerTitle.publicBase")) {
       expect(call).toContain("keyboard: false");
       expect(call).toContain("title: markerTitle.publicBase(");
+      return;
+    }
+    // World markers open a popup but a view can hold hundreds of them: as tab stops
+    // they buried the player's own markers. Named from the static data, for hover and browse mode.
+    if (call.includes("WORLD_PANE")) {
+      expect(call).toContain("keyboard: false");
+      expect(call).toContain("title: item.title");
       return;
     }
     expect(call).toContain("keyboard: true");
