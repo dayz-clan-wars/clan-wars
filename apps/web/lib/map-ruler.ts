@@ -41,3 +41,12 @@ export function rulerSummary(points: readonly RulerPoint[]): string {
   if (points.length === 1) return RULER_COPY.next;
   return `${formatDistance(pathLength(points))} · last leg ${formatBearing(bearing(points.at(-2)!, points.at(-1)!))}`;
 }
+
+/**
+ * Whether a map click adds a ruler point: only with the ruler on, and never while
+ * the pin sheet is open — that click is the player working the sheet's map, and a
+ * point dropped under it would be a leg they never meant.
+ */
+export function rulerTakesClick(rulerOn: boolean, pinSheetOpen: boolean): boolean {
+  return rulerOn && !pinSheetOpen;
+}

@@ -11,9 +11,10 @@ import { POSITION_FIX_MS, WORLD_MAP } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, READOUT_COPY, infoLines } from "@/lib/map-copy";
-import { readoutText, searchZoom, type SearchCtx } from "@/lib/map-search";
-import type { RulerPoint } from "@/lib/map-ruler";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, infoLines } from "@/lib/map-copy";
+import { searchZoom, type SearchCtx } from "@/lib/map-search";
+import { rulerTakesClick, type RulerPoint } from "@/lib/map-ruler";
+import { MapReadout } from "./map-readout";
 import { MapSearch, type MapSearchPick } from "./map-search";
 import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
@@ -174,9 +175,6 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
   const [centre, setCentre] = useState<{ grid: string; x: number; z: number } | null>(null);
   const [pinAt, setPinAt] = useState<PinDraft | null>(null);
-  // Where the mouse is, in metres, for the readout; null off the map and on touch, where it reads the centre.
-  const [cursor, setCursor] = useState<{ x: number; z: number } | null>(null);
-  const [copied, setCopied] = useState(false);
   // The ruler: on, and the points clicked so far. Page-local, never saved.
   const [rulerOn, setRulerOn] = useState(false);
   const [rulerPts, setRulerPts] = useState<RulerPoint[]>([]);
@@ -412,7 +410,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const rulerGroup = useRef<L.LayerGroup | null>(null);
   const rulerOnRef = useRef(rulerOn);
   rulerOnRef.current = rulerOn;
-  const stopCursor = useRef<() => void>(() => {});
+  const pinSheetRef = useRef(false);
 
   const observer = useRef<ResizeObserver | null>(null);
   const barObserver = useRef<ResizeObserver | null>(null);
@@ -684,26 +682,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         rulerGroup.current = rg;
         // A click adds a ruler point only while the ruler is on; otherwise a click is Leaflet's own.
         m.on("click", (e: L.LeafletMouseEvent) => {
-          if (!rulerOnRef.current) return;
+          if (!rulerTakesClick(rulerOnRef.current, pinSheetRef.current)) return;
           const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
           setRulerPts((pts) => [...pts, { x: w.x, z: w.z }]);
         });
-        // The readout follows the mouse, at most once a frame: mousemove fires far faster
-        // than a render is worth. Only where there is a hovering pointer; a touch screen's
-        // readout stays on the centre, which is what the player is looking at.
-        if (window.matchMedia?.("(hover: hover)").matches) {
-          let frame = 0;
-          let last: L.LatLng | null = null;
-          m.on("mousemove", (e: L.LeafletMouseEvent) => {
-            last = e.latlng;
-            frame ||= requestAnimationFrame(() => {
-              frame = 0;
-              if (last) setCursor(latLngToWorld(last.lat, last.lng, size));
-            });
-          });
-          m.on("mouseout", () => { last = null; setCursor(null); });
-          stopCursor.current = () => { cancelAnimationFrame(frame); frame = 0; };
-        }
         // Long-press on touch, right-click on desktop — Leaflet gives both the
         // same event, which is why the pin gesture needs no touch handling of
         // its own.
@@ -768,8 +750,6 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       worldDrawn.current = new Map();
       searchGroup.current = null;
       rulerGroup.current = null;
-      stopCursor.current();
-      stopCursor.current = () => {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
       ages.current = {};
@@ -837,6 +817,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+  pinSheetRef.current = pinSheet;
   // Set when the sheet was opened from a button, so closing it can put focus
   // back. Not for a long-press: focus was never on a button then.
   const returnFocus = useRef(false);
@@ -904,9 +885,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     const m = map.current, Lm = leaflet.current, g = searchGroup.current;
     if (!m || !Lm || !g || size === null) return;
     const at = ptFor(Lm, size)(p.x, p.z);
-    m.setView(at, searchZoom(m.getZoom()), { animate: !prefersReducedMotion() });
+    const zoom = searchZoom(m.getZoom());
     g.clearLayers();
-    if (p.reticle) drawReticle({ L: Lm, group: g, pt: ptFor(Lm, size), p: palette(), size }, p, layers.pins).openPopup();
+    if (p.reticle) {
+      const marker = drawReticle({ L: Lm, group: g, pt: ptFor(Lm, size), p: palette(), size }, p, layers.pins);
+      // Opened once the fly-to lands: opened mid-flight, Leaflet's autoPan fights the
+      // animation for the view. A pick on the spot already in view moves nothing, so opens now.
+      // `hasLayer`: a second pick before the first landed has replaced this reticle.
+      const open = () => { if (g.hasLayer(marker)) marker.openPopup(); };
+      if (m.getCenter().equals(at) && m.getZoom() === zoom) open();
+      else m.once("moveend", open);
+    }
+    m.setView(at, zoom, { animate: !prefersReducedMotion() });
   };
   const searchClear = () => searchGroup.current?.clearLayers();
   // The reticle popup's Pin it (map-draw.ts `reticlePopup`): the same sheet a long-press opens, on that point.
@@ -924,16 +914,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     return () => root.removeEventListener("click", onClick);
   }, [layers.pins]);
 
-  // The readout: under the mouse on desktop, the centre otherwise. A tap copies it.
-  const here = cursor ?? centre;
-  const readout = here && size !== null ? readoutText(here.x, here.z, size) : "GPS 000 / 000";
-  const copyReadout = () => {
-    // ⚠️ Silent on refusal: an insecure context has no clipboard, and a denied write
-    // is the browser's answer, not something the player can act on.
-    try {
-      void navigator.clipboard?.writeText(readout).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1_500); }, () => {});
-    } catch { /* no clipboard */ }
-  };
+  // Escape ends a measurement. ⚠️ Not while the layers panel is open (its Escape closes
+  // it) or the pin sheet is (its Escape cancels the draft): one key, one thing.
+  useEffect(() => {
+    if (!rulerOn || layersOpen || pinSheet) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setRulerOn(false); setRulerPts([]); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rulerOn, layersOpen, pinSheet]);
 
   // Escape closes the panel. ⚠️ Not while the pin sheet is open: its own
   // Escape cancels the draft, and this window listener heard the same keypress
@@ -1092,10 +1080,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
             {/* The readout: under the mouse, else the centre. A click copies it. */}
-            <button type="button" onClick={copyReadout} title={READOUT_COPY.copy}
-              className="flex min-h-[44px] min-w-[31ch] items-center px-4 font-mono text-[11px] tracking-[0.06em] text-muted tabular-nums hover:text-ink">
-              {copied ? READOUT_COPY.copied : readout}
-            </button>
+            <MapReadout map={mapReady ? map.current : null} size={size} centre={centre} variant="bar" />
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
               <Reticle size={16} /> Center on me
@@ -1140,11 +1125,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
             )}
             {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
-            <button type="button" onClick={copyReadout}
-              className={`flex min-h-[44px] w-full items-center gap-3 border-b border-rule-2 px-4 font-mono text-[11px] text-muted tabular-nums ${layersOpen ? "border-t" : ""}`}>
-              <span className="truncate">{readout}</span>
-              <span className="ml-auto flex-none uppercase tracking-[0.12em] text-ink">{copied ? READOUT_COPY.copied : READOUT_COPY.copy}</span>
-            </button>
+            <div className={`border-b border-rule-2 ${layersOpen ? "border-t" : ""}`}>
+              <MapReadout map={null} size={size} centre={centre} variant="row" />
+            </div>
             <div className="flex items-center gap-2 px-4 py-2.5">
               <button
                 type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"

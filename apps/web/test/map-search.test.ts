@@ -118,3 +118,12 @@ describe("MapSearch", () => {
     expect(render({ initial: "zzzz" })).toContain("Nothing on the map by that name.");
   });
 });
+
+describe("searchMap with hyphens", () => {
+  const hy: SearchCtx = { size, places: [{ name: "Sar-e Pol", x: 1, z: 1 }, { name: "Pol Camp", x: 2, z: 2 }], bunkers: [] };
+  it("matches a hyphenated name typed with the hyphen, or without it", () => {
+    expect(searchMap("sar-e", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
+    expect(searchMap("sar e pol", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
+    expect(searchMap("e-pol", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
+  });
+});

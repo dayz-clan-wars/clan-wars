@@ -1,7 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { bearing, formatBearing, formatDistance, pathLength, rulerSummary } from "../lib/map-ruler";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { bearing, formatBearing, formatDistance, pathLength, rulerSummary, rulerTakesClick } from "../lib/map-ruler";
 import { MapRuler, type MapRulerProps } from "../app/(site)/map/map-ruler";
 import { drawRuler } from "../app/(site)/map/map-draw";
 
@@ -90,5 +92,17 @@ describe("MapRuler", () => {
     expect(html).toContain('aria-pressed="true"');
     expect(html).toContain("740 m · last leg 000°");
     expect(html).toContain(">Clear<");
+  });
+});
+
+describe("rulerTakesClick", () => {
+  it("adds a point only with the ruler on and the pin sheet closed", () => {
+    expect(rulerTakesClick(true, false)).toBe(true);
+    expect(rulerTakesClick(true, true)).toBe(false);
+    expect(rulerTakesClick(false, false)).toBe(false);
+  });
+  it("is what the map's click handler asks", () => {
+    const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
+    expect(view).toContain("if (!rulerTakesClick(rulerOnRef.current, pinSheetRef.current)) return;");
   });
 });
