@@ -89,6 +89,8 @@ export const ITEM_COPY = {
   where: "Where",
   noSpot: "Spawns, but not at a spot we can show on the map.",
   none: "Does not spawn on this server.",
+  loading: "Loading items…",
+  failed: "Items could not load. Try again.",
   howMany: "How many",
   upTo: (nominal: number) => `Up to ${nominal} on the server at once.`,
   restock: (min: number) => `More spawn when fewer than ${min} are left.`,
@@ -96,7 +98,8 @@ export const ITEM_COPY = {
   tiers: "Tiers",
   anyTier: "Any tier",
   crashLabel: "Crash sites",
-  crash: "Spawns at heli crashes and military convoys.",
+  // Only before world.json is in; after, the line names the events whose wrecks hold the item.
+  crash: "Spawns in the wrecks at crash sites.",
   events: "Events",
   proxyLabel: "Fixed spots",
   proxy: "Sits fixed on some wrecks and buildings.",

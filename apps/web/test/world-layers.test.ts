@@ -7,7 +7,7 @@ import { parseLimits } from "../lib/area-flags";
 import { parseTypes, type ItemsFile } from "../lib/item-index";
 import {
   EVENT_LAYERS, WORLD_MIN_ZOOM, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, ALWAYS_DRAWN, ITEM_ALWAYS_MAX, ITEM_KEY, ITEM_MANY_KEY,
-  allTiers, isDense, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  allTiers, delootEvents, isDense, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
 } from "../lib/world-layers";
 import { drawWorld, worldPopup, worldView } from "../app/(site)/map/map-draw";
 import { gridRef } from "../lib/map-projection";
@@ -314,9 +314,9 @@ describe("itemPoints", () => {
     limits: lim,
     source: W.source,
     events: [
-      { event: "StaticHeliCrash", points: [{ x: 50, z: 50 }, { x: 60, z: 60 }] },
-      { event: "StaticMilitaryConvoy", points: [{ x: 70, z: 70 }] },
-      { event: "StaticPoliceCar", points: [{ x: 80, z: 80 }] },
+      { event: "StaticHeliCrash", points: [{ x: 50, z: 50 }, { x: 60, z: 60 }], children: ["Wreck_Mi8_Crashed"] },
+      { event: "StaticMilitaryConvoy", points: [{ x: 70, z: 70 }], children: ["Land_Wreck_Uaz"] },
+      { event: "StaticPoliceCar", points: [{ x: 80, z: 80 }], children: ["land_wreck_uaz_aban1_police"] },
       { event: "VehicleOffroadHatchback", points: [{ x: 90, z: 90 }, { x: 95, z: 95 }] },
     ],
     bunkers: [], contaminated: [], playerSpawns: [],
@@ -341,6 +341,10 @@ describe("itemPoints", () => {
       { name: "Land_Mil_Barracks1", usage: ub("Military"), containers: [{ categories: cb("weapons"), tags: 0, points: 3 }] },
       { name: "Land_Wreck_hb01_aban1_blue", usage: 0, containers: [], proxies: ["hatchbackwheel"] },
       { name: "Land_Shop", usage: 0, containers: [{ categories: cb("food"), tags: 0, points: 3 }] },
+      // The event wrecks: never placed props, only reached through their event's children.
+      { name: "Wreck_Mi8_Crashed", usage: ub("MilitaryWest"), containers: [{ categories: cb("clothes", "weapons"), tags: 0, points: 15 }] },
+      { name: "Land_Wreck_Uaz", usage: ub("MilitaryEast"), containers: [{ categories: cb("clothes", "weapons"), tags: 0, points: 5 }] },
+      { name: "Land_Wreck_UAZ_Aban1_Police", usage: ub("Police"), containers: [{ categories: cb("clothes", "weapons"), tags: 0, points: 5 }] },
     ],
   };
 
@@ -357,12 +361,24 @@ describe("itemPoints", () => {
     expect(pts[0]!.title).toBe("Ada");
   });
 
-  it("puts deloot at the crash sites (heli crashes and convoys), never at a police car", () => {
-    const loot = { ...entry("GhillieSuit_Desert") };
+  it("⚠️ puts deloot only at the events whose wrecks can hold it: military loot at the heli and convoy", () => {
+    const loot = entry("GhillieSuit_Desert"); // deloot; Military, MilitaryEast, MilitaryWest; clothes
     expect(loot.deloot).toBe(true);
+    expect(delootEvents(IW, loot)).toEqual(["StaticHeliCrash", "StaticMilitaryConvoy"]);
     const pts = itemPoints(IW, loot);
     expect(pts.map((p) => p.x).sort((a, b) => a - b)).toEqual([50, 60, 70]);
     expect(pts.map((p) => p.title)).toContain("Heli crash");
+  });
+
+  it("⚠️ puts Police deloot (PP19) at the police cars and nowhere else", () => {
+    const pp19 = entry("PP19");
+    expect(delootEvents(IW, pp19)).toEqual(["StaticPoliceCar"]);
+    expect(itemPoints(IW, pp19)).toEqual([{ x: 80, z: 80, title: "Police car" }]);
+  });
+
+  it("gives deloot no point when no event's wreck fits it, and only deloot gets event wrecks", () => {
+    expect(delootEvents(IW, { ...entry("PP19"), usage: 0 })).toEqual([]);
+    expect(delootEvents(IW, entry("M4A1"))).toEqual([]);
   });
 
   it("⚠️ puts a fixed part (dispatch proxy) on every placed wreck that carries it, ignoring case", () => {
@@ -371,6 +387,16 @@ describe("itemPoints", () => {
     expect(pts).toEqual([{ x: 600, z: 600, title: "Fixed spot" }]);
     // proxy false: the flag is the index's word that some placed building carries it.
     expect(itemPoints(IW, { ...wheel, proxy: false })).toEqual([]);
+  });
+
+  it("puts a part fixed in an event's wreck (an AKM in the locked armory) at that event's spawns", () => {
+    const armory: WorldFile = {
+      ...IW,
+      events: [...IW.events, { event: "StaticContainerLocked", points: [{ x: 33, z: 33 }], children: ["Land_Armory"] }],
+      protos: [...IW.protos, { name: "Land_Armory", usage: 0, containers: [], proxies: ["AKM"] }],
+    };
+    const akm = { ...entry("Orphan_Item"), className: "akm", proxy: true };
+    expect(itemPoints(armory, akm)).toEqual([{ x: 33, z: 33, title: "Locked container" }]);
   });
 
   it("draws a building once even when it is both loot and a fixed spot", () => {
@@ -419,9 +445,20 @@ describe("itemPoints on the committed data", () => {
     expect(itemPoints(world, by("Flag_Wolf"))).toEqual([]);
   });
 
-  it("puts deloot (the AKM here) at the heli crashes and convoys", () => {
-    const titles = new Set(itemPoints(world, by("AKM")).map((p) => p.title));
-    expect(titles).toEqual(new Set(["Heli crash", "Chinook crash", "Military convoy"]));
+  it("⚠️ carries each active event's children, so deloot follows the wrecks' own usage", () => {
+    expect(world.events.find((e) => e.event === "StaticPoliceCar")!.children).toContain("Land_Wreck_UAZ_Aban1_Police");
+    expect(world.events.find((e) => e.event === "StaticHeliCrash")!.children).toContain("Wreck_Mi8_Crashed");
+  });
+
+  it("puts the AKM in the locked containers it is fixed in", () => {
+    expect(itemPoints(world, by("AKM")).some((p) => p.title === "Locked container")).toBe(true);
+  });
+
+  it("⚠️ puts PP19 (Police deloot) at the police cars only, and military deloot at the military wrecks", () => {
+    expect(delootEvents(world, by("PP19"))).toEqual(["StaticPoliceCar"]);
+    expect(delootEvents(world, by("PressVest_Blue"))).toEqual(["StaticPoliceCar"]);
+    // SCARH_Black is ContaminatedArea only: no heli or convoy wreck carries that usage.
+    expect(delootEvents(world, by("SCARH_Black"))).not.toContain("StaticHeliCrash");
   });
 
   it("puts the Ada (OffroadHatchback) on its vehicle spawns", () => {

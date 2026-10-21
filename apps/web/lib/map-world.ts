@@ -9,7 +9,10 @@ import { WORLD_MAP } from "@factions/domain";
 import type { parseLimits } from "./area-flags";
 
 export type WorldPoint = { x: number; z: number };
-export type WorldEvent = { event: string; points: WorldPoint[] }; // cfgeventspawns name
+// cfgeventspawns name. `children`: the classes the event places when it is active (events.xml
+// <children> and its positions' cfgeventgroups groups, item-index.ts eventChildren), sorted;
+// absent for an inactive event or one with none. The item search reads it for deloot.
+export type WorldEvent = { event: string; points: WorldPoint[]; children?: string[] };
 export type WorldArea = { name: string; x: number; z: number; radius: number };
 // u / t: the areaflags.map usage and value (tier) bitmasks at the prop's position; bit k is
 // entry k of WorldFile.limits.usage / .value.

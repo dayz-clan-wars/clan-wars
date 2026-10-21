@@ -21,6 +21,7 @@ import {
   LOOT_GROUPS,
   type WorldFile,
 } from "../lib/map-world";
+import { eventChildren } from "../lib/item-index";
 
 const here = dirname(fileURLToPath(import.meta.url));
 // Resolved from the script's location, not the cwd: pnpm runs it from apps/web.
@@ -31,7 +32,12 @@ const out = join(here, `../public/map-data/${WORLD_MAP}/world.json`);
 
 const read = (f: string) => readFileSync(join(mission, f), "utf8");
 
-const events = parseEventSpawns(read("cfgeventspawns.xml"));
+// Each event with the classes it places (its wrecks), for the item search's deloot.
+const children = eventChildren(read("db/events.xml"), read("cfgeventspawns.xml"), read("cfgeventgroups.xml"));
+const events = parseEventSpawns(read("cfgeventspawns.xml")).map((e) => {
+  const c = children.get(e.event);
+  return c && c.length > 0 ? { ...e, children: c } : e;
+});
 const bunkers = parseBunkers(read("cfgbunkerbroadcast.json"));
 const contaminated = parseEffectAreas(read("cfgEffectArea.json"));
 const playerSpawns = parsePlayerSpawns(read("cfgplayerspawnpoints.xml"));

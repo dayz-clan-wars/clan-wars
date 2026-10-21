@@ -8,7 +8,9 @@ import { parseLimits } from "../lib/area-flags";
 import type { WorldProto } from "../lib/map-world";
 import {
   applySources,
+  canHoldDeloot,
   canSpawnAt,
+  eventChildren,
   parseAttachedTo,
   parseEventChildren,
   parseEventGroupChildren,
@@ -93,6 +95,21 @@ describe("other sources", () => {
     const m = parseEventGroupChildren(fx("events.xml"), spawns, groups);
     expect(m.get("StaticObj_Wreck_M1A2_DE")).toEqual(["VehicleOffroadHatchback"]);
     expect(m.has("Land_Boat_Small9_DE")).toBe(false);
+  });
+
+  it("lists each active event's children, its own and its cfgeventgroups groups' alike", () => {
+    const spawns = `<eventposdef>
+      <event name="VehicleOffroadHatchback"><pos x="1" z="2" a="0" group="Convoy"/></event>
+      <event name="VehicleBoat"><pos x="1" z="2" a="0" group="Dock"/></event>
+    </eventposdef>`;
+    const groups = `<eventgroupdef>
+      <group name="Convoy"><child type="StaticObj_Wreck_M1A2_DE" x="0" z="0" a="0"/></group>
+      <group name="Dock"><child type="Land_Boat_Small9_DE" x="0" z="0" a="0"/></group>
+    </eventgroupdef>`;
+    const m = eventChildren(fx("events.xml"), spawns, groups);
+    expect(m.get("VehicleOffroadHatchback")).toEqual(["OffroadHatchback", "StaticObj_Wreck_M1A2_DE"]);
+    // active 0: neither its own children nor its group's.
+    expect(m.has("VehicleBoat")).toBe(false);
   });
 
   it("reads dispatch proxy types from placed groups only", () => {
@@ -215,6 +232,35 @@ describe("canSpawnAt", () => {
     // The area flags are a second router, not a fallback (effectiveUsage is a union).
     expect(canSpawnAt(by("M4A1"), { ...zoneShed, usage: u("Military") }, u("ContaminatedArea"), v("Unique"))).toBe(true);
     expect(canSpawnAt(by("M4A1"), { ...zoneShed, usage: u("Military") }, 0, v("Unique"))).toBe(false);
+  });
+});
+
+describe("canHoldDeloot", () => {
+  const items = parseTypes(fx("types.xml"), limits);
+  const by = (n: string) => ({ ...items.find((i) => i.className === n)! });
+  const u = (...n: string[]) => bit(limits.usage, ...n);
+  const c = (...n: string[]) => bit(limits.categories, ...n);
+  // The real wrecks' groups (nasdara mapgroupproto.xml), reduced to what the match reads.
+  const policeCar: WorldProto = { name: "Land_Wreck_UAZ_Aban1_Police", usage: u("Police"), containers: [{ categories: c("clothes", "containers", "weapons"), tags: 0, points: 5 }] };
+  const heli: WorldProto = { name: "Wreck_Mi8_Crashed", usage: u("MilitaryWest"), containers: [{ categories: c("clothes", "containers", "tools", "weapons"), tags: 0, points: 15 }] };
+
+  it("⚠️ puts a Police deloot gun (PP19) in a police-car wreck, never a heli crash", () => {
+    const pp19 = by("PP19");
+    expect(pp19.deloot).toBe(true);
+    expect(canHoldDeloot(pp19, policeCar)).toBe(true);
+    expect(canHoldDeloot(pp19, heli)).toBe(false);
+  });
+
+  it("puts military deloot in a MilitaryWest heli wreck by its usage, and only deloot", () => {
+    expect(canHoldDeloot(by("GhillieSuit_Desert"), heli)).toBe(true);
+    expect(canHoldDeloot(by("GhillieSuit_Desert"), policeCar)).toBe(false);
+    expect(canHoldDeloot(by("M4A1"), heli)).toBe(false); // not deloot
+    expect(canHoldDeloot({ ...by("PP19"), nominal: 0 }, policeCar)).toBe(false);
+  });
+
+  it("checks the container's categories too", () => {
+    const noWeapons: WorldProto = { ...policeCar, containers: [{ categories: c("clothes"), tags: 0, points: 1 }] };
+    expect(canHoldDeloot(by("PP19"), noWeapons)).toBe(false);
   });
 });
 

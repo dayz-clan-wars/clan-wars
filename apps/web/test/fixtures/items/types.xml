@@ -53,6 +53,20 @@
         <usage name="MilitaryEast"/>
         <usage name="MilitaryWest"/>
     </type>
+    <!-- Copied from nasdara db/types.xml at 3645ab27: deloot with Police usage only, so it turns up at the
+         police-car wrecks (Police usage), never at the heli crashes (MilitaryEast/West). -->
+    <type name="PP19">
+        <nominal>18</nominal>
+        <lifetime>28800</lifetime>
+        <restock>3600</restock>
+        <min>13</min>
+        <quantmin>100</quantmin>
+        <quantmax>100</quantmax>
+        <cost>100</cost>
+        <flags count_in_cargo="0" count_in_hoarder="0" count_in_map="1" count_in_player="0" crafted="0" deloot="1"/>
+        <category name="weapons"/>
+        <usage name="Police"/>
+    </type>
     <!-- No value: any tier. Tagged shelves. -->
     <type name="TunaCan">
         <nominal>20</nominal>

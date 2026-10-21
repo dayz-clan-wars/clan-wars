@@ -43,6 +43,18 @@ describe("the item view's switches", () => {
     expect(clearItem(start)).toBe(start);
   });
 
+  it("⚠️ a switch clicked during the view turns that layer ON, even one that was on before the pick", () => {
+    // Every switch reads off during the view, so a click means "show me this one": flipping
+    // the saved value would turn Military (on before the pick) off.
+    const shown = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const s = toggleWorldLayer(shown, "loot:military");
+    expect(s.view).toBeNull();
+    expect(s.sw.on).toEqual(before.on);
+    expect(s.sw.on["loot:military"]).toBe(true);
+    // Outside the view a click still flips.
+    expect(toggleWorldLayer(s, "loot:military").sw.on["loot:military"]).toBe(false);
+  });
+
   it("a switch flipped while an item is shown ends the item view, from the switches as they were", () => {
     const shown = pickItem(start, { className: "M4A1", label: "M4A1" });
     const s = toggleWorldLayer(shown, "event:StaticHeliCrash");
@@ -69,6 +81,19 @@ describe("itemPanel", () => {
       "Found in: Contaminated area",
       "Tiers: Unique",
     ]);
+  });
+
+  it("asks to zoom in only while the map is zoomed out", () => {
+    const many = Array.from({ length: 300 }, (_, i) => pt(i));
+    expect(itemPanel(entry("TunaCan"), "TunaCan", many, limits, { delootAt: null, zoomedIn: true }).lines[0]!.text).toBe("300 spots.");
+  });
+
+  it("names the events whose wrecks hold deloot, or none when no wreck fits", () => {
+    const pp19 = entry("PP19");
+    expect(text(itemPanel(pp19, "PP19", [pt(1)], limits, { delootAt: ["StaticPoliceCar"], zoomedIn: false }))).toContain("Crash sites: Police car");
+    const none = itemPanel(pp19, "PP19", [], limits, { delootAt: [], zoomedIn: false });
+    expect(none.lines.some((l) => l.label === ITEM_COPY.crashLabel)).toBe(false);
+    expect(none.lines[0]!.text).toBe(ITEM_COPY.noSpot);
   });
 
   it("says when there are too many spots to show zoomed out", () => {

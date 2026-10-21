@@ -28,12 +28,14 @@ export function clearItem(s: WorldState): WorldState {
 }
 
 /**
- * A layer switch flipped while an item is shown ends the item view first: the player asked
+ * A layer switch clicked while an item is shown ends the item view first: the player asked
  * for layers back, and flipping one switch on an all-off panel would lose the rest of theirs.
+ * ⚠️ During the view the click turns that layer ON, never flips the saved value: every switch
+ * reads off, so flipping one that was on before the pick did the opposite of the click.
  */
 export function toggleWorldLayer(s: WorldState, key: WorldLayerKey): WorldState {
   const { sw } = clearItem(s);
-  return { sw: { ...sw, on: { ...sw.on, [key]: !sw.on[key] } }, view: null };
+  return { sw: { ...sw, on: { ...sw.on, [key]: s.view ? true : !sw.on[key] } }, view: null };
 }
 
 export function toggleWorldTier(s: WorldState, bit: number): WorldState {
@@ -44,12 +46,19 @@ export function toggleWorldTier(s: WorldState, bit: number): WorldState {
 export type ItemPanelLine = { label: string; text: string };
 export type ItemPanelModel = { chip: string; lines: ItemPanelLine[] };
 
-/** How many parents "Comes on" names before "and N more": a Rag rides on some 200 zombie classes. */
+/** How many parents "Comes on" names before "and N more": a Rag rides on 179 zombie and clothing classes. */
 const COMES_ON_SHOWN = 6;
 
 /** "ContaminatedArea" → "Contaminated area", "MilitaryEast" → "Military east". */
 const usageLabel = (name: string) => name.replace(/([a-z])([A-Z])/gu, (_, a: string, b: string) => `${a} ${b.toLowerCase()}`);
 const namesOf = (list: readonly string[], mask: number) => list.filter((_, i) => (mask & (1 << i)) !== 0);
+
+/**
+ * What the panel reads from the map rather than the item. `delootAt`: the events whose wrecks
+ * hold this deloot item (world-layers.ts delootEvents), null without the world file.
+ * `zoomedIn`: the map is at LOOT_MIN_ZOOM or closer, where every item point is drawn.
+ */
+export type ItemPanelMap = { delootAt: readonly string[] | null; zoomedIn: boolean };
 
 /**
  * The panel's lines, in order: where it is on the map, how many the server keeps, where and
@@ -58,7 +67,13 @@ const namesOf = (list: readonly string[], mask: number) => list.filter((_, i) =>
  * `points` is null when the world file is not in: the spot count is then left out rather than
  * read as "no spot". `limits` names the item's masks (items.json and world.json share them).
  */
-export function itemPanel(item: ItemIndexEntry, label: string, points: readonly WorldMark[] | null, limits: WorldFile["limits"]): ItemPanelModel {
+export function itemPanel(
+  item: ItemIndexEntry,
+  label: string,
+  points: readonly WorldMark[] | null,
+  limits: WorldFile["limits"],
+  map: ItemPanelMap = { delootAt: null, zoomedIn: false },
+): ItemPanelModel {
   const chip = ITEM_COPY.chip(label);
   if (!spawnsAnywhere(item)) return { chip, lines: [{ label: ITEM_COPY.where, text: ITEM_COPY.none }] };
   const lines: ItemPanelLine[] = [];
@@ -66,7 +81,8 @@ export function itemPanel(item: ItemIndexEntry, label: string, points: readonly 
     if (points.length === 0) lines.push({ label: ITEM_COPY.where, text: ITEM_COPY.noSpot });
     else {
       const spots = ITEM_COPY.spots(points.length);
-      lines.push({ label: ITEM_COPY.onMap, text: points.length > ITEM_ALWAYS_MAX ? `${spots} ${ITEM_COPY.zoomIn}` : spots });
+      // Past ITEM_ALWAYS_MAX the points wait for LOOT_MIN_ZOOM, so only a zoomed-out map hides them.
+      lines.push({ label: ITEM_COPY.onMap, text: points.length > ITEM_ALWAYS_MAX && !map.zoomedIn ? `${spots} ${ITEM_COPY.zoomIn}` : spots });
     }
   }
   if (item.nominal > 0) {
@@ -77,7 +93,10 @@ export function itemPanel(item: ItemIndexEntry, label: string, points: readonly 
     lines.push({ label: ITEM_COPY.foundIn, text: namesOf(limits.usage, item.usage).map(usageLabel).join(", ") });
     lines.push({ label: ITEM_COPY.tiers, text: item.value === 0 ? ITEM_COPY.anyTier : namesOf(limits.value, item.value).map(tierLabel).join(", ") });
   }
-  if (item.deloot) lines.push({ label: ITEM_COPY.crashLabel, text: ITEM_COPY.crash });
+  // Only the events whose wrecks match it; none is no line (the "Where" line already says no spot).
+  const at = map.delootAt;
+  if (item.deloot && at === null) lines.push({ label: ITEM_COPY.crashLabel, text: ITEM_COPY.crash });
+  else if (item.deloot && at !== null && at.length > 0) lines.push({ label: ITEM_COPY.crashLabel, text: at.map(eventLabel).join(", ") });
   if (item.events.length > 0) lines.push({ label: ITEM_COPY.events, text: [...new Set(item.events.map(eventLabel))].join(", ") });
   if (item.proxy) lines.push({ label: ITEM_COPY.proxyLabel, text: ITEM_COPY.proxy });
   if (item.attachedTo.length > 0) {

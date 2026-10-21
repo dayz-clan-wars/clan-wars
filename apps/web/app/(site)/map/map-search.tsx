@@ -1,6 +1,6 @@
 "use client";
 import { useId, useMemo, useState, type KeyboardEvent } from "react";
-import { SEARCH_COPY } from "@/lib/map-copy";
+import { ITEM_COPY, SEARCH_COPY } from "@/lib/map-copy";
 import { gridRef } from "@/lib/map-projection";
 import { searchMap, type SearchCtx, type SearchHit, type SearchTab } from "@/lib/map-search";
 
@@ -15,6 +15,11 @@ export type MapSearchProps = {
   onItem?: (item: MapSearchItem) => void;
   /** The box took focus: the map fetches the item index then, not on load (it is ~900 KB). */
   onFocus?: () => void;
+  /**
+   * Where the item index is. ⚠️ While it is loading or failed, a name with no place match must
+   * not read "Nothing on the map by that name": the item may well be there, unseen.
+   */
+  itemsStatus?: "idle" | "loading" | "failed" | "ready";
   /** The box was emptied: the map drops the reticle with it. */
   onClear?: () => void;
   /** "panel" is the desktop box top-left; "bar" is the phone's full-width bar under the strips. */
@@ -33,7 +38,7 @@ const TABS: SearchTab[] = ["locations", "items", "models"];
  * name lists its matches under a tab per kind. Only tabs with results are drawn,
  * so Items and Models stay out of the way until something fills them.
  */
-export function MapSearch({ ctx, onPick, onItem, onFocus, onClear, variant, initial = "" }: MapSearchProps) {
+export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready", onClear, variant, initial = "" }: MapSearchProps) {
   const [q, setQ] = useState(initial);
   const [open, setOpen] = useState(initial.trim() !== "");
   const [tab, setTab] = useState<SearchTab>("locations");
@@ -106,7 +111,12 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, onClear, variant, init
               </li>
             ))}
           </ul>
-          {rows.length === 0 && <p className="m-0 px-3 py-3 font-mono text-[11px] text-muted">{SEARCH_COPY.none}</p>}
+          {!go && itemsStatus === "loading" && <p role="status" className="m-0 px-3 py-3 font-mono text-[11px] text-muted">{ITEM_COPY.loading}</p>}
+          {/* A button: the dropdown holds focus in the box (mousedown above), so a tap retries without closing the list. */}
+          {!go && itemsStatus === "failed" && (
+            <button type="button" onClick={onFocus} className="block min-h-[44px] w-full px-3 text-left font-mono text-[11px] text-muted hover:text-ink">{ITEM_COPY.failed}</button>
+          )}
+          {rows.length === 0 && (go || itemsStatus === "ready" || itemsStatus === "idle") && <p className="m-0 px-3 py-3 font-mono text-[11px] text-muted">{SEARCH_COPY.none}</p>}
         </div>
       )}
     </div>

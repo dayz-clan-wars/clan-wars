@@ -3,7 +3,8 @@
 // selection is testable; map-draw.ts's `drawWorld` puts the result on the map.
 import { EVENT_LAYERS, WORLD_GROUPS, WORLD_LABELS, type WorldGroup } from "./map-copy";
 import { LOOT_GROUPS, effectiveUsage, type WorldFile } from "./map-world";
-import { canSpawnAt, type ItemIndexEntry } from "./item-index";
+import { canHoldDeloot, canSpawnAt, type ItemIndexEntry } from "./item-index";
+import type { WorldProto } from "./map-world";
 
 export { EVENT_LAYERS };
 
@@ -39,9 +40,9 @@ export const LOOT_MIN_ZOOM = 5;
 export const ITEM_KEY = "item";
 export const ITEM_MANY_KEY = "item:many";
 /**
- * ⚠️ The most item points drawn zoomed out. M4A1 (a few dozen zone buildings) fits, so a
- * player sees every spot at once; a Rag is in thousands of buildings, and drawing those
- * zoomed out is the DOM-marker flood LOOT_MIN_ZOOM exists to stop.
+ * ⚠️ The most item points drawn zoomed out. M4A1 (40 zone buildings) fits, so a player sees
+ * every spot at once; a Hammer is in over 6,000 buildings, and drawing those zoomed out is the
+ * DOM-marker flood LOOT_MIN_ZOOM exists to stop.
  */
 export const ITEM_ALWAYS_MAX = 250;
 /** Drawn at every zoom: 23 bunkers and 21 circles cost nothing, and both are what a player scans the whole map for. */
@@ -196,13 +197,34 @@ export function writeWorldSwitches(on: Record<WorldLayerKey, boolean>, tiers: nu
   return JSON.stringify({ on, tiers: presentTiers(w).filter((t) => (tiers & t.bit) !== 0).map((t) => t.name) });
 }
 
+/** Protos by lower-cased name, once per world file: event children are matched to them by name. */
+const protoIndex = new WeakMap<WorldFile, Map<string, WorldProto>>();
+function protoNamed(w: WorldFile, name: string): WorldProto | undefined {
+  let m = protoIndex.get(w);
+  if (!m) {
+    m = new Map();
+    for (const p of w.protos) if (!m.has(p.name.toLowerCase())) m.set(p.name.toLowerCase(), p);
+    protoIndex.set(w, m);
+  }
+  // ⚠️ Lower-cased, as linkProtos does: events.xml and mapgroupproto spell some wrecks differently.
+  return m.get(name.toLowerCase());
+}
+
 /**
- * Where deloot (dynamic-event loot) turns up: the heli crashes and the military convoys,
- * whose wrecks are what the CE fills with it (scripts/build-item-index.ts reads the convoy
- * wrecks through cfgeventgroups). ⚠️ Not StaticPoliceCar: its wrecks carry their own police
- * loot, and drawing deloot there would send players to 69 cars that never hold it.
+ * The events whose wrecks can hold this deloot item, in world.json order: an event counts when
+ * any class it places has a loot group that passes canHoldDeloot. Read from the data, not a
+ * list: the heli wrecks are MilitaryEast/West and the police cars Police, so each deloot item
+ * lands only where its own usage sends it.
  */
-export const DELOOT_EVENTS: readonly string[] = ["StaticHeliCrash", "StaticHeliCrashBig", "StaticMilitaryConvoy"];
+export function delootEvents(w: WorldFile, item: ItemIndexEntry): string[] {
+  if (!item.deloot || item.nominal <= 0) return [];
+  return w.events
+    .filter((e) => e.children?.some((c) => {
+      const proto = protoNamed(w, c);
+      return proto !== undefined && canHoldDeloot(item, proto);
+    }))
+    .map((e) => e.event);
+}
 
 /** An event's name for players: its layer label, else the raw name split at capitals ("InfectedArmy" → "Infected Army"). */
 export const eventLabel = (event: string): string => EVENT_LAYERS[event]?.label ?? event.replace(/([a-z])([A-Z])/gu, "$1 $2");
@@ -215,7 +237,7 @@ const LOOT_SPOT = "Loot building";
  * Every spot on the map this item can be found at: the buildings whose loot points can hold
  * it (canSpawnAt, with each prop's own area usage and tier), the placed buildings that carry
  * it fixed (a dispatch proxy), and the spawn points of the events that bring it (its own
- * events, and the crash sites for deloot).
+ * events, and for deloot the events whose wrecks can hold it: delootEvents).
  *
  * ⚠️ No tier filter and no switches: a picked item is the whole question, and a tier chip
  * left off from earlier must not hide where it is. A building is one point however many
@@ -241,7 +263,12 @@ export function itemPoints(w: WorldFile, item: ItemIndexEntry): WorldMark[] {
       }
     }
   }
-  const events = new Set([...item.events, ...(item.deloot ? DELOOT_EVENTS : [])]);
+  // Events whose wrecks carry it fixed: a placed building's proxies are drawn above, but a group
+  // only an event places (the locked armory container's AKM) has no prop, only the event's spawns.
+  const fixedIn = item.proxy
+    ? w.events.filter((e) => e.children?.some((c) => protoNamed(w, c)?.proxies?.some((x) => x.toLowerCase() === name))).map((e) => e.event)
+    : [];
+  const events = new Set([...item.events, ...delootEvents(w, item), ...fixedIn]);
   for (const e of w.events) {
     if (!events.has(e.event)) continue;
     const title = eventLabel(e.event);

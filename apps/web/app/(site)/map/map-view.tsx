@@ -29,7 +29,7 @@ import { MapRoster } from "./map-roster";
 import { WorldPanel } from "./world-panel";
 import { loadWorld, type WorldFile } from "@/lib/map-world";
 import {
-  ITEM_KEY, ITEM_MANY_KEY, WORLD_STORAGE_KEY, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  ITEM_KEY, ITEM_MANY_KEY, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, delootEvents, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
   type WorldItem, type WorldLayerKey, type WorldSwitches,
 } from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
@@ -194,6 +194,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const worldSw: WorldSwitches | null = world ? ws.sw : null;
   // The item index: fetched on the search box's first focus, never with the map.
   const [itemsFile, setItemsFile] = useState<ItemsFile | null>(null);
+  const [itemsStatus, setItemsStatus] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  // At LOOT_MIN_ZOOM or closer every item point is drawn, so the panel stops asking to zoom in.
+  const [zoomedIn, setZoomedIn] = useState(false);
   const worldList = useMemo(() => (world ? worldLayers(world) : []), [world]);
   const worldTiers = useMemo(() => (world ? presentTiers(world) : []), [world]);
   // Per-row counts follow the tier filter: a loot row says how many buildings it would draw.
@@ -406,8 +409,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const toggleTier = (bit: number) => setWs((prev) => saveWorld(toggleWorldTier(prev, bit)));
   const showItem = (hit: MapSearchItem) => setWs((prev) => pickItem(prev, hit));
   const clearItemView = () => setWs(clearItem);
+  // On focus, and from the failed line's retry. A failure is not cached (loadItemIndex), so trying again refetches.
   const loadItems = () => {
-    if (!itemsFile) loadItemIndex().then(setItemsFile, () => { /* not cached: the next focus tries again */ });
+    if (itemsStatus === "loading" || itemsStatus === "ready") return;
+    setItemsStatus("loading");
+    loadItemIndex().then((f) => { setItemsFile(f); setItemsStatus("ready"); }, () => setItemsStatus("failed"));
   };
   const worldStatus = worldFailed ? "failed" : world && worldSw ? "ready" : "loading";
 
@@ -697,6 +703,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
           setCentre({ grid: gridRef(c.x, c.z, size), x: c.x, z: c.z });
+          setZoomedIn(m.getZoom() >= LOOT_MIN_ZOOM);
           // A "Pin here" draft rides the centre: pan, and the pin moves under the cross.
           setPinAt((d) => followCentre(d, c));
         };
@@ -910,7 +917,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     [size, world, itemsFile],
   );
   // The item view's panel. Its card slot stays empty until Task 10's item cards.
-  const itemModel = shown && shownItem ? itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits) : null;
+  const delootAt = useMemo(() => (world && shownItem ? delootEvents(world, shownItem) : null), [world, shownItem]);
+  const itemModel = shown && shownItem ? itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }) : null;
   /**
    * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
    * reticle with its popup open; a place or bunker does not, because its name or its
@@ -1030,7 +1038,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
       {/* Phones: the search bar under the strips, full width, the ruler beside it. Stays up with the pin sheet so the map never jumps. */}
       <div className="absolute inset-x-0 top-0 z-[1100] flex h-(--cw-top) items-center gap-2 border-b-2 border-rule-2 bg-frame px-4 lg:hidden">
-        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} onClear={searchClear} variant="bar" />}</div>
+        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} itemsStatus={itemsStatus} onClear={searchClear} variant="bar" />}</div>
         <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="bar" />
       </div>
 
@@ -1041,7 +1049,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           {searchCtx && (
             // The item panel sits in the search box's own box, so the popup fit (CHROME_IDS.search) clears it too.
             <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden flex-col gap-2 lg:flex">
-              <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} onClear={searchClear} variant="panel" />
+              <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} itemsStatus={itemsStatus} onClear={searchClear} variant="panel" />
               {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="panel" />}
             </div>
           )}

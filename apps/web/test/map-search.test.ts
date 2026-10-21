@@ -149,6 +149,18 @@ describe("MapSearch", () => {
     expect(html).toContain(">M4A1<");
   });
 
+  it("says the items are loading instead of \"nothing by that name\"", () => {
+    const html = render({ initial: "m4a1", itemsStatus: "loading" });
+    expect(html).toContain("Loading items…");
+    expect(html).not.toContain("Nothing on the map by that name.");
+  });
+
+  it("says the items failed, as a retry", () => {
+    const html = render({ initial: "m4a1", itemsStatus: "failed" });
+    expect(html).toContain("Items could not load. Try again.");
+    expect(html).toMatch(/<button[^>]*>Items could not load\. Try again\.<\/button>/);
+  });
+
   it("says when nothing matches", () => {
     expect(render({ initial: "zzzz" })).toContain("Nothing on the map by that name.");
   });

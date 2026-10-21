@@ -171,6 +171,21 @@ export function parseEventGroupChildren(eventsXml: string, spawnsXml: string, gr
 }
 
 /**
+ * event → every class an ACTIVE event places, sorted: its own <children> and the children of
+ * the cfgeventgroups groups its spawn positions name. The inverse of parseEventChildren plus
+ * parseEventGroupChildren, kept in world.json so the map can tell which wrecks an event brings.
+ */
+export function eventChildren(eventsXml: string, spawnsXml: string, groupsXml: string): Map<string, string[]> {
+  const out = new Map<string, Set<string>>();
+  const add = (byChild: Map<string, string[]>) => {
+    for (const [child, events] of byChild) for (const e of events) out.set(e, (out.get(e) ?? new Set()).add(child));
+  };
+  add(parseEventChildren(eventsXml));
+  add(parseEventGroupChildren(eventsXml, spawnsXml, groupsXml));
+  return new Map([...out].map(([k, v]) => [k, [...v].sort()]));
+}
+
+/**
  * Item classes fixed in a building by <dispatch><proxy type>, for groups that are actually placed.
  * ⚠️ Placed-ness is matched case-insensitively: Nasdara's mapgroupproto spells 37 groups with
  * different case from mapgrouppos (Land_Store_Carservice, the refugee tents and more).
@@ -249,13 +264,29 @@ export function applySources(items: ItemIndexEntry[], s: ItemSources): void {
  */
 export function canSpawnAt(item: ItemIndexEntry, proto: WorldProto, areaUsage: number, areaValue: number): boolean {
   if (item.nominal <= 0 || item.deloot) return false;
+  if (item.value !== 0 && (areaValue & item.value) === 0) return false;
+  return fitsProto(item, proto, areaUsage);
+}
+
+/** Usage, then a container whose categories and tags fit: the part of the match buildings and event wrecks share. */
+function fitsProto(item: ItemIndexEntry, proto: WorldProto, areaUsage: number): boolean {
   // ⚠️ No usage means no building, not every building. On Nasdara that covers twelve items
   // with a nominal (the soda cans, Flashlight, two car wheels…); matching them everywhere
   // would paint every loot building on the map for them.
   if (item.usage === 0 || (effectiveUsage(proto, areaUsage) & item.usage) === 0) return false;
-  if (item.value !== 0 && (areaValue & item.value) === 0) return false;
   const fits = (have: number, want: number) => have === 0 || want === 0 || (have & want) !== 0;
   return proto.containers.some((c) => fits(c.categories, item.categories) && fits(c.tags, item.tags));
+}
+
+/**
+ * Can this deloot item turn up in this event wreck (a heli crash, a convoy truck, a police car)?
+ * The same usage, category and tag match as a building, on the wreck's own group usage alone:
+ * an event's wrecks are not placed props, so no area flags are read for them, and no tier.
+ * ⚠️ Matching every deloot item to every crash site sent the Police-only PP19 and press vests
+ * to the MilitaryEast/West heli wrecks and never to the 69 police cars that actually hold them.
+ */
+export function canHoldDeloot(item: ItemIndexEntry, proto: WorldProto): boolean {
+  return item.nominal > 0 && item.deloot && fitsProto(item, proto, 0);
 }
 
 /**
