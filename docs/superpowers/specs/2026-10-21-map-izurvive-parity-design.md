@@ -50,6 +50,15 @@ smarter search, and a ruler.
 8. **The "truck" players ask for is the `VehicleTruck01` event** (covered M3S trucks,
    27 positions). There is no separate build-truck event on Nasdara.
 
+9. **The site's grid reference switches to in-game GPS numbering, everywhere** (user,
+   2026-10-21). Until now `gridRef` (`apps/web/lib/map-projection.ts`) counted the
+   second number up from the bottom, so "Grid 067 023" on the site and the in-game GPS
+   disagreed. From this change every grid ref on the site (bottom bar, pin/base/roster
+   labels, kit and award pages, `/map?at=` keys) is the GPS's. The 1 km grid lines are
+   drawn from the top edge too, so a GPS cell is a drawn cell. Old `/map?at=` links and
+   grid numbers already posted in Discord will point somewhere else; that is
+   accepted.
+
 ## Layers
 
 All new layers go in the existing gear-button layers panel as grouped sections under
