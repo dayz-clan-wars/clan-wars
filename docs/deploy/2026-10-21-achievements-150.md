@@ -31,43 +31,60 @@ All commands run on the bot host, in `/opt/clan-wars`. Every SQL statement below
 its psql call; on this host `pnpm` is `/home/acab/.local/bin/pnpm`, and every script runs in a
 subshell that loads `.env`.
 
+**A helper for every restart below.** Paste it into the shell you run this runbook from (again
+if you reconnect). Given the instant just before a restart, it waits up to 3 minutes for THAT
+boot's `bot ready as`, then prints that boot's achievements line and the flag as the running
+process actually has it. ⚠️ `--since`, never `-n 80`: a tail can show the PREVIOUS boot's
+lines, and they say whatever the old `.env` said. The `/proc` read is the authority (the
+unit's main process is pnpm, and the bot inherits its environment); the log line is the
+cross-check.
+
+    bootcheck() {
+      timeout 180 sh -c 'until sudo -n journalctl -u clan-wars-bot --since "$1" --no-pager | grep -q "bot ready as"; do sleep 3; done' _ "$1" \
+        || { echo "NO 'bot ready as' since $1: stop and read sudo -n journalctl -u clan-wars-bot --since \"$1\""; return 1; }
+      sudo -n journalctl -u clan-wars-bot --since "$1" --no-pager | grep -E 'bot ready as|ACHIEVEMENTS_TICK is off|achievements tick on'
+      sudo -n cat /proc/$(systemctl show -p MainPID --value clan-wars-bot)/environ | tr '\0' '\n' | grep '^ACHIEVEMENTS_TICK' || echo 'ACHIEVEMENTS_TICK unset'
+    }
+
 1. **Take a `pg_dump` of `factions_live`.**
 
        cd /opt/clan-wars && sudo -n docker compose exec -T postgres pg_dump -U factions -Fc factions_live > ~/factions_live-pre-achievements-150.dump
 
-2. **Turn the tick off, BEFORE the tag lands.** Back `.env` up, set the flag off, restart:
+2. **Turn the tick off, BEFORE the tag lands.** Back `.env` up, set the flag off (the one
+   command works whether or not the key is already there), restart, check:
 
        cd /opt/clan-wars && cp -p .env .env.bak-$(date -u +%Y%m%dT%H%MZ)-achievements-off
-       cd /opt/clan-wars && sed -i 's/^ACHIEVEMENTS_TICK=.*/ACHIEVEMENTS_TICK=0/' .env && grep -n '^ACHIEVEMENTS_TICK' .env
-       sudo -n systemctl restart clan-wars-bot
+       cd /opt/clan-wars && { grep -q '^ACHIEVEMENTS_TICK=' .env && sed -i 's/^ACHIEVEMENTS_TICK=.*/ACHIEVEMENTS_TICK=0/' .env || printf '\nACHIEVEMENTS_TICK=0\n' >> .env; } && grep -n 'ACHIEVEMENTS_TICK' .env
+       R="$(date -u '+%Y-%m-%d %H:%M:%S') UTC"; sudo -n systemctl restart clan-wars-bot; bootcheck "$R"
 
-   `grep` must print exactly one line, `ACHIEVEMENTS_TICK=0`. (If it prints nothing the flag
-   was never set and the tick is already off; leave it unset.)
+   `grep` must print exactly one line, `ACHIEVEMENTS_TICK=0`. `bootcheck` must show
+   `bot ready as …` and `ACHIEVEMENTS_TICK=0`. The bot running now is still v2.6.0, which logs
+   nothing about this flag at startup (the `ACHIEVEMENTS_TICK is off` line arrives with this
+   release), so here only the `/proc` line speaks to it.
 
-   ⚠️ The bot running now is still v2.6.0, which logs nothing about this flag at startup (the
-   `ACHIEVEMENTS_TICK is off` line arrives with this release). Confirm from the running
-   process's own environment instead, and that it came back up:
-
-       sudo -n cat /proc/$(systemctl show -p MainPID --value clan-wars-bot)/environ | tr '\0' '\n' | grep '^ACHIEVEMENTS_TICK'
-       sudo -n journalctl -u clan-wars-bot -n 50 --no-pager | grep 'bot ready as'
-
-   The first must print `ACHIEVEMENTS_TICK=0` (or nothing), never `1`/`true`.
+   ⚠️ **If `/proc` shows `ACHIEVEMENTS_TICK=1` or `true` after this restart, STOP. Do not push
+   the tag.** Something in `.env` the edit did not catch (an `export ACHIEVEMENTS_TICK=1`, a
+   second line, a stray space) is still setting it; fix `.env` by hand and repeat this step.
 
 3. **Deploy.** This is the release deploy: once the tag lands, `clan-wars-deploy.timer` runs
    `deploy/deploy-release.sh`, which stops the writers, dumps, applies 0071, and restarts the
    web app, the worker and the bot. Do not rebuild by hand. Watch it finish:
 
-       sudo -n journalctl -u clan-wars-deploy -n 30 --no-pager
+       sudo -n journalctl -u clan-wars-deploy -n 30 --no-pager -o short-iso --utc
        cat /var/lib/clan-wars/deployed-tag
 
-   `deployed-tag` must read `v2.7.0`. Then confirm the bot came up with the tick off; this is
-   the line this release adds:
+   `deployed-tag` must read `v2.7.0`. The deployer restarted the bot itself, so there was no
+   "just before" to capture: set `R` from the journal above to the timestamp of the FIRST line
+   of the run that deployed v2.7.0 (the run started the bot partway through, so the run's
+   finish time can fall after the bot's `bot ready as` and miss it), then check:
 
-       sudo -n journalctl -u clan-wars-bot -n 80 --no-pager | grep -E 'bot ready as|ACHIEVEMENTS_TICK is off|achievements tick on'
+       R='YYYY-MM-DD HH:MM:SS UTC'; bootcheck "$R"
 
-   Expect `bot ready as …` and `ACHIEVEMENTS_TICK is off: no achievements are being evaluated
-   or announced.` If you see `achievements tick on`, stop the bot now
-   (`sudo -n systemctl stop clan-wars-bot`), fix `.env`, and start it again before going on.
+   Expect `bot ready as …`, `ACHIEVEMENTS_TICK is off: no achievements are being evaluated or
+   announced.` (the line this release adds), and `ACHIEVEMENTS_TICK=0`. If you see
+   `achievements tick on` or `ACHIEVEMENTS_TICK=1`, stop the bot now
+   (`sudo -n systemctl stop clan-wars-bot`), fix `.env`, start it again and `bootcheck` before
+   going on.
 
    And the migration:
 
@@ -89,34 +106,38 @@ subshell that loads `.env`.
    not, stop here and run Part A's runbook first: a backfill over hits without `cause` misses
    Hipster and Snagged, and since the backfill heads the watermarks, nothing goes back for them.
 
-5. **Note the release instant `T`, and the notice head `N0`.** Now, after the deploy and before
-   the backfill:
+5. **Note the notice head `N0`**, before the backfill:
 
-       date -u +%Y-%m-%dT%H:%M:%SZ
        cd /opt/clan-wars && sudo -n docker compose exec -T postgres psql -U factions -d factions_live -X -c "select coalesce(max(id), 0) as n0 from clan_notices;"
 
-   Write both down. Step 7 counts only unlocks earned before `T`. `N0` is how steps 6 and 9 find
-   the notices queued from here on: ⚠️ an achievement notice's `occurred_at` is the unlock's
-   `earned_at`, so a history unlock announced by mistake carries a PAST date, and a check on
-   `occurred_at > T` would miss exactly the failure it is looking for. `clan_notices` has no
-   created-at column; its id is the order of creation.
+   Write it down. `N0` is how steps 6 and 9 find the notices queued from here on: ⚠️ an
+   achievement notice's `occurred_at` is the unlock's `earned_at`, so a history unlock
+   announced by mistake carries a PAST date, and a check on `occurred_at` would miss exactly
+   the failure it is looking for. `clan_notices` has no created-at column; its id is the order
+   of creation.
 
-6. **Backfill, silently.** Evaluates every owner against all 150 rules with `announce: false`,
-   then walks the clans a second time (Every Class Covered reads the members' class tiles,
-   which the first walk had not written yet), and ends by heading every watermark, including
-   B8's `achievements:classUnlocks`, so the live tick starts from now:
+6. **Backfill, silently, then note `T`.** Evaluates every owner against all 150 rules with
+   `announce: false`, then walks the clans a second time (Every Class Covered reads the
+   members' class tiles, which the first walk had not written yet), and ends by heading every
+   watermark, including B8's `achievements:classUnlocks`, so the live tick starts from there.
+   The `date` runs only if the backfill exits 0, and prints `T`:
 
-       cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s backfill:achievements)
+       cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s backfill:achievements) && date -u +%Y-%m-%dT%H:%M:%SZ
 
    Expect it to take a while (minutes, not seconds: every player is read against the
    `player.hit` history, which 0071's indexes are for). It must print
-   `backfill: N owners evaluated, N unlocks inserted, 0 rule failures, in Nms` and exit **0**.
-   Any `rule … failed for …` line, or a nonzero exit, stops the runbook: the tick stays off,
-   read the error, fix, and run it again (it is idempotent by the unlock primary key).
+   `backfill: N owners evaluated, N unlocks inserted, 0 rule failures, in Nms` and exit **0**,
+   followed by the timestamp. Write that down as `T`, the release instant. Any
+   `rule … failed for …` line, or a nonzero exit (no timestamp), stops the runbook: the tick
+   stays off, read the error, fix, and run it again (it is idempotent by the unlock primary
+   key). The root form resolves cleanly (`@factions/db` and `drizzle-orm` both resolve from
+   the workspace root; it is `rebuild:kills` that does not), so no package-local form is needed.
 
-   ⚠️ If the root form fails to resolve a package, use the bot-package form:
-
-       cd /opt/clan-wars && (set -a && . ./.env && set +a && cd apps/bot && /home/acab/.local/bin/pnpm -s exec tsx ../../scripts/backfill-achievements.ts)
+   ⚠️ `T` is the backfill's EXIT, not its start. A tile earned while the backfill ran was
+   credited silently, and the tick is off until step 8, so it was never announced either;
+   taking `T` earlier would leave it out of the summary and out of the live announcements
+   both. Nothing earned between `T` and step 8 can be announced twice: the live tick only
+   reads past the heads the backfill wrote.
 
    Check nothing was queued:
 
@@ -126,7 +147,7 @@ subshell that loads `.env`.
 
 7. **Queue the summary DMs.** One DM per linked player who holds any of the 103 new tiles from
    before `T`, counting their own tiles (not their clan's). Dry run first and read the count;
-   put `T` from step 5 in for `<T>`:
+   put `T` from step 6 in for `<T>`:
 
        cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s announce:achievement-summary --before <T> --dry-run)
        cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s announce:achievement-summary --before <T>)
@@ -140,15 +161,14 @@ subshell that loads `.env`.
    ⚠️ Never run `pnpm backfill:achievement-notices` for this release: it announces every
    unlock one by one.
 
-8. **Turn the tick back on.** Back `.env` up again, set the flag, restart, confirm:
+8. **Turn the tick back on.** Back `.env` up again, set the flag, restart, check:
 
        cd /opt/clan-wars && cp -p .env .env.bak-$(date -u +%Y%m%dT%H%MZ)-achievements-on
-       cd /opt/clan-wars && sed -i 's/^ACHIEVEMENTS_TICK=.*/ACHIEVEMENTS_TICK=1/' .env && grep -n '^ACHIEVEMENTS_TICK' .env
-       sudo -n systemctl restart clan-wars-bot
-       sudo -n journalctl -u clan-wars-bot -n 80 --no-pager | grep -E 'bot ready as|ACHIEVEMENTS_TICK is off|achievements tick on'
+       cd /opt/clan-wars && { grep -q '^ACHIEVEMENTS_TICK=' .env && sed -i 's/^ACHIEVEMENTS_TICK=.*/ACHIEVEMENTS_TICK=1/' .env || printf '\nACHIEVEMENTS_TICK=1\n' >> .env; } && grep -n 'ACHIEVEMENTS_TICK' .env
+       R="$(date -u '+%Y-%m-%d %H:%M:%S') UTC"; sudo -n systemctl restart clan-wars-bot; bootcheck "$R"
 
-   (If step 2 found the flag unset, append `ACHIEVEMENTS_TICK=1` instead of the `sed`.) Expect
-   `achievements tick on`.
+   `grep` must print exactly one line, `ACHIEVEMENTS_TICK=1`. `bootcheck` must show
+   `bot ready as …`, `achievements tick on` and `ACHIEVEMENTS_TICK=1`.
 
 9. **Verify.** Put `T` in for `<T>` and `N0` for `<N0>`:
 
@@ -169,7 +189,7 @@ subshell that loads `.env`.
    | Query | Expect |
    |---|---|
    | `new_key_unlocks` | non-zero for `player`; `clan` rows if any clan has a member with a class tile, kills, or ruin repairs |
-   | `summary_dms` | **= `linked_players_with_new_tiles`** = step 7's `N` |
+   | `summary_dms` | **= `linked_players_with_new_tiles`** = step 7's `N`. The second can drift by one or two if someone links or unlinks between steps 7 and 9; the summary was counted at step 7 |
    | `posted` | climbs to `summary_dms` within a few minutes (the notice poster sends 50 per tick, every 10 s); `failed` is a player who has DMs closed |
    | `achievement_notices_since_n0` | **≈ 0** right after step 8: only tiles earned live since `T` (a Bad Dog window that closed since, say). Each notice is one row per target (public wall, clan channel, DM), so one unlock can be up to three. `earliest_earned` well before `T` means history is being announced: turn the tick off (Rolling back) and find out why |
 
