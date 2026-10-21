@@ -175,8 +175,11 @@ describe("committed world.json", () => {
   });
 
   it("carries the infected and animal territories inside the world", () => {
-    expect(world.territories.infected.length).toBeGreaterThan(0);
-    expect(world.territories.animals.length).toBeGreaterThan(0);
+    // Nasdara 58a7c4d: 686 zombie zones; 500 animal zones (hare 278, wild boar 112, hen 110, cattle's file empty).
+    expect(world.territories.infected).toHaveLength(686);
+    expect(world.territories.animals).toHaveLength(500);
+    const kinds = Object.fromEntries([...new Set(world.territories.animals.map((a) => a.kind))].map((k) => [k, world.territories.animals.filter((a) => a.kind === k).length]));
+    expect(kinds).toEqual({ wild_boar: 112, hen: 110, hare: 278 });
     for (const z of [...world.territories.infected, ...world.territories.animals]) {
       expect(z.radius).toBeGreaterThan(0);
       expect(z.x).toBeGreaterThanOrEqual(0);

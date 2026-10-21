@@ -329,6 +329,12 @@ describe("committed items.json", () => {
     for (const n of supplyKitClasses(template)) expect(by.get(n)?.clanWars, n).toContain("supply kit");
   });
 
+  it("loads the covered trucks with trowels and mortar, not tents (mission 58a7c4d)", () => {
+    expect(by.get("BrickTrowel")!.attachedTo).toContain("Truck_01_Covered");
+    expect(by.get("MortarMix_Opened")!.attachedTo).toContain("Truck_01_Covered");
+    expect(by.get("CarTent")!.attachedTo).not.toContain("Truck_01_Covered");
+  });
+
   it("puts M4A1 parts on the M4A1 and cars on their events", () => {
     expect(by.get("M4_Suppressor")!.attachedTo).toContain("M4A1");
     expect(by.get("OffroadHatchback")!.events.length).toBeGreaterThan(0);
