@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, achievementProgress, type Database } from "@factions/db";
-import { ACHIEVEMENT_BY_KEY } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, ACHIEVEMENTS } from "@factions/domain";
 import { sql } from "drizzle-orm";
 import { REVOCABLE_KEYS, revokeAchievements } from "../../src/achievements/revoke.js";
 import { PVP_RULES } from "../../src/achievements/rules-pvp.js";
@@ -29,6 +29,26 @@ describe("revokeAchievements", () => {
       expect(ACHIEVEMENT_BY_KEY[k].group).toBe("pvp");
     }
     for (const k of ["flag_thief", "home_defender", "blue_on_blue"]) expect(REVOCABLE_KEYS).not.toContain(k);
+  });
+
+  it("⚠️ every armory tile is revocable: each reads pvpBy kills through gunSet", () => {
+    const armory = ACHIEVEMENTS.filter((a) => "section" in a && a.section === "armory").map((a) => a.key);
+    expect(armory).toHaveLength(59);
+    for (const k of armory) expect(REVOCABLE_KEYS).toContain(k);
+    expect(REVOCABLE_KEYS).toHaveLength(12 + 59);
+  });
+
+  it("revokes a gun tile whose only kill was later flagged at the Hub, and keeps one a real kill still earns", async () => {
+    const hub = await seedKill(db, { serverId, killer: A, victim: B, at: m(0), weapon: "KA-M", distanceM: 30, atHub: true });
+    const real = await seedKill(db, { serverId, killer: A, victim: B, at: m(5), weapon: "VSS", distanceM: 120 });
+    await unlock("gun_akm", m(0), hub.id);
+    await unlock("gun_vss", m(5), real.id);
+    const r = await revokeAchievements(db, { apply: true });
+    expect(r.revoked).toEqual([{ ownerId: A, key: "gun_akm" }]);
+    expect(r.redated).toEqual([]);
+    expect(await held()).toEqual(["gun_vss"]);
+    const [p] = await db.select().from(achievementProgress);
+    expect(p).toMatchObject({ key: "gun_akm", count: 0, target: 1 });
   });
 
   it("revokes a badge that only Hub kills earned, and resets its progress", async () => {

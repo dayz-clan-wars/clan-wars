@@ -27,13 +27,13 @@ describe("achievementsTick", () => {
   });
 
   it("evaluates only owners touched since the last pass, unlocks with evidence, and queues the three notices", async () => {
-    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), weapon: "Mosin", distanceM: 320 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), weapon: "Mosin 91/30", distanceM: 320 });
     const r = await achievementsTick(db, { now: m(10), achievementsChannelId: CH });
     expect(r.evaluated).toBeGreaterThanOrEqual(2);   // A (killer) and B (victim), plus the clan via membership
     const unlocks = await db.select().from(achievementUnlocks).where(eq(achievementUnlocks.ownerId, A));
     const keys = unlocks.map((u) => u.key).sort();
     expect(keys).toEqual(expect.arrayContaining(["enlisted", "squad_up", "first_blood", "marksman", "sniper"]));
-    expect(unlocks.find((u) => u.key === "sniper")).toMatchObject({ earnedAt: m(1), evidence: { distanceM: 320, weapon: "Mosin" } });
+    expect(unlocks.find((u) => u.key === "sniper")).toMatchObject({ earnedAt: m(1), evidence: { distanceM: 320, weapon: "Mosin 91/30" } });
     const notices = await db.select().from(clanNotices).where(sql`${clanNotices.payload}->>'key' = 'sniper'`);
     const targets = notices.map((n) => `${n.target}:${n.factionId ?? "-"}:${n.discordTargetId ?? "-"}`).sort();
     expect(targets).toEqual([`channel:${bear}:999999999999999999`, `channel:-:${CH}`, `dm:${bear}:111111111111111111`].sort());

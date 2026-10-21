@@ -165,6 +165,8 @@ describe("pvp rules", () => {
     expect((await ownPvpKills(db, ctx, B)).map((k) => k.weapon)).toEqual(["VSS"]);
   });
 
+  // ⚠️ "Once" is per PROCESS: the lookup's reported-names set is module-level, so these names
+  // must not be warned about by any earlier test in this file, or the count here reads 0.
   it("an unmapped display name counts for nothing and warns once", async () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
     try {

@@ -98,7 +98,7 @@ export const ACHIEVEMENT_GLYPHS: Record<AchievementKey, string> = {
   class_shotguns: "M9 3h6v13h-6zM8 16h8v4h-8zM9 7h6",
   class_assault_rifles: "M4 21V11q0-4 2-6q2 2 2 6v10zM10 21V11q0-4 2-6q2 2 2 6v10zM16 21V11q0-4 2-6q2 2 2 6v10zM4 14h16",
   class_rifles: "M9 21V14L5 9V3M5 9L2 7M7 11L3 11M15 21V14l4-5V3M19 9l3-2M17 11h4M9 14h6",
-  class_snipers: "M2 10h3l2-2h10l2-2h3v8h-3l-2-2H7l-2 2H2zM12 8V5M10 5h4",
+  class_snipers: "M1 10L7 8v4L1 15zM7 8h6v3H7zM13 9h10M7 5h10M6 4v2M18 4v2M10 5v3M14 5v3M19 10l-2 6M19 10l2 6",
   full_armory: "M3 21L19 5M5 23l-3-3M21 21L5 5M19 23l3-3M12 1l1 2h2l-1.5 1.5L14 7l-2-1-2 1 .5-2.5L9 3h2z",
   colors_raised: "M5 21V3M5 4h13l-3 4 3 4H5",
   full_strength: "M4 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M10 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M16 7a2 2 0 1 0 4 0a2 2 0 1 0-4 0M2 20v-2a4 4 0 0 1 4-4h12a4 4 0 0 1 4 4v2M8 14v6M16 14v6",
