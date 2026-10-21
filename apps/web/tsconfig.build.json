@@ -1,0 +1,10 @@
+{
+  // What `next build` type-checks (next.config.ts `typescript.tsconfigPath`).
+  // ⚠️ scripts/ and test/ are left out because the web Docker image copies only
+  // packages/ and apps/web/: scripts/item-sources.ts reads the ingest worker's
+  // supplies.ts, which is not in that image, and v2.8.0's deploy failed on it.
+  // They are not part of the app, and `pnpm typecheck` (tsconfig.json) still
+  // checks them in CI.
+  "extends": "./tsconfig.json",
+  "exclude": ["node_modules", ".next", "scripts", "test"]
+}
