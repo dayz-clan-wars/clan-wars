@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.7.0] - 2026-10-21
+
 ### Added
 
 - 103 new achievements, for 150 in all: a PvP kill with each of the 52 firearms on Nasdara, every gun in a class, and Full Armory for all 52; knife, fist and sledgehammer kills; dogs and motorbikes; repairing ruins; bear traps, tripwires, barbed wire, mines and grenades; barrels, sea chests and tents; emotes; milestones like 250 PvP kills, a kill from 500 m and 500 hours played; and 4 more for clans. What you did before this release counts too, and each linked player who already holds any of the new ones gets one DM saying how many.
