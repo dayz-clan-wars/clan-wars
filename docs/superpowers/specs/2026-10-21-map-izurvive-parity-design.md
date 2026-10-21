@@ -225,6 +225,29 @@ GPS x = floor(x/100), GPS y = floor((size − z)/100).
   the area it stands in (`lib/area-flags.ts`).
 - **Crash-site loot comes from the wrecks.** Where an item spawns at a crash site is read
   from each event's child wreck protos, not from the event itself.
+- **Territories: Infected and Animals, from the files `cfgenvironment.xml` lists.** The mission
+  ships `env/zombie_territories.xml` and animal territory files. The world build reads the
+  `<territories><file path>` list, not the `env/` folder: Nasdara's folder holds bear, wolf, deer,
+  pig and sheep_goat files the list never names (so the game never loads them), and the list names
+  sheep, goat, mouflon, fox, monitor and dobermann_shepherd files that are not there. At mission
+  58a7c4d that leaves 686 infected zones and 500 animal zones (hare 278, wild boar 112, hen 110;
+  cattle's file is empty). Both layers sit under **World**, default off, drawn as circles like the
+  contaminated areas, and wait for the world zoom (hundreds of town circles would crowd a zoomed-out
+  phone). "Animals" is one toggle over every animal file; each circle's popup names its animal. The
+  earlier `Ambient*`-event Animals layer is gone: Nasdara has no `Ambient*` event with positions.
+- **Fig trees: wired, but no layer on Nasdara.** `TrajectoryFig` has a label ("Fig trees", under
+  World) in `EVENT_LAYERS`, and a layer appears whenever the event has positions. Nasdara's
+  `cfgeventspawns.xml` lists `TrajectoryFig` with no `<pos>`, so there is nothing to draw and no
+  toggle is offered.
+- **Not built: wells and water sources.** Nasdara's `mapgrouppos.xml` places no well or pump: wells
+  are terrain objects baked into the map itself, which the mission files do not list. There is no
+  mission source to read them from, and the anti-goals rule out copying them from another site.
+- **Not built: the optional tier overlay that shades the map.** The tier chips filter the loot
+  buildings, and every loot building's popup names its tier; on Nasdara the tiers also run by
+  region (north 1, middle 2, south 3), which the guide says in one line. That covers "which tier is
+  this area" without a second, map-wide layer of colour over the terrain.
+- **Untiered loot buildings pass the tier filter.** Eight Nasdara props stand on areaflags cells
+  with no tier bit; they show whatever tier chips are picked.
 - **No game item images.** DayZ draws items as live 3D models and ships no preview pictures,
   so item cards use the site's existing wiki pictures (`public/items`) where one exists.
 
@@ -235,5 +258,6 @@ GPS x = floor(x/100), GPS y = floor((size − z)/100).
 - Check whether Nasdara satellite tiles exist on the mirror.
 - Check whether the mission ships animal and infected territory files (`env/`).
   Show them if present, skip them silently if not.
+  **Done:** it does; see *Decisions made during the build*.
 - Spot-check GPS orientation in game once: stand at a bunker and compare the
   in-game GPS reading with the search result.
