@@ -90,7 +90,8 @@ describe("parseCoordQuery", () => {
     expect(parseCoordQuery("072 087", GPS_SIZE)).toEqual({ kind: "gps", x: 7250, z: 16384 - 8750 });
     expect(parseCoordQuery("072/087", GPS_SIZE)?.kind).toBe("gps");
     expect(parseCoordQuery("072,087", GPS_SIZE)?.kind).toBe("gps");
-    expect(parseCoordQuery("100 200", GPS_SIZE)?.kind).toBe("gps");
+    expect(parseCoordQuery("100 150", GPS_SIZE)?.kind).toBe("gps"); // digit count decides, not value
+    expect(parseCoordQuery("000 163", GPS_SIZE)).toEqual({ kind: "gps", x: 50, z: 34 });
     expect(parseCoordQuery("163 000", GPS_SIZE)?.kind).toBe("gps");
   });
   it("reads metres", () => {
@@ -100,6 +101,8 @@ describe("parseCoordQuery", () => {
   it("refuses numbers it cannot place, with a hint", () => {
     const bad = { kind: "bad", hint: COORD_HINT };
     expect(parseCoordQuery("164 000", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("100 200", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("000 164", GPS_SIZE)).toEqual(bad);
     expect(parseCoordQuery("20000 100", GPS_SIZE)).toEqual(bad);
     expect(parseCoordQuery("12 34", GPS_SIZE)).toEqual(bad);
     expect(parseCoordQuery("072 7216", GPS_SIZE)).toEqual(bad);

@@ -119,10 +119,10 @@ export function parseCoordQuery(input: string, size: number): CoordQuery {
   const [a, b] = parts as [string, string];
   if (a.length !== b.length) return bad;
   if (a.length === 3) {
-    const x = Number(a) * 100 + 50;
-    // Only x is bounded: a GPS row past the south edge clamps to z = 0 rather than refusing.
-    if (x > size) return bad;
-    return { kind: "gps", x, z: Math.max(0, size - (Number(b) * 100 + 50)) };
+    const x = Number(a) * 100 + 50, z = size - (Number(b) * 100 + 50);
+    // ⚠️ Both cells are range-checked: a ref off the map is refused, never clamped onto the edge.
+    if (x > size || z < 0) return bad;
+    return { kind: "gps", x, z };
   }
   if (a.length === 4 || a.length === 5) {
     const x = Number(a), z = Number(b);
