@@ -17,7 +17,7 @@ export type WorldProp = { type: number; x: number; z: number; u: number; t: numb
 export type WorldType = { name: string; proto: number | null };
 export type WorldProto = {
   name: string;
-  usage: number; // group <usage> mask, 0 = none (fall back to area flags)
+  usage: number; // group <usage> mask, 0 = none; the area flags apply on top either way (effectiveUsage)
   containers: { categories: number; tags: number; points: number }[]; // masks over limits.categories / limits.tags
 };
 
@@ -127,15 +127,29 @@ export function parseProtos(text: string, limits: ReturnType<typeof parseLimits>
   }));
 }
 
-/** A building's own group usage wins; the area flags only fill in when the group names none. */
+/**
+ * The usages a building's loot points serve: its own group <usage> AND the areaflags.map usage
+ * under it. The area flags are a second router beside the group, not a fallback for it (dayz
+ * plugin, dayz-mapgroups references/cross-file.md rule 6: an ordinary house on a Military-painted
+ * area spawns military loot).
+ * ⚠️ A union, never `||`: preferring the group's own usage hid contaminated-zone loot (M4A1) from
+ * every building that names a usage of its own.
+ */
 export function effectiveUsage(proto: WorldProto, areaUsage: number): number {
-  return proto.usage || areaUsage;
+  return proto.usage | areaUsage;
 }
 
-/** Proto index per type, by name; null when mapgroupproto has no such group. */
+/**
+ * Proto index per type, by name; null when mapgroupproto has no such group.
+ * ⚠️ Case-insensitive, as DayZ class names are: Nasdara's mapgrouppos and mapgroupproto disagree
+ * on case for 37 buildings (Land_Store_Carservice, the refugee tents…), and an exact match left
+ * them with no loot at all.
+ */
 export function linkProtos(types: { name: string }[], protos: WorldProto[]): (number | null)[] {
-  const byName = new Map(protos.map((p, i) => [p.name, i]));
-  return types.map((t) => byName.get(t.name) ?? null);
+  const byName = new Map<string, number>();
+  // If two groups ever differ only by case the first wins (Nasdara has none).
+  protos.forEach((p, i) => { if (!byName.has(p.name.toLowerCase())) byName.set(p.name.toLowerCase(), i); });
+  return types.map((t) => byName.get(t.name.toLowerCase()) ?? null);
 }
 
 // The loot layers the map offers. `usage` names must exist in limits.usage (a test checks).

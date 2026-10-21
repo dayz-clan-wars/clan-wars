@@ -1,8 +1,9 @@
 import { beforeAll, describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WORLD_MAP } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
+import { CLAIMABLE_FLAGS, NEUTRAL_FLAG, WORLD_MAP } from "@factions/domain";
+import { supplyKitClasses } from "../scripts/item-sources";
 import { parseLimits } from "../lib/area-flags";
 import type { WorldProto } from "../lib/map-world";
 import {
@@ -210,8 +211,28 @@ describe("canSpawnAt", () => {
     expect(canSpawnAt(by("GlassBottle"), village, 0, 0)).toBe(true);
   });
 
-  it("uses the area usage only when the building's group has none", () => {
-    expect(canSpawnAt(by("M4A1"), { ...zoneShed, usage: u("Military") }, u("ContaminatedArea"), v("Unique"))).toBe(false);
+  it("⚠️ matches the area usage even when the building's group names its own", () => {
+    // The area flags are a second router, not a fallback (effectiveUsage is a union).
+    expect(canSpawnAt(by("M4A1"), { ...zoneShed, usage: u("Military") }, u("ContaminatedArea"), v("Unique"))).toBe(true);
+    expect(canSpawnAt(by("M4A1"), { ...zoneShed, usage: u("Military") }, 0, v("Unique"))).toBe(false);
+  });
+});
+
+describe("supply kit classes", () => {
+  const template = JSON.parse(readFileSync(join(__dirname, "../../ingest-worker/assets/flag-supplies.template.json"), "utf8")) as {
+    Objects: { name: string }[];
+  };
+
+  it("⚠️ are what the worker's generator emits: every claimable flag, the template's items, no anchor or white flag", () => {
+    const names = supplyKitClasses(template);
+    const expected = new Set([
+      ...template.Objects.map((o) => o.name).filter((n) => n !== "TerritoryFlag" && n !== NEUTRAL_FLAG),
+      ...CLAIMABLE_FLAGS,
+    ]);
+    expect(new Set(names)).toEqual(expected);
+    expect(names).toContain("WoodenLog");
+    expect(names).not.toContain("TerritoryFlag");
+    expect(names).not.toContain(NEUTRAL_FLAG);
   });
 });
 
@@ -255,6 +276,11 @@ describe("committed items.json", () => {
     expect(flag.nominal).toBe(0);
     expect(flag.clanWars).toContain("supply kit");
     expect(spawnsAnywhere(flag)).toBe(true);
+  });
+
+  it("tags every supply kit class the worker's generator emits", () => {
+    const template = JSON.parse(readFileSync(join(__dirname, "../../ingest-worker/assets/flag-supplies.template.json"), "utf8"));
+    for (const n of supplyKitClasses(template)) expect(by.get(n)?.clanWars, n).toContain("supply kit");
   });
 
   it("puts M4A1 parts on the M4A1 and cars on their events", () => {

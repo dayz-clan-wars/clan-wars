@@ -230,15 +230,21 @@ export function applySources(items: ItemIndexEntry[], s: ItemSources): void {
  * Bohemia publishes no statement of the matching rule: its CE pages
  * (https://community.bistudio.com/wiki/DayZ:Central_Economy_setup_for_custom_terrains,
  * https://community.bistudio.com/wiki/DayZ:Central_Economy_mission_files_modding) describe the
- * files but not how they combine. This follows the reading of Bohemia's shipped files in
- * BohemiaInteractive/DayZ-Central-Economy (https://github.com/BohemiaInteractive/DayZ-Central-Economy),
- * as recorded in the dayz plugin's dayz-mapgroups schema ("proto ↔ types.xml: the four-way match")
- * and dayz-types keys reference:
+ * files but not how they combine. The sources this follows:
+ *  - the dayz plugin's dayz-mapgroups references/cross-file.md §3 ("proto ↔ types.xml: the
+ *    four-way match") and rule 6 (the area flags as a second usage router), and its dayz-types
+ *    references/keys.md (no <usage> → never building loot; no <value> → any tier);
+ *  - https://dayzlooteditor.com/guides/types-xml-explained ("An item without a value tag is not
+ *    limited to a tier"; items without usage "may never find a spawn point");
+ *  - https://dzconfig.com/wiki/types (deloot: dynamic event loot, not static spawn points).
+ *
+ * So:
  *  - usage, value, category and tag must ALL fit (not category OR tag);
  *  - a list missing on the item is open on that axis — except usage: an item with no usage is
  *    never building loot (it arrives as cargo, an attachment or an event instead);
- *  - a container that lists no categories (or no tags) is open on that axis — Nasdara's refugee
- *    tents hold their "lootweapons" points in such containers;
+ *  - a container that lists no categories (or no tags) is open on that axis. No source states
+ *    this; it is inferred from Nasdara's refugee tents, whose "lootweapons" points sit in
+ *    containers with neither list and would otherwise hold almost nothing;
  *  - deloot items spawn at dynamic-event wrecks, which are not static buildings.
  */
 export function canSpawnAt(item: ItemIndexEntry, proto: WorldProto, areaUsage: number, areaValue: number): boolean {

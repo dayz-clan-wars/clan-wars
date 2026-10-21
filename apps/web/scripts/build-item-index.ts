@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CLAIMABLE_FLAGS, KIT_SLOTS, KOTH_PRESET_FILES, NEUTRAL_FLAG, WORLD_MAP, armbandFor } from "@factions/domain";
+import { CLAIMABLE_FLAGS, KIT_SLOTS, KOTH_PRESET_FILES, WORLD_MAP, armbandFor } from "@factions/domain";
 import { boosterCatalogue } from "@factions/domain/catalogue";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { parseLimits } from "../lib/area-flags";
@@ -25,6 +25,7 @@ import {
   type ClanWarsSource,
   type ItemsFile,
 } from "../lib/item-index";
+import { supplyKitClasses } from "./item-sources";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
@@ -52,14 +53,11 @@ const tagAs = (source: ClanWarsSource, names: Iterable<string>) => {
   }
 };
 
-// Supply kit: the worker's captured template (a static asset; the worker module itself opens a
-// database). ⚠️ Its anchor TerritoryFlag is never emitted, and its white flag is swapped for the
-// clan's own texture (supplies.ts), so the kit's flags are the 33 claimable ones, never NEUTRAL_FLAG.
-const supplyTemplate = JSON.parse(
-  readFileSync(join(repoRoot, "apps/ingest-worker/assets/flag-supplies.template.json"), "utf8"),
-) as { Objects: { name: string }[] };
-tagAs("supply kit", supplyTemplate.Objects.map((o) => o.name).filter((n) => n !== "TerritoryFlag" && n !== NEUTRAL_FLAG));
-tagAs("supply kit", CLAIMABLE_FLAGS);
+// Supply kit: the worker's captured template, expanded by the worker's own generator (see
+// supplyKitClasses). Its anchor TerritoryFlag is never emitted and its white flag becomes each
+// clan's texture, so the kit's flags are the 33 claimable ones.
+const supplyTemplate = JSON.parse(readFileSync(join(repoRoot, "apps/ingest-worker/assets/flag-supplies.template.json"), "utf8"));
+tagAs("supply kit", supplyKitClasses(supplyTemplate));
 
 // Booster kit: every catalogue pick with its extras, plus the armband derived from the clan's
 // flag (booster-kits.ts).

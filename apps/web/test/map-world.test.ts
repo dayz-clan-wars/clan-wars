@@ -91,10 +91,18 @@ describe("loot protos", () => {
     expect(linkProtos([{ name: "Land_wreck_truck01_aban2_orange" }, { name: "Land_Mil_Barracks1" }], protos)).toEqual([null, 0]);
   });
 
-  it("falls back to the area flags only when the proto has no usage", () => {
+  it("⚠️ unions the building's own usage with the area flags, never one instead of the other", () => {
     const area = bit(limits.usage, "Town");
+    const mil = bit(limits.usage, "Military");
     expect(effectiveUsage({ name: "a", usage: 0, containers: [] }, area)).toBe(area);
-    expect(effectiveUsage({ name: "a", usage: 1, containers: [] }, area)).toBe(1);
+    // A Military building on a Town cell offers both: the area flags are a second router.
+    expect(effectiveUsage({ name: "a", usage: mil, containers: [] }, area)).toBe(mil | area);
+    expect(effectiveUsage({ name: "a", usage: mil, containers: [] }, 0)).toBe(mil);
+  });
+
+  it("⚠️ links a type to its proto case-insensitively, as DayZ names are", () => {
+    // mapgrouppos and mapgroupproto disagree on case for 37 Nasdara buildings.
+    expect(linkProtos([{ name: "LAND_MIL_BARRACKS1" }, { name: "land_mil_barracks1" }], protos)).toEqual([0, 0]);
   });
 });
 
@@ -143,11 +151,13 @@ describe("committed world.json", () => {
     for (const g of LOOT_GROUPS) for (const u of g.usage) expect(world.limits.usage, `${g.key}: ${u}`).toContain(u);
   });
 
-  it("links a type to its proto by name, and leaves a type with no proto null", () => {
-    const linked = world.types.filter((t) => t.proto !== null);
-    expect(linked.length).toBeGreaterThan(0);
-    for (const t of linked) expect(world.protos[t.proto!]!.name).toBe(t.name);
-    expect(world.types.some((t) => t.proto === null)).toBe(true);
+  it("⚠️ links every Nasdara type to its proto by name, ignoring case", () => {
+    // 37 of these differ only by case (Land_Store_Carservice…); an exact match left them null.
+    // A type with no group still gets null — the unit test above holds that half.
+    for (const t of world.types) {
+      expect(t.proto, t.name).not.toBeNull();
+      expect(world.protos[t.proto!]!.name.toLowerCase()).toBe(t.name.toLowerCase());
+    }
   });
 
   it("carries Land_Mil_Barracks1 with Military usage", () => {

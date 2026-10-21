@@ -40,6 +40,7 @@ const W: WorldFile = {
     { type: 2, x: 400, z: 400, u: u("Farm"), t: t("Tier1") }, // 3: shed on a Farm cell
     { type: 3, x: 500, z: 500, u: u("Town"), t: t("Tier1") }, // 4: a wreck
     { type: 4, x: 600, z: 600, u: u("Town"), t: t("Tier1") }, // 5: a rock: no proto, never loot
+    { type: 0, x: 2500, z: 2500, u: u("Town"), t: t("Tier1") }, // 6: barracks on a Town cell: both routers
   ],
   types: [
     { name: "Land_Mil_Barracks1", proto: 0 },
@@ -94,7 +95,12 @@ describe("worldLayers", () => {
 describe("pointsFor", () => {
   it("returns only buildings whose effective usage overlaps Military", () => {
     const pts = pointsFor(W, "loot:military", ALL_TIERS);
-    expect(pts.map((p) => [p.x, p.z])).toEqual([[100, 100], [200, 200], [300, 300]]);
+    expect(pts.map((p) => [p.x, p.z])).toEqual([[100, 100], [200, 200], [300, 300], [2500, 2500]]);
+  });
+
+  it("⚠️ puts a building on its own usage's layer AND its area's: the area flags are a second router", () => {
+    expect(pointsFor(W, "loot:town", ALL_TIERS).map((p) => p.x)).toContain(2500);
+    expect(pointsFor(W, "loot:military", ALL_TIERS).map((p) => p.x)).toContain(2500);
   });
 
   it("drops a Tier2 barracks when only the Tier4 bit is passed", () => {
@@ -141,7 +147,7 @@ describe("worldItems: overlapping loot layers", () => {
 
   it("gives the same building to Town when Military is off", () => {
     const items = worldItems(W, new Set(["loot:town"]), ALL_TIERS);
-    expect(items.map((i) => [i.key, i.x])).toEqual([["loot:town", 200]]);
+    expect(items.map((i) => [i.key, i.x])).toEqual([["loot:town", 200], ["loot:town", 2500]]); // 2500: a Military barracks on a Town cell
   });
 
   it("draws nothing for a layer that is off", () => {
