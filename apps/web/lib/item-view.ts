@@ -7,7 +7,8 @@ import { spawnsAnywhere, type ItemIndexEntry } from "./item-index";
 import { ITEM_ALWAYS_MAX, eventLabel, type WorldLayerKey, type WorldMark, type WorldSwitches } from "./world-layers";
 import type { WorldFile } from "./map-world";
 
-export type ItemPick = { className: string; label: string };
+/** `model`: a building or object picked from the Models tab, `className` then being its type name. */
+export type ItemPick = { className: string; label: string; model?: true };
 /** The item shown, and the switches as they were before the first pick: what Clear puts back. */
 export type ItemView = ItemPick & { saved: WorldSwitches };
 export type WorldState = { sw: WorldSwitches; view: ItemView | null };
@@ -21,6 +22,8 @@ export type WorldState = { sw: WorldSwitches; view: ItemView | null };
 export function pickItem(s: WorldState, pick: ItemPick): WorldState {
   const saved = s.view?.saved ?? s.sw;
   return { sw: { on: Object.fromEntries(Object.keys(saved.on).map((k) => [k, false])), tiers: saved.tiers }, view: { ...pick, saved } };
+  // ⚠️ A model pick and an item pick share this one view: picking either replaces the other, and
+  // `saved` still comes from the very first of them.
 }
 
 /** Clear: the switches exactly as they were before the item was picked. */
@@ -108,6 +111,18 @@ export function itemPanel(
   if (item.spawnGear) lines.push({ label: ITEM_COPY.spawnGearLabel, text: ITEM_COPY.spawnGear });
   for (const c of item.clanWars) lines.push({ label: ITEM_COPY.clanWarsLabel, text: ITEM_COPY.clanWars[c] });
   return { chip, lines };
+}
+
+/**
+ * A model's panel: the chip and how many the map places. `points` null (world file not in) leaves
+ * the count out, as itemPanel does. Past ITEM_ALWAYS_MAX the points wait for a close zoom, so the
+ * line says so, the same rule as an item's.
+ */
+export function modelPanel(label: string, points: readonly WorldMark[] | null, map: Pick<ItemPanelMap, "zoomedIn"> = { zoomedIn: false }): ItemPanelModel {
+  const chip = ITEM_COPY.modelChip(label);
+  if (points === null) return { chip, lines: [] };
+  const n = ITEM_COPY.placed(points.length);
+  return { chip, lines: [{ label: ITEM_COPY.onMap, text: points.length > ITEM_ALWAYS_MAX && !map.zoomedIn ? `${n} ${ITEM_COPY.zoomIn}` : n }] };
 }
 
 /** The card's head (picture, name, weight and size, description) and its lists as panel lines. */

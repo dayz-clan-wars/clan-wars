@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { createElement } from "react";
+import type { WorldFile } from "../lib/map-world";
+import { modelCounts, modelItems, modelLabel, modelPoints } from "../lib/world-layers";
 import { renderToStaticMarkup } from "react-dom/server";
 import { WORLD_SIZE_M } from "@factions/domain";
 import { placesFor } from "../lib/map-places";
@@ -211,5 +215,46 @@ describe("searchMap with hyphens", () => {
     expect(searchMap("sar-e", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
     expect(searchMap("sar e pol", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
     expect(searchMap("e-pol", hy).hits.map((h) => h.label)).toEqual(["Sar-e Pol"]);
+  });
+});
+
+describe("searchMap models", () => {
+  const world = JSON.parse(readFileSync(join(__dirname, "..", "public", "map-data", "nasdara", "world.json"), "utf8")) as WorldFile;
+  const withModels: SearchCtx = { ...ctx, models: modelCounts(world) };
+  const modelHits = (q: string) => searchMap(q, withModels).hits.filter((h) => h.tab === "models");
+
+  it("labels a type without Land_ and with spaces", () => {
+    expect(modelLabel("Land_Mil_Barracks1")).toBe("Mil Barracks1");
+    expect(modelLabel("Wreck_UH1Y")).toBe("Wreck UH1Y");
+  });
+
+  it("finds Mil Barracks1 for \"barracks\" with its placement count", () => {
+    const hit = modelHits("barracks").find((h) => h.tab === "models" && h.typeName === "Land_Mil_Barracks1");
+    expect(hit).toEqual({ tab: "models", typeName: "Land_Mil_Barracks1", label: "Mil Barracks1", count: 4 });
+    expect(modelHits("barracks")).toHaveLength(10);
+  });
+
+  it("returns that many points for the type", () => {
+    const pts = modelPoints(world, "Land_Mil_Barracks1");
+    expect(pts).toHaveLength(4);
+    expect(pts[0]).toMatchObject({ title: "Mil Barracks1" });
+    expect(modelPoints(world, "Nope")).toEqual([]);
+  });
+
+  it("gives every placement of a picked model its own marker id, apart from items'", () => {
+    const items = modelItems("Land_Mil_Barracks1", modelPoints(world, "Land_Mil_Barracks1"));
+    expect(items.map((i) => i.id)).toEqual([0, 1, 2, 3].map((i) => `model:Land_Mil_Barracks1#${i}`));
+    expect(items.every((i) => i.key === "item")).toBe(true);
+  });
+
+  it("returns no model hits until the world file is in", () => {
+    expect(searchMap("barracks", ctx).hits.some((h) => h.tab === "models")).toBe(false);
+  });
+
+  it("shows the Models tab with the count, and picking sends the type", () => {
+    const html = renderToStaticMarkup(createElement(MapSearch, { ...base, initial: "barracks1", ctx: withModels }));
+    expect(html).toContain(">Models<");
+    expect(html).toContain(">Mil Barracks1<");
+    expect(html).toContain(">4<");
   });
 });

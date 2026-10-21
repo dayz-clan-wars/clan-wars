@@ -1,5 +1,6 @@
 import { gridRef, parseCoordQuery, type CoordQuery } from "./map-projection";
 import { SEARCH_COPY } from "./map-copy";
+import { modelLabel } from "./world-layers";
 
 /**
  * The map's search box, minus the box: one query in, a coordinate and the
@@ -11,14 +12,14 @@ import { SEARCH_COPY } from "./map-copy";
 export type SearchHit =
   | { tab: "locations"; label: string; x: number; z: number }
   | { tab: "items"; className: string; label: string }
-  | { tab: "models"; typeName: string; label: string; count: number }; // filled by Task 11
+  | { tab: "models"; typeName: string; label: string; count: number };
 export type SearchTab = SearchHit["tab"];
 export type SearchResult = { coord: CoordQuery; hits: SearchHit[] };
 /**
  * Places and bunkers in world metres, and the item index once it is in (loaded on the box's
  * first focus, so a map that is never searched never fetches it). `cards`: the game's own
  * names for the items (lib/item-cards.ts), when they loaded; search works without them.
- * Task 11 adds `models?`.
+ * `models`: each placed type and how often the map places it (world-layers.ts modelCounts), once the world file is in.
  */
 export type SearchCtx = {
   size: number;
@@ -26,6 +27,7 @@ export type SearchCtx = {
   bunkers: { x: number; z: number }[];
   items?: readonly { className: string }[];
   cards?: ReadonlyMap<string, { displayName: string }>;
+  models?: readonly { typeName: string; count: number }[];
 };
 
 /** The zoom a picked result lands at, unless the player is already closer. */
@@ -96,6 +98,11 @@ export function searchMap(q: string, ctx: SearchCtx): SearchResult {
     const s = itemScore(i.className, name, typed);
     // Labelled as the game names it; the class name stays the key (and shows beside it in the list).
     if (s !== null) ranked.push({ s, hit: { tab: "items", className: i.className, label: name ?? i.className } });
+  }
+  for (const m of ctx.models ?? []) {
+    const label = modelLabel(m.typeName);
+    const s = score(label, typed);
+    if (s !== null) ranked.push({ s, hit: { tab: "models", typeName: m.typeName, label, count: m.count } });
   }
   // One sort for every tab: the box shows one tab at a time, so the order only matters within one.
   ranked.sort((a, b) => a.s - b.s || a.hit.label.localeCompare(b.hit.label, undefined, { numeric: true }));

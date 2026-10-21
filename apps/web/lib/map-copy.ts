@@ -82,6 +82,9 @@ export const SEARCH_COPY = {
  */
 export const ITEM_COPY = {
   chip: (label: string) => `Showing where ${label} spawns`,
+  // A searched building or object: every placement, not a spawn, so "where … spawns" would be wrong.
+  modelChip: (label: string) => `Showing every ${label}`,
+  placed: (n: number) => (n === 1 ? "1 placed." : `${n.toLocaleString("en-US")} placed.`),
   clear: "Clear",
   onMap: "On the map",
   spots: (n: number) => (n === 1 ? "1 spot." : `${n.toLocaleString("en-US")} spots.`),

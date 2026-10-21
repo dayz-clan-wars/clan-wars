@@ -286,3 +286,32 @@ export function itemItems(className: string, points: readonly WorldMark[]): Worl
   const key = points.length <= ITEM_ALWAYS_MAX ? ITEM_KEY : ITEM_MANY_KEY;
   return points.map((m, i) => ({ ...m, id: `item:${className}#${i}`, key }));
 }
+
+/** A placed object's type name as a player reads it: "Land_Mil_Barracks1" → "Mil Barracks1". */
+export const modelLabel = (typeName: string): string => typeName.replace(/^Land_/u, "").replace(/_/gu, " ");
+
+/** Every placed type with how many times the map places it, for the search box's Models tab. */
+export function modelCounts(w: WorldFile): { typeName: string; count: number }[] {
+  const counts = new Array<number>(w.types.length).fill(0);
+  for (const p of w.props) counts[p.type] = (counts[p.type] ?? 0) + 1;
+  return w.types.flatMap((t, i) => (counts[i]! > 0 ? [{ typeName: t.name, count: counts[i]! }] : []));
+}
+
+/** Every placement of one type, titled with its label. Unknown type: none. */
+export function modelPoints(w: WorldFile, typeName: string): WorldMark[] {
+  const index = w.types.findIndex((t) => t.name === typeName);
+  if (index < 0) return [];
+  const title = modelLabel(typeName);
+  return w.props.filter((p) => p.type === index).map((p) => ({ x: p.x, z: p.z, title }));
+}
+
+/**
+ * A picked model's points as drawWorld takes them, on the item view's keys so the same group,
+ * the same draw-at-every-zoom rule and the same Clear apply. ⚠️ The "model:" id prefix keeps a
+ * model's markers apart from an item's: a model and an item can share a name, and drawWorld
+ * keeps a marker whose id and key it already has.
+ */
+export function modelItems(typeName: string, points: readonly WorldMark[]): WorldItem[] {
+  const key = points.length <= ITEM_ALWAYS_MAX ? ITEM_KEY : ITEM_MANY_KEY;
+  return points.map((m, i) => ({ ...m, id: `model:${typeName}#${i}`, key }));
+}

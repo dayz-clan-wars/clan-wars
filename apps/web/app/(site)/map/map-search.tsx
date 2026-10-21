@@ -7,7 +7,7 @@ import { searchMap, type SearchCtx, type SearchHit, type SearchTab } from "@/lib
 /** Where a pick sends the map. `reticle`: a typed coordinate gets a mark; a place or bunker is already on the map. */
 export type MapSearchPick = { x: number; z: number; reticle: boolean };
 /** An item row picked: the map shows where it spawns (item-panel.tsx) rather than flying anywhere. */
-export type MapSearchItem = { className: string; label: string };
+export type MapSearchItem = { className: string; label: string; model?: true };
 
 export type MapSearchProps = {
   ctx: SearchCtx;
@@ -53,7 +53,7 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready",
   // One list either way: the coordinate's single row, or the names.
   const rows: { key: string; label: string; detail?: string; pick: Pick }[] = go
     ? [{ key: "coord", label: `${SEARCH_COPY.goTo} GPS ${gridRef(go.x, go.z, ctx.size)}`, detail: `${Math.round(go.x)}, ${Math.round(go.z)}`, pick: { x: go.x, z: go.z, reticle: true } }]
-    : hits.map((h, i) => ({ key: `${i}`, label: h.label, detail: itemDetail(h), pick: hitPick(h) }));
+    : hits.map((h, i) => ({ key: `${i}`, label: h.label, detail: rowDetail(h), pick: hitPick(h) }));
   const at = Math.min(active, Math.max(0, rows.length - 1));
 
   const pick = (p: Pick) => {
@@ -125,14 +125,15 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready",
 
 type Pick = MapSearchPick | MapSearchItem | null;
 
-/** A location flies there; an item shows where it spawns; models (Task 11) pick nothing yet. */
+/** A location flies there; an item shows where it spawns; a model shows every placement (className is its type name). */
 function hitPick(h: SearchHit): Pick {
   if (h.tab === "locations") return { x: h.x, z: h.z, reticle: false };
   if (h.tab === "items") return { className: h.className, label: h.label };
-  return null;
+  return { className: h.typeName, label: h.label, model: true };
 }
 
-/** An item's class name beside its display name: the M4-A1 comes in three colours, one name. */
-function itemDetail(h: SearchHit): string | undefined {
+/** An item's class name beside its display name (the M4-A1 comes in three colours, one name); a model's count. */
+function rowDetail(h: SearchHit): string | undefined {
+  if (h.tab === "models") return String(h.count);
   return h.tab === "items" && h.label !== h.className ? h.className : undefined;
 }

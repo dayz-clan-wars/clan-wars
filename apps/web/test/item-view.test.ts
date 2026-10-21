@@ -8,7 +8,7 @@ import { parseTypes, type ItemIndexEntry } from "../lib/item-index";
 import { CARD_COPY, ITEM_COPY } from "../lib/map-copy";
 import type { ItemCard } from "../lib/item-cards";
 import type { WorldSwitches } from "../lib/world-layers";
-import { clearItem, itemCardView, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "../lib/item-view";
+import { clearItem, itemCardView, itemPanel, modelPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "../lib/item-view";
 import { ItemCardView, ItemPanel } from "../app/(site)/map/item-panel";
 
 const limits = parseLimits(readFileSync(join(__dirname, "fixtures/mission/cfglimitsdefinition.xml"), "utf8"));
@@ -237,5 +237,37 @@ describe("the item panel on a phone", () => {
     expect(h).toContain("max-h-[24dvh]"); // the sheet's own height, not the desktop panel's
     expect(h).not.toContain("w-[300px]");
     expect(h.match(/overflow-y-auto/gu)).toHaveLength(1);
+  });
+});
+
+describe("the model view", () => {
+  it("is the item view with a model pick: same save and Clear", () => {
+    const s = pickItem(start, { className: "Land_Mil_Barracks1", label: "Mil Barracks1", model: true });
+    expect(s.view).toMatchObject({ model: true, saved: before });
+    expect(clearItem(s)).toEqual(start);
+  });
+
+  it("⚠️ switching between an item and a model keeps the first pick's switches", () => {
+    const a = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const b = pickItem(a, { className: "Land_Mil_Barracks1", label: "Mil Barracks1", model: true });
+    const c = pickItem(b, { className: "M4A1", label: "M4A1" });
+    expect(b.view?.saved).toBe(before);
+    expect(c.view?.model).toBeUndefined();
+    expect(clearItem(c).sw).toBe(before);
+  });
+
+  it("words the chip for a model", () => {
+    expect(ITEM_COPY.modelChip("Mil Barracks1")).toBe("Showing every Mil Barracks1");
+  });
+});
+
+describe("modelPanel", () => {
+  const pts = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i, z: i, title: "t" }));
+  it("says how many are placed", () => {
+    expect(modelPanel("Mil Barracks1", pts(4))).toEqual({ chip: "Showing every Mil Barracks1", lines: [{ label: "On the map", text: "4 placed." }] });
+    expect(modelPanel("Mil Barracks1", pts(1)).lines[0]!.text).toBe("1 placed.");
+  });
+  it("leaves the count out without the world file", () => {
+    expect(modelPanel("Mil Barracks1", null).lines).toEqual([]);
   });
 });

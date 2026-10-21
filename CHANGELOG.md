@@ -11,6 +11,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - The map has a search box: type a place, a bunker number, or the GPS numbers from a bunker broadcast (like 072 087) and it takes you there. The bottom bar shows the GPS and metres under your mouse, or the middle of the map on a phone; tap it to copy. A ruler measures distance and bearing.
 - Search the map for an item, like M4A1, and the map shows every spot it can spawn on our server: loot buildings, crash sites, vehicle spawns and the wrecks it sits on. A panel says how many the server keeps, which tiers, what it comes on, and whether it is in spawn gear, the build supplies, a booster kit, an award or a King of the Hill loadout. Clear puts your layers back.
 - An item you search for now has a card, read from the game's own files: its in-game name and description, weight and size, and what fits it (attachments, magazines and ammo), with a picture where we have one. Search by the in-game name works too, so M4-A1 finds the M4A1.
+- Search the map for a building or object, like barracks, and the Models tab lists each kind with how many are placed. Pick one and the map shows every one of them. Clear puts your layers back.
 
 ### Changed
 

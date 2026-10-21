@@ -19,7 +19,7 @@ import { MapSearch, type MapSearchItem, type MapSearchPick } from "./map-search"
 import { ItemCardView, ItemPanel } from "./item-panel";
 import { loadItemIndex, type ItemsFile } from "@/lib/item-index";
 import { loadItemCards, type ItemCard } from "@/lib/item-cards";
-import { clearItem, itemCardView, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "@/lib/item-view";
+import { clearItem, itemCardView, itemPanel, modelPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "@/lib/item-view";
 import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
@@ -30,7 +30,7 @@ import { MapRoster } from "./map-roster";
 import { WorldPanel } from "./world-panel";
 import { loadWorld, type WorldFile } from "@/lib/map-world";
 import {
-  ITEM_KEY, ITEM_MANY_KEY, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, delootEvents, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  ITEM_KEY, ITEM_MANY_KEY, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, delootEvents, itemItems, itemPoints, modelCounts, modelItems, modelPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
   type WorldItem, type WorldLayerKey, type WorldSwitches,
 } from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
@@ -208,15 +208,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     [world, worldList, worldSw],
   );
   const shown = ws.view;
-  const shownItem = useMemo(() => (shown ? itemsFile?.items.find((i) => i.className === shown.className) ?? null : null), [shown, itemsFile]);
+  const shownModel = shown?.model ? shown : null;
+  const shownItem = useMemo(() => (shown && !shown.model ? itemsFile?.items.find((i) => i.className === shown.className) ?? null : null), [shown, itemsFile]);
   // Null without the world file: the panel then leaves out the spot count rather than say "no spot".
   const shownPoints = useMemo(() => (world && shownItem ? itemPoints(world, shownItem) : null), [world, shownItem]);
+  const modelShown = useMemo(() => (world && shownModel ? modelPoints(world, shownModel.className) : null), [world, shownModel]);
   const worldNow = useMemo<WorldItem[]>(
     () => [
       ...(world && worldSw ? worldItems(world, new Set(Object.keys(worldSw.on).filter((k) => worldSw.on[k])), worldSw.tiers) : []),
       ...(shownItem && shownPoints ? itemItems(shownItem.className, shownPoints) : []),
+      ...(shownModel && modelShown ? modelItems(shownModel.className, modelShown) : []),
     ],
-    [world, worldSw, shownItem, shownPoints],
+    [world, worldSw, shownItem, shownPoints, shownModel, modelShown],
   );
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
@@ -827,7 +830,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     try { raw = window.localStorage.getItem(WORLD_STORAGE_KEY); } catch { /* private window: defaults */ }
     const read: WorldState = { sw: readWorldSwitches(raw, worldLayers(world), world), view: null };
     // An item picked while the file was still on its way stays shown, over the real switches.
-    setWs((prev) => (prev.view ? pickItem(read, { className: prev.view.className, label: prev.view.label }) : read));
+    setWs((prev) => (prev.view ? pickItem(read, { className: prev.view.className, label: prev.view.label, model: prev.view.model }) : read));
   }, [world]);
 
   // Each world layer's group on the map or off it with its switch, then the markers for
@@ -919,6 +922,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       places: placesFor(MAP, Infinity).map((p) => ({ name: p.name, ...latLngToWorld(p.lat, p.lng, size) })),
       bunkers: world?.bunkers ?? [],
       items: itemsFile?.items,
+      models: world ? modelCounts(world) : undefined,
       cards: cards ?? undefined,
     }),
     [size, world, itemsFile, cards],
@@ -926,10 +930,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The item view's panel, with the item's card when the cards are in.
   const delootAt = useMemo(() => (world && shownItem ? delootEvents(world, shownItem) : null), [world, shownItem]);
   const shownCard = useMemo(() => {
-    const c = shown && cards?.get(shown.className);
+    const c = shown && !shown.model && cards?.get(shown.className);
     return c && cards ? itemCardView(c, cards) : null;
   }, [shown, cards]);
-  const itemModel = shown && shownItem ? withCard(itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }), shownCard) : null;
+  const itemModel = shownModel ? modelPanel(shownModel.label, modelShown, { zoomedIn }) : shown && shownItem ? withCard(itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }), shownCard) : null;
   /**
    * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
    * reticle with its popup open; a place or bunker does not, because its name or its
