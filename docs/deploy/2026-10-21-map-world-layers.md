@@ -3,7 +3,8 @@
 The map's world layers, search, item cards, ruler and readout read three generated files under
 `apps/web/public/map-data/nasdara/`, plus the item pictures in `apps/web/public/items`:
 
-- `world.json`: events, bunkers, wrecks, buildings, spawns, contaminated areas, from the Nasdara mission.
+- `world.json`: events, bunkers, wrecks, buildings, spawns, contaminated areas, and the infected and animal
+  territories (the `env/*_territories.xml` files `cfgenvironment.xml` lists), from the Nasdara mission.
 - `items.json`: the item index (types.xml, spawn gear, events, area flags), from the Nasdara mission.
 - `item-cards.json`: name, description, weight, size and what fits each item, from the DayZ game files.
 
@@ -27,7 +28,15 @@ using.
 4. If the item list changed (the class names, not just nominal and min), rebuild the cards, see below.
 5. `npx turbo run typecheck test --concurrency=1` (needs Postgres, see CLAUDE.md), then commit the three JSON files.
 
-Both builds record the mission commit in `source.commit`.
+Both builds record the mission commit in `source.commit`. Build both from the same commit: a test
+fails when their commits or limits lists differ, because item masks and building masks are compared
+bit for bit.
+
+`map:world` prints the territory counts and every territory file `cfgenvironment.xml` lists that is
+not in the mission. On Nasdara 58a7c4d that is sheep, goat, mouflon, fox, monitor and
+dobermann_shepherd: the game finds no file for them either, so nothing spawns there and nothing is
+drawn. Files in `env/` that `cfgenvironment.xml` does not list (bear, wolf, the deer, pig,
+sheep_goat) are never loaded by the game and are not drawn.
 
 ## Rebuilding after a DayZ update (item cards)
 
@@ -49,7 +58,7 @@ without one shows no picture. Add one and re-run `map:cards`.
 Do this once after the first deploy. It confirms the grid orientation matches the game.
 
 1. Join Nasdara and stand next to a bunker entrance.
-2. Open the in-game GPS and write down the reading (three digits across, three up).
+2. Open the in-game GPS and write down the reading (three digits across from the west edge, then three digits down from the north edge).
 3. On the map, search that reading in the form `072 087`, and search the bunker by name.
 4. The result and the bunker should land on the same spot.
 
