@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- 2.8.0's map update did not go live: the website build failed on the server. It builds now.
+
 ## [2.8.0] - 2026-10-21
 
 ### Added

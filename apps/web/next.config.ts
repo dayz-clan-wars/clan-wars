@@ -16,6 +16,9 @@ const config: NextConfig = {
   // the server bundle rather than letting Next try to compile it.
   serverExternalPackages: ["postgres"],
 
+  // ⚠️ The build type-checks the app only; see tsconfig.build.json for why
+  // scripts/ and test/ are left to `pnpm typecheck`.
+  typescript: { tsconfigPath: "tsconfig.build.json" },
 };
 
 export default config;
