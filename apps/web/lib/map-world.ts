@@ -5,6 +5,7 @@
 // Coordinates are DayZ world metres: x east, z north, 0..WORLD_SIZE_M. The y (height) the
 // mission files carry is dropped here — the map is flat.
 import { XMLParser } from "fast-xml-parser";
+import { WORLD_MAP } from "@factions/domain";
 
 export type WorldPoint = { x: number; z: number };
 export type WorldEvent = { event: string; points: WorldPoint[] }; // cfgeventspawns name
@@ -89,7 +90,7 @@ let cached: Promise<WorldFile> | null = null;
 
 /** Fetched once per page load; a failure is not cached, so a retry can succeed. */
 export function loadWorld(): Promise<WorldFile> {
-  cached ??= fetch("/map-data/nasdara/world.json")
+  cached ??= fetch(`/map-data/${WORLD_MAP}/world.json`)
     .then((r) => {
       if (!r.ok) throw new Error(`world.json ${r.status}`);
       return r.json() as Promise<WorldFile>;

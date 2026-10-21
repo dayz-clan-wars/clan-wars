@@ -7,6 +7,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { WORLD_MAP } from "@factions/domain";
 import {
   parseBunkers,
   parseEffectAreas,
@@ -21,7 +22,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(here, "../../..");
 const argIdx = process.argv.indexOf("--mission");
 const mission = resolve(argIdx >= 0 ? process.argv[argIdx + 1]! : join(repoRoot, "../nasdara"));
-const out = join(here, "../public/map-data/nasdara/world.json");
+const out = join(here, `../public/map-data/${WORLD_MAP}/world.json`);
 
 const read = (f: string) => readFileSync(join(mission, f), "utf8");
 

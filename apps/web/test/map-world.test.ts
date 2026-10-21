@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { WORLD_SIZE_M } from "@factions/domain";
+import { WORLD_MAP, WORLD_SIZE_M } from "@factions/domain";
 import {
   parseBunkers,
   parseEffectAreas,
@@ -53,11 +53,12 @@ describe("map world parsers", () => {
 
 describe("committed world.json", () => {
   const world = JSON.parse(
-    readFileSync(join(__dirname, "../public/map-data/nasdara/world.json"), "utf8"),
+    readFileSync(join(__dirname, `../public/map-data/${WORLD_MAP}/world.json`), "utf8"),
   ) as WorldFile;
 
   it("⚠️ is the contract: 23 bunkers, and every event has points inside the world", () => {
     expect(world.version).toBe(1);
+    expect(world.source.commit).toMatch(/^[0-9a-f]{40}$/);
     expect(world.bunkers).toHaveLength(23);
     expect(world.events.length).toBeGreaterThan(0);
     for (const e of world.events) {
