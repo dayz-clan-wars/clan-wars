@@ -54,6 +54,8 @@ describe("parseHit", () => {
       .toMatchObject({ attackerType: "environment", attackerLabel: "German Shepherd", damage: 10, bodyPart: "Head" });
     expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 80] hit by Brown Bear into Torso(1) for 20 damage (MeleeBear)`)?.attackerLabel).toBe("Brown Bear");
     expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 93] hit by Doberman into Head(0) for 3.5 damage (MeleeWolf)`)?.attackerLabel).toBe("Doberman");
+    // A label that runs to the end of the line keeps no trailing space.
+    expect(parseHit(`10:00:00 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 93] hit by Brown Bear `)?.attackerLabel).toBe("Brown Bear");
   });
   it("a vehicle with no driver: the label is the vehicle class, not 'NO'", () => {
     expect(parseHit(`20:58:42 | Player "Vic" (id=${V} pos=<1.0, 2.0, 3.0>)[HP: 53.2977] hit by NO DRIVER with TransportHit (Motorbike_02_Yellow)`))

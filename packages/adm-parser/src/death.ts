@@ -21,7 +21,8 @@ const ENTITY_RE = /killed by ([A-Za-z0-9_]+)/u;
 const NO_DRIVER_RE = /killed by NO DRIVER \((\w+)\)/u;
 const VERB_RE = /\b(died|committed suicide|bled out|drowned|killed by)\b/u;
 // "killed by 6-M7 Frag Grenade", "killed by EGD-5 Frag Grenade", a landmine: the thrower is never on the line.
-const EXPLOSION_RE = /killed by .*(grenade|explosi|mine\b|claymore)/iu;
+// ⚠️ `mine(?:\b|trap)`: the land mine logs as `killed by LandMineTrap`, where a bare `mine\b` finds no word boundary.
+const EXPLOSION_RE = /killed by .*(grenade|explosi|mine(?:\b|trap)|claymore)/iu;
 const STATS_RE = /Stats>\s*Water:\s*([\d.]+)\s*Energy:\s*([\d.]+)\s*Bleed sources:\s*(\d+)/u;
 // Animals go through @factions/domain's classifyEntityLabel first (wolf, bear, dog, animal) — the same
 // rules the verdict applies to hit labels — so the prefixes here are disjoint from `Animal_`.
