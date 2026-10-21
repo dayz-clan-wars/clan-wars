@@ -297,9 +297,9 @@ describe("committed items.json", () => {
     expect(file.items).toHaveLength(2411);
   });
 
-  it("matches the M4A1 fact: weapons, ContaminatedArea, Unique, nominal 4", () => {
+  it("matches the M4A1 fact: weapons, ContaminatedArea, Unique, nominal 2 (4 before mission c506549 cut guns to 1.5x vanilla)", () => {
     const m = by.get("M4A1")!;
-    expect(m.nominal).toBe(4);
+    expect(m.nominal).toBe(2);
     expect(m.categories).toBe(1 << file.limits.categories.indexOf("weapons"));
     expect(m.usage).toBe(1 << file.limits.usage.indexOf("ContaminatedArea"));
     expect(m.value).toBe(1 << file.limits.value.indexOf("Unique"));
