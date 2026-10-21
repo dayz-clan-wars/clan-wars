@@ -18,12 +18,12 @@ export type WorldState = { sw: WorldSwitches; view: ItemView | null };
  * ⚠️ `saved` is taken from the FIRST pick only. A second pick while one is shown must not
  * save the all-off switches, or Clear would leave the player with an empty layers panel.
  * The tiers stay as they are: they hide nothing while every layer is off.
+ * ⚠️ A model pick and an item pick share this one view: picking either replaces the other, and
+ * `saved` still comes from the very first of them.
  */
 export function pickItem(s: WorldState, pick: ItemPick): WorldState {
   const saved = s.view?.saved ?? s.sw;
   return { sw: { on: Object.fromEntries(Object.keys(saved.on).map((k) => [k, false])), tiers: saved.tiers }, view: { ...pick, saved } };
-  // ⚠️ A model pick and an item pick share this one view: picking either replaces the other, and
-  // `saved` still comes from the very first of them.
 }
 
 /** Clear: the switches exactly as they were before the item was picked. */
