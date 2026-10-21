@@ -1,0 +1,7 @@
+{
+	"bunkerSettings": { "numberOfActive": 3 },
+	"proxies": [
+		{ "position": [ 7216.415, 185.2, 5706.95 ] },
+		{ "position": [ 1000, 50, 2000 ] }
+	]
+}

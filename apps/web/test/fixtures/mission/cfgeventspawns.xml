@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<eventposdef>
+		<event name="AmbientFox" />
+		<event name="StaticWaterTruck">
+				<pos x="3144.477295" z="4687.656250" />
+				<pos x="3666.478027" y="12.5" z="10883.100586" />
+		</event>
+		<event name="VehicleTruck01">
+				<pos x="100.5" z="200.25" a="90" />
+		</event>
+</eventposdef>

@@ -11,7 +11,8 @@
     "prebuild": "tsx scripts/build-achievement-glyphs.ts",
     "build": "next build",
     "start": "next start",
-    "guide:publish": "tsx scripts/publish-guide.ts"
+    "guide:publish": "tsx scripts/publish-guide.ts",
+    "map:world": "tsx scripts/build-map-world.ts"
   },
   "dependencies": {
     "@factions/copy": "workspace:*",
@@ -30,6 +31,7 @@
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "fast-xml-parser": "5.3.3",
     "sharp": "^0.35.4",
     "tailwindcss": "^4.1.0",
     "tsx": "^4.23.12",

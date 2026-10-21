@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<playerspawnpoints>
+    <fresh>
+        <generator_params><grid_density>4</grid_density></generator_params>
+        <generator_posbubbles>
+            <group name="ZiaratDistrict">
+                <pos x="10133.000000" z="4163.000000" />
+            </group>
+            <group name="ZulfiqarMissileBase">
+                <pos x="2696.000000" z="9693.000000" />
+            </group>
+        </generator_posbubbles>
+    </fresh>
+    <hop>
+        <generator_posbubbles>
+            <group name="HopOnly"><pos x="1.0" z="2.0" /></group>
+        </generator_posbubbles>
+    </hop>
+</playerspawnpoints>
