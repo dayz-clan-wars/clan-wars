@@ -25,7 +25,7 @@ describe("achievementsForDb", () => {
     await db.insert(identityLinks).values({ discordId: "1", dayzId: A, gamertag: "Ann", verifiedAt: t0 });
   });
 
-  it("a player's wall: the 49 earnable tiles, their own unlocks, progress, and the team unlocks of clans they were in at the time", async () => {
+  it("a player's wall: the 150 earnable tiles, their own unlocks, progress, and the team unlocks of clans they were in at the time", async () => {
     await db.insert(membershipHistory).values([{ serverId, factionId: bear, dayzId: A, joinedAt: d(0), leftAt: d(10) }, { serverId, factionId: wolf, dayzId: A, joinedAt: d(20), leftAt: null }]);
     await db.insert(achievementUnlocks).values([
       { ownerKind: "player", ownerId: A, key: "first_blood", earnedAt: d(1) },
@@ -39,8 +39,8 @@ describe("achievementsForDb", () => {
       { ownerKind: "player", ownerId: A, key: "builder", count: 10, target: 100, computedAt: d(30) },
     ]);
     const wall = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
-    expect(wall.tiles).toHaveLength(49);
-    expect(wall.tiles.map((t) => t.key)).not.toContain("wanderer");
+    expect(wall.tiles).toHaveLength(150);
+    for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(wall.tiles.map((t) => t.key)).not.toContain(k);
     expect(wall.earned).toBe(3);
     const by = (k: string) => wall.tiles.find((t) => t.key === k)!;
     expect(by("first_blood")).toMatchObject({ earnedAt: d(1), count: 1, clanTag: null });
@@ -51,22 +51,50 @@ describe("achievementsForDb", () => {
     expect(wall.closest.map((t) => t.key)).toEqual(["veteran", "ten_down", "builder"]);   // by count/target, desc
   });
 
+  /**
+   * ⚠️ A two-gun class tile one kill from done reads as 50%: without this, the armory's
+   * 59 tiles would fill the panel with gun chores and push every other goal out.
+   */
+  it("an armory tile is never 'closest', however near it is", async () => {
+    await db.insert(achievementProgress).values([
+      { ownerKind: "player", ownerId: A, key: "class_snipers", count: 2, target: 3, computedAt: d(30) },
+      { ownerKind: "player", ownerId: A, key: "full_armory", count: 51, target: 52, computedAt: d(30) },
+      { ownerKind: "player", ownerId: A, key: "ten_down", count: 1, target: 10, computedAt: d(30) },
+    ]);
+    const wall = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
+    expect(wall.closest.map((t) => t.key)).toEqual(["ten_down"]);
+    expect(wall.tiles.find((t) => t.key === "full_armory")).toMatchObject({ count: 51 });   // still on the wall
+  });
+
   it("a retired achievement shows only to a holder, earned, and is never 'closest'", async () => {
     await db.insert(achievementProgress).values({ ownerKind: "player", ownerId: A, key: "wanderer", count: 9, target: 10, computedAt: d(30) });
     const before = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
-    expect(before.tiles).toHaveLength(49);
+    expect(before.tiles).toHaveLength(150);
     expect(before.closest.map((t) => t.key)).not.toContain("wanderer");
     await db.insert(achievementUnlocks).values({ ownerKind: "player", ownerId: A, key: "wanderer", earnedAt: d(2) });
     const after = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
-    expect(after.tiles).toHaveLength(50);
+    expect(after.tiles).toHaveLength(151);
     expect(after.tiles.find((t) => t.key === "wanderer")).toMatchObject({ earnedAt: d(2), count: 10 });
     expect(after.earned).toBe(1);
   });
 
-  it("a clan's wall: the 12 team tiles only", async () => {
+  it("wolf_bait and bear_necessities, retired with the Nasdara swap: a holder's wall shows theirs, nobody else's shows either", async () => {
+    const B = "B".repeat(40);
+    await db.insert(players).values({ dayzId: B, gamertag: "Ben", firstSeenAt: t0, lastSeenAt: t0 });
+    await db.insert(achievementUnlocks).values({ ownerKind: "player", ownerId: A, key: "wolf_bait", earnedAt: d(2) });
+    const ann = (await achievementsForDb(db, { gamertag: "ann" }, d(30)))!;
+    expect(ann.tiles).toHaveLength(151);
+    expect(ann.tiles.find((t) => t.key === "wolf_bait")).toMatchObject({ earnedAt: d(2) });
+    expect(ann.tiles.map((t) => t.key)).not.toContain("bear_necessities");
+    const ben = (await achievementsForDb(db, { gamertag: "ben" }, d(30)))!;
+    expect(ben.tiles).toHaveLength(150);
+    for (const k of ["wolf_bait", "bear_necessities"]) expect(ben.tiles.map((t) => t.key)).not.toContain(k);
+  });
+
+  it("a clan's wall: the 16 team tiles only", async () => {
     await db.insert(achievementUnlocks).values({ ownerKind: "clan", ownerId: String(bear), key: "colors_raised", earnedAt: d(1) });
     const wall = (await achievementsForDb(db, { clanTag: "bear" }, d(30)))!;
-    expect(wall.tiles).toHaveLength(12);
+    expect(wall.tiles).toHaveLength(16);
     expect(wall.tiles.every((t) => t.group === "team")).toBe(true);
     expect(wall.earned).toBe(1);
     expect(wall.closest).toEqual([]);

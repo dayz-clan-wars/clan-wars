@@ -392,6 +392,8 @@ const builderId = sql<string>`${events.payload}->>'dayzId'`;
  * Shared with the bot's `built()` rule so the two can never disagree.
  */
 export const isBaseBuild = sql`${events.payload}->>'structure' is not null`;
+/** Its complement, for the ruin achievements: each `base.built` line with no structure is one repair. */
+export const isRuinRepair = sql`${events.payload}->>'structure' is null`;
 const builtInScope = (serverId: number, w: Window): SQL =>
   and(eq(events.serverId, serverId), eq(events.type, "base.built"), isBaseBuild, inWindow(events.occurredAt, w))!;
 

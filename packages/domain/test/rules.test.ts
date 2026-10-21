@@ -28,6 +28,7 @@ describe("rules", () => {
     expect(R.RENAME_COOLDOWN_MS).toBe(30 * DAY);
     expect(R.REBIND_CONFIRM_MS).toBe(24 * HOUR);
     expect(R.REBIND_COOLDOWN_MS).toBe(7 * DAY);
+    expect(R.BAD_DOG_SURVIVE_MS).toBe(10 * MIN);
     expect(R.GUEST_PASS_MS).toBe(24 * HOUR);
     expect(R.POSITION_FIX_MS).toBe(5 * MIN);
     expect(R.INTRUDER_ALERT_COOLDOWN_MS).toBe(20 * MIN);

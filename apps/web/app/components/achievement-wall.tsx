@@ -1,5 +1,6 @@
 import type { AchievementWall as Wall, AchievementTile } from "@factions/roster";
-import { ACHIEVEMENT_GROUPS, type AchievementGroup } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, ARMORY_KEYS, isArmory, type AchievementGroup } from "@factions/domain";
+import { ARMORY_LABEL, armoryCount } from "@factions/copy";
 import { GROUP_LABELS, WALL, progressLine, earnedLine } from "@/lib/achievements-copy";
 import { Panel, PanelBody, kickerSm } from "@/app/components/ui";
 import { AchievementBadge } from "@/app/components/achievement-badge";
@@ -53,11 +54,22 @@ export function Tile({ t }: { t: AchievementTile }) {
   );
 }
 
+/** One column on a phone: the wall must never scroll sideways. */
+const GRID = "m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2 xl:grid-cols-3";
+
+const armory = (t: AchievementTile): boolean => isArmory(ACHIEVEMENT_BY_KEY[t.key]);
+
 /**
- * The wall: forty-nine tiles (fifty for a holder of the retired Wanderer, twelve
- * on a clan's), grouped, earned in the group's colour, in progress with a ring
+ * The wall: every earnable tile (plus any retired one the player holds: Wanderer,
+ * Wolf Bait, Bear Necessities; a clan's carries its team tiles only), grouped, earned in the group's colour, in progress with a ring
  * on the badge, locked in grey. `id="achievements"` is what the owner's
  * closest-to-unlocking panel links down to.
+ *
+ * The 59 armory tiles (one per gun, the six classes, Full Armory) sit inside Combat
+ * in a native <details>, shut until opened: shown flat, they would bury the rest of
+ * Combat. <details> opens and closes itself, is keyboard- and screen-reader-operable,
+ * and keeps this a server component with no client JS. The summary line says the
+ * earned count, so a shut section still reports progress.
  *
  * ⚠️ A tile carries a name, a description, a count and a date — never a
  * coordinate. The wall is public on every profile and clan page.
@@ -67,15 +79,29 @@ export function AchievementWall({ wall, title = WALL.title, className }: { wall:
   return (
     <Panel id="achievements" title={title} aside={WALL.earnedOf(wall.earned, wall.tiles.length)} className={className}>
       <PanelBody>
-        {groups.map((g) => (
-          <section key={g} className="mb-5 last:mb-0">
-            <h3 className={`${kickerSm} mb-2`}>{GROUP_LABELS[g]}</h3>
-            {/* One column on a phone: the wall must never scroll sideways. */}
-            <ul className="m-0 grid list-none grid-cols-1 gap-2 p-0 sm:grid-cols-2 xl:grid-cols-3">
-              {wall.tiles.filter((t) => t.group === g).map((t) => <Tile key={t.key} t={t} />)}
-            </ul>
-          </section>
-        ))}
+        {groups.map((g) => {
+          const inGroup = wall.tiles.filter((t) => t.group === g);
+          const guns = inGroup.filter(armory);
+          return (
+            <section key={g} className="mb-5 last:mb-0">
+              <h3 className={`${kickerSm} mb-2`}>{GROUP_LABELS[g]}</h3>
+              <ul className={GRID}>
+                {inGroup.filter((t) => !armory(t)).map((t) => <Tile key={t.key} t={t} />)}
+              </ul>
+              {guns.length > 0 && (
+                <details className="mt-3 border-2 border-rule-2">
+                  <summary className={`${kickerSm} cursor-pointer px-3 py-2.5`}>
+                    {/* ⚠️ Out of ARMORY_KEYS, the whole section, not the tiles on this wall: the count is "of 59" for everyone. */}
+                    {ARMORY_LABEL} · {armoryCount(guns.filter((t) => t.earnedAt).length, ARMORY_KEYS.length)}
+                  </summary>
+                  <ul className={`${GRID} px-3 pb-3`}>
+                    {guns.map((t) => <Tile key={t.key} t={t} />)}
+                  </ul>
+                </details>
+              )}
+            </section>
+          );
+        })}
       </PanelBody>
     </Panel>
   );

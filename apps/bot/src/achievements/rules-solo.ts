@@ -1,23 +1,26 @@
-import { ACHIEVEMENT_BY_KEY, type AchievementKey, type EarnableKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, EMOTES, type AchievementKey, type EarnableKey } from "@factions/domain";
 import { achievementCounters, ceremonyParticipants, events, factions, identityLinks, membershipHistory, playerSessions } from "@factions/db";
 import { and, asc, eq, isNotNull, sql } from "drizzle-orm";
-import { nth, oneShot, type Rule } from "./types.js";
+import { nth, oneShot, type Rule, type RuleCtx } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
 const HOUR = 3_600_000, DAY = 86_400_000;
 
-/** Sessions with a close, ascending. Open sessions never count: their length is not known yet. */
-async function closedSessions(db: Parameters<Rule>[0], dayzId: string) {
-  return db.select({ id: playerSessions.id, from: playerSessions.connectedAt, to: playerSessions.disconnectedAt, serverId: playerSessions.serverId })
-    .from(playerSessions).where(and(eq(playerSessions.dayzId, dayzId), isNotNull(playerSessions.disconnectedAt)))
-    .orderBy(asc(playerSessions.connectedAt), asc(playerSessions.id));
-}
+/**
+ * Sessions with a close, ascending, read once per owner per pass for the three hours rules.
+ * Open sessions never count: their length is not known yet.
+ */
+const closedSessions = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string) =>
+  ctx.memo(`sessions:closed:${dayzId}`, () =>
+    db.select({ id: playerSessions.id, from: playerSessions.connectedAt, to: playerSessions.disconnectedAt, serverId: playerSessions.serverId })
+      .from(playerSessions).where(and(eq(playerSessions.dayzId, dayzId), isNotNull(playerSessions.disconnectedAt)))
+      .orderBy(asc(playerSessions.connectedAt), asc(playerSessions.id)));
 
 /** Hours played; earned at the disconnect that carried the total over the target. */
-const hoursPlayed = (key: AchievementKey): Rule => async (db, owner) => {
+const hoursPlayed = (key: AchievementKey): Rule => async (db, owner, ctx) => {
   const target = T(key);
   let ms = 0;
-  for (const s of await closedSessions(db, owner.id)) {
+  for (const s of await closedSessions(db, ctx, owner.id)) {
     ms += s.to!.getTime() - s.from.getTime();
     if (ms >= target * HOUR) {
       return { count: Math.floor(ms / HOUR), target, earnedAt: s.to!, evidenceId: s.id, evidence: { hours: Math.floor(ms / HOUR) }, serverId: s.serverId };
@@ -26,22 +29,69 @@ const hoursPlayed = (key: AchievementKey): Rule => async (db, owner) => {
   return { count: Math.floor(ms / HOUR), target };
 };
 
-/** Events of one type naming the player in the payload, ascending. */
-async function ownEvents(db: Parameters<Rule>[0], type: string, dayzId: string, extra = sql`true`) {
-  const rows = await db.select({ id: events.id, at: events.occurredAt, serverId: events.serverId }).from(events)
-    .where(and(eq(events.type, type as never), sql`${events.payload}->>'dayzId' = ${dayzId}`, extra))
-    .orderBy(asc(events.occurredAt), asc(events.id));
-  return rows;
-}
-
-/** A lifetime counter (counters.ts keeps it); earned at the moment the counter recorded crossing. */
-const counter = (key: AchievementKey): Rule => async (db, owner) => {
+/**
+ * A lifetime counter (counters.ts keeps it); earned at the moment the counter recorded crossing.
+ * `from` names another tile's counter row and `field` the detail key holding this tile's crossing:
+ * Globetrotter reads Explorer's square set, whose crossing of 150 is `globetrotterAt`.
+ * ⚠️ Never read the counter's `crossedAt` for a second target: it is when the set reached
+ * Explorer's 50, and would date a Globetrotter unlock to the wrong fix.
+ */
+const counter = (key: AchievementKey, from: AchievementKey = key, field = "crossedAt"): Rule => async (db, owner) => {
   const target = T(key);
   const [c] = await db.select().from(achievementCounters)
-    .where(and(eq(achievementCounters.ownerKind, owner.kind), eq(achievementCounters.ownerId, owner.id), eq(achievementCounters.key, key)));
+    .where(and(eq(achievementCounters.ownerKind, owner.kind), eq(achievementCounters.ownerId, owner.id), eq(achievementCounters.key, from)));
   if (!c) return { count: 0, target };
-  const crossedAt = typeof c.detail.crossedAt === "string" ? new Date(c.detail.crossedAt) : undefined;
+  const raw = c.detail[field];
+  const crossedAt = typeof raw === "string" ? new Date(raw) : undefined;
   return c.value >= target && crossedAt ? { count: c.value, target, earnedAt: crossedAt, evidence: { count: c.value } } : { count: c.value, target };
+};
+
+/** The owner's emotes in time order, each with its `payload.emote` token, read once per owner per pass for the five emote rules. */
+const ownEmotes = (db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string) =>
+  ctx.memo(`emotes:${dayzId}`, () =>
+    db.select({ id: events.id, at: events.occurredAt, serverId: events.serverId, emote: sql<string | null>`${events.payload}->>'emote'` }).from(events)
+      .where(and(eq(events.type, "emote.performed"), sql`${events.payload}->>'dayzId' = ${dayzId}`))
+      .orderBy(asc(events.occurredAt), asc(events.id)));
+
+/** Emotes of any kind, counted. */
+const emoteCount = (key: AchievementKey): Rule => async (db, owner, ctx) => nth(await ownEmotes(db, ctx, owner.id), T(key));
+
+/**
+ * Distinct emote tokens, earned at the emote that brought the target-th new one. `among` limits
+ * which tokens count: Full Repertoire counts only EMOTES, so a token outside the list (a PC-only
+ * emote, a parser oddity) can never stand in for a missing console one.
+ */
+const distinctEmotes = (key: AchievementKey, among?: ReadonlySet<string>): Rule => async (db, owner, ctx) => {
+  const target = T(key);
+  const seen = new Set<string>();
+  for (const e of await ownEmotes(db, ctx, owner.id)) {
+    if (!e.emote || seen.has(e.emote) || (among && !among.has(e.emote))) continue;
+    seen.add(e.emote);
+    if (seen.size === target) return { count: target, target, earnedAt: e.at, evidenceId: e.id, evidence: { emotes: target }, serverId: e.serverId };
+  }
+  return { count: seen.size, target };
+};
+const EMOTE_SET: ReadonlySet<string> = new Set(EMOTES);
+
+/**
+ * The longest run of consecutive UTC dates with a session start; earned at the session that
+ * made the run reach the target. Regular (7) and Devoted (30) share one read per owner per pass.
+ */
+const consecutiveDays = (key: AchievementKey): Rule => async (db, owner, ctx) => {
+  const target = T(key);
+  const sessions = await ctx.memo(`sessions:starts:${owner.id}`, () =>
+    db.select({ id: playerSessions.id, at: playerSessions.connectedAt, serverId: playerSessions.serverId })
+      .from(playerSessions).where(eq(playerSessions.dayzId, owner.id)).orderBy(asc(playerSessions.connectedAt)));
+  let run = 0, best = 0, prevDay = Number.NEGATIVE_INFINITY;
+  for (const s of sessions) {
+    const day = Math.floor(s.at.getTime() / DAY);
+    if (day === prevDay) continue;
+    run = day === prevDay + 1 ? run + 1 : 1;
+    prevDay = day;
+    if (run > best) best = run;
+    if (run === target) return { count: run, target, earnedAt: s.at, evidenceId: s.id, evidence: { days: run }, serverId: s.serverId };
+  }
+  return { count: best, target };
 };
 
 export const SOLO_RULES: Partial<Record<EarnableKey, Rule>> = {
@@ -86,25 +136,19 @@ export const SOLO_RULES: Partial<Record<EarnableKey, Rule>> = {
 
   long_haul: hoursPlayed("long_haul"),
   veteran: hoursPlayed("veteran"),
+  lifer: hoursPlayed("lifer"),
 
-  regular: async (db, owner) => {
-    // Distinct UTC dates with a session start, ascending; the longest run of consecutive dates.
-    const target = T("regular");
-    const sessions = await db.select({ id: playerSessions.id, at: playerSessions.connectedAt, serverId: playerSessions.serverId })
-      .from(playerSessions).where(eq(playerSessions.dayzId, owner.id)).orderBy(asc(playerSessions.connectedAt));
-    let run = 0, best = 0, prevDay = Number.NEGATIVE_INFINITY;
-    for (const s of sessions) {
-      const day = Math.floor(s.at.getTime() / DAY);
-      if (day === prevDay) continue;
-      run = day === prevDay + 1 ? run + 1 : 1;
-      prevDay = day;
-      if (run > best) best = run;
-      if (run === target) return { count: run, target, earnedAt: s.at, evidenceId: s.id, evidence: { days: run }, serverId: s.serverId };
-    }
-    return { count: best, target };
-  },
+  regular: consecutiveDays("regular"),
+  devoted: consecutiveDays("devoted"),
 
-  showman: async (db, owner) => nth(await ownEvents(db, "emote.performed", owner.id), T("showman")),
+  showman: emoteCount("showman"),
+  performer: emoteCount("performer"),
+  mime: distinctEmotes("mime"),
+  full_repertoire: distinctEmotes("full_repertoire", EMOTE_SET),
+  rps_champ: async (db, owner, ctx) =>
+    nth((await ownEmotes(db, ctx, owner.id)).filter((e) => e.emote === "EmoteRPSRandom"), T("rps_champ"), (r) => ({ games: r.length })),
+
   explorer: counter("explorer"),
+  globetrotter: counter("globetrotter", "explorer", "globetrotterAt"),
   cartographer: counter("cartographer"),
 };

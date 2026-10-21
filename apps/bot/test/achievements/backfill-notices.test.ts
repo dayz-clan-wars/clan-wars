@@ -46,7 +46,7 @@ describe("backfillAchievementNotices", () => {
 
   it("is idempotent, and skips what the live tick already announced", async () => {
     // The live tick announces a fresh kill's unlocks (marksman etc.) first.
-    await seedKill(db, { serverId, killer: A, victim: B, at: h(6), weapon: "Mosin", distanceM: 200 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: h(6), weapon: "Mosin 91/30", distanceM: 200 });
     await achievementsTick(db, { now: h(7), achievementsChannelId: CH });
     const live = (await db.select().from(clanNotices)).length;
     expect(live).toBeGreaterThan(0);

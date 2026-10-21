@@ -5,6 +5,15 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- 103 new achievements, for 150 in all: a PvP kill with each of the 52 firearms on Nasdara, every gun in a class, and Full Armory for all 52; knife, fist and sledgehammer kills; dogs and motorbikes; repairing ruins; bear traps, tripwires, barbed wire, mines and grenades; barrels, sea chests and tents; emotes; milestones like 250 PvP kills, a kill from 500 m and 500 hours played; and 4 more for clans. What you did before this release counts too, and each linked player who already holds any of the new ones gets one DM saying how many.
+- The gun achievements sit in an Armory section under Combat on your wall, closed until you open it, with its own count. They never fill your "Closest to unlocking" panel, and `/achievements` in Discord shows them as one count.
+
+### Changed
+
+- Wolf Bait and Bear Necessities can no longer be earned, since Nasdara has no wolves or bears. Anyone who has one keeps it.
+
 ## [2.6.0] - 2026-10-20
 
 ### Added

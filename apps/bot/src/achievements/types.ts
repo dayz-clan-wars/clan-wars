@@ -19,7 +19,25 @@ export type RuleResult = {
   /** The server the evidence came from, for the notice rows. Optional; the tick falls back to the owner's clan's server. */
   serverId?: number;
 };
-export type Rule = (db: Database, owner: Owner, ctx: { now: Date }) => Promise<RuleResult>;
+/**
+ * What a rule is handed. `memo` shares one read between the rules of a single owner in a
+ * single pass: callers asking for the same key get the same in-flight promise.
+ */
+export type RuleCtx = { now: Date; memo: <T>(key: string, fn: () => Promise<T>) => Promise<T> };
+export type Rule = (db: Database, owner: Owner, ctx: RuleCtx) => Promise<RuleResult>;
+
+/** A fresh context. ⚠️ One per owner per pass — a memo outliving its pass would serve stale rows. */
+export function makeCtx(now: Date): RuleCtx {
+  const cache = new Map<string, Promise<unknown>>();
+  return {
+    now,
+    memo: <T>(key: string, fn: () => Promise<T>): Promise<T> => {
+      let p = cache.get(key) as Promise<T> | undefined;
+      if (!p) { p = fn(); cache.set(key, p); }
+      return p;
+    },
+  };
+}
 
 export type Hit = { at: Date; id?: number | null; evidence?: Evidence; serverId?: number };
 

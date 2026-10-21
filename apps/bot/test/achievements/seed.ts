@@ -27,6 +27,17 @@ export async function seedEvent(db: Database, a: { serverId: number; type: strin
   }).returning();
   return e!;
 }
+/** A `player.hit` event as the ingest stores it. Defaults: an environment hit on `victim` with no label. */
+export async function seedHit(db: Database, a: {
+  serverId: number; at: Date; victim: string; attacker?: string | null; attackerType?: "player" | "infected" | "environment";
+  attackerLabel?: string | null; cause?: string | null; weapon?: string | null;
+}) {
+  return seedEvent(db, { serverId: a.serverId, type: "player.hit", at: a.at, payload: {
+    victimDayzId: a.victim, victimGamertag: "V", victimHp: 50, attackerDayzId: a.attacker ?? null, attackerGamertag: a.attacker ? "K" : null,
+    attackerType: a.attackerType ?? (a.attacker ? "player" : "environment"), attackerLabel: a.attackerLabel ?? null, cause: a.cause ?? null,
+    damage: 5, bodyPart: "Torso", weapon: a.weapon ?? null, distanceM: null,
+  } });
+}
 export async function seedLink(db: Database, a: { dayzId: string; discordId: string; gamertag: string; verifiedAt: Date }) {
   const [l] = await db.insert(identityLinks).values(a).returning();
   return l!;
@@ -34,8 +45,10 @@ export async function seedLink(db: Database, a: { dayzId: string; discordId: str
 export async function seedKill(db: Database, a: {
   serverId: number; killer: string | null; victim: string; at: Date; weapon?: string | null; distanceM?: number | null;
   cause?: string; friendlyFire?: boolean; killerFactionId?: number | null; victimFactionId?: number | null; atHub?: boolean;
+  /** The death event's `entity` (what killed a no-killer death: "Motorbike_02_Yellow"). */
+  entity?: string | null;
 }) {
-  const ev = await seedEvent(db, { serverId: a.serverId, type: a.killer ? "player.killed" : "player.died", at: a.at, payload: {} });
+  const ev = await seedEvent(db, { serverId: a.serverId, type: a.killer ? "player.killed" : "player.died", at: a.at, payload: a.entity === undefined ? {} : { entity: a.entity } });
   const [k] = await db.insert(kills).values({
     serverId: a.serverId, eventId: ev.id, occurredAt: a.at, victimDayzId: a.victim, killerDayzId: a.killer,
     weapon: a.weapon ?? (a.killer ? "M4-A1" : null), distanceM: a.distanceM == null ? null : String(a.distanceM),

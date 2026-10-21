@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CLAN_NOTICE_KINDS, type NoticeTarget } from "@factions/domain";
+import { achievementSummaryLine } from "@factions/copy";
 import { NOTICE_COPY, NOTICE_GROUPS, noticeCopy, kindsInGroup, noticeGroup } from "@/lib/notice-copy";
 
 const TARGETS: NoticeTarget[] = ["channel", "dm"];
@@ -192,5 +193,22 @@ describe("notice copy", () => {
   it("says an expired bounty is over, and a revoked one was lifted", () => {
     expect(noticeCopy("bounty_expired", { bountyId: 1 }, "dm").body).toMatch(/served|expired/iu);
     expect(noticeCopy("bounty_revoked", { bountyId: 1 }, "dm").body).toMatch(/lifted/iu);
+  });
+
+  /**
+   * ⚠️ The pin for the summary DM's wording: the bot's notice-text.test.ts asserts
+   * the same literal sentence. The site cannot print the bare wall URL, so the
+   * link is the call to action instead.
+   */
+  it("the achievement summary says the bot's sentence, and links the player's wall", () => {
+    const c = noticeCopy("achievement_summary", { release: "2026-10", count: 3, gamertag: "Ann", wallUrl: "https://dayzclanwars.com/players/Ann#achievements" }, "dm");
+    expect(c.body).toBe("You already hold 3 of the new achievements.");
+    expect(c.body).toBe(achievementSummaryLine(3));
+    expect(c.group).toBe("Achievement");
+    expect(c.cta).toEqual({ label: "See your wall", href: "/players/Ann#achievements" });
+  });
+
+  it("the achievement summary with no gamertag links nowhere rather than a broken page", () => {
+    expect(noticeCopy("achievement_summary", { count: 2 }, "dm").cta).toBeUndefined();
   });
 });

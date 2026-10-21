@@ -8,7 +8,7 @@ import {
   clearResume, collectEveryone, collectTouched, headWatermarks, ownerKey, pinsAfter, positionsAfter, readResume, readWatermarks,
   writeResume, writeWatermarks, type Watermarks,
 } from "./touched.js";
-import type { Owner, RuleResult } from "./types.js";
+import { makeCtx, type Owner, type RuleResult } from "./types.js";
 
 export type AchievementsTickOpts = {
   now?: Date;
@@ -33,10 +33,11 @@ const KEYS_FOR = {
 /** Every rule of the owner's kind; a throw is reported per key and skips only that key. */
 export async function evaluateOwner(db: Database, owner: Owner, now: Date, onError?: AchievementsTickOpts["onError"]): Promise<{ key: AchievementKey; result: RuleResult }[]> {
   const out: { key: AchievementKey; result: RuleResult }[] = [];
+  const ctx = makeCtx(now);
   for (const key of KEYS_FOR[owner.kind]) {
     // ⚠️ Per key, not per owner: one broken rule must never cost an owner the
-    // other 36 — the pass reports it in `failed` and carries on.
-    try { out.push({ key, result: await RULES[key](db, owner, { now }) }); }
+    // other rules — the pass reports it in `failed` and carries on.
+    try { out.push({ key, result: await RULES[key](db, owner, ctx) }); }
     catch (err) { onError?.(owner, key, err); }
   }
   return out;
@@ -211,6 +212,11 @@ export async function achievementsTick(db: Database, opts: AchievementsTickOpts)
     await backfillCounters(db, wm, batch * 5);
     const all = [...(await collectEveryone(db))].sort((a, b) => ownerKey(a).localeCompare(ownerKey(b)));
     for (const owner of all) await runOwner(owner);
+    // ⚠️ The clans again, now that every player is done: Every Class Covered reads the members'
+    // class-tile unlocks, and clans sort before players, so the first walk saw none of the ones
+    // this backfill wrote. Left to the live tick (`classUnlocks`), those clans would unlock — and
+    // ANNOUNCE — history on the first pass after a silent backfill. A clan is a few cheap reads.
+    for (const owner of all) if (owner.kind === "clan") await runOwner(owner);
     await db.transaction(async (tx) => { await writeWatermarks(tx, heads); await clearResume(tx); });
     return result;
   }

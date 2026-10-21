@@ -1819,6 +1819,12 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (!cfg.restartSchedule) console.warn("RESTART_SCHEDULE is off: the bot is not restarting the server on a schedule.");
     else console.log("scheduled restarts on: every even UTC hour");
 
+    // ⚠️ A release runbook turns the tick off for a silent backfill (docs/deploy/2026-10-21-
+    // achievements-150.md) and must SEE it off: the tick only logs when it unlocks something,
+    // so without this line "off" and "on with nothing to do" read the same in the journal.
+    if (!cfg.achievementsTick) console.warn("ACHIEVEMENTS_TICK is off: no achievements are being evaluated or announced.");
+    else console.log("achievements tick on");
+
     // ⚠️ The wipe writes to a file nobody watches, so "off" and "broken" look identical
     // from the journal. Name the events and the window, so a wrong one is visible here
     // rather than at 08:00 tomorrow.

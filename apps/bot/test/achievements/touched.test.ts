@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, membershipHistory, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, membershipHistory, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
+import { makeCtx } from "../../src/achievements/types.js";
 import { collectTouched, headWatermarks, readWatermarks, ownerKey } from "../../src/achievements/touched.js";
-import { seedServer, seedFaction, seedMembership, seedKill, TRUNCATE } from "./seed.js";
+import { seedServer, seedFaction, seedMembership, seedKill, seedEvent, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const t0 = new Date("2026-08-01T10:00:00Z");
@@ -48,5 +49,77 @@ describe("collectTouched", () => {
     expect(heads.membershipClosed).toBe(m(9).getTime());
     expect(heads.activations).toBe(t0.getTime());
     expect(heads).toEqual(collected.next);
+  });
+
+  describe("event sources", () => {
+    const A = "A".repeat(36), B = "B".repeat(36), C = "C".repeat(36);
+    const players = async () => (await collectTouched(db, await readWatermarks(db), 100)).owners.map(ownerKey).filter((k) => k.startsWith("player:")).sort();
+
+    it("a hit touches its victim and its player attacker", async () => {
+      await seedEvent(db, { serverId, type: "player.hit", at: m(1), payload: { victimDayzId: A, attackerDayzId: B, attackerType: "player" } });
+      await seedEvent(db, { serverId, type: "player.hit", at: m(2), payload: { victimDayzId: C, attackerDayzId: null, attackerLabel: "Doberman" } });
+      expect(await players()).toEqual([`player:${A}`, `player:${B}`, `player:${C}`]);
+    });
+    it.each(["item.placed", "item.packed", "player.conscious"])("%s touches its player", async (type) => {
+      await seedEvent(db, { serverId, type, at: m(1), payload: { dayzId: A } });
+      expect(await players()).toEqual([`player:${A}`]);
+    });
+    it("headWatermarks counts the new types so a backfill does not replay them", async () => {
+      const e = await seedEvent(db, { serverId, type: "player.hit", at: m(1), payload: { victimDayzId: A } });
+      expect((await headWatermarks(db)).events).toBe(e.id);
+    });
+  });
+
+  describe("the clan tiles' sources (Task B8)", () => {
+    const A = "A".repeat(36), B = "B".repeat(36);
+    const clans = (owners: { kind: string; id: string }[]) => owners.filter((o) => o.kind === "clan").map((o) => o.id);
+    let wolf = 0;
+    beforeEach(async () => {
+      wolf = (await seedFaction(db, { serverId, tag: "WOLF", texture: "Flag_Wolf", poleKey: "9000.00:100.00:9000.00", x: 9000, z: 9000, createdAt: t0, activatedAt: t0 })).id;
+    });
+    // The membership and activation sources would touch the clans on their own; start past them.
+    const settled = async () => (await collectTouched(db, await readWatermarks(db), 100)).next;
+
+    it("a kill touches the killer's clan as resolved at the kill (Warband, Armory)", async () => {
+      const wm = await settled();
+      await seedKill(db, { serverId, killer: A, victim: B, at: m(1), killerFactionId: bear });
+      await seedKill(db, { serverId, killer: B, victim: A, at: m(2), killerFactionId: null });
+      expect(clans((await collectTouched(db, wm, 100)).owners)).toEqual([String(bear)]);
+    });
+
+    it("a base.built touches the clan whose full-member span covers the builder at that moment (Renovators)", async () => {
+      await seedMembership(db, { serverId, factionId: bear, dayzId: A, joinedAt: m(0), leftAt: null });
+      await seedMembership(db, { serverId, factionId: wolf, dayzId: B, joinedAt: m(0), leftAt: m(5) });
+      const wm = await settled();
+      await seedEvent(db, { serverId, type: "base.built", at: m(10), payload: { dayzId: A, structure: null, part: "door" } });
+      await seedEvent(db, { serverId, type: "base.built", at: m(10), payload: { dayzId: B, structure: null, part: "door" } });   // B left WOLF at m(5)
+      expect(clans((await collectTouched(db, wm, 100)).owners)).toEqual([String(bear)]);
+    });
+
+    it("a class_* unlock touches the clan the player was in when it was earned, once (Every Class Covered)", async () => {
+      await seedMembership(db, { serverId, factionId: bear, dayzId: A, joinedAt: m(0), leftAt: null });
+      await seedMembership(db, { serverId, factionId: wolf, dayzId: B, joinedAt: m(20), leftAt: null });
+      const wm = await settled();
+      // noticed_at defaults to now(), with microseconds: the second pass below proves the
+      // millisecond watermark does not re-collect the same row forever.
+      await db.insert(achievementUnlocks).values([
+        { ownerKind: "player", ownerId: A, key: "class_snipers", earnedAt: m(3) },
+        { ownerKind: "player", ownerId: B, key: "class_snipers", earnedAt: m(3) },   // before B joined WOLF
+        { ownerKind: "player", ownerId: B, key: "full_armory", earnedAt: m(30) },    // not a class tile
+      ]);
+      const first = await collectTouched(db, wm, 100);
+      expect(clans(first.owners)).toEqual([String(bear)]);
+      expect(first.next.classUnlocks).toBeGreaterThan(0);
+      expect(clans((await collectTouched(db, first.next, 100)).owners)).toEqual([]);
+      expect(await headWatermarks(db)).toEqual(first.next);
+    });
+  });
+
+  it("memo: two rules asking for the same key share one read", async () => {
+    let reads = 0; const ctx = makeCtx(t0);
+    const [a, b] = await Promise.all([ctx.memo("k", async () => ++reads), ctx.memo("k", async () => ++reads)]);
+    expect(reads).toBe(1);
+    expect([a, b]).toEqual([1, 1]);
+    expect(await makeCtx(t0).memo("k", async () => 7)).toBe(7);
   });
 });

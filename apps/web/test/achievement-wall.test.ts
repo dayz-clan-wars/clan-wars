@@ -1,8 +1,9 @@
 import { describe, it, expect } from "vitest";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import type { AchievementTile } from "@factions/roster";
-import { Tile } from "../app/components/achievement-wall";
+import type { AchievementTile, AchievementWall as Wall } from "@factions/roster";
+import { EARNABLE_ACHIEVEMENTS } from "@factions/domain";
+import { AchievementWall, Tile } from "../app/components/achievement-wall";
 import { AchievementToast } from "../app/components/achievement-toast";
 
 const tile = (o: Partial<AchievementTile>): AchievementTile =>
@@ -67,5 +68,40 @@ describe("the unlock toast", () => {
     expect(html).toMatch(/font-display text-\[18px\] uppercase[^"]*"[^>]*>Ten Down</u);
     expect(html).toContain(">Get 10 PvP kills<");
     expect(html).toContain('stroke="#d4623a"');
+  });
+});
+
+/**
+ * The armory (spec 2026-10-20-achievements-150): 59 gun, class and Full Armory tiles would
+ * bury the rest of Combat, so they sit in one native <details> inside it, shut until opened,
+ * with the earned count on the summary line. No client JS: <details> opens itself.
+ */
+describe("the wall's armory section", () => {
+  const all: AchievementTile[] = EARNABLE_ACHIEVEMENTS.map((a) => ({
+    key: a.key, name: a.name, description: a.description, group: a.group, owner: a.owner, target: a.target, unit: a.unit,
+    earnedAt: a.key === "gun_mosin" || a.key === "first_blood" ? new Date("2026-10-01T00:00:00Z") : null, count: 0, clanTag: null,
+  }));
+  const wall: Wall = { tiles: all, earned: all.filter((t) => t.earnedAt).length, closest: [] };
+  const html = renderToStaticMarkup(createElement(AchievementWall, { wall }));
+  const combat = html.slice(html.indexOf(">Combat<"), html.indexOf(">Clan<"));
+
+  it("sits inside Combat, collapsed, with its earned count", () => {
+    expect(combat).toMatch(/<details(?![^>]*\bopen\b)[^>]*>/u);
+    expect(combat).toMatch(/<summary[^>]*>[\s\S]*Armory · 1 of 59[\s\S]*<\/summary>/u);
+    expect((html.match(/<details/gu) ?? []).length).toBe(1);
+    expect(combat.slice(combat.indexOf("<details"), combat.indexOf("</summary>") + "</summary>".length)).toMatchSnapshot();
+  });
+
+  it("holds every armory tile, and only those", () => {
+    const inside = combat.slice(combat.indexOf("<details"), combat.indexOf("</details>"));
+    expect((inside.match(/<li/gu) ?? []).length).toBe(59);
+    expect(inside).toContain("Full Armory");
+    expect(inside).not.toContain("First Blood");
+    expect(combat.slice(0, combat.indexOf("<details"))).toContain("First Blood");
+  });
+
+  it("is absent from a wall with no armory tiles (a clan's)", () => {
+    const clan: Wall = { tiles: all.filter((t) => t.group === "team"), earned: 0, closest: [] };
+    expect(renderToStaticMarkup(createElement(AchievementWall, { wall: clan }))).not.toContain("<details");
   });
 });

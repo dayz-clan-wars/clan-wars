@@ -1,4 +1,5 @@
 import { join } from "node:path";
+import { guideNumber } from "@factions/domain";
 
 /**
  * The field guide's table of contents — the one statement of chapter order,
@@ -48,7 +49,8 @@ export const CHAPTERS: readonly Chapter[] = [
   { slug: "rules-on-one-page", number: "13", title: "The rules on one page", file: "13-rules-on-one-page.html",
     lede: "Every promise in this guide, one line each. If it is not here, it is not a rule." },
   { slug: "achievements", number: "14", title: "Achievements", file: "14-achievements.html",
-    lede: "Forty-nine marks on your record, earned once and kept, each one proved from the log." },
+    // The count is the catalogue's, through guide-numbers.ts: a typed "Forty-nine" outlived 101 new tiles here.
+    lede: `${guideNumber("ACHIEVEMENTS_EARNABLE", "n")} marks on your record, earned once and kept, each one proved from the log.` },
   { slug: "numbers", number: "A", title: "Every number", file: null,
     lede: "Every timer, cap, radius and cooldown, in one table." },
 ];

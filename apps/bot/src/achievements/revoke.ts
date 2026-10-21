@@ -1,7 +1,8 @@
-import type { AchievementKey } from "@factions/domain";
+import { EARNABLE_ACHIEVEMENTS, type EarnableKey } from "@factions/domain";
 import { achievementProgress, achievementUnlocks, type Database } from "@factions/db";
 import { and, eq, inArray } from "drizzle-orm";
 import { PVP_RULES } from "./rules-pvp.js";
+import { makeCtx } from "./types.js";
 
 /**
  * The achievements a discredited kill can have earned (spec 2026-09-22-hub-combat §2.8).
@@ -9,13 +10,23 @@ import { PVP_RULES } from "./rules-pvp.js";
  * ⚠️ Kill-derived rules ONLY. Re-running a position- or pin-based rule today
  * reads data the reaper has already deleted (POSITION_RETENTION_MS), comes
  * back "not earned", and would revoke a badge that was fairly won. Pinned by
- * revoke.test.ts: every key here is a PvP rule, and none of the three PvP
- * rules that do not read `kills` scoring is here.
+ * revoke.test.ts: every key here is a PvP rule, none of the four PvP rules
+ * that do not read `kills` scoring is here, and every armory tile is.
+ *
+ * The 59 armory tiles (gun, class, Full Armory) all read `gunSet`, i.e. `pvpBy`
+ * kills, so they are derived from their `section` rather than typed: a firearm
+ * added to the catalogue is revocable the moment it has a tile.
  */
-export const REVOCABLE_KEYS = [
+export const REVOCABLE_KEYS: readonly EarnableKey[] = [
   "first_blood", "ten_down", "centurion", "marksman", "sniper", "point_blank",
   "arsenal", "hat_trick", "killing_spree", "unstoppable", "nemesis", "payback",
-] as const satisfies readonly AchievementKey[];
+  // Melee and Roadkill read `ownPvpKills`. ⚠️ Not Hit and Run: it reads hits, which a kill
+  // rebuild never changes, so re-running it can only re-earn what it already earned.
+  "knife_work", "bare_knuckles", "sledge", "melee_mix", "roadkill",
+  // The kill milestones: Warlord counts, Long Shot measures and Headhunter counts victims, all over `ownPvpKills`.
+  "warlord", "long_shot", "headhunter",
+  ...EARNABLE_ACHIEVEMENTS.filter((a) => "section" in a && a.section === "armory").map((a) => a.key),
+];
 
 export type RevokeResult = { owners: number; revoked: { ownerId: string; key: string }[]; redated: { ownerId: string; key: string }[]; failed: number };
 
@@ -39,11 +50,11 @@ export async function revokeAchievements(db: Database, opts: { apply: boolean; n
   for (const [ownerId, held] of byOwner) {
     out.owners++;
     for (const u of held) {
-      const key = u.key as (typeof REVOCABLE_KEYS)[number];
+      const key = u.key as EarnableKey;
       let r;
       // ⚠️ A throw is NOT "no longer earned": skip, count, report. Treating it as
       // a revocation would strip every badge on one bad query.
-      try { r = await PVP_RULES[key]!(db, { kind: "player", id: ownerId }, { now }); }
+      try { r = await PVP_RULES[key]!(db, { kind: "player", id: ownerId }, makeCtx(now)); }
       catch (err) { out.failed++; opts.onError?.(ownerId, key, err); continue; }
 
       const earned = r.earnedAt !== undefined && r.count >= r.target;

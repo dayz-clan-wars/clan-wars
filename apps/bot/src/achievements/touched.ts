@@ -1,5 +1,6 @@
+import { CLASS_TILE_KEYS } from "@factions/domain";
 import {
-  achievementCounters, alphaWeeks, clanPins, consumerCursors, ceremonyParticipants, defenses, events, factions, identityLinks, kills,
+  achievementCounters, achievementUnlocks, alphaWeeks, clanPins, consumerCursors, ceremonyParticipants, defenses, events, factions, identityLinks, kills,
   membershipHistory, playerPositions, playerSessions, raids, seasonResults, type Database,
 } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
@@ -7,13 +8,13 @@ import type { Owner } from "./types.js";
 
 export const SOURCES = [
   "kills", "sessions", "events", "raids", "defenses", "alphaWeeks", "seasonResults", "membership", "membershipClosed",
-  "ceremonies", "links", "pins", "positions", "activations",
+  "ceremonies", "links", "pins", "positions", "activations", "classUnlocks",
 ] as const;
 export type Source = (typeof SOURCES)[number];
 export type Watermarks = Record<Source, number>;
 export const CURSOR_PREFIX = "achievements:";
 /** The event types any rule reads; other types never touch an owner. */
-const RULE_EVENT_TYPES = ["base.built", "emote.performed", "player.unconscious"] as const;
+const RULE_EVENT_TYPES = ["base.built", "emote.performed", "player.unconscious", "player.hit", "item.placed", "item.packed", "player.conscious"] as const;
 
 export type PositionRow = { id: number; dayzId: string; x: number; z: number; at: Date };
 export type PinRow = { id: number; dayzId: string; at: Date };
@@ -112,8 +113,9 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
     return rows;
   };
 
-  for (const k of advance("kills", await db.select({ id: kills.id, killer: kills.killerDayzId, victim: kills.victimDayzId }).from(kills).where(gt(kills.id, wm.kills)).orderBy(asc(kills.id)).limit(limit))) {
-    add(player(k.victim)); if (k.killer) add(player(k.killer));
+  for (const k of advance("kills", await db.select({ id: kills.id, killer: kills.killerDayzId, victim: kills.victimDayzId, clan: kills.killerFactionId }).from(kills).where(gt(kills.id, wm.kills)).orderBy(asc(kills.id)).limit(limit))) {
+    // The killer's clan as resolved at the kill: Warband and Armory credit exactly that column.
+    add(player(k.victim)); if (k.killer) add(player(k.killer)); if (k.clan) add(clan(k.clan));
   }
   // Sessions are touched when they CLOSE, which is later than their insert: watermark on disconnected_at (epoch ms).
   const closed = await db.select({ id: playerSessions.id, dayzId: playerSessions.dayzId, at: playerSessions.disconnectedAt }).from(playerSessions)
@@ -122,9 +124,18 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
   if (closed.length) next.sessions = closed[closed.length - 1]!.at!.getTime();
   if (closed.length === limit) carried = true;
 
-  for (const e of advance("events", await db.select({ id: events.id, dayzId: sql<string>`${events.payload}->>'dayzId'` }).from(events)
+  for (const e of advance("events", await db.select({
+    id: events.id, dayzId: sql<string | null>`${events.payload}->>'dayzId'`, victim: sql<string | null>`${events.payload}->>'victimDayzId'`, attacker: sql<string | null>`${events.payload}->>'attackerDayzId'`,
+    // A build or repair also touches the clan the builder was a full member of at that moment
+    // (Renovators): the same span reading, on the same server, as the rule itself (rules-team.ts).
+    clans: sql<string[] | null>`case when ${events.type} = 'base.built' then (select array_agg(mh.faction_id::text) from ${membershipHistory} mh
+      where mh.dayz_id = ${events.payload}->>'dayzId' and mh.server_id = ${events.serverId}
+        and mh.joined_at <= ${events.occurredAt} and (mh.left_at is null or mh.left_at > ${events.occurredAt})) end`,
+  }).from(events)
     .where(and(gt(events.id, wm.events), inArray(events.type, [...RULE_EVENT_TYPES] as never[]))).orderBy(asc(events.id)).limit(limit))) {
-    if (e.dayzId) add(player(e.dayzId));
+    // Most types carry `dayzId`; a hit carries `victimDayzId` and, for a player attacker, `attackerDayzId`.
+    for (const id of new Set([e.dayzId, e.victim, e.attacker])) if (id) add(player(id));
+    for (const c of e.clans ?? []) add(clan(Number(c)));
   }
   for (const r of advance("raids", await db.select({ id: raids.id, raider: raids.raiderDayzId, clan: raids.raiderFactionId }).from(raids).where(gt(raids.id, wm.raids)).orderBy(asc(raids.id)).limit(limit))) {
     add(player(r.raider)); if (r.clan) add(clan(r.clan));
@@ -164,6 +175,24 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
   for (const f of activated) add(clan(f.id));
   if (activated.length) next.activations = activated[activated.length - 1]!.at!.getTime();
   if (activated.length === limit) carried = true;
+
+  // A member's class tile re-evaluates the clan they were in when they earned it (Every Class
+  // Covered reads those unlocks). Watermarked on `noticed_at`, the insert time: the unlock is
+  // written by THIS tick, after the clan — which sorts before every player — was already
+  // evaluated in that pass, so only the next pass can see it.
+  // ⚠️ Compared at millisecond precision: `noticed_at` is `now()` with microseconds, the
+  // watermark is epoch ms, and a raw `>` would re-collect the newest row on every pass forever.
+  const unlocked = await db.select({
+    at: sql<number>`floor(extract(epoch from ${achievementUnlocks.noticedAt}) * 1000)::bigint`.mapWith(Number),
+    clans: sql<string[] | null>`(select array_agg(mh.faction_id::text) from ${membershipHistory} mh
+      where mh.dayz_id = ${achievementUnlocks.ownerId} and mh.joined_at <= ${achievementUnlocks.earnedAt} and (mh.left_at is null or mh.left_at > ${achievementUnlocks.earnedAt}))`,
+  }).from(achievementUnlocks)
+    .where(and(eq(achievementUnlocks.ownerKind, "player"), inArray(achievementUnlocks.key, [...CLASS_TILE_KEYS]),
+      sql`floor(extract(epoch from ${achievementUnlocks.noticedAt}) * 1000) > ${wm.classUnlocks}`))
+    .orderBy(asc(achievementUnlocks.noticedAt)).limit(limit);
+  for (const u of unlocked) for (const c of u.clans ?? []) add(clan(Number(c)));
+  if (unlocked.length) next.classUnlocks = unlocked[unlocked.length - 1]!.at;
+  if (unlocked.length === limit) carried = true;
 
   return {
     // Sorted, not insertion-ordered: the carried-owner offset above is only meaningful
@@ -208,7 +237,9 @@ export async function headWatermarks(db: Database): Promise<Watermarks> {
     ${id("alpha_weeks")} as "alphaWeeks", ${id("season_results")} as "seasonResults",
     ${id("membership_history")} as membership, ${ms("membership_history", "left_at")} as "membershipClosed",
     ${id("ceremony_participants")} as ceremonies, ${id("identity_links")} as links, ${id("clan_pins")} as pins,
-    ${id("player_positions")} as positions, ${ms("factions", "activated_at")} as activations`);
+    ${id("player_positions")} as positions, ${ms("factions", "activated_at")} as activations,
+    coalesce((select floor(extract(epoch from max(noticed_at)) * 1000) from achievement_unlocks
+      where owner_kind = 'player' and key in (${sql.raw(CLASS_TILE_KEYS.map((k) => `'${k}'`).join(","))})), 0) as "classUnlocks"`);
   const row = (rows as unknown as Record<string, unknown>[])[0] ?? {};
   // ⚠️ `Math.floor`, not a bare `Number`: `extract(epoch from …) * 1000` carries microsecond
   // precision, so a time-keyed head can come back fractional (…957.123). These go straight into

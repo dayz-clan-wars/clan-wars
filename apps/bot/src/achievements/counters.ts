@@ -42,23 +42,30 @@ function byPlayer<T extends { dayzId: string }>(rows: readonly T[]): Map<string,
 
 /**
  * New position fixes, in time order. Squares are added to each player's set;
- * the fix that made it 50 is `crossedAt`.
+ * the fix that made it 50 is `crossedAt` (Explorer), the fix that made it 150
+ * `globetrotterAt` (Globetrotter reads this same row).
  *
- * ⚠️ `crossedAt` is set once and never moved: it is the `earnedAt` the rule
+ * ⚠️ Each crossing is set once and never moved: it is the `earnedAt` the rule
  * reports, and an unlock must be dated to the evidence, not to the last pass
- * that happened to touch the counter.
+ * that happened to touch the counter. A set already past 150 before
+ * `globetrotterAt` existed is stamped at its next fix, the first one seen.
  */
 export async function applyPositionCounters(tx: Tx, rows: readonly { dayzId: string; x: number; z: number; at: Date }[]): Promise<void> {
   const target = ACHIEVEMENT_BY_KEY.explorer.target;
+  const globe = ACHIEVEMENT_BY_KEY.globetrotter.target;
   for (const [dayzId, fixes] of byPlayer(rows)) {
     const c = await readCounter(tx, dayzId, "explorer");
     const squares = new Set<number>((c?.detail.squares as number[] | undefined) ?? []);
     let crossedAt = c?.detail.crossedAt as string | undefined;
+    let globetrotterAt = c?.detail.globetrotterAt as string | undefined;
     for (const f of fixes) {
       squares.add(gridSquare(f.x, f.z));
       if (!crossedAt && squares.size >= target) crossedAt = f.at.toISOString();
+      if (!globetrotterAt && squares.size >= globe) globetrotterAt = f.at.toISOString();
     }
-    await writeCounter(tx, dayzId, "explorer", squares.size, { squares: [...squares].sort((a, b) => a - b), ...(crossedAt ? { crossedAt } : {}) });
+    await writeCounter(tx, dayzId, "explorer", squares.size, {
+      squares: [...squares].sort((a, b) => a - b), ...(crossedAt ? { crossedAt } : {}), ...(globetrotterAt ? { globetrotterAt } : {}),
+    });
   }
 }
 

@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { CLAN_NOTICE_KINDS, DORMANT_AFTER_MS, RAID_DEDUP_MS, REBIND_CONFIRM_MS } from "@factions/domain";
+import { achievementSummaryLine } from "@factions/copy";
 import { noticeText, RENDERERS, duration } from "../src/notice-text.js";
 
 const now = new Date("2026-09-06T12:00:00Z");
@@ -256,5 +257,32 @@ describe("bounty", () => {
     const r = noticeText({ kind: "bounty_revoked", target: "dm", occurredAt: now, payload: { bountyId: 1 } }, site, dormantAfterMs);
     expect(e).toMatch(/served|expired/u);
     expect(r).toMatch(/lifted/u);
+  });
+});
+
+/**
+ * The one summary DM per player after the October 2026 release (spec
+ * 2026-10-20-achievements-150). ⚠️ The sentence is `achievementSummaryLine` in
+ * @factions/copy, which the web's notice-copy.ts renders too; this test and
+ * notice-copy.test.ts each pin the same literal, so the two cannot drift.
+ */
+describe("achievement_summary", () => {
+  const render = (payload: Record<string, string | number | boolean | null>) =>
+    noticeText({ kind: "achievement_summary", target: "dm", occurredAt: now, payload }, site, dormantAfterMs);
+  const wallUrl = `${site}/players/Ann#achievements`;
+
+  it("says how many of the new tiles the player already holds, and links the wall", () => {
+    expect(render({ release: "2026-10", count: 3, gamertag: "Ann", wallUrl }))
+      .toBe(`You already hold 3 of the new achievements. See your wall: <${wallUrl}>`);
+    expect(render({ release: "2026-10", count: 1, gamertag: "Ann", wallUrl }))
+      .toBe(`You already hold 1 of the new achievements. See your wall: <${wallUrl}>`);
+  });
+
+  it("reads the same sentence the site does", () => {
+    expect(render({ count: 3, wallUrl })).toBe(`${achievementSummaryLine(3)} See your wall: <${wallUrl}>`);
+  });
+
+  it("drops the link rather than print a broken one, and never prints NaN", () => {
+    expect(render({})).toBe("You already hold some of the new achievements.");
   });
 });

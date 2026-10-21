@@ -498,6 +498,13 @@
       "when": 1792338761413,
       "tag": "0070_cute_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 71,
+      "version": "7",
+      "when": 1792536966054,
+      "tag": "0071_lean_alice",
+      "breakpoints": true
     }
   ]
 }

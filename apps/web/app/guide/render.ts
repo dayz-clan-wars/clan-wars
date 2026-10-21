@@ -28,8 +28,8 @@ function escape(s: string): string {
 }
 
 /**
- * The forty-nine earnable achievements, rendered from `@factions/domain`'s
- * `EARNABLE_ACHIEVEMENTS` — a retired one (Wanderer) is not listed, because the
+ * The earnable achievements, rendered from `@factions/domain`'s
+ * `EARNABLE_ACHIEVEMENTS` — a retired one (Wanderer, Wolf Bait, Bear Necessities) is not listed, because the
  * guide tells you what you can earn, not what others once did. Never typed
  * here, so a threshold or a new achievement shows up in the guide without an edit. One table, grouped exactly the way the
  * appendix groups `GUIDE_NUMBERS` (a `tr.group` divider row, plain `<table>`
