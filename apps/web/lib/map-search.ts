@@ -10,12 +10,20 @@ import { SEARCH_COPY } from "./map-copy";
  */
 export type SearchHit =
   | { tab: "locations"; label: string; x: number; z: number }
-  | { tab: "items"; className: string; label: string } // filled by Task 9
+  | { tab: "items"; className: string; label: string }
   | { tab: "models"; typeName: string; label: string; count: number }; // filled by Task 11
 export type SearchTab = SearchHit["tab"];
 export type SearchResult = { coord: CoordQuery; hits: SearchHit[] };
-/** Places and bunkers in world metres. Task 9 adds `items?`, Task 11 adds `models?`. */
-export type SearchCtx = { size: number; places: { name: string; x: number; z: number }[]; bunkers: { x: number; z: number }[] };
+/**
+ * Places and bunkers in world metres, and the item index once it is in (loaded on the box's
+ * first focus, so a map that is never searched never fetches it). Task 11 adds `models?`.
+ */
+export type SearchCtx = {
+  size: number;
+  places: { name: string; x: number; z: number }[];
+  bunkers: { x: number; z: number }[];
+  items?: readonly { className: string }[];
+};
 
 /** The zoom a picked result lands at, unless the player is already closer. */
 export const SEARCH_ZOOM = 5;
@@ -45,6 +53,18 @@ function score(name: string, query: readonly string[]): number | null {
   return first * 1000 + (lower.length - query.join(" ").length);
 }
 
+/**
+ * A class name scored as typed ("mag_stanag") and split at its capitals too ("TunaCan" →
+ * "tuna can"), so "can" finds TunaCan. The better of the two wins.
+ * Labels are the class name until Task 10's item cards bring display names.
+ */
+function itemScore(className: string, query: readonly string[]): number | null {
+  const plain = score(className, query);
+  const split = score(className.replace(/([a-z])([A-Z])/gu, "$1 $2"), query);
+  if (plain === null) return split;
+  return split === null ? plain : Math.min(plain, split);
+}
+
 export function searchMap(q: string, ctx: SearchCtx): SearchResult {
   const query = q.trim();
   if (!query) return { coord: null, hits: [] };
@@ -63,6 +83,11 @@ export function searchMap(q: string, ctx: SearchCtx): SearchResult {
     const s = score(n.name, typed);
     if (s !== null) ranked.push({ s, hit: { tab: "locations", label: n.name, x: n.x, z: n.z } });
   }
+  for (const i of ctx.items ?? []) {
+    const s = itemScore(i.className, typed);
+    if (s !== null) ranked.push({ s, hit: { tab: "items", className: i.className, label: i.className } });
+  }
+  // One sort for every tab: the box shows one tab at a time, so the order only matters within one.
   ranked.sort((a, b) => a.s - b.s || a.hit.label.localeCompare(b.hit.label, undefined, { numeric: true }));
   return { coord: null, hits: ranked.map((r) => r.hit) };
 }

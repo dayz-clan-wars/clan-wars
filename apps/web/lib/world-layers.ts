@@ -3,6 +3,7 @@
 // selection is testable; map-draw.ts's `drawWorld` puts the result on the map.
 import { EVENT_LAYERS, WORLD_GROUPS, WORLD_LABELS, type WorldGroup } from "./map-copy";
 import { LOOT_GROUPS, effectiveUsage, type WorldFile } from "./map-world";
+import { canSpawnAt, type ItemIndexEntry } from "./item-index";
 
 export { EVENT_LAYERS };
 
@@ -31,10 +32,22 @@ export const WORLD_MIN_ZOOM = 4;
  * At 5 it is under 1,000, and a player picking one or two loot types sees a few dozen.
  */
 export const LOOT_MIN_ZOOM = 5;
+/**
+ * A searched item's points (itemItems): ITEM_KEY when there are few enough to draw at every
+ * zoom, ITEM_MANY_KEY when there are more, which waits for LOOT_MIN_ZOOM like the loot buildings.
+ */
+export const ITEM_KEY = "item";
+export const ITEM_MANY_KEY = "item:many";
+/**
+ * ⚠️ The most item points drawn zoomed out. M4A1 (a few dozen zone buildings) fits, so a
+ * player sees every spot at once; a Rag is in thousands of buildings, and drawing those
+ * zoomed out is the DOM-marker flood LOOT_MIN_ZOOM exists to stop.
+ */
+export const ITEM_ALWAYS_MAX = 250;
 /** Drawn at every zoom: 23 bunkers and 21 circles cost nothing, and both are what a player scans the whole map for. */
-export const ALWAYS_DRAWN: ReadonlySet<WorldLayerKey> = new Set(["bunkers", "contaminated"]);
+export const ALWAYS_DRAWN: ReadonlySet<WorldLayerKey> = new Set(["bunkers", "contaminated", ITEM_KEY]);
 /** The layers that wait for LOOT_MIN_ZOOM. */
-export const isDense = (key: WorldLayerKey): boolean => key.startsWith("loot:") || key === "wrecks";
+export const isDense = (key: WorldLayerKey): boolean => key.startsWith("loot:") || key === "wrecks" || key === ITEM_MANY_KEY;
 
 const WRECK = /^Land_wreck_/iu;
 const isAmbient = (event: string) => event.startsWith("Ambient");
@@ -181,4 +194,68 @@ export function readWorldSwitches(raw: string | null, layers: WorldLayer[], w: W
 
 export function writeWorldSwitches(on: Record<WorldLayerKey, boolean>, tiers: number, w: WorldFile): string {
   return JSON.stringify({ on, tiers: presentTiers(w).filter((t) => (tiers & t.bit) !== 0).map((t) => t.name) });
+}
+
+/**
+ * Where deloot (dynamic-event loot) turns up: the heli crashes and the military convoys,
+ * whose wrecks are what the CE fills with it (scripts/build-item-index.ts reads the convoy
+ * wrecks through cfgeventgroups). ⚠️ Not StaticPoliceCar: its wrecks carry their own police
+ * loot, and drawing deloot there would send players to 69 cars that never hold it.
+ */
+export const DELOOT_EVENTS: readonly string[] = ["StaticHeliCrash", "StaticHeliCrashBig", "StaticMilitaryConvoy"];
+
+/** An event's name for players: its layer label, else the raw name split at capitals ("InfectedArmy" → "Infected Army"). */
+export const eventLabel = (event: string): string => EVENT_LAYERS[event]?.label ?? event.replace(/([a-z])([A-Z])/gu, "$1 $2");
+
+/** The title on a building's point that holds the item fixed (a wheel on a wreck), not as loot. */
+export const FIXED_SPOT = "Fixed spot";
+const LOOT_SPOT = "Loot building";
+
+/**
+ * Every spot on the map this item can be found at: the buildings whose loot points can hold
+ * it (canSpawnAt, with each prop's own area usage and tier), the placed buildings that carry
+ * it fixed (a dispatch proxy), and the spawn points of the events that bring it (its own
+ * events, and the crash sites for deloot).
+ *
+ * ⚠️ No tier filter and no switches: a picked item is the whole question, and a tier chip
+ * left off from earlier must not hide where it is. A building is one point however many
+ * ways it qualifies.
+ */
+export function itemPoints(w: WorldFile, item: ItemIndexEntry): WorldMark[] {
+  const out: WorldMark[] = [];
+  const name = item.className.toLowerCase();
+  // Only these two loops walk every prop; an item with neither source skips them.
+  const loot = item.nominal > 0 && item.usage !== 0 && !item.deloot;
+  if (loot || item.proxy) {
+    for (let i = 0; i < w.props.length; i++) {
+      const p = w.props[i]!;
+      const index = w.types[p.type]?.proto;
+      if (index === null || index === undefined) continue;
+      const proto = w.protos[index]!;
+      // ⚠️ Lower-cased: DayZ class names are case-insensitive, and mapgroupproto spells some differently from types.xml.
+      if (item.proxy && proto.proxies?.some((x) => x.toLowerCase() === name)) {
+        // No tier or loot line: a part fixed on a wreck is there whatever the area's loot.
+        out.push({ x: p.x, z: p.z, title: FIXED_SPOT });
+      } else if (loot && canSpawnAt(item, proto, p.u, p.t)) {
+        out.push(lootMark(w, i, effectiveUsage(proto, p.u), LOOT_SPOT));
+      }
+    }
+  }
+  const events = new Set([...item.events, ...(item.deloot ? DELOOT_EVENTS : [])]);
+  for (const e of w.events) {
+    if (!events.has(e.event)) continue;
+    const title = eventLabel(e.event);
+    for (const p of e.points) out.push({ x: p.x, z: p.z, title });
+  }
+  return out;
+}
+
+/**
+ * A picked item's points as drawWorld takes them. ⚠️ The ids carry the class name: drawWorld
+ * keeps a marker whose id and key it already has, so ids shared between two items would leave
+ * the first item's markers standing after a second pick.
+ */
+export function itemItems(className: string, points: readonly WorldMark[]): WorldItem[] {
+  const key = points.length <= ITEM_ALWAYS_MAX ? ITEM_KEY : ITEM_MANY_KEY;
+  return points.map((m, i) => ({ ...m, id: `item:${className}#${i}`, key }));
 }

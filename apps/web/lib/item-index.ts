@@ -273,16 +273,19 @@ export function spawnsAnywhere(item: ItemIndexEntry): boolean {
   );
 }
 
-let cached: Promise<ItemIndexEntry[]> | null = null;
+let cached: Promise<ItemsFile> | null = null;
 
-/** Fetched once per page load; a failure is not cached, so a retry can succeed. */
-export function loadItemIndex(): Promise<ItemIndexEntry[]> {
+/**
+ * Fetched once per page load; a failure is not cached, so a retry can succeed. The whole file,
+ * not just the items: the panel names an item's masks through its own `limits`, so it still
+ * reads right if world.json failed to load.
+ */
+export function loadItemIndex(): Promise<ItemsFile> {
   cached ??= fetch(`/map-data/${WORLD_MAP}/items.json`)
     .then((r) => {
       if (!r.ok) throw new Error(`items.json ${r.status}`);
       return r.json() as Promise<ItemsFile>;
     })
-    .then((f) => f.items)
     .catch((e) => {
       cached = null;
       throw e;

@@ -190,6 +190,8 @@ export function worldGroupOf(key: string): WorldGroup {
  */
 export function worldAccent(p: Palette, key: string): string {
   if (key === "loot:military") return p.military;
+  // A searched item's points (world-layers.ts ITEM_KEY / ITEM_MANY_KEY): the strongest neutral, as they stand alone.
+  if (key.startsWith("item")) return p.ink;
   if (key === "contaminated") return p.rust2;
   if (key === "bunkers" || key === "loot:farm" || key === "loot:hunting" || key === "event:TrajectoryFig" || key === "animals") return p.olive;
   if (key === "loot:police" || key === "loot:medical" || key === "loot:fire" || worldGroupOf(key) === "Vehicles" || worldGroupOf(key) === "Crash sites") return p.ink;

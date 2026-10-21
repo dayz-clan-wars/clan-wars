@@ -80,6 +80,18 @@ describe("loot protos", () => {
     expect(r.containers).toHaveLength(1);
   });
 
+  it("keeps a group's dispatch proxies, and leaves the key off a group with none", () => {
+    const xml = `<prototype>
+      <group name="Land_Wreck_hb01_aban1_blue"><dispatch>
+        <proxy type="HatchbackWheel" pos="1 0 0"/><proxy type="HatchbackHood_BlueRust" pos="0 0 1"/><proxy type="HatchbackWheel" pos="2 0 0"/>
+      </dispatch></group>
+      <group name="Land_Shed"><container name="c"><point pos="0 0 0"/></container></group>
+    </prototype>`;
+    const [wreck, shed] = parseProtos(xml, limits);
+    expect(wreck!.proxies).toEqual(["HatchbackHood_BlueRust", "HatchbackWheel"]);
+    expect(shed).not.toHaveProperty("proxies");
+  });
+
   it("refuses a usage the limits file has no name for", () => {
     const bad = `<prototype><group name="X"><usage name="Nope"/></group></prototype>`;
     expect(() => parseProtos(bad, limits)).toThrow(/Nope/);
@@ -158,6 +170,11 @@ describe("committed world.json", () => {
       expect(t.proto, t.name).not.toBeNull();
       expect(world.protos[t.proto!]!.name.toLowerCase()).toBe(t.name.toLowerCase());
     }
+  });
+
+  it("carries the car wrecks' fixed parts (dispatch proxies) on their protos", () => {
+    const wreck = world.protos.find((p) => p.name.toLowerCase() === "land_wreck_hb01_aban1_blue")!;
+    expect(wreck.proxies).toContain("HatchbackWheel");
   });
 
   it("carries Land_Mil_Barracks1 with Military usage", () => {

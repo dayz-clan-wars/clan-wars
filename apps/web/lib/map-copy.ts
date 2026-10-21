@@ -66,12 +66,51 @@ export const WORLD_COPY = {
 /** The search box (map-search.tsx). Tab names follow iZurvive's, like the world groups. */
 export const SEARCH_COPY = {
   label: "Search the map",
-  placeholder: "Place, bunker or GPS",
+  placeholder: "Place, item, bunker or GPS",
   tabs: { locations: "Locations", items: "Items", models: "Models" },
   bunker: "Bunker",
   goTo: "Go to",
   none: "Nothing on the map by that name.",
   pinIt: "Pin it",
+} as const;
+
+/**
+ * The item view (item-panel.tsx, lib/item-view.ts): where a searched item can be found.
+ * ⚠️ `none` is the one line a player acts on without checking, so lib/item-view.ts gives it
+ * only when nothing at all places the item (item-index.ts spawnsAnywhere). An item that does
+ * spawn, just not at a spot the map can draw (soda cans, crafted rags), gets `noSpot` instead.
+ */
+export const ITEM_COPY = {
+  chip: (label: string) => `Showing where ${label} spawns`,
+  clear: "Clear",
+  onMap: "On the map",
+  spots: (n: number) => (n === 1 ? "1 spot." : `${n.toLocaleString("en-US")} spots.`),
+  zoomIn: "Zoom in to see them.",
+  where: "Where",
+  noSpot: "Spawns, but not at a spot we can show on the map.",
+  none: "Does not spawn on this server.",
+  howMany: "How many",
+  upTo: (nominal: number) => `Up to ${nominal} on the server at once.`,
+  restock: (min: number) => `More spawn when fewer than ${min} are left.`,
+  foundIn: "Found in",
+  tiers: "Tiers",
+  anyTier: "Any tier",
+  crashLabel: "Crash sites",
+  crash: "Spawns at heli crashes and military convoys.",
+  events: "Events",
+  proxyLabel: "Fixed spots",
+  proxy: "Sits fixed on some wrecks and buildings.",
+  comesOn: "Comes on",
+  more: (n: number) => ` and ${n} more`,
+  spawnGearLabel: "Spawn gear",
+  spawnGear: "Some fresh spawns start with it.",
+  clanWarsLabel: "Clan Wars",
+  clanWars: {
+    "supply kit": "In the build supplies at a clan's flag.",
+    "booster kit": "A booster kit pick.",
+    award: "Given as an award.",
+    "KotH loadout": "In a King of the Hill loadout.",
+  },
 } as const;
 
 /** The ruler (map-ruler.tsx, lib/map-ruler.ts). */

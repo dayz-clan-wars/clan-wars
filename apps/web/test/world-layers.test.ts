@@ -1,10 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { WORLD_MAP } from "@factions/domain";
 import type { WorldFile } from "../lib/map-world";
+import { parseLimits } from "../lib/area-flags";
+import { parseTypes, type ItemsFile } from "../lib/item-index";
 import {
-  EVENT_LAYERS, WORLD_MIN_ZOOM, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY,
-  allTiers, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  EVENT_LAYERS, WORLD_MIN_ZOOM, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, ALWAYS_DRAWN, ITEM_ALWAYS_MAX, ITEM_KEY, ITEM_MANY_KEY,
+  allTiers, isDense, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
 } from "../lib/world-layers";
 import { drawWorld, worldPopup, worldView } from "../app/(site)/map/map-draw";
 import { gridRef } from "../lib/map-projection";
@@ -295,5 +298,138 @@ describe("worldPopup", () => {
   it("escapes a raw event name", () => {
     const html = worldPopup({ id: "x", key: "event:X", x: 1, z: 1, title: "<b>" }, 16384);
     expect(html).toContain("&lt;b&gt;");
+  });
+});
+
+describe("itemPoints", () => {
+  // The real limits and the real M4A1 entry, so the masks are the ones the CE reads.
+  const lim = parseLimits(readFileSync(join(__dirname, "fixtures/mission/cfglimitsdefinition.xml"), "utf8"));
+  const entries = parseTypes(readFileSync(join(__dirname, "fixtures/items/types.xml"), "utf8"), lim);
+  const entry = (n: string) => ({ ...entries.find((i) => i.className === n)! });
+  const ub = (...n: string[]) => n.reduce((m, x) => m | (1 << lim.usage.indexOf(x)), 0);
+  const vb = (...n: string[]) => n.reduce((m, x) => m | (1 << lim.value.indexOf(x)), 0);
+  const cb = (...n: string[]) => n.reduce((m, x) => m | (1 << lim.categories.indexOf(x)), 0);
+  const IW: WorldFile = {
+    version: 1,
+    limits: lim,
+    source: W.source,
+    events: [
+      { event: "StaticHeliCrash", points: [{ x: 50, z: 50 }, { x: 60, z: 60 }] },
+      { event: "StaticMilitaryConvoy", points: [{ x: 70, z: 70 }] },
+      { event: "StaticPoliceCar", points: [{ x: 80, z: 80 }] },
+      { event: "VehicleOffroadHatchback", points: [{ x: 90, z: 90 }, { x: 95, z: 95 }] },
+    ],
+    bunkers: [], contaminated: [], playerSpawns: [],
+    props: [
+      { type: 0, x: 100, z: 100, u: ub("ContaminatedArea"), t: vb("Unique") }, // 0: zone shed: M4A1
+      { type: 0, x: 200, z: 200, u: ub("ContaminatedArea"), t: vb("Tier3") }, // 1: zone, wrong tier
+      { type: 1, x: 300, z: 300, u: ub("Military"), t: vb("Unique") }, // 2: barracks, Unique, not a zone
+      { type: 1, x: 400, z: 400, u: ub("ContaminatedArea"), t: vb("Unique") }, // 3: barracks in a zone: M4A1
+      { type: 2, x: 500, z: 500, u: ub("ContaminatedArea"), t: vb("Unique") }, // 4: a rock: no proto
+      { type: 3, x: 600, z: 600, u: ub("Town"), t: vb("Tier1") }, // 5: car wreck with fixed parts
+      { type: 4, x: 700, z: 700, u: ub("ContaminatedArea"), t: vb("Unique") }, // 6: food-only shop in a zone
+    ],
+    types: [
+      { name: "Land_Shed", proto: 0 },
+      { name: "Land_Mil_Barracks1", proto: 1 },
+      { name: "Land_Rock", proto: null },
+      { name: "Land_Wreck_hb01_aban1_blue", proto: 2 },
+      { name: "Land_Shop", proto: 3 },
+    ],
+    protos: [
+      { name: "Land_Shed", usage: 0, containers: [{ categories: cb("weapons"), tags: 0, points: 3 }] },
+      { name: "Land_Mil_Barracks1", usage: ub("Military"), containers: [{ categories: cb("weapons"), tags: 0, points: 3 }] },
+      { name: "Land_Wreck_hb01_aban1_blue", usage: 0, containers: [], proxies: ["hatchbackwheel"] },
+      { name: "Land_Shop", usage: 0, containers: [{ categories: cb("food"), tags: 0, points: 3 }] },
+    ],
+  };
+
+  it("puts the M4A1 fixture only in contaminated-area props of its tier with a weapons container", () => {
+    const pts = itemPoints(IW, entry("M4A1"));
+    expect(pts.map((p) => [p.x, p.z])).toEqual([[100, 100], [400, 400]]);
+    expect(pts[0]).toMatchObject({ tiers: ["Unique"], usage: ["ContaminatedArea"] });
+  });
+
+  it("adds the spawn points of the events that place it (a car on its vehicle event)", () => {
+    const car = { ...entry("OffroadHatchback"), events: ["VehicleOffroadHatchback", "InfectedArmy"] };
+    const pts = itemPoints(IW, car);
+    expect(pts.map((p) => [p.x, p.z])).toEqual([[90, 90], [95, 95]]);
+    expect(pts[0]!.title).toBe("Ada");
+  });
+
+  it("puts deloot at the crash sites (heli crashes and convoys), never at a police car", () => {
+    const loot = { ...entry("GhillieSuit_Desert") };
+    expect(loot.deloot).toBe(true);
+    const pts = itemPoints(IW, loot);
+    expect(pts.map((p) => p.x).sort((a, b) => a - b)).toEqual([50, 60, 70]);
+    expect(pts.map((p) => p.title)).toContain("Heli crash");
+  });
+
+  it("⚠️ puts a fixed part (dispatch proxy) on every placed wreck that carries it, ignoring case", () => {
+    const wheel = { ...entry("Orphan_Item"), className: "HatchbackWheel", proxy: true };
+    const pts = itemPoints(IW, wheel);
+    expect(pts).toEqual([{ x: 600, z: 600, title: "Fixed spot" }]);
+    // proxy false: the flag is the index's word that some placed building carries it.
+    expect(itemPoints(IW, { ...wheel, proxy: false })).toEqual([]);
+  });
+
+  it("draws a building once even when it is both loot and a fixed spot", () => {
+    const both: WorldFile = { ...IW, protos: IW.protos.map((p, i) => (i === 0 ? { ...p, proxies: ["M4A1"] } : p)) };
+    const pts = itemPoints(both, { ...entry("M4A1"), proxy: true });
+    expect(pts.filter((p) => p.x === 100)).toHaveLength(1);
+  });
+
+  it("has no point for an item with no usage (a soda can), nor for one that only comes on another", () => {
+    expect(itemPoints(IW, entry("Flashlight"))).toEqual([]);
+    expect(itemPoints(IW, entry("M4_Suppressor"))).toEqual([]);
+  });
+});
+
+describe("itemItems", () => {
+  const pts = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i, z: i, title: "x" }));
+
+  it("⚠️ gives each item its own ids, so a second pick redraws instead of keeping the first item's markers", () => {
+    const a = itemItems("M4A1", pts(2)), b = itemItems("AKM", pts(2));
+    expect(a.map((i) => i.id)).not.toEqual(b.map((i) => i.id));
+  });
+
+  it("draws a few points at every zoom, and many only zoomed in like the loot buildings", () => {
+    expect(itemItems("A", pts(ITEM_ALWAYS_MAX)).every((i) => i.key === ITEM_KEY && ALWAYS_DRAWN.has(i.key))).toBe(true);
+    const many = itemItems("A", pts(ITEM_ALWAYS_MAX + 1));
+    expect(many.every((i) => i.key === ITEM_MANY_KEY && isDense(i.key))).toBe(true);
+  });
+});
+
+describe("itemPoints on the committed data", () => {
+  const world = JSON.parse(readFileSync(join(__dirname, `../public/map-data/${WORLD_MAP}/world.json`), "utf8")) as WorldFile;
+  const items = JSON.parse(readFileSync(join(__dirname, `../public/map-data/${WORLD_MAP}/items.json`), "utf8")) as ItemsFile;
+  const by = (n: string) => items.items.find((i) => i.className === n)!;
+  const zone = 1 << world.limits.usage.indexOf("ContaminatedArea");
+
+  it("puts every M4A1 point in a contaminated area", () => {
+    const pts = itemPoints(world, by("M4A1"));
+    expect(pts.length).toBeGreaterThan(0);
+    for (const p of pts) expect(p.usage).toContain("ContaminatedArea");
+    expect(zone).toBeGreaterThan(0);
+  });
+
+  it("finds a Hammer in buildings all over; a Rag (crafted, nominal 0 here) and a clan flag at no spot", () => {
+    expect(itemPoints(world, by("Hammer")).length).toBeGreaterThan(ITEM_ALWAYS_MAX);
+    expect(itemPoints(world, by("Rag"))).toEqual([]);
+    expect(itemPoints(world, by("Flag_Wolf"))).toEqual([]);
+  });
+
+  it("puts deloot (the AKM here) at the heli crashes and convoys", () => {
+    const titles = new Set(itemPoints(world, by("AKM")).map((p) => p.title));
+    expect(titles).toEqual(new Set(["Heli crash", "Chinook crash", "Military convoy"]));
+  });
+
+  it("puts the Ada (OffroadHatchback) on its vehicle spawns", () => {
+    const ada = world.events.find((e) => e.event === "VehicleOffroadHatchback")!;
+    expect(itemPoints(world, by("OffroadHatchback")).length).toBeGreaterThanOrEqual(ada.points.length);
+  });
+
+  it("puts a hatchback wheel on the placed hatchback wrecks", () => {
+    expect(itemPoints(world, by("HatchbackWheel")).some((p) => p.title === "Fixed spot")).toBe(true);
   });
 });

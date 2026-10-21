@@ -19,6 +19,9 @@ export type WorldProto = {
   name: string;
   usage: number; // group <usage> mask, 0 = none; the area flags apply on top either way (effectiveUsage)
   containers: { categories: number; tags: number; points: number }[]; // masks over limits.categories / limits.tags
+  // Item classes fixed on the building by <dispatch><proxy type> (a car wreck's doors and
+  // wheels), sorted and unique. Absent when it has none, which is nearly every building.
+  proxies?: string[];
 };
 
 export type WorldFile = {
@@ -100,12 +103,13 @@ type Named = { name: string };
 type ProtoXml = {
   name: string;
   usage?: Named[];
+  dispatch?: { proxy?: { type: string }[] }[];
   container?: { category?: Named[]; tag?: Named[]; point?: unknown[] }[];
 };
 
 /** mapgroupproto.xml groups. Names resolve to bits via `limits`; an unknown name throws. */
 export function parseProtos(text: string, limits: ReturnType<typeof parseLimits>): WorldProto[] {
-  const doc = xml("group", "container", "usage", "category", "tag", "point").parse(text) as {
+  const doc = xml("group", "container", "usage", "category", "tag", "point", "dispatch", "proxy").parse(text) as {
     prototype?: { group?: ProtoXml[] };
   };
   // ⚠️ Throwing on an unknown name (not skipping it) is deliberate: a dropped bit would silently
@@ -116,15 +120,20 @@ export function parseProtos(text: string, limits: ReturnType<typeof parseLimits>
       if (i < 0) throw new Error(`mapgroupproto: ${what} "${n.name}" is not in cfglimitsdefinition.xml`);
       return m | (1 << i);
     }, 0);
-  return (doc.prototype?.group ?? []).map((g) => ({
-    name: g.name,
-    usage: mask(limits.usage, g.usage, "usage"),
-    containers: (g.container ?? []).map((c) => ({
-      categories: mask(limits.categories, c.category, "category"),
-      tags: mask(limits.tags, c.tag, "tag"),
-      points: (c.point ?? []).length,
-    })),
-  }));
+  return (doc.prototype?.group ?? []).map((g) => {
+    // The item search draws a fixed part on every placed building that carries it.
+    const proxies = [...new Set((g.dispatch ?? []).flatMap((d) => (d.proxy ?? []).map((p) => p.type)))].sort();
+    return {
+      name: g.name,
+      usage: mask(limits.usage, g.usage, "usage"),
+      containers: (g.container ?? []).map((c) => ({
+        categories: mask(limits.categories, c.category, "category"),
+        tags: mask(limits.tags, c.tag, "tag"),
+        points: (c.point ?? []).length,
+      })),
+      ...(proxies.length > 0 ? { proxies } : {}),
+    };
+  });
 }
 
 /**

@@ -6,10 +6,15 @@ import { searchMap, type SearchCtx, type SearchHit, type SearchTab } from "@/lib
 
 /** Where a pick sends the map. `reticle`: a typed coordinate gets a mark; a place or bunker is already on the map. */
 export type MapSearchPick = { x: number; z: number; reticle: boolean };
+/** An item row picked: the map shows where it spawns (item-panel.tsx) rather than flying anywhere. */
+export type MapSearchItem = { className: string; label: string };
 
 export type MapSearchProps = {
   ctx: SearchCtx;
   onPick: (pick: MapSearchPick) => void;
+  onItem?: (item: MapSearchItem) => void;
+  /** The box took focus: the map fetches the item index then, not on load (it is ~900 KB). */
+  onFocus?: () => void;
   /** The box was emptied: the map drops the reticle with it. */
   onClear?: () => void;
   /** "panel" is the desktop box top-left; "bar" is the phone's full-width bar under the strips. */
@@ -23,12 +28,12 @@ const SHOWN = 20;
 const TABS: SearchTab[] = ["locations", "items", "models"];
 
 /**
- * The map's search box: a GPS ref, metres, a place name or "bunker 7". Two numbers
+ * The map's search box: a GPS ref, metres, a place name, an item or "bunker 7". Two numbers
  * offer one row, "Go to"; numbers it cannot read put the hint under the box; a
  * name lists its matches under a tab per kind. Only tabs with results are drawn,
  * so Items and Models stay out of the way until something fills them.
  */
-export function MapSearch({ ctx, onPick, onClear, variant, initial = "" }: MapSearchProps) {
+export function MapSearch({ ctx, onPick, onItem, onFocus, onClear, variant, initial = "" }: MapSearchProps) {
   const [q, setQ] = useState(initial);
   const [open, setOpen] = useState(initial.trim() !== "");
   const [tab, setTab] = useState<SearchTab>("locations");
@@ -41,15 +46,16 @@ export function MapSearch({ ctx, onPick, onClear, variant, initial = "" }: MapSe
   const hits = result.hits.filter((h) => h.tab === shownTab).slice(0, SHOWN);
   const go = coord && coord.kind !== "bad" ? coord : null;
   // One list either way: the coordinate's single row, or the names.
-  const rows: { key: string; label: string; detail?: string; pick: MapSearchPick | null }[] = go
+  const rows: { key: string; label: string; detail?: string; pick: Pick }[] = go
     ? [{ key: "coord", label: `${SEARCH_COPY.goTo} GPS ${gridRef(go.x, go.z, ctx.size)}`, detail: `${Math.round(go.x)}, ${Math.round(go.z)}`, pick: { x: go.x, z: go.z, reticle: true } }]
     : hits.map((h, i) => ({ key: `${i}`, label: h.label, pick: hitPick(h) }));
   const at = Math.min(active, Math.max(0, rows.length - 1));
 
-  const pick = (p: MapSearchPick | null) => {
+  const pick = (p: Pick) => {
     if (!p) return;
     setOpen(false);
-    onPick(p);
+    if ("className" in p) onItem?.(p);
+    else onPick(p);
   };
   const onKey = (e: KeyboardEvent<HTMLInputElement>) => {
     if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setActive(Math.min(at + 1, rows.length - 1)); }
@@ -71,7 +77,7 @@ export function MapSearch({ ctx, onPick, onClear, variant, initial = "" }: MapSe
         aria-describedby={coord?.kind === "bad" ? `${id}-hint` : undefined}
         value={q} autoComplete="off" spellCheck={false}
         onChange={(e) => { setQ(e.target.value); setOpen(true); setActive(0); if (!e.target.value.trim()) onClear?.(); }}
-        onFocus={() => setOpen(true)}
+        onFocus={() => { setOpen(true); onFocus?.(); }}
         onBlur={() => setOpen(false)}
         onKeyDown={onKey}
         className="block min-h-[44px] w-full border-2 border-rule-2 bg-frame px-3 font-mono text-[13px] text-ink placeholder:text-muted focus:border-gold focus:outline-none"
@@ -107,7 +113,11 @@ export function MapSearch({ ctx, onPick, onClear, variant, initial = "" }: MapSe
   );
 }
 
-/** Only a location has a place to fly to; items and models (later work) pick differently. */
-function hitPick(h: SearchHit): MapSearchPick | null {
-  return h.tab === "locations" ? { x: h.x, z: h.z, reticle: false } : null;
+type Pick = MapSearchPick | MapSearchItem | null;
+
+/** A location flies there; an item shows where it spawns; models (Task 11) pick nothing yet. */
+function hitPick(h: SearchHit): Pick {
+  if (h.tab === "locations") return { x: h.x, z: h.z, reticle: false };
+  if (h.tab === "items") return { className: h.className, label: h.label };
+  return null;
 }

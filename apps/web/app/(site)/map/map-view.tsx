@@ -15,7 +15,10 @@ import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS,
 import { searchZoom, type SearchCtx } from "@/lib/map-search";
 import { rulerTakesClick, type RulerPoint } from "@/lib/map-ruler";
 import { MapReadout } from "./map-readout";
-import { MapSearch, type MapSearchPick } from "./map-search";
+import { MapSearch, type MapSearchItem, type MapSearchPick } from "./map-search";
+import { ItemPanel } from "./item-panel";
+import { loadItemIndex, type ItemsFile } from "@/lib/item-index";
+import { clearItem, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, type WorldState } from "@/lib/item-view";
 import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
@@ -26,7 +29,7 @@ import { MapRoster } from "./map-roster";
 import { WorldPanel } from "./world-panel";
 import { loadWorld, type WorldFile } from "@/lib/map-world";
 import {
-  WORLD_STORAGE_KEY, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  ITEM_KEY, ITEM_MANY_KEY, WORLD_STORAGE_KEY, itemItems, itemPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
   type WorldItem, type WorldLayerKey, type WorldSwitches,
 } from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
@@ -185,7 +188,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The world layers (lib/world-layers.ts): static mission data, fetched once the map exists.
   const [world, setWorld] = useState<WorldFile | null>(null);
   const [worldFailed, setWorldFailed] = useState(false);
-  const [worldSw, setWorldSw] = useState<WorldSwitches | null>(null);
+  // The switches, and the searched item shown in their place (lib/item-view.ts). Empty
+  // switches until the file is in; an item picked before then keeps its place (the read below).
+  const [ws, setWs] = useState<WorldState>({ sw: { on: {}, tiers: 0 }, view: null });
+  const worldSw: WorldSwitches | null = world ? ws.sw : null;
+  // The item index: fetched on the search box's first focus, never with the map.
+  const [itemsFile, setItemsFile] = useState<ItemsFile | null>(null);
   const worldList = useMemo(() => (world ? worldLayers(world) : []), [world]);
   const worldTiers = useMemo(() => (world ? presentTiers(world) : []), [world]);
   // Per-row counts follow the tier filter: a loot row says how many buildings it would draw.
@@ -193,9 +201,16 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     () => (world && worldSw ? Object.fromEntries(worldList.map((l) => [l.key, pointsFor(world, l.key, worldSw.tiers).length])) : {}),
     [world, worldList, worldSw],
   );
+  const shown = ws.view;
+  const shownItem = useMemo(() => (shown ? itemsFile?.items.find((i) => i.className === shown.className) ?? null : null), [shown, itemsFile]);
+  // Null without the world file: the panel then leaves out the spot count rather than say "no spot".
+  const shownPoints = useMemo(() => (world && shownItem ? itemPoints(world, shownItem) : null), [world, shownItem]);
   const worldNow = useMemo<WorldItem[]>(
-    () => (world && worldSw ? worldItems(world, new Set(Object.keys(worldSw.on).filter((k) => worldSw.on[k])), worldSw.tiers) : []),
-    [world, worldSw],
+    () => [
+      ...(world && worldSw ? worldItems(world, new Set(Object.keys(worldSw.on).filter((k) => worldSw.on[k])), worldSw.tiers) : []),
+      ...(shownItem && shownPoints ? itemItems(shownItem.className, shownPoints) : []),
+    ],
+    [world, worldSw, shownItem, shownPoints],
   );
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
@@ -381,12 +396,19 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     });
   };
 
-  const saveWorld = (next: WorldSwitches) => {
-    if (world) try { window.localStorage.setItem(WORLD_STORAGE_KEY, writeWorldSwitches(next.on, next.tiers, world)); } catch { /* storage is a convenience */ }
+  // ⚠️ Saved only from a switch the player flipped, never from a pick: the all-off switches of
+  // an item view must not outlive it, and a reload mid-view should bring the real ones back.
+  const saveWorld = (next: WorldState) => {
+    if (world) try { window.localStorage.setItem(WORLD_STORAGE_KEY, writeWorldSwitches(next.sw.on, next.sw.tiers, world)); } catch { /* storage is a convenience */ }
     return next;
   };
-  const toggleWorld = (key: WorldLayerKey) => setWorldSw((prev) => (prev ? saveWorld({ ...prev, on: { ...prev.on, [key]: !prev.on[key] } }) : prev));
-  const toggleTier = (bit: number) => setWorldSw((prev) => (prev ? saveWorld({ ...prev, tiers: prev.tiers ^ bit }) : prev));
+  const toggleWorld = (key: WorldLayerKey) => setWs((prev) => saveWorld(toggleWorldLayer(prev, key)));
+  const toggleTier = (bit: number) => setWs((prev) => saveWorld(toggleWorldTier(prev, bit)));
+  const showItem = (hit: MapSearchItem) => setWs((prev) => pickItem(prev, hit));
+  const clearItemView = () => setWs(clearItem);
+  const loadItems = () => {
+    if (!itemsFile) loadItemIndex().then(setItemsFile, () => { /* not cached: the next focus tries again */ });
+  };
   const worldStatus = worldFailed ? "failed" : world && worldSw ? "ready" : "loading";
 
   // ── Leaflet ───────────────────────────────────────────────────────────────
@@ -542,11 +564,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const worldDrawn = useRef<WorldDrawn>(new Map());
   const worldNowRef = useRef(worldNow);
   worldNowRef.current = worldNow;
+  // The searched item's markers: one group of their own, on the map whatever the switches say.
+  const itemGroup = useRef<L.LayerGroup | null>(null);
   // Reads everything through refs: it is called from the map's moveend as well as from the effect below.
   const redrawWorld = useCallback(() => {
     const Lm = leaflet.current, m = map.current, d = dataRef.current;
     if (!Lm || !m || !d) return;
     const group = (key: WorldLayerKey) => {
+      if (key === ITEM_KEY || key === ITEM_MANY_KEY) {
+        // ⚠️ Added to the map here: the switch effect only adds the groups of the layers it lists.
+        itemGroup.current ??= Lm.layerGroup().addTo(m);
+        return itemGroup.current;
+      }
       let g = worldGroups.current.get(key);
       if (!g) { g = Lm.layerGroup(); worldGroups.current.set(key, g); }
       return g;
@@ -748,6 +777,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       index.current = {};
       worldGroups.current = new Map();
       worldDrawn.current = new Map();
+      itemGroup.current = null;
       searchGroup.current = null;
       rulerGroup.current = null;
       // With the groups gone, every AgeLabel points at a detached layer; an
@@ -782,7 +812,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     if (!world) return;
     let raw: string | null = null;
     try { raw = window.localStorage.getItem(WORLD_STORAGE_KEY); } catch { /* private window: defaults */ }
-    setWorldSw(readWorldSwitches(raw, worldLayers(world), world));
+    const read: WorldState = { sw: readWorldSwitches(raw, worldLayers(world), world), view: null };
+    // An item picked while the file was still on its way stays shown, over the real switches.
+    setWs((prev) => (prev.view ? pickItem(read, { className: prev.view.className, label: prev.view.label }) : read));
   }, [world]);
 
   // Each world layer's group on the map or off it with its switch, then the markers for
@@ -873,9 +905,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       size,
       places: placesFor(MAP, Infinity).map((p) => ({ name: p.name, ...latLngToWorld(p.lat, p.lng, size) })),
       bunkers: world?.bunkers ?? [],
+      items: itemsFile?.items,
     }),
-    [size, world],
+    [size, world, itemsFile],
   );
+  // The item view's panel. Its card slot stays empty until Task 10's item cards.
+  const itemModel = shown && shownItem ? itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits) : null;
   /**
    * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
    * reticle with its popup open; a place or bunker does not, because its name or its
@@ -995,7 +1030,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
       {/* Phones: the search bar under the strips, full width, the ruler beside it. Stays up with the pin sheet so the map never jumps. */}
       <div className="absolute inset-x-0 top-0 z-[1100] flex h-(--cw-top) items-center gap-2 border-b-2 border-rule-2 bg-frame px-4 lg:hidden">
-        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onClear={searchClear} variant="bar" />}</div>
+        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} onClear={searchClear} variant="bar" />}</div>
         <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="bar" />
       </div>
 
@@ -1004,8 +1039,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
           {/* Desktop: the search box top left, where the zoom control was. */}
           {searchCtx && (
-            <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden lg:block">
-              <MapSearch ctx={searchCtx} onPick={searchPick} onClear={searchClear} variant="panel" />
+            // The item panel sits in the search box's own box, so the popup fit (CHROME_IDS.search) clears it too.
+            <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden flex-col gap-2 lg:flex">
+              <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} onClear={searchClear} variant="panel" />
+              {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="panel" />}
             </div>
           )}
           <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
@@ -1124,6 +1161,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
               </div>
             )}
+            {/* The item view on a phone: in this bar, so the map's inset grows with it and no spot hides under it. */}
+            {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" />}
             {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
             <div className={`border-b border-rule-2 ${layersOpen ? "border-t" : ""}`}>
               <MapReadout map={null} size={size} centre={centre} variant="row" />

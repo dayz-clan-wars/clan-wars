@@ -54,8 +54,37 @@ describe("searchMap", () => {
     expect(searchMap("zzzz", ctx).hits).toEqual([]);
   });
 
-  it("returns only location hits for now", () => {
+  it("returns only location hits until the item index is in", () => {
     expect(searchMap("a", ctx).hits.every((h) => h.tab === "locations")).toBe(true);
+  });
+});
+
+describe("searchMap items", () => {
+  const items = ["M4A1", "M4_Suppressor", "Mag_STANAG_30Rnd", "SodaCan_Cola", "TunaCan", "AKM"].map((className) => ({ className }));
+  const withItems: SearchCtx = { ...ctx, items };
+  const itemHits = (q: string) => searchMap(q, withItems).hits.filter((h) => h.tab === "items");
+
+  it("finds M4A1 for \"m4a1\", labelled with its class name", () => {
+    expect(itemHits("m4a1")).toEqual([{ tab: "items", className: "M4A1", label: "M4A1" }]);
+  });
+
+  it("ranks the whole-name match first: m4 → M4A1 before M4_Suppressor", () => {
+    expect(itemHits("m4").map((h) => h.className)).toEqual(["M4A1", "M4_Suppressor"]);
+  });
+
+  it("matches a word inside a class name, split at underscores and at capitals", () => {
+    expect(itemHits("cola").map((h) => h.className)).toEqual(["SodaCan_Cola"]);
+    expect(itemHits("can").map((h) => h.className)).toEqual(["TunaCan", "SodaCan_Cola"]);
+    expect(itemHits("stanag").map((h) => h.className)).toEqual(["Mag_STANAG_30Rnd"]);
+  });
+
+  it("keeps the places beside the items", () => {
+    const r = searchMap("no ab", withItems);
+    expect(r.hits[0]).toMatchObject({ tab: "locations", label: "No Abad" });
+  });
+
+  it("finds no items for a coordinate", () => {
+    expect(searchMap("072 087", withItems).hits).toEqual([]);
   });
 });
 
@@ -112,6 +141,12 @@ describe("MapSearch", () => {
 
   it("shows the hint under the box for numbers it cannot read", () => {
     expect(render({ initial: "72 0870" })).toContain(COORD_HINT);
+  });
+
+  it("shows the Items tab once the item index is in", () => {
+    const html = render({ initial: "m4a1", ctx: { ...ctx, items: [{ className: "M4A1" }] } });
+    expect(html).toContain(">Items<");
+    expect(html).toContain(">M4A1<");
   });
 
   it("says when nothing matches", () => {

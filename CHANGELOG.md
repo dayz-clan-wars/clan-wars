@@ -9,6 +9,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - The map has world layers: bunkers, vehicle and crash-site spawns, wrecks, contaminated areas, and loot buildings by type and tier, from our own server files. Find them under the layers button.
 - The map has a search box: type a place, a bunker number, or the GPS numbers from a bunker broadcast (like 072 087) and it takes you there. The bottom bar shows the GPS and metres under your mouse, or the middle of the map on a phone; tap it to copy. A ruler measures distance and bearing.
+- Search the map for an item, like M4A1, and the map shows every spot it can spawn on our server: loot buildings, crash sites, vehicle spawns and the wrecks it sits on. A panel says how many the server keeps, which tiers, what it comes on, and whether it is in spawn gear, the build supplies, a booster kit, an award or a King of the Hill loadout. Clear puts your layers back.
 
 ### Changed
 
