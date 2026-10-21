@@ -8,6 +8,7 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WORLD_MAP } from "@factions/domain";
+import { decodeAreaFlags, parseLimits } from "../lib/area-flags";
 import {
   parseBunkers,
   parseEffectAreas,
@@ -31,6 +32,8 @@ const bunkers = parseBunkers(read("cfgbunkerbroadcast.json"));
 const contaminated = parseEffectAreas(read("cfgEffectArea.json"));
 const playerSpawns = parsePlayerSpawns(read("cfgplayerspawnpoints.xml"));
 const groups = parseGroupPositions(read("mapgrouppos.xml"));
+const limits = parseLimits(read("cfglimitsdefinition.xml"));
+const flags = decodeAreaFlags(readFileSync(join(mission, "areaflags.map")));
 
 // Class names repeat thousands of times; store each once and index it.
 const typeIndex = new Map<string, number>();
@@ -43,12 +46,14 @@ const props = groups.map((g) => {
     // proto stays null until Task 5 links loot groups.
     types.push({ name: g.name, proto: null });
   }
-  return { type: i, x: g.x, z: g.z };
+  const f = flags.at(g.x, g.z);
+  return { type: i, x: g.x, z: g.z, u: f.usage, t: f.value };
 });
 
 const commit = execFileSync("git", ["-C", mission, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const world: WorldFile = {
   version: 1,
+  limits,
   source: { commit, builtAt: new Date().toISOString() },
   events,
   bunkers,

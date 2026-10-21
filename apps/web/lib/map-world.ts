@@ -6,15 +6,19 @@
 // mission files carry is dropped here — the map is flat.
 import { XMLParser } from "fast-xml-parser";
 import { WORLD_MAP } from "@factions/domain";
+import type { parseLimits } from "./area-flags";
 
 export type WorldPoint = { x: number; z: number };
 export type WorldEvent = { event: string; points: WorldPoint[] }; // cfgeventspawns name
 export type WorldArea = { name: string; x: number; z: number; radius: number };
-export type WorldProp = { type: number; x: number; z: number };
+// u / t: the areaflags.map usage and value (tier) bitmasks at the prop's position; bit k is
+// entry k of WorldFile.limits.usage / .value.
+export type WorldProp = { type: number; x: number; z: number; u: number; t: number };
 export type WorldType = { name: string; proto: number | null };
 
 export type WorldFile = {
   version: 1;
+  limits: ReturnType<typeof parseLimits>; // cfglimitsdefinition.xml lists, in bit order
   source: { commit: string; builtAt: string };
   events: WorldEvent[]; // only events with ≥1 position
   bunkers: WorldPoint[]; // cfgbunkerbroadcast.json proxies[].position [x,y,z] → {x, z}

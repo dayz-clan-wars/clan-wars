@@ -43,6 +43,13 @@ describe("decodeAreaFlags", () => {
     expect(flags.at(90, 90)).toEqual({ usage: 0b100000000, value: 0b00010 });
   });
 
+  it("clamps the far edge (x or z = world size) to the last cell", () => {
+    expect(flags.at(100, 100)).toEqual({ usage: 0b100000000, value: 0b00010 });
+    expect(flags.at(100, 10)).toEqual({ usage: 0b10000000, value: 0b00001 });
+    expect(flags.at(10, 100)).toEqual({ usage: 0x80000000, value: 0b10000 });
+    expect(flags.at(100.5, 10)).toEqual({ usage: 0, value: 0 });
+  });
+
   it("splits cells at their edges", () => {
     expect(flags.at(49.9, 49.9).value).toBe(0b00100);
     expect(flags.at(50, 49.9).value).toBe(0b00001);
@@ -51,7 +58,7 @@ describe("decodeAreaFlags", () => {
 
   it("reads nothing off the map", () => {
     expect(flags.at(-1, 10)).toEqual({ usage: 0, value: 0 });
-    expect(flags.at(10, 100)).toEqual({ usage: 0, value: 0 });
+    expect(flags.at(10, 100.5)).toEqual({ usage: 0, value: 0 });
   });
 
   it("refuses a buffer whose length disagrees with its header", () => {

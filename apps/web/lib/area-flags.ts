@@ -54,8 +54,10 @@ export function decodeAreaFlags(buf: Uint8Array): AreaFlags {
     cells: cellsX,
     worldSize: worldX,
     at(x, z) {
-      const col = Math.floor(x / cellM);
-      const row = Math.floor(z / cellM); // ⚠️ row 0 is the south edge (z = 0); see the header
+      // ⚠️ x or z exactly at the world size is the map's own far edge (a prop can sit there),
+      // not off the map: clamp it into the last cell instead of reading it as empty.
+      const col = x === worldX ? cellsX - 1 : Math.floor(x / cellM);
+      const row = z === worldZ ? cellsZ - 1 : Math.floor(z / cellM); // ⚠️ row 0 is the south edge (z = 0); see the header
       if (!(col >= 0 && col < cellsX && row >= 0 && row < cellsZ)) return { usage: 0, value: 0 };
       const i = row * cellsX + col;
       // getUint32 is unsigned, so bit 31 cannot turn a mask negative.

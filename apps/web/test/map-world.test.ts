@@ -76,4 +76,19 @@ describe("committed world.json", () => {
     expect(world.props.length).toBeGreaterThan(0);
     for (const p of world.props) expect(world.types[p.type]).toBeDefined();
   });
+
+  it("stamps area usage and tier masks on props: a Land_Mil_ building sits on Military with a tier", () => {
+    const mil = world.limits.usage.indexOf("Military");
+    expect(mil).toBeGreaterThanOrEqual(0);
+    const hit = world.props.some(
+      (p) => world.types[p.type]!.name.startsWith("Land_Mil_") && (p.u & (1 << mil)) !== 0 && p.t !== 0,
+    );
+    expect(hit).toBe(true);
+  });
+
+  it("carries the full limits lists in bit order", () => {
+    expect(world.limits.value.slice(0, 4)).toEqual(["Tier1", "Tier2", "Tier3", "Tier4"]);
+    expect(world.limits.categories).toContain("tools");
+    expect(world.limits.tags).toContain("floor");
+  });
 });
