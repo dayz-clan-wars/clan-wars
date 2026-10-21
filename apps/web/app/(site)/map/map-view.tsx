@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import type * as L from "leaflet";
 /**
@@ -12,16 +12,31 @@ import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, 
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
 import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, infoLines } from "@/lib/map-copy";
+import { searchZoom, type SearchCtx } from "@/lib/map-search";
+import { rulerTakesClick, type RulerPoint } from "@/lib/map-ruler";
+import { MapReadout } from "./map-readout";
+import { MapSearch, type MapSearchItem, type MapSearchPick } from "./map-search";
+import { ItemCardView, ItemPanel } from "./item-panel";
+import { loadItemIndex, type ItemsFile } from "@/lib/item-index";
+import { loadItemCards, type ItemCard } from "@/lib/item-cards";
+import { clearItem, itemCardView, itemPanel, modelPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "@/lib/item-view";
+import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
 import { motionOptions, prefersReducedMotion } from "@/lib/map-motion";
 import { followCentre, insetFor, pickReturnFocus, pinAtCentre, pinAtPoint, type PinDraft } from "@/lib/map-pin";
 import { MapRoster } from "./map-roster";
+import { WorldPanel } from "./world-panel";
+import { loadWorld, type WorldFile } from "@/lib/map-world";
+import {
+  ITEM_KEY, ITEM_MANY_KEY, LOOT_MIN_ZOOM, WORLD_STORAGE_KEY, delootEvents, itemItems, itemPoints, modelCounts, modelItems, modelPoints, pointsFor, presentTiers, readWorldSwitches, worldItems, worldLayers, writeWorldSwitches,
+  type WorldItem, type WorldLayerKey, type WorldSwitches,
+} from "@/lib/world-layers";
 import { PinSheet } from "./pin-sheet";
 import {
-  TRAVEL_PANE, type AgeLabel, type Ctx, type MapData, type WireState,
-  drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  TRAVEL_PANE, WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
+  drawWorld, worldView, drawReticle, drawRuler, setRulerMode, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -164,10 +179,48 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
   const [centre, setCentre] = useState<{ grid: string; x: number; z: number } | null>(null);
   const [pinAt, setPinAt] = useState<PinDraft | null>(null);
+  // The ruler: on, and the points clicked so far. Page-local, never saved.
+  const [rulerOn, setRulerOn] = useState(false);
+  const [rulerPts, setRulerPts] = useState<RulerPoint[]>([]);
   const shell = useRef<HTMLElement>(null);
   // The layers live behind a sprocket. Closed by default: the map is the
   // page, and a panel that stays open covers the terrain a player came for.
   const [layersOpen, setLayersOpen] = useState(false);
+  // The world layers (lib/world-layers.ts): static mission data, fetched once the map exists.
+  const [world, setWorld] = useState<WorldFile | null>(null);
+  const [worldFailed, setWorldFailed] = useState(false);
+  // The switches, and the searched item shown in their place (lib/item-view.ts). Empty
+  // switches until the file is in; an item picked before then keeps its place (the read below).
+  const [ws, setWs] = useState<WorldState>({ sw: { on: {}, tiers: 0 }, view: null });
+  const worldSw: WorldSwitches | null = world ? ws.sw : null;
+  // The item index: fetched on the search box's first focus, never with the map.
+  const [itemsFile, setItemsFile] = useState<ItemsFile | null>(null);
+  const [itemsStatus, setItemsStatus] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  // The item cards (lib/item-cards.ts): null until in, and while they fail to load (optional extras).
+  const [cards, setCards] = useState<ReadonlyMap<string, ItemCard> | null>(null);
+  // At LOOT_MIN_ZOOM or closer every item point is drawn, so the panel stops asking to zoom in.
+  const [zoomedIn, setZoomedIn] = useState(false);
+  const worldList = useMemo(() => (world ? worldLayers(world) : []), [world]);
+  const worldTiers = useMemo(() => (world ? presentTiers(world) : []), [world]);
+  // Per-row counts follow the tier filter: a loot row says how many buildings it would draw.
+  const worldCounts = useMemo(
+    () => (world && worldSw ? Object.fromEntries(worldList.map((l) => [l.key, pointsFor(world, l.key, worldSw.tiers).length])) : {}),
+    [world, worldList, worldSw],
+  );
+  const shown = ws.view;
+  const shownModel = shown?.model ? shown : null;
+  const shownItem = useMemo(() => (shown && !shown.model ? itemsFile?.items.find((i) => i.className === shown.className) ?? null : null), [shown, itemsFile]);
+  // Null without the world file: the panel then leaves out the spot count rather than say "no spot".
+  const shownPoints = useMemo(() => (world && shownItem ? itemPoints(world, shownItem) : null), [world, shownItem]);
+  const modelShown = useMemo(() => (world && shownModel ? modelPoints(world, shownModel.className) : null), [world, shownModel]);
+  const worldNow = useMemo<WorldItem[]>(
+    () => [
+      ...(world && worldSw ? worldItems(world, new Set(Object.keys(worldSw.on).filter((k) => worldSw.on[k])), worldSw.tiers) : []),
+      ...(shownItem && shownPoints ? itemItems(shownItem.className, shownPoints) : []),
+      ...(shownModel && modelShown ? modelItems(shownModel.className, modelShown) : []),
+    ],
+    [world, worldSw, shownItem, shownPoints, shownModel, modelShown],
+  );
 
   const visible = ALL_KEYS.filter((k) => ALWAYS.includes(k) || layers[k as keyof MapData["layers"]]);
   // The switches that would do nothing, with what would put them there.
@@ -352,6 +405,32 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     });
   };
 
+  // ⚠️ Saved only from a switch the player flipped, never from a pick: the all-off switches of
+  // an item view must not outlive it, and a reload mid-view should bring the real ones back.
+  const saveWorld = (next: WorldState) => {
+    if (world) try { window.localStorage.setItem(WORLD_STORAGE_KEY, writeWorldSwitches(next.sw.on, next.sw.tiers, world)); } catch { /* storage is a convenience */ }
+    return next;
+  };
+  const toggleWorld = (key: WorldLayerKey) => setWs((prev) => saveWorld(toggleWorldLayer(prev, key)));
+  const toggleTier = (bit: number) => setWs((prev) => saveWorld(toggleWorldTier(prev, bit)));
+  const showItem = (hit: MapSearchItem) => setWs((prev) => pickItem(prev, hit));
+  const clearItemView = () => setWs(clearItem);
+  // On focus, and from the failed line's retry. A failure is not cached (loadItemIndex), so trying again refetches.
+  // The panel's Try again: loadWorld dropped the failed promise, so this is a fresh fetch.
+  const retryWorld = () => {
+    setWorldFailed(false);
+    loadWorld().then((w) => { setWorld(w); setWorldFailed(false); }, () => setWorldFailed(true));
+  };
+  const loadItems = () => {
+    if (itemsStatus === "loading" || itemsStatus === "ready") return;
+    setItemsStatus("loading");
+    loadItemIndex().then((f) => { setItemsFile(f); setItemsStatus("ready"); }, () => setItemsStatus("failed"));
+    // ⚠️ Never part of itemsStatus: the cards are extra. Search and the panel work on the index
+    // alone, so a failed cards file costs the pictures and the game's names, nothing else.
+    if (!cards) loadItemCards().then(setCards, () => {});
+  };
+  const worldStatus = worldFailed ? "failed" : world && worldSw ? "ready" : "loading";
+
   // ── Leaflet ───────────────────────────────────────────────────────────────
   const leaflet = useRef<LeafletModule | null>(null);
   const map = useRef<L.Map | null>(null);
@@ -368,6 +447,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   dataRef.current = data;
   const nowRef = useRef(now);
   nowRef.current = now;
+  // The search reticle's and the ruler's own groups: drawn by this page alone, never by the poll.
+  const searchGroup = useRef<L.LayerGroup | null>(null);
+  const rulerGroup = useRef<L.LayerGroup | null>(null);
+  const rulerOnRef = useRef(rulerOn);
+  rulerOnRef.current = rulerOn;
+  const pinSheetRef = useRef(false);
 
   const observer = useRef<ResizeObserver | null>(null);
   const barObserver = useRef<ResizeObserver | null>(null);
@@ -494,6 +579,30 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     }
   }, []);
 
+  // One group per world layer, by key, and what drawWorld has put in them (map-draw.ts).
+  const worldGroups = useRef(new Map<WorldLayerKey, L.LayerGroup>());
+  const worldDrawn = useRef<WorldDrawn>(new Map());
+  const worldNowRef = useRef(worldNow);
+  worldNowRef.current = worldNow;
+  // The searched item's markers: one group of their own, on the map whatever the switches say.
+  const itemGroup = useRef<L.LayerGroup | null>(null);
+  // Reads everything through refs: it is called from the map's moveend as well as from the effect below.
+  const redrawWorld = useCallback(() => {
+    const Lm = leaflet.current, m = map.current, d = dataRef.current;
+    if (!Lm || !m || !d) return;
+    const group = (key: WorldLayerKey) => {
+      if (key === ITEM_KEY || key === ITEM_MANY_KEY) {
+        // ⚠️ Added to the map here: the switch effect only adds the groups of the layers it lists.
+        itemGroup.current ??= Lm.layerGroup().addTo(m);
+        return itemGroup.current;
+      }
+      let g = worldGroups.current.get(key);
+      if (!g) { g = Lm.layerGroup(); worldGroups.current.set(key, g); }
+      return g;
+    };
+    drawWorld({ L: Lm, group, pt: ptFor(Lm, d.world.size), p: palette(), size: d.world.size }, worldNowRef.current, worldView(m), worldDrawn.current);
+  }, []);
+
   useEffect(() => {
     if (!el.current || size === null) return;
     let cancelled = false;
@@ -515,10 +624,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           // the edge is a fact about the terrain, not a suggestion.
           maxBoundsViscosity: 1,
           attributionControl: true,
+          // Added below at top right: the search box has the top-left corner now.
+          zoomControl: false,
           // Zoom, tile fade, marker slide and pan inertia: all motion, all off under prefers-reduced-motion.
           ...motionOptions(prefersReducedMotion()),
         });
         map.current = m;
+        // ⚠️ Top right, under the sprocket (map.css moves it down on desktop). Top left is the search box's.
+        Lm.control.zoom({ position: "topright" }).addTo(m);
 
         const ll = (x: number, z: number) => { const p = worldToLatLng(x, z, size); return Lm.latLng(p.lat, p.lng); };
         const world = Lm.latLngBounds([ll(0, 0), ll(size, size)]);
@@ -531,6 +644,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         if (pane) pane.style.zIndex = "350";
         const placePane = m.createPane(PLACE_PANE);
         if (placePane) placePane.style.zIndex = "360";
+        // Under the travel points: a world marker is background, never over a shed or a player.
+        const worldPane = m.createPane(WORLD_PANE);
+        if (worldPane) worldPane.style.zIndex = "340";
 
         // ⚠️ The zoom floor: never a view with anything but map in it. Set
         // from the container's size, and again on every resize, because the
@@ -572,6 +688,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           drawTravel({ L: Lm, group: g, pt: ptFor(Lm, d.world.size), data: d, p: palette() }, travelView(m));
         };
         m.on("moveend", redrawTravel);
+        // World markers follow the view the same way (worldView): none of the dense layers zoomed out.
+        m.on("moveend", redrawWorld);
 
         for (const key of ALL_KEYS) if (!groups.current[key]) groups.current[key] = Lm.layerGroup();
         Lm.tileLayer(`/tiles/${MAP}/topographic/{z}/{x}/{y}.webp`, {
@@ -592,15 +710,32 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         for (const key of ALL_KEYS) if (enabledRef.current[key]) m.addLayer(groups.current[key]!);
         setMapReady(true);
         setChunkFailures(0);
+        // ⚠️ A failure here is one line in the panel, never the map's own error state:
+        // the clan layers do not depend on the world file and must keep working without it.
+        loadWorld().then((w) => { if (!cancelled) { setWorld(w); setWorldFailed(false); } }, () => { if (!cancelled) setWorldFailed(true); });
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
-          setCentre({ grid: gridRef(c.x, c.z), x: c.x, z: c.z });
+          setCentre({ grid: gridRef(c.x, c.z, size), x: c.x, z: c.z });
+          setZoomedIn(m.getZoom() >= LOOT_MIN_ZOOM);
           // A "Pin here" draft rides the centre: pan, and the pin moves under the cross.
           setPinAt((d) => followCentre(d, c));
         };
         readCentre();
         m.on("moveend", readCentre);
+
+        // Created and added as two statements, like the layer groups in redraw.
+        const sg = Lm.layerGroup(), rg = Lm.layerGroup();
+        m.addLayer(sg);
+        m.addLayer(rg);
+        searchGroup.current = sg;
+        rulerGroup.current = rg;
+        // A click adds a ruler point only while the ruler is on; otherwise a click is Leaflet's own.
+        m.on("click", (e: L.LeafletMouseEvent) => {
+          if (!rulerTakesClick(rulerOnRef.current, pinSheetRef.current)) return;
+          const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
+          setRulerPts((pts) => [...pts, { x: w.x, z: w.z }]);
+        });
         // Long-press on touch, right-click on desktop — Leaflet gives both the
         // same event, which is why the pin gesture needs no touch handling of
         // its own.
@@ -661,6 +796,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       fitPopupNow.current = () => {};
       groups.current = {};
       index.current = {};
+      worldGroups.current = new Map();
+      worldDrawn.current = new Map();
+      itemGroup.current = null;
+      searchGroup.current = null;
+      rulerGroup.current = null;
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
       ages.current = {};
@@ -688,6 +828,31 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // second line), so the fit is taken again — never the layers.
   useEffect(() => { refreshAges(allAges(), now); fitPopupNow.current(); }, [now]);
 
+  // The world switches, read once the file is in: the defaults come from the layers it offers.
+  useEffect(() => {
+    if (!world) return;
+    let raw: string | null = null;
+    try { raw = window.localStorage.getItem(WORLD_STORAGE_KEY); } catch { /* private window: defaults */ }
+    const read: WorldState = { sw: readWorldSwitches(raw, worldLayers(world), world), view: null };
+    // An item picked while the file was still on its way stays shown, over the real switches.
+    setWs((prev) => (prev.view ? pickItem(read, { className: prev.view.className, label: prev.view.label, model: prev.view.model }) : read));
+  }, [world]);
+
+  // Each world layer's group on the map or off it with its switch, then the markers for
+  // what is on now. A loot switch can move a building to another group (world-layers.ts
+  // worldItems), so every change redraws rather than only adding or removing a group.
+  useEffect(() => {
+    const m = map.current, Lm = leaflet.current;
+    if (!m || !Lm || !mapReady || !worldSw) return;
+    for (const l of worldList) {
+      let g = worldGroups.current.get(l.key);
+      if (!g) { g = Lm.layerGroup(); worldGroups.current.set(l.key, g); }
+      if (worldSw.on[l.key] && !m.hasLayer(g)) m.addLayer(g);
+      if (!worldSw.on[l.key] && m.hasLayer(g)) m.removeLayer(g);
+    }
+    redrawWorld();
+  }, [mapReady, worldList, worldSw, worldNow, redrawWorld]);
+
   // One group per layer, added and removed on its switch.
   useEffect(() => {
     const m = map.current;
@@ -705,6 +870,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // against `!pinAt` they could both be false at once — leaving a full-screen
   // map with no controls and no way back.
   const pinSheet = pinAt !== null && layers.pins;
+  pinSheetRef.current = pinSheet;
   // Set when the sheet was opened from a button, so closing it can put focus
   // back. Not for a long-press: focus was never on a button then.
   const returnFocus = useRef(false);
@@ -744,6 +910,87 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     return () => root.removeEventListener("click", onClick);
   }, []);
 
+  // The ruler redraws whole on every point; it is a handful of shapes.
+  useEffect(() => {
+    const Lm = leaflet.current, g = rulerGroup.current;
+    if (!Lm || !g || size === null) return;
+    drawRuler(Lm, g, ptFor(Lm, size), rulerOn ? rulerPts : [], palette().gold);
+  }, [rulerOn, rulerPts, mapReady, size]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    setRulerMode(m, rulerOn);
+  }, [rulerOn, mapReady]);
+  const toggleRuler = () => { setRulerOn((on) => !on); setRulerPts([]); };
+  const clearRuler = () => { setRulerOn(false); setRulerPts([]); };
+
+  // The names the search box looks through, in metres. Place names are stored as
+  // latlngs on the pyramid (lib/map-places.ts); bunkers come with the world file.
+  const searchCtx = useMemo<SearchCtx | null>(
+    () => (size === null ? null : {
+      size,
+      places: placesFor(MAP, Infinity).map((p) => ({ name: p.name, ...latLngToWorld(p.lat, p.lng, size) })),
+      bunkers: world?.bunkers ?? [],
+      items: itemsFile?.items,
+      models: world ? modelCounts(world) : undefined,
+      cards: cards ?? undefined,
+    }),
+    [size, world, itemsFile, cards],
+  );
+  // The item view's panel, with the item's card when the cards are in.
+  const delootAt = useMemo(() => (world && shownItem ? delootEvents(world, shownItem) : null), [world, shownItem]);
+  const shownCard = useMemo(() => {
+    const c = shown && !shown.model && cards?.get(shown.className);
+    return c && cards ? itemCardView(c, cards) : null;
+  }, [shown, cards]);
+  const itemModel = shownModel ? modelPanel(shownModel.label, modelShown, { zoomedIn }) : shown && shownItem ? withCard(itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }), shownCard) : null;
+  /**
+   * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
+   * reticle with its popup open; a place or bunker does not, because its name or its
+   * marker is already on the map.
+   */
+  const searchPick = (p: MapSearchPick) => {
+    const m = map.current, Lm = leaflet.current, g = searchGroup.current;
+    if (!m || !Lm || !g || size === null) return;
+    const at = ptFor(Lm, size)(p.x, p.z);
+    const zoom = searchZoom(m.getZoom());
+    g.clearLayers();
+    if (p.reticle) {
+      const marker = drawReticle({ L: Lm, group: g, pt: ptFor(Lm, size), p: palette(), size }, p, layers.pins);
+      // Opened once the fly-to lands: opened mid-flight, Leaflet's autoPan fights the
+      // animation for the view. A pick on the spot already in view moves nothing, so opens now.
+      // `hasLayer`: a second pick before the first landed has replaced this reticle.
+      const open = () => { if (g.hasLayer(marker)) marker.openPopup(); };
+      if (m.getCenter().equals(at) && m.getZoom() === zoom) open();
+      else m.once("moveend", open);
+    }
+    m.setView(at, zoom, { animate: !prefersReducedMotion() });
+  };
+  const searchClear = () => searchGroup.current?.clearLayers();
+  // The reticle popup's Pin it (map-draw.ts `reticlePopup`): the same sheet a long-press opens, on that point.
+  // Delegated, like Delete's arming above, because Leaflet builds the popup's DOM.
+  useEffect(() => {
+    const root = el.current;
+    if (!root || !layers.pins) return;
+    const onClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-pin-it]");
+      if (!btn) return;
+      map.current?.closePopup();
+      setPinAt(pinAtPoint({ x: Number(btn.dataset.x), z: Number(btn.dataset.z) }));
+    };
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, [layers.pins]);
+
+  // Escape ends a measurement. ⚠️ Not while the layers panel is open (its Escape closes
+  // it) or the pin sheet is (its Escape cancels the draft): one key, one thing.
+  useEffect(() => {
+    if (!rulerOn || layersOpen || pinSheet) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") { setRulerOn(false); setRulerPts([]); } };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [rulerOn, layersOpen, pinSheet]);
+
   // Escape closes the panel. ⚠️ Not while the pin sheet is open: its own
   // Escape cancels the draft, and this window listener heard the same keypress
   // and closed the panel too — one Escape undid two things.
@@ -769,12 +1016,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // `top-bar` (the class) is only the pre-measure fallback — the strips
     // effect above overwrites `style.top` with `mapTop()` once it can measure
     // #site-strips, so the map starts under the timers too, not just the bar.
-    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
+    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none [--cw-top:62px] lg:[--cw-top:0px]">
       <h1 className="sr-only">The map</h1>
       {/* The refresh's one announcement. Not the button: its text follows every pan. */}
       <p role="status" className="sr-only">{announce}</p>
       {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
-      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
+      {/*
+        ⚠️ On a phone the map starts BELOW the search bar (`--cw-top`), not under it. The
+        world is the max bounds with viscosity 1 and the zoom floor fits all of it, so a
+        bar painted over the map's top would hide the north edge for good — the bottom
+        bar's problem (insetBy), at the other end. The bar is that tall, fixed.
+      */}
+      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-x-0 bottom-0 top-(--cw-top)" />
       <MapStatus view={view} onRetry={retry} />
 
       {pinSheet && pinAt.follow && (
@@ -782,7 +1035,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         // lands. It sits between the markers (600) and the popups (700): over
         // everything it points at, under anything open. The map ends
         // `--cw-inset` above the bottom, so its centre is half of what remains.
-        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc((100% - var(--cw-inset, 0px)) / 2)" }}>
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc(var(--cw-top, 0px) + (100% - var(--cw-top, 0px) - var(--cw-inset, 0px)) / 2)" }}>
           <Reticle size={32} />
         </div>
       )}
@@ -808,19 +1061,36 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
       {pinSheet && <PinSheet draft={pinAt} pal={pal} onCancel={cancelPin} insetRef={insetBy} />}
 
+      {/* Phones: the search bar under the strips, full width, the ruler beside it. Stays up with the pin sheet so the map never jumps. */}
+      <div className="absolute inset-x-0 top-0 z-[1100] flex h-(--cw-top) items-center gap-2 border-b-2 border-rule-2 bg-frame px-4 lg:hidden">
+        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} itemsStatus={itemsStatus} onClear={searchClear} variant="bar" />}</div>
+        <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="bar" />
+      </div>
+
       {!pinSheet && (
         <>
           {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
+          {/* Desktop: the search box top left, where the zoom control was. */}
+          {searchCtx && (
+            // The item panel sits in the search box's own box, so the popup fit (CHROME_IDS.search) clears it too.
+            <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden flex-col gap-2 lg:flex">
+              <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} itemsStatus={itemsStatus} onClear={searchClear} variant="panel" />
+              {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="panel" card={shownCard && <ItemCardView model={shownCard} variant="panel" />} />}
+            </div>
+          )}
           <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
-            <button
-              type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
-              className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
-            >
-              <Sprocket />
-              <span className="sr-only">Layers</span>
-            </button>
+            <div className="flex items-start gap-2">
+              <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="panel" />
+              <button
+                type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
+                className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
+              >
+                <Sprocket />
+                <span className="sr-only">Layers</span>
+              </button>
+            </div>
             {layersOpen && (
-              <aside id="map-layers" className="w-[300px] border-2 border-rule-2 bg-frame">
+              <aside id="map-layers" className="max-h-[calc(100dvh-14rem)] w-[300px] overflow-y-auto border-2 border-rule-2 bg-frame">
                 <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
                   <h2 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">Layers</h2>
                   <span className="font-mono text-[11px] text-muted">Fixes every {POSITION_FIX_MS / 60_000} min</span>
@@ -847,6 +1117,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                     ))}
                   </ul>
                 )}
+                <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
+                  tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} onRetry={retryWorld} variant="panel" />
                 <MapRoster rows={rows} onGo={goTo} />
                 <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">{MAP_LEGEND}{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
@@ -867,7 +1139,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           )}
           {/*
             Notices stay visible with the panel closed: a failed refresh is not
-            a setting. Top centre, because the zoom control owns the top-left
+            a setting. Top centre, because the search box owns the top-left
             corner and the layers the top-right: at left-6 top-6 a notice sat
             over the zoom buttons for as long as it stayed up.
           */}
@@ -877,7 +1149,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             </div>
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
-            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre?.grid ?? "000 000"}</span>
+            {/* The readout: under the mouse, else the centre. A click copies it. */}
+            <MapReadout map={mapReady ? map.current : null} size={size} centre={centre} variant="bar" />
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
               <Reticle size={16} /> Center on me
@@ -910,6 +1183,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </label>
                 ))}
               </div>
+              <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
+                tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} onRetry={retryWorld} variant="sheet" />
               {/* `nested`: the sheet scrolls; a second scroller inside it trapped a swipe. */}
               <MapRoster rows={rows} onGo={goTo} nested />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
@@ -919,7 +1194,13 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
               </div>
             )}
-            <div className={`flex items-center gap-2 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
+            {/* The item view on a phone: in this bar, so the map's inset grows with it and no spot hides under it. */}
+            {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" card={shownCard && <ItemCardView model={shownCard} variant="sheet" />} />}
+            {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
+            <div className={`border-b border-rule-2 ${layersOpen ? "border-t" : ""}`}>
+              <MapReadout map={null} size={size} centre={centre} variant="row" />
+            </div>
+            <div className="flex items-center gap-2 px-4 py-2.5">
               <button
                 type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"
                 className={`flex h-11 w-11 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-3 text-ink"}`}
@@ -939,12 +1220,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   <span className="sr-only">Pin here</span>
                 </button>
               )}
-              {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
+              {/* Refresh: a tap reloads and says so for two seconds. The grid it used to show is the readout row above. */}
               <button type="button" onClick={() => void refreshTap()} title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
-                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
-                {/* The one accessible name; the visible grid above is aria-hidden so it is not said twice. */}
-                <span className="sr-only">Refresh the map. Centre: grid {centre?.grid ?? "000 000"}</span>
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">Refresh</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
             </div>

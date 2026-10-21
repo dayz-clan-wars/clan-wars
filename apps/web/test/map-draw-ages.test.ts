@@ -104,7 +104,7 @@ describe("a pin popup's expiry follows the clock", () => {
     const now = new Date("2026-09-23T00:00:00Z").getTime();
     const day = 24 * 3600_000;
     const ages: AgeLabel[] = [];
-    const p = { gold: "#d9a03c", ink: "#e8e2d4", ink2: "#b5afa4", rust2: "#d4623a", olive: "#8fa36a", frame: "#0b0b0a", rule2: "#2a2825" };
+    const p = { gold: "#d9a03c", ink: "#e8e2d4", ink2: "#b5afa4", rust2: "#d4623a", olive: "#8fa36a", frame: "#0b0b0a", rule2: "#2a2825", military: "#e0457b" };
     drawPins({
       L, group: {} as never, pt: (() => ({})) as never, now, ages, index: new Map(), p,
       data: { pins: [{ id: 1, x: 4321, z: 8765, icon: "loot", note: null, by: "Bob", at: new Date(now), expiresAt: new Date(now + 7 * day) }] } as never,

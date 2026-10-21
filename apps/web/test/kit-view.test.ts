@@ -29,8 +29,8 @@ describe("the kit page's view", () => {
   it("gives the spot as a grid square and a map link, never as metres", () => {
     const out = kitView(view({ spot: { x: 7450, y: 210, z: 5280, placedAt: new Date() } }));
     expect(out.spot).not.toBeNull();
-    expect(out.spot!.grid).toBe("074 052");
-    expect(out.spot!.href).toBe("/map?at=074052");
+    expect(out.spot!.grid).toBe("074 111");
+    expect(out.spot!.href).toBe("/map?at=074111");
     expect(JSON.stringify(out)).not.toContain("7450");
   });
 

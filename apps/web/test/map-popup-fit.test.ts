@@ -118,7 +118,10 @@ describe("every popup on the map opts into the fit", () => {
   });
 
   it("marks every popup's marker open, so a hidden tip still has a tie", () => {
-    expect(draw.match(/markOpen\(/gu)?.length).toBe(bindings.length + 1); // +1 for the declaration
+    // A contaminated area's circle has a popup but no chip to mark, so it is the one exception.
+    const circles = draw.match(/L\.circle\([^;]*\.bindPopup\(/gu)?.length ?? 0;
+    expect(circles).toBe(1);
+    expect(draw.match(/markOpen\(/gu)?.length).toBe(bindings.length - circles + 1); // +1 for the declaration
   });
 
   it("styles the open frame for any chip, not just a pin's", () => {
@@ -140,14 +143,21 @@ describe("chromePad", () => {
     expect(chromePad(view, {})).toEqual({ top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left: FIT_PAD });
   });
 
-  it("clears the zoom control on the left, the corner panel on the right, the bar at the bottom, the notices at the top", () => {
+  it("clears the search box on the left, the corner panel on the right, the bar at the bottom, the notices at the top", () => {
     const pad = chromePad(view, {
-      zoom: rect(10, 10, 48, 92),
+      search: rect(24, 24, 300, 48),
+      zoom: rect(1280 - 24 - 48, 76, 48, 92),
       corner: rect(1280 - 24 - 300, 24, 300, 500),
       bar: rect(24, 800 - 24 - 48, 520, 48),
       notices: rect(460, 24, 360, 44),
     });
-    expect(pad).toEqual({ left: 58 + FIT_PAD, right: 324 + FIT_PAD, bottom: 72 + FIT_PAD, top: 68 + FIT_PAD });
+    expect(pad).toEqual({ left: 324 + FIT_PAD, right: 324 + FIT_PAD, bottom: 72 + FIT_PAD, top: 68 + FIT_PAD });
+  });
+
+  it("clears the zoom control on the right with the panel closed (the corner is only the sprocket then)", () => {
+    const pad = chromePad(view, { zoom: rect(1280 - 24 - 48, 76, 48, 92), corner: rect(1280 - 24 - 44, 24, 44, 44) });
+    expect(pad.right).toBe(72 + FIT_PAD);
+    expect(pad.left).toBe(FIT_PAD);
   });
 
   it("ignores chrome that is display:none (a zero box) — the phone's hidden desktop bar", () => {

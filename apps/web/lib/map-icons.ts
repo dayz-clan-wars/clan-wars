@@ -1,4 +1,5 @@
 import type { PinIcon } from "@factions/domain";
+import { EVENT_LAYERS, type WorldGroup } from "./map-copy";
 
 /**
  * The marker set, from `Map Markers.dc.html` (2026-09-07). The terrain tiles
@@ -29,6 +30,11 @@ export type Palette = {
   frame: string;
   /** The chip's resting edge. */
   rule2: string;
+  /**
+   * Military loot buildings, and nothing else. The one hue no other marker uses, so the
+   * layer players open the map for stands out from Town and Village chips beside it.
+   */
+  military: string;
 };
 
 /** Every marker's box, and where Leaflet pins it to the point. */
@@ -43,6 +49,8 @@ export const ICON = {
   publicBase: { size: [28, 28], anchor: [10, 23], tooltipAnchor: [4, -27] },
   travel: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
   pin: { size: [28, 28], anchor: [14, 14], tooltipAnchor: [19, 0] },
+  /** World layers: a smaller chip, because a town's loot buildings sit 20 m apart. */
+  world: { size: [22, 22], anchor: [11, 11], tooltipAnchor: [14, 0] },
 } as const satisfies Record<string, { size: readonly [number, number]; anchor: readonly [number, number]; tooltipAnchor: readonly [number, number] }>;
 
 /** The 28-unit chip every glyph sits in. The edge carries `cw-chip-edge` so CSS can recolour it (an open pin goes gold). */
@@ -149,6 +157,58 @@ export function travelIcon(p: Palette): string {
 }
 
 /**
+ * The world layers' glyphs, one per group (map-copy.ts WORLD_GROUPS); `{a}` is the
+ * layer's accent. The group says what KIND of thing it is, the accent which one.
+ */
+export const WORLD_GLYPHS: Record<WorldGroup, string> = {
+  /** A bunker mound with its door. */
+  Bunkers: `<path d="M4 21c2-8 6-12 10-12s8 4 10 12zM11 21v-5h6v5"/>`,
+  Vehicles: PIN_GLYPHS.vehicle,
+  /** A burst. */
+  "Crash sites": `<path d="M14 4l2.4 6.2 6.6-1.2-4.4 5 4.4 5-6.6-1.2L14 24l-2.4-6.2L5 19l4.4-5L5 9l6.6 1.2z"/>`,
+  /** A house. */
+  "Loot buildings": `<path d="M5 13l9-7 9 7M8 11v12h12V11M12 23v-6h4v6"/>`,
+  /** The vehicle, struck through. */
+  Wrecks: `<path d="M5 18v-4l3-6h12l3 6v4zM5 14h18M6 6l16 16"/>`,
+  /** A marked point. */
+  World: `<circle cx="14" cy="14" r="5" fill="{a}"/><path d="M14 4v4M14 20v4M4 14h4M20 14h4"/>`,
+};
+
+/** Which glyph a world layer key draws: its panel group (world-layers.ts files events by EVENT_LAYERS too). */
+export function worldGroupOf(key: string): WorldGroup {
+  if (key === "bunkers") return "Bunkers";
+  if (key === "wrecks") return "Wrecks";
+  if (key.startsWith("loot:")) return "Loot buildings";
+  if (key.startsWith("event:")) return EVENT_LAYERS[key.slice("event:".length)]?.group ?? "World";
+  return "World";
+}
+
+/**
+ * A world layer's accent. ⚠️ Not gold (gold is YOURS on this map: you, your base, your
+ * pins) and not rust-2 for a building (rust-2 is a threat: intruders, bounties, danger).
+ * Contaminated areas are the one world layer that IS a danger, so they take rust-2.
+ */
+export function worldAccent(p: Palette, key: string): string {
+  if (key === "loot:military") return p.military;
+  // A searched item's points (world-layers.ts ITEM_KEY / ITEM_MANY_KEY): the strongest neutral, as they stand alone.
+  if (key.startsWith("item")) return p.ink;
+  if (key === "contaminated") return p.rust2;
+  if (key === "bunkers" || key === "loot:farm" || key === "loot:hunting" || key === "event:TrajectoryFig" || key === "animals") return p.olive;
+  if (key === "loot:police" || key === "loot:medical" || key === "loot:fire" || worldGroupOf(key) === "Vehicles" || worldGroupOf(key) === "Crash sites") return p.ink;
+  return p.ink2;
+}
+
+function worldMarkup(p: Palette, key: string): string {
+  const a = worldAccent(p, key);
+  return WORLD_GLYPHS[worldGroupOf(key)].replaceAll("{a}", a).replaceAll("{f}", p.frame).replaceAll("{i}", p.ink);
+}
+
+/** A world-layer marker: its group's glyph in the chip, drawn at ICON.world's 22 px. */
+export function worldIcon(p: Palette, key: string): string {
+  return chip(p, worldAccent(p, key), worldMarkup(p, key), p.rule2, ICON.world.size[0]);
+}
+
+/**
  * The layers panel's row icons: the marker's own glyph, bare, 20px, so the
  * panel is a legend. Keys are `LAYER_LABELS`'s.
  */
@@ -164,8 +224,16 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
     case "pins": return `${open(` stroke="${p.gold}"`)}<path d="M14 25V3M8 6l6-3 6 3-6 3z" fill="${p.gold}"/><path d="M7 25h14"/></svg>`;
     case "travel": return `${open(` stroke="${p.olive}"`)}${BOLT.replaceAll("{a}", p.olive)}</svg>`;
     case "places": return `${open(` stroke="${p.ink}"`)}<path d="M3 8h16l6 6-6 6H3z" fill="${p.frame}"/><path d="M7 14h9"/></svg>`;
-    default: return `${open(` stroke="${p.ink2}"`)}<path d="M3 3h22v22H3zM3 14h22M14 3v22"/></svg>`;
+    default:
+      // A world layer: its map glyph, bare.
+      if (isWorldKey(key)) return `${open(` stroke="${worldAccent(p, key)}"`)}${worldMarkup(p, key)}</svg>`;
+      return `${open(` stroke="${p.ink2}"`)}<path d="M3 3h22v22H3zM3 14h22M14 3v22"/></svg>`;
   }
+}
+
+const WORLD_KEYS = new Set(["bunkers", "wrecks", "infected", "animals", "spawns", "contaminated"]);
+function isWorldKey(key: string): boolean {
+  return WORLD_KEYS.has(key) || key.startsWith("event:") || key.startsWith("loot:");
 }
 
 /**

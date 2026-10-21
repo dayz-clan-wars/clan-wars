@@ -13,7 +13,7 @@ describe("markerTitle", () => {
     expect(markerTitle.clanmate("Bob", "3 h ago")).toBe("Bob, clanmate, 3 h ago");
     expect(markerTitle.intruder("Stranger", 42.4, "just now")).toBe("Stranger, intruder, 42 m from your base, just now");
     expect(markerTitle.bounty("Wanted1", "2 min ago")).toBe("Wanted1, wanted, 2 min ago");
-    expect(markerTitle.pin("Loot", X, Z, "yesterday")).toBe("Loot pin, grid 043 087, yesterday");
+    expect(markerTitle.pin("Loot", X, Z, "yesterday")).toBe("Loot pin, grid 043 076, yesterday");
   });
 
   /**
@@ -22,7 +22,7 @@ describe("markerTitle", () => {
    */
   it("speaks grid refs, never a metre coordinate", () => {
     for (const t of [markerTitle.base(X, Z, 100), markerTitle.pin("Loot", X, Z, "3 h ago"), markerTitle.publicBase(X, Z)]) {
-      expect(t).toContain("grid 043 087");
+      expect(t).toContain("grid 043 076");
       expect(t).not.toMatch(/4321|8765/u);
     }
   });
@@ -32,8 +32,8 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   const draw = readFileSync(join(MAP, "map-draw.ts"), "utf8");
   const markers = draw.match(/L\.marker\([\s\S]*?\}\)/gu) ?? [];
 
-  it("finds all eight marker calls", () => {
-    expect(markers).toHaveLength(8);
+  it("finds all ten marker calls", () => {
+    expect(markers).toHaveLength(10);
   });
 
   it.each(markers)("%s", (call) => {
@@ -48,6 +48,19 @@ describe("every marker a player can open is reachable by keyboard and named", ()
     if (call.includes("markerTitle.publicBase")) {
       expect(call).toContain("keyboard: false");
       expect(call).toContain("title: markerTitle.publicBase(");
+      return;
+    }
+    // World markers open a popup but a view can hold hundreds of them: as tab stops
+    // they buried the player's own markers. Named from the static data, for hover and browse mode.
+    if (call.includes("WORLD_PANE")) {
+      expect(call).toContain("keyboard: false");
+      expect(call).toContain("title: item.title");
+      return;
+    }
+    // The search reticle: one at a time, opens the GPS card, named by its GPS.
+    if (call.includes("RETICLE_SVG")) {
+      expect(call).toContain("keyboard: true");
+      expect(call).toContain("title: `GPS ");
       return;
     }
     expect(call).toContain("keyboard: true");

@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { CANVAS_PX, MAX_ZOOM, worldToPixel, worldToLatLng, latLngToWorld, gridRef, gridRefKey, parseGridRef } from "../lib/map-projection";
+import { CANVAS_PX, MAX_ZOOM, worldToPixel, worldToLatLng, latLngToWorld, gridRef, gridRefKey, parseGridRef, parseCoordQuery, COORD_HINT } from "../lib/map-projection";
 
 /**
  * ⚠️ The whole map hangs off these four functions. A sign error here does not
@@ -53,31 +53,62 @@ describe("latLngToWorld", () => {
   });
 });
 
-describe("gridRef", () => {
-  it("is metres over 100, truncated, zero-padded — what players say out loud", () => {
-    expect(gridRef(6712, 2399)).toBe("067 023");
+// The GPS cases are the real Nasdara world (WORLD_SIZE_M); the projection tests above use a 12800 m fixture.
+const GPS_SIZE = 16384;
+
+describe("gridRef (in-game GPS: second number counts down from the north edge)", () => {
+  it("is metres over 100, z flipped, zero-padded", () => {
+    expect(gridRef(7216, 5706, GPS_SIZE)).toBe("072 106"); // (16384-5706)/100 = 106.78
+    expect(gridRef(0, GPS_SIZE, GPS_SIZE)).toBe("000 000"); // top-left is 000 000
+    expect(gridRef(0, 87, GPS_SIZE)).toBe("000 162");
   });
 
-  it("pads short cells to three digits", () => {
-    expect(gridRef(0, 0)).toBe("000 000");
-    expect(gridRef(999, 12799)).toBe("009 127");
+  it("defaults to the world size", () => {
+    expect(gridRef(7216, 5706)).toBe("072 106");
   });
 
-  it("clamps negatives rather than printing a minus sign", () => {
-    // Panning past the world's edge is ordinary; a "-01 -02" readout is not.
-    expect(gridRef(-5, -1200)).toBe("000 000");
+  it("clamps outside the world rather than printing a minus sign", () => {
+    expect(gridRef(-5, GPS_SIZE + 50, GPS_SIZE)).toBe("000 000");
   });
 });
 
 describe("grid refs both ways", () => {
   it("keys drop the space and parse back to the cell's centre", () => {
-    expect(gridRefKey(4321, 8765)).toBe("043087");
-    expect(parseGridRef("043087", SIZE)).toEqual({ x: 4350, z: 8750 });
+    expect(gridRefKey(7216, 5706, GPS_SIZE)).toBe("072106");
+    expect(parseGridRef("072106", GPS_SIZE)).toEqual({ x: 7250, z: 16384 - 10650 });
   });
   it("refuses anything that is not six digits inside the world", () => {
-    expect(parseGridRef("43087", SIZE)).toBeNull();
-    expect(parseGridRef("999999", SIZE)).toBeNull();
-    expect(parseGridRef(null, SIZE)).toBeNull();
-    expect(parseGridRef("04308a", SIZE)).toBeNull();
+    expect(parseGridRef("164000", GPS_SIZE)).toBeNull();
+    expect(parseGridRef("43087", GPS_SIZE)).toBeNull();
+    expect(parseGridRef(null, GPS_SIZE)).toBeNull();
+    expect(parseGridRef("04308a", GPS_SIZE)).toBeNull();
+  });
+});
+
+describe("parseCoordQuery", () => {
+  it("reads GPS cells", () => {
+    expect(parseCoordQuery("072 087", GPS_SIZE)).toEqual({ kind: "gps", x: 7250, z: 16384 - 8750 });
+    expect(parseCoordQuery("072/087", GPS_SIZE)?.kind).toBe("gps");
+    expect(parseCoordQuery("072,087", GPS_SIZE)?.kind).toBe("gps");
+    expect(parseCoordQuery("100 150", GPS_SIZE)?.kind).toBe("gps"); // digit count decides, not value
+    expect(parseCoordQuery("000 163", GPS_SIZE)).toEqual({ kind: "gps", x: 50, z: 34 });
+    expect(parseCoordQuery("163 000", GPS_SIZE)?.kind).toBe("gps");
+  });
+  it("reads metres", () => {
+    expect(parseCoordQuery("7216 5706", GPS_SIZE)).toEqual({ kind: "metres", x: 7216, z: 5706 });
+    expect(parseCoordQuery("0100 0200", GPS_SIZE)).toEqual({ kind: "metres", x: 100, z: 200 });
+  });
+  it("refuses numbers it cannot place, with a hint", () => {
+    const bad = { kind: "bad", hint: COORD_HINT };
+    expect(parseCoordQuery("164 000", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("100 200", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("000 164", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("20000 100", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("12 34", GPS_SIZE)).toEqual(bad);
+    expect(parseCoordQuery("072 7216", GPS_SIZE)).toEqual(bad);
+  });
+  it("leaves names to the name search", () => {
+    expect(parseCoordQuery("No Abad", GPS_SIZE)).toBeNull();
+    expect(parseCoordQuery("072", GPS_SIZE)).toBeNull();
   });
 });

@@ -8,13 +8,13 @@ import { PinSheet } from "../app/(site)/map/pin-sheet";
 import { PIN_FOLLOW, PIN_SHEET_COPY } from "../lib/map-copy";
 import type { Palette } from "../lib/map-icons";
 
-const pal: Palette = { gold: "#d9a03c", ink: "#e8e2d4", ink2: "#b5afa4", rust2: "#d4623a", olive: "#8fa36a", frame: "#0b0b0a", rule2: "#2a2825" };
+const pal: Palette = { gold: "#d9a03c", ink: "#e8e2d4", ink2: "#b5afa4", rust2: "#d4623a", olive: "#8fa36a", frame: "#0b0b0a", rule2: "#2a2825", military: "#e0457b" };
 const render = (follow: boolean) =>
   renderToStaticMarkup(createElement(PinSheet, { draft: { x: 4321, z: 8765, follow }, pal, onCancel: () => {}, insetRef: () => {} }));
 
 describe("PinSheet", () => {
   it("is a form named for the grid square it drops on", () => {
-    expect(render(false)).toContain('aria-label="Drop a pin at grid 043 087"');
+    expect(render(false)).toContain('aria-label="Drop a pin at grid 043 076"');
   });
 
   it("labels the note with a real label, not a placeholder alone", () => {

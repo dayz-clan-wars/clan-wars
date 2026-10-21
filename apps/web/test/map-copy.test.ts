@@ -23,7 +23,7 @@ describe("the pin icons all have words and a glyph", () => {
     expect(Object.keys(PIN_GLYPHS).sort()).toEqual([...PIN_ICONS].sort());
   });
 
-  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust2: "RUST2", olive: "OLIVE", frame: "FRAME", rule2: "RULE2" };
+  const p: Palette = { gold: "GOLD", ink: "INK", ink2: "INK2", rust2: "RUST2", olive: "OLIVE", frame: "FRAME", rule2: "RULE2", military: "MILITARY" };
 
   it("fills every placeholder — no {a}, {f} or {i} reaches the map", () => {
     for (const icon of PIN_ICONS) {

@@ -15,6 +15,137 @@ export const LAYER_LABELS = {
   publicBases: "Public bases", pins: "Pins", travel: "Travel points", places: "Place names", terrain: "Terrain",
 } as const;
 
+/**
+ * The world layers' section headings, in panel order. Names follow iZurvive's,
+ * so a player moving over finds things where they expect them.
+ */
+export const WORLD_GROUPS = ["Bunkers", "Vehicles", "Crash sites", "Loot buildings", "Wrecks", "World"] as const;
+export type WorldGroup = (typeof WORLD_GROUPS)[number];
+
+/**
+ * What each cfgeventspawns event is called on the map, and where it sits. An
+ * event missing here still gets a World toggle under its raw name, and
+ * test/world-layers.test.ts lists the mission's events so a new one is noticed.
+ * Order within a group is the panel's order.
+ */
+export const EVENT_LAYERS: Record<string, { group: WorldGroup; label: string }> = {
+  StaticWaterTruck: { group: "Vehicles", label: "Water truck" },
+  VehicleTruck01: { group: "Vehicles", label: "Truck" },
+  VehicleCivilianSedan: { group: "Vehicles", label: "Olga" },
+  VehicleHatchback02: { group: "Vehicles", label: "Gunter" },
+  VehicleSedan02: { group: "Vehicles", label: "Sarka" },
+  VehicleOffroadHatchback: { group: "Vehicles", label: "Ada" },
+  VehicleOffroad02: { group: "Vehicles", label: "Hummer" },
+  VehicleMotorbike: { group: "Vehicles", label: "Motorbike" },
+  StaticHeliCrash: { group: "Crash sites", label: "Heli crash" },
+  StaticHeliCrashBig: { group: "Crash sites", label: "Chinook crash" },
+  StaticMilitaryConvoy: { group: "Crash sites", label: "Military convoy" },
+  StaticPoliceCar: { group: "Crash sites", label: "Police car" },
+  StaticContainerLocked: { group: "Crash sites", label: "Locked container" },
+  ItemBricks: { group: "World", label: "Bricks" },
+  TrajectoryFig: { group: "World", label: "Fig trees" },
+  Loot: { group: "World", label: "Loot piles" },
+};
+
+/** The world layers that are not one event or one loot group. */
+export const WORLD_LABELS = {
+  bunkers: "Bunkers",
+  wrecks: "Wrecks",
+  infected: "Infected",
+  animals: "Animals",
+  spawns: "Player spawns",
+  contaminated: "Contaminated areas",
+} as const;
+
+/** The world section's own lines in the layers panel. */
+export const WORLD_COPY = {
+  failed: "World layers could not load.",
+  retry: "Try again",
+  zoom: "Bunkers and contaminated areas show at every zoom. The rest show once you zoom in.",
+  tiers: "Tiers",
+} as const;
+
+/** The search box (map-search.tsx). Tab names follow iZurvive's, like the world groups. */
+export const SEARCH_COPY = {
+  label: "Search the map",
+  placeholder: "Place, item, bunker or GPS",
+  tabs: { locations: "Locations", items: "Items", models: "Models" },
+  bunker: "Bunker",
+  goTo: "Go to",
+  none: "Nothing on the map by that name.",
+  pinIt: "Pin it",
+} as const;
+
+/**
+ * The item view (item-panel.tsx, lib/item-view.ts): where a searched item can be found.
+ * ⚠️ `none` is the one line a player acts on without checking, so lib/item-view.ts gives it
+ * only when nothing at all places the item (item-index.ts spawnsAnywhere). An item that does
+ * spawn, just not at a spot the map can draw (soda cans, crafted rags), gets `noSpot` instead.
+ */
+export const ITEM_COPY = {
+  chip: (label: string) => `Showing where ${label} spawns`,
+  // A searched building or object: every placement, not a spawn, so "where … spawns" would be wrong.
+  modelChip: (label: string) => `Showing every ${label}`,
+  placed: (n: number) => (n === 1 ? "1 placed." : `${n.toLocaleString("en-US")} placed.`),
+  clear: "Clear",
+  onMap: "On the map",
+  spots: (n: number) => (n === 1 ? "1 spot." : `${n.toLocaleString("en-US")} spots.`),
+  zoomIn: "Zoom in to see them.",
+  where: "Where",
+  noSpot: "Spawns, but not at a spot we can show on the map.",
+  none: "Does not spawn on this server.",
+  loading: "Loading items…",
+  failed: "Items could not load. Try again.",
+  howMany: "How many",
+  upTo: (nominal: number) => `Up to ${nominal} on the server at once.`,
+  restock: (min: number) => `More spawn when fewer than ${min} are left.`,
+  foundIn: "Found in",
+  tiers: "Tiers",
+  anyTier: "Any tier",
+  crashLabel: "Crash sites",
+  // Only before world.json is in; after, the line names the events whose wrecks hold the item.
+  crash: "Spawns in the wrecks at crash sites.",
+  events: "Events",
+  proxyLabel: "Fixed spots",
+  proxy: "Sits fixed on some wrecks and buildings.",
+  comesOn: "Comes on",
+  more: (n: number) => ` and ${n} more`,
+  spawnGearLabel: "Spawn gear",
+  spawnGear: "Some fresh spawns start with it.",
+  clanWarsLabel: "Clan Wars",
+  clanWars: {
+    "supply kit": "In the build supplies at a clan's flag.",
+    "booster kit": "A booster kit pick.",
+    award: "Given as an award.",
+    "KotH loadout": "In a King of the Hill loadout.",
+  },
+} as const;
+
+/** The item card (lib/item-cards.ts): what the item is, from the game's own files. */
+export const CARD_COPY = {
+  weight: "Weight",
+  size: "Size",
+  attachments: "Attachments",
+  magazines: "Magazines",
+  ammo: "Ammo",
+} as const;
+
+/** The ruler (map-ruler.tsx, lib/map-ruler.ts). */
+export const RULER_COPY = {
+  label: "Ruler",
+  clear: "Clear",
+  start: "Click or tap the map to start measuring.",
+  next: "Click or tap to add the next point.",
+} as const;
+
+/** The readout (bottom bar): tap to copy. A refused clipboard says nothing. */
+export const READOUT_COPY = { copy: "Copy", copied: "Copied" } as const;
+
+/** "Tier1" → "Tier 1". "Unique" stays as it is. */
+export function tierLabel(name: string): string {
+  return name.replace(/^Tier(\d)$/u, "Tier $1");
+}
+
 /** Why a switch is missing from the layers panel (App Review §03): what would put the layer there. */
 export const LAYER_REASONS: Record<"base" | "clanmates" | "intruders" | "pins", string> = {
   base: "declare a base", clanmates: "join a clan", intruders: "declare a base", pins: "join a clan",

@@ -1,0 +1,8 @@
+{
+	"Areas": [
+		{ "AreaName": "Tunnel1", "Type": "ContaminatedArea_Static",
+			"Data": { "Pos": [ 5507, 247, 5634 ], "Radius": 75, "PosHeight": 5 } },
+		{ "AreaName": "Tunnel2", "Type": "ContaminatedArea_Static",
+			"Data": { "Pos": [ 6000, 100, 7000 ], "Radius": 40 } }
+	]
+}

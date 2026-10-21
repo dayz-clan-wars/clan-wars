@@ -1,13 +1,15 @@
 import type * as L from "leaflet";
 import type { PinIcon } from "@factions/domain";
 import { CANVAS_PX, MAX_ZOOM, gridRef, gridRefKey, worldToLatLng } from "@/lib/map-projection";
-import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge } from "@/lib/map-copy";
+import { DIM_AFTER_MS, PIN_ICON_LABELS, SEARCH_COPY, expiresIn, fixAge, tierLabel } from "@/lib/map-copy";
+import { rulerSummary, type RulerPoint } from "@/lib/map-ruler";
+import { ALWAYS_DRAWN, LOOT_MIN_ZOOM, WORLD_MIN_ZOOM, isDense, type WorldItem } from "@/lib/world-layers";
 import { markerTitle } from "@/lib/map-labels";
 import { markerKey } from "@/lib/map-roster";
 import { popupOptions } from "@/lib/map-motion";
 import {
   AGE_OPACITY, ICON, type AgeStep, type Palette, ageStep,
-  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, youIcon,
+  baseIcon, bountyIcon, clanmateIcon, intruderIcon, pinGlyph, pinIcon, publicBaseIcon, travelIcon, worldAccent, worldIcon, youIcon,
 } from "@/lib/map-icons";
 
 /**
@@ -88,6 +90,7 @@ export const COLOURS = {
   /** Rust for a mark (3:1 on the frame). --color-rust is edges only; the map draws no edge in it. */
   rust2: () => token("--color-rust-2", "#d4623a"),
   olive: () => token("--color-olive", "#8fa36a"),
+  military: () => token("--color-military", "#e0457b"),
   muted: () => token("--color-muted", "#8a857c"),
   /** Every marker's ground: the one value the terrain never uses. */
   frame: () => token("--color-frame", "#0b0b0a"),
@@ -96,7 +99,7 @@ export const COLOURS = {
 
 /** The marker builders' palette, read once per draw. */
 export function palette(): Palette {
-  return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust2: COLOURS.rust2(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2() };
+  return { gold: COLOURS.gold(), ink: COLOURS.ink(), ink2: COLOURS.ink2(), rust2: COLOURS.rust2(), olive: COLOURS.olive(), frame: COLOURS.frame(), rule2: COLOURS.rule2(), military: COLOURS.military() };
 }
 
 /** Leaflet's own pane sits at 400; travel points go under everything else at 350. */
@@ -438,11 +441,208 @@ export function travelView(m: L.Map): L.LatLngBounds | null {
   return m.getZoom() >= TRAVEL_MIN_ZOOM ? m.getBounds().pad(TRAVEL_VIEW_PAD) : null;
 }
 
-/** A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in. */
+/**
+ * A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in.
+ * ⚠️ Horizontals run at z = size − k·1000, not k·1000: the GPS counts rows down
+ * from the north edge, and a grid anchored at the south edge would be drawn
+ * offset from the cells the readout names whenever size is not a multiple of 1000.
+ */
 export function drawGrid(L: typeof import("leaflet"), group: L.LayerGroup, pt: (x: number, z: number) => L.LatLng, size: number): void {
   const style = { color: COLOURS.frame(), weight: 1, opacity: 0.25, interactive: false } as const;
   for (let v = 0; v <= size; v += 1000) {
     L.polyline([pt(v, 0), pt(v, size)], style).addTo(group);
-    L.polyline([pt(0, v), pt(size, v)], style).addTo(group);
+    L.polyline([pt(0, size - v), pt(size, size - v)], style).addTo(group);
   }
+}
+
+/** The world layers' pane: under the travel points (350), the place names (360) and every player marker. */
+export const WORLD_PANE = "world";
+/**
+ * How far past the visible edge world markers are drawn. Smaller than the travel pad:
+ * the loot layers are the densest thing on the map, and every 10% of pad on each side
+ * is ~44% more area to fill with DOM markers.
+ */
+export const WORLD_VIEW_PAD = 0.1;
+
+/** Where to draw world markers, and whether the dense layers are in yet; null below WORLD_MIN_ZOOM. */
+export type WorldView = { bounds: L.LatLngBounds; dense: boolean };
+
+/** The bounds to draw world markers in, or null below WORLD_MIN_ZOOM (Review Focus 5: a zoomed-out phone draws none). */
+export function worldView(m: L.Map): WorldView | null {
+  const zoom = m.getZoom();
+  return zoom >= WORLD_MIN_ZOOM ? { bounds: m.getBounds().pad(WORLD_VIEW_PAD), dense: zoom >= LOOT_MIN_ZOOM } : null;
+}
+
+/** What drawWorld has on the map, by item id: kept between calls so a redraw only adds and removes the difference. */
+export type WorldDrawn = Map<string, { key: string; layer: L.Layer }>;
+
+/**
+ * A world marker's popup.
+ *
+ * ⚠️ This is the one popup on the map that DOES print coordinates, and that is not a
+ * breach of the rule at the top of this file. That rule protects players: a clanmate's
+ * or a base's numbers are what someone pastes into another clan's Discord. A bunker,
+ * a heli-crash spawn or a barracks is static mission data that iZurvive already
+ * publishes for every server; its GPS and metres are what a player types into the
+ * search box or reads off their in-game GPS. Nothing here comes from the database.
+ */
+export function worldPopup(item: WorldItem, size: number): string {
+  const line = (text: string) => `<p class="m-0 pt-1 font-mono text-[11px] text-muted">${text}</p>`;
+  return `<div class="${POPUP_TEXT}">` +
+    `<p class="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink">${escapeHtml(item.title)}</p>` +
+    line(`GPS ${gridRef(item.x, item.z, size)} · metres ${Math.round(item.x)} ${Math.round(item.z)}`) +
+    (item.radius !== undefined ? line(`Radius ${Math.round(item.radius)} m`) : "") +
+    (item.tiers?.length ? line(`Tier: ${escapeHtml(item.tiers.map(tierLabel).join(", "))}`) : "") +
+    (item.usage?.length ? line(`Loot: ${escapeHtml(item.usage.join(", "))}`) : "") +
+  `</div>`;
+}
+
+/**
+ * Put the world items that belong on screen into their layers' groups, and take off
+ * the ones that no longer do. Bunkers and contaminated circles are drawn whatever the
+ * view; everything else only inside `view`, and the loot buildings and wrecks only
+ * once `view.dense`.
+ *
+ * ⚠️ A reconciler, not clear-and-redraw. It runs on every moveend, and opening a
+ * popup near the edge pans the map, which fires moveend: clearing the groups there
+ * removed the very marker whose popup was opening and closed it at once. A marker
+ * still wanted is left alone, so its popup stays open; it also means a short pan
+ * creates only the markers that just came into range.
+ */
+export function drawWorld(
+  { L, group, pt, p, size }: { L: typeof import("leaflet"); group: (key: string) => L.LayerGroup; pt: (x: number, z: number) => L.LatLng; p: Palette; size: number },
+  items: readonly WorldItem[],
+  view: WorldView | null,
+  drawn: WorldDrawn,
+): void {
+  const icons = new Map<string, L.DivIcon>();
+  const iconFor = (key: string) => {
+    let icon = icons.get(key);
+    if (!icon) {
+      icon = chipIcon(L, worldIcon(p, key), ICON.world, "cw-mk-world");
+      icons.set(key, icon);
+    }
+    return icon;
+  };
+  const want = new Set<string>();
+  for (const item of items) {
+    const always = ALWAYS_DRAWN.has(item.key);
+    if (!always && (view === null || (isDense(item.key) && !view.dense))) continue;
+    const at = pt(item.x, item.z);
+    if (!always && !view!.bounds.contains(at)) continue;
+    want.add(item.id);
+    const had = drawn.get(item.id);
+    if (had?.key === item.key) continue;
+    // Same building, new owner: a loot layer above it in LOOT_GROUPS order was switched on or off.
+    if (had) group(had.key).removeLayer(had.layer);
+    const popup = () => worldPopup(item, size);
+    let layer: L.Layer;
+    if (item.radius !== undefined) {
+      // Metres to latlng units, as drawBase does for the watch zone.
+      const radius = (item.radius * (CANVAS_PX / size)) / 2 ** MAX_ZOOM;
+      const colour = worldAccent(p, item.key);
+      layer = L.circle(at, { pane: WORLD_PANE, radius, color: colour, weight: 2, dashArray: "4 4", fillColor: colour, fillOpacity: 0.12 })
+        .bindPopup(popup, popupOptions(POPUP));
+    } else {
+      // Not a tab stop: a view can hold hundreds, and Tab would wade through every
+      // roof before reaching the player's own markers. The title serves hover and browse mode.
+      const marker = L.marker(at, { pane: WORLD_PANE, icon: iconFor(item.key), keyboard: false, title: item.title })
+        .bindPopup(popup, popupOptions(POPUP));
+      markOpen(marker);
+      layer = marker;
+    }
+    layer.addTo(group(item.key));
+    drawn.set(item.id, { key: item.key, layer });
+  }
+  for (const [id, d] of drawn) {
+    if (want.has(id)) continue;
+    group(d.key).removeLayer(d.layer);
+    drawn.delete(id);
+  }
+}
+
+/**
+ * The search box's coordinate popup: the GPS, the metres, and Pin it.
+ *
+ * Coordinates again, and allowed for the same reason as `worldPopup`: this is the
+ * point the player typed into the search box, not anyone's position. Pin it carries
+ * `data-pin-it`; map-view.tsx listens for it on the map's element (Leaflet builds the
+ * popup's DOM) and opens the ordinary pin sheet on the point.
+ */
+export function reticlePopup(at: { x: number; z: number }, size: number, canPin: boolean): string {
+  const x = Math.round(at.x), z = Math.round(at.z);
+  return `<div class="${POPUP_TEXT}">` +
+    `<p class="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink">GPS ${gridRef(x, z, size)}</p>` +
+    `<p class="m-0 pt-1 font-mono text-[11px] text-muted">Metres ${x}, ${z}</p>` +
+    (canPin
+      ? `<button type="button" data-pin-it data-x="${x}" data-z="${z}" class="mt-2 flex min-h-[44px] items-center border-2 border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold hover:bg-gold hover:text-ground">${SEARCH_COPY.pinIt}</button>`
+      : "") +
+  `</div>`;
+}
+
+/** The searched point's mark: the "you" reticle's shape, so it reads as "here", in gold. */
+const RETICLE_SVG = (gold: string) =>
+  `<svg width="32" height="32" viewBox="0 0 28 28" fill="none" stroke="${gold}" stroke-width="2" stroke-linecap="square" aria-hidden="true">` +
+  `<circle cx="14" cy="14" r="8.5"/><path d="M14 1v7M14 20v7M1 14h7M20 14h7"/></svg>`;
+
+/**
+ * Drop the search reticle on a point, replacing the last one, and return it so the
+ * caller can open its popup once the view has moved. Local to the page: nothing saved.
+ */
+export function drawReticle(
+  { L, group, pt, p, size }: { L: typeof import("leaflet"); group: L.LayerGroup; pt: (x: number, z: number) => L.LatLng; p: Palette; size: number },
+  at: { x: number; z: number },
+  canPin: boolean,
+): L.Marker {
+  group.clearLayers();
+  const marker = L.marker(pt(at.x, at.z), {
+    keyboard: true,
+    title: `GPS ${gridRef(at.x, at.z, size)}`,
+    icon: L.divIcon({ className: "cw-mk", html: RETICLE_SVG(p.gold), iconSize: [32, 32], iconAnchor: [16, 16] }),
+  }).bindPopup(() => reticlePopup(at, size, canPin), popupOptions(POPUP));
+  markOpen(marker);
+  marker.addTo(group);
+  return marker;
+}
+
+/** On the map's container while the ruler is on: map.css lets clicks through the world pane. */
+export const RULER_CLASS = "cw-ruler-on";
+
+/**
+ * The map's own behaviour while the ruler is on. ⚠️ Double-click zoom goes off, since two quick
+ * points are a double click and zoomed the map mid-measure; and the world markers stop taking
+ * clicks (RULER_CLASS), since a click on a bunker or a loot building opened its popup and added
+ * no point. Both come back when the ruler goes off.
+ */
+export function setRulerMode(
+  m: { doubleClickZoom: { enable(): unknown; disable(): unknown }; getContainer(): { classList: { toggle(c: string, on: boolean): unknown } } },
+  on: boolean,
+): void {
+  if (on) m.doubleClickZoom.disable();
+  else m.doubleClickZoom.enable();
+  m.getContainer().classList.toggle(RULER_CLASS, on);
+}
+
+/**
+ * The ruler's line, a dot on every point, and the total with the last leg's bearing
+ * beside the last point. Rebuilt whole on every click: a ruler is a handful of points.
+ * Distances and bearings only — no coordinate is written (the rule at the top).
+ */
+export function drawRuler(
+  L: typeof import("leaflet"),
+  group: L.LayerGroup,
+  pt: (x: number, z: number) => L.LatLng,
+  points: readonly RulerPoint[],
+  colour: string,
+): void {
+  group.clearLayers();
+  if (points.length === 0) return;
+  const at = points.map((q) => pt(q.x, q.z));
+  // Not interactive: a click on the line must land on the map and add a point, not stop at the line.
+  if (at.length > 1) L.polyline(at, { color: colour, weight: 3, dashArray: "8 6", interactive: false }).addTo(group);
+  at.forEach((a, i) => {
+    const dot = L.circleMarker(a, { radius: 5, color: colour, weight: 2, fillColor: colour, fillOpacity: 1, interactive: false });
+    if (i === at.length - 1 && at.length > 1) dot.bindTooltip(rulerSummary(points), { permanent: true, direction: "right", className: TAG, opacity: 1 });
+    dot.addTo(group);
+  });
 }

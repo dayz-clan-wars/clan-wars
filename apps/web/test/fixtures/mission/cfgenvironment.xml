@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<env>
+	<!-- Cut from nasdara cfgenvironment.xml: hare and zombie ship, cattle is empty, fox is listed but has no file. -->
+	<territories>
+		<file path="env/cattle_territories.xml" />
+		<file path="env/hare_territories.xml" />
+		<file path="env/fox_territories.xml" />
+		<file path="env/zombie_territories.xml" />
+		<territory type="Ambient" name="AmbientHare" behavior="DZAmbientLifeGroupBeh">
+			<file usable="hare_territories" />
+		</territory>
+	</territories>
+</env>

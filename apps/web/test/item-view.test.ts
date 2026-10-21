@@ -1,0 +1,273 @@
+import { describe, it, expect } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { parseLimits } from "../lib/area-flags";
+import { parseTypes, type ItemIndexEntry } from "../lib/item-index";
+import { CARD_COPY, ITEM_COPY } from "../lib/map-copy";
+import type { ItemCard } from "../lib/item-cards";
+import type { WorldSwitches } from "../lib/world-layers";
+import { clearItem, itemCardView, itemPanel, modelPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "../lib/item-view";
+import { ItemCardView, ItemPanel } from "../app/(site)/map/item-panel";
+
+const limits = parseLimits(readFileSync(join(__dirname, "fixtures/mission/cfglimitsdefinition.xml"), "utf8"));
+const entries = parseTypes(readFileSync(join(__dirname, "fixtures/items/types.xml"), "utf8"), limits);
+const entry = (n: string): ItemIndexEntry => ({ ...entries.find((i) => i.className === n)! });
+const pt = (x: number) => ({ x, z: x, title: "Loot building" });
+
+const before: WorldSwitches = { on: { bunkers: true, "loot:military": true, "event:StaticHeliCrash": false, wrecks: true }, tiers: 0b10110 };
+const start: WorldState = { sw: before, view: null };
+
+describe("the item view's switches", () => {
+  it("hides every world layer on a pick and keeps the tiers", () => {
+    const s = pickItem(start, { className: "M4A1", label: "M4A1" });
+    expect(Object.values(s.sw.on).every((v) => v === false)).toBe(true);
+    expect(Object.keys(s.sw.on)).toEqual(Object.keys(before.on));
+    expect(s.view).toMatchObject({ className: "M4A1", label: "M4A1" });
+  });
+
+  it("⚠️ Clear restores every switch exactly as it was before the pick", () => {
+    const s = clearItem(pickItem(start, { className: "M4A1", label: "M4A1" }));
+    expect(s).toEqual(start);
+    expect(s.sw).toBe(before);
+  });
+
+  it("⚠️ a second pick while one is shown keeps the ORIGINAL switches for Clear, not the all-off ones", () => {
+    const one = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const two = pickItem(one, { className: "Rag", label: "Rag" });
+    expect(two.view?.className).toBe("Rag");
+    expect(clearItem(two)).toEqual(start);
+  });
+
+  it("does nothing on Clear with no item shown", () => {
+    expect(clearItem(start)).toBe(start);
+  });
+
+  it("⚠️ a switch clicked during the view turns that layer ON, even one that was on before the pick", () => {
+    // Every switch reads off during the view, so a click means "show me this one": flipping
+    // the saved value would turn Military (on before the pick) off.
+    const shown = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const s = toggleWorldLayer(shown, "loot:military");
+    expect(s.view).toBeNull();
+    expect(s.sw.on).toEqual(before.on);
+    expect(s.sw.on["loot:military"]).toBe(true);
+    // Outside the view a click still flips.
+    expect(toggleWorldLayer(s, "loot:military").sw.on["loot:military"]).toBe(false);
+  });
+
+  it("a switch flipped while an item is shown ends the item view, from the switches as they were", () => {
+    const shown = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const s = toggleWorldLayer(shown, "event:StaticHeliCrash");
+    expect(s.view).toBeNull();
+    expect(s.sw.on).toEqual({ ...before.on, "event:StaticHeliCrash": true });
+    const t = toggleWorldTier(shown, 0b10);
+    expect(t.view).toBeNull();
+    expect(t.sw).toEqual({ on: before.on, tiers: 0b10100 });
+  });
+});
+
+const text = (m: ReturnType<typeof itemPanel>) => m.lines.map((l) => `${l.label}: ${l.text}`);
+
+describe("itemPanel", () => {
+  it("names the item in the chip", () => {
+    expect(itemPanel(entry("M4A1"), "M4A1", [pt(1)], limits).chip).toBe("Showing where M4A1 spawns");
+  });
+
+  it("explains M4A1: spots, how many, where and which tier", () => {
+    const lines = text(itemPanel(entry("M4A1"), "M4A1", [pt(1), pt(2)], limits));
+    expect(lines).toEqual([
+      "On the map: 2 spots.",
+      "How many: Up to 4 on the server at once. More spawn when fewer than 3 are left.",
+      "Found in: Contaminated area",
+      "Tiers: Unique",
+    ]);
+  });
+
+  it("asks to zoom in only while the map is zoomed out", () => {
+    const many = Array.from({ length: 300 }, (_, i) => pt(i));
+    expect(itemPanel(entry("TunaCan"), "TunaCan", many, limits, { delootAt: null, zoomedIn: true }).lines[0]!.text).toBe("300 spots.");
+  });
+
+  it("names the events whose wrecks hold deloot, or none when no wreck fits", () => {
+    const pp19 = entry("PP19");
+    expect(text(itemPanel(pp19, "PP19", [pt(1)], limits, { delootAt: ["StaticPoliceCar"], zoomedIn: false }))).toContain("Crash sites: Police car");
+    const none = itemPanel(pp19, "PP19", [], limits, { delootAt: [], zoomedIn: false });
+    expect(none.lines.some((l) => l.label === ITEM_COPY.crashLabel)).toBe(false);
+    expect(none.lines[0]!.text).toBe(ITEM_COPY.noSpot);
+  });
+
+  it("says when there are too many spots to show zoomed out", () => {
+    const many = Array.from({ length: 300 }, (_, i) => pt(i));
+    expect(itemPanel(entry("TunaCan"), "TunaCan", many, limits).lines[0]!.text).toBe("300 spots. Zoom in to see them.");
+    expect(itemPanel(entry("TunaCan"), "TunaCan", many, limits).lines.find((l) => l.label === ITEM_COPY.tiers)?.text).toBe(ITEM_COPY.anyTier);
+  });
+
+  it("⚠️ never says \"does not spawn\" for an item that spawns with no spot to show (a soda can, a flashlight)", () => {
+    const m = itemPanel(entry("Flashlight"), "Flashlight", [], limits);
+    const all = text(m).join("\n");
+    expect(all).not.toContain(ITEM_COPY.none);
+    expect(m.lines[0]!.text).toBe(ITEM_COPY.noSpot);
+    expect(all).not.toContain("Found in");
+  });
+
+  it("says \"does not spawn\" only when nothing at all places the item", () => {
+    expect(itemPanel(entry("Orphan_Item"), "Orphan_Item", [], limits).lines).toEqual([{ label: ITEM_COPY.where, text: ITEM_COPY.none }]);
+  });
+
+  it("lists the parents an attachment comes on, capped", () => {
+    const sup = entry("M4_Suppressor");
+    sup.attachedTo = ["M4A1"];
+    expect(text(itemPanel(sup, "M4_Suppressor", [], limits))).toContain("Comes on: M4A1");
+    sup.attachedTo = Array.from({ length: 10 }, (_, i) => `Gun${i}`);
+    expect(text(itemPanel(sup, "M4_Suppressor", [], limits))).toContain("Comes on: Gun0, Gun1, Gun2, Gun3, Gun4, Gun5 and 4 more");
+  });
+
+  it("names crash sites for deloot, the events, fixed spots, spawn gear and each Clan Wars source", () => {
+    const i = { ...entry("GhillieSuit_Desert"), events: ["VehicleOffroadHatchback", "InfectedArmy"], proxy: true, spawnGear: true,
+      clanWars: ["supply kit", "award"] as ItemIndexEntry["clanWars"] };
+    const lines = text(itemPanel(i, "GhillieSuit_Desert", [pt(1)], limits));
+    expect(lines).toContain(`Crash sites: ${ITEM_COPY.crash}`);
+    expect(lines).toContain("Events: Ada, Infected Army");
+    expect(lines).toContain(`Fixed spots: ${ITEM_COPY.proxy}`);
+    expect(lines).toContain(`Spawn gear: ${ITEM_COPY.spawnGear}`);
+    expect(lines).toContain(`Clan Wars: ${ITEM_COPY.clanWars["supply kit"]}`);
+    expect(lines).toContain(`Clan Wars: ${ITEM_COPY.clanWars.award}`);
+    // deloot: never building loot, so no "Found in".
+    expect(lines.some((l) => l.startsWith("Found in"))).toBe(false);
+  });
+
+  it("explains a clan flag: no spot, but the supply kit", () => {
+    const flag = { ...entry("Orphan_Item"), className: "Flag_Wolf", clanWars: ["supply kit"] as ItemIndexEntry["clanWars"] };
+    expect(text(itemPanel(flag, "Flag_Wolf", [], limits))).toEqual([`Where: ${ITEM_COPY.noSpot}`, `Clan Wars: ${ITEM_COPY.clanWars["supply kit"]}`]);
+  });
+
+  it("without the world file, skips the spots line rather than guessing", () => {
+    expect(itemPanel(entry("M4A1"), "M4A1", null, limits).lines[0]!.label).toBe(ITEM_COPY.howMany);
+  });
+});
+
+describe("ItemPanel", () => {
+  const model = itemPanel(entry("M4A1"), "M4A1", [pt(1)], limits);
+  const render = (card?: string) =>
+    renderToStaticMarkup(createElement(ItemPanel, { model, onClear: () => {}, variant: "panel", card: card ? createElement("p", null, card) : undefined }));
+
+  it("shows the chip with Clear, and the lines", () => {
+    const html = render();
+    expect(html).toContain("Showing where M4A1 spawns");
+    expect(html).toContain(">Clear<");
+    expect(html).toContain("Contaminated area");
+  });
+
+  it("has a slot for the item card", () => {
+    expect(render("CARD")).toContain("<p>CARD</p>");
+  });
+});
+
+const card = (c: Partial<ItemCard> & { className: string }): ItemCard => ({
+  displayName: c.className, description: "", weightG: null, size: null, attachments: [], magazines: [], ammo: [], image: null, ...c,
+});
+const m4 = card({
+  className: "M4A1", displayName: "M4-A1", description: "Selective-fire assault rifle.", weightG: 2276, size: [8, 3],
+  attachments: ["M4_OEBttstck", "M4_OEBttstck_Black", "ACOGOptic"], magazines: ["Mag_STANAG_30Rnd"], ammo: ["Ammo_556x45", "Ammo_556x45Tracer"],
+  image: "/items/M4A1.webp",
+});
+const cards = new Map([m4, card({ className: "M4_OEBttstck", displayName: "M4-A1 OE Buttstock" }), card({ className: "M4_OEBttstck_Black", displayName: "M4-A1 OE Buttstock" }),
+  card({ className: "Mag_STANAG_30Rnd", displayName: "30rd Standardized Mag" }), card({ className: "Ammo_556x45", displayName: "5.56x45mm Rounds" })].map((c) => [c.className, c]));
+
+describe("itemCardView", () => {
+  const v = itemCardView(m4, cards);
+
+  it("names the item, its picture, weight and size the way a player reads them", () => {
+    expect(v).toMatchObject({ title: "M4-A1", image: "/items/M4A1.webp", description: "Selective-fire assault rifle." });
+    expect(v.facts).toEqual([{ label: CARD_COPY.weight, text: "2.28 kg" }, { label: CARD_COPY.size, text: "8 × 3" }]);
+    expect(itemCardView(card({ className: "Mag", weightG: 90 }), cards).facts).toEqual([{ label: CARD_COPY.weight, text: "90 g" }]);
+  });
+
+  it("lists what fits by display name, once per name, and a class name when there is no card for it", () => {
+    expect(v.lines).toEqual([
+      { label: CARD_COPY.attachments, text: "M4-A1 OE Buttstock, ACOGOptic" },
+      { label: CARD_COPY.magazines, text: "30rd Standardized Mag" },
+      { label: CARD_COPY.ammo, text: "5.56x45mm Rounds, Ammo_556x45Tracer" },
+    ]);
+  });
+
+  it("caps a long list with \"and N more\"", () => {
+    const many = card({ className: "Vest", attachments: Array.from({ length: 12 }, (_, i) => `Pouch${i}`) });
+    expect(itemCardView(many, cards).lines[0]!.text).toBe(`Pouch0, Pouch1, Pouch2, Pouch3, Pouch4, Pouch5, Pouch6, Pouch7${ITEM_COPY.more(4)}`);
+  });
+
+  it("has no lines and no facts for an item that says nothing", () => {
+    expect(itemCardView(card({ className: "Rock" }), cards)).toMatchObject({ facts: [], lines: [] });
+  });
+
+  it("puts the card's lines after the panel's, so where it spawns stays first", () => {
+    const model = itemPanel(entry("M4A1"), "M4-A1", [pt(1)], limits);
+    const merged = withCard(model, v);
+    expect(merged.lines.slice(0, model.lines.length)).toEqual(model.lines);
+    expect(merged.lines.slice(model.lines.length)).toEqual(v.lines);
+    expect(withCard(model, null)).toBe(model);
+  });
+});
+
+describe("ItemCardView", () => {
+  const html = (variant: "panel" | "sheet", c = m4) => renderToStaticMarkup(createElement(ItemCardView, { model: itemCardView(c, cards), variant }));
+
+  it.each(["panel", "sheet"] as const)("%s: the picture, name, facts and description", (variant) => {
+    const h = html(variant);
+    expect(h).toMatch(/<img[^>]*src="\/items\/M4A1.webp"/u);
+    expect(h).toContain('alt=""'); // the name sits right beside it
+    expect(h).toContain(">M4-A1<");
+    expect(h).toContain("2.28 kg");
+    expect(h).toContain("Selective-fire assault rifle.");
+  });
+
+  it("draws no picture when there is none", () => {
+    expect(html("panel", { ...m4, image: null })).not.toContain("<img");
+  });
+});
+
+describe("the item panel on a phone", () => {
+  it("renders as the bottom sheet with the card in it, the card's lines in its one scroller", () => {
+    const model = withCard(itemPanel(entry("M4A1"), "M4-A1", [pt(1)], limits), itemCardView(m4, cards));
+    const h = renderToStaticMarkup(createElement(ItemPanel, { model, onClear: () => {}, variant: "sheet", card: createElement(ItemCardView, { model: itemCardView(m4, cards), variant: "sheet" }) }));
+    expect(h).toContain("Showing where M4-A1 spawns");
+    expect(h).toContain(">M4-A1<");
+    expect(h).toContain(CARD_COPY.attachments);
+    expect(h).toContain("max-h-[24dvh]"); // the sheet's own height, not the desktop panel's
+    expect(h).not.toContain("w-[300px]");
+    expect(h.match(/overflow-y-auto/gu)).toHaveLength(1);
+  });
+});
+
+describe("the model view", () => {
+  it("is the item view with a model pick: same save and Clear", () => {
+    const s = pickItem(start, { className: "Land_Mil_Barracks1", label: "Mil Barracks1", model: true });
+    expect(s.view).toMatchObject({ model: true, saved: before });
+    expect(clearItem(s)).toEqual(start);
+  });
+
+  it("⚠️ switching between an item and a model keeps the first pick's switches", () => {
+    const a = pickItem(start, { className: "M4A1", label: "M4A1" });
+    const b = pickItem(a, { className: "Land_Mil_Barracks1", label: "Mil Barracks1", model: true });
+    const c = pickItem(b, { className: "M4A1", label: "M4A1" });
+    expect(b.view?.saved).toBe(before);
+    expect(c.view?.model).toBeUndefined();
+    expect(clearItem(c).sw).toBe(before);
+  });
+
+  it("words the chip for a model", () => {
+    expect(ITEM_COPY.modelChip("Mil Barracks1")).toBe("Showing every Mil Barracks1");
+  });
+});
+
+describe("modelPanel", () => {
+  const pts = (n: number) => Array.from({ length: n }, (_, i) => ({ x: i, z: i, title: "t" }));
+  it("says how many are placed", () => {
+    expect(modelPanel("Mil Barracks1", pts(4))).toEqual({ chip: "Showing every Mil Barracks1", lines: [{ label: "On the map", text: "4 placed." }] });
+    expect(modelPanel("Mil Barracks1", pts(1)).lines[0]!.text).toBe("1 placed.");
+  });
+  it("leaves the count out without the world file", () => {
+    expect(modelPanel("Mil Barracks1", null).lines).toEqual([]);
+  });
+});

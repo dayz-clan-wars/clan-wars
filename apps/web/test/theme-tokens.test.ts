@@ -25,6 +25,7 @@ const TOKENS: Record<string, string> = {
   "--color-rust": "#8c3a22",
   "--color-rust-2": "#d4623a",
   "--color-olive": "#8fa36a",
+  "--color-military": "#e0457b",
   "--color-terrain": "#111110",
   "--color-ground": "#050505",
   // ⚠️ The badge colours are stated in @factions/domain (the bot's embeds read them there)

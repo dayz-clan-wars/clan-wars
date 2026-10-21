@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- On disk but not listed in cfgenvironment.xml: the game never loads it. -->
+<territory-type>
+    <territory color="2729642808">
+        <zone name="HuntingGround" smin="0" smax="0" dmin="0" dmax="0" x="8901.07" z="7709.6" r="210"/>
+    </territory>
+</territory-type>
