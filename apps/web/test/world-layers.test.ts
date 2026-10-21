@@ -139,6 +139,23 @@ describe("tiers", () => {
   });
 });
 
+describe("tiers: an untiered area", () => {
+  // 8 Nasdara props sit on an areaflags cell with no tier bit at all (t 0): no chip can select them.
+  const W0: WorldFile = { ...W, props: [...W.props, { type: 0, x: 3000, z: 3000, u: 0, t: 0 }] };
+
+  it("⚠️ passes the tier filter whatever tiers are picked: the area has no tier to filter by", () => {
+    for (const mask of [ALL_TIERS, t("Tier4"), 0]) {
+      expect(pointsFor(W0, "loot:military", mask).map((p) => p.x), String(mask)).toContain(3000);
+      expect(worldItems(W0, new Set(["loot:military"]), mask).map((i) => i.x), String(mask)).toContain(3000);
+    }
+  });
+
+  it("adds no tier chip and no tier line", () => {
+    expect(presentTiers(W0).map((p) => p.name)).toEqual(["Tier1", "Tier2", "Tier3"]);
+    expect(pointsFor(W0, "loot:military", ALL_TIERS).find((p) => p.x === 3000)!.tiers).toEqual([]);
+  });
+});
+
 describe("worldItems: overlapping loot layers", () => {
   it("draws a building that sits in two loot layers once, as Military", () => {
     const items = worldItems(W, new Set(["loot:military", "loot:town"]), ALL_TIERS);

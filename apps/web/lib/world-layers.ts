@@ -81,14 +81,21 @@ function propUsage(w: WorldFile, i: number): number | null {
   return effectiveUsage(w.protos[proto]!, prop.u);
 }
 
+/**
+ * Whether a prop passes the tier filter: any of its tier bits is picked.
+ * ⚠️ t 0 always passes. Its areaflags cell carries no tier at all (8 Nasdara props), so no chip
+ * can name it, and hiding it hid real loot buildings whatever the player picked.
+ */
+export const passesTier = (t: number, tiers: number): boolean => t === 0 || (t & tiers) !== 0;
+
 function lootMark(w: WorldFile, i: number, usage: number, title: string): WorldMark {
   const p = w.props[i]!;
   return { x: p.x, z: p.z, title, tiers: namesOf(w.limits.value, p.t), usage: namesOf(w.limits.usage, usage) };
 }
 
 /**
- * The points one layer draws. `tiers` filters loot buildings only (a building shows when
- * any of its tier bits is selected); every other layer ignores it.
+ * The points one layer draws. `tiers` filters loot buildings only (passesTier: a building
+ * shows when any of its tier bits is selected, or it has none); every other layer ignores it.
  */
 export function pointsFor(w: WorldFile, key: WorldLayerKey, tiers: number): WorldMark[] {
   if (key === "bunkers") return w.bunkers.map((b, i) => ({ x: b.x, z: b.z, title: `Bunker ${i + 1}` }));
@@ -114,7 +121,7 @@ export function pointsFor(w: WorldFile, key: WorldLayerKey, tiers: number): Worl
     const out: WorldMark[] = [];
     for (let i = 0; i < w.props.length; i++) {
       const usage = propUsage(w, i);
-      if (usage === null || (usage & mask) === 0 || (w.props[i]!.t & tiers) === 0) continue;
+      if (usage === null || (usage & mask) === 0 || !passesTier(w.props[i]!.t, tiers)) continue;
       out.push(lootMark(w, i, usage, group.label));
     }
     return out;
@@ -163,7 +170,7 @@ export function worldItems(w: WorldFile, on: ReadonlySet<WorldLayerKey>, tiers: 
   const groups = LOOT_GROUPS.filter((g) => on.has(`loot:${g.key}`)).map((g) => ({ key: `loot:${g.key}`, label: g.label, mask: lootMask(w, g.usage) }));
   if (groups.length === 0) return out;
   for (let i = 0; i < w.props.length; i++) {
-    if ((w.props[i]!.t & tiers) === 0) continue;
+    if (!passesTier(w.props[i]!.t, tiers)) continue;
     const usage = propUsage(w, i);
     if (usage === null) continue;
     const g = groups.find((g) => (usage & g.mask) !== 0);
