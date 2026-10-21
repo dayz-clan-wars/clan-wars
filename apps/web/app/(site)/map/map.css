@@ -47,6 +47,16 @@
 .leaflet-bar a.leaflet-disabled { background: var(--color-frame); color: var(--color-dim); }
 .leaflet-bar a:focus-visible { outline: 2px solid var(--color-gold); outline-offset: -2px; }
 /*
+ * The zoom control sits top right since the search box took the top left. On
+ * desktop that corner already holds the sprocket (right-6 top-6, 44px), so the
+ * control drops under it: 24 + 44 + 8 gap = 76px, less Leaflet's own 10px
+ * control margin. The layers panel, at z-1100 over Leaflet's 1000, covers it
+ * while open. On a phone the corner is free and Leaflet's default stands.
+ */
+@media (min-width: 64rem) {
+  .leaflet-top.leaflet-right { top: 66px; right: 14px; }
+}
+/*
  * The marker set (lib/map-icons.ts, from `Map Markers.dc.html`). Every
  * marker is a divIcon whose root is `.cw-mk`: Leaflet sizes it inline, and
  * these rules only keep it from being a white box and let a class flip its

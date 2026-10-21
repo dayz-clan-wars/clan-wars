@@ -11,7 +11,11 @@ import { POSITION_FIX_MS, WORLD_MAP } from "@factions/domain";
 import { MAX_ZOOM, ZOOM_SNAP, gridRef, latLngToWorld, worldToLatLng, zoomFloor, CANVAS_PX, parseGridRef } from "@/lib/map-projection";
 import { placeWeight, placesFor } from "@/lib/map-places";
 import { WATCH_ZONE_RADIUS_M } from "@factions/domain";
-import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, infoLines } from "@/lib/map-copy";
+import { LAYER_REASONS, MAP_HINT, MAP_LOAD_COPY, MAP_REGION_LABEL, LAYER_LABELS, PIN_HINT, MAP_LEGEND, READOUT_COPY, infoLines } from "@/lib/map-copy";
+import { readoutText, searchZoom, type SearchCtx } from "@/lib/map-search";
+import type { RulerPoint } from "@/lib/map-ruler";
+import { MapSearch, type MapSearchPick } from "./map-search";
+import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
 import { layerOfKey, rosterRows } from "@/lib/map-roster";
@@ -27,7 +31,7 @@ import {
 import { PinSheet } from "./pin-sheet";
 import {
   TRAVEL_PANE, WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
-  drawWorld, worldView, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  drawWorld, worldView, drawReticle, drawRuler, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -170,6 +174,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The centre in metres as well as its grid ref: "Pin here" drops on it. Null until the map exists.
   const [centre, setCentre] = useState<{ grid: string; x: number; z: number } | null>(null);
   const [pinAt, setPinAt] = useState<PinDraft | null>(null);
+  // Where the mouse is, in metres, for the readout; null off the map and on touch, where it reads the centre.
+  const [cursor, setCursor] = useState<{ x: number; z: number } | null>(null);
+  const [copied, setCopied] = useState(false);
+  // The ruler: on, and the points clicked so far. Page-local, never saved.
+  const [rulerOn, setRulerOn] = useState(false);
+  const [rulerPts, setRulerPts] = useState<RulerPoint[]>([]);
   const shell = useRef<HTMLElement>(null);
   // The layers live behind a sprocket. Closed by default: the map is the
   // page, and a panel that stays open covers the terrain a player came for.
@@ -397,6 +407,12 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   dataRef.current = data;
   const nowRef = useRef(now);
   nowRef.current = now;
+  // The search reticle's and the ruler's own groups: drawn by this page alone, never by the poll.
+  const searchGroup = useRef<L.LayerGroup | null>(null);
+  const rulerGroup = useRef<L.LayerGroup | null>(null);
+  const rulerOnRef = useRef(rulerOn);
+  rulerOnRef.current = rulerOn;
+  const stopCursor = useRef<() => void>(() => {});
 
   const observer = useRef<ResizeObserver | null>(null);
   const barObserver = useRef<ResizeObserver | null>(null);
@@ -561,10 +577,14 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           // the edge is a fact about the terrain, not a suggestion.
           maxBoundsViscosity: 1,
           attributionControl: true,
+          // Added below at top right: the search box has the top-left corner now.
+          zoomControl: false,
           // Zoom, tile fade, marker slide and pan inertia: all motion, all off under prefers-reduced-motion.
           ...motionOptions(prefersReducedMotion()),
         });
         map.current = m;
+        // ⚠️ Top right, under the sprocket (map.css moves it down on desktop). Top left is the search box's.
+        Lm.control.zoom({ position: "topright" }).addTo(m);
 
         const ll = (x: number, z: number) => { const p = worldToLatLng(x, z, size); return Lm.latLng(p.lat, p.lng); };
         const world = Lm.latLngBounds([ll(0, 0), ll(size, size)]);
@@ -655,6 +675,35 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         };
         readCentre();
         m.on("moveend", readCentre);
+
+        // Created and added as two statements, like the layer groups in redraw.
+        const sg = Lm.layerGroup(), rg = Lm.layerGroup();
+        m.addLayer(sg);
+        m.addLayer(rg);
+        searchGroup.current = sg;
+        rulerGroup.current = rg;
+        // A click adds a ruler point only while the ruler is on; otherwise a click is Leaflet's own.
+        m.on("click", (e: L.LeafletMouseEvent) => {
+          if (!rulerOnRef.current) return;
+          const w = latLngToWorld(e.latlng.lat, e.latlng.lng, size);
+          setRulerPts((pts) => [...pts, { x: w.x, z: w.z }]);
+        });
+        // The readout follows the mouse, at most once a frame: mousemove fires far faster
+        // than a render is worth. Only where there is a hovering pointer; a touch screen's
+        // readout stays on the centre, which is what the player is looking at.
+        if (window.matchMedia?.("(hover: hover)").matches) {
+          let frame = 0;
+          let last: L.LatLng | null = null;
+          m.on("mousemove", (e: L.LeafletMouseEvent) => {
+            last = e.latlng;
+            frame ||= requestAnimationFrame(() => {
+              frame = 0;
+              if (last) setCursor(latLngToWorld(last.lat, last.lng, size));
+            });
+          });
+          m.on("mouseout", () => { last = null; setCursor(null); });
+          stopCursor.current = () => { cancelAnimationFrame(frame); frame = 0; };
+        }
         // Long-press on touch, right-click on desktop — Leaflet gives both the
         // same event, which is why the pin gesture needs no touch handling of
         // its own.
@@ -717,6 +766,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       index.current = {};
       worldGroups.current = new Map();
       worldDrawn.current = new Map();
+      searchGroup.current = null;
+      rulerGroup.current = null;
+      stopCursor.current();
+      stopCursor.current = () => {};
       // With the groups gone, every AgeLabel points at a detached layer; an
       // age tick must not go looking for their tooltips.
       ages.current = {};
@@ -823,6 +876,65 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     return () => root.removeEventListener("click", onClick);
   }, []);
 
+  // The ruler redraws whole on every point; it is a handful of shapes.
+  useEffect(() => {
+    const Lm = leaflet.current, g = rulerGroup.current;
+    if (!Lm || !g || size === null) return;
+    drawRuler(Lm, g, ptFor(Lm, size), rulerOn ? rulerPts : [], palette().gold);
+  }, [rulerOn, rulerPts, mapReady, size]);
+  const toggleRuler = () => { setRulerOn((on) => !on); setRulerPts([]); };
+  const clearRuler = () => { setRulerOn(false); setRulerPts([]); };
+
+  // The names the search box looks through, in metres. Place names are stored as
+  // latlngs on the pyramid (lib/map-places.ts); bunkers come with the world file.
+  const searchCtx = useMemo<SearchCtx | null>(
+    () => (size === null ? null : {
+      size,
+      places: placesFor(MAP, Infinity).map((p) => ({ name: p.name, ...latLngToWorld(p.lat, p.lng, size) })),
+      bunkers: world?.bunkers ?? [],
+    }),
+    [size, world],
+  );
+  /**
+   * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
+   * reticle with its popup open; a place or bunker does not, because its name or its
+   * marker is already on the map.
+   */
+  const searchPick = (p: MapSearchPick) => {
+    const m = map.current, Lm = leaflet.current, g = searchGroup.current;
+    if (!m || !Lm || !g || size === null) return;
+    const at = ptFor(Lm, size)(p.x, p.z);
+    m.setView(at, searchZoom(m.getZoom()), { animate: !prefersReducedMotion() });
+    g.clearLayers();
+    if (p.reticle) drawReticle({ L: Lm, group: g, pt: ptFor(Lm, size), p: palette(), size }, p, layers.pins).openPopup();
+  };
+  const searchClear = () => searchGroup.current?.clearLayers();
+  // The reticle popup's Pin it (map-draw.ts `reticlePopup`): the same sheet a long-press opens, on that point.
+  // Delegated, like Delete's arming above, because Leaflet builds the popup's DOM.
+  useEffect(() => {
+    const root = el.current;
+    if (!root || !layers.pins) return;
+    const onClick = (e: MouseEvent) => {
+      const btn = (e.target as HTMLElement | null)?.closest<HTMLButtonElement>("button[data-pin-it]");
+      if (!btn) return;
+      map.current?.closePopup();
+      setPinAt(pinAtPoint({ x: Number(btn.dataset.x), z: Number(btn.dataset.z) }));
+    };
+    root.addEventListener("click", onClick);
+    return () => root.removeEventListener("click", onClick);
+  }, [layers.pins]);
+
+  // The readout: under the mouse on desktop, the centre otherwise. A tap copies it.
+  const here = cursor ?? centre;
+  const readout = here && size !== null ? readoutText(here.x, here.z, size) : "GPS 000 / 000";
+  const copyReadout = () => {
+    // ⚠️ Silent on refusal: an insecure context has no clipboard, and a denied write
+    // is the browser's answer, not something the player can act on.
+    try {
+      void navigator.clipboard?.writeText(readout).then(() => { setCopied(true); setTimeout(() => setCopied(false), 1_500); }, () => {});
+    } catch { /* no clipboard */ }
+  };
+
   // Escape closes the panel. ⚠️ Not while the pin sheet is open: its own
   // Escape cancels the draft, and this window listener heard the same keypress
   // and closed the panel too — one Escape undid two things.
@@ -848,12 +960,18 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     // `top-bar` (the class) is only the pre-measure fallback — the strips
     // effect above overwrites `style.top` with `mapTop()` once it can measure
     // #site-strips, so the map starts under the timers too, not just the bar.
-    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none">
+    <main ref={shell} id="main" tabIndex={-1} aria-label="The map" className="fixed inset-x-0 bottom-0 top-bar isolate bg-terrain outline-none [--cw-top:62px] lg:[--cw-top:0px]">
       <h1 className="sr-only">The map</h1>
       {/* The refresh's one announcement. Not the button: its text follows every pan. */}
       <p role="status" className="sr-only">{announce}</p>
       {/* Leaflet makes this element keyboard-pannable (tabindex 0); the name says what it is and how to move through it. */}
-      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-0" />
+      {/*
+        ⚠️ On a phone the map starts BELOW the search bar (`--cw-top`), not under it. The
+        world is the max bounds with viscosity 1 and the zoom floor fits all of it, so a
+        bar painted over the map's top would hide the north edge for good — the bottom
+        bar's problem (insetBy), at the other end. The bar is that tall, fixed.
+      */}
+      <div ref={el} role="region" aria-label={MAP_REGION_LABEL} className="absolute inset-x-0 bottom-0 top-(--cw-top)" />
       <MapStatus view={view} onRetry={retry} />
 
       {pinSheet && pinAt.follow && (
@@ -861,7 +979,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         // lands. It sits between the markers (600) and the popups (700): over
         // everything it points at, under anything open. The map ends
         // `--cw-inset` above the bottom, so its centre is half of what remains.
-        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc((100% - var(--cw-inset, 0px)) / 2)" }}>
+        <div aria-hidden="true" className="pointer-events-none absolute left-1/2 z-[650] -translate-x-1/2 -translate-y-1/2 text-gold" style={{ top: "calc(var(--cw-top, 0px) + (100% - var(--cw-top, 0px) - var(--cw-inset, 0px)) / 2)" }}>
           <Reticle size={32} />
         </div>
       )}
@@ -887,17 +1005,32 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
       {pinSheet && <PinSheet draft={pinAt} pal={pal} onCancel={cancelPin} insetRef={insetBy} />}
 
+      {/* Phones: the search bar under the strips, full width, the ruler beside it. Stays up with the pin sheet so the map never jumps. */}
+      <div className="absolute inset-x-0 top-0 z-[1100] flex h-(--cw-top) items-center gap-2 border-b-2 border-rule-2 bg-frame px-4 lg:hidden">
+        <div className="min-w-0 flex-1">{searchCtx && <MapSearch ctx={searchCtx} onPick={searchPick} onClear={searchClear} variant="bar" />}</div>
+        <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="bar" />
+      </div>
+
       {!pinSheet && (
         <>
           {/* Desktop: a sprocket top right opens the layers as a panel under it; grid and refresh bottom left. */}
+          {/* Desktop: the search box top left, where the zoom control was. */}
+          {searchCtx && (
+            <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden lg:block">
+              <MapSearch ctx={searchCtx} onPick={searchPick} onClear={searchClear} variant="panel" />
+            </div>
+          )}
           <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
-            <button
-              type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
-              className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
-            >
-              <Sprocket />
-              <span className="sr-only">Layers</span>
-            </button>
+            <div className="flex items-start gap-2">
+              <MapRuler on={rulerOn} points={rulerPts} onToggle={toggleRuler} onClear={clearRuler} variant="panel" />
+              <button
+                type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers"
+                className={`flex h-11 w-11 items-center justify-center border-2 bg-frame ${layersOpen ? "border-gold text-gold" : "border-rule-2 text-ink hover:text-gold"}`}
+              >
+                <Sprocket />
+                <span className="sr-only">Layers</span>
+              </button>
+            </div>
             {layersOpen && (
               <aside id="map-layers" className="max-h-[calc(100dvh-14rem)] w-[300px] overflow-y-auto border-2 border-rule-2 bg-frame">
                 <div className="flex items-center justify-between border-b-2 border-rule-2 px-5 py-3.5">
@@ -948,7 +1081,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
           )}
           {/*
             Notices stay visible with the panel closed: a failed refresh is not
-            a setting. Top centre, because the zoom control owns the top-left
+            a setting. Top centre, because the search box owns the top-left
             corner and the layers the top-right: at left-6 top-6 a notice sat
             over the zoom buttons for as long as it stayed up.
           */}
@@ -958,7 +1091,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             </div>
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
-            <span className="flex min-h-[44px] items-center px-4 font-mono text-[11px] tracking-[0.18em] text-muted">Grid {centre?.grid ?? "000 000"}</span>
+            {/* The readout: under the mouse, else the centre. A click copies it. */}
+            <button type="button" onClick={copyReadout} title={READOUT_COPY.copy}
+              className="flex min-h-[44px] min-w-[31ch] items-center px-4 font-mono text-[11px] tracking-[0.06em] text-muted tabular-nums hover:text-ink">
+              {copied ? READOUT_COPY.copied : readout}
+            </button>
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
               className="flex min-h-[44px] items-center gap-2 border-l border-rule-2 px-4 text-ink hover:text-gold disabled:opacity-40 disabled:hover:text-ink">
               <Reticle size={16} /> Center on me
@@ -1002,7 +1139,13 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
               </div>
             )}
-            <div className={`flex items-center gap-2 px-4 py-2.5 ${layersOpen ? "border-t border-rule-2" : ""}`}>
+            {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
+            <button type="button" onClick={copyReadout}
+              className={`flex min-h-[44px] w-full items-center gap-3 border-b border-rule-2 px-4 font-mono text-[11px] text-muted tabular-nums ${layersOpen ? "border-t" : ""}`}>
+              <span className="truncate">{readout}</span>
+              <span className="ml-auto flex-none uppercase tracking-[0.12em] text-ink">{copied ? READOUT_COPY.copied : READOUT_COPY.copy}</span>
+            </button>
+            <div className="flex items-center gap-2 px-4 py-2.5">
               <button
                 type="button" onClick={() => setLayersOpen((o) => !o)} aria-expanded={layersOpen} aria-controls="map-layers-sheet"
                 className={`flex h-11 w-11 items-center justify-center border-2 ${layersOpen ? "border-gold text-gold" : "border-rule-3 text-ink"}`}
@@ -1022,12 +1165,10 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   <span className="sr-only">Pin here</span>
                 </button>
               )}
-              {/* The grid cell is the refresh button: a tap reloads and says so for two seconds. */}
+              {/* Refresh: a tap reloads and says so for two seconds. The grid it used to show is the readout row above. */}
               <button type="button" onClick={() => void refreshTap()} title="Refresh"
                 className="flex min-h-[44px] min-w-0 flex-1 items-center gap-2 border-2 border-rule-3 px-3 font-mono text-[11px] text-muted">
-                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
-                {/* The one accessible name; the visible grid above is aria-hidden so it is not said twice. */}
-                <span className="sr-only">Refresh the map. Centre: grid {centre?.grid ?? "000 000"}</span>
+                {flash ? <span className="truncate text-ink">Refreshed · just now</span> : <><span className="truncate">Refresh</span><svg width="14" height="14" viewBox="0 0 28 28" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="square" aria-hidden="true" className="ml-auto flex-none"><path d="M23 14a9 9 0 1 1-3-6.7" /><path d="M20 3v5h-5" /></svg></>}
               </button>
               <a className="flex min-h-[44px] flex-none items-center bg-gold px-3.5 font-display text-xs uppercase tracking-[0.06em] text-ground" href={next.href}>{next.label}</a>
             </div>

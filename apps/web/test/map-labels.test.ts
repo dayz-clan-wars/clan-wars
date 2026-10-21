@@ -32,8 +32,8 @@ describe("every marker a player can open is reachable by keyboard and named", ()
   const draw = readFileSync(join(MAP, "map-draw.ts"), "utf8");
   const markers = draw.match(/L\.marker\([\s\S]*?\}\)/gu) ?? [];
 
-  it("finds all nine marker calls", () => {
-    expect(markers).toHaveLength(9);
+  it("finds all ten marker calls", () => {
+    expect(markers).toHaveLength(10);
   });
 
   it.each(markers)("%s", (call) => {
@@ -55,6 +55,12 @@ describe("every marker a player can open is reachable by keyboard and named", ()
     if (call.includes("WORLD_PANE")) {
       expect(call).toContain("keyboard: false");
       expect(call).toContain("title: item.title");
+      return;
+    }
+    // The search reticle: one at a time, opens the GPS card, named by its GPS.
+    if (call.includes("RETICLE_SVG")) {
+      expect(call).toContain("keyboard: true");
+      expect(call).toContain("title: `GPS ");
       return;
     }
     expect(call).toContain("keyboard: true");

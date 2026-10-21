@@ -32,9 +32,9 @@ describe("MapNotices", () => {
 describe("where the desktop notices sit", () => {
   const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
 
-  it("is top centre, not over the zoom control's top-left corner", () => {
-    expect(view).not.toContain("absolute left-6 top-6 z-[1100]");
-    expect(view).toContain("absolute left-1/2 top-6 z-[1100]");
+  it("is top centre, not over the search box's top-left corner", () => {
+    expect(view).toContain('id={CHROME_IDS.notices} className="absolute left-1/2 top-6 z-[1100]');
+    expect(view).toContain('id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100]');
   });
 
   it("takes ?result out of the address, so a reload does not replay it", () => {

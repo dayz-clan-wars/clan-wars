@@ -66,6 +66,7 @@ describe("map-view.tsx moves the view the same way", () => {
 
   it("never animates a recentre or a list jump unconditionally", () => {
     expect(view).not.toContain("animate: true");
-    expect(view.match(/animate: !prefersReducedMotion\(\)/gu)).toHaveLength(2);
+    // Recentre, a list row's jump, and a search pick.
+    expect(view.match(/animate: !prefersReducedMotion\(\)/gu)).toHaveLength(3);
   });
 });

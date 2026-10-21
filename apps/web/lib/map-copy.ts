@@ -63,6 +63,28 @@ export const WORLD_COPY = {
   tiers: "Tiers",
 } as const;
 
+/** The search box (map-search.tsx). Tab names follow iZurvive's, like the world groups. */
+export const SEARCH_COPY = {
+  label: "Search the map",
+  placeholder: "Place, bunker or GPS",
+  tabs: { locations: "Locations", items: "Items", models: "Models" },
+  bunker: "Bunker",
+  goTo: "Go to",
+  none: "Nothing on the map by that name.",
+  pinIt: "Pin it",
+} as const;
+
+/** The ruler (map-ruler.tsx, lib/map-ruler.ts). */
+export const RULER_COPY = {
+  label: "Ruler",
+  clear: "Clear",
+  start: "Click or tap the map to start measuring.",
+  next: "Click or tap to add the next point.",
+} as const;
+
+/** The readout (bottom bar): tap to copy. A refused clipboard says nothing. */
+export const READOUT_COPY = { copy: "Copy", copied: "Copied" } as const;
+
 /** "Tier1" → "Tier 1". "Unique" stays as it is. */
 export function tierLabel(name: string): string {
   return name.replace(/^Tier(\d)$/u, "Tier $1");

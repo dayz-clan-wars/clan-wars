@@ -30,11 +30,13 @@ describe("refresh feedback", () => {
   });
 });
 
-// The phone's Refresh already carries "Refresh the map. Centre: grid …" in an
-// sr-only span; the visible grid beside it made the name say the grid twice.
+// The phone's Refresh used to show the centre's grid, and its name said it
+// (twice, until the visible copy was hidden). The grid is the readout row now,
+// so the button is just "Refresh", and its name no longer moves with the pan.
 describe("the phone Refresh's accessible name", () => {
-  it("hides the visible grid from the accessibility tree", () => {
-    expect(view).toContain('<span aria-hidden="true" className="truncate">{centre?.grid ?? "000 000"}</span>');
+  it("is Refresh, with no grid in it", () => {
+    expect(view).toContain('<span className="truncate">Refresh</span>');
+    expect(view).not.toContain("Centre: grid");
   });
 });
 

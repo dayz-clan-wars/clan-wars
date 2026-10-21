@@ -1,7 +1,8 @@
 import type * as L from "leaflet";
 import type { PinIcon } from "@factions/domain";
 import { CANVAS_PX, MAX_ZOOM, gridRef, gridRefKey, worldToLatLng } from "@/lib/map-projection";
-import { DIM_AFTER_MS, PIN_ICON_LABELS, expiresIn, fixAge, tierLabel } from "@/lib/map-copy";
+import { DIM_AFTER_MS, PIN_ICON_LABELS, SEARCH_COPY, expiresIn, fixAge, tierLabel } from "@/lib/map-copy";
+import { rulerSummary, type RulerPoint } from "@/lib/map-ruler";
 import { ALWAYS_DRAWN, LOOT_MIN_ZOOM, WORLD_MIN_ZOOM, isDense, type WorldItem } from "@/lib/world-layers";
 import { markerTitle } from "@/lib/map-labels";
 import { markerKey } from "@/lib/map-roster";
@@ -558,4 +559,72 @@ export function drawWorld(
     group(d.key).removeLayer(d.layer);
     drawn.delete(id);
   }
+}
+
+/**
+ * The search box's coordinate popup: the GPS, the metres, and Pin it.
+ *
+ * Coordinates again, and allowed for the same reason as `worldPopup`: this is the
+ * point the player typed into the search box, not anyone's position. Pin it carries
+ * `data-pin-it`; map-view.tsx listens for it on the map's element (Leaflet builds the
+ * popup's DOM) and opens the ordinary pin sheet on the point.
+ */
+export function reticlePopup(at: { x: number; z: number }, size: number, canPin: boolean): string {
+  const x = Math.round(at.x), z = Math.round(at.z);
+  return `<div class="${POPUP_TEXT}">` +
+    `<p class="m-0 font-display text-[13px] uppercase tracking-[0.06em] text-ink">GPS ${gridRef(x, z, size)}</p>` +
+    `<p class="m-0 pt-1 font-mono text-[11px] text-muted">Metres ${x}, ${z}</p>` +
+    (canPin
+      ? `<button type="button" data-pin-it data-x="${x}" data-z="${z}" class="mt-2 flex min-h-[44px] items-center border-2 border-gold px-3 font-display text-xs uppercase tracking-[0.06em] text-gold hover:bg-gold hover:text-ground">${SEARCH_COPY.pinIt}</button>`
+      : "") +
+  `</div>`;
+}
+
+/** The searched point's mark: the "you" reticle's shape, so it reads as "here", in gold. */
+const RETICLE_SVG = (gold: string) =>
+  `<svg width="32" height="32" viewBox="0 0 28 28" fill="none" stroke="${gold}" stroke-width="2" stroke-linecap="square" aria-hidden="true">` +
+  `<circle cx="14" cy="14" r="8.5"/><path d="M14 1v7M14 20v7M1 14h7M20 14h7"/></svg>`;
+
+/**
+ * Drop the search reticle on a point, replacing the last one, and return it so the
+ * caller can open its popup once the view has moved. Local to the page: nothing saved.
+ */
+export function drawReticle(
+  { L, group, pt, p, size }: { L: typeof import("leaflet"); group: L.LayerGroup; pt: (x: number, z: number) => L.LatLng; p: Palette; size: number },
+  at: { x: number; z: number },
+  canPin: boolean,
+): L.Marker {
+  group.clearLayers();
+  const marker = L.marker(pt(at.x, at.z), {
+    keyboard: true,
+    title: `GPS ${gridRef(at.x, at.z, size)}`,
+    icon: L.divIcon({ className: "cw-mk", html: RETICLE_SVG(p.gold), iconSize: [32, 32], iconAnchor: [16, 16] }),
+  }).bindPopup(() => reticlePopup(at, size, canPin), popupOptions(POPUP));
+  markOpen(marker);
+  marker.addTo(group);
+  return marker;
+}
+
+/**
+ * The ruler's line, a dot on every point, and the total with the last leg's bearing
+ * beside the last point. Rebuilt whole on every click: a ruler is a handful of points.
+ * Distances and bearings only — no coordinate is written (the rule at the top).
+ */
+export function drawRuler(
+  L: typeof import("leaflet"),
+  group: L.LayerGroup,
+  pt: (x: number, z: number) => L.LatLng,
+  points: readonly RulerPoint[],
+  colour: string,
+): void {
+  group.clearLayers();
+  if (points.length === 0) return;
+  const at = points.map((q) => pt(q.x, q.z));
+  // Not interactive: a click on the line must land on the map and add a point, not stop at the line.
+  if (at.length > 1) L.polyline(at, { color: colour, weight: 3, dashArray: "8 6", interactive: false }).addTo(group);
+  at.forEach((a, i) => {
+    const dot = L.circleMarker(a, { radius: 5, color: colour, weight: 2, fillColor: colour, fillOpacity: 1, interactive: false });
+    if (i === at.length - 1 && at.length > 1) dot.bindTooltip(rulerSummary(points), { permanent: true, direction: "right", className: TAG, opacity: 1 });
+    dot.addTo(group);
+  });
 }

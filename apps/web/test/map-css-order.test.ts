@@ -84,8 +84,8 @@ describe("popup text clears the 44px close button", () => {
 
   it("pads every text-only popup's right edge by the button's width, and is at least as tall as it", () => {
     expect(draw).toMatch(/const POPUP_TEXT = "(?=[^"]*\bpr-11\b)(?=[^"]*min-h-\[44px\])[^"]*"/u);
-    // Clanmates, bounties and the world layers' popup (drawWorld).
-    expect(draw.match(/\$\{POPUP_TEXT\}/gu)?.length).toBe(3);
+    // Clanmates, bounties, the world layers' popup (drawWorld) and the search reticle's.
+    expect(draw.match(/\$\{POPUP_TEXT\}/gu)?.length).toBe(4);
   });
 
   it("pads the pin card's header the same way", () => {

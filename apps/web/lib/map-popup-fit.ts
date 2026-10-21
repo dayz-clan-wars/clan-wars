@@ -35,7 +35,7 @@ const EVEN: Pad = { top: FIT_PAD, right: FIT_PAD, bottom: FIT_PAD, left: FIT_PAD
 export type Rect = { left: number; top: number; right: number; bottom: number; width: number; height: number };
 
 /** The map's own chrome outside Leaflet's container, by id: map-view.tsx sets these, `applyPopupFit` measures them. */
-export const CHROME_IDS = { corner: "map-corner", bar: "map-bar", notices: "map-notices" } as const;
+export const CHROME_IDS = { corner: "map-corner", bar: "map-bar", notices: "map-notices", search: "map-search" } as const;
 
 /**
  * The gutter on each side of the map, taken from the chrome that paints over
@@ -44,8 +44,8 @@ export const CHROME_IDS = { corner: "map-corner", bar: "map-bar", notices: "map-
  * it opens hidden. Each box is measured, never guessed, and a `display: none`
  * box (zero size) is ignored, so the phone's hidden desktop chrome costs nothing.
  *
- * - zoom control (top-left) → the left gutter
- * - the sprocket and its layers panel (top-right) → the right gutter
+ * - the desktop search box (top-left) → the left gutter
+ * - the sprocket, its layers panel, and the zoom control under them (top-right) → the right gutter
  * - the desktop grid/refresh bar (bottom-left) → the bottom gutter
  * - the notices (top centre) → the top gutter
  *
@@ -53,13 +53,14 @@ export const CHROME_IDS = { corner: "map-corner", bar: "map-bar", notices: "map-
  * slides a little further than it strictly had to is still readable, and one
  * that lands under the panel is not.
  */
-export function chromePad(view: Rect, chrome: { zoom?: Rect | null; corner?: Rect | null; bar?: Rect | null; notices?: Rect | null }): Pad {
+export function chromePad(view: Rect, chrome: { zoom?: Rect | null; corner?: Rect | null; bar?: Rect | null; notices?: Rect | null; search?: Rect | null }): Pad {
   const shown = (r: Rect | null | undefined): r is Rect => r != null && r.width > 0 && r.height > 0;
+  const fromRight = (r: Rect | null | undefined) => (shown(r) ? view.right - r.left + FIT_PAD : FIT_PAD);
   return {
     top: shown(chrome.notices) ? Math.max(FIT_PAD, chrome.notices.bottom - view.top + FIT_PAD) : FIT_PAD,
-    right: shown(chrome.corner) ? Math.max(FIT_PAD, view.right - chrome.corner.left + FIT_PAD) : FIT_PAD,
+    right: Math.max(FIT_PAD, fromRight(chrome.corner), fromRight(chrome.zoom)),
     bottom: shown(chrome.bar) ? Math.max(FIT_PAD, view.bottom - chrome.bar.top + FIT_PAD) : FIT_PAD,
-    left: shown(chrome.zoom) ? Math.max(FIT_PAD, chrome.zoom.right - view.left + FIT_PAD) : FIT_PAD,
+    left: shown(chrome.search) ? Math.max(FIT_PAD, chrome.search.right - view.left + FIT_PAD) : FIT_PAD,
   };
 }
 
@@ -150,6 +151,7 @@ export function applyPopupFit(map: L.Map, popup: L.Popup): void {
     corner: byId(CHROME_IDS.corner),
     bar: byId(CHROME_IDS.bar),
     notices: byId(CHROME_IDS.notices),
+    search: byId(CHROME_IDS.search),
   });
   const fit = fitPopup(
     { left: box.left - view.left - was.x, top: box.top - view.top - was.y, width: box.width, height: box.height },
