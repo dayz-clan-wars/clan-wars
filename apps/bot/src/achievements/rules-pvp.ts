@@ -201,8 +201,10 @@ export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
   first_blood: killCount("first_blood"),
   ten_down: killCount("ten_down"),
   centurion: killCount("centurion"),
+  warlord: killCount("warlord"),
   marksman: distance("marksman"),
   sniper: distance("sniper"),
+  long_shot: distance("long_shot"),
   point_blank: pointBlank("point_blank"),
 
   arsenal: async (db, owner, ctx) => {
@@ -257,6 +259,20 @@ export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
       if (n === target) return { count: n, target, earnedAt: k.at, evidenceId: k.id, evidence: { victim: k.victim, kills: n }, serverId: k.serverId };
     }
     return { count: best, target };
+  },
+
+  // Distinct victims among scoring kills; earned at the kill of the target-th new one.
+  // ⚠️ Evidence is the count only, never the ids: the list of who someone killed is the grudge
+  // list the note on nemesis above warns about, times twenty-five.
+  headhunter: async (db, owner, ctx) => {
+    const target = T("headhunter");
+    const seen = new Set<string>();
+    for (const k of await ownPvpKills(db, ctx, owner.id)) {
+      if (seen.has(k.victim)) continue;
+      seen.add(k.victim);
+      if (seen.size === target) return { count: target, target, earnedAt: k.at, evidenceId: k.id, evidence: { victims: target }, serverId: k.serverId };
+    }
+    return { count: seen.size, target };
   },
 
   payback: async (db, owner) => {

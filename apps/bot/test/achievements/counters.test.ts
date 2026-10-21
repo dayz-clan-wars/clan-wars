@@ -61,4 +61,19 @@ describe("achievement counters", () => {
     const [c] = await db.select().from(achievementCounters);
     expect(c).toMatchObject({ value: 50, detail: expect.objectContaining({ crossedAt: t(49).toISOString() }) });
   });
+
+  it("explorer: the same set records when it crossed 150 too (Globetrotter), once, and keeps the 50 crossing", async () => {
+    const fix = (i: number, at: Date) => ({ dayzId: A, x: (i % 16) * 1000 + 1, z: Math.floor(i / 16) * 1000 + 1, at });
+    await db.transaction((tx) => applyPositionCounters(tx, Array.from({ length: 149 }, (_, i) => fix(i, t(i)))));
+    let [c] = await db.select().from(achievementCounters);
+    expect(c).toMatchObject({ value: 149, detail: expect.objectContaining({ crossedAt: t(49).toISOString() }) });
+    expect(c!.detail.globetrotterAt).toBeUndefined();
+    await db.transaction((tx) => applyPositionCounters(tx, [fix(0, t(200)), fix(149, t(201)), fix(150, t(202))]));
+    [c] = await db.select().from(achievementCounters);
+    expect(c).toMatchObject({ value: 151, detail: expect.objectContaining({ crossedAt: t(49).toISOString(), globetrotterAt: t(201).toISOString() }) });
+    // A replay, or a later fix, never moves either crossing.
+    await db.transaction((tx) => applyPositionCounters(tx, [fix(151, t(300))]));
+    [c] = await db.select().from(achievementCounters);
+    expect(c!.detail).toMatchObject({ crossedAt: t(49).toISOString(), globetrotterAt: t(201).toISOString() });
+  });
 });

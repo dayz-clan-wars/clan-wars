@@ -1,27 +1,28 @@
 import { describe, it, expect } from "vitest";
 import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEMENTS, isRetired } from "../src/achievements";
 import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
+import { EMOTES } from "../src/achievement-evidence";
 
 describe("the achievement definitions", () => {
-  it("are exactly 133, keyed uniquely in snake_case", () => {
-    expect(ACHIEVEMENTS).toHaveLength(133);
+  it("are exactly 149, keyed uniquely in snake_case", () => {
+    expect(ACHIEVEMENTS).toHaveLength(149);
     const keys = ACHIEVEMENTS.map((a) => a.key);
-    expect(new Set(keys).size).toBe(133);
+    expect(new Set(keys).size).toBe(149);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
   });
 
-  it("130 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
-    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(130);
+  it("146 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(146);
     for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain(k);
     expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer", "wolf_bait", "bear_necessities"]);
     expect(ACHIEVEMENT_BY_KEY.wanderer.name).toBe("Wanderer");
     expect([ACHIEVEMENT_BY_KEY.wolf_bait.name, ACHIEVEMENT_BY_KEY.bear_necessities.name]).toEqual(["Wolf Bait", "Bear Necessities"]);
   });
 
-  it("split 11 solo, 30 pve, 80 pvp, 12 team; team is clan-owned and nothing else is", () => {
+  it("split 18 solo, 36 pve, 83 pvp, 12 team; team is clan-owned and nothing else is", () => {
     const by = (g: string) => ACHIEVEMENTS.filter((a) => a.group === g);
-    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([11, 30, 80, 12]);
+    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([18, 36, 83, 12]);
     for (const a of ACHIEVEMENTS) expect(a.owner).toBe(a.group === "team" ? "clan" : "player");
     expect(ACHIEVEMENT_GROUPS).toEqual(["solo", "pve", "pvp", "team"]);
   });
@@ -64,7 +65,7 @@ describe("the achievement definitions", () => {
     // One statement of a class's size: the target is the catalogue's count, never a typed number.
     FIREARM_CLASSES.forEach((c, i) => expect(classes[i]!.target).toBe(FIREARMS.filter((f) => f.class === c).length));
     expect(ACHIEVEMENT_BY_KEY.full_armory).toMatchObject({ name: "Full Armory", description: "A PvP kill with every firearm on Nasdara", target: 52 });
-    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(74);
+    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(90);
   });
 
   it("melee, dogs and motorbikes: the eleven tiles as agreed", () => {
@@ -101,5 +102,30 @@ describe("the achievement definitions", () => {
       ["sea_legs", "Sea Legs", "Place a sea chest", "pve", 1],
       ["minefield", "Minefield", "Place a land mine", "pve", 1],
     ]);
+  });
+
+  it("emotes, oddities and milestones: the sixteen tiles as agreed", () => {
+    const row = (k: string) => { const a = ACHIEVEMENT_BY_KEY[k as keyof typeof ACHIEVEMENT_BY_KEY]; return [a.key, a.name, a.description, a.group, a.target, a.unit]; };
+    expect(["mime", "full_repertoire", "rps_champ", "performer", "burned", "hipster", "comeback", "sleeps_with_fishes", "warlord", "long_shot", "headhunter", "lifer", "devoted", "globetrotter", "master_builder", "hundred_lives"].map(row)).toEqual([
+      ["mime", "Mime", "Perform 10 different emotes", "solo", 10, "count"],
+      ["full_repertoire", "Full Repertoire", "Perform every emote", "solo", EMOTES.length, "count"],
+      ["rps_champ", "Best of Ten", "Play rock-paper-scissors 10 times", "solo", 10, "count"],
+      ["performer", "Performer", "Perform 500 emotes", "solo", 500, "count"],
+      ["burned", "Burned", "Get burned by a fire", "pve", 1, "count"],
+      ["hipster", "Hipster", "Eat your food before it was cool", "pve", 1, "count"],
+      ["comeback", "Comeback", "Come round after being knocked out 10 times", "pve", 10, "count"],
+      ["sleeps_with_fishes", "Sleeps With the Fishes", "Drown", "pve", 1, "count"],
+      ["warlord", "Warlord", "Get 250 PvP kills", "pvp", 250, "count"],
+      ["long_shot", "Long Shot", "A kill from 500 m or more", "pvp", 500, "m"],
+      ["headhunter", "Headhunter", "Kill 25 different players", "pvp", 25, "count"],
+      ["lifer", "Lifer", "Play for 500 hours", "solo", 500, "hours"],
+      ["devoted", "Devoted", "Play on 30 consecutive days", "solo", 30, "days"],
+      ["globetrotter", "Globetrotter", "Seen in 150 different 1 km grid squares", "solo", 150, "count"],
+      ["master_builder", "Master Builder", "Earn 2,000 build points", "pve", 2000, "count"],
+      ["hundred_lives", "Hundred Lives", "Die 100 times, any cause", "pve", 100, "count"],
+    ]);
+    // Full Repertoire's target is the list's length, never a typed 36: an emote added there moves it.
+    expect(ACHIEVEMENT_BY_KEY.full_repertoire.target).toBe(36);
+    expect(ACHIEVEMENTS.map((a) => a.key)).not.toContain("tenderized");
   });
 });

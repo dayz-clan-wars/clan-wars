@@ -1,5 +1,5 @@
 import {
-  ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, GRENADE_ENTITY_RE, MINE_ENTITIES, RUIN_KIND, TENTS, isDogLabel, isMotorbikeClass,
+  ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, GRENADE_ENTITY_RE, HOT_FOOD_RE, MINE_ENTITIES, RUIN_KIND, TENTS, isDogLabel, isMotorbikeClass,
   type AchievementKey, type EarnableKey, type RuinKind,
 } from "@factions/domain";
 import { events, kills, playerSessions } from "@factions/db";
@@ -17,7 +17,17 @@ async function ownEvents(db: Parameters<Rule>[0], type: string, dayzId: string, 
     .where(and(eq(events.type, type as never), sql`${events.payload}->>'dayzId' = ${dayzId}`, extra))
     .orderBy(asc(events.occurredAt), asc(events.id));
 }
-const built = (key: AchievementKey): Rule => async (db, owner) => nth(await ownEvents(db, "base.built", owner.id, isBaseBuild), T(key), (rows) => ({ buildPoints: rows.length }));
+/** Build points (`base.built` with a structure; ruin repairs never count), read once per owner per pass for the four build rules. */
+const built = (key: AchievementKey): Rule => async (db, owner, ctx) =>
+  nth(await ctx.memo(`builds:${owner.id}`, () => ownEvents(db, "base.built", owner.id, isBaseBuild)), T(key), (rows) => ({ buildPoints: rows.length }));
+
+/** Every death of the owner, any cause, killer or not, read once per owner per pass: Nine Lives and Hundred Lives. */
+const deaths = (key: AchievementKey): Rule => async (db, owner, ctx) => {
+  const rows = await ctx.memo(`deaths:${owner.id}`, () =>
+    db.select({ id: kills.id, at: kills.occurredAt, serverId: kills.serverId }).from(kills)
+      .where(eq(kills.victimDayzId, owner.id)).orderBy(asc(kills.occurredAt), asc(kills.id)));
+  return nth(rows, T(key), (r) => ({ deaths: r.length }));
+};
 
 /**
  * A death to the environment with the named cause; killer is null for every non-player death.
@@ -81,6 +91,7 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   foundation: built("foundation"),
   builder: built("builder"),
   architect: built("architect"),
+  master_builder: built("master_builder"),
 
   // wolf_bait and bear_necessities are retired (no wolves or bears on Nasdara): no rule, so
   // nothing unlocks them again, and their holders' rows are never touched.
@@ -88,6 +99,7 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   gravity_check: deathBy("fall"),
   sunday_driver: deathBy("vehicle"),
   should_have_bandaged: deathBy("bled_out"),
+  sleeps_with_fishes: deathBy("drowned"),
 
   // ── Dogs and motorbikes (spec 2026-10-20-achievements-150 §2.5, §2.6) ──────
   // ⚠️ deathBy's `killer_dayz_id IS NULL` is what keeps a player's kill after dog bites (or a
@@ -173,6 +185,12 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
     return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { entity: k.entity } } : undefined);
   },
 
+  // ── Oddities (§2.10) ───────────────────────────────────────────────────────
+  burned: hitBy((h) => h.attackerLabel === "Fireplace", (h) => ({ fire: h.attackerLabel })),
+  // Eating food still too hot: `hit by HumanSteakMeat with EnviroDmg`. ⚠️ The cause is half the
+  // test: HOT_FOOD_RE alone also matches a SteakKnife, and hitBy already drops player hits.
+  hipster: hitBy((h) => h.cause === "EnviroDmg" && h.attackerLabel != null && HOT_FOOD_RE.test(h.attackerLabel), (h) => ({ food: h.attackerLabel })),
+
   // ── Camp (§2.9) ────────────────────────────────────────────────────────────
   barrel_hoarder: items("barrel_hoarder", "item.placed", ["Barrel"]),
   pack_up: items("pack_up", "item.packed", TENTS),
@@ -182,11 +200,11 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   lights_out: async (db, owner) =>
     nth(await ownEvents(db, "player.unconscious", owner.id, sql`coalesce((${events.payload}->>'disconnecting')::boolean, false) = false`), T("lights_out")),
 
-  nine_lives: async (db, owner) => {
-    const rows = await db.select({ id: kills.id, at: kills.occurredAt, serverId: kills.serverId }).from(kills)
-      .where(eq(kills.victimDayzId, owner.id)).orderBy(asc(kills.occurredAt), asc(kills.id));
-    return nth(rows, T("nine_lives"), (r) => ({ deaths: r.length }));
-  },
+  // Coming round after a knockout (`player.conscious`): every line is one, as every knockout is one for Lights Out.
+  comeback: async (db, owner) => nth(await ownEvents(db, "player.conscious", owner.id), T("comeback")),
+
+  nine_lives: deaths("nine_lives"),
+  hundred_lives: deaths("hundred_lives"),
 
   ironman: async (db, owner) => {
     // Walk closed sessions in order; a death inside a session splits it, and only time after the

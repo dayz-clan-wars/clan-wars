@@ -252,4 +252,39 @@ describe("pvp rules", () => {
     await ride(sec(10), C);
     expect((await rule("hit_and_run")(db, player, mk())).evidence).toMatchObject({ incidents: 2 });
   });
+
+  // ── Milestones (Task B7) ──────────────────────────────────────────────────
+  it("warlord: 250 scoring kills; friendly fire, Hub kills and self-kills do not count", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(0), friendlyFire: true });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), atHub: true });
+    await seedKill(db, { serverId, killer: A, victim: A, at: m(2), cause: "suicide" });
+    for (let i = 0; i < 249; i++) await seedKill(db, { serverId, killer: A, victim: i % 2 ? B : C, at: m(10 + i), distanceM: 20 });
+    expect(await rule("warlord")(db, player, mk())).toMatchObject({ count: 249, target: 250 });
+    const k = await seedKill(db, { serverId, killer: A, victim: B, at: m(500), distanceM: 20 });
+    expect(await rule("warlord")(db, player, mk())).toMatchObject({ count: 250, earnedAt: m(500), evidenceId: k.id, evidence: { kills: 250 } });
+  });
+
+  it("long_shot: the first scoring kill from 500 m or more; a Hub or friendly long kill is not", async () => {
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(0), distanceM: 499.9 });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(1), distanceM: 700, atHub: true });
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(2), distanceM: 650, friendlyFire: true });
+    expect(await rule("long_shot")(db, player, mk())).toMatchObject({ count: 499, target: 500 });
+    const far = await seedKill(db, { serverId, killer: A, victim: B, at: m(3), distanceM: 711.2, weapon: "SVD" });
+    expect(await rule("long_shot")(db, player, mk())).toMatchObject({ count: 711, earnedAt: m(3), evidenceId: far.id, evidence: { distanceM: 711, weapon: "SVD" } });
+  });
+
+  it("headhunter: 25 different victims, earned at the kill of the 25th; repeats, friendly fire and Hub kills add none", async () => {
+    const v = (i: number) => `${i}`.padStart(36, "V");
+    for (let i = 0; i < 24; i++) await seedKill(db, { serverId, killer: A, victim: v(i), at: m(i) });
+    for (let i = 0; i < 10; i++) await seedKill(db, { serverId, killer: A, victim: v(0), at: m(100 + i) });
+    await seedKill(db, { serverId, killer: A, victim: v(90), at: m(200), friendlyFire: true });
+    await seedKill(db, { serverId, killer: A, victim: v(91), at: m(201), atHub: true });
+    await seedKill(db, { serverId, killer: v(92), victim: A, at: m(202) });
+    expect(await rule("headhunter")(db, player, mk())).toEqual({ count: 24, target: 25 });
+    const k = await seedKill(db, { serverId, killer: A, victim: v(24), at: m(300) });
+    const r = await rule("headhunter")(db, player, mk());
+    expect(r).toMatchObject({ count: 25, earnedAt: m(300), evidenceId: k.id, evidence: { victims: 25 } });
+    // ⚠️ Never the victims' ids: evidence is forensics, and a list of who someone killed is a grudge list.
+    expect(JSON.stringify(r.evidence)).not.toContain("V".repeat(30));
+  });
 });

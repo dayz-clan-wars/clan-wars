@@ -23,6 +23,8 @@ export const REVOCABLE_KEYS: readonly EarnableKey[] = [
   // Melee and Roadkill read `ownPvpKills`. ⚠️ Not Hit and Run: it reads hits, which a kill
   // rebuild never changes, so re-running it can only re-earn what it already earned.
   "knife_work", "bare_knuckles", "sledge", "melee_mix", "roadkill",
+  // The kill milestones: Warlord counts, Long Shot measures and Headhunter counts victims, all over `ownPvpKills`.
+  "warlord", "long_shot", "headhunter",
   ...EARNABLE_ACHIEVEMENTS.filter((a) => "section" in a && a.section === "armory").map((a) => a.key),
 ];
 

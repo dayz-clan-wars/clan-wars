@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   isKnife, isFist, isSledgehammer, meleeWeaponOf, isDogLabel, isMotorbikeClass, motorbikeOfWeapon,
-  GRENADE_ENTITY_RE, MINE_ENTITIES, THROWN_MEAT_RE, TENTS, EMOTES, RUIN_RUBBLE_RE, RUIN_KIND,
+  GRENADE_ENTITY_RE, MINE_ENTITIES, HOT_FOOD_RE, TENTS, EMOTES, RUIN_RUBBLE_RE, RUIN_KIND,
 } from "../src/achievement-evidence";
 import { EMOTE_DICTIONARY } from "../src/emotes";
 
@@ -48,16 +48,16 @@ describe("dogs and motorbikes", () => {
   });
 });
 
-describe("traps, grenades, meat", () => {
+describe("traps, grenades, hot food", () => {
   it("grenade entities as death.ts stores them", () => {
     for (const e of ["6", "EGD", "RGD", "M67Grenade", "MNGrenade"]) expect(GRENADE_ENTITY_RE.test(e)).toBe(true);
     for (const e of ["LandMineTrap", "Claymore", "Plastic", "60", "Animal_UrsusArctos", "Truck_01_Covered"]) expect(GRENADE_ENTITY_RE.test(e)).toBe(false);
   });
   it("mines", () => expect(MINE_ENTITIES).toEqual(["LandMineTrap", "Claymore"]));
-  it("thrown meat", () => {
-    expect(THROWN_MEAT_RE.test("ChickenBreastMeat")).toBe(true);
-    expect(THROWN_MEAT_RE.test("HumanSteakMeat")).toBe(true);
-    expect(THROWN_MEAT_RE.test("Meatball Can")).toBe(false);
+  it("hot food: the cookable food classnames an EnviroDmg hit names when you eat it too hot", () => {
+    // `hit by HumanSteakMeat with EnviroDmg` and `hit by ChickenBreastMeat with EnviroDmg` are in production.
+    for (const l of ["ChickenBreastMeat", "HumanSteakMeat", "BearSteakMeat", "CarpFilletMeat", "MackerelFillet", "Lard", "SteakMeat"]) expect(HOT_FOOD_RE.test(l)).toBe(true);
+    for (const l of ["Meatball Can", "MeatTenderizer", "Fireplace", "BakedBeansCan", "Apple", "Doberman"]) expect(HOT_FOOD_RE.test(l)).toBe(false);
   });
 });
 

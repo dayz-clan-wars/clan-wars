@@ -1,3 +1,4 @@
+import { EMOTES } from "./achievement-evidence";
 import { FIREARMS, FIREARM_CLASSES } from "./firearms";
 
 /**
@@ -48,17 +49,26 @@ export const ACHIEVEMENTS = [
   def("loyalist", "Loyalist", "Stay a full member of one clan for 30 days", "solo", 30, "days"),
   def("long_haul", "Long Haul", "Play for 24 hours", "solo", 24, "hours"),
   def("veteran", "Veteran", "Play for 100 hours", "solo", 100, "hours"),
+  def("lifer", "Lifer", "Play for 500 hours", "solo", 500, "hours"),
   def("regular", "Regular", "Play on 7 consecutive days", "solo", 7, "days"),
+  def("devoted", "Devoted", "Play on 30 consecutive days", "solo", 30, "days"),
   // ⚠️ Retired: Nasdara has no fast travel. Never delete it — the unlock rows that cite
   // this key are records, and the wall still shows it to the players who hold it.
   def("wanderer", "Wanderer", "Fast travel 10 times", "solo", 10, "count", { retired: true }),
   def("explorer", "Explorer", "Seen in 50 different 1 km grid squares", "solo", 50),
+  def("globetrotter", "Globetrotter", "Seen in 150 different 1 km grid squares", "solo", 150),
   def("showman", "Showman", "Perform 50 emotes", "solo", 50),
+  def("performer", "Performer", "Perform 500 emotes", "solo", 500),
+  def("mime", "Mime", "Perform 10 different emotes", "solo", 10),
+  // The target is the list's length, never a typed number: an emote added to EMOTES moves it.
+  def("full_repertoire", "Full Repertoire", "Perform every emote", "solo", EMOTES.length),
+  def("rps_champ", "Best of Ten", "Play rock-paper-scissors 10 times", "solo", 10),
   def("cartographer", "Cartographer", "Drop 10 map pins", "solo", 10),
   // PvE — the map, the builds, and the ways it kills you
   def("foundation", "Foundation", "Build your first base part", "pve"),
   def("builder", "Builder", "Earn 100 build points", "pve", 100),
   def("architect", "Architect", "Earn 500 build points", "pve", 500),
+  def("master_builder", "Master Builder", "Earn 2,000 build points", "pve", 2000),
   def("ironman", "Ironman", "Play for 5 hours without dying", "pve", 5, "hours"),
   // ⚠️ Retired: Nasdara has no wolves or bears. Kept, like Wanderer, for their holders.
   def("wolf_bait", "Wolf Bait", "Get killed by a wolf", "pve", 1, "count", { retired: true }),
@@ -67,8 +77,14 @@ export const ACHIEVEMENTS = [
   def("gravity_check", "Gravity Check", "Die to a fall", "pve"),
   def("sunday_driver", "Sunday Driver", "Get killed by a vehicle", "pve"),
   def("lights_out", "Lights Out", "Get knocked unconscious 10 times", "pve", 10),
+  def("comeback", "Comeback", "Come round after being knocked out 10 times", "pve", 10),
   def("should_have_bandaged", "Should Have Bandaged", "Bleed out", "pve"),
+  def("sleeps_with_fishes", "Sleeps With the Fishes", "Drown", "pve"),
   def("nine_lives", "Nine Lives", "Die 9 times, any cause", "pve", 9),
+  def("hundred_lives", "Hundred Lives", "Die 100 times, any cause", "pve", 100),
+  // PvE — oddities (§2.10)
+  def("burned", "Burned", "Get burned by a fire", "pve"),
+  def("hipster", "Hipster", "Eat your food before it was cool", "pve"),
   // PvE — dogs and motorbikes (spec 2026-10-20-achievements-150 §2.5, §2.6)
   def("dog_food", "Dog Food", "Get killed by a dog", "pve"),
   def("bad_dog", "Bad Dog", "Survive a dog attack", "pve"),
@@ -95,14 +111,17 @@ export const ACHIEVEMENTS = [
   def("first_blood", "First Blood", "Your first PvP kill", "pvp"),
   def("ten_down", "Ten Down", "Get 10 PvP kills", "pvp", 10),
   def("centurion", "Centurion", "Get 100 PvP kills", "pvp", 100),
+  def("warlord", "Warlord", "Get 250 PvP kills", "pvp", 250),
   def("marksman", "Marksman", "A kill from 150 m or more", "pvp", 150, "m"),
   def("sniper", "Sniper", "A kill from 300 m or more", "pvp", 300, "m"),
+  def("long_shot", "Long Shot", "A kill from 500 m or more", "pvp", 500, "m"),
   def("point_blank", "Point Blank", "A kill from under 5 m", "pvp", 5, "m"),
   def("arsenal", "Arsenal", "Kills with 10 different weapons", "pvp", 10),
   def("hat_trick", "Hat Trick", "Get 3 PvP kills in one session", "pvp", 3),
   def("killing_spree", "Killing Spree", "Get 5 PvP kills without a PvP death", "pvp", 5),
   def("unstoppable", "Unstoppable", "Get 10 PvP kills without a PvP death", "pvp", 10),
   def("nemesis", "Nemesis", "Kill the same player 5 times", "pvp", 5),
+  def("headhunter", "Headhunter", "Kill 25 different players", "pvp", 25),
   def("payback", "Payback", "Kill someone within an hour of them killing you", "pvp"),
   def("flag_thief", "Flag Thief", "Lower an enemy flag yourself in a scored raid", "pvp"),
   def("home_defender", "Home Defender", "Make the raise that ends a siege", "pvp"),

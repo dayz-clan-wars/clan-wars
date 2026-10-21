@@ -67,14 +67,23 @@ export function motorbikeOfWeapon(w: string | null): string | null {
  * Not "Plastic" (Plastic Explosive), "LandMineTrap" or "Claymore": those are not
  * grenades, and the mine tile owns the latter two. Anchored so "60" or a vehicle
  * class can never pass. An M79 death with no killer prints "killed by  with 40mm
- * Explosive Grenade" and stores a null entity, so it is not a grenade kill here.
+ * Explosive Grenade" and stores a null entity, so this regex never matches it; Frag
+ * Out still counts it, through its other arm (a null entity with cause "explosion").
  */
 export const GRENADE_ENTITY_RE = /^(?:6|EGD|RGD|[A-Za-z0-9_]*Grenade[A-Za-z0-9_]*)$/u;
 
 export const MINE_ENTITIES = ["LandMineTrap", "Claymore"] as const;
 
-/** `hit by ChickenBreastMeat with …`: thrown meat is the hitter's classname. */
-export const THROWN_MEAT_RE = /Meat$/u;
+// ── Oddities (§2.10) ──────────────────────────────────────────────────────────
+
+/**
+ * A cookable food's classname. Eating food that is still too hot logs the food as
+ * the hitter: `hit by HumanSteakMeat with EnviroDmg`, `hit by ChickenBreastMeat with
+ * EnviroDmg` (both in production). Meats end in `Meat`; fish fillets and lard do not.
+ * ⚠️ Only half the test: `SteakKnife` matches too, so the Hipster rule also requires
+ * cause `EnviroDmg` and a non-player hitter.
+ */
+export const HOT_FOOD_RE = /Meat$|Steak|Fillet|Lard/u;
 
 // ── Camp (§2.9) ───────────────────────────────────────────────────────────────
 

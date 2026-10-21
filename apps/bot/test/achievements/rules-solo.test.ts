@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, achievementCounters, achievementUnlocks, ceremonies, ceremonyParticipants, factions, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, achievementCounters, achievementUnlocks, ceremonies, ceremonyParticipants, events, factions, type Database } from "@factions/db";
+import { EMOTES } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { SOLO_RULES } from "../../src/achievements/rules-solo.js";
 import { makeCtx } from "../../src/achievements/types.js";
@@ -103,5 +104,71 @@ describe("solo rules", () => {
     expect(await rule("explorer")(db, player, mk())).toMatchObject({ count: 50, earnedAt: h(3) });
     await db.insert(achievementCounters).values({ ownerKind: "player", ownerId: A, key: "cartographer", value: 4, detail: {} });
     expect(await rule("cartographer")(db, player, mk())).toMatchObject({ count: 4, target: 10 });
+  });
+
+  // ── Emotes and milestones (spec 2026-10-20-achievements-150, Task B7) ──────
+  const emote = (at: Date, name: string, who = A) => seedEvent(db, { serverId, type: "emote.performed", at, payload: { dayzId: who, gamertag: "Ann", emote: name } });
+
+  it("mime: 10 different emotes, earned at the tenth distinct one; repeats and other players do not count", async () => {
+    for (let i = 0; i < 9; i++) { await emote(h(i * 2), EMOTES[i]!); await emote(h(i * 2 + 1), EMOTES[i]!); }
+    await emote(h(30), EMOTES[20]!, "B".repeat(36));
+    expect(await rule("mime")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    const tenth = await emote(h(40), EMOTES[9]!);
+    expect(await rule("mime")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(40), evidenceId: tenth.id });
+  });
+
+  it("full_repertoire: every emote in EMOTES; a token outside the list is not progress", async () => {
+    for (let i = 0; i < EMOTES.length - 1; i++) await emote(h(i), EMOTES[i]!);
+    await emote(h(50), "EmoteWave");   // not a console emote: never counts toward the set
+    expect(await rule("full_repertoire")(db, player, mk())).toMatchObject({ count: EMOTES.length - 1, target: EMOTES.length });
+    await emote(h(60), EMOTES[0]!);   // a repeat is not a new one
+    expect((await rule("full_repertoire")(db, player, mk())).count).toBe(EMOTES.length - 1);
+    const last = await emote(h(70), EMOTES[EMOTES.length - 1]!);
+    expect(await rule("full_repertoire")(db, player, mk())).toMatchObject({ count: EMOTES.length, earnedAt: h(70), evidenceId: last.id });
+  });
+
+  it("rps_champ: 10 rock-paper-scissors emotes; other emotes do not count", async () => {
+    for (let i = 0; i < 9; i++) await emote(h(i), "EmoteRPSRandom");
+    await emote(h(10), "EmoteSalute"); await emote(h(11), "EmoteRPSRandom", "B".repeat(36));
+    expect(await rule("rps_champ")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    await emote(h(12), "EmoteRPSRandom");
+    expect(await rule("rps_champ")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(12) });
+  });
+
+  it("performer: 500 emotes of any kind, as showman counts them", async () => {
+    // One seeded line for its adm file, then the rest in one insert (500 round trips is slow).
+    const { admFileId } = await emote(h(0), EMOTES[0]!);
+    await db.insert(events).values(Array.from({ length: 499 }, (_, j) => j + 1).map((i) => ({
+      serverId, admFileId, lineIndex: 100_000 + i, type: "emote.performed" as never, occurredAt: h(i), payload: { dayzId: A, gamertag: "Ann", emote: EMOTES[i % EMOTES.length] },
+    })));
+    expect(await rule("showman")(db, player, mk())).toMatchObject({ count: 50, earnedAt: h(49) });
+    expect(await rule("performer")(db, player, mk())).toMatchObject({ count: 500, earnedAt: h(499) });
+  });
+
+  it("lifer: 500 hours from closed sessions, earned at the disconnect that crossed", async () => {
+    for (let i = 0; i < 49; i++) await seedSession(db, { serverId, dayzId: A, from: d(i), to: new Date(d(i).getTime() + 10 * 3_600_000) });
+    expect(await rule("lifer")(db, player, mk())).toMatchObject({ count: 490, target: 500 });
+    await seedSession(db, { serverId, dayzId: A, from: d(49), to: new Date(d(49).getTime() + 10 * 3_600_000) });
+    expect(await rule("lifer")(db, player, mk())).toMatchObject({ count: 500, earnedAt: new Date(d(49).getTime() + 10 * 3_600_000) });
+  });
+
+  it("devoted: 30 consecutive UTC days, the regular rule parameterised; a gap restarts the run", async () => {
+    const day = (i: number) => seedSession(db, { serverId, dayzId: A, from: h(24 * i + 1), to: h(24 * i + 2) });
+    for (let i = 0; i < 29; i++) await day(i);
+    await day(30);                                   // day 29 missed: the run restarts at 30
+    expect(await rule("devoted")(db, player, mk())).toMatchObject({ count: 29, target: 30 });
+    for (let i = 31; i < 59; i++) await day(i);      // 30..58 is 29 days
+    expect((await rule("devoted")(db, player, mk())).count).toBe(29);
+    await day(59);
+    expect(await rule("devoted")(db, player, mk())).toMatchObject({ count: 30, earnedAt: h(24 * 59 + 1) });
+    expect(await rule("regular")(db, player, mk())).toMatchObject({ count: 7, earnedAt: h(24 * 6 + 1) });
+  });
+
+  it("globetrotter: reads the explorer counter's set, earned when it crossed 150, not when it crossed 50", async () => {
+    await db.insert(achievementCounters).values({ ownerKind: "player", ownerId: A, key: "explorer", value: 149, detail: { squares: [], crossedAt: h(3).toISOString() } });
+    expect(await rule("globetrotter")(db, player, mk())).toEqual({ count: 149, target: 150 });
+    await db.update(achievementCounters).set({ value: 150, detail: { squares: [], crossedAt: h(3).toISOString(), globetrotterAt: h(9).toISOString() } });
+    expect(await rule("globetrotter")(db, player, mk())).toMatchObject({ count: 150, earnedAt: h(9) });
+    expect(await rule("explorer")(db, player, mk())).toMatchObject({ earnedAt: h(3) });
   });
 });

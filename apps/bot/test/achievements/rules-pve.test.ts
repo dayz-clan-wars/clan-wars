@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, events, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PVE_RULES } from "../../src/achievements/rules-pve.js";
 import { makeCtx } from "../../src/achievements/types.js";
@@ -310,5 +310,68 @@ describe("pve rules", () => {
     expect((await rule(key)(db, player, mk())).count).toBe(0);
     const e = await placed(h(3), item);
     expect(await rule(key)(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: e.id });
+  });
+
+  // ── Oddities and milestones (Task B7) ─────────────────────────────────────
+  it("burned: a hit by a Fireplace; another player's burn, or a player hit, is not", async () => {
+    await seedHit(db, { serverId, at: sec(0), victim: B, attackerLabel: "Fireplace", cause: "FireDamage" });
+    await seedHit(db, { serverId, at: sec(1), victim: A, attacker: B, weapon: "M4-A1" });
+    await seedHit(db, { serverId, at: sec(2), victim: A, attackerLabel: "HumanSteakMeat", cause: "EnviroDmg" });
+    expect((await rule("burned")(db, player, mk())).count).toBe(0);
+    const hit = await seedHit(db, { serverId, at: sec(5), victim: A, attackerLabel: "Fireplace", cause: "FireDamage" });
+    await seedHit(db, { serverId, at: sec(6), victim: A, attackerLabel: "Fireplace", cause: "FireDamage" });
+    expect(await rule("burned")(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(5), evidenceId: hit.id });
+  });
+
+  it("hipster: the first EnviroDmg hit by a cookable food (eating it too hot); not a fire, not a can, not another cause", async () => {
+    await seedHit(db, { serverId, at: sec(0), victim: B, attackerLabel: "HumanSteakMeat", cause: "EnviroDmg" });
+    await seedHit(db, { serverId, at: sec(1), victim: A, attackerLabel: "Fireplace", cause: "FireDamage" });
+    await seedHit(db, { serverId, at: sec(2), victim: A, attackerLabel: "Meatball Can", cause: "EnviroDmg" });
+    await seedHit(db, { serverId, at: sec(3), victim: A, attackerLabel: "ChickenBreastMeat", cause: null });   // a stored hit from before `cause` was parsed
+    expect((await rule("hipster")(db, player, mk())).count).toBe(0);
+    const hit = await seedHit(db, { serverId, at: sec(5), victim: A, attackerLabel: "HumanSteakMeat", cause: "EnviroDmg" });
+    await seedHit(db, { serverId, at: sec(6), victim: A, attackerLabel: "CarpFilletMeat", cause: "EnviroDmg" });
+    expect(await rule("hipster")(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(5), evidenceId: hit.id, evidence: { food: "HumanSteakMeat" } });
+  });
+
+  it("comeback: 10 player.conscious events; another player's, or a knockout, does not count", async () => {
+    for (let i = 0; i < 9; i++) await seedEvent(db, { serverId, type: "player.conscious", at: h(i), payload: { dayzId: A, gamertag: "Ann" } });
+    await seedEvent(db, { serverId, type: "player.conscious", at: h(9), payload: { dayzId: B, gamertag: "Ben" } });
+    await seedEvent(db, { serverId, type: "player.unconscious", at: h(10), payload: { dayzId: A, gamertag: "Ann", disconnecting: false } });
+    expect(await rule("comeback")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    const tenth = await seedEvent(db, { serverId, type: "player.conscious", at: h(11), payload: { dayzId: A, gamertag: "Ann" } });
+    expect(await rule("comeback")(db, player, mk())).toMatchObject({ count: 10, earnedAt: h(11), evidenceId: tenth.id });
+  });
+
+  it("sleeps_with_fishes: a no-killer death with cause drowned; a player's kill is not", async () => {
+    await seedKill(db, { serverId, killer: B, victim: A, at: h(0), cause: "pvp" });
+    await seedKill(db, { serverId, killer: null, victim: B, at: h(1), cause: "drowned" });
+    expect((await rule("sleeps_with_fishes")(db, player, mk())).count).toBe(0);
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(2), cause: "drowned" });
+    expect(await rule("sleeps_with_fishes")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(2), evidenceId: k.id });
+  });
+
+  it("master_builder: 2,000 build points; ruin repairs and other players' builds do not count", async () => {
+    // One seeded line for its adm file, then the rest in one insert (2,000 round trips is slow).
+    const first = await seedEvent(db, { serverId, type: "base.built", at: sec(0), payload: { dayzId: A, gamertag: "Ann", part: "Wall", structure: "Fence" } });
+    const row = (i: number, payload: Record<string, unknown>) => ({ serverId, admFileId: first.admFileId, lineIndex: 100_000 + i, type: "base.built" as never, occurredAt: sec(i), payload });
+    await db.insert(events).values([
+      ...Array.from({ length: 1998 }, (_, j) => row(j + 1, { dayzId: A, gamertag: "Ann", part: "Wall", structure: "Fence" })),
+      ...Array.from({ length: 50 }, (_, j) => row(5000 + j, { dayzId: A, gamertag: "Ann", part: "door1_metal", structure: null })),
+      ...Array.from({ length: 50 }, (_, j) => row(6000 + j, { dayzId: B, gamertag: "Ben", part: "Wall", structure: "Fence" })),
+    ]);
+    expect(await rule("master_builder")(db, player, mk())).toMatchObject({ count: 1999, target: 2000 });
+    const last = await seedEvent(db, { serverId, type: "base.built", at: sec(9000), payload: { dayzId: A, gamertag: "Ann", part: "Wall", structure: "Fence" } });
+    expect(await rule("master_builder")(db, player, mk())).toMatchObject({ count: 2000, earnedAt: sec(9000), evidenceId: last.id });
+    expect((await rule("architect")(db, player, mk())).earnedAt).toEqual(sec(499));
+  });
+
+  it("hundred_lives: any death counts, as nine_lives does; dying someone else's death does not", async () => {
+    for (let i = 0; i < 99; i++) await seedKill(db, { serverId, killer: i % 3 ? null : B, victim: A, at: h(i), cause: i % 3 ? "fall" : "pvp" });
+    await seedKill(db, { serverId, killer: A, victim: B, at: h(150) });
+    expect(await rule("hundred_lives")(db, player, mk())).toMatchObject({ count: 99, target: 100 });
+    expect((await rule("nine_lives")(db, player, mk())).earnedAt).toEqual(h(8));
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(200), cause: "drowned" });
+    expect(await rule("hundred_lives")(db, player, mk())).toMatchObject({ count: 100, earnedAt: h(200), evidenceId: k.id });
   });
 });
