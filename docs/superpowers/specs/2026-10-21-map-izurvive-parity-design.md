@@ -90,11 +90,11 @@ Rules:
   on) gets no toggle. That brings in VehicleCivilianSedan (47), ItemBricks (122,
   under World) and StaticContainerLocked (28, under Crash sites as "Locked
   container"). **Claude's call.**
-- **Rotated vehicles say so.** A vehicle switched off right now by the truck wipe or
-  the weekly rotation keeps its toggle, labelled "off this week" or "off until the
-  next restart". The label is worked out in the browser from `truckWipeActive()` /
-  `weeklyWipeVehicle()` in `packages/domain/src/restarts.ts`, the same functions
-  the bot uses, so the map and the server can't disagree. **Claude's call.**
+- **Rotated vehicles carry no label.** Vehicle rows have no "off this week" or "off until
+  the next restart" label. The weekly rotation switches a car off only inside the Monday
+  window, and the browser cannot see the truck wipe's hours, so any label it worked out
+  would sometimes be wrong. A vehicle layer shows where a car can spawn, not that one is
+  there now. **Claude's call, amended during the build.**
 - **Military stands out:** it gets its own distinct marker colour. Everything else
   follows the existing chip style in `lib/map-icons.ts` (near-black chip with the
   colour inside, from `Map Markers.dc.html`). New glyphs extend that file.
@@ -216,6 +216,17 @@ GPS x = floor(x/100), GPS y = floor((size − z)/100).
 - A wall of dots by default, or a map that stutters on a phone.
 - Copy that discourages raiding. Player-facing words follow
   `brand/02-verbal-identity.md`.
+
+## Decisions made during the build
+
+- **Tiers run by region.** On Nasdara the north is Tier1, the middle Tier2 and the south
+  Tier3. Tier4 is declared but never set on anything.
+- **Loot usage is a union.** A loot building's usage is its own usage plus the usage flags of
+  the area it stands in (`lib/area-flags.ts`).
+- **Crash-site loot comes from the wrecks.** Where an item spawns at a crash site is read
+  from each event's child wreck protos, not from the event itself.
+- **No game item images.** DayZ draws items as live 3D models and ships no preview pictures,
+  so item cards use the site's existing wiki pictures (`public/items`) where one exists.
 
 ## Open items for the builder
 
