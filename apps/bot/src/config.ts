@@ -373,7 +373,7 @@ function requiredSnowflake(env: NodeJS.ProcessEnv, key: string, what: string): s
  * that Discord's embed proxy then fetches, leaking them somewhere we do not
  * control.
  */
-function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefined {
+export function optionalHttpUrl(env: NodeJS.ProcessEnv, key: string): string | undefined {
   const raw = env[key];
   if (raw === undefined || raw === "") return undefined;
   let parsed: URL;

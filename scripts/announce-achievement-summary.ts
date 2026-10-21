@@ -21,7 +21,7 @@
  */
 import { createClient } from "@factions/db";
 import { ACHIEVEMENTS_2026_10 } from "@factions/domain";
-import { DEFAULT_SITE_BASE_URL } from "../apps/bot/src/config.js";
+import { DEFAULT_SITE_BASE_URL, optionalHttpUrl } from "../apps/bot/src/config.js";
 import { queueAchievementSummaries } from "../apps/bot/src/achievements/summary.js";
 
 const url = process.env.DATABASE_URL;
@@ -33,7 +33,11 @@ const before = beforeArg ? new Date(beforeArg) : null;
 if (!url) { console.error("DATABASE_URL unset"); process.exit(2); }
 if (!url.endsWith("/factions_live") && !allowTest) { console.error(`refusing: not factions_live -> ${url} (pass --allow-test-db to override)`); process.exit(2); }
 if (!before || Number.isNaN(before.getTime())) { console.error("usage: announce:achievement-summary --before <ISO instant of the release> [--dry-run] [--allow-test-db]"); process.exit(2); }
-const siteBaseUrl = (process.env.SITE_BASE_URL ?? DEFAULT_SITE_BASE_URL).replace(/\/+$/u, "");
+// ⚠️ The bot's own check, so a typo'd host or a stray path cannot put a dead link in
+// every player's DM: the queued payload freezes the URL, and nothing rewrites it later.
+let siteBaseUrl: string;
+try { siteBaseUrl = (optionalHttpUrl(process.env, "SITE_BASE_URL") ?? DEFAULT_SITE_BASE_URL).replace(/\/+$/u, ""); }
+catch (err) { console.error((err as Error).message); process.exit(2); }
 
 const db = createClient(url);
 const r = await queueAchievementSummaries(db, { release: "2026-10", keys: ACHIEVEMENTS_2026_10, before, siteBaseUrl, dryRun });

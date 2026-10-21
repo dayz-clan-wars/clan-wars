@@ -51,7 +51,8 @@ describe("the guide manifest", () => {
     for (const retired of ["Wanderer", "Wolf Bait", "Bear Necessities"]) expect(html).not.toContain(retired);
     // ⚠️ The counts in the prose are tokens over the catalogue, so they move with it: a
     // hand-typed "forty-nine" sat in this chapter for a hundred tiles' worth of release.
-    expect(raw).not.toMatch(/forty-nine|fifty|twelve|sixteen|\b150\b|\b16\b/iu);
+    // Only the old phrases, typed or numeral, so an unrelated "16 h" elsewhere cannot trip it.
+    expect(raw).not.toMatch(/forty-nine|fifty marks|its (?:twelve|sixteen|16)\b|the (?:forty-nine|150)\b|\b150 marks/iu);
     expect(raw).toContain("{{ACHIEVEMENTS_EARNABLE|n}}");
     expect(raw).toContain("{{ACHIEVEMENTS_CLAN|n}}");
     expect(html).toMatch(/<h2[^>]*>The 150</u);

@@ -185,26 +185,28 @@ export const EARNABLE_ACHIEVEMENTS = ACHIEVEMENTS.filter((a): a is EarnableAchie
 
 /** A tile in the wall's Armory section: the 59 gun, class and Full Armory tiles. */
 export const isArmory = (a: Achievement): boolean => "section" in a && a.section === "armory";
-export const ARMORY_KEYS = ACHIEVEMENTS.filter(isArmory).map((a) => a.key) as readonly AchievementKey[];
+export const ARMORY_KEYS = EARNABLE_ACHIEVEMENTS.filter(isArmory).map((a) => a.key) as readonly AchievementKey[];
 
 /**
- * The fifty keys the launch shipped (2026-09-12), as they were then. A literal on
- * purpose: it is a record of what existed, not something to derive, and the October
- * release is defined against it.
+ * The 103 tiles the October 2026 release added (spec 2026-10-20-achievements-150): the
+ * summary DM counts a player's unlocks among these. ⚠️ A frozen literal, never derived:
+ * it names what THIS release added, so a tile a later release adds must not join it
+ * (that would re-count it in a summary for the wrong release). The test holds it to the
+ * catalogue: every key earnable, none from the launch's fifty.
  */
-const LAUNCH_KEYS: ReadonlySet<string> = new Set([
-  "enlisted", "squad_up", "founder", "loyalist", "long_haul", "veteran", "regular", "wanderer", "explorer", "showman",
-  "cartographer", "foundation", "builder", "architect", "ironman", "wolf_bait", "bear_necessities", "brains", "gravity_check", "sunday_driver",
-  "lights_out", "should_have_bandaged", "nine_lives", "first_blood", "ten_down", "centurion", "marksman", "sniper", "point_blank", "arsenal",
-  "hat_trick", "killing_spree", "unstoppable", "nemesis", "payback", "flag_thief", "home_defender", "blue_on_blue", "colors_raised", "full_strength",
-  "first_raid", "warpath", "giant_killer", "wide_net", "fortress", "podium", "alpha", "dynasty", "untouched", "champions",
-]);
-
-/**
- * The 103 tiles the October 2026 release added (spec 2026-10-20-achievements-150): every
- * earnable key the launch did not have. The summary DM counts a player's unlocks among
- * these. ⚠️ Derived, not listed, so it cannot miss a tile — but that also means a tile
- * added AFTER this release would join it; freeze it into a literal before the next
- * release adds any (the test pins its length at 103 to catch exactly that).
- */
-export const ACHIEVEMENTS_2026_10: readonly AchievementKey[] = EARNABLE_ACHIEVEMENTS.map((a) => a.key).filter((k) => !LAUNCH_KEYS.has(k));
+export const ACHIEVEMENTS_2026_10 = [
+  "lifer", "devoted", "globetrotter", "performer", "mime", "full_repertoire", "rps_champ", "master_builder",
+  "comeback", "sleeps_with_fishes", "hundred_lives", "burned", "hipster", "dog_food", "bad_dog", "chew_toy",
+  "road_rash", "wipeout", "squatter", "rubble_rouser", "renovator", "fixer_upper", "snapped", "tripped",
+  "snagged", "minesweeper", "frag_out", "barrel_hoarder", "pack_up", "sea_legs", "minefield", "warlord",
+  "long_shot", "headhunter", "knife_work", "bare_knuckles", "sledge", "melee_mix", "hit_and_run", "roadkill",
+  "gun_cz75", "gun_colt1911", "gun_deagle", "gun_derringer", "gun_fnx45", "gun_glock19", "gun_luger",
+  "gun_mkii", "gun_magnum", "gun_makarov", "gun_p1", "gun_longhorn", "gun_cz61", "gun_mp5k", "gun_ump45",
+  "gun_pp19", "gun_mp18", "gun_pm73", "gun_vikhr", "gun_izh18_shotgun", "gun_izh43", "gun_mp133",
+  "gun_saiga", "gun_r12", "gun_ak101", "gun_ak74", "gun_akm", "gun_aks74u", "gun_asval", "gun_aug",
+  "gun_aug_short", "gun_fal", "gun_famas", "gun_m16a2", "gun_m4a1", "gun_scarh", "gun_scarl", "gun_b95",
+  "gun_cz527", "gun_cz550", "gun_izh18", "gun_lee_enfield", "gun_mosin", "gun_repeater", "gun_ruger1022",
+  "gun_sks", "gun_ssg82", "gun_winchester70", "gun_svd", "gun_vss", "gun_crossbow", "gun_m79",
+  "class_pistols", "class_smgs", "class_shotguns", "class_assault_rifles", "class_rifles", "class_snipers",
+  "full_armory", "clan_armory", "clan_renovators", "clan_warband", "clan_arsenal",
+] as const satisfies readonly AchievementKey[];

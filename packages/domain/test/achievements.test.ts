@@ -149,6 +149,15 @@ describe("the achievement definitions", () => {
  * The October 2026 release (spec 2026-10-20-achievements-150): the keys the summary DM
  * counts. Every earnable key the launch's fifty did not have.
  */
+/** The fifty keys the launch shipped (2026-09-12): a record, to check the release list against. */
+const LAUNCH_KEYS: ReadonlySet<string> = new Set([
+  "enlisted", "squad_up", "founder", "loyalist", "long_haul", "veteran", "regular", "wanderer", "explorer", "showman",
+  "cartographer", "foundation", "builder", "architect", "ironman", "wolf_bait", "bear_necessities", "brains", "gravity_check", "sunday_driver",
+  "lights_out", "should_have_bandaged", "nine_lives", "first_blood", "ten_down", "centurion", "marksman", "sniper", "point_blank", "arsenal",
+  "hat_trick", "killing_spree", "unstoppable", "nemesis", "payback", "flag_thief", "home_defender", "blue_on_blue", "colors_raised", "full_strength",
+  "first_raid", "warpath", "giant_killer", "wide_net", "fortress", "podium", "alpha", "dynasty", "untouched", "champions",
+]);
+
 describe("ACHIEVEMENTS_2026_10", () => {
   it("is the 103 tiles new in this release: hipster in, tenderized never, no launch tile, no retired one", () => {
     expect(ACHIEVEMENTS_2026_10).toHaveLength(103);
@@ -158,8 +167,14 @@ describe("ACHIEVEMENTS_2026_10", () => {
     expect(ACHIEVEMENTS_2026_10).toContain("clan_warband");
     expect(ACHIEVEMENTS_2026_10).not.toContain("tenderized" as never);
     for (const k of ["first_blood", "sniper", "champions", "enlisted", "wanderer", "wolf_bait", "bear_necessities"]) expect(ACHIEVEMENTS_2026_10).not.toContain(k);
-    const earnable = new Set(EARNABLE_ACHIEVEMENTS.map((a) => a.key));
-    for (const k of ACHIEVEMENTS_2026_10) expect(earnable.has(k as never), k).toBe(true);
+    expect(LAUNCH_KEYS.size).toBe(50);
+    const earnable = new Set<string>(EARNABLE_ACHIEVEMENTS.map((a) => a.key));
+    for (const k of ACHIEVEMENTS_2026_10) {
+      expect(earnable.has(k), k).toBe(true);
+      expect(LAUNCH_KEYS.has(k), k).toBe(false);
+    }
+    // Today the release is exactly the catalogue minus the launch; a later release breaks this on purpose.
+    expect([...ACHIEVEMENTS_2026_10].sort()).toEqual([...earnable].filter((k) => !LAUNCH_KEYS.has(k)).sort());
   });
 });
 

@@ -35,6 +35,10 @@ export type SummaryOpts = {
  * queues nothing new, and the queued row IS the record that the summary was sent —
  * deleting it sends it again.
  *
+ * The count is the player's OWN tiles only (`owner_kind = 'player'`). Clan tiles the
+ * player shared are left out on purpose: clan unlocks are announced to the clan's
+ * channel, and counting them here would credit one clan unlock to every member's DM.
+ *
  * Unlinked players get nothing: there is nobody to DM. A player who links later is
  * not caught up by this; the wall already shows them their tiles.
  */

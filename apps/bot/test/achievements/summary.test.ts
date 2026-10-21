@@ -6,7 +6,7 @@ import { queueAchievementSummaries } from "../../src/achievements/summary.js";
 import { seedServer, seedLink, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
-const A = "A".repeat(36), B = "B".repeat(36), C = "C".repeat(36), D = "D".repeat(36);
+const A = "A".repeat(36), B = "B".repeat(36), C = "C".repeat(36), D = "D".repeat(36), E = "E".repeat(36), F = "F".repeat(36);
 const t0 = new Date("2026-10-01T10:00:00Z");
 const h = (n: number) => new Date(t0.getTime() + n * 3_600_000);
 const RELEASE = h(100);
@@ -28,6 +28,8 @@ describe("queueAchievementSummaries", () => {
     await seedLink(db, { dayzId: A, discordId: "111111111111111111", gamertag: "Ann Lee", verifiedAt: t0 });
     await seedLink(db, { dayzId: C, discordId: "333333333333333333", gamertag: "Cat", verifiedAt: t0 });
     await seedLink(db, { dayzId: D, discordId: "444444444444444444", gamertag: "Dan", verifiedAt: t0 });
+    await seedLink(db, { dayzId: E, discordId: "555555555555555555", gamertag: "Eve", verifiedAt: t0 });
+    await seedLink(db, { dayzId: F, discordId: "666666666666666666", gamertag: "Fay", verifiedAt: t0 });
     await db.insert(achievementUnlocks).values([
       // Ann: three new tiles from history, and one launch tile that is not new.
       { ownerKind: "player", ownerId: A, key: "hipster", earnedAt: h(1), evidence: {} },
@@ -40,23 +42,30 @@ describe("queueAchievementSummaries", () => {
       { ownerKind: "player", ownerId: C, key: "hipster", earnedAt: h(101), evidence: {} },
       // Dan holds only launch tiles.
       { ownerKind: "player", ownerId: D, key: "first_blood", earnedAt: h(1), evidence: {} },
+      // Eve: two new tiles from history and one live: the count is the history only.
+      { ownerKind: "player", ownerId: E, key: "hipster", earnedAt: h(5), evidence: {} },
+      { ownerKind: "player", ownerId: E, key: "mime", earnedAt: h(6), evidence: {} },
+      { ownerKind: "player", ownerId: E, key: "dog_food", earnedAt: h(150), evidence: {} },
+      // Fay's only new tile crossed exactly at the release instant: `before` is exclusive.
+      { ownerKind: "player", ownerId: F, key: "hipster", earnedAt: RELEASE, evidence: {} },
     ]);
   });
 
   it("queues one DM for a linked player with historical new unlocks, and none for the unlinked, the live-only or the launch-only", async () => {
     const r = await queueAchievementSummaries(db, opts);
-    expect(r).toEqual({ queued: 1, skipped: 0 });
+    expect(r).toEqual({ queued: 2, skipped: 0 });
     const rows = await db.select().from(clanNotices).orderBy(asc(clanNotices.id));
-    expect(rows).toHaveLength(1);
-    expect(rows[0]).toMatchObject({ target: "dm", discordTargetId: "111111111111111111", kind: "achievement_summary", factionId: null, postedAt: null });
+    expect(rows.map((n) => n.discordTargetId)).toEqual(["111111111111111111", "555555555555555555"]);   // not Ben, Cat, Dan or Fay
+    expect(rows[0]).toMatchObject({ target: "dm", kind: "achievement_summary", factionId: null, postedAt: null });
     expect(rows[0]!.payload).toEqual({ release: "2026-10", count: 3, gamertag: "Ann Lee", wallUrl: `${SITE}/players/Ann%20Lee#achievements` });
+    expect(rows[1]!.payload).toMatchObject({ count: 2, gamertag: "Eve" });   // the live dog_food is not counted
   });
 
   it("⚠️ run twice, queues nothing new", async () => {
     await queueAchievementSummaries(db, opts);
     const again = await queueAchievementSummaries(db, opts);
-    expect(again).toEqual({ queued: 0, skipped: 1 });
-    expect(await db.select().from(clanNotices)).toHaveLength(1);
+    expect(again).toEqual({ queued: 0, skipped: 2 });
+    expect(await db.select().from(clanNotices)).toHaveLength(2);
   });
 
   it("never posts to a channel", async () => {
@@ -68,12 +77,12 @@ describe("queueAchievementSummaries", () => {
     await queueAchievementSummaries(db, opts);
     // Not a real release key today; the guard is per release, not per kind.
     const r = await queueAchievementSummaries(db, { ...opts, release: "2027-01" as never });
-    expect(r.queued).toBe(1);
+    expect(r.queued).toBe(2);
   });
 
   it("dry run counts without writing", async () => {
     const r = await queueAchievementSummaries(db, { ...opts, dryRun: true });
-    expect(r).toEqual({ queued: 1, skipped: 0 });
+    expect(r).toEqual({ queued: 2, skipped: 0 });
     expect(await db.select().from(clanNotices)).toHaveLength(0);
   });
 });
