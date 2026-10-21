@@ -42,6 +42,13 @@ describe("WorldPanel", () => {
     expect(html).not.toContain("<h3");
   });
 
+  it("offers Try again on a failed load when it can refetch", () => {
+    const html = render({ status: "failed", onRetry: () => {} });
+    expect(WORLD_COPY.retry).toBe("Try again");
+    expect(html).toMatch(new RegExp(`<button type="button"[^>]*>${WORLD_COPY.retry}</button>`, "u"));
+    expect(render({ status: "ready", onRetry: () => {} })).not.toContain(WORLD_COPY.retry);
+  });
+
   it("renders nothing while loading", () => {
     expect(render({ status: "loading" })).toBe("");
   });

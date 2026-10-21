@@ -16,6 +16,8 @@ export type WorldPanelProps = {
   pal: Palette;
   /** "panel" is the desktop aside's rows; "sheet" is the phone sheet's chips. */
   variant: "panel" | "sheet";
+  /** Refetches the world file after a failed load (loadWorld does not cache a failure). */
+  onRetry?: () => void;
 };
 
 /**
@@ -23,11 +25,16 @@ export type WorldPanelProps = {
  * WORLD_GROUPS), a switch per layer with its count, and the tier filter under Loot
  * buildings. Below the clan layers on both layouts.
  */
-export function WorldPanel({ status, layers, counts, on, onToggle, tiers, tierMask, onTier, pal, variant }: WorldPanelProps) {
+export function WorldPanel({ status, layers, counts, on, onToggle, tiers, tierMask, onTier, pal, variant, onRetry }: WorldPanelProps) {
   if (status === "loading") return null;
   const sheet = variant === "sheet";
   if (status === "failed") {
-    return <p className={`m-0 border-t border-rule-2 font-mono text-[11px] text-muted ${sheet ? "px-4 py-2" : "px-5 py-3"}`}>{WORLD_COPY.failed}</p>;
+    return (
+      <p className={`m-0 flex flex-wrap items-center gap-x-3 border-t border-rule-2 font-mono text-[11px] text-muted ${sheet ? "px-4 py-2" : "px-5 py-3"}`}>
+        {WORLD_COPY.failed}
+        {onRetry && <button type="button" onClick={onRetry} className="min-h-[44px] text-gold hover:underline">{WORLD_COPY.retry}</button>}
+      </p>
+    );
   }
   const heading = `m-0 font-mono text-[11px] uppercase tracking-[0.18em] text-muted ${sheet ? "px-4 pt-3" : "px-5 pt-3"}`;
   const tierRow = tiers.length > 1 && (

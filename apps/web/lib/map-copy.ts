@@ -60,6 +60,7 @@ export const WORLD_LABELS = {
 /** The world section's own lines in the layers panel. */
 export const WORLD_COPY = {
   failed: "World layers could not load.",
+  retry: "Try again",
   zoom: "Bunkers and contaminated areas show at every zoom. The rest show once you zoom in.",
   tiers: "Tiers",
 } as const;

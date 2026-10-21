@@ -416,6 +416,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   const showItem = (hit: MapSearchItem) => setWs((prev) => pickItem(prev, hit));
   const clearItemView = () => setWs(clearItem);
   // On focus, and from the failed line's retry. A failure is not cached (loadItemIndex), so trying again refetches.
+  // The panel's Try again: loadWorld dropped the failed promise, so this is a fresh fetch.
+  const retryWorld = () => {
+    setWorldFailed(false);
+    loadWorld().then((w) => { setWorld(w); setWorldFailed(false); }, () => setWorldFailed(true));
+  };
   const loadItems = () => {
     if (itemsStatus === "loading" || itemsStatus === "ready") return;
     setItemsStatus("loading");
@@ -707,7 +712,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
         setChunkFailures(0);
         // ⚠️ A failure here is one line in the panel, never the map's own error state:
         // the clan layers do not depend on the world file and must keep working without it.
-        loadWorld().then((w) => { if (!cancelled) setWorld(w); }, () => { if (!cancelled) setWorldFailed(true); });
+        loadWorld().then((w) => { if (!cancelled) { setWorld(w); setWorldFailed(false); } }, () => { if (!cancelled) setWorldFailed(true); });
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
@@ -1108,7 +1113,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                   </ul>
                 )}
                 <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
-                  tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} variant="panel" />
+                  tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} onRetry={retryWorld} variant="panel" />
                 <MapRoster rows={rows} onGo={goTo} />
                 <div className="border-t border-rule-2 px-5 py-3 font-mono text-xs leading-relaxed text-muted">{MAP_LEGEND}{layers.pins && ` ${PIN_HINT}`}{guide && <> <a className="text-gold hover:underline" href={guide.href}>In the guide: {guide.label} →</a></>}</div>
               </aside>
@@ -1174,7 +1179,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
                 ))}
               </div>
               <WorldPanel status={worldStatus} layers={worldList} counts={worldCounts} on={worldSw?.on ?? {}} onToggle={toggleWorld}
-                tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} variant="sheet" />
+                tiers={worldTiers} tierMask={worldSw?.tiers ?? 0} onTier={toggleTier} pal={pal} onRetry={retryWorld} variant="sheet" />
               {/* `nested`: the sheet scrolls; a second scroller inside it trapped a swipe. */}
               <MapRoster rows={rows} onGo={goTo} nested />
               <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-t border-rule-2 px-4 py-2 font-mono text-[11px] leading-relaxed text-muted">
