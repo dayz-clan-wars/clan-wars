@@ -1,5 +1,5 @@
 "use client";
-import { useId, useMemo, useState, type KeyboardEvent } from "react";
+import { useId, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import { ITEM_COPY, SEARCH_COPY } from "@/lib/map-copy";
 import { gridRef } from "@/lib/map-projection";
 import { searchMap, type SearchCtx, type SearchHit, type SearchTab } from "@/lib/map-search";
@@ -28,6 +28,13 @@ export type MapSearchProps = {
   initial?: string;
 };
 
+/**
+ * Whether a pick takes focus out of the box. The phone's bar does: a focused input keeps the
+ * on-screen keyboard up over the map the player just sent somewhere. The desktop box keeps
+ * focus, so a keyboard user can type the next search straight away.
+ */
+export const blursOnPick = (variant: MapSearchProps["variant"]): boolean => variant === "bar";
+
 /** How many names the list shows; the rest are a sharper query away. */
 const SHOWN = 20;
 const TABS: SearchTab[] = ["locations", "items", "models"];
@@ -44,6 +51,7 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready",
   const [tab, setTab] = useState<SearchTab>("locations");
   const [active, setActive] = useState(0);
   const id = useId();
+  const input = useRef<HTMLInputElement>(null);
   const result = useMemo(() => searchMap(q, ctx), [q, ctx]);
   const { coord } = result;
   const tabs = TABS.filter((t) => result.hits.some((h) => h.tab === t));
@@ -59,6 +67,7 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready",
   const pick = (p: Pick) => {
     if (!p) return;
     setOpen(false);
+    if (blursOnPick(variant)) input.current?.blur();
     if ("className" in p) onItem?.(p);
     else onPick(p);
   };
@@ -76,6 +85,7 @@ export function MapSearch({ ctx, onPick, onItem, onFocus, itemsStatus = "ready",
   return (
     <div className={`relative ${bar ? "w-full" : "w-[300px]"}`}>
       <input
+        ref={input}
         type="search" role="combobox" aria-label={SEARCH_COPY.label} placeholder={SEARCH_COPY.placeholder}
         aria-expanded={listOpen} aria-controls={listId} aria-autocomplete="list"
         aria-activedescendant={listOpen && rows.length > 0 ? `${id}-${at}` : undefined}

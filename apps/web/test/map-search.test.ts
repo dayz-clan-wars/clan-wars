@@ -9,7 +9,7 @@ import { WORLD_SIZE_M } from "@factions/domain";
 import { placesFor } from "../lib/map-places";
 import { COORD_HINT, latLngToWorld } from "../lib/map-projection";
 import { readoutText, searchMap, searchZoom, type SearchCtx } from "../lib/map-search";
-import { MapSearch, type MapSearchProps } from "../app/(site)/map/map-search";
+import { MapSearch, blursOnPick, type MapSearchProps } from "../app/(site)/map/map-search";
 import { reticlePopup } from "../app/(site)/map/map-draw";
 
 const size = WORLD_SIZE_M;
@@ -256,5 +256,12 @@ describe("searchMap models", () => {
     expect(html).toContain(">Models<");
     expect(html).toContain(">Mil Barracks1<");
     expect(html).toContain(">4<");
+  });
+});
+
+describe("blursOnPick", () => {
+  it("closes the phone's keyboard after a pick (the bar), and keeps desktop focus in the box (the panel)", () => {
+    expect(blursOnPick("bar")).toBe(true);
+    expect(blursOnPick("panel")).toBe(false);
   });
 });
