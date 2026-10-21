@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { ITEM_COPY } from "@/lib/map-copy";
-import type { ItemPanelModel } from "@/lib/item-view";
+import type { ItemCardModel, ItemPanelModel } from "@/lib/item-view";
 
 export type ItemPanelProps = {
   model: ItemPanelModel;
@@ -8,7 +8,7 @@ export type ItemPanelProps = {
   onClear: () => void;
   /** "panel" is the desktop box under the search; "sheet" is the phone's bottom bar. */
   variant: "panel" | "sheet";
-  /** The item's card (picture, display name), above the lines. Task 10 fills it; the panel stands without it. */
+  /** The item's card head (ItemCardView), above the lines. Optional: the panel stands without it. */
   card?: ReactNode;
 };
 
@@ -35,5 +35,35 @@ export function ItemPanel({ model, onClear, variant, card }: ItemPanelProps) {
         ))}
       </dl>
     </section>
+  );
+}
+
+/**
+ * The head of an item's card: its picture, the game's name for it, weight and size, and the
+ * game's description. Its lists go in the panel's own lines (lib/item-view.ts withCard).
+ */
+export function ItemCardView({ model, variant }: { model: ItemCardModel; variant: "panel" | "sheet" }) {
+  const sheet = variant === "sheet";
+  const pad = sheet ? "px-4" : "px-5";
+  const edge = sheet ? 56 : 72;
+  return (
+    <div className={`border-b border-rule-2 ${pad} py-3`}>
+      <div className="flex items-start gap-3">
+        {model.image && (
+          // alt="": the name is the next thing read, right beside it. A plain img: a fixed-size static thumbnail.
+          <img src={model.image} alt="" width={edge} height={edge} loading="lazy" className="flex-none bg-surface object-contain" style={{ width: edge, height: edge }} />
+        )}
+        <div className="min-w-0 flex-1">
+          <h3 className="m-0 font-display text-sm uppercase tracking-[0.06em] text-ink">{model.title}</h3>
+          {model.facts.length > 0 && (
+            <p className="m-0 mt-1 font-mono text-[11px] text-muted">
+              {model.facts.map((f) => `${f.label} ${f.text}`).join(" · ")}
+            </p>
+          )}
+        </div>
+      </div>
+      {/* Clamped on a phone: the sheet is short, and the lines under it are what the player came for. */}
+      {model.description && <p className={`m-0 mt-2 text-sm leading-relaxed text-ink ${sheet ? "line-clamp-3" : ""}`}>{model.description}</p>}
+    </div>
   );
 }

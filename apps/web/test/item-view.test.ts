@@ -5,10 +5,11 @@ import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { parseLimits } from "../lib/area-flags";
 import { parseTypes, type ItemIndexEntry } from "../lib/item-index";
-import { ITEM_COPY } from "../lib/map-copy";
+import { CARD_COPY, ITEM_COPY } from "../lib/map-copy";
+import type { ItemCard } from "../lib/item-cards";
 import type { WorldSwitches } from "../lib/world-layers";
-import { clearItem, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, type WorldState } from "../lib/item-view";
-import { ItemPanel } from "../app/(site)/map/item-panel";
+import { clearItem, itemCardView, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "../lib/item-view";
+import { ItemCardView, ItemPanel } from "../app/(site)/map/item-panel";
 
 const limits = parseLimits(readFileSync(join(__dirname, "fixtures/mission/cfglimitsdefinition.xml"), "utf8"));
 const entries = parseTypes(readFileSync(join(__dirname, "fixtures/items/types.xml"), "utf8"), limits);
@@ -160,5 +161,81 @@ describe("ItemPanel", () => {
 
   it("has a slot for the item card", () => {
     expect(render("CARD")).toContain("<p>CARD</p>");
+  });
+});
+
+const card = (c: Partial<ItemCard> & { className: string }): ItemCard => ({
+  displayName: c.className, description: "", weightG: null, size: null, attachments: [], magazines: [], ammo: [], image: null, ...c,
+});
+const m4 = card({
+  className: "M4A1", displayName: "M4-A1", description: "Selective-fire assault rifle.", weightG: 2276, size: [8, 3],
+  attachments: ["M4_OEBttstck", "M4_OEBttstck_Black", "ACOGOptic"], magazines: ["Mag_STANAG_30Rnd"], ammo: ["Ammo_556x45", "Ammo_556x45Tracer"],
+  image: "/items/M4A1.webp",
+});
+const cards = new Map([m4, card({ className: "M4_OEBttstck", displayName: "M4-A1 OE Buttstock" }), card({ className: "M4_OEBttstck_Black", displayName: "M4-A1 OE Buttstock" }),
+  card({ className: "Mag_STANAG_30Rnd", displayName: "30rd Standardized Mag" }), card({ className: "Ammo_556x45", displayName: "5.56x45mm Rounds" })].map((c) => [c.className, c]));
+
+describe("itemCardView", () => {
+  const v = itemCardView(m4, cards);
+
+  it("names the item, its picture, weight and size the way a player reads them", () => {
+    expect(v).toMatchObject({ title: "M4-A1", image: "/items/M4A1.webp", description: "Selective-fire assault rifle." });
+    expect(v.facts).toEqual([{ label: CARD_COPY.weight, text: "2.28 kg" }, { label: CARD_COPY.size, text: "8 × 3" }]);
+    expect(itemCardView(card({ className: "Mag", weightG: 90 }), cards).facts).toEqual([{ label: CARD_COPY.weight, text: "90 g" }]);
+  });
+
+  it("lists what fits by display name, once per name, and a class name when there is no card for it", () => {
+    expect(v.lines).toEqual([
+      { label: CARD_COPY.attachments, text: "M4-A1 OE Buttstock, ACOGOptic" },
+      { label: CARD_COPY.magazines, text: "30rd Standardized Mag" },
+      { label: CARD_COPY.ammo, text: "5.56x45mm Rounds, Ammo_556x45Tracer" },
+    ]);
+  });
+
+  it("caps a long list with \"and N more\"", () => {
+    const many = card({ className: "Vest", attachments: Array.from({ length: 12 }, (_, i) => `Pouch${i}`) });
+    expect(itemCardView(many, cards).lines[0]!.text).toBe(`Pouch0, Pouch1, Pouch2, Pouch3, Pouch4, Pouch5, Pouch6, Pouch7${ITEM_COPY.more(4)}`);
+  });
+
+  it("has no lines and no facts for an item that says nothing", () => {
+    expect(itemCardView(card({ className: "Rock" }), cards)).toMatchObject({ facts: [], lines: [] });
+  });
+
+  it("puts the card's lines after the panel's, so where it spawns stays first", () => {
+    const model = itemPanel(entry("M4A1"), "M4-A1", [pt(1)], limits);
+    const merged = withCard(model, v);
+    expect(merged.lines.slice(0, model.lines.length)).toEqual(model.lines);
+    expect(merged.lines.slice(model.lines.length)).toEqual(v.lines);
+    expect(withCard(model, null)).toBe(model);
+  });
+});
+
+describe("ItemCardView", () => {
+  const html = (variant: "panel" | "sheet", c = m4) => renderToStaticMarkup(createElement(ItemCardView, { model: itemCardView(c, cards), variant }));
+
+  it.each(["panel", "sheet"] as const)("%s: the picture, name, facts and description", (variant) => {
+    const h = html(variant);
+    expect(h).toMatch(/<img[^>]*src="\/items\/M4A1.webp"/u);
+    expect(h).toContain('alt=""'); // the name sits right beside it
+    expect(h).toContain(">M4-A1<");
+    expect(h).toContain("2.28 kg");
+    expect(h).toContain("Selective-fire assault rifle.");
+  });
+
+  it("draws no picture when there is none", () => {
+    expect(html("panel", { ...m4, image: null })).not.toContain("<img");
+  });
+});
+
+describe("the item panel on a phone", () => {
+  it("renders as the bottom sheet with the card in it, the card's lines in its one scroller", () => {
+    const model = withCard(itemPanel(entry("M4A1"), "M4-A1", [pt(1)], limits), itemCardView(m4, cards));
+    const h = renderToStaticMarkup(createElement(ItemPanel, { model, onClear: () => {}, variant: "sheet", card: createElement(ItemCardView, { model: itemCardView(m4, cards), variant: "sheet" }) }));
+    expect(h).toContain("Showing where M4-A1 spawns");
+    expect(h).toContain(">M4-A1<");
+    expect(h).toContain(CARD_COPY.attachments);
+    expect(h).toContain("max-h-[24dvh]"); // the sheet's own height, not the desktop panel's
+    expect(h).not.toContain("w-[300px]");
+    expect(h.match(/overflow-y-auto/gu)).toHaveLength(1);
   });
 });

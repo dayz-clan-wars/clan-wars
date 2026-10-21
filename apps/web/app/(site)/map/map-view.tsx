@@ -16,9 +16,10 @@ import { searchZoom, type SearchCtx } from "@/lib/map-search";
 import { rulerTakesClick, type RulerPoint } from "@/lib/map-ruler";
 import { MapReadout } from "./map-readout";
 import { MapSearch, type MapSearchItem, type MapSearchPick } from "./map-search";
-import { ItemPanel } from "./item-panel";
+import { ItemCardView, ItemPanel } from "./item-panel";
 import { loadItemIndex, type ItemsFile } from "@/lib/item-index";
-import { clearItem, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, type WorldState } from "@/lib/item-view";
+import { loadItemCards, type ItemCard } from "@/lib/item-cards";
+import { clearItem, itemCardView, itemPanel, pickItem, toggleWorldLayer, toggleWorldTier, withCard, type WorldState } from "@/lib/item-view";
 import { MapRuler } from "./map-ruler";
 import { layerIcon } from "@/lib/map-icons";
 import { CHROME_IDS, applyPopupFit } from "@/lib/map-popup-fit";
@@ -195,6 +196,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // The item index: fetched on the search box's first focus, never with the map.
   const [itemsFile, setItemsFile] = useState<ItemsFile | null>(null);
   const [itemsStatus, setItemsStatus] = useState<"idle" | "loading" | "failed" | "ready">("idle");
+  // The item cards (lib/item-cards.ts): null until in, and while they fail to load (optional extras).
+  const [cards, setCards] = useState<ReadonlyMap<string, ItemCard> | null>(null);
   // At LOOT_MIN_ZOOM or closer every item point is drawn, so the panel stops asking to zoom in.
   const [zoomedIn, setZoomedIn] = useState(false);
   const worldList = useMemo(() => (world ? worldLayers(world) : []), [world]);
@@ -414,6 +417,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     if (itemsStatus === "loading" || itemsStatus === "ready") return;
     setItemsStatus("loading");
     loadItemIndex().then((f) => { setItemsFile(f); setItemsStatus("ready"); }, () => setItemsStatus("failed"));
+    // ⚠️ Never part of itemsStatus: the cards are extra. Search and the panel work on the index
+    // alone, so a failed cards file costs the pictures and the game's names, nothing else.
+    if (!cards) loadItemCards().then(setCards, () => {});
   };
   const worldStatus = worldFailed ? "failed" : world && worldSw ? "ready" : "loading";
 
@@ -913,12 +919,17 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
       places: placesFor(MAP, Infinity).map((p) => ({ name: p.name, ...latLngToWorld(p.lat, p.lng, size) })),
       bunkers: world?.bunkers ?? [],
       items: itemsFile?.items,
+      cards: cards ?? undefined,
     }),
-    [size, world, itemsFile],
+    [size, world, itemsFile, cards],
   );
-  // The item view's panel. Its card slot stays empty until Task 10's item cards.
+  // The item view's panel, with the item's card when the cards are in.
   const delootAt = useMemo(() => (world && shownItem ? delootEvents(world, shownItem) : null), [world, shownItem]);
-  const itemModel = shown && shownItem ? itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }) : null;
+  const shownCard = useMemo(() => {
+    const c = shown && cards?.get(shown.className);
+    return c && cards ? itemCardView(c, cards) : null;
+  }, [shown, cards]);
+  const itemModel = shown && shownItem ? withCard(itemPanel(shownItem, shown.label, shownPoints, itemsFile!.limits, { delootAt, zoomedIn }), shownCard) : null;
   /**
    * A search pick: fly there, at zoom 5 or closer. A typed coordinate also gets the
    * reticle with its popup open; a place or bunker does not, because its name or its
@@ -1050,7 +1061,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             // The item panel sits in the search box's own box, so the popup fit (CHROME_IDS.search) clears it too.
             <div id={CHROME_IDS.search} className="absolute left-6 top-6 z-[1100] hidden flex-col gap-2 lg:flex">
               <MapSearch ctx={searchCtx} onPick={searchPick} onItem={showItem} onFocus={loadItems} itemsStatus={itemsStatus} onClear={searchClear} variant="panel" />
-              {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="panel" />}
+              {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="panel" card={shownCard && <ItemCardView model={shownCard} variant="panel" />} />}
             </div>
           )}
           <div id={CHROME_IDS.corner} className="absolute right-6 top-6 z-[1100] hidden flex-col items-end gap-2 lg:flex">
@@ -1170,7 +1181,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
               </div>
             )}
             {/* The item view on a phone: in this bar, so the map's inset grows with it and no spot hides under it. */}
-            {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" />}
+            {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" card={shownCard && <ItemCardView model={shownCard} variant="sheet" />} />}
             {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
             <div className={`border-b border-rule-2 ${layersOpen ? "border-t" : ""}`}>
               <MapReadout map={null} size={size} centre={centre} variant="row" />

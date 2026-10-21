@@ -16,13 +16,16 @@ export type SearchTab = SearchHit["tab"];
 export type SearchResult = { coord: CoordQuery; hits: SearchHit[] };
 /**
  * Places and bunkers in world metres, and the item index once it is in (loaded on the box's
- * first focus, so a map that is never searched never fetches it). Task 11 adds `models?`.
+ * first focus, so a map that is never searched never fetches it). `cards`: the game's own
+ * names for the items (lib/item-cards.ts), when they loaded; search works without them.
+ * Task 11 adds `models?`.
  */
 export type SearchCtx = {
   size: number;
   places: { name: string; x: number; z: number }[];
   bunkers: { x: number; z: number }[];
   items?: readonly { className: string }[];
+  cards?: ReadonlyMap<string, { displayName: string }>;
 };
 
 /** The zoom a picked result lands at, unless the player is already closer. */
@@ -53,16 +56,21 @@ function score(name: string, query: readonly string[]): number | null {
   return first * 1000 + (lower.length - query.join(" ").length);
 }
 
+/** The best of several scores; null only when none matched. */
+const best = (...scores: (number | null)[]): number | null =>
+  scores.reduce<number | null>((a, b) => (a === null ? b : b === null ? a : Math.min(a, b)), null);
+
 /**
  * A class name scored as typed ("mag_stanag") and split at its capitals too ("TunaCan" →
- * "tuna can"), so "can" finds TunaCan. The better of the two wins.
- * Labels are the class name until Task 10's item cards bring display names.
+ * "tuna can"), so "can" finds TunaCan, and the game's display name when its card is in
+ * ("M4-A1", "Canned Tuna"): players type what the game shows them. The best one wins.
  */
-function itemScore(className: string, query: readonly string[]): number | null {
-  const plain = score(className, query);
-  const split = score(className.replace(/([a-z])([A-Z])/gu, "$1 $2"), query);
-  if (plain === null) return split;
-  return split === null ? plain : Math.min(plain, split);
+function itemScore(className: string, displayName: string | undefined, query: readonly string[]): number | null {
+  return best(
+    score(className, query),
+    score(className.replace(/([a-z])([A-Z])/gu, "$1 $2"), query),
+    displayName === undefined ? null : score(displayName, query),
+  );
 }
 
 export function searchMap(q: string, ctx: SearchCtx): SearchResult {
@@ -84,8 +92,10 @@ export function searchMap(q: string, ctx: SearchCtx): SearchResult {
     if (s !== null) ranked.push({ s, hit: { tab: "locations", label: n.name, x: n.x, z: n.z } });
   }
   for (const i of ctx.items ?? []) {
-    const s = itemScore(i.className, typed);
-    if (s !== null) ranked.push({ s, hit: { tab: "items", className: i.className, label: i.className } });
+    const name = ctx.cards?.get(i.className)?.displayName;
+    const s = itemScore(i.className, name, typed);
+    // Labelled as the game names it; the class name stays the key (and shows beside it in the list).
+    if (s !== null) ranked.push({ s, hit: { tab: "items", className: i.className, label: name ?? i.className } });
   }
   // One sort for every tab: the box shows one tab at a time, so the order only matters within one.
   ranked.sort((a, b) => a.s - b.s || a.hit.label.localeCompare(b.hit.label, undefined, { numeric: true }));

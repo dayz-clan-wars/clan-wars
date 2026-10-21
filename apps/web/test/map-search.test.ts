@@ -88,6 +88,39 @@ describe("searchMap items", () => {
   });
 });
 
+describe("searchMap items with their cards", () => {
+  const items = ["M4A1", "M4A1_Green", "AKM", "TunaCan"].map((className) => ({ className }));
+  const cards = new Map([
+    ["M4A1", { displayName: "M4-A1" }],
+    ["M4A1_Green", { displayName: "M4-A1" }],
+    ["AKM", { displayName: "KA-M" }],
+    ["TunaCan", { displayName: "Canned Tuna" }],
+  ]);
+  const withCards: SearchCtx = { ...ctx, items, cards };
+  const itemHits = (q: string) => searchMap(q, withCards).hits.filter((h) => h.tab === "items");
+
+  it("matches the game's display name: \"M4-A1\" finds M4A1, labelled as the game names it", () => {
+    expect(itemHits("M4-A1")).toEqual([
+      { tab: "items", className: "M4A1", label: "M4-A1" },
+      { tab: "items", className: "M4A1_Green", label: "M4-A1" },
+    ]);
+  });
+
+  it("still matches the class name: \"akm\" finds the KA-M", () => {
+    expect(itemHits("akm").map((h) => h.className)).toEqual(["AKM"]);
+  });
+
+  it("finds a word only the display name has", () => {
+    expect(itemHits("tuna").map((h) => h.label)).toEqual(["Canned Tuna"]);
+    expect(itemHits("canned").map((h) => h.className)).toEqual(["TunaCan"]);
+  });
+
+  it("works without the cards: an item with no card keeps its class name", () => {
+    const some: SearchCtx = { ...ctx, items, cards: new Map([["AKM", { displayName: "KA-M" }]]) };
+    expect(searchMap("m4a1", some).hits.filter((h) => h.tab === "items")[0]).toEqual({ tab: "items", className: "M4A1", label: "M4A1" });
+  });
+});
+
 describe("searchZoom", () => {
   it("zooms in to 5, and never out", () => {
     expect(searchZoom(2)).toBe(5);
@@ -147,6 +180,12 @@ describe("MapSearch", () => {
     const html = render({ initial: "m4a1", ctx: { ...ctx, items: [{ className: "M4A1" }] } });
     expect(html).toContain(">Items<");
     expect(html).toContain(">M4A1<");
+  });
+
+  it("shows an item's class name beside its display name, so two colours of one gun tell apart", () => {
+    const html = render({ initial: "m4-a1", ctx: { ...ctx, items: [{ className: "M4A1_Green" }], cards: new Map([["M4A1_Green", { displayName: "M4-A1" }]]) } });
+    expect(html).toContain(">M4-A1<");
+    expect(html).toContain(">M4A1_Green<");
   });
 
   it("says the items are loading instead of \"nothing by that name\"", () => {

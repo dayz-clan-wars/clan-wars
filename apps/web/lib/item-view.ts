@@ -1,7 +1,8 @@
 // The item view: a searched item drawn alone on the map, and the panel that says how it
 // reaches players. Pure — the switches as values, the panel as lines — so map-view.tsx only
 // wires it up and item-panel.tsx only renders it.
-import { ITEM_COPY, tierLabel } from "./map-copy";
+import { CARD_COPY, ITEM_COPY, tierLabel } from "./map-copy";
+import type { ItemCard } from "./item-cards";
 import { spawnsAnywhere, type ItemIndexEntry } from "./item-index";
 import { ITEM_ALWAYS_MAX, eventLabel, type WorldLayerKey, type WorldMark, type WorldSwitches } from "./world-layers";
 import type { WorldFile } from "./map-world";
@@ -107,4 +108,45 @@ export function itemPanel(
   if (item.spawnGear) lines.push({ label: ITEM_COPY.spawnGearLabel, text: ITEM_COPY.spawnGear });
   for (const c of item.clanWars) lines.push({ label: ITEM_COPY.clanWarsLabel, text: ITEM_COPY.clanWars[c] });
   return { chip, lines };
+}
+
+/** The card's head (picture, name, weight and size, description) and its lists as panel lines. */
+export type ItemCardModel = { title: string; image: string | null; description: string; facts: ItemPanelLine[]; lines: ItemPanelLine[] };
+
+/** How many names a card list shows before "and N more": a plate carrier takes 26 things. */
+const CARD_LIST_SHOWN = 8;
+
+/** 90 → "90 g", 2276 → "2.28 kg": the game's grams, as a player would say them. */
+const weightText = (g: number) => (g < 1000 ? `${g} g` : `${Number((g / 1000).toFixed(2))} kg`);
+
+/**
+ * What the item is. Lists name each class by its own card's display name, once per name: the
+ * three colours of the OE buttstock are one "M4-A1 OE Buttstock". A class with no card keeps
+ * its class name rather than vanishing.
+ */
+export function itemCardView(card: ItemCard, cards: ReadonlyMap<string, ItemCard>): ItemCardModel {
+  const facts: ItemPanelLine[] = [];
+  if (card.weightG !== null) facts.push({ label: CARD_COPY.weight, text: weightText(card.weightG) });
+  if (card.size) facts.push({ label: CARD_COPY.size, text: `${card.size[0]} × ${card.size[1]}` });
+  const lines: ItemPanelLine[] = [];
+  const list = (label: string, classes: readonly string[]) => {
+    const names = [...new Set(classes.map((c) => cards.get(c)?.displayName ?? c))];
+    if (names.length === 0) return;
+    const rest = names.length - CARD_LIST_SHOWN;
+    const shown = names.slice(0, CARD_LIST_SHOWN).join(", ");
+    lines.push({ label, text: rest > 0 ? `${shown}${ITEM_COPY.more(rest)}` : shown });
+  };
+  list(CARD_COPY.attachments, card.attachments);
+  list(CARD_COPY.magazines, card.magazines);
+  list(CARD_COPY.ammo, card.ammo);
+  return { title: card.displayName, image: card.image, description: card.description, facts, lines };
+}
+
+/**
+ * The panel with the card's lists added AFTER its own lines: the panel is "where it spawns"
+ * first. ⚠️ Into the panel's one scroller, not a second list in the card: a scroller inside the
+ * phone's scrolling sheet traps a swipe. No card (cards failed to load) is the panel unchanged.
+ */
+export function withCard(model: ItemPanelModel, card: ItemCardModel | null): ItemPanelModel {
+  return card ? { ...model, lines: [...model.lines, ...card.lines] } : model;
 }

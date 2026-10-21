@@ -116,6 +116,15 @@ export const ITEM_COPY = {
   },
 } as const;
 
+/** The item card (lib/item-cards.ts): what the item is, from the game's own files. */
+export const CARD_COPY = {
+  weight: "Weight",
+  size: "Size",
+  attachments: "Attachments",
+  magazines: "Magazines",
+  ammo: "Ammo",
+} as const;
+
 /** The ruler (map-ruler.tsx, lib/map-ruler.ts). */
 export const RULER_COPY = {
   label: "Ruler",
