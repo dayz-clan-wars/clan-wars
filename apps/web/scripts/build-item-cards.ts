@@ -7,6 +7,8 @@
 //                            pnpm --filter @factions/web map:cards --host user@pc
 //                            pnpm --filter @factions/web map:cards --from <a local copy of the extract>
 // Run after a DayZ update or an items.json rebuild, then commit the output.
+// ⚠️ This rewrites every card's `image`, so it drops the community pictures. Re-run
+// `pnpm --filter @factions/web map:pictures` afterwards (it warns below when pictures/ exists).
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -97,3 +99,4 @@ const file: ItemCardsFile = { version: 1, source: { ...build, builtAt: new Date(
 writeFileSync(join(dataDir, "item-cards.json"), `${JSON.stringify(file)}\n`);
 const missing = index.items.length - cards.length;
 console.log(`${cards.length} cards for ${index.items.length} items (${missing} not in the game files); images: ${counts.game} game, ${counts.wiki} wiki, ${counts.none} none; ${(bytes / 1024 / 1024).toFixed(2)} MB at ${EDGE}px`);
+if (existsSync(join(dataDir, "pictures"))) console.log(`⚠️ ${join(dataDir, "pictures")} exists but these cards no longer point at it: run \`map:pictures\` now`);

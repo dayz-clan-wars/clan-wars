@@ -53,6 +53,12 @@ The game is installed on the Ubuntu PC `rraygun@192.168.1.103`, so the cards are
 DayZ ships no item pictures, so cards use the wiki pictures in `apps/web/public/items`; an item
 without one shows no picture. Add one and re-run `map:cards`.
 
+Most cards also have a community-supplied picture (`apps/web/public/map-data/nasdara/pictures/`,
+supplied 2026-10-21, source unconfirmed; delete the folder and run `map:cards` to remove them).
+⚠️ `map:cards` rewrites every card's `image` and drops those pictures, so run
+`pnpm --filter @factions/web map:pictures` after it (`--from <dir>` if the originals are not at
+`<repo>/../item_images`). `map:cards` prints a warning when the folder is still there.
+
 ## In-game spot check
 
 Do this once after the first deploy. It confirms the grid orientation matches the game.

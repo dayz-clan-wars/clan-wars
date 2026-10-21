@@ -20,7 +20,7 @@ export type ItemCard = {
 
 export type ItemCardsFile = {
   version: 1;
-  source: { steamBuildId: string; addonsModified: string; hemtt: string; builtAt: string }; // the DayZ build read, and the tool that read it
+  source: { steamBuildId: string; addonsModified: string; hemtt: string; builtAt: string; pictures?: { count: number; suppliedBy: string; sourceConfirmed: boolean } }; // the DayZ build read, and the tool that read it; `pictures` is added by map:pictures
   cards: ItemCard[];
 };
 

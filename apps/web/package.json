@@ -14,7 +14,8 @@
     "guide:publish": "tsx scripts/publish-guide.ts",
     "map:world": "tsx scripts/build-map-world.ts",
     "map:items": "tsx scripts/build-item-index.ts",
-    "map:cards": "tsx scripts/build-item-cards.ts"
+    "map:cards": "tsx scripts/build-item-cards.ts",
+    "map:pictures": "tsx scripts/apply-item-pictures.ts"
   },
   "dependencies": {
     "@factions/copy": "workspace:*",
