@@ -3,7 +3,8 @@ import { createClient, runMigrations, requireTestDatabaseUrl, type Database } fr
 import { sql } from "drizzle-orm";
 import { PVE_RULES } from "../../src/achievements/rules-pve.js";
 import { makeCtx } from "../../src/achievements/types.js";
-import { seedServer, seedKill, seedSession, seedEvent, TRUNCATE } from "./seed.js";
+import { BAD_DOG_SURVIVE_MS } from "@factions/domain";
+import { seedServer, seedKill, seedSession, seedEvent, seedHit, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const A = "A".repeat(36), B = "B".repeat(36);
@@ -11,7 +12,8 @@ const t0 = new Date("2026-08-01T10:00:00Z");
 const h = (n: number) => new Date(t0.getTime() + n * 3_600_000);
 const player = { kind: "player" as const, id: A };
 const NOW = h(1000);
-const mk = () => makeCtx(NOW);
+const mk = (now = NOW) => makeCtx(now);
+const sec = (n: number) => new Date(t0.getTime() + n * 1000);
 const rule = (k: string) => PVE_RULES[k as keyof typeof PVE_RULES]!;
 
 describe("pve rules", () => {
@@ -99,5 +101,92 @@ describe("pve rules", () => {
     // The run restarted at h(5), so the target is only crossed 5 h of play after it.
     await seedSession(db, { serverId, dayzId: A, from: h(10), to: h(12) });
     expect(await rule("ironman")(db, player, mk())).toMatchObject({ count: 5, earnedAt: h(11) });
+  });
+
+  // ── Dogs (spec 2026-10-20-achievements-150 §2.5) ────────────────────────────
+
+  const bite = (at: Date, label = "Doberman", victim = A) => seedHit(db, { serverId, at, victim, attackerLabel: label });
+
+  it("dog_food: a death with cause dog and no killer", async () => {
+    await bite(h(0));
+    expect((await rule("dog_food")(db, player, mk())).count).toBe(0);
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(0.01), cause: "dog" });
+    expect(await rule("dog_food")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(0.01), evidenceId: k.id });
+  });
+
+  it("⚠️ dog_food: dog bites then a player's kill — the death is the player's, so no Dog Food", async () => {
+    await bite(sec(0)); await bite(sec(2), "German Shepherd");
+    await seedKill(db, { serverId, killer: B, victim: A, at: sec(5), cause: "dog" });   // even mislabelled, a credited kill is not this
+    await seedKill(db, { serverId, killer: B, victim: A, at: sec(9) });
+    expect((await rule("dog_food")(db, player, mk())).count).toBe(0);
+  });
+
+  it("chew_toy: 10 dog hit lines, both breeds, other hitters and other victims not counted", async () => {
+    for (let i = 0; i < 9; i++) await bite(sec(i), i % 2 ? "German Shepherd" : "Doberman");
+    await seedHit(db, { serverId, at: sec(20), victim: A, attackerLabel: "Infected", attackerType: "infected" });
+    await seedHit(db, { serverId, at: sec(21), victim: A, attackerLabel: "Fence", cause: "BarbedWireHit" });
+    await seedHit(db, { serverId, at: sec(22), victim: A, attacker: B, weapon: "M4-A1" });
+    await bite(sec(23), "Doberman", B);
+    expect(await rule("chew_toy")(db, player, mk())).toMatchObject({ count: 9, target: 10 });
+    // Lines, not attacks: a tenth bite in the same second as the ninth still counts.
+    const tenth = await bite(sec(8));
+    expect(await rule("chew_toy")(db, player, mk())).toMatchObject({ count: 10, earnedAt: sec(8), evidenceId: tenth.id });
+  });
+
+  it("bad_dog: a bite and then a death 4 min later is not surviving it", async () => {
+    await bite(h(0));
+    await seedKill(db, { serverId, killer: null, victim: A, at: new Date(h(0).getTime() + 4 * 60_000), cause: "bled_out" });
+    expect(await rule("bad_dog")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+  });
+
+  it("bad_dog: a death in the bite's own second is the bite killing you, not surviving it", async () => {
+    await bite(sec(30));
+    await seedKill(db, { serverId, killer: null, victim: A, at: sec(30), cause: "dog" });
+    expect(await rule("bad_dog")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+  });
+
+  it("bad_dog: a bite with an open session and no death is earned at bite + 10 min, only once now has reached it", async () => {
+    await seedSession(db, { serverId, dayzId: A, from: h(-1), to: null });
+    const b = await bite(h(1));
+    const at = new Date(h(1).getTime() + BAD_DOG_SURVIVE_MS);
+    expect(await rule("bad_dog")(db, player, mk(new Date(at.getTime() - 1000)))).toMatchObject({ count: 0, target: 1 });
+    expect(await rule("bad_dog")(db, player, mk(at))).toMatchObject({ count: 1, earnedAt: at, evidenceId: b.id });
+    // A death after the window does not undo it.
+    await seedKill(db, { serverId, killer: B, victim: A, at: new Date(at.getTime() + 1000) });
+    expect(await rule("bad_dog")(db, player, mk())).toMatchObject({ count: 1, earnedAt: at });
+  });
+
+  it("bad_dog: the first bite that was survived — an earlier fatal mauling does not count, a later survived one does", async () => {
+    await bite(h(0));
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(0.1), cause: "dog" });   // 6 min later
+    const b2 = await bite(h(2), "German Shepherd");
+    await bite(h(2.05));
+    expect(await rule("bad_dog")(db, player, mk())).toMatchObject({ count: 1, earnedAt: new Date(h(2).getTime() + BAD_DOG_SURVIVE_MS), evidenceId: b2.id });
+  });
+
+  // ── Motorbikes (§2.6) ───────────────────────────────────────────────────────
+
+  it("⚠️ road_rash: a 30-line burst in one second is one incident, not 30", async () => {
+    const first = await seedHit(db, { serverId, at: sec(10), victim: A, attackerLabel: "Motorbike_02_Yellow", cause: "TransportHit" });
+    for (let i = 1; i < 30; i++) await seedHit(db, { serverId, at: sec(10), victim: A, attackerLabel: "Motorbike_02_Yellow", cause: "TransportHit" });
+    expect(await rule("road_rash")(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(10), evidenceId: first.id, evidence: { incidents: 1 } });
+    await seedHit(db, { serverId, at: sec(70), victim: A, attackerLabel: "Motorbike_01_Blue", cause: "TransportHit" });
+    expect((await rule("road_rash")(db, player, mk())).evidence).toMatchObject({ incidents: 2 });
+  });
+
+  it("road_rash: not a car, not a driven bike, not someone else", async () => {
+    await seedHit(db, { serverId, at: sec(0), victim: A, attackerLabel: "Hatchback_02_Blue", cause: "TransportHit" });
+    await seedHit(db, { serverId, at: sec(1), victim: A, attacker: B, weapon: "TransportHit (Motorbike_02_Red)" });
+    await seedHit(db, { serverId, at: sec(2), victim: B, attackerLabel: "Motorbike_02_Yellow", cause: "TransportHit" });
+    expect(await rule("road_rash")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+  });
+
+  it("wipeout: a no-killer vehicle death whose entity is a motorbike; a car, or a driver's kill, is not", async () => {
+    await seedKill(db, { serverId, killer: null, victim: A, at: h(0), cause: "vehicle", entity: "Hatchback_02_Blue" });
+    await seedKill(db, { serverId, killer: B, victim: A, at: h(1), cause: "pvp", weapon: "TransportHit (Motorbike_02_Red)" });
+    await seedKill(db, { serverId, killer: null, victim: B, at: h(2), cause: "vehicle", entity: "Motorbike_02_Yellow" });
+    expect(await rule("wipeout")(db, player, mk())).toMatchObject({ count: 0, target: 1 });
+    const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(3), cause: "vehicle", entity: "Motorbike_02_Yellow" });
+    expect(await rule("wipeout")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3), evidenceId: k.id, evidence: { vehicle: "Motorbike_02_Yellow" } });
   });
 });

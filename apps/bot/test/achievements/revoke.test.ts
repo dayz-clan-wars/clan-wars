@@ -29,13 +29,16 @@ describe("revokeAchievements", () => {
       expect(ACHIEVEMENT_BY_KEY[k].group).toBe("pvp");
     }
     for (const k of ["flag_thief", "home_defender", "blue_on_blue"]) expect(REVOCABLE_KEYS).not.toContain(k);
+    // The melee and motorbike kill tiles read pvpBy kills; Hit and Run reads hits, not kills, so it stays out.
+    for (const k of ["knife_work", "bare_knuckles", "sledge", "melee_mix", "roadkill"]) expect(REVOCABLE_KEYS).toContain(k);
+    expect(REVOCABLE_KEYS).not.toContain("hit_and_run");
   });
 
   it("⚠️ every armory tile is revocable: each reads pvpBy kills through gunSet", () => {
     const armory = ACHIEVEMENTS.filter((a) => "section" in a && a.section === "armory").map((a) => a.key);
     expect(armory).toHaveLength(59);
     for (const k of armory) expect(REVOCABLE_KEYS).toContain(k);
-    expect(REVOCABLE_KEYS).toHaveLength(12 + 59);
+    expect(REVOCABLE_KEYS).toHaveLength(12 + 5 + 59);
   });
 
   it("revokes a gun tile whose only kill was later flagged at the Hub, and keeps one a real kill still earns", async () => {

@@ -3,25 +3,25 @@ import { ACHIEVEMENTS, ACHIEVEMENT_BY_KEY, ACHIEVEMENT_GROUPS, EARNABLE_ACHIEVEM
 import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
 
 describe("the achievement definitions", () => {
-  it("are exactly 109, keyed uniquely in snake_case", () => {
-    expect(ACHIEVEMENTS).toHaveLength(109);
+  it("are exactly 120, keyed uniquely in snake_case", () => {
+    expect(ACHIEVEMENTS).toHaveLength(120);
     const keys = ACHIEVEMENTS.map((a) => a.key);
-    expect(new Set(keys).size).toBe(109);
+    expect(new Set(keys).size).toBe(120);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
   });
 
-  it("106 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
-    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(106);
+  it("117 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(117);
     for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain(k);
     expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer", "wolf_bait", "bear_necessities"]);
     expect(ACHIEVEMENT_BY_KEY.wanderer.name).toBe("Wanderer");
     expect([ACHIEVEMENT_BY_KEY.wolf_bait.name, ACHIEVEMENT_BY_KEY.bear_necessities.name]).toEqual(["Wolf Bait", "Bear Necessities"]);
   });
 
-  it("split 11 solo, 12 pve, 74 pvp, 12 team; team is clan-owned and nothing else is", () => {
+  it("split 11 solo, 17 pve, 80 pvp, 12 team; team is clan-owned and nothing else is", () => {
     const by = (g: string) => ACHIEVEMENTS.filter((a) => a.group === g);
-    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([11, 12, 74, 12]);
+    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([11, 17, 80, 12]);
     for (const a of ACHIEVEMENTS) expect(a.owner).toBe(a.group === "team" ? "clan" : "player");
     expect(ACHIEVEMENT_GROUPS).toEqual(["solo", "pve", "pvp", "team"]);
   });
@@ -64,6 +64,23 @@ describe("the achievement definitions", () => {
     // One statement of a class's size: the target is the catalogue's count, never a typed number.
     FIREARM_CLASSES.forEach((c, i) => expect(classes[i]!.target).toBe(FIREARMS.filter((f) => f.class === c).length));
     expect(ACHIEVEMENT_BY_KEY.full_armory).toMatchObject({ name: "Full Armory", description: "A PvP kill with every firearm on Nasdara", target: 52 });
-    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(50);
+    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(61);
+  });
+
+  it("melee, dogs and motorbikes: the eleven tiles as agreed", () => {
+    const row = (k: string) => { const a = ACHIEVEMENT_BY_KEY[k as keyof typeof ACHIEVEMENT_BY_KEY]; return [a.key, a.name, a.description, a.group, a.target]; };
+    expect(["knife_work", "bare_knuckles", "sledge", "melee_mix", "dog_food", "bad_dog", "chew_toy", "road_rash", "wipeout", "hit_and_run", "roadkill"].map(row)).toEqual([
+      ["knife_work", "Knife Work", "A PvP kill with a knife", "pvp", 1],
+      ["bare_knuckles", "Bare Knuckles", "A PvP kill with your fists", "pvp", 1],
+      ["sledge", "Sledge", "A PvP kill with a sledgehammer", "pvp", 1],
+      ["melee_mix", "Hands On", "PvP kills with 5 different melee weapons", "pvp", 5],
+      ["dog_food", "Dog Food", "Get killed by a dog", "pve", 1],
+      ["bad_dog", "Bad Dog", "Survive a dog attack", "pve", 1],
+      ["chew_toy", "Chew Toy", "Take 10 dog bites", "pve", 10],
+      ["road_rash", "Road Rash", "Get hurt by a motorbike", "pve", 1],
+      ["wipeout", "Wipeout", "Get killed by a motorbike", "pve", 1],
+      ["hit_and_run", "Hit and Run", "Hit a player with a motorbike", "pvp", 1],
+      ["roadkill", "Roadkill", "A PvP kill with a motorbike", "pvp", 1],
+    ]);
   });
 });

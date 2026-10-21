@@ -69,6 +69,12 @@ export const ACHIEVEMENTS = [
   def("lights_out", "Lights Out", "Get knocked unconscious 10 times", "pve", 10),
   def("should_have_bandaged", "Should Have Bandaged", "Bleed out", "pve"),
   def("nine_lives", "Nine Lives", "Die 9 times, any cause", "pve", 9),
+  // PvE — dogs and motorbikes (spec 2026-10-20-achievements-150 §2.5, §2.6)
+  def("dog_food", "Dog Food", "Get killed by a dog", "pve"),
+  def("bad_dog", "Bad Dog", "Survive a dog attack", "pve"),
+  def("chew_toy", "Chew Toy", "Take 10 dog bites", "pve", 10),
+  def("road_rash", "Road Rash", "Get hurt by a motorbike", "pve"),
+  def("wipeout", "Wipeout", "Get killed by a motorbike", "pve"),
   // PvP — kills, streaks, and flags taken by hand
   def("first_blood", "First Blood", "Your first PvP kill", "pvp"),
   def("ten_down", "Ten Down", "Get 10 PvP kills", "pvp", 10),
@@ -85,6 +91,13 @@ export const ACHIEVEMENTS = [
   def("flag_thief", "Flag Thief", "Lower an enemy flag yourself in a scored raid", "pvp"),
   def("home_defender", "Home Defender", "Make the raise that ends a siege", "pvp"),
   def("blue_on_blue", "Blue on Blue", "Kill a clanmate", "pvp"),
+  // PvP — up close: melee and motorbikes (spec §2.4, §2.6)
+  def("knife_work", "Knife Work", "A PvP kill with a knife", "pvp"),
+  def("bare_knuckles", "Bare Knuckles", "A PvP kill with your fists", "pvp"),
+  def("sledge", "Sledge", "A PvP kill with a sledgehammer", "pvp"),
+  def("melee_mix", "Hands On", "PvP kills with 5 different melee weapons", "pvp", 5),
+  def("hit_and_run", "Hit and Run", "Hit a player with a motorbike", "pvp"),
+  def("roadkill", "Roadkill", "A PvP kill with a motorbike", "pvp"),
   // PvP — the armory: one tile per firearm, generated from the catalogue IN ITS ORDER, so a
   // gun added to firearms.ts gets its tile (and the rules-test diff demands its rule) at once.
   // ⚠️ A key is `gun_<firearm key>` and stable forever once shipped: never rename a firearm key.

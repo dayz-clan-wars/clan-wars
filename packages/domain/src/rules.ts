@@ -445,3 +445,8 @@ export const REFERRAL_CLOSE_GRACE_MS = 30 * 60_000;
 export const REFERRAL_AWARD_KEY = "weapon-kit";
 /** How long the prize runs. Set here, not from the catalogue: the weapon kit's own `durationDays` is shorter, and the post promises a week. */
 export const REFERRAL_AWARD_DAYS = 7;
+
+// ─── Achievements (spec 2026-10-20-achievements-150) ─────────────────────────
+
+/** Bad Dog: a dog bite counts as survived once this long passes with no death. Earned at the bite plus this, never earlier. */
+export const BAD_DOG_SURVIVE_MS = 10 * MIN;

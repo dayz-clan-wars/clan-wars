@@ -3,7 +3,7 @@ import { createClient, runMigrations, requireTestDatabaseUrl, type Database } fr
 import { sql } from "drizzle-orm";
 import { PVP_RULES, gunSet, ownPvpKills } from "../../src/achievements/rules-pvp.js";
 import { makeCtx } from "../../src/achievements/types.js";
-import { seedServer, seedKill, seedSession, seedRaid, seedDefense, seedFaction, seedSeason, TRUNCATE } from "./seed.js";
+import { seedServer, seedKill, seedSession, seedRaid, seedDefense, seedFaction, seedSeason, seedHit, TRUNCATE } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
 const A = "A".repeat(36), B = "B".repeat(36), C = "C".repeat(36);
@@ -188,5 +188,68 @@ describe("pvp rules", () => {
       expect(about("KA-M2")).toHaveLength(1);
       for (const n of ["Hunting Knife", "TransportHit (Motorbike_02_Red)", "DMR"]) expect(about(n)).toHaveLength(0);
     } finally { warn.mockRestore(); }
+  });
+
+  // ── Melee (spec 2026-10-20-achievements-150 §2.4) ───────────────────────────
+
+  const melee = (at: Date, weapon: string, o: { victim?: string; friendlyFire?: boolean; atHub?: boolean; distanceM?: number | null } = {}) =>
+    seedKill(db, { serverId, killer: A, victim: o.victim ?? B, at, weapon, distanceM: o.distanceM ?? null, friendlyFire: o.friendlyFire, atHub: o.atHub });
+
+  it("knife_work / bare_knuckles / sledge: the first scoring kill with that weapon", async () => {
+    await melee(m(0), "Hunting Knife", { friendlyFire: true });
+    await melee(m(1), "(MeleeFist)", { atHub: true });
+    await seedKill(db, { serverId, killer: B, victim: A, at: m(2), weapon: "Sledgehammer" });   // being killed with one is not this
+    for (const k of ["knife_work", "bare_knuckles", "sledge"]) expect((await rule(k)(db, player, mk())).count).toBe(0);
+    const knife = await melee(m(3), "Kukri");
+    const fist = await melee(m(4), "(MeleeFist_Heavy)");
+    const sledge = await melee(m(5), "Sledgehammer");
+    await melee(m(6), "Combat Knife");
+    expect(await rule("knife_work")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(3), evidenceId: knife.id, evidence: { weapon: "Kukri" } });
+    expect(await rule("bare_knuckles")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(4), evidenceId: fist.id });
+    expect(await rule("sledge")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(5), evidenceId: sledge.id });
+  });
+
+  it("melee_mix: 5 different melee weapons; fists are one, guns and ranged kills are none", async () => {
+    await melee(m(0), "(MeleeFist)");
+    await melee(m(1), "(MeleeFistHeavy)");
+    await melee(m(2), "(MeleeFist_Heavy)");
+    await melee(m(3), "Hunting Knife");
+    await melee(m(4), "Hunting Knife", { victim: C });
+    await melee(m(5), "Mystery 9000", { distanceM: 40 });        // an unmapped gun: it has a range, so not melee
+    await seedKill(db, { serverId, killer: A, victim: B, at: m(6), weapon: "M4-A1", distanceM: 30 });
+    await melee(m(7), "TransportHit (Motorbike_02_Red)");      // a bike is not a melee weapon
+    await melee(m(8), "Pickaxe");
+    await melee(m(9), "Hatchet", { friendlyFire: true });
+    expect(await rule("melee_mix")(db, player, mk())).toMatchObject({ count: 3, target: 5 });
+    await melee(m(10), "Farming Hoe");
+    const fifth = await melee(m(11), "Sledgehammer");
+    await melee(m(12), "Hatchet");
+    expect(await rule("melee_mix")(db, player, mk())).toMatchObject({ count: 5, earnedAt: m(11), evidenceId: fifth.id });
+  });
+
+  // ── Motorbikes (§2.6) ───────────────────────────────────────────────────────
+
+  it("roadkill: a scoring kill whose weapon is a motorbike; a car or a Hub kill is not", async () => {
+    await melee(m(0), "TransportHit (Hatchback_02_Blue)");
+    await melee(m(1), "TransportHit (Motorbike_02_Red)", { atHub: true });
+    expect((await rule("roadkill")(db, player, mk())).count).toBe(0);
+    const k = await melee(m(2), "TransportHit (Motorbike_01_Blue)");
+    expect(await rule("roadkill")(db, player, mk())).toMatchObject({ count: 1, earnedAt: m(2), evidenceId: k.id, evidence: { vehicle: "Motorbike_01_Blue" } });
+  });
+
+  const sec = (n: number) => new Date(t0.getTime() + n * 1000);
+  const ride = (at: Date, victim: string, weapon = "TransportHit (Motorbike_02_Red)", attacker = A) => seedHit(db, { serverId, at, victim, attacker, weapon });
+
+  it("⚠️ hit_and_run: 30 identical lines in one second on one victim are one incident; another victim that second is another", async () => {
+    await ride(sec(0), B, "TransportHit (Hatchback_02_Blue)");
+    await ride(sec(1), A);                                         // your own bike on yourself is not hitting a player
+    await ride(sec(2), A, "TransportHit (Motorbike_02_Red)", B);   // being hit is not this
+    await seedHit(db, { serverId, at: sec(3), victim: A, attackerLabel: "Motorbike_02_Yellow", cause: "TransportHit" });
+    expect((await rule("hit_and_run")(db, player, mk())).count).toBe(0);
+    const first = await ride(sec(10), B);
+    for (let i = 1; i < 30; i++) await ride(sec(10), B);
+    expect(await rule("hit_and_run")(db, player, mk())).toMatchObject({ count: 1, earnedAt: sec(10), evidenceId: first.id, evidence: { incidents: 1 } });
+    await ride(sec(10), C);
+    expect((await rule("hit_and_run")(db, player, mk())).evidence).toMatchObject({ incidents: 2 });
   });
 });

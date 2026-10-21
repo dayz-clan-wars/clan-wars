@@ -10,7 +10,7 @@ import { makeCtx } from "./types.js";
  * ⚠️ Kill-derived rules ONLY. Re-running a position- or pin-based rule today
  * reads data the reaper has already deleted (POSITION_RETENTION_MS), comes
  * back "not earned", and would revoke a badge that was fairly won. Pinned by
- * revoke.test.ts: every key here is a PvP rule, none of the three PvP rules
+ * revoke.test.ts: every key here is a PvP rule, none of the four PvP rules
  * that do not read `kills` scoring is here, and every armory tile is.
  *
  * The 59 armory tiles (gun, class, Full Armory) all read `gunSet`, i.e. `pvpBy`
@@ -20,6 +20,9 @@ import { makeCtx } from "./types.js";
 export const REVOCABLE_KEYS: readonly EarnableKey[] = [
   "first_blood", "ten_down", "centurion", "marksman", "sniper", "point_blank",
   "arsenal", "hat_trick", "killing_spree", "unstoppable", "nemesis", "payback",
+  // Melee and Roadkill read `ownPvpKills`. ⚠️ Not Hit and Run: it reads hits, which a kill
+  // rebuild never changes, so re-running it can only re-earn what it already earned.
+  "knife_work", "bare_knuckles", "sledge", "melee_mix", "roadkill",
   ...EARNABLE_ACHIEVEMENTS.filter((a) => "section" in a && a.section === "armory").map((a) => a.key),
 ];
 

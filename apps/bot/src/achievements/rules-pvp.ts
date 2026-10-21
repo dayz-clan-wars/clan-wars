@@ -1,6 +1,7 @@
-import { ACHIEVEMENT_BY_KEY, FIREARMS, createFirearmLookup, firearmOf, motorbikeOfWeapon, streakOf, type AchievementKey, type EarnableKey, type FirearmClass, type FirearmKey } from "@factions/domain";
+import { ACHIEVEMENT_BY_KEY, FIREARMS, createFirearmLookup, firearmOf, isFist, isKnife, isSledgehammer, meleeWeaponOf, motorbikeOfWeapon, streakOf, type AchievementKey, type EarnableKey, type FirearmClass, type FirearmKey } from "@factions/domain";
 import { defenses, kills, playerSessions, raids } from "@factions/db";
 import { and, asc, eq, ne, isNotNull, or, sql } from "drizzle-orm";
+import { incidents, ownHits } from "./hits.js";
 import { nth, oneShot, type Rule, type RuleCtx, type RuleResult } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
@@ -88,6 +89,58 @@ const ARMORY_RULES = {
   full_armory: gunsOf("full_armory", FIREARMS.map((f) => f.key)),
 } as Partial<Record<EarnableKey, Rule>>;
 
+// ── Up close: melee and motorbikes (spec 2026-10-20-achievements-150 §2.4, §2.6) ──
+
+/**
+ * The owner's scoring kills that are melee kills, in time order, each with its stable melee name.
+ * ⚠️ `distanceM === null` is half the test, not a nicety: `meleeWeaponOf` calls every string it
+ * does not know a melee weapon, so an unmapped gun would count toward Hands On without it. Every
+ * gun kill line carries `from N meters`; no melee line does (spec §2.4).
+ */
+async function meleeKills(db: Parameters<Rule>[0], ctx: RuleCtx, dayzId: string) {
+  return (await ownPvpKills(db, ctx, dayzId)).flatMap((k) => {
+    const melee = k.distanceM === null ? meleeWeaponOf(k.weapon) : null;
+    return melee ? [{ ...k, melee }] : [];
+  });
+}
+const meleeWith = (test: (w: string | null) => boolean): Rule => async (db, owner, ctx) => {
+  const k = (await meleeKills(db, ctx, owner.id)).find((m) => test(m.weapon));
+  return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { weapon: k.weapon } } : undefined);
+};
+
+const MELEE_RULES: Partial<Record<EarnableKey, Rule>> = {
+  knife_work: meleeWith(isKnife),
+  bare_knuckles: meleeWith(isFist),
+  sledge: meleeWith(isSledgehammer),
+
+  // Distinct by the stable name, so the three fist spellings are one weapon, not three.
+  melee_mix: async (db, owner, ctx) => {
+    const target = T("melee_mix");
+    const seen = new Set<string>();
+    for (const k of await meleeKills(db, ctx, owner.id)) {
+      if (seen.has(k.melee)) continue;
+      seen.add(k.melee);
+      if (seen.size === target) return { count: target, target, earnedAt: k.at, evidenceId: k.id, evidence: { weapons: [...seen].join(", ") }, serverId: k.serverId };
+    }
+    return { count: seen.size, target };
+  },
+
+  roadkill: async (db, owner, ctx) => {
+    const k = (await ownPvpKills(db, ctx, owner.id)).find((r) => motorbikeOfWeapon(r.weapon));
+    return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { vehicle: motorbikeOfWeapon(k.weapon) } } : undefined);
+  },
+
+  /**
+   * Hitting another player with a motorbike you are riding. Reads hits, not kills, so it is not
+   * revocable (revoke.ts) and `pvpBy` does not apply: no kill was scored. One per incident, a
+   * distinct (victim, second), because a bike logs a burst of identical lines (spec §2.6).
+   */
+  hit_and_run: async (db, owner, ctx) => {
+    const hits = (await ownHits(db, ctx, owner.id, "attacker")).filter((h) => h.victimDayzId !== owner.id && motorbikeOfWeapon(h.weapon));
+    return nth(incidents(hits), T("hit_and_run"), (r) => ({ incidents: r.length }));
+  },
+};
+
 /**
  * Longer-range rules (marksman, sniper): the target is a distance in metres, so the
  * count IS that distance — best-so-far as progress, floored, never from a null distance.
@@ -144,6 +197,7 @@ function streak(key: AchievementKey): Rule {
 
 export const PVP_RULES: Partial<Record<EarnableKey, Rule>> = {
   ...ARMORY_RULES,
+  ...MELEE_RULES,
   first_blood: killCount("first_blood"),
   ten_down: killCount("ten_down"),
   centurion: killCount("centurion"),
