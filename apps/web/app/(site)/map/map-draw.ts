@@ -438,11 +438,16 @@ export function travelView(m: L.Map): L.LatLngBounds | null {
   return m.getZoom() >= TRAVEL_MIN_ZOOM ? m.getBounds().pad(TRAVEL_VIEW_PAD) : null;
 }
 
-/** A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in. */
+/**
+ * A 1 km grid, so a grid ref read off the bottom bar has visible cells to sit in.
+ * ⚠️ Horizontals run at z = size − k·1000, not k·1000: the GPS counts rows down
+ * from the north edge, and a grid anchored at the south edge would be drawn
+ * offset from the cells the readout names whenever size is not a multiple of 1000.
+ */
 export function drawGrid(L: typeof import("leaflet"), group: L.LayerGroup, pt: (x: number, z: number) => L.LatLng, size: number): void {
   const style = { color: COLOURS.frame(), weight: 1, opacity: 0.25, interactive: false } as const;
   for (let v = 0; v <= size; v += 1000) {
     L.polyline([pt(v, 0), pt(v, size)], style).addTo(group);
-    L.polyline([pt(0, v), pt(size, v)], style).addTo(group);
+    L.polyline([pt(0, size - v), pt(size, size - v)], style).addTo(group);
   }
 }

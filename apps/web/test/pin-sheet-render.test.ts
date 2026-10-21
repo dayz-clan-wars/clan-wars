@@ -14,7 +14,7 @@ const render = (follow: boolean) =>
 
 describe("PinSheet", () => {
   it("is a form named for the grid square it drops on", () => {
-    expect(render(false)).toContain('aria-label="Drop a pin at grid 043 087"');
+    expect(render(false)).toContain('aria-label="Drop a pin at grid 043 076"');
   });
 
   it("labels the note with a real label, not a placeholder alone", () => {

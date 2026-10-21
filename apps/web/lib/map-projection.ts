@@ -7,6 +7,8 @@
  * error here is a map that renders perfectly and is wrong everywhere.
  */
 
+import { WORLD_SIZE_M } from "@factions/domain";
+
 /**
  * One Life's pyramid: DZMap's loader tops out at zoom 6 → 256 * 2**6 px.
  *
@@ -63,29 +65,69 @@ export function zoomFloor(width: number, height: number, snap = ZOOM_SNAP, maxZo
   return Math.max(0, floor);
 }
 
-/** "043087": the grid ref with no space, for a URL (`/map?at=043087`). Six digits, so it can carry no metre coordinate. */
-export function gridRefKey(x: number, z: number): string {
-  return gridRef(x, z).replace(" ", "");
+/** "072106": the grid ref with no space, for a URL (`/map?at=072106`). Six digits, so it can carry no metre coordinate. */
+export function gridRefKey(x: number, z: number, size = WORLD_SIZE_M): string {
+  return gridRef(x, z, size).replace(" ", "");
 }
 
 /**
  * A grid key's whole shape: exactly six digits. The one statement of it —
  * lib/map-url.ts gates the `at` it writes into a URL on this same regex, so
  * the page never parses a key the redirect would not have written.
+ *
+ * ⚠️ GPS orientation, like the in-game GPS: the first number counts east from
+ * the west edge, the second counts SOUTH from the top (north) edge. Old
+ * `?at=` links written before 2026-10-21 counted z up from the bottom, so they
+ * now land on the mirrored cell; the grid shape is unchanged, so nothing
+ * rejects them.
  */
 export const GRID_KEY = /^\d{6}$/u;
 
 /** The centre of the cell a grid ref names, in metres — or null for anything that is not six digits inside the world. */
 export function parseGridRef(key: string | null | undefined, size: number): { x: number; z: number } | null {
   if (!key || !GRID_KEY.test(key)) return null;
-  const cx = Number(key.slice(0, 3)), cz = Number(key.slice(3));
-  const x = cx * 100 + 50, z = cz * 100 + 50;
-  if (x > size || z > size) return null;
+  const gx = Number(key.slice(0, 3)), gy = Number(key.slice(3));
+  const x = gx * 100 + 50, z = size - (gy * 100 + 50);
+  if (x > size || z < 0) return null;
   return { x, z };
 }
 
-/** "067 023": metres ÷ 100, truncated, zero-padded — what players say out loud. */
-export function gridRef(x: number, z: number): string {
+/**
+ * "072 087": x cell, then the cell counted DOWN from the north edge, zero-padded
+ * — the in-game GPS. ⚠️ `size` is what makes z flip; a wrong size mirrors every
+ * ref on the map without any error.
+ */
+export function gridRef(x: number, z: number, size = WORLD_SIZE_M): string {
   const cell = (v: number) => String(Math.max(0, Math.floor(v / 100))).padStart(3, "0");
-  return `${cell(x)} ${cell(z)}`;
+  return `${cell(x)} ${cell(size - z)}`;
+}
+
+export const COORD_HINT = "Use GPS like 072 087, or metres like 7216 5706";
+
+/** Null = not two numbers, so the caller treats the text as a name search. */
+export type CoordQuery = { kind: "gps" | "metres"; x: number; z: number } | { kind: "bad"; hint: string } | null;
+
+/**
+ * Search-box coordinates. Three digits each is the GPS (cell numbers); four or
+ * five each is metres. Mixed lengths, or anything else numeric, is `bad` rather
+ * than a guess — a wrong guess flies the map to somewhere plausible and wrong.
+ */
+export function parseCoordQuery(input: string, size: number): CoordQuery {
+  const parts = input.trim().split(/[\s,/]+/u);
+  if (parts.length !== 2 || !parts.every((p) => /^\d+$/u.test(p))) return null;
+  const bad: CoordQuery = { kind: "bad", hint: COORD_HINT };
+  const [a, b] = parts as [string, string];
+  if (a.length !== b.length) return bad;
+  if (a.length === 3) {
+    const x = Number(a) * 100 + 50;
+    // Only x is bounded: a GPS row past the south edge clamps to z = 0 rather than refusing.
+    if (x > size) return bad;
+    return { kind: "gps", x, z: Math.max(0, size - (Number(b) * 100 + 50)) };
+  }
+  if (a.length === 4 || a.length === 5) {
+    const x = Number(a), z = Number(b);
+    if (x > size || z > size) return bad;
+    return { kind: "metres", x, z };
+  }
+  return bad;
 }

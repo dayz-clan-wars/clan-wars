@@ -595,7 +595,7 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
 
         const readCentre = () => {
           const c = latLngToWorld(m.getCenter().lat, m.getCenter().lng, size);
-          setCentre({ grid: gridRef(c.x, c.z), x: c.x, z: c.z });
+          setCentre({ grid: gridRef(c.x, c.z, size), x: c.x, z: c.z });
           // A "Pin here" draft rides the centre: pan, and the pin moves under the cross.
           setPinAt((d) => followCentre(d, c));
         };

@@ -25,13 +25,13 @@ const METRES = ["4321", "8765", "4400", "8800", "1234", "2345", "3456", "4567", 
 describe("rosterRows", () => {
   it("lists you, your base, intruders, bounties, clanmates (newest first), then pins", () => {
     expect(rosterRows(DATA, ALL, now)).toEqual([
-      { key: "you", name: "You", detail: "grid 043 087 · 14 min ago" },
-      { key: "base", name: "Your base", detail: "grid 044 088" },
-      { key: "intruder:Stranger", name: "Stranger", detail: "Intruder, 42 m · grid 044 087 · 2 min ago" },
-      { key: "bounty:Hunted", name: "Hunted", detail: "Wanted · grid 056 067 · 1 min ago" },
-      { key: "clanmate:b", name: "Newer", detail: "Clanmate · grid 034 045 · 5 min ago" },
-      { key: "clanmate:a", name: "Older", detail: "Clanmate · grid 012 023 · 5 h ago" },
-      { key: "pin:7", name: "Loot pin", detail: "by Newer · grid 061 072 · 1 h ago" },
+      { key: "you", name: "You", detail: "grid 043 076 · 14 min ago" },
+      { key: "base", name: "Your base", detail: "grid 044 075" },
+      { key: "intruder:Stranger", name: "Stranger", detail: "Intruder, 42 m · grid 044 075 · 2 min ago" },
+      { key: "bounty:Hunted", name: "Hunted", detail: "Wanted · grid 056 095 · 1 min ago" },
+      { key: "clanmate:b", name: "Newer", detail: "Clanmate · grid 034 118 · 5 min ago" },
+      { key: "clanmate:a", name: "Older", detail: "Clanmate · grid 012 140 · 5 h ago" },
+      { key: "pin:7", name: "Loot pin", detail: "by Newer · grid 061 091 · 1 h ago" },
     ]);
   });
 
@@ -74,7 +74,7 @@ describe("MapRoster", () => {
     expect(html).toContain(ROSTER_COPY.heading);
     expect(html.match(/<button/gu)).toHaveLength(rows.length);
     expect(html).toContain("min-h-[44px]");
-    expect(html).toContain("Clanmate · grid 034 045 · 5 min ago");
+    expect(html).toContain("Clanmate · grid 034 118 · 5 min ago");
   });
 
   it("says so when there is nothing to list", () => {
