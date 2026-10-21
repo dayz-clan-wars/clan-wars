@@ -169,8 +169,8 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
   snagged: hitBy((h) => h.cause === "BarbedWireHit", (h) => ({ on: h.attackerLabel })),
 
   minesweeper: async (db, owner) => {
-    // ⚠️ Read the entity, never the cause: `killed by LandMineTrap` is filed "environment" (the
-    // parser's `mine\b` cannot match inside "MineTrap"), only a Claymore is filed "explosion".
+    // ⚠️ Read the entity, never the cause: `killed by LandMineTrap` and a Claymore are both filed
+    // "explosion" (since Part A's parser fix), but so is every grenade; only the entity says mine.
     const k = (await noKillerDeaths(db, owner.id)).find((r) => r.entity != null && MINE_SET.has(r.entity));
     return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { entity: k.entity } } : undefined);
   },

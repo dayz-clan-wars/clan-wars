@@ -43,8 +43,24 @@ cross-check.
       timeout 180 sh -c 'until sudo -n journalctl -u clan-wars-bot --since "$1" --no-pager | grep -q "bot ready as"; do sleep 3; done' _ "$1" \
         || { echo "NO 'bot ready as' since $1: stop and read sudo -n journalctl -u clan-wars-bot --since \"$1\""; return 1; }
       sudo -n journalctl -u clan-wars-bot --since "$1" --no-pager | grep -E 'bot ready as|ACHIEVEMENTS_TICK is off|achievements tick on'
-      sudo -n cat /proc/$(systemctl show -p MainPID --value clan-wars-bot)/environ | tr '\0' '\n' | grep '^ACHIEVEMENTS_TICK' || echo 'ACHIEVEMENTS_TICK unset'
+      pid="$(systemctl show -p MainPID --value clan-wars-bot)"
+      if envs="$(sudo -n cat "/proc/$pid/environ" 2>/dev/null | tr '\0' '\n'; exit "${PIPESTATUS[0]}")"; then
+        printf '%s\n' "$envs" | grep '^ACHIEVEMENTS_TICK' || echo 'ACHIEVEMENTS_TICK unset'
+      else
+        echo "could not read /proc/$pid/environ (MainPID $pid): the flag is UNKNOWN, treat it as on"
+      fi
     }
+
+⚠️ **The helper contains single quotes, so it cannot be wrapped in `ssh acab@regime.fi '…'`.**
+Run it in a shell ON the host, or, from a workstation, send the definition, the `R` capture,
+the restart and the `bootcheck` call in ONE invocation through a quoted heredoc (a function
+defined in one `ssh` call does not exist in the next). For step 2, say:
+
+    ssh acab@regime.fi 'bash -s' <<'EOF'
+    bootcheck() { …the whole definition above… }
+    cd /opt/clan-wars
+    R="$(date -u '+%Y-%m-%d %H:%M:%S') UTC"; sudo -n systemctl restart clan-wars-bot; bootcheck "$R"
+    EOF
 
 1. **Take a `pg_dump` of `factions_live`.**
 
@@ -62,23 +78,29 @@ cross-check.
    nothing about this flag at startup (the `ACHIEVEMENTS_TICK is off` line arrives with this
    release), so here only the `/proc` line speaks to it.
 
-   ⚠️ **If `/proc` shows `ACHIEVEMENTS_TICK=1` or `true` after this restart, STOP. Do not push
-   the tag.** Something in `.env` the edit did not catch (an `export ACHIEVEMENTS_TICK=1`, a
-   second line, a stray space) is still setting it; fix `.env` by hand and repeat this step.
+   ⚠️ **If the `/proc` line is anything other than exactly `ACHIEVEMENTS_TICK=0`, STOP. Do not
+   push the tag.** That includes `ACHIEVEMENTS_TICK=1` or `true`, `ACHIEVEMENTS_TICK unset`
+   (off as far as the bot is concerned, but it means the edit never reached the process) and `could not read
+   /proc …`. Something in `.env` the edit did not catch (an `export ACHIEVEMENTS_TICK=1`, a
+   second line, a stray space), or a bot that did not come back, is the usual cause; fix it by
+   hand and repeat this step.
 
 3. **Deploy.** This is the release deploy: once the tag lands, `clan-wars-deploy.timer` runs
    `deploy/deploy-release.sh`, which stops the writers, dumps, applies 0071, and restarts the
-   web app, the worker and the bot. Do not rebuild by hand. Watch it finish:
+   web app, the worker and the bot. Do not rebuild by hand. Write down the UTC time you push
+   the tag (`date -u '+%Y-%m-%d %H:%M:%S'` just before `git push origin v2.7.0`) as `R`; it is
+   after step 2's restart and before the deployer's. Watch the run finish:
 
-       sudo -n journalctl -u clan-wars-deploy -n 30 --no-pager -o short-iso --utc
+       R='YYYY-MM-DD HH:MM:SS UTC'
+       sudo -n journalctl -u clan-wars-deploy.service --since "$R" --no-pager -o short-iso --utc
        cat /var/lib/clan-wars/deployed-tag
 
    `deployed-tag` must read `v2.7.0`. The deployer restarted the bot itself, so there was no
-   "just before" to capture: set `R` from the journal above to the timestamp of the FIRST line
-   of the run that deployed v2.7.0 (the run started the bot partway through, so the run's
-   finish time can fall after the bot's `bot ready as` and miss it), then check:
+   "just before" to capture; `R`, the time the tag was pushed, stands in for it (⚠️ not the
+   run's finish time: the run starts the bot partway through, so its finish can fall after the
+   bot's `bot ready as` and miss it). With `R` set as above:
 
-       R='YYYY-MM-DD HH:MM:SS UTC'; bootcheck "$R"
+       bootcheck "$R"
 
    Expect `bot ready as …`, `ACHIEVEMENTS_TICK is off: no achievements are being evaluated or
    announced.` (the line this release adds), and `ACHIEVEMENTS_TICK=0`. If you see
@@ -120,24 +142,36 @@ cross-check.
    `announce: false`, then walks the clans a second time (Every Class Covered reads the
    members' class tiles, which the first walk had not written yet), and ends by heading every
    watermark, including B8's `achievements:classUnlocks`, so the live tick starts from there.
-   The `date` runs only if the backfill exits 0, and prints `T`:
+   It runs for minutes, so run it in `tmux` (installed on the host), detached, so a dropped
+   ssh does not kill it; the log gets its exit status and the instant it exited, which is `T`:
 
-       cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s backfill:achievements) && date -u +%Y-%m-%dT%H:%M:%SZ
+       rm -f ~/backfill-achievements-150.log
+       cd /opt/clan-wars && tmux new-session -d -s backfill150 'cd /opt/clan-wars && (set -a && . ./.env && set +a && /home/acab/.local/bin/pnpm -s backfill:achievements) > ~/backfill-achievements-150.log 2>&1; echo "EXIT=$?" >> ~/backfill-achievements-150.log; date -u +%Y-%m-%dT%H:%M:%SZ >> ~/backfill-achievements-150.log'
 
-   Expect it to take a while (minutes, not seconds: every player is read against the
-   `player.hit` history, which 0071's indexes are for). It must print
-   `backfill: N owners evaluated, N unlocks inserted, 0 rule failures, in Nms` and exit **0**,
-   followed by the timestamp. Write that down as `T`, the release instant. Any
-   `rule … failed for …` line, or a nonzero exit (no timestamp), stops the runbook: the tick
+   (Without tmux, the same command line after `nohup sh -c '…' &` does the same.) Wait for it,
+   then read the end of the log:
+
+       until grep -q '^EXIT=' ~/backfill-achievements-150.log; do sleep 10; done; tail -n 5 ~/backfill-achievements-150.log
+
+   Expect minutes, not seconds: every player is read against the `player.hit` history, which
+   0071's indexes are for. The last three lines must be
+   `backfill: N owners evaluated, N unlocks inserted, 0 rule failures, in Nms`, `EXIT=0`, and
+   a timestamp. Write that timestamp down as `T`, the release instant; it is only `T` when the
+   line above it is `EXIT=0`. Any `rule … failed for …` line, or any other `EXIT=`, stops the
+   runbook: the tick
    stays off, read the error, fix, and run it again (it is idempotent by the unlock primary
    key). The root form resolves cleanly (`@factions/db` and `drizzle-orm` both resolve from
    the workspace root; it is `rebuild:kills` that does not), so no package-local form is needed.
 
-   ⚠️ `T` is the backfill's EXIT, not its start. A tile earned while the backfill ran was
-   credited silently, and the tick is off until step 8, so it was never announced either;
-   taking `T` earlier would leave it out of the summary and out of the live announcements
-   both. Nothing earned between `T` and step 8 can be announced twice: the live tick only
-   reads past the heads the backfill wrote.
+   ⚠️ `T` is the backfill's EXIT, not its start. The backfill walks the owners one at a time,
+   and heads the watermarks where they stood when it STARTED. A tile earned while it ran, by
+   an owner it had not reached yet, is credited silently and dated before `T`, so the summary
+   counts it; it is never announced live (the unlock already exists when the tick comes back),
+   so a `T` taken at the start would lose it from both. A tile earned while it ran by an owner
+   it had ALREADY evaluated is not written by the backfill: the first live tick after step 8
+   re-reads the rows logged during the run, finds it and announces it like any other unlock.
+   The summary does not count it (it did not exist at step 7), so nothing is counted twice.
+   Likewise nothing earned between `T` and step 8 is announced twice.
 
    Check nothing was queued:
 

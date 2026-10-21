@@ -333,6 +333,15 @@ kills, mapped through the display-name table, should feed every per-gun,
 class, Full Armory and Arsenal result. The builder measures tick time against
 `factions_live`-sized data before and after.
 
+*Measured 2026-10-21:* `evaluateOwner` on the 5440 test database seeded to
+production's size (74,192 events, 10,918 hits, 2,839 kills, 372 players, 7
+clans) with the heaviest owners production has (a player with 443 kills, 274
+deaths, 645 hits given and 420 taken; a clan credited with 763 kills), median of
+seven warm runs. Before (origin/main, 49 rules, no 0071): player 36 ms in 38
+queries, clan 4.3 ms in 13. After (this branch, 150 rules, 0071 applied): player
+37 ms in 48 queries (134 rules), clan 8 ms in 17 (16 rules). The 59 armory rules
+share one read.
+
 Arsenal (10 different weapons) keeps counting raw weapon strings as today.
 Do not change its meaning.
 
@@ -342,6 +351,10 @@ Do not change its meaning.
   groups. With 52 gun tiles the pvp group dominates. The builder may add a
   visual sub-section ("Armory") within pvp, collapsed by default, but no new
   group colour. The earned count and "closest" panel keep working over all 150.
+  *Amended 2026-10-21:* the gun, class and Full Armory tiles (`section:
+  "armory"`) are left out of "Closest to unlocking". A two-gun class tile is at
+  50% after one kill, so they would crowd out every other goal. The earned count
+  still covers all 150.
 - Clan wall: 12 → 16 team tiles. The wall copy that says "fifty tiles" etc.
 - **Badge art.** Every key needs `apps/web/public/achievements/{svg,unlocked,
   locked}/<key>` and a regenerated `lib/achievement-glyphs.ts`. For the 52
@@ -371,6 +384,10 @@ Do not change its meaning.
    player by the backfill, through the existing notice queue, and rendered
    in both `apps/bot/src/notice-text.ts` and `apps/web/lib/notice-copy.ts`.
    Unlinked players get no DM; their tiles are simply on the wall.
+   *Amended 2026-10-21:* the summary is not queued by the backfill. It is a
+   separate script, `pnpm announce:achievement-summary --before <T>
+   [--dry-run]`, run after the silent backfill with `T` the backfill's exit
+   instant. That gives a dry run first and an exact cutoff.
 6. After launch, gun, class and Full Armory tiles **announce exactly like
    every other achievement** (owner, 2026-10-20). No per-tile announce flag.
 
