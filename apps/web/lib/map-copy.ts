@@ -51,6 +51,7 @@ export const EVENT_LAYERS: Record<string, { group: WorldGroup; label: string }> 
 export const WORLD_LABELS = {
   bunkers: "Bunkers",
   wrecks: "Wrecks",
+  infected: "Infected",
   animals: "Animals",
   spawns: "Player spawns",
   contaminated: "Contaminated areas",

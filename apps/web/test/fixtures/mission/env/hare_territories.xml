@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<territory-type>
+    <territory color="2576133439">
+        <zone name="Zone_Hare" smin="0" smax="0" dmin="0" dmax="2" x="12984" z="1692" r="50"/>
+        <zone name="Zone_Hare" smin="0" smax="0" dmin="0" dmax="2" x="12804.5" z="1700" r="50"/>
+    </territory>
+    <territory color="2576133440">
+        <zone name="Zone_Hare" smin="0" smax="0" dmin="0" dmax="2" x="100" z="200" r="60"/>
+    </territory>
+</territory-type>

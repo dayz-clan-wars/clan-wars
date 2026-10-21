@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<territory-type>
+    <territory color="2575065676">
+        <zone name="InfectedVillage" smin="0" smax="0" dmin="3" dmax="5" x="4473.14" z="10987.4" r="80"/>
+    </territory>
+</territory-type>

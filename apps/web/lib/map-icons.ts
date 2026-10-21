@@ -231,7 +231,7 @@ export function layerIcon(p: Palette, key: string, size = 20): string {
   }
 }
 
-const WORLD_KEYS = new Set(["bunkers", "wrecks", "animals", "spawns", "contaminated"]);
+const WORLD_KEYS = new Set(["bunkers", "wrecks", "infected", "animals", "spawns", "contaminated"]);
 function isWorldKey(key: string): boolean {
   return WORLD_KEYS.has(key) || key.startsWith("event:") || key.startsWith("loot:");
 }

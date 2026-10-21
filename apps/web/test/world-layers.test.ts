@@ -28,13 +28,15 @@ const W: WorldFile = {
     { event: "StaticWaterTruck", points: [{ x: 1000, z: 1000 }, { x: 9000, z: 9000 }] },
     { event: "StaticHeliCrash", points: [{ x: 1100, z: 1100 }] },
     { event: "VehicleTruck01", points: [] },
-    { event: "AmbientHare", points: [{ x: 1200, z: 1200 }] },
-    { event: "AmbientFox", points: [{ x: 1300, z: 1300 }] },
     { event: "Loot", points: [{ x: 1400, z: 1400 }] },
     { event: "MysteryEvent", points: [{ x: 1500, z: 1500 }] },
   ],
   bunkers: [{ x: 9500, z: 9500 }, { x: 200, z: 200 }],
   contaminated: [{ name: "Tunnel1", x: 9600, z: 9600, radius: 75 }],
+  territories: {
+    infected: [{ x: 1200, z: 1200, radius: 80 }],
+    animals: [{ x: 1300, z: 1300, radius: 50, kind: "hare" }, { x: 1350, z: 1350, radius: 90, kind: "wild_boar" }],
+  },
   playerSpawns: [{ x: 1600, z: 1600 }],
   props: [
     { type: 0, x: 100, z: 100, u: 0, t: t("Tier2") }, // 0: barracks, own Military usage
@@ -71,10 +73,29 @@ describe("worldLayers", () => {
     expect(layer("event:VehicleTruck01")).toBeUndefined();
   });
 
-  it("makes every Ambient* event one Animals toggle", () => {
-    expect(layer("animals")).toMatchObject({ group: "World", label: "Animals" });
-    expect(worldLayers(W).filter((l) => l.key.startsWith("event:Ambient"))).toEqual([]);
-    expect(pointsFor(W, "animals", ALL_TIERS)).toHaveLength(2);
+  it("offers Infected and one Animals toggle over every animal territory, both World and off", () => {
+    expect(layer("infected")).toEqual({ key: "infected", group: "World", label: "Infected", defaultOn: false });
+    expect(layer("animals")).toEqual({ key: "animals", group: "World", label: "Animals", defaultOn: false });
+  });
+
+  it("draws territories as circles: infected, and each animal zone titled with its animal", () => {
+    expect(pointsFor(W, "infected", 0)).toEqual([{ x: 1200, z: 1200, title: "Infected", radius: 80 }]);
+    expect(pointsFor(W, "animals", 0)).toEqual([
+      { x: 1300, z: 1300, title: "Hare", radius: 50 },
+      { x: 1350, z: 1350, title: "Wild boar", radius: 90 },
+    ]);
+  });
+
+  it("offers no territory layer when the mission ships none", () => {
+    const keys = worldLayers({ ...W, territories: { infected: [], animals: [] } }).map((l) => l.key);
+    expect(keys).not.toContain("infected");
+    expect(keys).not.toContain("animals");
+  });
+
+  it("waits for WORLD_MIN_ZOOM: hundreds of town circles are not drawn zoomed out", () => {
+    expect(ALWAYS_DRAWN.has("infected")).toBe(false);
+    expect(ALWAYS_DRAWN.has("animals")).toBe(false);
+    expect(isDense("infected")).toBe(false);
   });
 
   it("files an unknown event under World with its raw name, and Loot as loot piles", () => {
@@ -205,7 +226,7 @@ describe("committed world.json", () => {
   const world = JSON.parse(readFileSync(join(__dirname, "..", "public", "map-data", "nasdara", "world.json"), "utf8")) as WorldFile;
 
   it("⚠️ has no event the label map does not name — a new one must be given a label here", () => {
-    const names = world.events.map((e) => e.event).filter((n) => !n.startsWith("Ambient")).sort();
+    const names = world.events.map((e) => e.event).sort();
     expect(names).toEqual([
       "ItemBricks", "StaticContainerLocked", "StaticHeliCrash", "StaticHeliCrashBig", "StaticMilitaryConvoy",
       "StaticPoliceCar", "StaticWaterTruck", "VehicleCivilianSedan", "VehicleHatchback02", "VehicleMotorbike",
@@ -336,7 +357,7 @@ describe("itemPoints", () => {
       { event: "StaticPoliceCar", points: [{ x: 80, z: 80 }], children: ["land_wreck_uaz_aban1_police"] },
       { event: "VehicleOffroadHatchback", points: [{ x: 90, z: 90 }, { x: 95, z: 95 }] },
     ],
-    bunkers: [], contaminated: [], playerSpawns: [],
+    bunkers: [], contaminated: [], territories: { infected: [], animals: [] }, playerSpawns: [],
     props: [
       { type: 0, x: 100, z: 100, u: ub("ContaminatedArea"), t: vb("Unique") }, // 0: zone shed: M4A1
       { type: 0, x: 200, z: 200, u: ub("ContaminatedArea"), t: vb("Tier3") }, // 1: zone, wrong tier

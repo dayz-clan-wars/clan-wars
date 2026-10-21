@@ -1,5 +1,5 @@
 // The static world data the map layers draw from: event spawns, bunkers, contaminated zones,
-// fresh-spawn points and the mission's building props. Built by hand from the Nasdara mission
+// infected and animal territories, fresh-spawn points and the mission's building props. Built by hand from the Nasdara mission
 // checkout (scripts/build-map-world.ts) and committed, so the web never reads the mission.
 //
 // Coordinates are DayZ world metres: x east, z north, 0..WORLD_SIZE_M. The y (height) the
@@ -14,6 +14,10 @@ export type WorldPoint = { x: number; z: number };
 // absent for an inactive event or one with none. The item search reads it for deloot.
 export type WorldEvent = { event: string; points: WorldPoint[]; children?: string[] };
 export type WorldArea = { name: string; x: number; z: number; radius: number };
+/** One env/*_territories.xml <zone>: a circle the CE spawns infected or animals in. */
+export type WorldZone = { x: number; z: number; radius: number };
+/** `kind`: the territory file's stem ("wild_boar" from env/wild_boar_territories.xml), for the popup title. */
+export type WorldTerritories = { infected: WorldZone[]; animals: (WorldZone & { kind: string })[] };
 // u / t: the areaflags.map usage and value (tier) bitmasks at the prop's position; bit k is
 // entry k of WorldFile.limits.usage / .value.
 export type WorldProp = { type: number; x: number; z: number; u: number; t: number };
@@ -34,6 +38,7 @@ export type WorldFile = {
   events: WorldEvent[]; // only events with ≥1 position
   bunkers: WorldPoint[]; // cfgbunkerbroadcast.json proxies[].position [x,y,z] → {x, z}
   contaminated: WorldArea[]; // cfgEffectArea.json Areas[].Data.Pos/Radius
+  territories: WorldTerritories; // the env/*_territories.xml files cfgenvironment.xml lists (readTerritories)
   playerSpawns: WorldPoint[]; // cfgplayerspawnpoints.xml <fresh> positions
   props: WorldProp[]; // mapgrouppos rows; `type` indexes `types`
   types: WorldType[]; // proto indexes `protos`, null = no loot group
@@ -79,6 +84,53 @@ export function parseEffectAreas(text: string): WorldArea[] {
     z: a.Data.Pos[2],
     radius: a.Data.Radius,
   }));
+}
+
+/** The territory files cfgenvironment.xml loads: its <territories><file path>, in order. */
+export function parseEnvironmentFiles(text: string): string[] {
+  const doc = xml("file").parse(text) as { env?: { territories?: { file?: { path?: string }[] } } };
+  // <territory><file usable> inside the same block names a file by stem, not path: skipped here.
+  return (doc.env?.territories?.file ?? []).flatMap((f) => (f.path ? [f.path] : []));
+}
+
+/** Every <zone> of every <territory> in one env/*_territories.xml, as a circle. */
+export function parseTerritoryZones(text: string): WorldZone[] {
+  type Zone = { x: string; z: string; r: string };
+  // An empty file is <territory-type/>, which parses as "" rather than an object.
+  const doc = xml("territory", "zone").parse(text) as { "territory-type"?: { territory?: { zone?: Zone[] }[] } | "" };
+  const root = doc["territory-type"];
+  if (!root) return [];
+  return (root.territory ?? []).flatMap((t) => (t.zone ?? []).map((z) => ({ x: num(z.x), z: num(z.z), radius: num(z.r) })));
+}
+
+const ZOMBIE_FILE = /(^|\/)zombie_territories\.xml$/iu;
+
+/**
+ * The infected and animal territories, from the files cfgenvironment.xml lists. `read` returns a
+ * file's text by its mission-relative path, or null when the file is not there.
+ *
+ * ⚠️ The list decides, not the env folder. Nasdara's env/ holds bear, wolf and deer files that
+ * cfgenvironment.xml never names (so the game never loads them), and names sheep, fox and others
+ * that are not on disk. Drawing the folder would put animals where none spawn. A listed file that
+ * is missing comes back in `missing` for the build to print.
+ */
+export function readTerritories(environment: string, read: (path: string) => string | null): { territories: WorldTerritories; missing: string[] } {
+  const territories: WorldTerritories = { infected: [], animals: [] };
+  const missing: string[] = [];
+  for (const path of parseEnvironmentFiles(environment)) {
+    const text = read(path);
+    if (text === null) {
+      missing.push(path);
+      continue;
+    }
+    const zones = parseTerritoryZones(text);
+    if (ZOMBIE_FILE.test(path)) territories.infected.push(...zones);
+    else {
+      const kind = path.replace(/^.*\//u, "").replace(/_territories\.xml$/iu, "");
+      territories.animals.push(...zones.map((z) => ({ ...z, kind })));
+    }
+  }
+  return { territories, missing };
 }
 
 export function parsePlayerSpawns(text: string): WorldPoint[] {

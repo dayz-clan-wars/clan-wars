@@ -8,11 +8,11 @@ import type { WorldProto } from "./map-world";
 
 export { EVENT_LAYERS };
 
-/** e.g. "event:StaticWaterTruck", "loot:military", "bunkers", "contaminated", "spawns", "wrecks", "animals". */
+/** e.g. "event:StaticWaterTruck", "loot:military", "bunkers", "contaminated", "spawns", "wrecks", "infected", "animals". */
 export type WorldLayerKey = string;
 export type WorldLayer = { key: WorldLayerKey; group: WorldGroup; label: string; defaultOn: boolean };
 
-/** One point a layer draws. `tiers`/`usage` only on a loot building; `radius` (metres) only on a contaminated area. */
+/** One point a layer draws. `tiers`/`usage` only on a loot building; `radius` (metres) only on an area drawn as a circle. */
 export type WorldMark = { x: number; z: number; title: string; tiers?: string[]; usage?: string[]; radius?: number };
 /** A point as drawn: `id` is stable across redraws, so the reconciler keeps a marker that is still wanted. */
 export type WorldItem = WorldMark & { id: string; key: WorldLayerKey };
@@ -51,7 +51,11 @@ export const ALWAYS_DRAWN: ReadonlySet<WorldLayerKey> = new Set(["bunkers", "con
 export const isDense = (key: WorldLayerKey): boolean => key.startsWith("loot:") || key === "wrecks" || key === ITEM_MANY_KEY;
 
 const WRECK = /^Land_wreck_/iu;
-const isAmbient = (event: string) => event.startsWith("Ambient");
+/** "wild_boar" → "Wild boar": a territory file's stem as an animal zone's title. */
+const animalLabel = (kind: string): string => {
+  const words = kind.replace(/_/gu, " ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+};
 
 const bit = (list: string[], name: string) => {
   const i = list.indexOf(name);
@@ -101,9 +105,9 @@ export function pointsFor(w: WorldFile, key: WorldLayerKey, tiers: number): Worl
   if (key === "bunkers") return w.bunkers.map((b, i) => ({ x: b.x, z: b.z, title: `Bunker ${i + 1}` }));
   if (key === "contaminated") return w.contaminated.map((a) => ({ x: a.x, z: a.z, title: "Contaminated area", radius: a.radius }));
   if (key === "spawns") return w.playerSpawns.map((s) => ({ x: s.x, z: s.z, title: "Player spawn" }));
-  if (key === "animals") {
-    return w.events.filter((e) => isAmbient(e.event)).flatMap((e) => e.points.map((p) => ({ x: p.x, z: p.z, title: WORLD_LABELS.animals })));
-  }
+  // The CE's territory zones (map-world.ts readTerritories), circles like the contaminated areas.
+  if (key === "infected") return w.territories.infected.map((a) => ({ x: a.x, z: a.z, title: WORLD_LABELS.infected, radius: a.radius }));
+  if (key === "animals") return w.territories.animals.map((a) => ({ x: a.x, z: a.z, title: animalLabel(a.kind), radius: a.radius }));
   if (key === "wrecks") {
     const out: WorldMark[] = [];
     for (const p of w.props) if (WRECK.test(w.types[p.type]?.name ?? "")) out.push({ x: p.x, z: p.z, title: "Wreck" });
@@ -134,12 +138,13 @@ export function worldLayers(w: WorldFile): WorldLayer[] {
   const tiers = allTiers(w);
   const events = w.events.filter((e) => e.points.length > 0).map((e) => e.event);
   const known = Object.keys(EVENT_LAYERS);
-  const unknown = events.filter((e) => !known.includes(e) && !isAmbient(e)).sort();
+  const unknown = events.filter((e) => !known.includes(e)).sort();
   const candidates: Omit<WorldLayer, "defaultOn">[] = [
     { key: "bunkers", group: "Bunkers", label: WORLD_LABELS.bunkers },
     ...known.filter((e) => events.includes(e)).map((e) => ({ key: `event:${e}`, group: EVENT_LAYERS[e]!.group, label: EVENT_LAYERS[e]!.label })),
     ...LOOT_GROUPS.map((g) => ({ key: `loot:${g.key}`, group: "Loot buildings" as const, label: g.label })),
     { key: "wrecks", group: "Wrecks", label: WORLD_LABELS.wrecks },
+    { key: "infected", group: "World", label: WORLD_LABELS.infected },
     { key: "animals", group: "World", label: WORLD_LABELS.animals },
     ...unknown.map((e) => ({ key: `event:${e}`, group: "World" as const, label: e })),
     { key: "spawns", group: "World", label: WORLD_LABELS.spawns },

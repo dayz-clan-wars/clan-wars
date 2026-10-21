@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { WORLD_MAP, WORLD_SIZE_M } from "@factions/domain";
 import {
@@ -9,6 +9,9 @@ import {
   parseGroupPositions,
   parsePlayerSpawns,
   parseProtos,
+  parseEnvironmentFiles,
+  parseTerritoryZones,
+  readTerritories,
   effectiveUsage,
   linkProtos,
   LOOT_GROUPS,
@@ -53,6 +56,38 @@ describe("map world parsers", () => {
     const g = parseGroupPositions(fx("mapgrouppos.xml"));
     expect(g).toHaveLength(3);
     expect(g[0]).toEqual({ name: "Land_wreck_truck01_aban2_orange", x: 2005.421509, z: 4348.476563 });
+  });
+});
+
+describe("territories", () => {
+  it("lists the territory files cfgenvironment.xml loads, in its order", () => {
+    expect(parseEnvironmentFiles(fx("cfgenvironment.xml"))).toEqual([
+      "env/cattle_territories.xml", "env/hare_territories.xml", "env/fox_territories.xml", "env/zombie_territories.xml",
+    ]);
+  });
+
+  it("reads every zone of every territory as x, z and radius", () => {
+    expect(parseTerritoryZones(fx("env/hare_territories.xml"))).toEqual([
+      { x: 12984, z: 1692, radius: 50 },
+      { x: 12804.5, z: 1700, radius: 50 },
+      { x: 100, z: 200, radius: 60 },
+    ]);
+    // One territory with one zone: a lone child is still a list.
+    expect(parseTerritoryZones(fx("env/zombie_territories.xml"))).toEqual([{ x: 4473.14, z: 10987.4, radius: 80 }]);
+    expect(parseTerritoryZones(fx("env/cattle_territories.xml"))).toEqual([]);
+  });
+
+  it("⚠️ splits infected from animals, reads only listed files, and reports a listed file that is missing", () => {
+    const read = (path: string) => {
+      const f = join(__dirname, "fixtures/mission", path);
+      return existsSync(f) ? readFileSync(f, "utf8") : null;
+    };
+    const { territories, missing } = readTerritories(fx("cfgenvironment.xml"), read);
+    expect(territories.infected).toEqual([{ x: 4473.14, z: 10987.4, radius: 80 }]);
+    expect(territories.animals.map((a) => a.kind)).toEqual(["hare", "hare", "hare"]);
+    // wolf_territories.xml is on disk but not listed: the game never loads it, so neither do we.
+    expect(territories.animals.some((a) => a.x === 8901.07)).toBe(false);
+    expect(missing).toEqual(["env/fox_territories.xml"]);
   });
 });
 
@@ -136,6 +171,18 @@ describe("committed world.json", () => {
         expect(p.z).toBeGreaterThanOrEqual(0);
         expect(p.z).toBeLessThanOrEqual(WORLD_SIZE_M);
       }
+    }
+  });
+
+  it("carries the infected and animal territories inside the world", () => {
+    expect(world.territories.infected.length).toBeGreaterThan(0);
+    expect(world.territories.animals.length).toBeGreaterThan(0);
+    for (const z of [...world.territories.infected, ...world.territories.animals]) {
+      expect(z.radius).toBeGreaterThan(0);
+      expect(z.x).toBeGreaterThanOrEqual(0);
+      expect(z.x).toBeLessThanOrEqual(WORLD_SIZE_M);
+      expect(z.z).toBeGreaterThanOrEqual(0);
+      expect(z.z).toBeLessThanOrEqual(WORLD_SIZE_M);
     }
   });
 

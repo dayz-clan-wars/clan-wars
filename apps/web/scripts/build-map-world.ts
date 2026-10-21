@@ -4,7 +4,7 @@
 //   pnpm --filter @factions/web map:world                  # ../nasdara beside this repo
 //   pnpm --filter @factions/web map:world --mission <dir>
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { WORLD_MAP } from "@factions/domain";
@@ -16,6 +16,7 @@ import {
   parseGroupPositions,
   parsePlayerSpawns,
   parseProtos,
+  readTerritories,
   linkProtos,
   effectiveUsage,
   LOOT_GROUPS,
@@ -40,6 +41,10 @@ const events = parseEventSpawns(read("cfgeventspawns.xml")).map((e) => {
 });
 const bunkers = parseBunkers(read("cfgbunkerbroadcast.json"));
 const contaminated = parseEffectAreas(read("cfgEffectArea.json"));
+// Only the files cfgenvironment.xml lists: the game loads those and no other.
+const { territories, missing } = readTerritories(read("cfgenvironment.xml"), (f) =>
+  existsSync(join(mission, f)) ? read(f) : null,
+);
 const playerSpawns = parsePlayerSpawns(read("cfgplayerspawnpoints.xml"));
 const groups = parseGroupPositions(read("mapgrouppos.xml"));
 const limits = parseLimits(read("cfglimitsdefinition.xml"));
@@ -71,6 +76,7 @@ const world: WorldFile = {
   events,
   bunkers,
   contaminated,
+  territories,
   playerSpawns,
   props,
   types,
@@ -86,6 +92,13 @@ for (const name of ["StaticWaterTruck", "VehicleTruck01", "VehicleCivilianSedan"
 console.log("events", events.length);
 console.log("bunkers", bunkers.length);
 console.log("contaminated", contaminated.length);
+console.log("infected zones", territories.infected.length);
+console.log("animal zones", territories.animals.length);
+for (const kind of [...new Set(territories.animals.map((a) => a.kind))]) {
+  console.log("  animal", kind, territories.animals.filter((a) => a.kind === kind).length);
+}
+// Listed in cfgenvironment.xml but not in the mission: the game logs these too, and spawns nothing there.
+for (const f of missing) console.log("territory file listed but missing:", f);
 console.log("playerSpawns", playerSpawns.length);
 console.log("props", props.length);
 console.log("types", types.length);
