@@ -15,6 +15,10 @@ import {
   parseEventSpawns,
   parseGroupPositions,
   parsePlayerSpawns,
+  parseProtos,
+  linkProtos,
+  effectiveUsage,
+  LOOT_GROUPS,
   type WorldFile,
 } from "../lib/map-world";
 
@@ -43,12 +47,15 @@ const props = groups.map((g) => {
   if (i === undefined) {
     i = types.length;
     typeIndex.set(g.name, i);
-    // proto stays null until Task 5 links loot groups.
     types.push({ name: g.name, proto: null });
   }
   const f = flags.at(g.x, g.z);
   return { type: i, x: g.x, z: g.z, u: f.usage, t: f.value };
 });
+
+const protos = parseProtos(read("mapgroupproto.xml"), limits);
+// A mapgrouppos type with no group in mapgroupproto (wrecks, trees) keeps proto: null.
+linkProtos(types, protos).forEach((p, i) => (types[i]!.proto = p));
 
 const commit = execFileSync("git", ["-C", mission, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
 const world: WorldFile = {
@@ -61,6 +68,7 @@ const world: WorldFile = {
   playerSpawns,
   props,
   types,
+  protos,
 };
 
 mkdirSync(dirname(out), { recursive: true });
@@ -75,3 +83,13 @@ console.log("contaminated", contaminated.length);
 console.log("playerSpawns", playerSpawns.length);
 console.log("props", props.length);
 console.log("types", types.length);
+console.log("protos", protos.length);
+console.log("types with a proto", types.filter((t) => t.proto !== null).length);
+for (const g of LOOT_GROUPS) {
+  const mask = g.usage.reduce((m, u) => m | (1 << limits.usage.indexOf(u)), 0);
+  const n = props.filter((p) => {
+    const proto = types[p.type]!.proto;
+    return proto !== null && (effectiveUsage(protos[proto]!, p.u) & mask) !== 0;
+  }).length;
+  console.log("loot", g.key, n);
+}

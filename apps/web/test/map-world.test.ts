@@ -8,8 +8,13 @@ import {
   parseEventSpawns,
   parseGroupPositions,
   parsePlayerSpawns,
+  parseProtos,
+  effectiveUsage,
+  linkProtos,
+  LOOT_GROUPS,
   type WorldFile,
 } from "../lib/map-world";
+import { parseLimits } from "../lib/area-flags";
 
 const fx = (name: string) => readFileSync(join(__dirname, "fixtures/mission", name), "utf8");
 
@@ -48,6 +53,48 @@ describe("map world parsers", () => {
     const g = parseGroupPositions(fx("mapgrouppos.xml"));
     expect(g).toHaveLength(3);
     expect(g[0]).toEqual({ name: "Land_wreck_truck01_aban2_orange", x: 2005.421509, z: 4348.476563 });
+  });
+});
+
+describe("loot protos", () => {
+  const limits = parseLimits(fx("cfglimitsdefinition.xml"));
+  const protos = parseProtos(fx("mapgroupproto.xml"), limits);
+  const bit = (list: string[], ...names: string[]) => names.reduce((m, n) => m | (1 << list.indexOf(n)), 0);
+
+  it("gives Land_Mil_Barracks1 the Military bit and its two containers", () => {
+    const b = protos.find((p) => p.name === "Land_Mil_Barracks1")!;
+    expect(b.usage).toBe(bit(limits.usage, "Military"));
+    expect(b.containers).toHaveLength(2);
+    expect(b.containers[0]).toEqual({
+      categories: bit(limits.categories, "tools", "containers"),
+      tags: bit(limits.tags, "floor"),
+      points: 9,
+    });
+    expect(b.containers[1]!.tags).toBe(bit(limits.tags, "shelves"));
+    expect(b.containers[1]!.categories).toBe(bit(limits.categories, "tools", "containers", "clothes", "food", "books"));
+  });
+
+  it("gives a group with no <usage> a usage of 0", () => {
+    const r = protos.find((p) => p.name === "Land_Airfield_Radar_Tall")!;
+    expect(r.usage).toBe(0);
+    expect(r.containers).toHaveLength(1);
+  });
+
+  it("refuses a usage the limits file has no name for", () => {
+    const bad = `<prototype><group name="X"><usage name="Nope"/></group></prototype>`;
+    expect(() => parseProtos(bad, limits)).toThrow(/Nope/);
+  });
+
+  it("keeps a mapgrouppos type with no proto at null instead of throwing", () => {
+    // ⚠️ mapgrouppos names props mapgroupproto never defines (wrecks, trees); they are not loot.
+    expect(protos.some((p) => p.name === "Land_wreck_truck01_aban2_orange")).toBe(false);
+    expect(linkProtos([{ name: "Land_wreck_truck01_aban2_orange" }, { name: "Land_Mil_Barracks1" }], protos)).toEqual([null, 0]);
+  });
+
+  it("falls back to the area flags only when the proto has no usage", () => {
+    const area = bit(limits.usage, "Town");
+    expect(effectiveUsage({ name: "a", usage: 0, containers: [] }, area)).toBe(area);
+    expect(effectiveUsage({ name: "a", usage: 1, containers: [] }, area)).toBe(1);
   });
 });
 
@@ -90,5 +137,22 @@ describe("committed world.json", () => {
     expect(world.limits.value.slice(0, 4)).toEqual(["Tier1", "Tier2", "Tier3", "Tier4"]);
     expect(world.limits.categories).toContain("tools");
     expect(world.limits.tags).toContain("floor");
+  });
+
+  it("⚠️ drift: every LOOT_GROUPS usage name exists in limits.usage", () => {
+    for (const g of LOOT_GROUPS) for (const u of g.usage) expect(world.limits.usage, `${g.key}: ${u}`).toContain(u);
+  });
+
+  it("links a type to its proto by name, and leaves a type with no proto null", () => {
+    const linked = world.types.filter((t) => t.proto !== null);
+    expect(linked.length).toBeGreaterThan(0);
+    for (const t of linked) expect(world.protos[t.proto!]!.name).toBe(t.name);
+    expect(world.types.some((t) => t.proto === null)).toBe(true);
+  });
+
+  it("carries Land_Mil_Barracks1 with Military usage", () => {
+    const b = world.protos.find((p) => p.name === "Land_Mil_Barracks1")!;
+    expect(b.usage & (1 << world.limits.usage.indexOf("Military"))).not.toBe(0);
+    expect(b.containers.length).toBeGreaterThan(0);
   });
 });

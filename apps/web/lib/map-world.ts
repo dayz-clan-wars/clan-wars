@@ -15,6 +15,11 @@ export type WorldArea = { name: string; x: number; z: number; radius: number };
 // entry k of WorldFile.limits.usage / .value.
 export type WorldProp = { type: number; x: number; z: number; u: number; t: number };
 export type WorldType = { name: string; proto: number | null };
+export type WorldProto = {
+  name: string;
+  usage: number; // group <usage> mask, 0 = none (fall back to area flags)
+  containers: { categories: number; tags: number; points: number }[]; // masks over limits.categories / limits.tags
+};
 
 export type WorldFile = {
   version: 1;
@@ -25,7 +30,8 @@ export type WorldFile = {
   contaminated: WorldArea[]; // cfgEffectArea.json Areas[].Data.Pos/Radius
   playerSpawns: WorldPoint[]; // cfgplayerspawnpoints.xml <fresh> positions
   props: WorldProp[]; // mapgrouppos rows; `type` indexes `types`
-  types: WorldType[]; // proto indexes `protos` (Task 5), null = no loot group
+  types: WorldType[]; // proto indexes `protos`, null = no loot group
+  protos: WorldProto[]; // mapgroupproto.xml groups
 };
 
 // isArray forces a list for chosen tags: fast-xml-parser returns a lone child as an object,
@@ -89,6 +95,62 @@ export function parseGroupPositions(text: string): { name: string; x: number; z:
     return { name: g.name, x: x!, z: z! };
   });
 }
+
+type Named = { name: string };
+type ProtoXml = {
+  name: string;
+  usage?: Named[];
+  container?: { category?: Named[]; tag?: Named[]; point?: unknown[] }[];
+};
+
+/** mapgroupproto.xml groups. Names resolve to bits via `limits`; an unknown name throws. */
+export function parseProtos(text: string, limits: ReturnType<typeof parseLimits>): WorldProto[] {
+  const doc = xml("group", "container", "usage", "category", "tag", "point").parse(text) as {
+    prototype?: { group?: ProtoXml[] };
+  };
+  // ⚠️ Throwing on an unknown name (not skipping it) is deliberate: a dropped bit would silently
+  // move a building into the wrong loot layer after a limits file change.
+  const mask = (list: string[], names: Named[] | undefined, what: string) =>
+    (names ?? []).reduce((m, n) => {
+      const i = list.indexOf(n.name);
+      if (i < 0) throw new Error(`mapgroupproto: ${what} "${n.name}" is not in cfglimitsdefinition.xml`);
+      return m | (1 << i);
+    }, 0);
+  return (doc.prototype?.group ?? []).map((g) => ({
+    name: g.name,
+    usage: mask(limits.usage, g.usage, "usage"),
+    containers: (g.container ?? []).map((c) => ({
+      categories: mask(limits.categories, c.category, "category"),
+      tags: mask(limits.tags, c.tag, "tag"),
+      points: (c.point ?? []).length,
+    })),
+  }));
+}
+
+/** A building's own group usage wins; the area flags only fill in when the group names none. */
+export function effectiveUsage(proto: WorldProto, areaUsage: number): number {
+  return proto.usage || areaUsage;
+}
+
+/** Proto index per type, by name; null when mapgroupproto has no such group. */
+export function linkProtos(types: { name: string }[], protos: WorldProto[]): (number | null)[] {
+  const byName = new Map(protos.map((p, i) => [p.name, i]));
+  return types.map((t) => byName.get(t.name) ?? null);
+}
+
+// The loot layers the map offers. `usage` names must exist in limits.usage (a test checks).
+export const LOOT_GROUPS: readonly { key: string; label: string; usage: string[] }[] = [
+  { key: "military", label: "Military", usage: ["Military", "MilitaryEast", "MilitaryWest"] },
+  { key: "police", label: "Police", usage: ["Police", "Prison"] },
+  { key: "medical", label: "Medical", usage: ["Medic"] },
+  { key: "fire", label: "Fire station", usage: ["Firefighter"] },
+  { key: "industrial", label: "Industrial", usage: ["Industrial"] },
+  { key: "town", label: "Town", usage: ["Town", "Office", "School", "Lunapark"] },
+  { key: "village", label: "Village", usage: ["Village"] },
+  { key: "farm", label: "Farm", usage: ["Farm"] },
+  { key: "hunting", label: "Hunting", usage: ["Hunting"] },
+  { key: "coast", label: "Coast", usage: ["Coast"] },
+];
 
 let cached: Promise<WorldFile> | null = null;
 
