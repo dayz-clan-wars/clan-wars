@@ -449,6 +449,14 @@ describe("itemPoints on the committed data", () => {
   const by = (n: string) => items.items.find((i) => i.className === n)!;
   const zone = 1 << world.limits.usage.indexOf("ContaminatedArea");
 
+  it("⚠️ drift: world.json and items.json come from one mission commit with one limits file", () => {
+    // canSpawnAt and canHoldDeloot AND an item's masks (bit order: items.json limits) against a
+    // proto's and a prop's (bit order: world.json limits). Built from two commits whose limits
+    // differ, every bit after the change would name a different usage or tier — silently.
+    expect(world.source.commit).toBe(items.source.commit);
+    expect(world.limits).toEqual(items.limits);
+  });
+
   it("puts every M4A1 point in a contaminated area", () => {
     const pts = itemPoints(world, by("M4A1"));
     expect(pts.length).toBeGreaterThan(0);
