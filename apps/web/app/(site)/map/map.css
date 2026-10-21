@@ -134,3 +134,10 @@
 .cw-map-popup .leaflet-popup-content-wrapper,
 .cw-map-popup a.leaflet-popup-close-button { transform: translate(var(--cw-fit-x, 0px), var(--cw-fit-y, 0px)); }
 .cw-map-popup.cw-no-tip .leaflet-popup-tip-container { display: none; }
+/*
+ * The ruler (map-draw.ts setRulerMode). ⚠️ While it is on, a click must land on the
+ * map and add a point; a world marker or circle under it took the click and opened
+ * its popup instead. !important on the children: Leaflet's .leaflet-interactive sets
+ * pointer-events back to auto on every marker and path.
+ */
+.cw-ruler-on .leaflet-world-pane, .cw-ruler-on .leaflet-world-pane * { pointer-events: none !important; }

@@ -605,6 +605,24 @@ export function drawReticle(
   return marker;
 }
 
+/** On the map's container while the ruler is on: map.css lets clicks through the world pane. */
+export const RULER_CLASS = "cw-ruler-on";
+
+/**
+ * The map's own behaviour while the ruler is on. ⚠️ Double-click zoom goes off, since two quick
+ * points are a double click and zoomed the map mid-measure; and the world markers stop taking
+ * clicks (RULER_CLASS), since a click on a bunker or a loot building opened its popup and added
+ * no point. Both come back when the ruler goes off.
+ */
+export function setRulerMode(
+  m: { doubleClickZoom: { enable(): unknown; disable(): unknown }; getContainer(): { classList: { toggle(c: string, on: boolean): unknown } } },
+  on: boolean,
+): void {
+  if (on) m.doubleClickZoom.disable();
+  else m.doubleClickZoom.enable();
+  m.getContainer().classList.toggle(RULER_CLASS, on);
+}
+
 /**
  * The ruler's line, a dot on every point, and the total with the last leg's bearing
  * beside the last point. Rebuilt whole on every click: a ruler is a handful of points.

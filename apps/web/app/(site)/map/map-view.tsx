@@ -36,7 +36,7 @@ import {
 import { PinSheet } from "./pin-sheet";
 import {
   TRAVEL_PANE, WORLD_PANE, type AgeLabel, type Ctx, type MapData, type WireState, type WorldDrawn,
-  drawWorld, worldView, drawReticle, drawRuler, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
+  drawWorld, worldView, drawReticle, drawRuler, setRulerMode, drawBase, drawBounties, drawClanmates, drawGrid, drawIntruders, drawPins, drawPublicBases, drawTravel, travelView, drawYou, escapeHtml, palette, parseState, ptFor, refreshAges,
 } from "./map-draw";
 import { changedLayers, layerSignatures, reopenAfter, type DataLayer, type Signatures } from "./map-redraw";
 import { chunkRetryDelay, loadView, nextPollDelay, requestGate, type LoadError } from "@/lib/map-load";
@@ -916,6 +916,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
     if (!Lm || !g || size === null) return;
     drawRuler(Lm, g, ptFor(Lm, size), rulerOn ? rulerPts : [], palette().gold);
   }, [rulerOn, rulerPts, mapReady, size]);
+  useEffect(() => {
+    const m = map.current;
+    if (!m) return;
+    setRulerMode(m, rulerOn);
+  }, [rulerOn, mapReady]);
   const toggleRuler = () => { setRulerOn((on) => !on); setRulerPts([]); };
   const clearRuler = () => { setRulerOn(false); setRulerPts([]); };
 

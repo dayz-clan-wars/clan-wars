@@ -5,7 +5,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { bearing, formatBearing, formatDistance, pathLength, rulerSummary, rulerTakesClick } from "../lib/map-ruler";
 import { MapRuler, type MapRulerProps } from "../app/(site)/map/map-ruler";
-import { drawRuler } from "../app/(site)/map/map-draw";
+import { RULER_CLASS, WORLD_PANE, drawRuler, setRulerMode } from "../app/(site)/map/map-draw";
 
 describe("pathLength", () => {
   it("adds the legs in metres", () => {
@@ -104,5 +104,33 @@ describe("rulerTakesClick", () => {
   it("is what the map's click handler asks", () => {
     const view = readFileSync(join(import.meta.dirname, "..", "app", "(site)", "map", "map-view.tsx"), "utf8");
     expect(view).toContain("if (!rulerTakesClick(rulerOnRef.current, pinSheetRef.current)) return;");
+  });
+});
+
+describe("setRulerMode", () => {
+  const fake = () => {
+    const calls: string[] = [];
+    const classes = new Set<string>();
+    const m = {
+      doubleClickZoom: { enable: () => calls.push("enable"), disable: () => calls.push("disable") },
+      getContainer: () => ({ classList: { toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)) } }),
+    };
+    return { m, calls, classes };
+  };
+
+  it("⚠️ turns double-click zoom off and the world markers' clicks off while the ruler is on", () => {
+    const { m, calls, classes } = fake();
+    setRulerMode(m, true);
+    expect(calls).toEqual(["disable"]);
+    expect(classes.has(RULER_CLASS)).toBe(true);
+    setRulerMode(m, false);
+    expect(calls).toEqual(["disable", "enable"]);
+    expect(classes.has(RULER_CLASS)).toBe(false);
+  });
+
+  it("lets a click through every world marker and circle to the map while the class is on", () => {
+    const css = readFileSync(join(__dirname, "..", "app", "(site)", "map", "map.css"), "utf8");
+    // Leaflet's own .leaflet-interactive sets pointer-events back to auto, hence !important on the children.
+    expect(css).toContain(`.${RULER_CLASS} .leaflet-${WORLD_PANE}-pane, .${RULER_CLASS} .leaflet-${WORLD_PANE}-pane * { pointer-events: none !important; }`);
   });
 });
