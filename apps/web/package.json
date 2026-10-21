@@ -12,7 +12,8 @@
     "build": "next build",
     "start": "next start",
     "guide:publish": "tsx scripts/publish-guide.ts",
-    "map:world": "tsx scripts/build-map-world.ts"
+    "map:world": "tsx scripts/build-map-world.ts",
+    "map:items": "tsx scripts/build-item-index.ts"
   },
   "dependencies": {
     "@factions/copy": "workspace:*",
