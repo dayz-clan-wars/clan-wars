@@ -96,7 +96,7 @@ describe("supplyTick drift detection", () => {
     expect(r.uploaded).toBe(true);
     expect(srv.uploads).toHaveLength(2);
     // What is restored must be the projection, not the foreign file.
-    expect(JSON.parse(srv.uploads[1]!.body).Objects).toHaveLength(103);
+    expect(JSON.parse(srv.uploads[1]!.body).Objects).toHaveLength(122);
   });
   it("re-uploads when the file is gone from the server", async () => {
     const srv = fakeServer();

@@ -9,19 +9,19 @@ const COK = { tag: "COK", texture: "Flag_Rooster", x: 5551.69, y: 311.63, z: 879
 
 describe("loadTemplate", () => {
   it("drops the anchor and keeps every other object", () => {
-    // The real template: 73 objects, exactly one TerritoryFlag.
-    expect(RAW.Objects).toHaveLength(73);
-    expect(loadTemplate(RAW)).toHaveLength(72);
+    // The real template: 123 objects, exactly one TerritoryFlag.
+    expect(RAW.Objects).toHaveLength(123);
+    expect(loadTemplate(RAW)).toHaveLength(122);
     expect(loadTemplate(RAW).some((o) => o.name === "TerritoryFlag")).toBe(false);
   });
 
   it("expresses positions as offsets from the anchor", () => {
-    // Anchor is at 5572.65625 / 310.8094482421875 / 8811.84375. The
-    // Flag_White sits at 5573.5546875 / 312.02886962890627 / 8811.8125.
+    // Anchor is at 4562.60302734375 / 338.8551330566406 / 10059.1298828125.
+    // Both Flag_White sit at 4562.3193359375 / 340.1875305175781 / 10058.892578125.
     const flag = loadTemplate(RAW).find((o) => o.name === "Flag_White")!;
-    expect(flag.pos[0]).toBeCloseTo(0.8984375, 6);
-    expect(flag.pos[1]).toBeCloseTo(1.2194213867, 6);
-    expect(flag.pos[2]).toBeCloseTo(-0.03125, 6);
+    expect(flag.pos[0]).toBeCloseTo(-0.28369140625, 6);
+    expect(flag.pos[1]).toBeCloseTo(1.3323974609, 6);
+    expect(flag.pos[2]).toBeCloseTo(-0.2373046875, 6);
   });
 
   it("throws when the anchor is missing", () => {
@@ -29,13 +29,6 @@ describe("loadTemplate", () => {
     // coordinates — one pile on the map, nowhere near any pole.
     expect(() => loadTemplate({ Objects: [{ name: "NailBox", pos: [1, 2, 3], ypr: [0, 0, 0], scale: 1, enableCEPersistency: 0, customString: "" }] }))
       .toThrow(/anchor/i);
-  });
-
-  it("throws when a kit quantity names an object the template lacks", () => {
-    // ⚠️ Guards a typo in KIT_QUANTITIES, whose only other symptom is the
-    // template's own count shipping unchanged — a kit silently short.
-    const noLogs = { Objects: RAW.Objects.filter((o: any) => o.name !== "WoodenLog") };
-    expect(() => loadTemplate(noLogs)).toThrow(/WoodenLog/);
   });
 
   it("throws when the template has two anchors", () => {
@@ -49,11 +42,11 @@ describe("generateSupplies", () => {
 
   it("places the kit at the faction's pole", () => {
     const out = JSON.parse(generateSupplies(offsets, [COK]));
-    // 72 template objects, plus a second flag item and thirty extra logs.
-    expect(out.Objects).toHaveLength(103);
+    // Every template object but the anchor, once each.
+    expect(out.Objects).toHaveLength(122);
     const flag = out.Objects.find((o: any) => o.name === "Flag_Rooster");
-    expect(flag.pos[0]).toBeCloseTo(5551.69 + 0.8984375, 6);
-    expect(flag.pos[2]).toBeCloseTo(8790.97 - 0.03125, 6);
+    expect(flag.pos[0]).toBeCloseTo(5551.69 - 0.28369140625, 6);
+    expect(flag.pos[2]).toBeCloseTo(8790.97 - 0.2373046875, 6);
   });
 
   it("substitutes the faction's texture for the white flag", () => {
@@ -62,22 +55,20 @@ describe("generateSupplies", () => {
     expect(out.Objects.filter((o: any) => o.name === "Flag_Rooster")).toHaveLength(2);
   });
 
-  it("raises the wooden logs to fifty, spread over the template's entries", () => {
-    // The template holds 20, all at one position with drifting yaw. 50 is
-    // 2 each with the remainder of 10 going to the first 10, so the captured
-    // yaw variety survives instead of one entry being stamped 30 times.
-    const logs = JSON.parse(generateSupplies(offsets, [COK])).Objects.filter(
-      (o: any) => o.name === "WoodenLog",
-    );
-    expect(logs).toHaveLength(50);
-    expect(new Set(logs.map((o: any) => JSON.stringify(o.ypr))).size).toBe(
-      new Set(RAW.Objects.filter((o: any) => o.name === "WoodenLog").map((o: any) => JSON.stringify(o.ypr))).size,
-    );
+  it("spawns each object as many times as the template captured it", () => {
+    // Quantity lives in the template: fifty WoodenLog entries, twenty
+    // CommonBrick, and so on. Nothing is multiplied on the way out.
+    const out = JSON.parse(generateSupplies(offsets, [COK])).Objects;
+    const count = (name: string) => out.filter((o: any) => o.name === name).length;
+    expect(count("WoodenLog")).toBe(50);
+    expect(count("CommonBrick")).toBe(20);
+    expect(count("DigitalCodeLock")).toBe(4);
+    expect(count("Battery9V")).toBe(4);
   });
 
   it("gives each kit two flags, stacked at the template's flag offset", () => {
     // A spare, so a raided faction can re-raise without waiting for a sweep.
-    // Both sit at the same offset — the template stacks duplicates too.
+    // The template captured both at the same spot.
     const flags = JSON.parse(generateSupplies(offsets, [COK])).Objects.filter(
       (o: any) => o.name === "Flag_Rooster",
     );
@@ -105,8 +96,8 @@ describe("generateSupplies", () => {
   it("emits every faction's kit", () => {
     const other = { tag: "WLF", texture: "Flag_Wolf", x: 100, y: 200, z: 300, supplied: true };
     const out = JSON.parse(generateSupplies(offsets, [COK, other]));
-    expect(out.Objects).toHaveLength(206);
-    expect(out.Objects.filter((o: any) => o.customString === "WLF")).toHaveLength(103);
+    expect(out.Objects).toHaveLength(244);
+    expect(out.Objects.filter((o: any) => o.customString === "WLF")).toHaveLength(122);
   });
 
   it("⚠️ emits a clan's flags and nothing else when it is not supplied", async () => {
@@ -136,10 +127,10 @@ describe("generateSupplies", () => {
     // faction order rather than splitting into two blocks.
     const wolf = { tag: "WLF", texture: "Flag_Wolf", x: 100, y: 200, z: 300, supplied: false };
     const out = JSON.parse(generateSupplies(offsets, [COK, wolf]));
-    expect(out.Objects).toHaveLength(105);
-    expect(out.Objects.filter((o: any) => o.customString === "COK")).toHaveLength(103);
+    expect(out.Objects).toHaveLength(124);
+    expect(out.Objects.filter((o: any) => o.customString === "COK")).toHaveLength(122);
     expect(out.Objects.filter((o: any) => o.customString === "WLF")).toHaveLength(2);
-    expect(out.Objects[103].name).toBe("Flag_Wolf");
+    expect(out.Objects[122].name).toBe("Flag_Wolf");
   });
 
   it("produces a valid empty file for no factions", () => {
@@ -155,7 +146,7 @@ describe("generateSupplies", () => {
     // — not just "the function agrees with itself in one process".
     const out = generateSupplies(offsets, [COK]);
     const digest = createHash("sha256").update(out).digest("hex");
-    expect(digest).toBe("8e32be15bf1e3f0146ec9840c60f513e8f8c769922adf9579d95b094776d6a44");
+    expect(digest).toBe("6e6217133a695bb3133c8cecb40197b3144f45ad6047dac465688d294b40be8a");
   });
 
   it("emits exactly the six spawner fields per object, no more and no fewer", () => {
