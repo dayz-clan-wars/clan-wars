@@ -7,7 +7,7 @@ import { ServerStrip } from "@/app/components/server-strip";
 import { TimerBar } from "@/app/components/timer-bar";
 import { serverStripLines } from "@/lib/server-strip";
 import { SkipLink } from "@/app/components/ui";
-import { SITE_STRIPS_ID } from "@/lib/site-strips";
+import { SiteStrips } from "@/app/components/site-strips";
 
 /**
  * The site shell: one top bar with the menu, over every page except the
@@ -48,12 +48,12 @@ export default async function SiteLayout({ children }: { children: React.ReactNo
         counts={counts}
         notifications={session ? { unread: counts?.notices ?? 0, recent, now } : undefined}
       />
-      {/* One wrapper so the map (fixed below the bar) can measure every strip at once — lib/site-strips.ts. */}
-      <div id={SITE_STRIPS_ID}>
+      {/* One wrapper so the map (fixed below the bar) can measure every strip at once, and drop them on /map — lib/site-strips.ts. */}
+      <SiteStrips>
         <ServerStrip lines={serverLines} />
         <TimerBar window={raidWindow} restartsScheduled={restarts} now={now} />
         <InstallStrip />
-      </div>
+      </SiteStrips>
       {children}
     </>
   );

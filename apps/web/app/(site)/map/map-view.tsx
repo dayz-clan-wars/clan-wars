@@ -44,6 +44,8 @@ import { SITE_STRIPS_ID, mapTop } from "@/lib/site-strips";
 import { withoutResult } from "@/lib/map-url";
 import { MapStatus } from "./map-status";
 import { MapNotices } from "./map-notices";
+import { MapTimers } from "./map-timers";
+import type { TimerColumns } from "@/lib/timer-bar";
 // ⚠️ Next special-cases a global stylesheet imported FROM node_modules: a
 // third-party package's CSS may be imported in the component that needs it and
 // still gets extracted, scoped to this component's chunk rather than loaded on
@@ -132,7 +134,7 @@ const HINT_KEY = "cw-map-hint-v1";
 /** The bar's last slot: the player's next step, not always "Your clan" (App Review §03). */
 export type MapNext = { label: string; href: string };
 
-export default function MapView({ layers, notice, guide, next }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string }; next: MapNext }) {
+export default function MapView({ layers, notice, guide, next, timers }: { layers: MapData["layers"]; notice?: string; guide?: { href: string; label: string }; next: MapNext; timers: TimerColumns }) {
   // A first map with nothing of the player's on it says what would change that; dismissed once, remembered beside the layer switches.
   const bare = !layers.base && !layers.clanmates;
   const [hint, setHint] = useState(false);
@@ -485,8 +487,9 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
   // ordinary flow, so it used to paint straight over them: the raid countdown
   // invisible on the one page raiders plan from, and the install strip's
   // buttons still tabbable underneath. The map's top follows the strips'
-  // measured height instead. A dismissed install strip shrinks it; the
-  // marquee's and the timers' heights vary with the servers and the width.
+  // measured height instead. Today the strips are hidden on /map
+  // (lib/site-strips.ts; the clocks ride in the bar as MapTimers), so this
+  // measures 0 — kept so a strip that ever shows here moves the map, never hides under it.
   // Before the first measure, `top-bar` (the class) holds the map under the
   // bar alone.
   useEffect(() => {
@@ -1149,6 +1152,8 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             </div>
           )}
           <div id={CHROME_IDS.bar} className="absolute bottom-6 left-6 z-[1100] hidden items-stretch border-2 border-rule-2 bg-frame font-display text-xs uppercase tracking-[0.06em] lg:flex">
+            {/* The raid and restart clocks, here because the strips above the map stand down on /map. */}
+            <MapTimers columns={timers} variant="bar" />
             {/* The readout: under the mouse, else the centre. A click copies it. */}
             <MapReadout map={mapReady ? map.current : null} size={size} centre={centre} variant="bar" />
             <button type="button" onClick={recentre} disabled={!hasFix} title={hasFix ? "Center on your last known position" : "No position for you yet"}
@@ -1197,7 +1202,11 @@ export default function MapView({ layers, notice, guide, next }: { layers: MapDa
             {/* The item view on a phone: in this bar, so the map's inset grows with it and no spot hides under it. */}
             {itemModel && <ItemPanel model={itemModel} onClear={clearItemView} variant="sheet" card={shownCard && <ItemCardView model={shownCard} variant="sheet" />} />}
             {/* The readout, the centre on a phone: its own row, because the button row has no room left. A tap copies it. */}
-            <div className={`border-b border-rule-2 ${layersOpen ? "border-t" : ""}`}>
+            {/* The clocks the strips carried on every other page: one row, over the readout. */}
+            <div className={layersOpen ? "border-t border-rule-2" : ""}>
+              <MapTimers columns={timers} variant="row" />
+            </div>
+            <div className="border-b border-rule-2">
               <MapReadout map={null} size={size} centre={centre} variant="row" />
             </div>
             <div className="flex items-center gap-2 px-4 py-2.5">

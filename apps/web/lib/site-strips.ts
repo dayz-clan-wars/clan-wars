@@ -9,3 +9,14 @@ export const SITE_STRIPS_ID = "site-strips";
 export function mapTop(stripsPx: number): string {
   return `calc(var(--spacing-bar) + ${Math.max(0, Math.round(stripsPx))}px)`;
 }
+
+/**
+ * The pages the strips stand down on. The map wants every pixel, so its raid
+ * and restart clocks ride in its own bottom bar instead (map/map-timers.tsx),
+ * and the marquee and the install offer wait for the next page.
+ */
+const STRIPLESS = new Set(["/map"]);
+
+export function stripsHidden(pathname: string | null): boolean {
+  return pathname !== null && STRIPLESS.has(pathname.replace(/\/+$/u, "") || "/");
+}
