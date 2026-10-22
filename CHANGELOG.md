@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The map has more room: the server name, the raid and restart timers and the install offer no longer sit above it. The raid and restart clocks are in the map's bottom bar instead.
+
 ## [2.8.1] - 2026-10-21
 
 ### Fixed

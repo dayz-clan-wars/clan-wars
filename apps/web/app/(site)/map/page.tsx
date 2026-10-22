@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { mapState, claimContext } from "@factions/roster";
+import { mapState, claimContext, baseDamageWindow, restartsScheduled } from "@factions/roster";
+import { timerColumns } from "@/lib/timer-bar";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY } from "@/lib/map-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
@@ -43,5 +44,12 @@ export default async function MapPage({ searchParams }: { searchParams: Promise<
     : state.layers.clanmates ? { label: "Your clan", href: "/clan" }
     : state.layers.base ? { label: "Your base", href: "/base" }
     : { label: "Declare", href: "/base" };
-  return <MapView layers={state.layers} notice={notice} guide={guideLinkFor("/map")} next={next} />;
+  // The strips stand down on /map (lib/site-strips.ts), so the clocks come with
+  // the map. Same reads as the layout's, and like there never a reason to fail the page.
+  const [raidWindow, restarts] = await Promise.all([
+    baseDamageWindow().catch(() => undefined),
+    restartsScheduled().catch(() => false),
+  ]);
+  const timers = timerColumns(raidWindow, restarts, new Date());
+  return <MapView layers={state.layers} notice={notice} guide={guideLinkFor("/map")} next={next} timers={timers} />;
 }

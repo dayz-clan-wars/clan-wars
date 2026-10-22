@@ -22,7 +22,8 @@ import { restartColumn, type RestartColumn } from "@/lib/timer-bar";
  * than on the server. A server-painted gold that never arrives, or a rule frozen
  * at the width it had at page load, is worse than no bar at all.
  */
-export function RestartCountdown({ initial, valueClass }: { initial: RestartColumn; valueClass: string }) {
+/** `rule: false` is the map's compact clock (map/map-timers.tsx), which has no bottom edge to drain along. */
+export function RestartCountdown({ initial, valueClass, rule = true }: { initial: RestartColumn; valueClass: string; rule?: boolean }) {
   // ⚠️ Seeded from the server's own computation for the first paint; the clock
   // starts after mount, or React reports a hydration mismatch and discards the
   // markup. Same discipline as RaidCountdown, and the same reason.
@@ -40,9 +41,11 @@ export function RestartCountdown({ initial, valueClass }: { initial: RestartColu
     <>
       <span className={`flex-none ${valueClass} ${c.soon ? "text-gold" : "text-ink"}`}>{c.value}</span>
       {/* Drains right to left, mirroring the raid rule, as the canvas draws it. */}
-      <div aria-hidden="true" className="absolute inset-x-0 -bottom-0.5 h-0.5">
-        <div className={`ml-auto h-full ${c.soon ? "bg-gold" : "bg-rule-3"}`} style={{ width: `${(c.fill * 100).toFixed(2)}%` }} />
-      </div>
+      {rule && (
+        <div aria-hidden="true" className="absolute inset-x-0 -bottom-0.5 h-0.5">
+          <div className={`ml-auto h-full ${c.soon ? "bg-gold" : "bg-rule-3"}`} style={{ width: `${(c.fill * 100).toFixed(2)}%` }} />
+        </div>
+      )}
     </>
   );
 }

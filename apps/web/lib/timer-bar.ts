@@ -1,5 +1,5 @@
 import type { BaseDamageWindow } from "@factions/roster";
-import { RESTART_PERIOD_MS } from "@factions/domain";
+import { RESTART_PERIOD_MS, nextRestartAt } from "@factions/domain";
 
 /**
  * The two-column timer bar under the server-name marquee: the raid window on
@@ -121,5 +121,21 @@ export function restartColumn(nextAt: Date, now: Date): RestartColumn {
     value: `${mm}:${ss}`,
     soon: left <= RESTART_SOON_MS,
     fill: Math.min(1, left / RESTART_PERIOD_MS),
+  };
+}
+
+/** Both columns' first frame, for the map's compact clocks (map/map-timers.tsx). null is a column with nothing to show. */
+export type TimerColumns = { raid: RaidColumn | null; restart: RestartColumn | null };
+
+/**
+ * The bar's two columns as plain data, from one clock read — the map renders
+ * them in its own bar, client-side, so it is handed the columns rather than
+ * the window. Same rules as TimerBar: no window is no raid column, and no
+ * scheduled restarts is no restart column, never a confident clock.
+ */
+export function timerColumns(w: BaseDamageWindow | undefined, restartsScheduled: boolean, now: Date): TimerColumns {
+  return {
+    raid: w ? raidColumn(w, now) : null,
+    restart: restartsScheduled ? restartColumn(nextRestartAt(now), now) : null,
   };
 }
