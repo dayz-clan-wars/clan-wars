@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.8.3] - 2026-10-21
+
 ### Changed
 
 - New supply kit at your flagpole, built for Nasdara: 50 logs, planks, nails, metal plates, 20 bricks and mortar with two trowels, wire, rope, two pickaxes, two hatchets, two pliers, a hand saw, whetstones, four digital code locks with batteries, and two of your clan's flag. Barrels, combination locks, barbed wire and the fence and watchtower kits are no longer in it. It arrives at the next restart.
