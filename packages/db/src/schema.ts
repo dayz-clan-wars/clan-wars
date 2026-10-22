@@ -664,8 +664,8 @@ export const factions = pgTable("factions", {
   language: text("language"),
   pitch: text("pitch"),
   /**
-   * Whether the clan wants its build supplies (crate, barrels, materials,
-   * tools, kits). Off, the worker spawns its two flags and nothing else — a
+   * Whether the clan wants its build supplies (crate, materials, tools,
+   * code locks). Off, the worker spawns its two flags and nothing else — a
    * built base can shed the clutter and come back for repairs. Written only
    * by `PgRosterStore.setSupplies` (officer+), which queues a channel notice.
    *

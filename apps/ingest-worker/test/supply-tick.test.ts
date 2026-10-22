@@ -59,7 +59,7 @@ describe("supplyTick", () => {
     expect(uploads[0]!.dir).toBe("/d");
     expect(uploads[0]!.name).toBe("f.json");
     const parsed = JSON.parse(uploads[0]!.body);
-    expect(parsed.Objects).toHaveLength(103);
+    expect(parsed.Objects).toHaveLength(122);
     expect(parsed.Objects.every((o: any) => o.customString === "COK")).toBe(true);
   });
 
@@ -144,7 +144,7 @@ describe("supplyTick", () => {
     const objects = JSON.parse(bodies[0]!).Objects;
     // Without this the loop below asserts nothing on an empty file, so any
     // mutation that drops the faction turns this test green instead of red.
-    expect(objects).toHaveLength(103);
+    expect(objects).toHaveLength(122);
     for (const o of objects) {
       for (const p of o.pos) expect(typeof p).toBe("number");
       expect(Number.isFinite(o.pos[0])).toBe(true);
@@ -161,7 +161,7 @@ describe("supplyTick", () => {
     const client = { statFile: async () => null, uploadFile: async (_d: string, _n: string, b: string) => { bodies.push(b); } };
     await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects).toHaveLength(103);
+    expect(objects).toHaveLength(122);
     expect([...new Set(objects.map((o: any) => o.customString))]).toEqual(["COK"]);
   });
 
@@ -216,7 +216,7 @@ describe("supplyTick", () => {
     expect(objects).toHaveLength(2);
     expect(objects.every((o: any) => o.name === "Flag_Rooster")).toBe(true);
     // At their own pole, not the template's.
-    expect(objects[0].pos[0]).toBeCloseTo(5551.69 + 0.8984375, 6);
+    expect(objects[0].pos[0]).toBeCloseTo(5551.69 - 0.28369140625, 6);
   });
 
   it("restores the full kit when a raided clan raises its flag again", async () => {
@@ -232,7 +232,7 @@ describe("supplyTick", () => {
 
     expect(back).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
     expect(bodies).toHaveLength(2);
-    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(103);
+    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(122);
   });
 
   it("⚠️ gives a clan that turned its build supplies off its flags, and nothing but its flags", async () => {
@@ -259,7 +259,7 @@ describe("supplyTick", () => {
     await db.update(factions).set({ buildSupplies: true }).where(eq(factions.id, f.id));
     const back = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     expect(back).toEqual({ factions: 1, flagsOnly: 0, uploaded: true });
-    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(103);
+    expect(JSON.parse(bodies[1]!).Objects).toHaveLength(122);
   });
 
   it("⚠️ keeps a raided clan on flags only even with its build supplies on", async () => {
@@ -313,7 +313,7 @@ describe("supplyTick", () => {
     const r = await supplyTick(db, { serverId, client, offsets, remoteDir: "/d", fileName: "f.json", now });
     expect(r).toEqual({ factions: 1, flagsOnly: 1, uploaded: true });
     const objects = JSON.parse(bodies[0]!).Objects;
-    expect(objects.filter((o: any) => o.customString === "COK")).toHaveLength(103);
+    expect(objects.filter((o: any) => o.customString === "COK")).toHaveLength(122);
     expect(objects.filter((o: any) => o.customString === "DRM")).toHaveLength(2);
   });
 

@@ -100,6 +100,13 @@ resupply at the pole, not a permanent grant of items.
 
 ## 3. The template
 
+> **Amended 2026-10-21: the Nasdara template replaces this one.** The asset is
+> now a capture from the Clan Wars server's `custom/supply-template.json`: 123
+> objects around one `TerritoryFlag`, so 122 per faction, with the 50 logs and
+> two `Flag_White` captured in place. `KIT_QUANTITIES` is gone — the template
+> states every quantity itself. The capture-specific numbers below describe
+> the original Livonia template.
+
 `livonia/custom/flag-supplies.json` is committed to this repo unchanged, as
 captured in game. It contains **73 objects** around a single `TerritoryFlag` at
 `5572.65 / 310.81 / 8811.84`, so **103 are emitted per faction** — the 72
