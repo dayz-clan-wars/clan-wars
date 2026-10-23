@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { barFor, isCurrent, menuFor, signInHref } from "../lib/menu";
+import { isCurrent, menuFor, signInHref } from "../lib/menu";
 
 /**
  * The site's navigation (app/(site)/site-bar.tsx, menu-list.tsx) is the
@@ -29,26 +29,44 @@ describe("menuFor (the phone drawer)", () => {
   });
 });
 
-describe("barFor (the desktop bar)", () => {
-  it("is the short form: Alphas and Seasons live in the scoreboard's own nav", () => {
-    expect(barFor(true).map((g) => g.map((m) => m.href))).toEqual([
-      ["/me", "/map", "/clan"],
-      ["/clans", "/players", "/scoreboard", "/live", "/guide"],
-    ]);
-    expect(barFor(false)).toEqual(barFor(true).slice(1));
+describe("one menu at every width", () => {
+  const site = (f: string) => readFileSync(join(import.meta.dirname, "..", "app", "(site)", f), "utf8");
+
+  it("has no separate desktop list: the drawer's list is the only one", async () => {
+    const menu = await import("../lib/menu");
+    expect("barFor" in menu).toBe(false);
+    expect(site("menu-list.tsx")).not.toMatch(/export function BarNav/u);
   });
 
-  it("Live owns /live/* and /war-log (the war log is one of its tabs)", () => {
-    const live = barFor(false)[0]!.find((m) => m.href === "/live")!;
-    expect(live.label).toBe("Live");
-    for (const p of ["/live", "/live/kills", "/war-log"]) expect(isCurrent(live, p)).toBe(true);
-    expect(isCurrent(live, "/livestream")).toBe(false);
+  it("⚠️ the Menu button is never hidden on desktop", () => {
+    // It used to sit in an lg:hidden group beside an inline nav; with the nav
+    // gone, hiding it again would leave a desktop visitor with no way around.
+    // The div that wraps the Drawer: the last one opened before it, ignoring divs that close on their own line.
+    const bar = site("site-bar.tsx").split("\n").filter((l) => !/<div[^>]*>.*<\/div>/u.test(l)).join("\n");
+    expect(bar).toMatch(/<Drawer /u);
+    const before = bar.slice(0, bar.indexOf("<Drawer "));
+    expect(before.slice(before.lastIndexOf("<div"))).not.toMatch(/lg:hidden/u);
   });
 
-  it("Live lights up on /radio (the bar has no room for its own cell)", () => {
-    const live = barFor(false)[0]!.find((m) => m.href === "/live")!;
-    expect(isCurrent(live, "/radio")).toBe(true);
-    expect(isCurrent(live, "/radios")).toBe(false);
+  it("the wordmark and the crumb are no longer squeezed out on laptops", () => {
+    const bar = site("site-bar.tsx");
+    expect(bar).not.toMatch(/lg:max-xl:sr-only/u);
+    expect(bar).toMatch(/text-muted lg:inline">\/ \{crumb\}/u);
+  });
+
+  it("a signed-out visitor keeps a Sign in button beside Menu", () => {
+    expect(site("site-bar.tsx")).toMatch(/\{!signedIn && <SignInButton \/>\}/u);
+  });
+
+  it("⚠️ that Sign in is sm and up: at 375px it wrapped itself and the wordmark (phones have it in the drawer)", () => {
+    const list = site("menu-list.tsx");
+    const button = list.slice(list.indexOf("export function SignInButton"), list.indexOf("export function Drawer"));
+    expect(button).toMatch(/className="hidden [^"]*sm:flex/u);
+    expect(site("site-bar.tsx")).toMatch(/<span className="whitespace-nowrap">Clan Wars<\/span>/u);
+  });
+
+  it("the guide's Contents button stays phone-only (desktop has the sidebar)", () => {
+    expect(site("site-bar.tsx")).toMatch(/\{extra && <div className="lg:hidden">\{extra\}<\/div>\}/u);
   });
 
   it("the drawer has both Live and War log, each its own item", () => {
@@ -57,54 +75,20 @@ describe("barFor (the desktop bar)", () => {
     expect(boards.map((m) => m.label)).toContain("War log");
   });
 
-  it("⚠️ Kit is in neither nav list", () => {
-    // It means nothing to anyone who is not boosting, and the bar is already
-    // full at 1024px (see the `quiet` flag's own comment in menu.ts). The way
-    // in is the owner's player page instead.
-    for (const signedIn of [true, false]) {
-      const all = [...menuFor(signedIn).flat(), ...barFor(signedIn).flat()];
-      expect(all.filter((i) => i.href === "/kit")).toEqual([]);
-    }
+  it("⚠️ Kit is not in the menu", () => {
+    // It means nothing to anyone who is not boosting. The way in is the owner's player page instead.
+    for (const signedIn of [true, false]) expect(menuFor(signedIn).flat().filter((i) => i.href === "/kit")).toEqual([]);
   });
 
-  it("does NOT have Notifications — the bell (site-bar.tsx) already covers it, and there is no room for a tenth cell", () => {
-    const [mine] = barFor(true);
-    expect(mine!.some((m) => m.href === "/notifications")).toBe(false);
-  });
-
-  it("Scoreboard owns /alphas and /seasons; /clan does not own /clans", () => {
-    const [mine, boards] = barFor(true);
-    const scoreboard = boards!.find((m) => m.href === "/scoreboard")!;
-    expect(isCurrent(scoreboard, "/alphas")).toBe(true);
-    expect(isCurrent(scoreboard, "/seasons")).toBe(true);
-    expect(isCurrent(scoreboard, "/scoreboard")).toBe(true);
-    const clan = mine!.find((m) => m.href === "/clan")!;
+  it("/clan does not own /clans", () => {
+    const clan = menuFor(true)[0]!.find((m) => m.href === "/clan")!;
     expect(isCurrent(clan, "/clan/vault")).toBe(true);
     expect(isCurrent(clan, "/clans")).toBe(false);
     expect(isCurrent(clan, "/clans/WTC")).toBe(false);
   });
-});
 
-/**
- * M2: at 1024–1279px the quiet Guide cell was `!hidden xl:!flex`, the drawer
- * is lg:hidden, and the footer is on two pages — so the guide was reachable
- * from nowhere. The room now comes from the wordmark and the cell padding.
- */
-describe("the bar between lg and xl", () => {
-  const site = (f: string) => readFileSync(join(import.meta.dirname, "..", "app", "(site)", f), "utf8");
-
-  it("⚠️ never hides the quiet Guide cell", () => {
-    expect(site("menu-list.tsx")).not.toMatch(/!hidden\s+xl:!flex/u);
-  });
-
-  it("buys the room by dropping the wordmark and the crumb to xl, never the guide", () => {
-    const bar = site("site-bar.tsx");
-    expect(bar).toMatch(/<span className="lg:max-xl:sr-only">Clan Wars<\/span>/u);
-    expect(bar).toMatch(/hidden text-muted xl:inline">\/ \{crumb\}/u);
-  });
-
-  it("the Guide is still in the bar", () => {
-    expect(barFor(true).flat().some((m) => m.href === "/guide")).toBe(true);
+  it("the guide is in the menu", () => {
+    expect(menuFor(false).flat().some((m) => m.href === "/guide")).toBe(true);
   });
 });
 

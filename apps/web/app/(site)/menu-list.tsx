@@ -1,7 +1,7 @@
 "use client";
 import { useRef } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
-import { barFor, isCurrent, menuFor, signInHref, type Counts } from "@/lib/menu";
+import { isCurrent, menuFor, signInHref, type Counts } from "@/lib/menu";
 import { POPOVER_GROUP } from "@/lib/popover";
 import { GuideSearch } from "@/app/guide/search";
 import type { SearchEntry } from "@/app/guide/index";
@@ -12,7 +12,6 @@ function useHere() {
   return { pathname, here: search ? `${pathname}?${search}` : pathname };
 }
 
-/** The desktop bar's items. Client-side only to mark the current page and carry the path into Sign in. */
 /** The gold count on an item: things waiting there. Hidden at zero. */
 function Badge({ n, label }: { n: number; label: string }) {
   if (n <= 0) return null;
@@ -20,38 +19,19 @@ function Badge({ n, label }: { n: number; label: string }) {
 }
 const countFor = (badge: "you" | "clan" | undefined, counts: Counts) => (badge ? counts[badge] : 0);
 
-export function BarNav({ signedIn, counts = { you: 0, clan: 0 } }: { signedIn: boolean; counts?: Counts }) {
-  const { pathname, here } = useHere();
-  const cell = "flex h-full items-center border-l border-rule-2 px-3 font-display text-xs uppercase tracking-[0.06em] xl:px-4";
-  return (
-    <nav aria-label="Site" className="flex h-full items-stretch whitespace-nowrap">
-      {barFor(signedIn).map((group, gi) => (
-        <div key={gi} className={`flex items-stretch ${gi > 0 ? "ml-4" : ""}`}>
-          {group.map((m) => {
-            const on = isCurrent(m, pathname);
-            return (
-              <a key={m.href} href={m.href} aria-current={on ? "page" : undefined}
-                className={`${cell} gap-2 ${on ? "text-gold shadow-[inset_0_-2px_0_var(--color-gold)]" : m.quiet ? "text-muted hover:text-ink" : "text-ink hover:text-gold"}`}>
-                {m.label}<Badge n={countFor(m.badge, counts)} label="waiting" />
-              </a>
-            );
-          })}
-        </div>
-      ))}
-      {signedIn ? (
-        // POST only: the logout route refuses GET (app/api/auth/logout/route.ts).
-        <form action="/api/auth/logout" method="post" className="flex items-stretch border-l border-rule-2">
-          <button type="submit" className="flex h-full items-center pl-4 font-mono text-[11px] uppercase tracking-[0.18em] text-muted hover:text-ink xl:pl-5">Sign out</button>
-        </form>
-      ) : (
-        <a href={signInHref(here)} className="ml-4 flex items-center bg-gold px-5 font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Sign in</a>
-      )}
-    </nav>
-  );
+/**
+ * The bar's gold Sign in, beside Menu for a signed-out visitor: the one action
+ * worth keeping out of the drawer. Client-side to carry the current path.
+ * ⚠️ From sm up only: at 375px beside the guide's Contents and Menu it wrapped
+ * itself and the wordmark onto two lines. Phones have it at the foot of the drawer.
+ */
+export function SignInButton() {
+  const { here } = useHere();
+  return <a href={signInHref(here)} className="hidden min-h-[44px] items-center whitespace-nowrap bg-gold px-4 sm:flex font-display text-xs uppercase tracking-[0.06em] text-ground hover:bg-gold-hover">Sign in</a>;
 }
 
 /**
- * The phone drawer: a <details> so it works without JavaScript and closes on
+ * The Menu drawer, at every width: a <details> so it works without JavaScript and closes on
  * navigation, with a dimmed backdrop. The summary reads "Menu" closed and
  * "Close" open, filled gold when open. Escape, click-outside and
  * one-popover-at-a-time come from PopoverDismiss (mounted by SiteBar) for the
