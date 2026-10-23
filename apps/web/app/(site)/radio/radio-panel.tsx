@@ -2,11 +2,12 @@ import type { BunkerCard } from "@/lib/radio/tally";
 import { btnPrimary, btnQuiet, btnSecondary } from "@/app/components/ui";
 import { BunkerCardView } from "./bunker-card";
 
-export type RadioState = "idle" | "starting" | "listening" | "denied" | "no-device" | "unsupported";
+export type RadioState = "idle" | "starting" | "listening" | "denied" | "no-device" | "busy" | "unsupported";
 
 const PROBLEM: Partial<Record<RadioState, string>> = {
   denied: "Your browser blocked the microphone. Allow it for this site in your browser settings, then press Listen again.",
   "no-device": "No microphone found. Plug one in or use a phone, then press Listen again.",
+  busy: "Another app is using the microphone. Close it or leave its call, then press Listen again.",
   unsupported: "This browser can't listen. Try Chrome or Safari on a phone.",
 };
 

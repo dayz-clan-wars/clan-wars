@@ -20,8 +20,10 @@ export type Sym = "." | "-" | "?";
 export type Group = {
   start: number;
   symbols: Sym[];
-  /** A silence of a whole group gap was heard before it, so its first element is the group's first. */
+  /** A real group gap of silence was heard before it, so its first element is the group's first. */
   fromStart: boolean;
+  /** A real group gap of silence followed it, so its last element is the group's last. */
+  toEnd: boolean;
   /** Still coming in: no group gap of silence has followed it yet. */
   open: boolean;
 };
@@ -36,6 +38,8 @@ export const TIMING = {
   pitchDash: 1900,
   charExtra: 400,
   groupGap: 4000,
+  realGap: 6000,
+  isolated: 2500,
   joinGap: 300,
   minRun: 50,
 } as const;
@@ -48,10 +52,15 @@ const PITCH = { ".": TIMING.pitchDot, "-": TIMING.pitchDash } as const;
 const FIT_MS = 300;
 const GROUP_LEN = 50;
 
-/** A noise burst chops one tone into pieces a few ms apart; put them back together. */
+/**
+ * A noise burst chops one tone into pieces a few ms apart; put them back together.
+ * ⚠️ Blips are dropped BEFORE joining: two 5 ms noise blips 75 ms apart would
+ * otherwise join into an 80 ms "dot", and one phantom element shifts every
+ * digit of the group after it.
+ */
 function joined(runs: ToneRun[]): ToneRun[] {
   const out: ToneRun[] = [];
-  for (const r of [...runs].sort((a, b) => a.start - b.start)) {
+  for (const r of runs.filter((x) => x.length >= TIMING.minRun).sort((a, b) => a.start - b.start)) {
     const last = out.at(-1);
     if (last && r.start - (last.start + last.length) < TIMING.joinGap) {
       last.length = Math.max(last.length, r.start + r.length - last.start);
@@ -59,7 +68,18 @@ function joined(runs: ToneRun[]): ToneRun[] {
       out.push({ ...r });
     }
   }
-  return out.filter((r) => r.length >= TIMING.minRun);
+  return out;
+}
+
+/** A run with long silence on both sides is a stray noise, not Morse: left in, it would bridge a group gap and merge two groups. */
+function withoutStrays(rs: ToneRun[], k: number): ToneRun[] {
+  const quiet = TIMING.isolated * k;
+  return rs.filter((r, i) => {
+    const prev = rs[i - 1];
+    const next = rs[i + 1];
+    if (!prev || !next) return true;
+    return !(r.start - (prev.start + prev.length) > quiet && next.start - (r.start + r.length) > quiet);
+  });
 }
 
 /**
@@ -111,12 +131,18 @@ function explain(first: Sym, pitch: number, k: number): Sym[] | null {
   return best?.syms ?? null;
 }
 
-/** Every group heard so far, spelled out. `now` is ms since listening began. */
-export function spellGroups(runs: ToneRun[], now: number): Group[] {
-  const rs = joined(runs);
+/**
+ * Every group heard so far, spelled out. `now` is ms since listening began;
+ * `heardFrom` is the first ms of audio actually analysed (the detector drops
+ * audio heard long before the tone locks), so silence before it proves nothing.
+ */
+export function spellGroups(runs: ToneRun[], now: number, heardFrom = 0): Group[] {
+  const k0 = speedScale(runs);
+  const rs = withoutStrays(joined(runs), k0);
   if (rs.length === 0) return [];
   const k = speedScale(rs);
   const gap = TIMING.groupGap * k;
+  const real = TIMING.realGap * k;
 
   const raw: ToneRun[][] = [[rs[0]!]];
   for (let i = 1; i < rs.length; i++) {
@@ -132,13 +158,17 @@ export function spellGroups(runs: ToneRun[], now: number): Group[] {
     }
     const last = g.at(-1)!;
     symbols.push(classify(last.length, k));
+    const before = gi > 0 ? g[0]!.start - (raw[gi - 1]!.at(-1)!.start + raw[gi - 1]!.at(-1)!.length) : g[0]!.start - heardFrom;
+    const after = gi < raw.length - 1 ? raw[gi + 1]![0]!.start - (last.start + last.length) : now - (last.start + last.length);
     return {
       start: g[0]!.start,
       symbols,
-      // ⚠️ The first group counts as heard from its start only if listening
-      // began a whole group gap before it; otherwise it is a tail.
-      fromStart: gi > 0 || g[0]!.start >= gap,
-      open: gi === raw.length - 1 && now - (last.start + last.length) <= gap,
+      // ⚠️ Over 4 s of silence splits a group, but only a real group gap
+      // (~6.8 s) proves an end: two drowned dashes leave ~5 s mid-group, and
+      // calling the piece after it "from the start" reads it into wrong digits.
+      fromStart: before >= real,
+      toEnd: after >= real,
+      open: gi === raw.length - 1 && after <= gap,
     };
   });
 }
@@ -158,24 +188,28 @@ export function toDigits(symbols: Sym[], from: "left" | "right" = "left"): strin
 
 /**
  * One read per group worth reading, lined up in its ten places. A group heard
- * from its start lines up from the left; a tail (listening began mid-group)
- * from the right, once it has closed.
+ * from its start lines up from the left, one heard to its end from the right.
+ * Both ends and exactly 50 elements is a full read. Both ends and any other
+ * count means an element was lost or invented somewhere unknown, so a digit is
+ * kept only where both alignments agree.
  */
 export function readsOf(groups: Group[]): Read[] {
   const reads: Read[] = [];
   for (const g of groups) {
     // Under ten elements is a stray blip or a fragment, not two digits' worth.
     if (g.symbols.length < 10) continue;
-    if (!g.fromStart) {
-      // ⚠️ Neither end heard yet: aligning it now would be a guess, and a
-      // wrong read seeds a wrong cluster in the tally.
-      if (g.open) continue;
-      reads.push({ digits: toDigits(g.symbols, "right").slice(-10).padStart(10, "?") });
-    } else if (!g.open && g.symbols.length === GROUP_LEN) {
-      reads.push({ digits: toDigits(g.symbols) });
-    } else {
-      reads.push({ digits: toDigits(g.symbols).slice(0, 10).padEnd(10, "?") });
+    const left = toDigits(g.symbols).slice(0, 10).padEnd(10, "?");
+    const right = toDigits(g.symbols, "right").slice(-10).padStart(10, "?");
+    if (g.fromStart && g.toEnd) {
+      reads.push({ digits: g.symbols.length === GROUP_LEN ? left : [...left].map((c, i) => (c === right[i] ? c : "?")).join("") });
+    } else if (g.fromStart) {
+      reads.push({ digits: left });
+    } else if (g.toEnd) {
+      reads.push({ digits: right });
     }
+    // ⚠️ Neither end heard (a tail still coming in, or a piece between two
+    // dropouts): any alignment is a guess, and a wrong read seeds a wrong
+    // cluster in the tally. No read.
   }
   return reads;
 }

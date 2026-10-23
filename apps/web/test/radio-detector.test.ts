@@ -15,7 +15,7 @@ function rng(seed: number) {
 }
 
 /** One group of the broadcast at its own timing, 5 s of quiet either side; bursts are 200 ms of loud broadband noise at those ms. */
-function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 0.02, bursts = [] as number[] } = {}) {
+function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 0.02, bursts = [] as number[], hum = null as { hz: number; amp: number } | null } = {}) {
   const els: ToneRun[] = [];
   let t = 5_000;
   for (const d of digits) {
@@ -39,6 +39,7 @@ function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 
       out[a + i]! += 0.5 * g * env * Math.sin((2 * Math.PI * tone * (a + i)) / rate);
     }
   }
+  if (hum) for (let i = 0; i < total; i++) out[i]! += hum.amp * g * Math.sin((2 * Math.PI * hum.hz * i) / rate);
   for (const b of bursts) {
     const a = Math.round((b / 1000) * rate);
     for (let i = 0; i < rate * 0.2; i++) out[a + i]! += 10 * noise * g * r() * 3.4;
@@ -48,10 +49,17 @@ function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 
 
 function listen(audio: Float32Array, rate = 48_000, opts?: { tone?: number }) {
   const d = new ToneDetector(rate, opts);
-  const runs: ToneRun[] = [];
-  for (let i = 0; i < audio.length; i += 128) runs.push(...d.push(audio.subarray(i, i + 128)));
+  let runs: ToneRun[] = [];
+  let gen = d.generation;
+  for (let i = 0; i < audio.length; i += 128) {
+    const got = d.push(audio.subarray(i, i + 128));
+    // A new lock replays recent audio: what the old one said is void.
+    if (d.generation !== gen) [runs, gen] = [[], d.generation];
+    runs.push(...got);
+  }
   const now = (audio.length / rate) * 1000;
-  return { d, runs, reads: readsOf(spellGroups(runs, now)).map((r) => r.digits) };
+  const heard = runs.filter((r) => r.start >= d.heardFrom);
+  return { d, runs, reads: readsOf(spellGroups(heard, now, d.heardFrom)).map((r) => r.digits) };
 }
 
 describe("ToneDetector", () => {
@@ -76,6 +84,35 @@ describe("ToneDetector", () => {
 
   it("detects a quiet tone", () => {
     expect(listen(synth("0910442410", { gainDb: -30 })).reads).toEqual(["0910442410"]);
+  });
+
+  it("a steady hum does not steal the lock when listening starts in silence", () => {
+    const { d, reads } = listen(synth("0910442410", { hum: { hz: 600, amp: 0.02 } }));
+    expect(Math.abs(d.tone! - 988)).toBeLessThanOrEqual(10);
+    expect(reads).toEqual(["0910442410"]);
+  });
+
+  it("a tone held for seconds is not Morse: it searches again", () => {
+    const { d, reads } = listen(synth("0910442410", { hum: { hz: 600, amp: 0.3 } }), 48_000, { tone: 600 });
+    expect(Math.abs(d.tone! - 988)).toBeLessThanOrEqual(10);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const r of reads) [...r].forEach((c, i) => expect(["?", "0910442410"[i]]).toContain(c));
+  });
+
+  it("a pause in the audio is silence, not a join", () => {
+    // The context was suspended for 3 s mid-group: that audio never arrives.
+    const audio = synth("0910442410");
+    const cut = 48_000 * 40;
+    const d = new ToneDetector(48_000, { tone: 988 });
+    const runs: ToneRun[] = [];
+    const before = audio.subarray(0, cut);
+    const after = audio.subarray(cut + 48_000 * 3);
+    for (let i = 0; i < before.length; i += 128) runs.push(...d.push(before.subarray(i, i + 128)));
+    runs.push(...d.skip(3_000));
+    for (let i = 0; i < after.length; i += 128) runs.push(...d.push(after.subarray(i, i + 128)));
+    const reads = readsOf(spellGroups(runs, (audio.length / 48_000) * 1000)).map((r) => r.digits);
+    expect(reads.length).toBeGreaterThan(0);
+    for (const r of reads) [...r].forEach((c, i) => expect(["?", "0910442410"[i]]).toContain(c));
   });
 
   it("decodes at 44.1 kHz with the tone given", () => {

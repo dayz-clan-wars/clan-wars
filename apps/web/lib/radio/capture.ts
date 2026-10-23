@@ -3,7 +3,8 @@
  * (detector, decoder, tally) is pure and tested without it.
  */
 
-export type CaptureError = "denied" | "no-device" | "unsupported";
+export type CaptureError = "denied" | "no-device" | "busy" | "unsupported";
+const RESUME_WAIT_MS = 3000;
 
 /**
  * ⚠️ The worklet loads from a Blob URL, never a file in public/: lib/auth/gate.ts
@@ -21,7 +22,12 @@ class RadioTap extends AudioWorkletProcessor {
 registerProcessor("radio-tap", RadioTap);
 `;
 
-export async function startCapture(onSamples: (block: Float32Array) => void): Promise<{ sampleRate: number; stop(): void }> {
+/**
+ * `onGap` hears how long the audio stopped for (the context suspended or was
+ * interrupted: a screen lock, a phone call), so the detector can count that
+ * time as silence rather than join the audio either side of it.
+ */
+export async function startCapture(onSamples: (block: Float32Array) => void, onGap: (ms: number) => void): Promise<{ sampleRate: number; stop(): void }> {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined") {
     throw new Error("unsupported" satisfies CaptureError);
   }
@@ -41,30 +47,61 @@ export async function startCapture(onSamples: (block: Float32Array) => void): Pr
     const name = e instanceof DOMException ? e.name : "";
     if (name === "NotAllowedError" || name === "SecurityError") throw new Error("denied" satisfies CaptureError);
     if (name === "NotFoundError" || name === "OverconstrainedError") throw new Error("no-device" satisfies CaptureError);
+    // Discord, a call or the Xbox app holding the microphone: worth another try, unlike a browser that cannot.
+    if (name === "NotReadableError" || name === "AbortError") throw new Error("busy" satisfies CaptureError);
     throw new Error("unsupported" satisfies CaptureError);
   }
 
-  const url = URL.createObjectURL(new Blob([TAP], { type: "application/javascript" }));
+  const release = () => {
+    for (const t of stream.getTracks()) t.stop();
+    void ctx.close();
+  };
+  let tap: AudioWorkletNode;
   try {
-    await ctx.audioWorklet.addModule(url);
-  } finally {
-    URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(new Blob([TAP], { type: "application/javascript" }));
+    try {
+      await ctx.audioWorklet.addModule(url);
+    } finally {
+      URL.revokeObjectURL(url);
+    }
+    // ⚠️ Never wait on resume() unbounded: if the browser never grants it, the
+    // page would sit on "starting" with Listen disabled. After a wait, carry
+    // on; the visibility handler below asks again.
+    await Promise.race([resumed, new Promise((r) => setTimeout(r, RESUME_WAIT_MS))]);
+    const source = ctx.createMediaStreamSource(stream);
+    tap = new AudioWorkletNode(ctx, "radio-tap");
+    tap.port.onmessage = (ev: MessageEvent<Float32Array>) => onSamples(ev.data);
+    // A node nothing pulls from may never run; a silent gain to the speakers keeps it pulled.
+    const mute = ctx.createGain();
+    mute.gain.value = 0;
+    source.connect(tap).connect(mute).connect(ctx.destination);
+  } catch {
+    // ⚠️ The microphone is open by now: leave it open and the browser shows it in use until the tab closes.
+    release();
+    throw new Error("unsupported" satisfies CaptureError);
   }
-  await resumed;
-  const source = ctx.createMediaStreamSource(stream);
-  const tap = new AudioWorkletNode(ctx, "radio-tap");
-  tap.port.onmessage = (ev: MessageEvent<Float32Array>) => onSamples(ev.data);
-  // A node nothing pulls from may never run; a silent gain to the speakers keeps it pulled.
-  const mute = ctx.createGain();
-  mute.gain.value = 0;
-  source.connect(tap).connect(mute).connect(ctx.destination);
+
+  let pausedAt: number | null = ctx.state === "running" ? null : performance.now();
+  ctx.onstatechange = () => {
+    if (ctx.state === "running") {
+      if (pausedAt !== null) onGap(performance.now() - pausedAt);
+      pausedAt = null;
+    } else if (pausedAt === null) {
+      pausedAt = performance.now();
+    }
+  };
+  const wake = () => {
+    if (document.visibilityState === "visible" && ctx.state !== "running" && ctx.state !== "closed") void ctx.resume().catch(() => {});
+  };
+  document.addEventListener("visibilitychange", wake);
 
   return {
     sampleRate: ctx.sampleRate,
     stop() {
+      document.removeEventListener("visibilitychange", wake);
+      ctx.onstatechange = null;
       tap.port.onmessage = null;
-      for (const t of stream.getTracks()) t.stop();
-      void ctx.close();
+      release();
     },
   };
 }

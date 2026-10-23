@@ -11,6 +11,11 @@ const digits = (rs: ToneRun[], now = fx.durationMs) => readsOf(spellGroups(rs, n
 
 const CODES: Record<string, string> = { "0": "-----", "1": ".----", "2": "..---", "3": "...--", "4": "....-", "5": ".....", "6": "-....", "7": "--...", "8": "---..", "9": "----." };
 
+/** Every digit is either unknown or right: a wrong digit shown as certain is the one thing the page must not do. */
+function expectNoWrongDigits(read: string, truth: string) {
+  [...read].forEach((c, i) => expect(["?", truth[i]], `${read} vs ${truth} at ${i}`).toContain(c));
+}
+
 /** A group at the broadcast's own timing, starting at `t0`. */
 function morse(ds: string, t0 = 10_000): ToneRun[] {
   const out: ToneRun[] = [];
@@ -29,8 +34,10 @@ describe("the decoder", () => {
   it("decodes the recording", () => {
     const got = digits(runs);
     expect(got.slice(0, 3)).toEqual(["????002049", "0910442410", "1001219970"]);
-    expect(got[3]).toMatch(/^0281002/);
+    // Noise at its end makes the last group 48 elements: both ends heard, so
+    // only digits both readings agree on are kept, and none may be wrong.
     expect(got).toHaveLength(4);
+    expectNoWrongDigits(got[3]!, "0281002049");
   });
 
   it("puts back the dot drowned out at 59 s", () => {
@@ -46,8 +53,8 @@ describe("the decoder", () => {
   });
 
   it("tail group aligns right", () => {
-    // 57 s: the 4 s silence after it has passed, so it is closed.
-    expect(digits(runs.filter((r) => r.start < 53_000), 57_000)).toEqual(["????002049"]);
+    // 59 s: a whole group gap of silence has followed it, so its end is the group's end.
+    expect(digits(runs.filter((r) => r.start < 53_000), 59_000)).toEqual(["????002049"]);
   });
 
   it("a tail still coming in is no read yet", () => {
@@ -66,6 +73,37 @@ describe("the decoder", () => {
     const got = digits(withBlip);
     expect(got).toContain("0910442410");
     expect(got).toHaveLength(4);
+  });
+
+  it("two noise blips close together do not make a dot", () => {
+    const rs = [...morse("0910442410"), { start: 9_000, length: 5 }, { start: 9_080, length: 5 }].sort((a, b) => a.start - b.start);
+    expect(digits(rs, 200_000)).toEqual(["0910442410"]);
+  });
+
+  it("a phantom element before a group never shifts it into wrong digits", () => {
+    const rs = [{ start: 9_110, length: 90 }, ...morse("0910442410")];
+    const got = digits(rs, 200_000);
+    expect(got).toHaveLength(1);
+    expectNoWrongDigits(got[0]!, "0910442410");
+  });
+
+  it("two lost elements in a row split a group without wrong digits", () => {
+    const rs = morse("0910442410");
+    rs.splice(16, 2); // two dashes of the fourth digit: over 4 s of silence mid-group
+    const got = digits(rs, 200_000);
+    expect(got.length).toBeGreaterThan(0);
+    for (const d of got) expectNoWrongDigits(d, "0910442410");
+  });
+
+  it("a group under way when the audio starts is a tail, however late that is", () => {
+    const rs = morse("0910442410", 30_000).slice(7);
+    const reads = readsOf(spellGroups(rs, 200_000, rs[0]!.start - 1_000)).map((r) => r.digits);
+    expect(reads).toEqual(["??10442410"]);
+  });
+
+  it("a blip in the middle of the group gap does not merge two groups", () => {
+    const withBlip = [...runs, { start: 56_000, length: 120 }].sort((a, b) => a.start - b.start);
+    expect(digits(withBlip).slice(0, 3)).toEqual(["????002049", "0910442410", "1001219970"]);
   });
 
   it("a whole synthetic group reads in full", () => {

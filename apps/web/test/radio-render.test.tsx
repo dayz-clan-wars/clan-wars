@@ -29,6 +29,12 @@ describe("RadioPanel", () => {
     expect(html).not.toContain(">Listen<");
   });
 
+  it("a busy microphone says so and keeps the Listen button", () => {
+    const html = panel("busy");
+    expect(html).toContain("Another app is using the microphone");
+    expect(html).toContain(">Listen<");
+  });
+
   it("shows Stop and Clear while listening, and the beeps it is waiting for", () => {
     const html = panel("listening");
     expect(html).toContain(">Stop<");
@@ -54,6 +60,12 @@ describe("BunkerCardView", () => {
   it("marks settled", () => {
     expect(card("0910442410", "0910442410")).toContain("Settled");
     expect(card("0910442410")).not.toContain("Settled");
+  });
+
+  it("a grid off the bunker list looks unsure, however often it was heard", () => {
+    const html = card(...Array.from({ length: 5 }, () => "5555552410"));
+    expect(html).toContain("Not a bunker square");
+    expect(html).not.toMatch(/text-ink">5</);
   });
 
   it("says how often it was heard", () => {

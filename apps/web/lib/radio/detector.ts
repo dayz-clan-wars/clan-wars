@@ -26,10 +26,12 @@ const RATIO_DB = 15;
 const BELOW_PEAK_DB = 12;
 const HISTORY_S = 60;
 const PERCENTILE_EVERY = 200; // frames: once a second
+/** The longest beep is under half a second. A tone held this long is a hum or a whistle, not the radio: search again. */
+const NOT_MORSE_MS = 3000;
 
-const SEARCH = { from: 300, to: 3000, step: 10, window: 2048, everyS: 0.1, peak: 10, votes: 5, share: 0.6 } as const;
-/** ⚠️ Kept until the tone locks, then replayed: dropping the first element would shift every digit of the group after it. */
-const PRELOCK_MAX_S = 20;
+const SEARCH = { from: 300, to: 3000, step: 10, window: 2048, everyS: 0.1, peak: 10, votes: 5, share: 0.6, floorScans: 20, rise: 10 } as const;
+/** ⚠️ Recent audio is kept and replayed once the tone locks: dropping the first element would shift every digit of the group after it. */
+const RECENT_MAX_S = 20;
 
 function hann(n: number): Float32Array {
   const w = new Float32Array(n);
@@ -45,26 +47,34 @@ export class ToneDetector {
   private readonly ring: Float32Array;
   private ringIdx = 0;
   private sinceHop = 0;
-  private frame = 0;
+  /** Absolute index of the next sample the run path reads. */
+  private runSample = 0;
   private coeffs: [number, number, number] = [0, 0, 0];
 
   private readonly history: Float32Array;
   private historyLen = 0;
   private historyIdx = 0;
   private threshold = -Infinity;
+  private hops = 0;
 
   private on = false;
-  private onFrame = 0;
+  private onMs = 0;
   private out: ToneRun[] = [];
 
   private locked: number | null = null;
-  private prelock: Float32Array[] = [];
-  private prelockLen = 0;
-  private dropped = 0;
+  private gen = 0;
+  private from = 0;
+  /** Every sample pushed or skipped. */
+  private total = 0;
+  private recent: Float32Array[] = [];
+  private recentLen = 0;
+  private recentStart = 0;
+
   private readonly scan: Float32Array;
   private readonly scanHann: Float32Array;
   private scanIdx = 0;
   private sinceScan = 0;
+  private scanPowers: Float64Array[] = [];
   private votes = new Map<number, number>();
   private totalVotes = 0;
 
@@ -79,7 +89,7 @@ export class ToneDetector {
     this.history = new Float32Array(Math.round(HISTORY_S / FRAME_S));
     this.scan = new Float32Array(SEARCH.window);
     this.scanHann = hann(SEARCH.window);
-    if (opts?.tone) this.lock(opts.tone);
+    if (opts?.tone) this.lock(opts.tone, 0);
   }
 
   /** The locked tone in Hz, null while still searching. */
@@ -96,6 +106,23 @@ export class ToneDetector {
     return this.on;
   }
 
+  /**
+   * The first ms of audio the current lock analysed. Silence before it was
+   * never heard, so it proves no group gap (decode.ts `spellGroups`).
+   */
+  get heardFrom(): number {
+    return this.from;
+  }
+
+  /**
+   * Bumped on every lock. ⚠️ Runs from an earlier generation came from a
+   * different tone and the replay re-reads the recent audio, so a caller
+   * drops the runs it holds when this changes.
+   */
+  get generation(): number {
+    return this.gen;
+  }
+
   /** Runs that ended during this block, in ms since the first sample. */
   push(samples: Float32Array): ToneRun[] {
     let sum = 0;
@@ -104,49 +131,96 @@ export class ToneDetector {
     this.lastLevel = Math.min(1, Math.max(0, (db + 60) / 60));
 
     this.out = [];
-    if (this.locked === null) {
-      this.search(samples);
-    } else {
-      this.frames(samples);
-    }
+    this.remember(samples);
+    this.total += samples.length;
+    if (this.locked === null) this.search(samples);
+    else this.frames(samples);
     return this.out;
   }
 
-  private lock(hz: number) {
+  /**
+   * Time that passed with no audio (a suspended or interrupted context): it
+   * is silence, not a join. ⚠️ Without it the audio either side of a pause
+   * runs together and the decoder reads two halves of different groups as one.
+   */
+  skip(ms: number): ToneRun[] {
+    this.out = [];
+    const n = Math.round((ms / 1000) * this.rate);
+    if (this.on) this.out.push({ start: this.onMs, length: this.ms(this.runSample) - this.onMs });
+    this.on = false;
+    this.total += n;
+    this.runSample = this.total;
+    this.ring.fill(0);
+    this.sinceHop = 0;
+    // Recent audio no longer runs up to now; a replay across the gap would misplace it.
+    this.recent = [];
+    this.recentLen = 0;
+    this.recentStart = this.total;
+    if (this.locked === null) this.from = this.ms(this.total);
+    return this.out;
+  }
+
+  private ms(sample: number) {
+    return (sample / this.rate) * 1000;
+  }
+
+  private remember(samples: Float32Array) {
+    this.recent.push(samples.slice());
+    this.recentLen += samples.length;
+    while (this.recentLen - this.recent[0]!.length > RECENT_MAX_S * this.rate) {
+      const old = this.recent.shift()!;
+      this.recentLen -= old.length;
+      this.recentStart += old.length;
+    }
+  }
+
+  private lock(hz: number, fromSample: number) {
     this.locked = hz;
+    this.gen++;
     const c = (f: number) => 2 * Math.cos((2 * Math.PI * f) / this.rate);
     this.coeffs = [c(hz), c(hz - REF_OFFSET_HZ), c(hz + REF_OFFSET_HZ)];
+    this.from = this.ms(fromSample);
+    this.runSample = fromSample;
+    this.ring.fill(0);
+    this.sinceHop = 0;
+    this.on = false;
+    this.historyLen = 0;
+    this.historyIdx = 0;
+    this.threshold = -Infinity;
+    this.hops = 0;
+  }
+
+  private unlock() {
+    this.locked = null;
+    this.on = false;
+    this.votes.clear();
+    this.totalVotes = 0;
+    this.scanPowers = [];
   }
 
   private search(samples: Float32Array) {
-    this.prelock.push(samples.slice());
-    this.prelockLen += samples.length;
-    while (this.prelockLen - this.prelock[0]!.length > PRELOCK_MAX_S * this.rate) {
-      const old = this.prelock.shift()!;
-      this.prelockLen -= old.length;
-      this.dropped += old.length;
-    }
     for (let i = 0; i < samples.length; i++) {
       this.scan[this.scanIdx] = samples[i]!;
       this.scanIdx = (this.scanIdx + 1) % SEARCH.window;
       if (++this.sinceScan >= SEARCH.everyS * this.rate) {
         this.sinceScan = 0;
-        this.scanOnce();
-        if (this.locked !== null) break;
+        const hz = this.scanOnce();
+        if (hz !== null) {
+          // Replay everything kept, timed from where it began.
+          this.lock(hz, this.recentStart);
+          for (const block of this.recent) this.frames(block);
+          return;
+        }
       }
     }
-    if (this.locked === null) return;
-    // Replay everything heard so far through the run detector, timed from
-    // the start of listening.
-    this.frame = Math.floor(this.dropped / this.hop);
-    const kept = this.prelock;
-    this.prelock = [];
-    this.prelockLen = 0;
-    for (const block of kept) this.frames(block);
   }
 
-  /** One look over 300–3000 Hz; a clear peak is a vote for its frequency. */
-  private scanOnce() {
+  /**
+   * One look over 300–3000 Hz. A clear peak that was much quieter within the
+   * last two seconds is a vote for its frequency: the radio switches on and
+   * off, a hum, a fan or a TV whine does not, and must never win the lock.
+   */
+  private scanOnce(): number | null {
     const bins = Math.floor((SEARCH.to - SEARCH.from) / SEARCH.step) + 1;
     const power = new Float64Array(bins);
     let best = 0;
@@ -162,9 +236,13 @@ export class ToneDetector {
       power[b] = s1 * s1 + s2 * s2 - coeff * s1 * s2;
       if (power[b]! > power[best]!) best = b;
     }
-    const sorted = Float64Array.from(power).sort();
-    const median = sorted[Math.floor(bins / 2)]!;
-    if (!(power[best]! > SEARCH.peak * median)) return;
+    this.scanPowers.push(power);
+    if (this.scanPowers.length > SEARCH.floorScans) this.scanPowers.shift();
+    let floor = Infinity;
+    for (const p of this.scanPowers) floor = Math.min(floor, p[best]!);
+
+    const median = Float64Array.from(power).sort()[Math.floor(bins / 2)]!;
+    if (!(power[best]! > SEARCH.peak * median) || !(power[best]! > SEARCH.rise * floor)) return null;
     this.votes.set(best, (this.votes.get(best) ?? 0) + 1);
     this.totalVotes++;
     // A bin and its two neighbours are one tone: the window cannot split them.
@@ -174,26 +252,30 @@ export class ToneDetector {
       const v = (this.votes.get(b - 1) ?? 0) + this.votes.get(b)! + (this.votes.get(b + 1) ?? 0);
       if (v > leadVotes) [lead, leadVotes] = [b, v];
     }
-    if (leadVotes >= SEARCH.votes && leadVotes >= SEARCH.share * this.totalVotes) {
-      let w = 0;
-      let f = 0;
-      for (const b of [lead - 1, lead, lead + 1]) {
-        const v = this.votes.get(b) ?? 0;
-        w += v;
-        f += v * (SEARCH.from + b * SEARCH.step);
-      }
-      this.lock(f / w);
+    if (leadVotes < SEARCH.votes || leadVotes < SEARCH.share * this.totalVotes) return null;
+    let w = 0;
+    let f = 0;
+    for (const b of [lead - 1, lead, lead + 1]) {
+      const v = this.votes.get(b) ?? 0;
+      w += v;
+      f += v * (SEARCH.from + b * SEARCH.step);
     }
+    return f / w;
   }
 
   private frames(samples: Float32Array) {
     for (let i = 0; i < samples.length; i++) {
       this.ring[this.ringIdx] = samples[i]!;
       this.ringIdx = (this.ringIdx + 1) % this.win;
+      this.runSample++;
       if (++this.sinceHop >= this.hop) {
         this.sinceHop = 0;
         this.decide();
-        this.frame++;
+        if (this.locked === null) {
+          // Not Morse after all. What is left of this block feeds the search.
+          this.search(samples.subarray(i + 1));
+          return;
+        }
       }
     }
   }
@@ -215,15 +297,16 @@ export class ToneDetector {
     this.history[this.historyIdx] = toneDb;
     this.historyIdx = (this.historyIdx + 1) % this.history.length;
     this.historyLen = Math.min(this.historyLen + 1, this.history.length);
-    if (this.frame % PERCENTILE_EVERY === 0) {
+    if (this.hops++ % PERCENTILE_EVERY === 0) {
       const sorted = this.history.slice(0, this.historyLen).sort();
       this.threshold = sorted[Math.floor(sorted.length * 0.95)]! - BELOW_PEAK_DB;
     }
 
+    const now = this.ms(this.runSample);
     const on = toneDb - refDb > RATIO_DB && toneDb > this.threshold;
-    const ms = (f: number) => ((f * this.hop) / this.rate) * 1000;
-    if (on && !this.on) this.onFrame = this.frame;
-    if (!on && this.on) this.out.push({ start: ms(this.onFrame), length: ms(this.frame) - ms(this.onFrame) });
+    if (on && !this.on) this.onMs = now;
+    if (!on && this.on) this.out.push({ start: this.onMs, length: now - this.onMs });
     this.on = on;
+    if (on && now - this.onMs > NOT_MORSE_MS) this.unlock();
   }
 }
