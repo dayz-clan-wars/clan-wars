@@ -5,12 +5,22 @@
  * browser side (capture.ts) only hands it blocks of samples.
  *
  * Tone-on is two tests, both needed:
- *  - the tone band stands 15 dB above two reference bands ±140 Hz away, so
+ *  - the tone band stands 8 dB above two reference bands ±140 Hz away, so
  *    broadband noise (a gunshot, a shout) lifts all three together and never
- *    counts as a beep;
+ *    counts as a beep. ⚠️ Not more: in real game audio, footsteps and wind
+ *    fill a reference band for a moment mid-beep, and at 15 dB the beep broke
+ *    up and no group read;
  *  - the tone band is within 12 dB of its own loudest (95th percentile) over
  *    the last minute, so a phone held at a TV, 30 dB quieter than a headset,
- *    still reads, because the threshold follows the level.
+ *    still reads, because the threshold follows the level. It also stands
+ *    6 dB over the band's median, its noise floor (the radio beeps a quarter
+ *    of the time): before the first beep is in the history, the 95th
+ *    percentile is the noise itself.
+ *
+ * Either way it flips only once the new state has held: 40 ms to start a
+ * beep, 100 ms to end one. The shortest beep is 75 ms and the shortest gap
+ * 400 ms, so a click, or a dropout inside a dash, never reaches the decoder,
+ * and a dash never comes out as dots.
  */
 import type { ToneRun } from "./decode";
 
@@ -22,14 +32,18 @@ const FRAME_S = 0.005;
  */
 const WINDOW_S = 0.02;
 const REF_OFFSET_HZ = 140;
-const RATIO_DB = 15;
+const RATIO_DB = 8;
+/** Frames (5 ms) a new state must hold before it counts; the run is timed from its first frame. */
+const ON_FRAMES = 8;
+const OFF_FRAMES = 20;
 const BELOW_PEAK_DB = 12;
+const OVER_FLOOR_DB = 6;
 const HISTORY_S = 60;
 const PERCENTILE_EVERY = 200; // frames: once a second
 /** The longest beep is under half a second. A tone held this long is a hum or a whistle, not the radio: search again. */
 const NOT_MORSE_MS = 3000;
 
-const SEARCH = { from: 300, to: 3000, step: 10, window: 2048, everyS: 0.1, peak: 10, votes: 5, share: 0.6, floorScans: 20, rise: 10 } as const;
+const SEARCH = { from: 300, to: 3000, step: 10, window: 2048, everyS: 0.1, peak: 10, votes: 5, lead: 3, floorScans: 20, rise: 10 } as const;
 /** ⚠️ Recent audio is kept and replayed once the tone locks: dropping the first element would shift every digit of the group after it. */
 const RECENT_MAX_S = 20;
 
@@ -59,6 +73,11 @@ export class ToneDetector {
 
   private on = false;
   private onMs = 0;
+  /** Frames in a row that disagree with `on`, and when the first of them was. */
+  private pending = 0;
+  private flipMs = 0;
+  /** When the tone band last began standing clear of its neighbours, whatever its level; null while it does not. */
+  private clearSince: number | null = null;
   private out: ToneRun[] = [];
 
   private locked: number | null = null;
@@ -76,7 +95,8 @@ export class ToneDetector {
   private sinceScan = 0;
   private scanPowers: Float64Array[] = [];
   private votes = new Map<number, number>();
-  private totalVotes = 0;
+  /** Per bin, the sum of each vote's dB over the spectrum's median, less the 10 dB a vote needs. */
+  private strength = new Map<number, number>();
 
   private lastLevel = 0;
 
@@ -148,6 +168,8 @@ export class ToneDetector {
     const n = Math.round((ms / 1000) * this.rate);
     if (this.on) this.out.push({ start: this.onMs, length: this.ms(this.runSample) - this.onMs });
     this.on = false;
+    this.pending = 0;
+    this.clearSince = null;
     this.total += n;
     this.runSample = this.total;
     this.ring.fill(0);
@@ -184,6 +206,8 @@ export class ToneDetector {
     this.ring.fill(0);
     this.sinceHop = 0;
     this.on = false;
+    this.pending = 0;
+    this.clearSince = null;
     this.historyLen = 0;
     this.historyIdx = 0;
     this.threshold = -Infinity;
@@ -194,7 +218,7 @@ export class ToneDetector {
     this.locked = null;
     this.on = false;
     this.votes.clear();
-    this.totalVotes = 0;
+    this.strength.clear();
     this.scanPowers = [];
   }
 
@@ -219,6 +243,11 @@ export class ToneDetector {
    * One look over 300–3000 Hz. A clear peak that was much quieter within the
    * last two seconds is a vote for its frequency: the radio switches on and
    * off, a hum, a fan or a TV whine does not, and must never win the lock.
+   *
+   * ⚠️ Votes are weighed by how far the peak stands out. Between beeps, game
+   * sounds peak too, somewhere new each time, and outnumber the beep, which
+   * is on a quarter of the time; the beep stands 30 dB clear, they 10–20.
+   * Counting votes alone, nothing ever won.
    */
   private scanOnce(): number | null {
     const bins = Math.floor((SEARCH.to - SEARCH.from) / SEARCH.step) + 1;
@@ -244,15 +273,18 @@ export class ToneDetector {
     const median = Float64Array.from(power).sort()[Math.floor(bins / 2)]!;
     if (!(power[best]! > SEARCH.peak * median) || !(power[best]! > SEARCH.rise * floor)) return null;
     this.votes.set(best, (this.votes.get(best) ?? 0) + 1);
-    this.totalVotes++;
+    this.strength.set(best, (this.strength.get(best) ?? 0) + 10 * Math.log10(power[best]! / median) - 10);
     // A bin and its two neighbours are one tone: the window cannot split them.
+    const near = (m: Map<number, number>, b: number) => (m.get(b - 1) ?? 0) + (m.get(b) ?? 0) + (m.get(b + 1) ?? 0);
     let lead = -1;
-    let leadVotes = 0;
-    for (const b of this.votes.keys()) {
-      const v = (this.votes.get(b - 1) ?? 0) + this.votes.get(b)! + (this.votes.get(b + 1) ?? 0);
-      if (v > leadVotes) [lead, leadVotes] = [b, v];
+    let leadStrength = 0;
+    for (const b of this.strength.keys()) {
+      const v = near(this.strength, b);
+      if (v > leadStrength) [lead, leadStrength] = [b, v];
     }
-    if (leadVotes < SEARCH.votes || leadVotes < SEARCH.share * this.totalVotes) return null;
+    let next = 0;
+    for (const b of this.strength.keys()) if (Math.abs(b - lead) > 2) next = Math.max(next, near(this.strength, b));
+    if (near(this.votes, lead) < SEARCH.votes || leadStrength < SEARCH.lead * next) return null;
     let w = 0;
     let f = 0;
     for (const b of [lead - 1, lead, lead + 1]) {
@@ -299,14 +331,25 @@ export class ToneDetector {
     this.historyLen = Math.min(this.historyLen + 1, this.history.length);
     if (this.hops++ % PERCENTILE_EVERY === 0) {
       const sorted = this.history.slice(0, this.historyLen).sort();
-      this.threshold = sorted[Math.floor(sorted.length * 0.95)]! - BELOW_PEAK_DB;
+      this.threshold = Math.max(sorted[Math.floor(sorted.length * 0.95)]! - BELOW_PEAK_DB, sorted[Math.floor(sorted.length / 2)]! + OVER_FLOOR_DB);
     }
 
     const now = this.ms(this.runSample);
-    const on = toneDb - refDb > RATIO_DB && toneDb > this.threshold;
-    if (on && !this.on) this.onMs = now;
-    if (!on && this.on) this.out.push({ start: this.onMs, length: now - this.onMs });
-    this.on = on;
-    if (on && now - this.onMs > NOT_MORSE_MS) this.unlock();
+    const clear = toneDb - refDb > RATIO_DB;
+    const on = clear && toneDb > this.threshold;
+    if (on === this.on) this.pending = 0;
+    else if (++this.pending === 1) this.flipMs = now;
+    if (this.pending >= (on ? ON_FRAMES : OFF_FRAMES)) {
+      this.pending = 0;
+      if (on) this.onMs = this.flipMs;
+      else this.out.push({ start: this.onMs, length: this.flipMs - this.onMs });
+      this.on = on;
+    }
+    // ⚠️ Judged on the band standing clear, not on `on`: a steady hum sits at
+    // its own median, under the threshold, so it never reads as a beep and
+    // would hold the lock forever.
+    if (!clear) this.clearSince = null;
+    else if (this.clearSince === null) this.clearSince = now;
+    else if (now - this.clearSince > NOT_MORSE_MS) this.unlock();
   }
 }

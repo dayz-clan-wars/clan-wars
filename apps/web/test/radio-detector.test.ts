@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, it, expect } from "vitest";
 import { ToneDetector } from "@/lib/radio/detector";
 import { readsOf, spellGroups, type ToneRun } from "@/lib/radio/decode";
@@ -15,7 +16,7 @@ function rng(seed: number) {
 }
 
 /** One group of the broadcast at its own timing, 5 s of quiet either side; bursts are 200 ms of loud broadband noise at those ms. */
-function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 0.02, bursts = [] as number[], hum = null as { hz: number; amp: number } | null } = {}) {
+function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 0.02, bursts = [] as number[], hum = null as { hz: number; amp: number } | null, dips = [] as number[] } = {}) {
   const els: ToneRun[] = [];
   let t = 5_000;
   for (const d of digits) {
@@ -43,6 +44,11 @@ function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 
   for (const b of bursts) {
     const a = Math.round((b / 1000) * rate);
     for (let i = 0; i < rate * 0.2; i++) out[a + i]! += 10 * noise * g * r() * 3.4;
+  }
+  // 60 ms of loud sound just beside the tone: it fills a reference band, not the beep.
+  for (const at of dips) {
+    const a = Math.round((at / 1000) * rate);
+    for (let i = 0; i < rate * 0.06; i++) out[a + i]! += 0.5 * g * Math.sin((2 * Math.PI * (tone + 140) * i) / rate);
   }
   return out;
 }
@@ -113,6 +119,38 @@ describe("ToneDetector", () => {
     const reads = readsOf(spellGroups(runs, (audio.length / 48_000) * 1000)).map((r) => r.digits);
     expect(reads.length).toBeGreaterThan(0);
     for (const r of reads) [...r].forEach((c, i) => expect(["?", "0910442410"[i]]).toContain(c));
+  });
+
+  it("a sound beside the tone for a moment does not cut a dash in two", () => {
+    // Twice inside the first dash (5000–5485 ms): left in, they leave three
+    // short pieces, and a short piece reads as a dot.
+    const { runs, reads } = listen(synth("0910442410", { dips: [5_150, 5_300] }));
+    const first = runs.filter((r) => r.start < 5_600 && r.start + r.length > 4_900);
+    expect(first).toHaveLength(1);
+    expect(first[0]!.length).toBeGreaterThan(400);
+    expect(reads).toEqual(["0910442410"]);
+  });
+
+  it("decodes the real broadcast played through a speaker into a room", () => {
+    // test/fixtures/bunker-radio-room.ulaw: 102 s of twitch.tv/videos/2908002004
+    // from 45 s, band-limited to a speaker, with room echo, 20 dB down, 8 kHz
+    // mu-law. Raised to 48 kHz, the rate a phone hands the page.
+    const u = readFileSync(new URL("./fixtures/bunker-radio-room.ulaw", import.meta.url));
+    const low = new Float32Array(u.length);
+    for (let i = 0; i < u.length; i++) {
+      const b = ~u[i]! & 0xff;
+      const m = ((((b & 0x0f) << 3) + 0x84) << ((b >> 4) & 7)) - 0x84;
+      low[i] = ((b & 0x80 ? -m : m) / 32768);
+    }
+    const audio = new Float32Array(low.length * 6);
+    for (let i = 0; i < audio.length; i++) {
+      const p = i / 6;
+      const k = Math.floor(p);
+      audio[i] = low[k]! + (p - k) * ((low[k + 1] ?? low[k]!) - low[k]!);
+    }
+    const { d, reads } = listen(audio);
+    expect(Math.abs(d.tone! - 988)).toBeLessThanOrEqual(10);
+    expect(reads).toContain("0910442410");
   });
 
   it("decodes at 44.1 kHz with the tone given", () => {
