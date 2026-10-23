@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- On a computer, every page is now in the Menu button at the top right, the same list you get on a phone, so Radio and the rest are one click away and nothing gets squeezed out of the top bar.
+
 ## [2.9.0] - 2026-10-23
 
 ### Added
