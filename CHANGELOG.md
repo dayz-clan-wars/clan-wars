@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A Radio page that listens to the bunker broadcast through your phone's microphone and writes down each bunker's grid and key code, with a link to it on the map. Find it in the menu, or under Live on a computer.
+
 ## [2.8.3] - 2026-10-21
 
 ### Changed

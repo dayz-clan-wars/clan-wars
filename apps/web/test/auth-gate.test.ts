@@ -10,7 +10,7 @@ import { PUBLIC_PATHS, PUBLIC_PREFIXES, AUTH_PAGES, pathIsPublic } from "../lib/
  */
 describe("the public allowlist is exactly this", () => {
   it("pins the public paths", () => {
-    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"]);
+    expect([...PUBLIC_PATHS]).toEqual(["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/radio", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"]);
   });
 
   it("pins the public prefixes", () => {
@@ -77,6 +77,9 @@ describe("pathIsPublic", () => {
     expect(pathIsPublic("/live/kills")).toBe(true);
     expect(pathIsPublic("/api/live/kills")).toBe(true);
     expect(pathIsPublic("/livestream")).toBe(false);
+    // The radio decodes in the browser and reads nothing private.
+    expect(pathIsPublic("/radio")).toBe(true);
+    expect(pathIsPublic("/radios")).toBe(false);
   });
 
   it("lets the player boards and player profiles through, but not the clan board", () => {

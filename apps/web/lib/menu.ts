@@ -58,8 +58,9 @@ const BOARDS: readonly MenuItem[] = [
   { label: "Players", href: "/players" },
   { label: "Scoreboard", href: "/scoreboard", also: ["/alphas", "/seasons"] },
   // ⚠️ Live replaces War log in the bar: there is no room for another cell at
-  // 1024px. The war log is a Live tab, and /war-log still lights this up.
-  { label: "Live", href: "/live", also: ["/war-log"] },
+  // 1024px. The war log is a Live tab, and /war-log still lights this up. So
+  // does /radio, reached from Live's tabs until the bar becomes a drawer.
+  { label: "Live", href: "/live", also: ["/war-log", "/radio"] },
 ];
 
 const BOARDS_LONG: readonly MenuItem[] = [
@@ -70,6 +71,7 @@ const BOARDS_LONG: readonly MenuItem[] = [
   { label: "Seasons", href: "/seasons" },
   { label: "Live", href: "/live" },
   { label: "War log", href: "/war-log" },
+  { label: "Radio", href: "/radio" },
 ];
 
 const GUIDE: readonly MenuItem[] = [{ label: "Field guide", href: "/guide" }];

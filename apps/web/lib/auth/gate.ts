@@ -18,7 +18,7 @@
  * fetched by Discord's and Twitter's crawlers, which never have a session —
  * gated, a pasted link unfurls with no picture.
  */
-export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"] as const;
+export const PUBLIC_PATHS = ["/", "/clans", "/scoreboard", "/alphas", "/seasons", "/war-log", "/live", "/players", "/guide", "/radio", "/mark.png", "/icon.png", "/apple-icon.png", "/manifest.webmanifest", "/opengraph-image.png", "/twitter-image.png"] as const;
 
 /**
  * ⚠️ Trailing slashes are load-bearing: "/api/auth/" must not match

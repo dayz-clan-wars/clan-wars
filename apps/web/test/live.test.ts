@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { parseCursor, toLiveItem, LIVE_TABS } from "../lib/live-items";
+import { parseCursor, toLiveItem, LIVE_TABS, liveNav } from "../lib/live-items";
 import { LIVE_FEEDS, ACHIEVEMENTS } from "@factions/domain";
 
 describe("parseCursor", () => {
@@ -9,6 +9,17 @@ describe("parseCursor", () => {
     expect(parseCursor(["1", "2"])).toBeUndefined();
     expect(parseCursor(undefined)).toBeUndefined();
     expect(parseCursor(null)).toBeUndefined();
+  });
+});
+
+describe("liveNav", () => {
+  it("is every feed, then Radio", () => {
+    expect(liveNav("/radio").at(-1)).toEqual({ label: "Radio", href: "/radio", current: true });
+    expect(liveNav("/radio").slice(0, -1).map((i) => i.href)).toEqual(LIVE_FEEDS.map((f) => `/live/${f}`));
+  });
+  it("marks the page it is on", () => {
+    const nav = liveNav("/live/kills");
+    expect(nav.filter((i) => i.current).map((i) => i.href)).toEqual(["/live/kills"]);
   });
 });
 
