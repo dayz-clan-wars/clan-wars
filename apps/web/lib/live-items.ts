@@ -14,6 +14,12 @@ const LABELS: Record<LiveFeed, string> = {
 };
 export const LIVE_TABS: { feed: LiveFeed; label: string }[] = LIVE_FEEDS.map((feed) => ({ feed, label: LABELS[feed] }));
 
+/** Live's tab row: every feed, then the radio, which is not a feed but lives here on desktop (lib/menu.ts). */
+export function liveNav(current: string): { label: string; href: string; current: boolean }[] {
+  return [...LIVE_TABS.map((t) => ({ label: t.label, href: `/live/${t.feed}` })), { label: "Radio", href: "/radio" }]
+    .map((i) => ({ ...i, current: i.href === current }));
+}
+
 /** Attacker-supplied. A positive safe integer, or nothing: never reaches SQL as anything else. */
 export function parseCursor(v: string | string[] | null | undefined): number | undefined {
   if (typeof v !== "string" || !/^[1-9][0-9]{0,15}$/u.test(v)) return undefined;

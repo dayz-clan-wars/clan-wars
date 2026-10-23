@@ -14,7 +14,7 @@ describe("menuFor (the phone drawer)", () => {
   it("signed in: your places first, then the boards, then the guide", () => {
     expect(menuFor(true).map((g) => g.map((m) => m.href))).toEqual([
       ["/me", "/map", "/clan", "/notifications"],
-      ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/live", "/war-log"],
+      ["/clans", "/players", "/scoreboard", "/alphas", "/seasons", "/live", "/war-log", "/radio"],
       ["/guide"],
     ]);
   });
@@ -43,6 +43,12 @@ describe("barFor (the desktop bar)", () => {
     expect(live.label).toBe("Live");
     for (const p of ["/live", "/live/kills", "/war-log"]) expect(isCurrent(live, p)).toBe(true);
     expect(isCurrent(live, "/livestream")).toBe(false);
+  });
+
+  it("Live lights up on /radio (the bar has no room for its own cell)", () => {
+    const live = barFor(false)[0]!.find((m) => m.href === "/live")!;
+    expect(isCurrent(live, "/radio")).toBe(true);
+    expect(isCurrent(live, "/radios")).toBe(false);
   });
 
   it("the drawer has both Live and War log, each its own item", () => {
