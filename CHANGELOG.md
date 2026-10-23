@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- The Radio page now picks up the bunker broadcast from a real game. It used to hear the beeps but never write a code down, because the game's other sounds between beeps kept it from settling on the radio's pitch.
+
 ## [2.9.1] - 2026-10-23
 
 ### Changed
