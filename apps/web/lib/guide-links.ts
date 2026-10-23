@@ -30,6 +30,7 @@ export const GUIDE_LINKS: Record<string, GuideRef> = {
   "/seasons": { slug: "the-scoreboard", heading: "the-season" },
   "/war-log": { slug: "raiding" },
   "/map": { slug: "the-map" },
+  "/radio": { slug: "the-map", heading: "the-bunker-radio" },
 };
 
 /** Named anchors used inline in refusals, beside the copy strings (which stay plain). */
