@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- `/koth schedule` can now book any restart, even within 24 hours of the last King of the Hill. The 24-hour gap still holds back the automatic King of the Hill and `/kothvote`.
+
 ## [2.9.2] - 2026-10-23
 
 ### Fixed
