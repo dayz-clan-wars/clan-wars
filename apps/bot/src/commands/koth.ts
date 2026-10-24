@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
 import { kothEvents, servers } from "@factions/db";
 import {
-  KOTH_LOCATIONS, KOTH_MIN_GAP_MS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothGapOk, kothLocation, kothTownName, kothStandings, nextRestartAt,
+  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, kothTownName, kothStandings, nextRestartAt,
   restartSlot,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -9,7 +9,6 @@ import { and, eq, inArray } from "drizzle-orm";
 import { kothPrize, reminderMinutes, scheduledText } from "../koth-text.js";
 import { kothKills, kothOpenedAt } from "../koth-score.js";
 import { escapeMarkdown } from "../site-links.js";
-import { lastKothSlot } from "../koth-vote-store.js";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
 const reply = (content: string): Reply => ({ content, ephemeral: true });
@@ -67,11 +66,9 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   const open = await ctx.db.select({ id: kothEvents.id }).from(kothEvents)
     .where(and(eq(kothEvents.serverId, server.id), inArray(kothEvents.state, ["scheduled", "live"])));
   if (open.length > 0) return reply("A King of the Hill event is already scheduled or live. Only one at a time.");
-  // ⚠️ Spec 2026-09-24 §2.2: every path holds the gap, so the three cannot disagree
-  // about whether a session is "too soon".
-  if (!kothGapOk(slot, await lastKothSlot(ctx.db, server.id, slot))) {
-    return reply(`That is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill. Pick a later slot.`);
-  }
+  // ⚠️ No 24 h gap here, on purpose: the gap paces the automatic picker and
+  // /kothvote, and an admin choosing a slot has already decided it is not too soon.
+  // An admin session still counts toward the gap those two hold.
 
   let row: { id: number } | undefined;
   try {

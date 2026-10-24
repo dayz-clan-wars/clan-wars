@@ -237,14 +237,15 @@ describe("/koth", () => {
     expect(await rows()).toHaveLength(1);
   });
 
-  it("refuses a slot within 24 h of the last event's slot", async () => {
+  // ⚠️ The 24 h gap holds back the automatic picker and /kothvote, never an admin.
+  it("schedules a slot within 24 h of the last event's slot", async () => {
     await db.insert(kothEvents).values({
       serverId, slotAt: at("2026-10-03T00:00:00Z"), location: "borek", centreX: "1", centreZ: "1",
       state: "no_winner", origin: "vote", scheduledByDiscordId: "7",
     });
     const reply = await schedule(ctx(), input());
-    expect(reply.content).toMatch(/24 hours/);
-    expect((await rows()).filter((r) => r.state === "scheduled")).toHaveLength(0);
+    expect(reply.content).toMatch(/^Scheduled/);
+    expect((await rows()).filter((r) => r.state === "scheduled")).toHaveLength(1);
   });
 
   it("writes origin 'admin'", async () => {

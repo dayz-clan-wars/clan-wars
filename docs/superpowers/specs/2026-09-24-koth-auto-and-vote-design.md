@@ -53,7 +53,7 @@ cancellation, ops alerts — reads `origin` or changes.
 | Limit | admin | auto | vote |
 |---|---|---|---|
 | One KotH `scheduled` or `live` at a time | ✔ | ✔ | ✔ |
-| 24 h since the last KotH's slot (`KOTH_MIN_GAP_MS`) | ✔ | ✔ | ✔ |
+| 24 h since the last KotH's slot (`KOTH_MIN_GAP_MS`) | — | ✔ | ✔ |
 | Never shares a slot with an airdrop | ✔ | ✔ | ✔ |
 | Weekly cap (`KOTH_WEEKLY_CAP`) | — | ✔ | — |
 | Population rule | — | high-water (§3) | ≥ `KOTH_VOTE_MIN_POP` at open |
@@ -66,8 +66,9 @@ The gap is measured slot to slot — this slot against the `slot_at` of the last
 KotH that is not `cancelled` or `failed` — because for KotH the session is the
 event, not the moment it was decided.
 
-⚠️ `/koth schedule` does not yet check the 24 h gap. It gains that check here, so
-the three paths agree.
+⚠️ Amended 2026-10-24: `/koth schedule` does not check the 24 h gap. An admin
+picking a slot has already judged it is not too soon. An admin session still
+counts toward the gap the automatic picker and `/kothvote` hold.
 
 ### 2.3 No prize
 
