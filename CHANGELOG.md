@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.10.0] - 2026-10-25
+
 ### Added
 
 - The Radio page has a **Tap along** button. If your phone can't hear the radio, tap with each beep instead (a quick tap for a short beep, hold for a long one) and the page writes the codes down the same way.
