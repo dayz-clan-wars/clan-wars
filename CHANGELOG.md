@@ -5,6 +5,17 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- The Radio page has a **Tap along** button. If your phone can't hear the radio, tap with each beep instead (a quick tap for a short beep, hold for a long one) and the page writes the codes down the same way.
+
+### Changed
+
+- The Radio page now keeps the codes it has heard on your device for 2 hours. Going to the map, signing in, or reloading no longer means listening to the whole broadcast again, and listening again carries on from what you already have.
+- The Map link on each bunker opens in a new tab, so the radio keeps listening while you look.
+- Clear is now **Start over**, with an Undo in case you tap it by accident.
+- Each bunker says how close it is to settling, and digits it isn't sure of are underlined as well as greyed out.
+
 ## [2.9.3] - 2026-10-24
 
 ### Changed
