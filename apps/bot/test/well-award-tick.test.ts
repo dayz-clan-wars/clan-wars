@@ -90,6 +90,21 @@ describe("wellAwardTick", () => {
     expect((await db.select().from(wellAwards)).map((w) => w.wellBrickEventId)).toEqual([first.id]);
   });
 
+  it("⚠️ a rebuild brick that brings a neighbouring well's earlier brick within reach does not pay that well again", async () => {
+    await link(A, "7");
+    // Well A's brick, then well B's brick 8 m away and later: two wells.
+    const a1 = await place(B, "well_brick", h(1), 1000, 1000);
+    const b1 = await place(C, "well_brick", h(2), 1008, 1000);
+    await place(A, "roof", h(3), 1008, 1000);
+    // B rebuilt with a brick between the two: the earliest brick within 5 m of it is A1.
+    await place(C, "well_brick", h(50), 1004.5, 1000);
+    await place(A, "roof", h(51), 1006, 1000);
+    expect(await wellAwardTick(db, opts())).toEqual({ recorded: 1, paid: 1 });
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
+    expect((await db.select().from(wellAwards)).map((w) => w.wellBrickEventId)).toEqual([b1.id]);
+    expect(a1.id).not.toBe(b1.id);
+  });
+
   it("a different player roofing that same well later is paid", async () => {
     await link(A, "7"); await link(C, "8");
     const first = await place(B, "well_brick", h(1));

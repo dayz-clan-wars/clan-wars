@@ -1,4 +1,4 @@
-import { and, asc, eq, gt, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { consumerCursors, events, identityLinks, wellAwards, type Database } from "@factions/db";
 import { WELL_ROOF_PART } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -65,7 +65,18 @@ async function recordWellAwards(db: Database): Promise<number> {
         // ⚠️ The anchor is taken around the MATCHED BRICK, not the roof: a rebuild after
         // decay lays a new brick ~2 m from the old, and the earliest brick within reach
         // of it is the original — the same well, so the same key, so no second payment.
-        const anchor = wellAnchor(await bricksNear(tx, r.serverId, brick.x, brick.z));
+        const near = await bricksNear(tx, r.serverId, brick.x, brick.z);
+        // ⚠️ The anchor is not transitive: a rebuild brick laid between two wells can
+        // bring a NEIGHBOURING well's earlier brick within reach, move this well's anchor
+        // to it, and dodge the unique index — paying the same well twice. So any award
+        // this player already holds on a brick in reach means this roof is not paid.
+        // Errs toward under-paying (two genuinely distinct wells within 5 m of one brick
+        // pay once), never toward paying twice; the unique index stays the replay guard.
+        const ids = near.map((b) => b.id);
+        const [held] = await tx.select({ id: wellAwards.id }).from(wellAwards)
+          .where(and(eq(wellAwards.dayzId, r.dayzId), inArray(wellAwards.wellBrickEventId, ids))).limit(1);
+        if (held) continue;
+        const anchor = wellAnchor(near);
         const ins = await tx.insert(wellAwards).values({
           serverId: r.serverId, dayzId: r.dayzId, wellBrickEventId: anchor, roofEventId: r.id, roofedAt: r.at,
         }).onConflictDoNothing({ target: [wellAwards.dayzId, wellAwards.wellBrickEventId] }).returning({ id: wellAwards.id });
