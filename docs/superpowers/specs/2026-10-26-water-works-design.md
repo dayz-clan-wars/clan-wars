@@ -50,16 +50,18 @@ achievement (badge wall, Discord post, notification, `achievement_unlocks`).
 
 ### Community Service — no reward
 
-Earned by **anyone who takes part in the early work on a well**: clears its rubble, or lays
-its brick.
+Earned by **anyone who works on a well**: clears its rubble, lays its brick, or builds its
+roof (the roof added by the operator, 2026-10-26 — so a roof-builder earns both
+achievements).
 
 - It is earned **once the well's brick is laid** — that is the moment the spot becomes a
   known well. A player who cleared rubble there earlier earns it then, at the same time as
   the brick-layer (operator's example: A clears the rubble, B lays the brick, both earn
   Community Service when the brick goes in).
 - Rubble cleared at a spot that never gets a brick earns nothing — nothing marks it as a well.
-- Rubble cleared at a well after its brick is already laid earns it straight away.
-- One player doing both steps earns it once.
+- Rubble cleared, or a roof built, at a well after its brick is already laid earns it
+  straight away. (A roof always follows the brick, so a roof-builder is credited at the roof.)
+- One player doing several steps earns it once.
 - No award attached.
 
 ### Water Works — with a plate carrier
@@ -109,7 +111,7 @@ As of 2026-10-26 that means:
 | Near Bad Asyab | RonaldRaygun552 (Oct 21) | RonaldRaygun552 (Oct 22) | RonaldRaygun552 (Oct 22) |
 | Near Bagh-e Mir | CPT Hawkeye3482 (Oct 24) | CPT Hawkeye3482 (Oct 24) | helifighter06 (Oct 24) |
 
-So: Community Service to RonaldRaygun552 and CPT Hawkeye3482; Water Works and one plate
+So: Community Service to RonaldRaygun552, CPT Hawkeye3482 and helifighter06; Water Works and one plate
 carrier each to RonaldRaygun552 (linked — paid at once) and helifighter06 (not linked — held
 until they link).
 
