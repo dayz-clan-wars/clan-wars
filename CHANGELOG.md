@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.11.1] - 2026-10-26
+
 ### Changed
 
 - The Radio page no longer sits under Live with the feed tabs across the top. It has its own page, still in the menu.
