@@ -53,6 +53,24 @@ function synth(digits: string, { rate = 48_000, tone = 988, gainDb = 0, noise = 
   return out;
 }
 
+/** An 8 kHz mu-law fixture, raised to 48 kHz, the rate a phone hands the page. */
+function fixture(name: string): Float32Array {
+  const u = readFileSync(new URL(`./fixtures/${name}`, import.meta.url));
+  const low = new Float32Array(u.length);
+  for (let i = 0; i < u.length; i++) {
+    const b = ~u[i]! & 0xff;
+    const m = ((((b & 0x0f) << 3) + 0x84) << ((b >> 4) & 7)) - 0x84;
+    low[i] = ((b & 0x80 ? -m : m) / 32768);
+  }
+  const audio = new Float32Array(low.length * 6);
+  for (let i = 0; i < audio.length; i++) {
+    const p = i / 6;
+    const k = Math.floor(p);
+    audio[i] = low[k]! + (p - k) * ((low[k + 1] ?? low[k]!) - low[k]!);
+  }
+  return audio;
+}
+
 function listen(audio: Float32Array, rate = 48_000, opts?: { tone?: number }) {
   const d = new ToneDetector(rate, opts);
   let runs: ToneRun[] = [];
@@ -135,22 +153,25 @@ describe("ToneDetector", () => {
     // test/fixtures/bunker-radio-room.ulaw: 102 s of twitch.tv/videos/2908002004
     // from 45 s, band-limited to a speaker, with room echo, 20 dB down, 8 kHz
     // mu-law. Raised to 48 kHz, the rate a phone hands the page.
-    const u = readFileSync(new URL("./fixtures/bunker-radio-room.ulaw", import.meta.url));
-    const low = new Float32Array(u.length);
-    for (let i = 0; i < u.length; i++) {
-      const b = ~u[i]! & 0xff;
-      const m = ((((b & 0x0f) << 3) + 0x84) << ((b >> 4) & 7)) - 0x84;
-      low[i] = ((b & 0x80 ? -m : m) / 32768);
-    }
-    const audio = new Float32Array(low.length * 6);
-    for (let i = 0; i < audio.length; i++) {
-      const p = i / 6;
-      const k = Math.floor(p);
-      audio[i] = low[k]! + (p - k) * ((low[k + 1] ?? low[k]!) - low[k]!);
-    }
-    const { d, reads } = listen(audio);
+    const { d, reads } = listen(fixture("bunker-radio-room.ulaw"));
     expect(Math.abs(d.tone! - 988)).toBeLessThanOrEqual(10);
     expect(reads).toContain("0910442410");
+  });
+
+  it("locks onto the beep, not the band of hiss above it, from a phone's own capture", () => {
+    // test/fixtures/bunker-radio-pixel.ulaw: 54 s the page itself heard on a
+    // Pixel in Chrome, held to a TV (/radio?debug, 2026-10-26). Static fills
+    // 2.3–2.7 kHz: the search locked on 2474 Hz there before the first beep
+    // and the page sat on "Hearing the radio" and Quiet for good.
+    const { d, runs } = listen(fixture("bunker-radio-pixel.ulaw"));
+    expect(Math.abs(d.tone! - 990)).toBeLessThanOrEqual(10);
+    expect(runs.length).toBeGreaterThan(20);
+  });
+
+  it("lets go of a lock that never hears a beep", () => {
+    const { d, reads } = listen(synth("0910442410", { rate: 48_000 }), 48_000, { tone: 2500 });
+    expect(Math.abs(d.tone! - 988)).toBeLessThanOrEqual(10);
+    expect(reads).toEqual(["0910442410"]);
   });
 
   it("decodes at 44.1 kHz with the tone given", () => {

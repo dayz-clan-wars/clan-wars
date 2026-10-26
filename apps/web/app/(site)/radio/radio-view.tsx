@@ -12,8 +12,8 @@ import { tally, type BunkerCard } from "@/lib/radio/tally";
 import { RadioPanel, type RadioState } from "./radio-panel";
 
 const REDRAW_MS = 100;
-/** /radio?debug keeps this much of the microphone's own audio (about 11 MB as a WAV), the newest. */
-const DEBUG_KEEP_S = 120;
+/** /radio?debug keeps this much of the microphone's own audio (about 29 MB as a WAV), the newest: a whole broadcast round is about 4½ minutes. */
+const DEBUG_KEEP_S = 300;
 /** How long Start over's Undo stays on offer. */
 const UNDO_MS = 10_000;
 

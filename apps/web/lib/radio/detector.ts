@@ -42,6 +42,14 @@ const HISTORY_S = 60;
 const PERCENTILE_EVERY = 200; // frames: once a second
 /** The longest beep is under half a second. A tone held this long is a hum or a whistle, not the radio: search again. */
 const NOT_MORSE_MS = 3000;
+/**
+ * ⚠️ A lock that has not heard one beep this long after it was made is not
+ * the radio: search again. Without it a wrong lock is for good, because the
+ * not-Morse test only ever releases a steady tone, and hiss is never steady.
+ * Only a lock that has NEVER beeped: a real one goes quiet for minutes between
+ * rounds, and letting go then would drop every run it had read.
+ */
+const NO_BEEP_MS = 10_000;
 
 const SEARCH = { from: 300, to: 3000, step: 10, window: 2048, everyS: 0.1, peak: 10, votes: 5, lead: 3, floorScans: 20, rise: 10 } as const;
 /** ⚠️ Recent audio is kept and replayed once the tone locks: dropping the first element would shift every digit of the group after it. */
@@ -81,6 +89,9 @@ export class ToneDetector {
   private out: ToneRun[] = [];
 
   private locked: number | null = null;
+  /** The sample the lock was made at (the replay before it is older), and whether it has beeped since. */
+  private lockedAt = 0;
+  private beeped = false;
   private gen = 0;
   private from = 0;
   /** Every sample pushed or skipped. */
@@ -198,6 +209,8 @@ export class ToneDetector {
 
   private lock(hz: number, fromSample: number) {
     this.locked = hz;
+    this.lockedAt = this.total;
+    this.beeped = false;
     this.gen++;
     const c = (f: number) => 2 * Math.cos((2 * Math.PI * f) / this.rate);
     this.coeffs = [c(hz), c(hz - REF_OFFSET_HZ), c(hz + REF_OFFSET_HZ)];
@@ -248,6 +261,12 @@ export class ToneDetector {
    * sounds peak too, somewhere new each time, and outnumber the beep, which
    * is on a quarter of the time; the beep stands 30 dB clear, they 10–20.
    * Counting votes alone, nothing ever won.
+   *
+   * ⚠️ A peak only votes if it stands RATIO_DB over the spectrum 140 Hz either
+   * side, the same test a beep must pass once locked. Radio static fills a
+   * band hundreds of Hz wide, and its loudest bin moves about inside it and
+   * rises and falls like a beep: on a Pixel held to a TV it won the lock at
+   * 2474 Hz before the first beep, and no beep was ever heard.
    */
   private scanOnce(): number | null {
     const bins = Math.floor((SEARCH.to - SEARCH.from) / SEARCH.step) + 1;
@@ -272,6 +291,9 @@ export class ToneDetector {
 
     const median = Float64Array.from(power).sort()[Math.floor(bins / 2)]!;
     if (!(power[best]! > SEARCH.peak * median) || !(power[best]! > SEARCH.rise * floor)) return null;
+    const off = Math.round(REF_OFFSET_HZ / SEARCH.step);
+    const beside = Math.max(power[best - off] ?? 0, power[best + off] ?? 0);
+    if (!(power[best]! > 10 ** (RATIO_DB / 10) * beside)) return null;
     this.votes.set(best, (this.votes.get(best) ?? 0) + 1);
     this.strength.set(best, (this.strength.get(best) ?? 0) + 10 * Math.log10(power[best]! / median) - 10);
     // A bin and its two neighbours are one tone: the window cannot split them.
@@ -341,7 +363,10 @@ export class ToneDetector {
     else if (++this.pending === 1) this.flipMs = now;
     if (this.pending >= (on ? ON_FRAMES : OFF_FRAMES)) {
       this.pending = 0;
-      if (on) this.onMs = this.flipMs;
+      if (on) {
+        this.onMs = this.flipMs;
+        this.beeped = true;
+      }
       else this.out.push({ start: this.onMs, length: this.flipMs - this.onMs });
       this.on = on;
     }
@@ -351,5 +376,6 @@ export class ToneDetector {
     if (!clear) this.clearSince = null;
     else if (this.clearSince === null) this.clearSince = now;
     else if (now - this.clearSince > NOT_MORSE_MS) this.unlock();
+    if (this.locked !== null && !this.beeped && this.runSample - this.lockedAt > (NO_BEEP_MS / 1000) * this.rate) this.unlock();
   }
 }
