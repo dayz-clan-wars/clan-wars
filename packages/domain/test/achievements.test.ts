@@ -6,16 +6,16 @@ import { EMOTES } from "../src/achievement-evidence";
 
 describe("the achievement definitions", () => {
   it("are exactly 153, keyed uniquely in snake_case", () => {
-    expect(ACHIEVEMENTS).toHaveLength(153);
+    expect(ACHIEVEMENTS).toHaveLength(155);
     const keys = ACHIEVEMENTS.map((a) => a.key);
-    expect(new Set(keys).size).toBe(153);
-    expect(new Set(ACHIEVEMENT_KEYS).size).toBe(153);
+    expect(new Set(keys).size).toBe(155);
+    expect(new Set(ACHIEVEMENT_KEYS).size).toBe(155);
     for (const k of keys) expect(k).toMatch(/^[a-z][a-z0-9_]*$/u);
     expect(Object.keys(ACHIEVEMENT_BY_KEY).sort()).toEqual([...keys].sort());
   });
 
-  it("150 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
-    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(150);
+  it("152 can be earned: Wanderer, Wolf Bait and Bear Necessities are retired, but stay defined for their holders", () => {
+    expect(EARNABLE_ACHIEVEMENTS).toHaveLength(152);
     expect(EARNABLE_ACHIEVEMENTS.filter((a) => a.owner === "clan")).toHaveLength(16);
     for (const k of ["wanderer", "wolf_bait", "bear_necessities"]) expect(EARNABLE_ACHIEVEMENTS.map((a) => a.key)).not.toContain(k);
     expect(ACHIEVEMENTS.filter(isRetired).map((a) => a.key)).toEqual(["wanderer", "wolf_bait", "bear_necessities"]);
@@ -23,9 +23,9 @@ describe("the achievement definitions", () => {
     expect([ACHIEVEMENT_BY_KEY.wolf_bait.name, ACHIEVEMENT_BY_KEY.bear_necessities.name]).toEqual(["Wolf Bait", "Bear Necessities"]);
   });
 
-  it("split 18 solo, 36 pve, 83 pvp, 16 team; team is clan-owned and nothing else is", () => {
+  it("split 18 solo, 38 pve, 83 pvp, 16 team; team is clan-owned and nothing else is", () => {
     const by = (g: string) => ACHIEVEMENTS.filter((a) => a.group === g);
-    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([18, 36, 83, 16]);
+    expect([by("solo").length, by("pve").length, by("pvp").length, by("team").length]).toEqual([18, 38, 83, 16]);
     for (const a of ACHIEVEMENTS) expect(a.owner).toBe(a.group === "team" ? "clan" : "player");
     expect(ACHIEVEMENT_GROUPS).toEqual(["solo", "pve", "pvp", "team"]);
   });
@@ -68,7 +68,7 @@ describe("the achievement definitions", () => {
     // One statement of a class's size: the target is the catalogue's count, never a typed number.
     FIREARM_CLASSES.forEach((c, i) => expect(classes[i]!.target).toBe(FIREARMS.filter((f) => f.class === c).length));
     expect(ACHIEVEMENT_BY_KEY.full_armory).toMatchObject({ name: "Full Armory", description: "A PvP kill with every firearm on Nasdara", target: 52 });
-    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(94);
+    expect(ACHIEVEMENTS.filter((a) => !("section" in a))).toHaveLength(96);
   });
 
   it("the four clan tiles as agreed; Every Class Covered needs one tile per gun class", () => {
@@ -173,8 +173,18 @@ describe("ACHIEVEMENTS_2026_10", () => {
       expect(earnable.has(k), k).toBe(true);
       expect(LAUNCH_KEYS.has(k), k).toBe(false);
     }
-    // Today the release is exactly the catalogue minus the launch; a later release breaks this on purpose.
-    expect([...ACHIEVEMENTS_2026_10].sort()).toEqual([...earnable].filter((k) => !LAUNCH_KEYS.has(k)).sort());
+    // The release is the catalogue minus the launch and minus the later well tiles (the list is frozen, so each later tile is named here).
+    const LATER = new Set(["community_service", "water_works"]);
+    expect([...ACHIEVEMENTS_2026_10].sort()).toEqual([...earnable].filter((k) => !LAUNCH_KEYS.has(k) && !LATER.has(k)).sort());
+  });
+});
+
+describe("the well achievements", () => {
+  it("are one-shot PvE tiles, and not in the frozen October release", () => {
+    for (const k of ["community_service", "water_works"]) {
+      expect(ACHIEVEMENT_BY_KEY[k as "water_works"], k).toMatchObject({ group: "pve", owner: "player", target: 1, unit: "count" });
+      expect(ACHIEVEMENTS_2026_10).not.toContain(k as never);
+    }
   });
 });
 
@@ -192,7 +202,7 @@ describe("the armory section", () => {
 describe("the guide's achievement counts", () => {
   it("come from the catalogue, never a typed number", () => {
     expect(guideNumber("ACHIEVEMENTS_EARNABLE", "n")).toBe(String(EARNABLE_ACHIEVEMENTS.length));
-    expect(guideNumber("ACHIEVEMENTS_EARNABLE", "n")).toBe("150");
+    expect(guideNumber("ACHIEVEMENTS_EARNABLE", "n")).toBe("152");
     expect(guideNumber("ACHIEVEMENTS_CLAN", "n")).toBe("16");
   });
 });

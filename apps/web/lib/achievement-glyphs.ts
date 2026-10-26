@@ -48,6 +48,8 @@ export const ACHIEVEMENT_GLYPHS: Record<AchievementKey, string> = {
   rubble_rouser: "M2 21h20M3 21l1.5-6 7 1.5-1.5 4.5M13 21v-6h8v6M7 15l2.5-6 7.5 2.5-1.5 3.5",
   renovator: "M3 21L3 11L12 3L21 11L21 21zM8 19l5-5M12 11l4 4 2-2-4-4z",
   fixer_upper: "M4 21L4 11L12 4L20 11L20 21zM8 21v-6h4v6M14 13h3v3h-3z",
+  community_service: "M6 8h12l-1.5 13h-9zM6 8c0-4 12-4 12 0M9 4l3-2 3 2",
+  water_works: "M5 11v10M19 11v10M3 11h18M12 11v4M10 15h4v5h-4zM8 6l4-3 4 3M8 6v5M16 6v5",
   snapped: "M10 2v19h10v-3l-6-3V2M7.5 3a5 5 0 0 0 0 10M16.5 3a5 5 0 0 1 0 10M7.5 3l-2.5 2.5 2.5 2.5-2.5 2.5 2.5 2.5M16.5 3l2.5 2.5-2.5 2.5 2.5 2.5-2.5 2.5",
   tripped: "M2 21v-5M22 21v-5M2 17h20M16 6a2 2 0 1 0 4 0a2 2 0 1 0 -4 0M16 8.5l-6 5M10 13.5l-4 3.5M10 13.5l-1 3.5M14 10l4 4",
   snagged: "M2 12h20M3.5 9.5l3 5M6.5 9.5l-3 5M10.5 9.5l3 5M13.5 9.5l-3 5M17.5 9.5l3 5M20.5 9.5l-3 5",
