@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.11.2] - 2026-10-26
+
 ### Fixed
 
 - The Radio page could lock onto radio static instead of the beeps and then sit on "Hearing the radio" with the light on Quiet for good, even with the phone held right to the speaker. It now only locks onto a clean beep, and lets go of anything that hasn't beeped within 10 seconds.
