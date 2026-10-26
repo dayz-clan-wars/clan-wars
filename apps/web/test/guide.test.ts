@@ -57,7 +57,7 @@ describe("the guide manifest", () => {
     expect(raw).toContain("{{ACHIEVEMENTS_CLAN|n}}");
     expect(html).toMatch(/<h2[^>]*>The 152</u);
     expect(html).toContain("A clan's page shows its 16.");
-    expect(c.lede).toMatch(/^150 marks on your record/u);
+    expect(c.lede).toMatch(/^152 marks on your record/u);
   });
 });
 
