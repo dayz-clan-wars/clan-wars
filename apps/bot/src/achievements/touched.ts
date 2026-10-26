@@ -1,10 +1,11 @@
-import { CLASS_TILE_KEYS } from "@factions/domain";
+import { CLASS_TILE_KEYS, RUIN_RUBBLE_RE, WELL_BRICK_PART } from "@factions/domain";
 import {
   achievementCounters, achievementUnlocks, alphaWeeks, clanPins, consumerCursors, ceremonyParticipants, defenses, events, factions, identityLinks, kills,
   membershipHistory, playerPositions, playerSessions, raids, seasonResults, type Database,
 } from "@factions/db";
 import { and, asc, eq, gt, inArray, isNotNull, sql } from "drizzle-orm";
 import type { Owner } from "./types.js";
+import { withinWellRadius } from "../wells.js";
 
 export const SOURCES = [
   "kills", "sessions", "events", "raids", "defenses", "alphaWeeks", "seasonResults", "membership", "membershipClosed",
@@ -131,11 +132,22 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
     clans: sql<string[] | null>`case when ${events.type} = 'base.built' then (select array_agg(mh.faction_id::text) from ${membershipHistory} mh
       where mh.dayz_id = ${events.payload}->>'dayzId' and mh.server_id = ${events.serverId}
         and mh.joined_at <= ${events.occurredAt} and (mh.left_at is null or mh.left_at > ${events.occurredAt})) end`,
+    // ⚠️ Community Service is earned by someone with NO new event of their own: A cleared rubble
+    // yesterday, B lays the brick today, and A earns it from B's event. Without this column A is
+    // never re-evaluated and the award is silently never given. Same server, same radius rule as
+    // the rule itself (withinWellRadius), so the two cannot name different wells.
+    // ⚠️ The outer columns are written qualified (`events.…`): drizzle renders a column in a
+    // single-table select UNQUALIFIED, and inside this subquery `server_id`/`payload` would then
+    // bind to the inner `r` row, comparing it with itself (every server, every distance matches).
+    rubbleNear: sql<string[] | null>`case when "events"."payload"->>'part' = ${WELL_BRICK_PART} then (select array_agg(distinct r.payload->>'dayzId') from ${events} r
+      where r.server_id = "events"."server_id" and r.type = 'base.built' and r.payload->>'part' ~ ${RUIN_RUBBLE_RE.source}
+        and ${withinWellRadius(sql`(r.payload->'pos'->>'x')::float`, sql`(r.payload->'pos'->>'z')::float`, sql`("events"."payload"->'pos'->>'x')::float`, sql`("events"."payload"->'pos'->>'z')::float`)}) end`,
   }).from(events)
     .where(and(gt(events.id, wm.events), inArray(events.type, [...RULE_EVENT_TYPES] as never[]))).orderBy(asc(events.id)).limit(limit))) {
     // Most types carry `dayzId`; a hit carries `victimDayzId` and, for a player attacker, `attackerDayzId`.
     for (const id of new Set([e.dayzId, e.victim, e.attacker])) if (id) add(player(id));
     for (const c of e.clans ?? []) add(clan(Number(c)));
+    for (const id of e.rubbleNear ?? []) if (id) add(player(id));
   }
   for (const r of advance("raids", await db.select({ id: raids.id, raider: raids.raiderDayzId, clan: raids.raiderFactionId }).from(raids).where(gt(raids.id, wm.raids)).orderBy(asc(raids.id)).limit(limit))) {
     add(player(r.raider)); if (r.clan) add(clan(r.clan));
