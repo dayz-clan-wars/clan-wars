@@ -71,6 +71,7 @@ import { sessionsTick } from "./sessions-tick.js";
 import { killsTick } from "./kills-tick.js";
 import { leadershipTick } from "./leadership-tick.js";
 import { achievementsTick } from "./achievements/tick.js";
+import { wellAwardTick } from "./well-award-tick.js";
 import { handleGuildMemberRemove } from "./guild-removal.js";
 import { makeRoster } from "@factions/roster";
 import { routeInteraction, safeErrorInfo, UNKNOWN } from "./commands/route.js";
@@ -1252,6 +1253,17 @@ export async function start(cfg: BotConfig): Promise<void> {
       }
     }
 
+    // Well roofs (spec 2026-10-26-water-works): record and pay the 7-day plate carrier.
+    // After the achievements tick; its own try/catch so a failure here stops nothing else.
+    if (cfg.wellAwards.enabled && client.user) {
+      try {
+        const r = await wellAwardTick(db, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl, grantedByDiscordId: client.user.id });
+        if (r.recorded || r.paid) console.log(`well awards: ${r.recorded} recorded, ${r.paid} paid`);
+      } catch (err) {
+        console.error("well award tick failed", err);
+      }
+    }
+
     // ⚠️ Two steps, not one try. A thrown tick must not kill the interval, and
     // it must not take the notifier down with it either: the two are
     // independent, and players already verified still need telling.
@@ -1842,6 +1854,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (cfg.koth.auto.enabled) console.log(`king of the hill automation on (cap ${cfg.koth.auto.weeklyCap}/week, floor ${cfg.koth.auto.minPop})`);
     if (cfg.koth.vote.enabled) console.log("king of the hill voting on");
 
+    if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
     if (!cfg.referralAward.enabled) console.warn("REFERRAL_AWARD_TICK is off: referrals still qualify, but no weekly plate carrier is granted or announced.");
     else console.log("referral award on: the weekly plate carrier is granted and announced");
 

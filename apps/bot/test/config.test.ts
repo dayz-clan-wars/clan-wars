@@ -403,6 +403,14 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("WELL_AWARD_TICK", () => {
+    it("WELL_AWARD_TICK=true enables wellAwards; unset is off", () => {
+      expect(loadConfig(OK).wellAwards).toEqual({ enabled: false });
+      expect(loadConfig({ ...OK, WELL_AWARD_TICK: "true" }).wellAwards).toEqual({ enabled: true });
+      expect(loadConfig({ ...OK, WELL_AWARD_TICK: "1" }).wellAwards).toEqual({ enabled: true });
+    });
+  });
+
   describe("OPS_CHANNEL_ID", () => {
     it("is optional, off by default", () => {
       expect(loadConfig(OK).opsChannelId).toBeUndefined();
