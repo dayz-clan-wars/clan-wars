@@ -46,7 +46,9 @@ describe("wellAwardTick", () => {
     serverId = (await seedServer(db)).id;
     stub.dropPlateCarrier = false; stub.refuseFor = null;
   });
-  afterEach(() => { stub.dropPlateCarrier = false; stub.refuseFor = null; });
+  // ⚠️ Close each test's pool: the bot suite shares one Postgres, and unclosed per-test
+  // clients pushed CI's service container past max_connections (PR #221).
+  afterEach(async () => { stub.dropPlateCarrier = false; stub.refuseFor = null; await db.$client.end(); });
 
   const place = (who: string, part: string, at: Date, x = 1000, z = 1000, server = serverId) =>
     seedEvent(db, { serverId: server, type: "base.built", at, payload: { dayzId: who, gamertag: "G", part, tool: "Shovel", structure: null, pos: { x, y: 10, z } } });
@@ -221,6 +223,7 @@ describe("well identity (bricksNear + wellAnchor)", () => {
     await db.execute(sql`truncate table well_awards, award_grants, clan_notices, identity_links, consumer_cursors, events, raw_lines, adm_files, servers restart identity cascade`);
     serverId = (await seedServer(db)).id;
   });
+  afterEach(async () => { await db.$client.end(); });
   const brick = (at: Date, x = 1000, z = 1000) =>
     seedEvent(db, { serverId, type: "base.built", at, payload: { dayzId: A, gamertag: "G", part: "well_brick", tool: "Shovel", structure: null, pos: { x, y: 10, z } } });
 

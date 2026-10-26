@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, events, type Database } from "@factions/db";
 import { sql } from "drizzle-orm";
 import { PVE_RULES } from "../../src/achievements/rules-pve.js";
@@ -24,6 +24,8 @@ describe("pve rules", () => {
     await db.transaction(async (tx) => { await tx.execute(sql`set local client_min_messages = warning`); await tx.execute(sql.raw(TRUNCATE)); });
     serverId = (await seedServer(db)).id;
   });
+  // ⚠️ Close each test's pool: unclosed per-test clients pushed CI's Postgres past max_connections (PR #221).
+  afterEach(async () => { await db.$client.end(); });
 
   it("foundation / builder / architect: base.built events by the player", async () => {
     expect((await rule("foundation")(db, player, mk())).count).toBe(0);
