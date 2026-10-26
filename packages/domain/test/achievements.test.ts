@@ -5,7 +5,7 @@ import { FIREARMS, FIREARM_CLASSES } from "../src/firearms";
 import { EMOTES } from "../src/achievement-evidence";
 
 describe("the achievement definitions", () => {
-  it("are exactly 153, keyed uniquely in snake_case", () => {
+  it("are exactly 155, keyed uniquely in snake_case", () => {
     expect(ACHIEVEMENTS).toHaveLength(155);
     const keys = ACHIEVEMENTS.map((a) => a.key);
     expect(new Set(keys).size).toBe(155);

@@ -129,9 +129,11 @@ export async function collectTouched(db: Database, wm: Watermarks, limit: number
     id: events.id, dayzId: sql<string | null>`${events.payload}->>'dayzId'`, victim: sql<string | null>`${events.payload}->>'victimDayzId'`, attacker: sql<string | null>`${events.payload}->>'attackerDayzId'`,
     // A build or repair also touches the clan the builder was a full member of at that moment
     // (Renovators): the same span reading, on the same server, as the rule itself (rules-team.ts).
+    // ⚠️ Outer columns qualified for the reason given at rubbleNear below: unqualified,
+    // `server_id` bound to mh.server_id and the server filter was always true.
     clans: sql<string[] | null>`case when ${events.type} = 'base.built' then (select array_agg(mh.faction_id::text) from ${membershipHistory} mh
-      where mh.dayz_id = ${events.payload}->>'dayzId' and mh.server_id = ${events.serverId}
-        and mh.joined_at <= ${events.occurredAt} and (mh.left_at is null or mh.left_at > ${events.occurredAt})) end`,
+      where mh.dayz_id = "events"."payload"->>'dayzId' and mh.server_id = "events"."server_id"
+        and mh.joined_at <= "events"."occurred_at" and (mh.left_at is null or mh.left_at > "events"."occurred_at")) end`,
     // ⚠️ Community Service is earned by someone with NO new event of their own: A cleared rubble
     // yesterday, B lays the brick today, and A earns it from B's event. Without this column A is
     // never re-evaluated and the award is silently never given. Same server, same radius rule as
