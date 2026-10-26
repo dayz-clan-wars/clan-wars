@@ -160,9 +160,20 @@ describe("wellAwardTick", () => {
     expect(await wellAwardTick(db, opts())).toEqual({ recorded: 0, paid: 0 });
     await db.execute(sql`update consumer_cursors set last_event_id = 0 where consumer_name = ${WELL_AWARD_CONSUMER}`);
     expect(await wellAwardTick(db, opts())).toEqual({ recorded: 0, paid: 0 });
-    await Promise.all([payWellAwards(db, opts()), payWellAwards(db, opts())]);
     expect(await db.select().from(awardGrants)).toHaveLength(1);
     expect(await db.select().from(wellAwards)).toHaveLength(1);
+  });
+
+  it("⚠️ two payout passes racing over one owed award grant it exactly once", async () => {
+    // Recorded while unlinked, so the award is still owed when both passes start.
+    await place(B, "well_brick", h(1));
+    await place(A, "roof", h(2));
+    expect(await wellAwardTick(db, opts())).toEqual({ recorded: 1, paid: 0 });
+    await link(A, "7");
+    const paid = await Promise.all([payWellAwards(db, opts()), payWellAwards(db, opts())]);
+    expect(paid.reduce((a, b) => a + b, 0)).toBe(1);
+    expect(await db.select().from(awardGrants)).toHaveLength(1);
+    expect((await db.select().from(clanNotices)).map((n) => n.kind)).toEqual(["award_granted"]);
   });
 
   it("⚠️ plate-carrier missing from the catalogue sets award_failure once and stops retrying", async () => {
