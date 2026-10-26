@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.11.0] - 2026-10-26
+
 ### Added
 
 - Two new achievements for rebuilding ruined wells. **Community Service** goes to everyone who clears a well's rubble, lays its bricks or builds its roof. **Water Works** goes to whoever puts the roof on. Every well you roof also earns you a Plate Carrier award for 7 days, once per well. If you haven't linked yet, it waits for you until you do.
