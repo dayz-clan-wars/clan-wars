@@ -5,6 +5,14 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- The Radio page no longer sits under Live with the feed tabs across the top. It has its own page, still in the menu.
+
+### Added
+
+- `/radio?debug` shows the microphone settings your browser actually used and can save what the page heard, so a radio that won't pick up the beeps can be looked into.
+
 ## [2.11.0] - 2026-10-26
 
 ### Added

@@ -13,9 +13,8 @@ describe("parseCursor", () => {
 });
 
 describe("liveNav", () => {
-  it("is every feed, then Radio", () => {
-    expect(liveNav("/radio").at(-1)).toEqual({ label: "Radio", href: "/radio", current: true });
-    expect(liveNav("/radio").slice(0, -1).map((i) => i.href)).toEqual(LIVE_FEEDS.map((f) => `/live/${f}`));
+  it("is every feed, and nothing else", () => {
+    expect(liveNav("/live/kills").map((i) => i.href)).toEqual(LIVE_FEEDS.map((f) => `/live/${f}`));
   });
   it("marks the page it is on", () => {
     const nav = liveNav("/live/kills");

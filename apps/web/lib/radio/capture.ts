@@ -27,7 +27,7 @@ registerProcessor("radio-tap", RadioTap);
  * interrupted: a screen lock, a phone call), so the detector can count that
  * time as silence rather than join the audio either side of it.
  */
-export async function startCapture(onSamples: (block: Float32Array) => void, onGap: (ms: number) => void): Promise<{ sampleRate: number; stop(): void }> {
+export async function startCapture(onSamples: (block: Float32Array) => void, onGap: (ms: number) => void): Promise<{ sampleRate: number; settings: MediaTrackSettings; stop(): void }> {
   if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia || typeof AudioWorkletNode === "undefined") {
     throw new Error("unsupported" satisfies CaptureError);
   }
@@ -97,6 +97,8 @@ export async function startCapture(onSamples: (block: Float32Array) => void, onG
 
   return {
     sampleRate: ctx.sampleRate,
+    // What the browser actually applied: the constraints above are only asked for. Shown on /radio?debug.
+    settings: stream.getAudioTracks()[0]?.getSettings() ?? {},
     stop() {
       document.removeEventListener("visibilitychange", wake);
       ctx.onstatechange = null;
