@@ -374,4 +374,66 @@ describe("pve rules", () => {
     const k = await seedKill(db, { serverId, killer: null, victim: A, at: h(200), cause: "drowned" });
     expect(await rule("hundred_lives")(db, player, mk())).toMatchObject({ count: 100, earnedAt: h(200), evidenceId: k.id });
   });
+
+  describe("wells", () => {
+    const C = "C".repeat(36);
+    const place = (who: string, part: string, at: Date, x = 1000, z = 1000) =>
+      seedEvent(db, { serverId, type: "base.built", at, payload: { dayzId: who, gamertag: "G", part, tool: "Shovel", structure: null, pos: { x, y: 10, z } } });
+    const playerB = { kind: "player" as const, id: B };
+    const playerC = { kind: "player" as const, id: C };
+
+    it("community_service: rubble by A then brick by B; both earn it at the brick's time", async () => {
+      await place(A, "rubble_1", h(1));
+      const brick = await place(B, "well_brick", h(2));
+      expect(await rule("community_service")(db, player, mk())).toMatchObject({ count: 1, earnedAt: brick.occurredAt });
+      expect(await rule("community_service")(db, playerB, mk())).toMatchObject({ count: 1, earnedAt: brick.occurredAt });
+    });
+    it("community_service: rubble with no brick anywhere earns nothing", async () => {
+      await place(A, "rubble_1", h(1));
+      expect((await rule("community_service")(db, player, mk())).count).toBe(0);
+    });
+    it("community_service: rubble 6 m from the brick earns nothing; 4 m does", async () => {
+      await place(B, "well_brick", h(1));
+      await place(A, "rubble_1", h(2), 1006, 1000);
+      expect((await rule("community_service")(db, player, mk())).count).toBe(0);
+      await place(A, "rubble_2", h(3), 1004, 1000);
+      expect(await rule("community_service")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(3) });
+    });
+    it("community_service: rubble after the brick earns it at the rubble's time", async () => {
+      await place(B, "well_brick", h(1));
+      await place(A, "rubble_1", h(5));
+      expect(await rule("community_service")(db, player, mk())).toMatchObject({ count: 1, earnedAt: h(5) });
+    });
+    it("community_service: the roof-builder earns it at the roof", async () => {
+      await place(B, "well_brick", h(1));
+      const roof = await place(C, "roof", h(4));
+      expect(await rule("community_service")(db, playerC, mk())).toMatchObject({ count: 1, earnedAt: roof.occurredAt });
+    });
+    it("water_works: a roof within 5 m of an earlier brick earns it at the roof", async () => {
+      await place(B, "well_brick", h(1), 1003, 1000);
+      const roof = await place(A, "roof", h(2));
+      expect(await rule("water_works")(db, player, mk())).toMatchObject({ count: 1, earnedAt: roof.occurredAt, evidenceId: roof.id });
+    });
+    it("water_works: roof1 beside a well, or a roof with no brick, earns nothing", async () => {
+      await place(B, "well_brick", h(1));
+      await place(A, "roof1", h(2));
+      expect((await rule("water_works")(db, player, mk())).count).toBe(0);
+      await place(A, "roof", h(3), 5000, 5000);
+      expect((await rule("water_works")(db, player, mk())).count).toBe(0);
+    });
+    it("water_works: a roof built before any brick earns nothing", async () => {
+      await place(A, "roof", h(1));
+      await place(B, "well_brick", h(2));
+      expect((await rule("water_works")(db, player, mk())).count).toBe(0);
+    });
+    it("evidence carries no coordinate", async () => {
+      await place(B, "well_brick", h(1));
+      await place(A, "roof", h(2));
+      for (const k of ["community_service", "water_works"]) {
+        const json = JSON.stringify((await rule(k)(db, player, mk())).evidence);
+        expect(json).not.toContain("1000");
+        expect(json).not.toMatch(/"[xz]"/);
+      }
+    });
+  });
 });
