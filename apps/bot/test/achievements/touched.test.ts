@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, membershipHistory, type Database } from "@factions/db";
+import { createClient, runMigrations, requireTestDatabaseUrl, achievementUnlocks, membershipHistory, servers, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { makeCtx } from "../../src/achievements/types.js";
 import { collectTouched, headWatermarks, readWatermarks, ownerKey } from "../../src/achievements/touched.js";
@@ -94,6 +94,20 @@ describe("collectTouched", () => {
       await seedEvent(db, { serverId, type: "base.built", at: m(10), payload: { dayzId: A, structure: null, part: "door" } });
       await seedEvent(db, { serverId, type: "base.built", at: m(10), payload: { dayzId: B, structure: null, part: "door" } });   // B left WOLF at m(5)
       expect(clans((await collectTouched(db, wm, 100)).owners)).toEqual([String(bear)]);
+    });
+
+    it("collectTouched: a well_brick also touches everyone who cleared rubble within 5 m on that server", async () => {
+      const D = "D".repeat(36), E = "E".repeat(36);
+      const other = (await db.insert(servers).values({ name: "S2", map: "livonia", clockOffsetMs: 0 }).returning())[0]!.id;
+      const built = (dayzId: string, part: string, x: number, sid = serverId, at = m(1)) =>
+        seedEvent(db, { serverId: sid, type: "base.built", at, payload: { dayzId, structure: null, part, pos: { x, y: 0, z: 1000 } } });
+      await built(A, "rubble_a", 1000);
+      await built(D, "rubble_a", 1050);          // 50 m away
+      await built(E, "rubble_a", 1000, other);   // same spot, another server
+      const wm = await settled();                // their own events are consumed: only the brick can touch them now
+      await built(B, "well_brick", 1001, serverId, m(2));
+      const owners = (await collectTouched(db, wm, 100)).owners.map(ownerKey).filter((k) => k.startsWith("player:"));
+      expect(owners).toEqual([`player:${A}`, `player:${B}`].sort());
     });
 
     it("a class_* unlock touches the clan the player was in when it was earned, once (Every Class Covered)", async () => {

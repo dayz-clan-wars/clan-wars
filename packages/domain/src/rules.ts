@@ -450,3 +450,6 @@ export const REFERRAL_AWARD_DAYS = 7;
 
 /** Bad Dog: a dog bite counts as survived once this long passes with no death. Earned at the bite plus this, never earlier. */
 export const BAD_DOG_SURVIVE_MS = 10 * MIN;
+
+/** Water Works / Community Service: steps within this of each other belong to one well. ⚠️ The observed wells keep all three steps within ~3 m; a bigger radius merges neighbouring wells into one, so one player's work would credit another's well. */
+export const WELL_RADIUS_M = 5;

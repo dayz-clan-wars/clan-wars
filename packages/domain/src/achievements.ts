@@ -96,6 +96,8 @@ export const ACHIEVEMENTS = [
   def("rubble_rouser", "Rubble Rouser", "Clear 10 rubble piles", "pve", 10),
   def("renovator", "Renovator", "Make 25 ruin repairs", "pve", 25),
   def("fixer_upper", "Fixer-Upper", "Repair a door, a window and a roof", "pve"),
+  def("community_service", "Community Service", "Help rebuild a ruined well", "pve"),
+  def("water_works", "Water Works", "Put the roof on a rebuilt well", "pve"),
   // PvE — traps and explosives (§2.8)
   def("snapped", "Snapped", "Step in a bear trap", "pve"),
   def("tripped", "Tripped", "Set off a tripwire", "pve"),

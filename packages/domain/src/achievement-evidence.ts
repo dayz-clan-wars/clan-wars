@@ -117,6 +117,11 @@ export const EMOTES = [
 
 export const RUIN_RUBBLE_RE = /^rubble_/u;
 
+/** The brick step of a well rebuild (Community Service). */
+export const WELL_BRICK_PART = "well_brick";
+/** The roof step of a well rebuild (Water Works). */
+export const WELL_ROOF_PART = "roof";
+
 export type RuinKind = "door" | "window" | "roof" | "wall" | "rubble" | "ladder";
 
 /**

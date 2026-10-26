@@ -159,6 +159,11 @@ export type BotConfig = {
    */
   bounties: { enabled: boolean };
   /**
+   * Gates the well award tick (spec 2026-10-26-water-works). Off, wells still earn
+   * achievements but no plate carrier is recorded or granted. Needs no channel.
+   */
+  wellAwards: { enabled: boolean };
+  /**
    * `KOTH_TICK` gates opening anything; `auto` and `vote` are the two ways a row
    * comes about without an admin (spec 2026-09-24). Both refuse to load without
    * `KOTH_TICK`: a row they create would be decided and never opened.
@@ -478,6 +483,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     },
     raidWindow: { enabled: ["1", "true"].includes((env.RAID_WINDOW_TICK ?? "").toLowerCase()) },
     bounties: { enabled: ["1", "true"].includes((env.BOUNTY_TICK ?? "").trim().toLowerCase()) },
+    wellAwards: { enabled: ["1", "true"].includes((env.WELL_AWARD_TICK ?? "").trim().toLowerCase()) },
     koth: {
       enabled: ["1", "true"].includes((env.KOTH_TICK ?? "").trim().toLowerCase()),
       auto: {

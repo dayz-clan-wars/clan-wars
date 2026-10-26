@@ -45,9 +45,9 @@ describe("the guide manifest", () => {
     const { html } = renderFragment(raw);
     expect(html).toContain("Sniper");
     expect(html).toContain("A kill from 300 m or more");
-    // 150 rows: the retired Wanderer, Wolf Bait and Bear Necessities are not listed, since nobody
+    // 152 rows: the retired Wanderer, Wolf Bait and Bear Necessities are not listed, since nobody
     // can earn them now.
-    expect((html.match(/<tr>/gu) ?? []).length).toBe(150);
+    expect((html.match(/<tr>/gu) ?? []).length).toBe(152);
     for (const retired of ["Wanderer", "Wolf Bait", "Bear Necessities"]) expect(html).not.toContain(retired);
     // ⚠️ The counts in the prose are tokens over the catalogue, so they move with it: a
     // hand-typed "forty-nine" sat in this chapter for a hundred tiles' worth of release.
@@ -55,9 +55,9 @@ describe("the guide manifest", () => {
     expect(raw).not.toMatch(/forty-nine|fifty marks|its (?:twelve|sixteen|16)\b|the (?:forty-nine|150)\b|\b150 marks/iu);
     expect(raw).toContain("{{ACHIEVEMENTS_EARNABLE|n}}");
     expect(raw).toContain("{{ACHIEVEMENTS_CLAN|n}}");
-    expect(html).toMatch(/<h2[^>]*>The 150</u);
+    expect(html).toMatch(/<h2[^>]*>The 152</u);
     expect(html).toContain("A clan's page shows its 16.");
-    expect(c.lede).toMatch(/^150 marks on your record/u);
+    expect(c.lede).toMatch(/^152 marks on your record/u);
   });
 });
 

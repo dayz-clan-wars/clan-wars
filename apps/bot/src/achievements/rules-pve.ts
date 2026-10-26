@@ -1,11 +1,12 @@
 import {
-  ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, GRENADE_ENTITY_RE, HOT_FOOD_RE, MINE_ENTITIES, RUIN_KIND, TENTS, isDogLabel, isMotorbikeClass,
+  ACHIEVEMENT_BY_KEY, BAD_DOG_SURVIVE_MS, GRENADE_ENTITY_RE, HOT_FOOD_RE, MINE_ENTITIES, RUIN_KIND, TENTS, WELL_ROOF_PART, isDogLabel, isMotorbikeClass,
   type AchievementKey, type EarnableKey, type RuinKind,
 } from "@factions/domain";
 import { events, kills, playerSessions } from "@factions/db";
 import { isBaseBuild, isRuinRepair } from "@factions/roster/internal";
 import { and, asc, eq, inArray, isNull, isNotNull, sql } from "drizzle-orm";
 import { incidents, ownHits, type HitRow } from "./hits.js";
+import { bricksNear, wellStepsOf } from "../wells.js";
 import { nth, oneShot, type Hit, type Rule } from "./types.js";
 
 const T = (k: AchievementKey) => ACHIEVEMENT_BY_KEY[k].target;
@@ -66,6 +67,9 @@ const ruinRepairs = (db: Parameters<Rule>[0], ctx: Parameters<Rule>[2], dayzId: 
       .orderBy(asc(events.occurredAt), asc(events.id));
     return rows.map((r) => ({ id: r.id, at: r.at, serverId: r.serverId, kind: r.part ? RUIN_KIND(r.part) : null }));
   });
+
+/** The owner's well steps, read once per pass for both well rules. */
+const wellSteps = (db: Parameters<Rule>[0], ctx: Parameters<Rule>[2], dayzId: string) => ctx.memo(`wells:${dayzId}`, () => wellStepsOf(db, dayzId));
 
 /** A trap or wire hit the owner took: the first one matching. */
 const hitBy = (match: (h: HitRow) => boolean, evidence: (h: HitRow) => Hit["evidence"]): Rule =>
@@ -141,6 +145,30 @@ export const PVE_RULES: Partial<Record<EarnableKey, Rule>> = {
     // Filtered here, not in SQL, so `isMotorbikeClass` stays the one statement of "a motorbike".
     const k = (await noKillerDeaths(db, owner.id, "vehicle")).find((r) => isMotorbikeClass(r.entity));
     return oneShot(k ? { at: k.at, id: k.id, serverId: k.serverId, evidence: { vehicle: k.entity } } : undefined);
+  },
+
+  // ── Wells (spec 2026-10-26-water-works-design) ────────────────────────────
+  // ⚠️ Evidence is the part only, never the position: a coordinate in an unlock notice shows
+  // where a clan's well is.
+  /** Any well step with a brick within the radius, earned at the later of the step and that brick: rubble cleared before the first brick only counts once a well exists. */
+  community_service: async (db, owner, ctx) => {
+    let best: { at: Date; id: number; serverId: number; part: string } | undefined;
+    for (const s of await wellSteps(db, ctx, owner.id)) {
+      const first = (await bricksNear(db, s.serverId, s.x, s.z))[0];
+      if (!first) continue;
+      const at = s.at > first.at ? s.at : first.at;
+      if (!best || at < best.at) best = { at, id: s.id, serverId: s.serverId, part: s.part };
+    }
+    return oneShot(best && { at: best.at, id: best.id, serverId: best.serverId, evidence: { part: best.part } });
+  },
+
+  /** The first roof with a brick within the radius no later than the roof itself. */
+  water_works: async (db, owner, ctx) => {
+    for (const s of (await wellSteps(db, ctx, owner.id)).filter((r) => r.part === WELL_ROOF_PART)) {
+      if ((await bricksNear(db, s.serverId, s.x, s.z)).some((b) => b.at <= s.at))
+        return oneShot({ at: s.at, id: s.id, serverId: s.serverId, evidence: { part: s.part } });
+    }
+    return oneShot(undefined);
   },
 
   // ── Ruins (spec 2026-10-20-achievements-150 §2.7) ─────────────────────────
