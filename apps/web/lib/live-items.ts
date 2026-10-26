@@ -14,9 +14,9 @@ const LABELS: Record<LiveFeed, string> = {
 };
 export const LIVE_TABS: { feed: LiveFeed; label: string }[] = LIVE_FEEDS.map((feed) => ({ feed, label: LABELS[feed] }));
 
-/** Live's tab row: every feed, then the radio, which is not a feed but lives here on desktop (lib/menu.ts). */
+/** Live's tab row: every feed. The radio is not a feed and has its own menu item (lib/menu.ts). */
 export function liveNav(current: string): { label: string; href: string; current: boolean }[] {
-  return [...LIVE_TABS.map((t) => ({ label: t.label, href: `/live/${t.feed}` })), { label: "Radio", href: "/radio" }]
+  return LIVE_TABS.map((t) => ({ label: t.label, href: `/live/${t.feed}` }))
     .map((i) => ({ ...i, current: i.href === current }));
 }
 

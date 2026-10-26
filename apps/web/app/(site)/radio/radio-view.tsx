@@ -6,10 +6,14 @@ import { ToneDetector } from "@/lib/radio/detector";
 import { readsOf, spellGroups, toDigits, type Read, type ToneRun } from "@/lib/radio/decode";
 import { browserStore, loadReads, saveReads } from "@/lib/radio/saved";
 import { TapKey } from "@/lib/radio/tap";
+import { wavOf } from "@/lib/radio/wav";
+import { btnQuiet } from "@/app/components/ui";
 import { tally, type BunkerCard } from "@/lib/radio/tally";
 import { RadioPanel, type RadioState } from "./radio-panel";
 
 const REDRAW_MS = 100;
+/** /radio?debug keeps this much of the microphone's own audio (about 11 MB as a WAV), the newest. */
+const DEBUG_KEEP_S = 120;
 /** How long Start over's Undo stays on offer. */
 const UNDO_MS = 10_000;
 
@@ -53,6 +57,13 @@ export default function RadioView() {
   // checks it: a capture that resolves after Stop, or after the page is gone,
   // is shut at once instead of leaving the microphone and the wake lock on.
   const session = useRef(0);
+  // /radio?debug: the raw samples and the mic settings the browser applied,
+  // so a player can send us exactly what the page heard.
+  const [debug, setDebug] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<{ rate: number; settings: MediaTrackSettings } | null>(null);
+  const debugBlocks = useRef<Float32Array[]>([]);
+  const debugLen = useRef(0);
+  useEffect(() => setDebug(new URLSearchParams(window.location.search).has("debug")), []);
 
   /** Vote everything, show it, and keep it if it changed. Stamped only on a change, so the two hours run from the last new read. */
   const publish = useCallback((extra: Partial<View> = {}) => {
@@ -120,6 +131,11 @@ export default function RadioView() {
           const d = detector.current;
           if (!d) return;
           heardMs.current += (block.length / c.sampleRate) * 1000;
+          if (debug) {
+            debugBlocks.current.push(block);
+            debugLen.current += block.length;
+            while (debugLen.current - debugBlocks.current[0]!.length > DEBUG_KEEP_S * c.sampleRate) debugLen.current -= debugBlocks.current.shift()!.length;
+          }
           const got = d.push(block);
           // A new lock replays the recent audio: what the old one said is void.
           if (d.generation !== generation.current) {
@@ -140,6 +156,9 @@ export default function RadioView() {
         return;
       }
       detector.current = new ToneDetector(c.sampleRate);
+      debugBlocks.current = [];
+      debugLen.current = 0;
+      setDebugInfo({ rate: c.sampleRate, settings: c.settings });
       generation.current = detector.current.generation;
       runs.current = [];
       heardMs.current = 0;
@@ -152,7 +171,17 @@ export default function RadioView() {
       const why = e instanceof Error ? e.message : "";
       setState(why === "denied" || why === "no-device" || why === "busy" ? why : "unsupported");
     }
-  }, [end, requestWake]);
+  }, [end, requestWake, debug]);
+
+  const downloadDebug = useCallback(() => {
+    if (!debugInfo || debugBlocks.current.length === 0) return;
+    const url = URL.createObjectURL(new Blob([wavOf(debugBlocks.current, debugInfo.rate)], { type: "audio/wav" }));
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `radio-${new Date().toISOString().replace(/[:.]/g, "-")}.wav`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }, [debugInfo]);
 
   const tapAlong = useCallback(() => {
     end();
@@ -255,6 +284,7 @@ export default function RadioView() {
   }, [state, publish]);
 
   return (
+    <>
     <RadioPanel
       state={state}
       {...view}
@@ -269,5 +299,12 @@ export default function RadioView() {
       onPress={press}
       onRelease={release}
     />
+    {debug && debugInfo && (
+      <div className="mt-6 flex flex-col gap-2 font-mono text-xs text-muted">
+        <p>Debug · {debugInfo.rate} Hz · {JSON.stringify(debugInfo.settings)}</p>
+        <button type="button" className={btnQuiet} onClick={downloadDebug}>Save what the page heard (last {DEBUG_KEEP_S / 60} min)</button>
+      </div>
+    )}
+    </>
   );
 }
