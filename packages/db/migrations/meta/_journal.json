@@ -505,6 +505,13 @@
       "when": 1792536966054,
       "tag": "0071_lean_alice",
       "breakpoints": true
+    },
+    {
+      "idx": 72,
+      "version": "7",
+      "when": 1793002063724,
+      "tag": "0072_spicy_miss_america",
+      "breakpoints": true
     }
   ]
 }

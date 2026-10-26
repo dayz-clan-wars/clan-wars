@@ -2319,6 +2319,45 @@ export const bounties = pgTable("bounties", {
 }));
 
 /**
+ * One plate-carrier award owed to a character for roofing a well (spec
+ * 2026-10-26-water-works, "The plate carrier award"). Recorded by `wellAwardTick`
+ * from `base.built` roofs; paid by its payout pass to the character's linked
+ * Discord. A row with `award_grant_id` null is OWED: the player was not linked
+ * yet, and it is paid the tick after they link — never dropped.
+ *
+ * Lock order: `well_awards` → `award_grants` → `clan_notices` (CLAUDE.md).
+ */
+export const wellAwards = pgTable("well_awards", {
+  id: bigserial("id", { mode: "number" }).primaryKey(),
+  serverId: integer("server_id").notNull().references(() => servers.id),
+  dayzId: text("dayz_id").notNull(),
+  /**
+   * The well's identity: the id of the earliest `well_brick` ever laid within
+   * WELL_RADIUS_M of the brick this roof matched (`wellAnchor`). NOT the matched
+   * brick itself — a rebuild after decay lays a new brick at the same spot, and
+   * keying on that would make every rebuild a new well and pay it again.
+   */
+  wellBrickEventId: bigint("well_brick_event_id", { mode: "number" }).notNull(),
+  roofEventId: bigint("roof_event_id", { mode: "number" }).notNull().references(() => events.id),
+  roofedAt: timestamp("roofed_at", { withTimezone: true }).notNull(),
+  /**
+   * ⚠️ The payment record, as `bounties.award_grant_id` is: the payout locks the
+   * row, checks this is null, grants, and sets it, in one transaction. Clearing
+   * it pays the plate carrier again.
+   */
+  awardGrantId: bigint("award_grant_id", { mode: "number" }).references(() => awardGrants.id),
+  /** Why it could not be paid (plate-carrier left the catalogue), so the tick stops retrying and ops can grant it by hand. */
+  awardFailure: text("award_failure"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (t) => ({
+  // ⚠️ THE ONLY THING STOPPING A SECOND PAYMENT. Once per player per well, for good
+  // (operator, 2026-10-26): the recorder inserts ON CONFLICT DO NOTHING against it, so
+  // a re-roof, a rebuilt well, a rewound cursor or a replayed log all land here and
+  // record nothing. Dropping or narrowing it pays every rebuild again.
+  playerWell: uniqueIndex("well_awards_player_well_uq").on(t.dayzId, t.wellBrickEventId),
+}));
+
+/**
  * `finished` is a session scored with no prize to grant — scheduled with none, or
  * one whose award left the catalogue before it could be granted.
  */
