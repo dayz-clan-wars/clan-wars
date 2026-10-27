@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.11.3] - 2026-10-27
+
 ### Fixed
 
 - 77 award and booster kit items that showed "No art" now have a picture, including the SCAR-L, the FNO jacket and pants, desert ghillie and hunter gear, OBR, kameez, keffiyeh, turbans, pakols and the linen and robe vests. Many of the guns got a clearer picture too. 32 items still have no art: the short sleeve shirts, shalwar pants and sandals.
