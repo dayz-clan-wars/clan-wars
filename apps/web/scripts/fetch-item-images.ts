@@ -84,9 +84,9 @@ async function main(): Promise<void> {
   for (const entry of entries) {
     const source = wikiFileFor(entry.className);
     if (!source) { skipped.push(`${entry.className} (no source)`); continue; }
-    // ⚠️ A supplied URL or a hand-trimmed image has no wiki file to re-fetch.
-    // Overwriting it from a guess would silently undo a human decision.
-    if (source.wiki === "supplied" || source.wiki === "local") {
+    // ⚠️ A supplied URL, a hand-trimmed image or a map picture has no wiki file
+    // to re-fetch. Overwriting it from a guess would silently undo a human decision.
+    if (source.wiki === "supplied" || source.wiki === "local" || source.wiki === "map") {
       skipped.push(`${entry.className} (${source.wiki}, committed by hand)`);
       continue;
     }
