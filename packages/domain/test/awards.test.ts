@@ -223,12 +223,9 @@ describe("the weapon kit award", () => {
     });
   });
 
-  // SCARL came with Nasdara and neither wiki has its art yet; it renders as the
-  // "No art" tile. Drop it from here when its image lands.
-  const NO_ART_YET = ["SCARL"];
-  it("has art for every gun, bar the known gaps", () => {
+  it("has art for every gun", () => {
     for (const i of kit.slots.weapon!.items) {
-      expect(i.image).toBe(NO_ART_YET.includes(i.className) ? undefined : `items/${i.className}.webp`);
+      expect(i.image).toBe(`items/${i.className}.webp`);
     }
   });
 });

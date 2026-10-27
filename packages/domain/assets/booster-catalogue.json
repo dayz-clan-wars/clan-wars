@@ -52,35 +52,43 @@
     },
     {
       "className": "Keffiyeh_Black",
-      "label": "Keffiyeh (Black)"
+      "label": "Keffiyeh (Black)",
+      "image": "items/Keffiyeh_Black.webp"
     },
     {
       "className": "Keffiyeh_Blue",
-      "label": "Keffiyeh (Blue)"
+      "label": "Keffiyeh (Blue)",
+      "image": "items/Keffiyeh_Blue.webp"
     },
     {
       "className": "Keffiyeh_Brown",
-      "label": "Keffiyeh (Brown)"
+      "label": "Keffiyeh (Brown)",
+      "image": "items/Keffiyeh_Brown.webp"
     },
     {
       "className": "Keffiyeh_Gray",
-      "label": "Keffiyeh (Gray)"
+      "label": "Keffiyeh (Gray)",
+      "image": "items/Keffiyeh_Gray.webp"
     },
     {
       "className": "Keffiyeh_LightBlue",
-      "label": "Keffiyeh (Light Blue)"
+      "label": "Keffiyeh (Light Blue)",
+      "image": "items/Keffiyeh_LightBlue.webp"
     },
     {
       "className": "Keffiyeh_LightBrown",
-      "label": "Keffiyeh (Light Brown)"
+      "label": "Keffiyeh (Light Brown)",
+      "image": "items/Keffiyeh_LightBrown.webp"
     },
     {
       "className": "Keffiyeh_LightRed",
-      "label": "Keffiyeh (Light Red)"
+      "label": "Keffiyeh (Light Red)",
+      "image": "items/Keffiyeh_LightRed.webp"
     },
     {
       "className": "Keffiyeh_Red",
-      "label": "Keffiyeh (Red)"
+      "label": "Keffiyeh (Red)",
+      "image": "items/Keffiyeh_Red.webp"
     },
     {
       "className": "MimeMask_Female",
@@ -231,11 +239,13 @@
     },
     {
       "className": "DustGoggles_Black",
-      "label": "Dust Goggles (Black)"
+      "label": "Dust Goggles (Black)",
+      "image": "items/DustGoggles_Black.webp"
     },
     {
       "className": "DustGoggles_Transparent",
-      "label": "Dust Goggles (Transparent)"
+      "label": "Dust Goggles (Transparent)",
+      "image": "items/DustGoggles_Transparent.webp"
     },
     {
       "className": "SkiGoggles_BlackYellow",
@@ -281,7 +291,8 @@
     },
     {
       "className": "MilitaryBeret_TK",
-      "label": "Beret (TK)"
+      "label": "Beret (TK)",
+      "image": "items/MilitaryBeret_TK.webp"
     },
     {
       "className": "BallisticHelmet_BDU",
@@ -345,7 +356,8 @@
     },
     {
       "className": "GhillieHood_Desert",
-      "label": "Ghillie Hood (Desert)"
+      "label": "Ghillie Hood (Desert)",
+      "image": "items/GhillieHood_Desert.webp"
     },
     {
       "className": "Headdress_Bear",
@@ -404,31 +416,38 @@
     },
     {
       "className": "OBRCap_Beige",
-      "label": "OBR Cap (Beige)"
+      "label": "OBR Cap (Beige)",
+      "image": "items/OBRCap_Beige.webp"
     },
     {
       "className": "OBRCap_Olive",
-      "label": "OBR Cap (Olive)"
+      "label": "OBR Cap (Olive)",
+      "image": "items/OBRCap_Olive.webp"
     },
     {
       "className": "PakolHat_Beige",
-      "label": "Pakol (Beige)"
+      "label": "Pakol (Beige)",
+      "image": "items/PakolHat_Beige.webp"
     },
     {
       "className": "PakolHat_Black",
-      "label": "Pakol (Black)"
+      "label": "Pakol (Black)",
+      "image": "items/PakolHat_Black.webp"
     },
     {
       "className": "PakolHat_Brown",
-      "label": "Pakol (Brown)"
+      "label": "Pakol (Brown)",
+      "image": "items/PakolHat_Brown.webp"
     },
     {
       "className": "PakolHat_Grey",
-      "label": "Pakol (Grey)"
+      "label": "Pakol (Grey)",
+      "image": "items/PakolHat_Grey.webp"
     },
     {
       "className": "PakolHat_White",
-      "label": "Pakol (White)"
+      "label": "Pakol (White)",
+      "image": "items/PakolHat_White.webp"
     },
     {
       "className": "SantasHat",
@@ -458,51 +477,63 @@
     },
     {
       "className": "TurbanHat_Beige",
-      "label": "Turban (Beige)"
+      "label": "Turban (Beige)",
+      "image": "items/TurbanHat_Beige.webp"
     },
     {
       "className": "TurbanHat_Black",
-      "label": "Turban (Black)"
+      "label": "Turban (Black)",
+      "image": "items/TurbanHat_Black.webp"
     },
     {
       "className": "TurbanHat_Brown",
-      "label": "Turban (Brown)"
+      "label": "Turban (Brown)",
+      "image": "items/TurbanHat_Brown.webp"
     },
     {
       "className": "TurbanHat_Green",
-      "label": "Turban (Green)"
+      "label": "Turban (Green)",
+      "image": "items/TurbanHat_Green.webp"
     },
     {
       "className": "TurbanHat_Grey",
-      "label": "Turban (Grey)"
+      "label": "Turban (Grey)",
+      "image": "items/TurbanHat_Grey.webp"
     },
     {
       "className": "TurbanHat_NavyBlue",
-      "label": "Turban (Navy Blue)"
+      "label": "Turban (Navy Blue)",
+      "image": "items/TurbanHat_NavyBlue.webp"
     },
     {
       "className": "TurbanHat_Pink",
-      "label": "Turban (Pink)"
+      "label": "Turban (Pink)",
+      "image": "items/TurbanHat_Pink.webp"
     },
     {
       "className": "TurbanHat_Purple",
-      "label": "Turban (Purple)"
+      "label": "Turban (Purple)",
+      "image": "items/TurbanHat_Purple.webp"
     },
     {
       "className": "TurbanHat_Red",
-      "label": "Turban (Red)"
+      "label": "Turban (Red)",
+      "image": "items/TurbanHat_Red.webp"
     },
     {
       "className": "TurbanHat_Skyblue",
-      "label": "Turban (Sky Blue)"
+      "label": "Turban (Sky Blue)",
+      "image": "items/TurbanHat_Skyblue.webp"
     },
     {
       "className": "TurbanHat_White",
-      "label": "Turban (White)"
+      "label": "Turban (White)",
+      "image": "items/TurbanHat_White.webp"
     },
     {
       "className": "TurbanHat_Yellow",
-      "label": "Turban (Yellow)"
+      "label": "Turban (Yellow)",
+      "image": "items/TurbanHat_Yellow.webp"
     },
     {
       "className": "WitchHat",
@@ -628,7 +659,8 @@
     },
     {
       "className": "FNOJacket",
-      "label": "Fishtail Night Ops Jacket"
+      "label": "Fishtail Night Ops Jacket",
+      "image": "items/FNOJacket.webp"
     },
     {
       "className": "HikingJacket_Black",
@@ -662,7 +694,8 @@
     },
     {
       "className": "HuntingJacket_Desert",
-      "label": "Hunter Jacket (Desert)"
+      "label": "Hunter Jacket (Desert)",
+      "image": "items/HuntingJacket_Desert.webp"
     },
     {
       "className": "HuntingJacket_Spring",
@@ -681,59 +714,73 @@
     },
     {
       "className": "KameezShirt_Beige",
-      "label": "Kameez (Beige)"
+      "label": "Kameez (Beige)",
+      "image": "items/KameezShirt_Beige.webp"
     },
     {
       "className": "KameezShirt_Black",
-      "label": "Kameez (Black)"
+      "label": "Kameez (Black)",
+      "image": "items/KameezShirt_Black.webp"
     },
     {
       "className": "KameezShirt_BlueFlowers",
-      "label": "Kameez (Blue Flowers)"
+      "label": "Kameez (Blue Flowers)",
+      "image": "items/KameezShirt_BlueFlowers.webp"
     },
     {
       "className": "KameezShirt_Brown",
-      "label": "Kameez (Brown)"
+      "label": "Kameez (Brown)",
+      "image": "items/KameezShirt_Brown.webp"
     },
     {
       "className": "KameezShirt_Grey",
-      "label": "Kameez (Grey)"
+      "label": "Kameez (Grey)",
+      "image": "items/KameezShirt_Grey.webp"
     },
     {
       "className": "KameezShirt_NavyBlue",
-      "label": "Kameez (Navy Blue)"
+      "label": "Kameez (Navy Blue)",
+      "image": "items/KameezShirt_NavyBlue.webp"
     },
     {
       "className": "KameezShirt_Olive",
-      "label": "Kameez (Olive)"
+      "label": "Kameez (Olive)",
+      "image": "items/KameezShirt_Olive.webp"
     },
     {
       "className": "KameezShirt_Orange",
-      "label": "Kameez (Orange)"
+      "label": "Kameez (Orange)",
+      "image": "items/KameezShirt_Orange.webp"
     },
     {
       "className": "KameezShirt_Pink",
-      "label": "Kameez (Pink)"
+      "label": "Kameez (Pink)",
+      "image": "items/KameezShirt_Pink.webp"
     },
     {
       "className": "KameezShirt_Purple",
-      "label": "Kameez (Purple)"
+      "label": "Kameez (Purple)",
+      "image": "items/KameezShirt_Purple.webp"
     },
     {
       "className": "KameezShirt_Red",
-      "label": "Kameez (Red)"
+      "label": "Kameez (Red)",
+      "image": "items/KameezShirt_Red.webp"
     },
     {
       "className": "KameezShirt_SkyBlue",
-      "label": "Kameez (Sky Blue)"
+      "label": "Kameez (Sky Blue)",
+      "image": "items/KameezShirt_SkyBlue.webp"
     },
     {
       "className": "KameezShirt_White",
-      "label": "Kameez (White)"
+      "label": "Kameez (White)",
+      "image": "items/KameezShirt_White.webp"
     },
     {
       "className": "KameezShirt_Yellow",
-      "label": "Kameez (Yellow)"
+      "label": "Kameez (Yellow)",
+      "image": "items/KameezShirt_Yellow.webp"
     },
     {
       "className": "WinterMilitaryCoat_Brown",
@@ -757,15 +804,18 @@
     },
     {
       "className": "OBRJacket_Beige",
-      "label": "OBR Jacket (Beige)"
+      "label": "OBR Jacket (Beige)",
+      "image": "items/OBRJacket_Beige.webp"
     },
     {
       "className": "OBRJacket_Officer",
-      "label": "OBR Jacket (Officer)"
+      "label": "OBR Jacket (Officer)",
+      "image": "items/OBRJacket_Officer.webp"
     },
     {
       "className": "OBRJacket_Olive",
-      "label": "OBR Jacket (Olive)"
+      "label": "OBR Jacket (Olive)",
+      "image": "items/OBRJacket_Olive.webp"
     },
     {
       "className": "OMKJacket_Navy",
@@ -924,7 +974,8 @@
     },
     {
       "className": "TacticalShirt_ION_Olive",
-      "label": "Tactical Shirt (ION Olive)"
+      "label": "Tactical Shirt (ION Olive)",
+      "image": "items/TacticalShirt_ION_Olive.webp"
     },
     {
       "className": "TacticalShirt_ION_Tan",
@@ -989,7 +1040,8 @@
     },
     {
       "className": "FNOPants",
-      "label": "Fishtail Night Ops Pants"
+      "label": "Fishtail Night Ops Pants",
+      "image": "items/FNOPants.webp"
     },
     {
       "className": "HunterPants_Autumn",
@@ -1003,7 +1055,8 @@
     },
     {
       "className": "HunterPants_Desert",
-      "label": "Hunter Pants (Desert)"
+      "label": "Hunter Pants (Desert)",
+      "image": "items/HunterPants_Desert.webp"
     },
     {
       "className": "HunterPants_Spring",
@@ -1055,11 +1108,13 @@
     },
     {
       "className": "OBRPants_Beige",
-      "label": "OBR Pants (Beige)"
+      "label": "OBR Pants (Beige)",
+      "image": "items/OBRPants_Beige.webp"
     },
     {
       "className": "OBRPants_Olive",
-      "label": "OBR Pants (Olive)"
+      "label": "OBR Pants (Olive)",
+      "image": "items/OBRPants_Olive.webp"
     },
     {
       "className": "OMKPants_Navy",
@@ -1352,7 +1407,8 @@
   "backpack": [
     {
       "className": "AssaultBag_Desert",
-      "label": "Assault Backpack (Desert)"
+      "label": "Assault Backpack (Desert)",
+      "image": "items/AssaultBag_Desert.webp"
     },
     {
       "className": "TortillaBag",
@@ -1386,11 +1442,13 @@
     },
     {
       "className": "GhillieTop_Desert",
-      "label": "Ghillie Cloak (Desert)"
+      "label": "Ghillie Cloak (Desert)",
+      "image": "items/GhillieTop_Desert.webp"
     },
     {
       "className": "GhillieSuit_Desert",
-      "label": "Ghillie Suit (Desert)"
+      "label": "Ghillie Suit (Desert)",
+      "image": "items/GhillieSuit_Desert.webp"
     },
     {
       "className": "HuntingBag",
@@ -1429,7 +1487,8 @@
     },
     {
       "className": "CoyoteBag_Desert",
-      "label": "Tactical Backpack (Desert)"
+      "label": "Tactical Backpack (Desert)",
+      "image": "items/CoyoteBag_Desert.webp"
     },
     {
       "className": "CoyoteBag_Green",
@@ -1445,47 +1504,58 @@
   "vest": [
     {
       "className": "ChestRigVest_Khaki",
-      "label": "Chest Rig (Khaki)"
+      "label": "Chest Rig (Khaki)",
+      "image": "items/ChestRigVest_Khaki.webp"
     },
     {
       "className": "ChestRigVest_Olive",
-      "label": "Chest Rig (Olive)"
+      "label": "Chest Rig (Olive)",
+      "image": "items/ChestRigVest_Olive.webp"
     },
     {
       "className": "ChestRigVest_Tan",
-      "label": "Chest Rig (Tan)"
+      "label": "Chest Rig (Tan)",
+      "image": "items/ChestRigVest_Tan.webp"
     },
     {
       "className": "UKAssVest_Desert",
-      "label": "Field Vest (Desert)"
+      "label": "Field Vest (Desert)",
+      "image": "items/UKAssVest_Desert.webp"
     },
     {
       "className": "HuntingVest_Desert",
-      "label": "Hunter Vest (Desert)"
+      "label": "Hunter Vest (Desert)",
+      "image": "items/HuntingVest_Desert.webp"
     },
     {
       "className": "LinenVest_Black",
-      "label": "Linen Vest (Black)"
+      "label": "Linen Vest (Black)",
+      "image": "items/LinenVest_Black.webp"
     },
     {
       "className": "LinenVest_Brown",
-      "label": "Linen Vest (Brown)"
+      "label": "Linen Vest (Brown)",
+      "image": "items/LinenVest_Brown.webp"
     },
     {
       "className": "LinenVest_DarkGrey",
-      "label": "Linen Vest (Dark Grey)"
+      "label": "Linen Vest (Dark Grey)",
+      "image": "items/LinenVest_DarkGrey.webp"
     },
     {
       "className": "LinenVest_Green",
-      "label": "Linen Vest (Green)"
+      "label": "Linen Vest (Green)",
+      "image": "items/LinenVest_Green.webp"
     },
     {
       "className": "LinenVest_Grey",
-      "label": "Linen Vest (Grey)"
+      "label": "Linen Vest (Grey)",
+      "image": "items/LinenVest_Grey.webp"
     },
     {
       "className": "LinenVest_NavyBlue",
-      "label": "Linen Vest (Navy Blue)"
+      "label": "Linen Vest (Navy Blue)",
+      "image": "items/LinenVest_NavyBlue.webp"
     },
     {
       "className": "PlateCarrierVest_Black",
@@ -1534,27 +1604,33 @@
     },
     {
       "className": "RobeVest_Beige",
-      "label": "Robe (Beige)"
+      "label": "Robe (Beige)",
+      "image": "items/RobeVest_Beige.webp"
     },
     {
       "className": "RobeVest_Brown",
-      "label": "Robe (Brown)"
+      "label": "Robe (Brown)",
+      "image": "items/RobeVest_Brown.webp"
     },
     {
       "className": "RobeVest_Green",
-      "label": "Robe (Green)"
+      "label": "Robe (Green)",
+      "image": "items/RobeVest_Green.webp"
     },
     {
       "className": "RobeVest_Grey",
-      "label": "Robe (Grey)"
+      "label": "Robe (Grey)",
+      "image": "items/RobeVest_Grey.webp"
     },
     {
       "className": "RobeVest_Navy",
-      "label": "Robe (Navy)"
+      "label": "Robe (Navy)",
+      "image": "items/RobeVest_Navy.webp"
     },
     {
       "className": "HighCapacityVest_ION",
-      "label": "Tactical Vest (ION)"
+      "label": "Tactical Vest (ION)",
+      "image": "items/HighCapacityVest_ION.webp"
     }
   ]
 }
