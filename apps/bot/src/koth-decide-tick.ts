@@ -5,7 +5,7 @@ import {
 import { and, eq, gt, gte, inArray, isNull, lt, notInArray } from "drizzle-orm";
 import { scheduledText } from "./koth-text.js";
 import { historyInstants, onlineNow, popsAt } from "./population.js";
-import { kothOpen, lastKothSlot, recentTowns, slotTakenBy } from "./koth-vote-store.js";
+import { kothOpen, lastKothSlot, raidOpenAt, recentTowns, slotTakenBy } from "./koth-vote-store.js";
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -65,7 +65,7 @@ export async function kothDecideTick(
       const threshold = highWater(await popsAt(db, s.id, historyInstants(kothDecisionInstantFor(slot), KOTH_HISTORY_MS)));
       if (!shouldFireKoth({
         slot, slotTaken: (await slotTakenBy(db, s.id, slot)) !== null, voteBlocks: votes.length > 0,
-        openEvent: await kothOpen(db, s.id), weekCount: week.length, weeklyCap: opts.weeklyCap,
+        openEvent: await kothOpen(db, s.id), raidOpen: await raidOpenAt(db, slot), weekCount: week.length, weeklyCap: opts.weeklyCap,
         lastSlotAt: await lastKothSlot(db, s.id, slot), pop, threshold, minPop: opts.minPop,
       })) continue;
 

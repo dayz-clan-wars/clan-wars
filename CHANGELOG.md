@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+
+- King of the Hill no longer runs while base damage is on. From Friday 00:00 to Monday 00:00 UTC, no King of the Hill can be voted in, started automatically or scheduled by an admin. If raiding is skipped for a weekend, King of the Hill can run that weekend as normal.
+
 ## [2.11.3] - 2026-10-27
 
 ### Fixed

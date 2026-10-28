@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import retiredAssets from "../assets/koth-locations-retired.json";
 import {
   kothWanted, inKothZone, kothStandings, kothWinner, restoredPresets, isRestartSlot,
-  highWater, isoWeekStart, kothDecisionInstantFor, voteClosesAt,
+  highWater, isoWeekStart, kothDecisionInstantFor, voteClosesAt, kothBlockedByRaid, raidWindowAt, RESTART_PERIOD_MS,
   KOTH_LOCATIONS, kothLocation, kothTownName, KOTH_PRESET_FILES, KOTH_PRESET_PREFIX, KOTH_ZONE_RADIUS_M, WORLD_SIZE_M,
 } from "../src/index.js";
 
@@ -151,5 +151,28 @@ describe("the calendar", () => {
   it("is the instant the vote closes", () => {
     const slot = at("2026-10-17T12:00:00Z");
     expect(kothDecisionInstantFor(slot).getTime()).toBe(voteClosesAt(slot).getTime());
+  });
+});
+
+describe("kothBlockedByRaid", () => {
+  it("blocks the first slot of the window and its last", () => {
+    expect(kothBlockedByRaid(at("2026-10-30T00:00:00Z"), [])).toBe(true); // Friday 00:00
+    expect(kothBlockedByRaid(at("2026-11-01T22:00:00Z"), [])).toBe(true); // Sunday 22:00
+  });
+  it("allows the slots either side of it", () => {
+    expect(kothBlockedByRaid(at("2026-10-29T22:00:00Z"), [])).toBe(false); // Thursday 22:00
+    expect(kothBlockedByRaid(at("2026-11-02T00:00:00Z"), [])).toBe(false); // Monday 00:00
+  });
+  it("allows a skipped weekend, when base damage stays off", () => {
+    expect(kothBlockedByRaid(at("2026-10-31T12:00:00Z"), [{ opensAt: at("2026-10-30T00:00:00Z"), reason: "test" }])).toBe(false);
+  });
+  // ⚠️ Why checking the slot's START is enough: no session straddles a window edge.
+  it("agrees with the window at every instant of every slot in a week", () => {
+    for (let t = at("2026-10-26T00:00:00Z").getTime(); t < at("2026-11-02T00:00:00Z").getTime(); t += RESTART_PERIOD_MS) {
+      const blocked = kothBlockedByRaid(new Date(t), []);
+      for (let m = 0; m < RESTART_PERIOD_MS; m += 60_000) {
+        expect(!raidWindowAt(new Date(t + m), []).baseDamageDisabled, new Date(t + m).toISOString()).toBe(blocked);
+      }
+    }
   });
 });

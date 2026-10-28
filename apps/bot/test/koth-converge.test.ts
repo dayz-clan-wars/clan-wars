@@ -9,8 +9,8 @@ import { restartTick, type RestartTarget } from "../src/restart-tick.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
-const SLOT = at("2026-10-03T20:00:00Z");
-const NEXT = at("2026-10-03T22:00:00Z");
+const SLOT = at("2026-10-06T20:00:00Z");
+const NEXT = at("2026-10-06T22:00:00Z");
 
 const GAMEPLAY = `{\n\t"PlayerData": {\n\t\t"spawnGearPresetFiles": [\n\t\t\t"./custom/loadout.json"\n\t\t]\n\t}\n}`;
 const GLOBALS = (player: number, infected: number, avoid: number) => `<variables>
@@ -64,7 +64,7 @@ function mission(over: Record<string, string | undefined> = {}) {
 let db: Database; let serverId = 0;
 beforeEach(async () => {
   db = createClient(URL); await runMigrations(db);
-  await db.execute(sql`truncate table koth_events, server_restarts, servers restart identity cascade`);
+  await db.execute(sql`truncate table raid_window_skips, koth_events, server_restarts, servers restart identity cascade`);
   // ⚠️ nitradoServiceId: restartTick only targets servers that have one.
   const [s] = await db.insert(servers).values({ name: "S", map: "chernarusplus", clockOffsetMs: 0, nitradoServiceId: 1, active: true }).returning();
   serverId = s!.id;
@@ -116,6 +116,19 @@ describe("planKoth", () => {
       expect(saved!.loadoutSnapshot).toBeNull();
     });
   }
+
+  // ⚠️ The last line: a session booked into a skipped weekend that was later un-skipped.
+  it("a slot base damage is on for refuses: failed, nothing KotH planned, nothing uploaded", async () => {
+    const SAT = at("2026-10-10T20:00:00Z");
+    const row = await schedule({ slotAt: SAT });
+    const m = mission({});
+    const p = (await planKoth(db, m.target, serverId, SAT, { allowOpen: true }))!;
+    expect(p.failure).toMatch(/base damage is on/);
+    expect(p.opening).toBeNull();
+    expect(m.uploadFile).not.toHaveBeenCalled();
+    const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
+    expect(saved!.state).toBe("failed");
+  });
 
   // ⚠️ Review focus 3: a row scheduled on an earlier map reaching its slot on Nasdara.
   it("a retired Livonia town refuses with a reason rather than throwing", async () => {
@@ -189,7 +202,7 @@ describe("planKoth", () => {
   it("a later user edit survives: no koth- entry → nothing touched", async () => {
     await schedule({ state: "no_winner", openedAt: SLOT, loadoutSnapshot: ["./custom/loadout.json"] });
     const edited = GAMEPLAY.replace('"./custom/loadout.json"', '"./custom/loadout.json",\n\t\t\t"./custom/extra.json"');
-    const p = (await planKoth(db, mission({ "/m/cfggameplay.json": edited }).target, serverId, at("2026-10-04T10:00:00Z"), { allowOpen: true }))!;
+    const p = (await planKoth(db, mission({ "/m/cfggameplay.json": edited }).target, serverId, at("2026-10-07T10:00:00Z"), { allowOpen: true }))!;
     expect(p.presets).toBeNull();
     expect(p.files).toEqual([]);
   });
@@ -220,7 +233,7 @@ describe("restartTick with KotH", () => {
     const m = mission({ "/m/cfgplayerspawnpoints.xml": spawns, "/m/koth/default/cfgplayerspawnpoints.xml": spawns });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
+    await restartTick(db, () => target, { now: at("2026-10-06T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     // ⚠️ Review focus 5: the display name, never a capitalised slug.
     expect(restart).toHaveBeenCalledWith(expect.stringContaining("King of the Hill at Dar-e Ardis"));
     expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(narrowFreshSpawns(spawns, "DareArdis"));
@@ -229,7 +242,7 @@ describe("restartTick with KotH", () => {
     let [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("live");
 
-    await restartTick(db, () => target, { now: at("2026-10-03T22:00:05Z"), lastError: new Map(), koth: { open: true } });
+    await restartTick(db, () => target, { now: at("2026-10-06T22:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(restart).toHaveBeenLastCalledWith("Scheduled restart");
     expect(m.read("/m/cfgplayerspawnpoints.xml")).toBe(spawns);
     expect(m.read("/m/cfggameplay.json")).toBe(GAMEPLAY);
@@ -240,14 +253,14 @@ describe("restartTick with KotH", () => {
 
   // ⚠️ KOTH_TICK off must never OPEN a session, but the restore arm runs regardless.
   it("with KOTH_TICK off, a due row is not opened and stays scheduled; an earlier session still restores", async () => {
-    await schedule({ slotAt: at("2026-10-03T18:00:00Z"), state: "no_winner", openedAt: at("2026-10-03T18:00:00Z"), loadoutSnapshot: ["./custom/loadout.json"] });
+    await schedule({ slotAt: at("2026-10-06T18:00:00Z"), state: "no_winner", openedAt: at("2026-10-06T18:00:00Z"), loadoutSnapshot: ["./custom/loadout.json"] });
     const row = await schedule();
     const m = mission({ "/m/cfggameplay.json": kothGameplay, "/m/cfgplayerspawnpoints.xml": DASHTABAD });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
     for (const koth of [{ open: false }, undefined]) {
       await db.delete(serverRestarts);
-      await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth });
+      await restartTick(db, () => target, { now: at("2026-10-06T20:00:05Z"), lastError: new Map(), koth });
       expect(restart).toHaveBeenLastCalledWith("Scheduled restart");
       const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
       expect(saved!.state).toBe("scheduled");
@@ -259,7 +272,7 @@ describe("restartTick with KotH", () => {
   it("a failed restart POST leaves the row scheduled, not live", async () => {
     const row = await schedule();
     const target = { ...mission().target, status: async () => "started", restart: async () => { throw new Error("503"); } } as unknown as RestartTarget;
-    await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
+    await restartTick(db, () => target, { now: at("2026-10-06T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));
     expect(saved!.state).toBe("scheduled");
   });
@@ -269,7 +282,7 @@ describe("restartTick with KotH", () => {
     const m = mission({ "/m/koth/default/cfgplayerspawnpoints.xml": undefined });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
+    const r = await restartTick(db, () => target, { now: at("2026-10-06T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(r.restarted).toBe(1);
     expect(restart).toHaveBeenCalledWith("Scheduled restart");
     expect(m.uploadFile).not.toHaveBeenCalled();
@@ -282,28 +295,30 @@ describe("restartTick with KotH", () => {
   // uploads cfggameplay.json while the raid splice changes nothing. Keyed on
   // `uploaded`, that slot would overwrite Friday's real rollback copy and
   // `applied_at` with Saturday's already-flipped file, silently.
-  it("a KotH opening on an applied raid boundary leaves the flip's previousContent and applied_at alone", async () => {
-    const withRaid = GAMEPLAY.replace('"PlayerData"', '"GeneralData": {\n\t\t"disableBaseDamage": true\n\t},\n\t"PlayerData"');
-    const SAT = at("2026-09-19T12:00:00Z");
-    await schedule({ slotAt: SAT });
+  // ⚠️ At the window's CLOSE: no KotH may open inside the window (kothBlockedByRaid), so
+  // the close is the only raid boundary a session can share a day with.
+  it("a KotH opening after an applied raid boundary leaves the flip's previousContent and applied_at alone", async () => {
+    const withRaid = GAMEPLAY.replace('"PlayerData"', '"GeneralData": {\n\t\t"disableBaseDamage": false\n\t},\n\t"PlayerData"');
+    const MON = at("2026-09-21T12:00:00Z");
+    await schedule({ slotAt: MON });
     const m = mission({ "/m/cfggameplay.json": withRaid });
     const target = { ...m.target, status: async () => "started", restart: async () => {} } as unknown as RestartTarget;
     const opts = { lastError: new Map<number, string>(), raidWindow: { enabled: true }, koth: { open: true } };
 
-    await restartTick(db, () => target, { ...opts, now: at("2026-09-18T00:00:03Z") });
-    const [fri] = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
-    expect(fri).toMatchObject({ boundaryAt: at("2026-09-18T00:00:00Z"), outcome: "applied" });
-    expect(fri!.previousContent).toBe(withRaid);
-    expect(fri!.appliedAt).not.toBeNull();
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-21T00:00:03Z") });
+    const [close] = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
+    expect(close).toMatchObject({ boundaryAt: at("2026-09-21T00:00:00Z"), outcome: "applied" });
+    expect(close!.previousContent).toBe(withRaid);
+    expect(close!.appliedAt).not.toBeNull();
 
-    await restartTick(db, () => target, { ...opts, now: at("2026-09-19T12:00:03Z") });
+    await restartTick(db, () => target, { ...opts, now: at("2026-09-21T12:00:03Z") });
     // Premise: the KotH opening really did upload cfggameplay.json this slot.
     expect(m.read("/m/cfggameplay.json")).toContain("./custom/koth-");
     const rows = await db.select().from(raidWindowFlips).where(eq(raidWindowFlips.serverId, serverId));
     expect(rows).toHaveLength(1);
     expect(rows[0]!.outcome).toBe("applied");
-    expect(rows[0]!.previousContent).toBe(fri!.previousContent);
-    expect(rows[0]!.appliedAt).toEqual(fri!.appliedAt);
+    expect(rows[0]!.previousContent).toBe(close!.previousContent);
+    expect(rows[0]!.appliedAt).toEqual(close!.appliedAt);
   });
 
   it("a refused preset splice fails the row, never advertises it, and still restarts", async () => {
@@ -312,7 +327,7 @@ describe("restartTick with KotH", () => {
     const m = mission({ "/m/cfggameplay.json": twice });
     const restart = vi.fn(async () => {});
     const target = { ...m.target, status: async () => "started", restart } as unknown as RestartTarget;
-    const r = await restartTick(db, () => target, { now: at("2026-10-03T20:00:05Z"), lastError: new Map(), koth: { open: true } });
+    const r = await restartTick(db, () => target, { now: at("2026-10-06T20:00:05Z"), lastError: new Map(), koth: { open: true } });
     expect(r.restarted).toBe(1);
     expect(restart).toHaveBeenCalledWith("Scheduled restart");
     const [saved] = await db.select().from(kothEvents).where(eq(kothEvents.id, row.id));

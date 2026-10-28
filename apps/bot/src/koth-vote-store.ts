@@ -1,4 +1,5 @@
-import { identityLinks, kothEvents, playerSessions, type Database, type KothState } from "@factions/db";
+import { identityLinks, kothEvents, playerSessions, raidWindowSkips, type Database, type KothState } from "@factions/db";
+import { kothBlockedByRaid } from "@factions/domain";
 import { and, desc, eq, inArray, isNull, lt, max } from "drizzle-orm";
 
 export type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
@@ -33,6 +34,16 @@ export async function lastKothSlot(db: Q, serverId: number, before: Date): Promi
   // ⚠️ drizzle's max() over a timestamp column can come back as a string — the
   // gap test (koth-decide-tick.test.ts, "holds the 24 h gap") catches a mismatch.
   return r?.at ? new Date(r.at) : null;
+}
+
+/**
+ * Whether base damage is on for `slot`, skipped weekends read fresh every call.
+ * ⚠️ Read from `raid_window_skips` whether or not RAID_WINDOW_TICK is set: the window
+ * is the rule, and a KotH must never be the reason a weekend's bases are left alone.
+ */
+export async function raidOpenAt(db: Q, slot: Date): Promise<boolean> {
+  const skips = await db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason }).from(raidWindowSkips);
+  return kothBlockedByRaid(slot, skips);
 }
 
 export async function recentTowns(db: Database, serverId: number): Promise<string[]> {

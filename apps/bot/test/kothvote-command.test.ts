@@ -11,8 +11,8 @@ import type { Ctx, CommandInput } from "../src/commands/types.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
-const NOW = at("2026-10-03T15:00:00Z"); // targets the 16:00 slot, closes 15:30
-const SLOT = at("2026-10-03T16:00:00Z");
+const NOW = at("2026-10-06T15:00:00Z"); // targets the 16:00 slot, closes 15:30
+const SLOT = at("2026-10-06T16:00:00Z");
 const start = kothVoteGroup.specs.find((s) => s.path === "kothvote")!.handler;
 
 describe("/kothvote", () => {
@@ -20,7 +20,7 @@ describe("/kothvote", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table koth_votes, koth_events, airdrop_events, identity_links, player_sessions, events, raw_lines, adm_files, servers restart identity cascade`);
+    await db.execute(sql`truncate table raid_window_skips, koth_votes, koth_events, airdrop_events, identity_links, player_sessions, events, raw_lines, adm_files, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id; line = 0;
     await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: at("2026-09-01T00:00:00Z"), linesIngested: 0, complete: true });
@@ -31,8 +31,8 @@ describe("/kothvote", () => {
     const [file] = await db.select({ id: admFiles.id }).from(admFiles);
     for (let i = 0; i < linked + unlinked; i++) {
       const dayzId = `z${i}`;
-      const [e] = await db.insert(events).values({ serverId, admFileId: file!.id, lineIndex: line++, type: "player.connected" as never, occurredAt: at("2026-10-03T14:00:00Z"), payload: {} }).returning({ id: events.id });
-      await db.insert(playerSessions).values({ serverId, dayzId, connectedAt: at("2026-10-03T14:00:00Z"), connectEventId: e!.id });
+      const [e] = await db.insert(events).values({ serverId, admFileId: file!.id, lineIndex: line++, type: "player.connected" as never, occurredAt: at("2026-10-06T14:00:00Z"), payload: {} }).returning({ id: events.id });
+      await db.insert(playerSessions).values({ serverId, dayzId, connectedAt: at("2026-10-06T14:00:00Z"), connectEventId: e!.id });
       if (i < linked) await db.insert(identityLinks).values({ discordId: `d${i}`, dayzId, gamertag: `Tag${i}`, verifiedAt: NOW });
     }
   }
@@ -51,7 +51,7 @@ describe("/kothvote", () => {
     expect(reply.ephemeral).toBe(true);
     const [v] = await db.select().from(kothVotes);
     expect(v).toMatchObject({ slotAt: SLOT, state: "open", electorateSize: 6, turnoutFloor: 5, channelId: "c1", messageId: "m1", startedByDiscordId: "d0" });
-    expect(v!.closesAt).toEqual(at("2026-10-03T15:30:00Z"));
+    expect(v!.closesAt).toEqual(at("2026-10-06T15:30:00Z"));
     const voters = await db.select().from(kothVoteVoters);
     expect(voters).toHaveLength(6);
     expect(voters.find((r) => r.discordId === "d0")!.ballot).toBe(true);
@@ -91,16 +91,24 @@ describe("/kothvote", () => {
     await db.execute(sql`update koth_votes set state = 'failed', closed_at = now()`);
     expect((await start(ctx(), input("d1"))).content).toMatch(/already been a vote/i);
   });
+  it("refuses while base damage is on, and opens nothing", async () => {
+    await populate(6, 5);
+    const ch = channel();
+    const reply = await start(ctx(ch, true, at("2026-10-09T15:00:00Z")), input()); // Friday
+    expect(reply.content).toMatch(/base damage is on/i);
+    expect(await db.select().from(kothVotes)).toEqual([]);
+    expect(ch.post).not.toHaveBeenCalled();
+  });
   it("refuses inside the 24 h gap", async () => {
     await populate(6, 5);
-    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-03T06:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "no_winner", origin: "admin", scheduledByDiscordId: "9" });
+    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-06T06:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "no_winner", origin: "admin", scheduledByDiscordId: "9" });
     expect((await start(ctx(), input())).content).toMatch(/24 hours/);
   });
   // F6: `kothOpen` (koth-vote-store.ts) is scoped to the SERVER, not the slot — a
   // scheduled admin KotH anywhere blocks a vote, whichever slot it targets.
   it("refuses while a scheduled KotH exists, at a different future slot", async () => {
     await populate(6, 5);
-    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-04T20:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9" });
+    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-07T20:00:00Z"), location: "borek", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9" });
     expect((await start(ctx(), input())).content).toMatch(/already scheduled or live/i);
   });
   it("refuses while a scheduled KotH exists AT the vote's own target slot", async () => {

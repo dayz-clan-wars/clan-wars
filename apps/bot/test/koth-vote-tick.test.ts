@@ -8,20 +8,20 @@ import type { KothVoteChannel } from "../src/koth-vote-channel.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
-const SLOT = at("2026-10-03T16:00:00Z");
-const CLOSE = at("2026-10-03T15:30:00Z");
+const SLOT = at("2026-10-06T16:00:00Z");
+const CLOSE = at("2026-10-06T15:30:00Z");
 
 describe("kothVoteTick", () => {
   let db: Database; let serverId = 0; let voteId = 0;
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table koth_votes, koth_events, airdrop_events, identity_links, servers restart identity cascade`);
+    await db.execute(sql`truncate table raid_window_skips, koth_votes, koth_events, airdrop_events, identity_links, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id;
     await db.insert(identityLinks).values({ discordId: "d0", dayzId: "z0", gamertag: "Mina", verifiedAt: CLOSE });
     const [v] = await db.insert(kothVotes).values({
-      serverId, slotAt: SLOT, location: "dashtabad", startedByDiscordId: "d0", openedAt: at("2026-10-03T15:00:00Z"),
+      serverId, slotAt: SLOT, location: "dashtabad", startedByDiscordId: "d0", openedAt: at("2026-10-06T15:00:00Z"),
       closesAt: CLOSE, electorateSize: 6, turnoutFloor: 5, state: "open", channelId: "c1", messageId: "m1", tallyText: "old",
     }).returning();
     voteId = v!.id;
@@ -29,7 +29,7 @@ describe("kothVoteTick", () => {
   });
 
   const vote = async () => (await db.select().from(kothVotes).where(eq(kothVotes.id, voteId)))[0]!;
-  const cast = (d: string, yes: boolean) => db.update(kothVoteVoters).set({ ballot: yes, castAt: at("2026-10-03T15:05:00Z") })
+  const cast = (d: string, yes: boolean) => db.update(kothVoteVoters).set({ ballot: yes, castAt: at("2026-10-06T15:05:00Z") })
     .where(sql`${kothVoteVoters.voteId} = ${voteId} and ${kothVoteVoters.discordId} = ${d}`);
   const channel = () => ({ post: vi.fn(), edit: vi.fn(async () => {}) }) as unknown as KothVoteChannel & { edit: ReturnType<typeof vi.fn> };
   const run = (ch: KothVoteChannel, announce: (c: string) => Promise<void>, now: Date, enabled = true) =>
@@ -38,16 +38,16 @@ describe("kothVoteTick", () => {
   it("edits the tally when it changes, and stores it", async () => {
     await cast("d0", true);
     const ch = channel();
-    expect((await run(ch, vi.fn(async () => {}), at("2026-10-03T15:10:00Z"))).edited).toBe(1);
+    expect((await run(ch, vi.fn(async () => {}), at("2026-10-06T15:10:00Z"))).edited).toBe(1);
     expect(ch.edit).toHaveBeenCalledWith("c1", "m1", expect.stringContaining("Yes 1 · No 0"), voteId);
     expect((await vote()).tallyText).toContain("Yes 1 · No 0");
   });
   // Review focus 4.
   it("does not edit when the tally is unchanged", async () => {
     await cast("d0", true);
-    await run(channel(), vi.fn(async () => {}), at("2026-10-03T15:10:00Z"));
+    await run(channel(), vi.fn(async () => {}), at("2026-10-06T15:10:00Z"));
     const ch = channel();
-    expect((await run(ch, vi.fn(async () => {}), at("2026-10-03T15:11:00Z"))).edited).toBe(0);
+    expect((await run(ch, vi.fn(async () => {}), at("2026-10-06T15:11:00Z"))).edited).toBe(0);
     expect(ch.edit).not.toHaveBeenCalled();
   });
 
@@ -66,6 +66,17 @@ describe("kothVoteTick", () => {
     expect(v.resultPostedAt).toEqual(CLOSE);
     expect(ch.edit).toHaveBeenLastCalledWith("c1", "m1", expect.stringContaining("Voting has closed"), null);
   });
+  // ⚠️ A skipped weekend un-skipped while the vote was open puts the slot back in the window.
+  it("voids a passed vote whose slot base damage is on for, and schedules nothing", async () => {
+    const fri = { slotAt: at("2026-10-09T16:00:00Z"), openedAt: at("2026-10-09T15:00:00Z"), closesAt: at("2026-10-09T15:30:00Z") };
+    await db.update(kothVotes).set(fri).where(eq(kothVotes.id, voteId));
+    for (const d of ["d0", "d1", "d2", "d3", "d4"]) await cast(d, true);
+    await run(channel(), vi.fn(async () => {}), fri.closesAt);
+    const v = await vote();
+    expect(v.state).toBe("void");
+    expect(v.detail).toMatchObject({ reason: "base damage is on for that restart" });
+    expect(await db.select().from(kothEvents)).toEqual([]);
+  });
   // ⚠️ A vote opened on Livonia names a town that is no longer on the map.
   it("voids a passed vote whose town is not on this map any more, and schedules nothing", async () => {
     await db.update(kothVotes).set({ location: "borek" }).where(eq(kothVotes.id, voteId));
@@ -77,7 +88,7 @@ describe("kothVoteTick", () => {
   // Review focus 2.
   it("passes when closed late but before the slot", async () => {
     for (const d of ["d0", "d1", "d2", "d3", "d4"]) await cast(d, true);
-    await run(channel(), vi.fn(async () => {}), at("2026-10-03T15:35:00Z"));
+    await run(channel(), vi.fn(async () => {}), at("2026-10-06T15:35:00Z"));
     expect((await vote()).state).toBe("passed");
   });
   it("fails on turnout", async () => {
@@ -96,7 +107,7 @@ describe("kothVoteTick", () => {
   });
   it("voids at close if an admin scheduled in the meantime", async () => {
     for (const d of ["d0", "d1", "d2", "d3", "d4"]) await cast(d, true);
-    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-04T20:00:00Z"), location: "lembork", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9", announcedAt: CLOSE });
+    await db.insert(kothEvents).values({ serverId, slotAt: at("2026-10-07T20:00:00Z"), location: "lembork", centreX: "1", centreZ: "1", state: "scheduled", origin: "admin", scheduledByDiscordId: "9", announcedAt: CLOSE });
     const announce = vi.fn(async (_c: string) => {});
     await run(channel(), announce, CLOSE);
     expect((await vote()).state).toBe("void");
@@ -104,7 +115,7 @@ describe("kothVoteTick", () => {
   });
   it("voids a vote the bot reaches only after its slot", async () => {
     for (const d of ["d0", "d1", "d2", "d3", "d4"]) await cast(d, true);
-    await run(channel(), vi.fn(async () => {}), at("2026-10-03T16:05:00Z"));
+    await run(channel(), vi.fn(async () => {}), at("2026-10-06T16:05:00Z"));
     expect((await vote()).state).toBe("void");
     expect(await db.select().from(kothEvents)).toHaveLength(0);
   });
@@ -120,7 +131,7 @@ describe("kothVoteTick", () => {
     expect((await vote()).state).toBe("failed");
     expect((await vote()).resultPostedAt).toBeNull();
     const announce = vi.fn(async () => {});
-    await run(channel(), announce, at("2026-10-03T15:31:00Z"));
+    await run(channel(), announce, at("2026-10-06T15:31:00Z"));
     expect(announce).toHaveBeenCalledTimes(1);
     expect((await vote()).resultPostedAt).not.toBeNull();
   });
@@ -135,11 +146,11 @@ describe("kothVoteTick", () => {
     const eventId = (await vote()).kothEventId!;
     await db.update(kothEvents).set({ state: "cancelled" }).where(eq(kothEvents.id, eventId));
     const announce = vi.fn(async () => {});
-    await run(channel(), announce, at("2026-10-03T15:31:00Z"));
+    await run(channel(), announce, at("2026-10-06T15:31:00Z"));
     expect(announce).not.toHaveBeenCalledWith(expect.stringContaining("The vote passed"));
     const [ev] = await db.select().from(kothEvents).where(eq(kothEvents.id, eventId));
     expect(ev!.announcedAt).toBeNull();
-    expect((await vote()).resultPostedAt).toEqual(at("2026-10-03T15:31:00Z"));
+    expect((await vote()).resultPostedAt).toEqual(at("2026-10-06T15:31:00Z"));
   });
 
   it("still closes and posts when the message was deleted by hand", async () => {

@@ -5,6 +5,7 @@ import {
   KOTH_MIN_GAP_MS, KOTH_NO_REPEAT, KOTH_PRESET_PREFIX, KOTH_REMINDER_LEAD_MS, KOTH_VOTE_MIN_OPEN_MS,
   KOTH_VOTE_PASS_DEN, KOTH_VOTE_PASS_NUM, KOTH_VOTE_TURNOUT_MIN, KOTH_ZONE_RADIUS_M, RESTART_PERIOD_MS,
 } from "./rules";
+import { raidWindowAt, type SkippedWindow } from "./raid-window";
 import { nextRestartAt } from "./restarts";
 import { distance2d } from "./spacing";
 
@@ -100,6 +101,19 @@ export function kothGapOk(slot: Date, lastSlotAt: Date | null): boolean {
 }
 
 /**
+ * True when base damage is on for the session opening at `slot`, which no KotH may share:
+ * a hill full of players leaves every base around it unguarded.
+ * ⚠️ One statement for every path that schedules or opens a session — /koth schedule,
+ * the automatic trigger, the vote and the opening itself.
+ * ⚠️ Checking the slot's start covers the whole session: the raid window's edges are
+ * midnight UTC and the slots are RESTART_PERIOD_MS steps from the epoch, so a session
+ * never straddles one. koth.test.ts pins that.
+ */
+export function kothBlockedByRaid(slot: Date, skips: SkippedWindow[]): boolean {
+  return !raidWindowAt(slot, skips).baseDamageDisabled;
+}
+
+/**
  * Spec §2.4: skip the last few towns, fall back to the full list when all are recent.
  * ⚠️ The fallback is not padding: an empty pool indexes undefined and throws inside a tick.
  */
@@ -118,6 +132,8 @@ export type KothFireInput = {
   voteBlocks: boolean;
   /** A KotH is `scheduled` or `live`. */
   openEvent: boolean;
+  /** Base damage is on for the slot (`kothBlockedByRaid`). */
+  raidOpen: boolean;
   /** `origin = 'auto'` rows, not cancelled/failed, in the slot's ISO week. */
   weekCount: number;
   weeklyCap: number;
@@ -130,7 +146,7 @@ export type KothFireInput = {
 
 /** Spec §3. The refusals in the order that makes one cheapest to read. */
 export function shouldFireKoth(i: KothFireInput): boolean {
-  if (i.slotTaken || i.voteBlocks || i.openEvent) return false;
+  if (i.slotTaken || i.voteBlocks || i.openEvent || i.raidOpen) return false;
   if (i.weekCount >= i.weeklyCap) return false;
   if (!kothGapOk(i.slot, i.lastSlotAt)) return false;
   return i.pop >= Math.max(i.minPop, i.threshold);
