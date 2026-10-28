@@ -30,7 +30,7 @@ describe("chooseKothTown", () => {
 
 describe("shouldFireKoth", () => {
   const base: KothFireInput = {
-    slot: SLOT, slotTaken: false, voteBlocks: false, openEvent: false, weekCount: 0, weeklyCap: 2,
+    slot: SLOT, slotTaken: false, voteBlocks: false, openEvent: false, raidOpen: false, weekCount: 0, weeklyCap: 2,
     lastSlotAt: null, pop: 12, threshold: 11, minPop: 10,
   };
   it("fires at a new high", () => expect(shouldFireKoth(base)).toBe(true));
@@ -40,6 +40,7 @@ describe("shouldFireKoth", () => {
   it("refuses a taken slot", () => expect(shouldFireKoth({ ...base, slotTaken: true })).toBe(false));
   it("refuses a slot a vote blocks", () => expect(shouldFireKoth({ ...base, voteBlocks: true })).toBe(false));
   it("refuses while an event is open", () => expect(shouldFireKoth({ ...base, openEvent: true })).toBe(false));
+  it("refuses while base damage is on", () => expect(shouldFireKoth({ ...base, raidOpen: true })).toBe(false));
   it("refuses at the weekly cap", () => expect(shouldFireKoth({ ...base, weekCount: 2 })).toBe(false));
   it("refuses inside the gap", () => expect(shouldFireKoth({ ...base, lastSlotAt: at("2026-10-03T00:00:00Z") })).toBe(false));
 });

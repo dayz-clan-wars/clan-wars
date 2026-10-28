@@ -4,6 +4,7 @@ import {
 } from "@factions/domain";
 import { and, desc, eq, isNotNull, sql } from "drizzle-orm";
 import { readSpawnGearPresets } from "./cfggameplay.js";
+import { raidOpenAt } from "./koth-vote-store.js";
 import { readGlobalVar, setGlobalVar } from "./globals-xml.js";
 import { narrowFreshSpawns } from "./spawn-points.js";
 import type { RestartTarget } from "./restart-tick.js";
@@ -85,6 +86,9 @@ export async function planKoth(
       // refused here with a reason, never a throw out of planKoth.
       const loc = kothLocation(opening.location);
       if (!loc) throw new Error(`${opening.location} is not one of the ${KOTH_LOCATIONS.length} KotH towns on this map`);
+      // ⚠️ The last line: every scheduling path refuses these slots, but a skipped
+      // weekend can be un-skipped after a session was booked into it.
+      if (await raidOpenAt(db, slot)) throw new Error("base damage is on for this slot");
       const custom = new Set(await nitrado.listFiles(`${root}/custom`));
       const missing = KOTH_PRESET_FILES.filter((p) => !custom.has(p.slice("./custom/".length)));
       if (missing.length > 0) throw new Error(`KotH preset(s) missing on the server: ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? " …" : ""}`);

@@ -1,13 +1,14 @@
 import { SlashCommandBuilder, PermissionFlagsBits } from "discord.js";
-import { kothEvents, servers } from "@factions/db";
+import { kothEvents, raidWindowSkips, servers } from "@factions/db";
 import {
-  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothLocation, kothTownName, kothStandings, nextRestartAt,
-  restartSlot,
+  KOTH_LOCATIONS, KOTH_REMINDER_LEAD_MS, RESTART_PERIOD_MS, isRestartSlot, kothBlockedByRaid, kothLocation, kothTownName, kothStandings,
+  nextRestartAt, restartSlot,
 } from "@factions/domain";
 import { awardsCatalogue } from "@factions/domain/awards";
 import { and, eq, inArray } from "drizzle-orm";
 import { kothPrize, reminderMinutes, scheduledText } from "../koth-text.js";
 import { kothKills, kothOpenedAt } from "../koth-score.js";
+import { raidOpenAt } from "../koth-vote-store.js";
 import { escapeMarkdown } from "../site-links.js";
 import type { AutocompleteSource, CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
@@ -60,6 +61,9 @@ async function schedule(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (slot.getTime() - ctx.now.getTime() < KOTH_REMINDER_LEAD_MS) {
     return reply(`That slot is under ${reminderMinutes} minutes away. Pick a later one, so players get the reminder.`);
   }
+  // ⚠️ Admins too: unlike the 24 h gap below, this is not pacing but the one rule no
+  // session may break, whoever chose it.
+  if (await raidOpenAt(ctx.db, slot)) return reply("Base damage is on for that slot. King of the Hill only runs outside the raid window.");
 
   const server = await activeServer(ctx);
   if (!server) return reply("No active server.");
@@ -134,11 +138,13 @@ const towns: AutocompleteSource = async (_ctx, a) => KOTH_LOCATIONS
   .filter((l) => l.name.toLowerCase().startsWith(a.value.toLowerCase()) || l.slug.startsWith(a.value.toLowerCase()))
   .slice(0, 25).map((l) => ({ name: l.name, value: l.slug }));
 
-/** The next 7 days of slots, capped at Discord's 25 choices, skipping any under the reminder lead. */
+/** The next 7 days of slots, capped at Discord's 25 choices, skipping any under the reminder lead or inside the raid window. */
 const slots: AutocompleteSource = async (ctx, a) => {
   const out: { name: string; value: string }[] = [];
+  const skips = await ctx.db.select({ opensAt: raidWindowSkips.opensAt, reason: raidWindowSkips.reason }).from(raidWindowSkips);
   for (let t = nextRestartAt(ctx.now).getTime(); out.length < 25 && t < ctx.now.getTime() + 7 * 86_400_000; t += RESTART_PERIOD_MS) {
     if (t - ctx.now.getTime() < KOTH_REMINDER_LEAD_MS) continue;
+    if (kothBlockedByRaid(new Date(t), skips)) continue;
     const iso = new Date(t).toISOString();
     const name = `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
     if (name.includes(a.value)) out.push({ name, value: iso });

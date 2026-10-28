@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl, kothEvents, servers, admFiles, events, kills, players,
-  serverRestarts, type Database,
+  raidWindowSkips, serverRestarts, type Database,
 } from "@factions/db";
 import { eq, sql } from "drizzle-orm";
 import { awardsCatalogue } from "@factions/domain/awards";
@@ -10,8 +10,8 @@ import type { Ctx, CommandInput } from "../src/commands/types.js";
 
 const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
-const SLOT = at("2026-10-03T20:00:00Z");
-const NOW = at("2026-10-03T12:00:00Z");
+const SLOT = at("2026-10-06T20:00:00Z");
+const NOW = at("2026-10-06T12:00:00Z");
 
 const schedule = kothGroup.specs.find((s) => s.path === "koth schedule")!.handler;
 const cancel = kothGroup.specs.find((s) => s.path === "koth cancel")!.handler;
@@ -22,7 +22,7 @@ describe("/koth", () => {
   beforeEach(async () => {
     db = createClient(URL);
     await runMigrations(db);
-    await db.execute(sql`truncate table koth_events, airdrop_events, kills, events, adm_files, players, server_restarts, servers restart identity cascade`);
+    await db.execute(sql`truncate table raid_window_skips, koth_events, airdrop_events, kills, events, adm_files, players, server_restarts, servers restart identity cascade`);
     const [s] = await db.insert(servers).values({ name: "R", map: "livonia", clockOffsetMs: 0, nitradoServiceId: 7, active: true }).returning();
     serverId = s!.id;
   });
@@ -87,9 +87,9 @@ describe("/koth", () => {
   it("refuses an unknown town, a non-slot time, and a slot under 30 minutes away", async () => {
     const unknownTown = await schedule(ctx(), input({ location: "narnia" }));
     expect(unknownTown.content).toMatch(/not one of/);
-    const notASlot = await schedule(ctx(), input({ at: "2026-10-03T21:00:00Z" }));
+    const notASlot = await schedule(ctx(), input({ at: "2026-10-06T21:00:00Z" }));
     expect(notASlot.content).toMatch(/restart slot/);
-    const tooSoon = await schedule(ctx(undefined, at("2026-10-03T19:45:00Z")), input());
+    const tooSoon = await schedule(ctx(undefined, at("2026-10-06T19:45:00Z")), input());
     expect(tooSoon.content).toMatch(/30 minutes/);
     expect(await rows()).toHaveLength(0);
   });
@@ -97,7 +97,7 @@ describe("/koth", () => {
   // ⚠️ Spec §2.12.
   it("refuses while another event is scheduled or live", async () => {
     await db.insert(kothEvents).values({
-      serverId, slotAt: at("2026-10-03T18:00:00Z"), location: "dolnik", centreX: "0", centreZ: "0",
+      serverId, slotAt: at("2026-10-06T18:00:00Z"), location: "dolnik", centreX: "0", centreZ: "0",
       state: "scheduled", scheduledByDiscordId: "1", announcedAt: NOW,
     });
     const reply = await schedule(ctx(), input());
@@ -132,7 +132,7 @@ describe("/koth", () => {
   // files; a cancel now would race it. The next restart ends the session anyway.
   it("cancel refuses inside the opening slot and leaves the row alone", async () => {
     await schedule(ctx(), input());
-    const reply = await cancel(ctx(undefined, at("2026-10-03T20:00:30Z")), input());
+    const reply = await cancel(ctx(undefined, at("2026-10-06T20:00:30Z")), input());
     expect(reply.content).toMatch(/opening this slot/i);
     expect(reply.content).toMatch(/next restart/i);
     const [row] = await rows();
@@ -172,7 +172,7 @@ describe("/koth", () => {
       serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
       state: "live", scheduledByDiscordId: "1", announcedAt: NOW, openedAt: SLOT,
     }).returning();
-    await db.insert(serverRestarts).values({ serverId, scheduledFor: SLOT, issuedAt: at("2026-10-03T20:00:04Z"), outcome: "restarted" });
+    await db.insert(serverRestarts).values({ serverId, scheduledFor: SLOT, issuedAt: at("2026-10-06T20:00:04Z"), outcome: "restarted" });
     const [f] = await db.insert(admFiles).values({ serverId, filename: "f.ADM", bootAt: SLOT, linesIngested: 0, complete: true }).returning();
     await db.insert(players).values({ dayzId: "a", gamertag: "**Boss**", firstSeenAt: SLOT, lastSeenAt: SLOT });
     let line = 0;
@@ -181,12 +181,12 @@ describe("/koth", () => {
         payload: { killerDayzId: killer, victimDayzId: `v${line}`, victimPos: { x, y: 100, z: 6635 } } }).returning();
       await db.insert(kills).values({ serverId, eventId: e!.id, occurredAt: at(iso), victimDayzId: `v${line}`, killerDayzId: killer, cause: "killed" });
     };
-    await kill("a", "2026-10-03T20:10:00Z", 8675);
-    await kill("a", "2026-10-03T20:11:00Z", 8680);
-    await kill("b", "2026-10-03T20:12:00Z", 8675);
-    await kill("b", "2026-10-03T20:00:01Z", 8675);        // before the opening restart was issued
-    await kill("c", "2026-10-03T20:13:00Z", 8675 + 900);  // off the hill
-    const reply = await status(ctx(undefined, at("2026-10-03T21:00:00Z")), input());
+    await kill("a", "2026-10-06T20:10:00Z", 8675);
+    await kill("a", "2026-10-06T20:11:00Z", 8680);
+    await kill("b", "2026-10-06T20:12:00Z", 8675);
+    await kill("b", "2026-10-06T20:00:01Z", 8675);        // before the opening restart was issued
+    await kill("c", "2026-10-06T20:13:00Z", 8675 + 900);  // off the hill
+    const reply = await status(ctx(undefined, at("2026-10-06T21:00:00Z")), input());
     expect(reply.content).toMatch(/live/);
     expect(reply.content).toContain("1. \\*\\*Boss\\*\\* — 2");
     expect(reply.content).toContain("2. b — 1");
@@ -199,7 +199,7 @@ describe("/koth", () => {
       serverId, slotAt: SLOT, location: "lembork", centreX: "8675", centreZ: "6635",
       state: "live", scheduledByDiscordId: "1", announcedAt: NOW, openedAt: SLOT,
     });
-    const reply = await status(ctx(undefined, at("2026-10-03T21:00:00Z")), input());
+    const reply = await status(ctx(undefined, at("2026-10-06T21:00:00Z")), input());
     expect(reply.content).toMatch(/no kills on the hill yet/i);
   });
 
@@ -240,7 +240,7 @@ describe("/koth", () => {
   // ⚠️ The 24 h gap holds back the automatic picker and /kothvote, never an admin.
   it("schedules a slot within 24 h of the last event's slot", async () => {
     await db.insert(kothEvents).values({
-      serverId, slotAt: at("2026-10-03T00:00:00Z"), location: "borek", centreX: "1", centreZ: "1",
+      serverId, slotAt: at("2026-10-06T00:00:00Z"), location: "borek", centreX: "1", centreZ: "1",
       state: "no_winner", origin: "vote", scheduledByDiscordId: "7",
     });
     const reply = await schedule(ctx(), input());
@@ -253,11 +253,35 @@ describe("/koth", () => {
     expect((await rows())[0]!.origin).toBe("admin");
   });
 
+  it("refuses a slot inside the raid window, admin or not", async () => {
+    const post = vi.fn(async () => {});
+    const reply = await schedule(ctx(post), input({ at: "2026-10-10T20:00:00.000Z" })); // Saturday
+    expect(reply.content).toMatch(/Base damage is on/);
+    expect(await rows()).toHaveLength(0);
+    expect(post).not.toHaveBeenCalled();
+  });
+
+  it("schedules a weekend slot when that raid window is skipped", async () => {
+    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T00:00:00Z"), reason: "test", decidedAt: NOW });
+    const reply = await schedule(ctx(), input({ at: "2026-10-10T20:00:00.000Z" }));
+    expect(reply.content).toMatch(/Scheduled/);
+  });
+
+  it("leaves raid-window slots out of the autocomplete, unless skipped", async () => {
+    const pick = kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.at!;
+    const weekend = (vs: { value: string }[]) => vs.filter((v) => [0, 5, 6].includes(new Date(v.value).getUTCDay()));
+    // From Thursday, the next 25 slots run into Saturday.
+    const thu = at("2026-10-08T12:00:00Z");
+    expect(weekend(await pick(ctx(undefined, thu), { actorDiscordId: "99", value: "" }))).toEqual([]);
+    await db.insert(raidWindowSkips).values({ opensAt: at("2026-10-09T00:00:00Z"), reason: "test", decidedAt: NOW });
+    expect(weekend(await pick(ctx(undefined, thu), { actorDiscordId: "99", value: "" })).length).toBeGreaterThan(0);
+  });
+
   it("autocompletes towns by prefix and the next 7 days of slots", async () => {
     const towns = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.location!(ctx(), { actorDiscordId: "99", value: "da" });
     expect(towns.map((t) => t.value)).toContain("dashtabad");
     const slots = await kothGroup.specs.find((s) => s.path === "koth schedule")!.autocomplete!.at!(ctx(), { actorDiscordId: "99", value: "" });
     expect(slots.length).toBeLessThanOrEqual(25);
-    expect(slots[0]!.value).toBe("2026-10-03T14:00:00.000Z");
+    expect(slots[0]!.value).toBe("2026-10-06T14:00:00.000Z");
   });
 });

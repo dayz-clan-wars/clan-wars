@@ -4,7 +4,7 @@ import { and, eq, gte, isNotNull, isNull, ne } from "drizzle-orm";
 import { voteView } from "./commands/kothvote.js";
 import { voteFailedText, voteMessage, votePassedText, voteVoidText, type Tally } from "./koth-text.js";
 import type { KothVoteChannel } from "./koth-vote-channel.js";
-import { kothOpen, lastKothSlot, slotTakenBy } from "./koth-vote-store.js";
+import { kothOpen, lastKothSlot, raidOpenAt, slotTakenBy } from "./koth-vote-store.js";
 
 type Vote = typeof kothVotes.$inferSelect;
 /** Bound on how far back a result is posted: never resurrect a long-dead row. */
@@ -81,6 +81,8 @@ async function close(db: Database, open: Vote, opts: { now: Date; enabled: boole
     if (taken) { await done("void", { reason: "an event took that restart" }); return; }
     if (await kothOpen(tx, v.serverId)) { await done("void", { reason: "another King of the Hill was scheduled first" }); return; }
     if (!kothGapOk(v.slotAt, await lastKothSlot(tx, v.serverId, v.slotAt))) { await done("void", { reason: "another King of the Hill ran too recently" }); return; }
+    // ⚠️ Re-checked here too: a skipped weekend can be un-skipped while the vote is open.
+    if (await raidOpenAt(tx, v.slotAt)) { await done("void", { reason: "base damage is on for that restart" }); return; }
     const loc = kothLocation(v.location);
     // ⚠️ A vote opened before the move to Nasdara names a Chernarus or Livonia town; it can no longer open.
     if (!loc) { await done("void", { reason: "that town is not on this map any more" }); return; }

@@ -6,7 +6,7 @@ import {
 } from "@factions/domain";
 import { and, eq } from "drizzle-orm";
 import { hhmm, voteMessage, type VoteView } from "../koth-text.js";
-import { kothOpen, lastKothSlot, linkedOnline, recentTowns, slotTakenBy } from "../koth-vote-store.js";
+import { kothOpen, lastKothSlot, linkedOnline, raidOpenAt, recentTowns, slotTakenBy } from "../koth-vote-store.js";
 import { onlineNow } from "../population.js";
 import type { CommandGroup, Ctx, CommandInput, Reply } from "./types.js";
 
@@ -45,6 +45,9 @@ async function start(ctx: Ctx, input: CommandInput): Promise<Reply> {
   if (taken || await kothOpen(ctx.db, server.id)) return reply("A King of the Hill event is already scheduled or live.");
   if (!kothGapOk(slot, await lastKothSlot(ctx.db, server.id, slot))) {
     return reply(`The ${hhmm(slot)} restart is within ${KOTH_MIN_GAP_MS / 3_600_000} hours of the last King of the Hill.`);
+  }
+  if (await raidOpenAt(ctx.db, slot)) {
+    return reply("King of the Hill can't run while base damage is on. Try again after the raid window closes, Monday 00:00 UTC.");
   }
   // ⚠️ Refused up front: with fewer than the minimum electorate the floor can never
   // be met, and a vote that cannot pass is only a public notice that it failed.
