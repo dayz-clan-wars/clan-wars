@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.13.0] - 2026-10-29
+
 ### Added
 
 - When someone dismantles, builds or boost-stacks at your base, your clan channel now gets a message once it's over saying you can press charges, who it was, and the deadline. Solo players get it as a DM. It also shows up in your notifications on the site.
