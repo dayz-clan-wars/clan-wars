@@ -11,8 +11,10 @@ export type NoticeSender = (target: NoticeTarget, discordTargetId: string, conte
 
 /**
  * The channel kinds that open with `<@&role>` so every clanmate's phone
- * buzzes: someone is at the base right now, or the flag is down. Everything
- * else posts silently and is read when the channel is next opened.
+ * buzzes: someone is at the base right now, the flag is down, or an
+ * incident is waiting to be charged (it has a deadline, and an unread
+ * channel line is how the first one went uncharged). Everything else posts
+ * silently and is read when the channel is next opened.
  *
  * ⚠️ Channel kinds ONLY. The `solo_*` twins are DM rows — a DM is already a
  * ping, and a solo player has no role to mention.
@@ -24,7 +26,7 @@ export type NoticeSender = (target: NoticeTarget, discordTargetId: string, conte
  */
 export const PING_KINDS: ReadonlySet<ClanNoticeKind> = new Set<ClanNoticeKind>([
   "intruder", "dismantle", "gate_built", "built",
-  "flag_down", "non_member_raise", "colors_elsewhere",
+  "flag_down", "non_member_raise", "colors_elsewhere", "incident_ready",
 ]);
 
 /**

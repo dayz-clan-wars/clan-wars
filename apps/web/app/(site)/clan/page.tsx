@@ -15,6 +15,7 @@ import { readKept } from "@/lib/form";
 import { OwnClanHero } from "@/app/components/own-clan-hero";
 import { AchievementWall } from "@/app/components/achievement-wall";
 import { RowAction } from "@/app/components/row-action";
+import { WitnessedIncidents } from "@/app/components/witnessed-incidents";
 import { LeaveForm } from "./leave-form";
 
 export const metadata: Metadata = { title: "Clan Wars — your clan", robots: { index: false, follow: false } };
@@ -50,7 +51,7 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
     );
   }
 
-  const { clan, me, roster, invitesOut, requestsIn, leadership } = view;
+  const { clan, me, roster, invitesOut, requestsIn, leadership, incidents } = view;
   const officer = me.status === "full" && (me.role === "officer" || me.role === "leader");
   const leader = me.status === "full" && me.role === "leader";
   const full = roster.filter((r) => r.status === "full");
@@ -73,6 +74,9 @@ export default async function ClanPage({ searchParams }: { searchParams: Promise
 
       <div className="grid gap-4 px-5 py-5 lg:grid-cols-[7fr_5fr] lg:gap-6 lg:px-8 lg:pb-10 lg:pt-6">
         <div className="flex flex-col gap-4 lg:gap-6">
+          {/* First in the column: an incident is the one thing on this page with a deadline. */}
+          {incidents.length > 0 && <WitnessedIncidents incidents={incidents} canCharge={officer} />}
+
           <Panel title="Roster" aside={<>{full.length} full{pending.length > 0 && `, ${pending.length} pending`}</>}>
             <ul>
               {[...full, ...pending].map((r) => {

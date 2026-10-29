@@ -105,6 +105,26 @@ const dateOf = (v: NoticePayload[string] | undefined): string | null => {
   return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
 };
 
+/**
+ * The incident-ready notice for either owner. `offenders` is newline-joined
+ * gamertags (violation-tick.ts); an unparseable deadline drops its clause.
+ */
+const incidentReady = (p: NoticePayload, how: string, href: string): NoticeCopy => {
+  const names = String(p.offenders ?? "").split("\n").filter(Boolean).map((g) => who(g));
+  const acts = [
+    Number(p.dismantled) > 0 ? `dismantling ${count(p.dismantled)}` : null,
+    Number(p.built) > 0 ? `building ${count(p.built)}` : null,
+    Number(p.stacked) > 0 ? `stacking ${count(p.stacked)}` : null,
+  ].filter(Boolean).join(" and ");
+  const until = dateOf(p.chargeableUntil);
+  return {
+    kicker: "Incident",
+    title: "You can press charges",
+    body: `The log caught ${names.length > 0 ? names.join(", ") : "someone"}${acts ? ` ${acts}` : ""} at your base. ${how}${until ? ` until ${until}` : ""}.`,
+    cta: { label: "Review and press charges", href },
+  };
+};
+
 /** A renderer reads the payload and, where the fact differs by audience, the notice's own target. */
 type Render = (p: NoticePayload, target: NoticeTarget) => NoticeCopy;
 
@@ -304,6 +324,10 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
       body: `The log recorded you ${acts || "acting"} inside ${p.tag ? String(p.tag) : "another clan"}'s zone. If they asked you to help, ignore this. If not, an officer can report it, and the penalty scales with the damage.`,
     };
   } },
+  // The owner's half of an incident (violation-tick.ts). The bot's
+  // notice-text.ts says the same; read both when you change either.
+  incident_ready: { group: "Enforcement", render: (p) => incidentReady(p, "The leader or an officer can press charges on the clan page", "/clan#incidents") },
+  solo_incident_ready: { group: "Enforcement", render: (p) => incidentReady(p, "You can press charges on your base page", "/base#incidents") },
   booster_kit_unchosen: { group: "Roster", render: () => ({
     kicker: "Booster kit", title: "You have a booster kit waiting",
     body: "Pick the ten pieces you respawn with, and the spot they wait at. Nothing is chosen yet, so nothing will spawn.",

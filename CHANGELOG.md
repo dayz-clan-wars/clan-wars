@@ -5,6 +5,11 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- When someone dismantles, builds or boost-stacks at your base, your clan channel now gets a message once it's over saying you can press charges, who it was, and the deadline. Solo players get it as a DM. It also shows up in your notifications on the site.
+- You can now press charges from your clan page. The incidents are at the top, and the leader and officers get the Press charges button. Before, they were only on `/base`, which clans had no reason to open.
+
 ## [2.12.0] - 2026-10-28
 
 ### Changed
