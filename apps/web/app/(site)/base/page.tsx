@@ -1,15 +1,15 @@
 import type { Metadata } from "next";
-import { baseFor, type ReportableIncident } from "@factions/roster";
-import { WATCH_ZONE_RADIUS_M, WORLD_MAP, WORLD_SIZE_M, sentenceMsFor, type IncidentDamage, type ViolationKind } from "@factions/domain";
+import { baseFor } from "@factions/roster";
+import { WATCH_ZONE_RADIUS_M, WORLD_MAP, WORLD_SIZE_M } from "@factions/domain";
 import { gridRef, gridRefKey } from "@/lib/map-projection";
 import { nearestPlace } from "@/lib/map-places";
 import { currentSession } from "@/lib/viewer";
 import { RESULT_COPY, lapsedCopy } from "@/lib/base-copy";
 import { lookupCopy } from "@/lib/copy-lookup";
-import { ago, days, when } from "@/lib/format";
+import { ago, when } from "@/lib/format";
 import { guideLinkFor, guideLink, GUIDE_INLINE } from "@/lib/guide-links";
 import { Page, PageHead, Body, Panel, PanelBody, Notice, BackLine, SessionLost, ConfirmButton, btnPrimary, btnDanger, link } from "@/app/components/ui";
-import { ReportButton } from "./report-button";
+import { WitnessedIncidents } from "@/app/components/witnessed-incidents";
 import { RowAction } from "@/app/components/row-action";
 
 export const metadata: Metadata = {
@@ -34,52 +34,6 @@ function Pole({ x, z }: { x: number; z: number }) {
   );
 }
 
-/** One line per witnessed act, in the copy the guide uses. */
-const ACT_LABEL: Record<ViolationKind, string> = {
-  dismantle: "Dismantled",
-  build: "Built without permission",
-  gate: "Gate forced",
-  stack: "Boosted on a stack",
-};
-
-/**
- * One reportable incident: every act and participant the log recorded, in
- * full — coordinates included. This is the ONLY place that evidence may be
- * shown (CLAUDE.md: no coordinates in any Discord notice); `/base` is
- * already gated to the viewer's own base, which is exactly why it lives
- * here. The minimum term shown is computed at a first offence
- * (`priorOffences = 0`) — the officer pressing charges does not know the
- * offenders' history without querying it, and a repeat offender always
- * serves at least as long, never less, so "at least" is honest either way.
- */
-function Incident({ incident }: { incident: ReportableIncident }) {
-  const damage: IncidentDamage = {
-    partsDismantled: incident.partsDismantled, partsBuilt: incident.partsBuilt,
-    stackItems: incident.stackItems, hasBreach: incident.hasBreach, hasGate: incident.hasGate,
-  };
-  const minTermMs = sentenceMsFor(damage, 0);
-  const gamertags = incident.participants.map((p) => p.gamertag);
-  return (
-    <li className="border-t border-rule-2 px-4 py-4 first:border-t-0 lg:px-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm text-ink-2">
-          Closed {ago(incident.closedAt)} &middot; {gamertags.join(", ")}
-        </p>
-      </div>
-      <ul className="mt-2 flex flex-col gap-1">
-        {incident.acts.map((a, i) => (
-          <li key={i} className="font-mono text-xs text-muted">
-            {ACT_LABEL[a.kind]} {a.what} at {gridRef(a.x, a.z)} &middot; {ago(a.at)}
-          </li>
-        ))}
-      </ul>
-      <div className="mt-3">
-        <ReportButton incidentId={incident.id} participants={incident.participants} minTermLabel={minTermMs === null ? "permanent" : days(minTermMs)} />
-      </div>
-    </li>
-  );
-}
-
 export default async function BasePage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const session = await currentSession();
   if (!session) return <SessionLost next="/base" />;
@@ -101,7 +55,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
         )}
 
         {view.linked && view.inClan && (
-          <p className="text-ink-2">You are in a clan, so your base is the clan&rsquo;s. Solo declarations are for players outside one.</p>
+          <p className="text-ink-2">You are in a clan, so your base is the clan&rsquo;s. Solo declarations are for players outside one. Incidents at the clan&rsquo;s base are on <a className={link} href="/clan#incidents">your clan page</a>.</p>
         )}
 
         {view.linked && !view.inClan && (
@@ -150,18 +104,7 @@ export default async function BasePage({ searchParams }: { searchParams: Promise
         {/* Surfaces for both a solo declarant and a clan's full members (only an
             officer or the leader can actually press charges — reportIncidentDb's
             own gate; a member who cannot still sees why an officer might). */}
-        {view.linked && view.incidents.length > 0 && (
-          <Panel num="03" title="Witnessed incidents" aside={`${view.incidents.length}`}>
-            <PanelBody className="!p-0">
-              <p className="px-4 pt-4 text-sm leading-relaxed text-ink-2 lg:px-5">
-                The log witnessed these at your base. Pressing charges bans the named players automatically — there is no staff review after you confirm.
-              </p>
-              <ul>
-                {view.incidents.map((i) => <Incident key={i.id} incident={i} />)}
-              </ul>
-            </PanelBody>
-          </Panel>
-        )}
+        {view.linked && view.incidents.length > 0 && <WitnessedIncidents num="03" incidents={view.incidents} canCharge />}
         <BackLine href="/me">Your page</BackLine>
       </Body>
     </Page>

@@ -11,6 +11,7 @@ import {
 } from "./internal";
 import { activeServerId } from "./server";
 import { freeFlagsDb } from "./internal/flag-holds";
+import { reportableIncidentsDb, type ReportableIncident } from "./internal/incidents";
 import { alphaWeekCountFor, clanStatsFor, latestAlphaFactionIds, placementsFor } from "./scoring";
 
 const HOLDING: string[] = [...HOLDING_STATUSES];
@@ -45,6 +46,12 @@ export type ClanView = {
   guestPasses: OpenGuestPass[];
   /** The leader's rebrand panel: the pending flag change, if any, and the flags they could pick. Null for everyone else. */
   rebrand: { pending: { texture: string; until: Date } | null; freeFlags: string[] } | null;
+  /**
+   * Witnessed incidents at the clan's base, ready to charge — the same read
+   * `/base` makes, for every FULL member (a member sees why an officer might
+   * charge; `reportIncidentDb` is the officer gate). `[]` for a pending one.
+   */
+  incidents: ReportableIncident[];
 };
 
 export type DirectoryEntry = {
@@ -169,8 +176,9 @@ export async function clanForDb(db: Database, discordId: string, now: Date = new
   const leadership = status === "full" ? await leadershipFor(db, m.factionId, link.dayzId, now) : PENDING_LEADERSHIP;
   const guestPasses = officerPlus ? await openGuestPassesDb(db, m.factionId, now) : [];
   const rebrand = status === "full" && role === "leader" ? await rebrandFor(db, serverId, m.factionId, now) : null;
+  const incidents = status === "full" ? await reportableIncidentsDb(db, now, discordId) : [];
 
-  return { clan: { ...card, base }, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses, rebrand };
+  return { clan: { ...card, base }, me: { role, status }, roster, invitesOut, requestsIn, rebindCandidates, leadership, guestPasses, rebrand, incidents };
 }
 
 async function rebrandFor(db: Database, serverId: number, factionId: number, now: Date): Promise<NonNullable<ClanView["rebrand"]>> {

@@ -8,6 +8,7 @@ import {
 import { VIOLATION_REPORT_WINDOW_MS, sentenceMsFor, type IncidentDamage } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { reportableIncidentsDb, reportIncidentDb } from "../src/internal/incidents";
+import { clanForDb } from "../src/reads";
 import { seedFaction, seedSeason } from "./seed";
 
 const URL = requireTestDatabaseUrl();
@@ -113,6 +114,18 @@ describe("reportable incidents and pressing charges", () => {
     expect(rows.map((i) => i.id)).toEqual([id]);
     expect(rows[0]!.participants.map((p) => p.gamertag).sort()).toEqual(["Offender1", "Offender2"]);
     expect(rows[0]!.acts).toMatchObject([{ kind: "dismantle", what: "Fence", x: 5010, z: 5010 }]);
+  });
+
+  it("the clan page carries the same incidents for a full member, and none for a pending one", async () => {
+    const id = await seedIncident();
+    const officer = await clanForDb(db, OFFICER_DISCORD, now);
+    if (typeof officer === "string") throw new Error(officer);
+    expect(officer.incidents.map((i) => i.id)).toEqual([id]);
+
+    await db.insert(factionMembers).values({ factionId, serverId, dayzId: STRANGER_DAYZ, discordId: STRANGER_DISCORD, role: "member", joinedAt: now, status: "pending" });
+    const pending = await clanForDb(db, STRANGER_DISCORD, now);
+    if (typeof pending === "string") throw new Error(pending);
+    expect(pending.incidents).toEqual([]);
   });
 
   it("a full member who is not an officer sees them but cannot report", async () => {

@@ -4,7 +4,7 @@ import {
   factionMembers, identityLinks, declarations, zoneIncidents, zoneIncidentParticipants, clanNotices,
   type Database,
 } from "@factions/db";
-import { VIOLATION_INCIDENT_GAP_MS } from "@factions/domain";
+import { VIOLATION_INCIDENT_GAP_MS, VIOLATION_REPORT_WINDOW_MS } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { violationTick } from "../src/violation-tick.js";
 import { seedFaction } from "./seed.js";
@@ -55,6 +55,33 @@ describe("violationTick", () => {
     const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "zone_warning"));
     expect(n).toMatchObject({ target: "dm", discordTargetId: "99", factionId: null });
     expect(n!.payload).not.toHaveProperty("x");
+  });
+
+  it("tells the clan the incident can be charged, in its channel, once, with no coordinates", async () => {
+    await seedIncident(at(-VIOLATION_INCIDENT_GAP_MS - 60_000), [STRANGER, UNLINKED]);
+    expect(await violationTick(db, { now })).toMatchObject({ closed: 1, ownersNotified: 1 });
+    await violationTick(db, { now });
+    const rows = await db.select().from(clanNotices).where(eq(clanNotices.kind, "incident_ready"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ target: "channel", factionId });
+    expect(rows[0]!.payload).toMatchObject({
+      offenders: "Sasha\nSasha", dismantled: 2, built: 1, stacked: 0,
+      chargeableUntil: new Date(now.getTime() + VIOLATION_REPORT_WINDOW_MS).toISOString(),
+    });
+    expect(rows[0]!.payload).not.toHaveProperty("x");
+  });
+
+  it("tells a solo declarant by DM, and nobody when the declarant is unlinked", async () => {
+    await db.update(declarations).set({ ownerFactionId: null, ownerDayzId: MEMBER }).where(eq(declarations.id, declarationId));
+    await db.insert(identityLinks).values({ dayzId: MEMBER, discordId: "7", gamertag: "Owner", verifiedAt: now });
+    await seedIncident(at(-VIOLATION_INCIDENT_GAP_MS - 60_000), [STRANGER]);
+    await violationTick(db, { now });
+    const [n] = await db.select().from(clanNotices).where(eq(clanNotices.kind, "solo_incident_ready"));
+    expect(n).toMatchObject({ target: "dm", discordTargetId: "7", factionId: null });
+
+    await db.delete(identityLinks).where(eq(identityLinks.dayzId, MEMBER));
+    await seedIncident(at(-VIOLATION_INCIDENT_GAP_MS - 60_000), [STRANGER]);
+    expect(await violationTick(db, { now })).toMatchObject({ closed: 1, ownersNotified: 0 });
   });
 
   it("does not close an incident still inside the gap", async () => {

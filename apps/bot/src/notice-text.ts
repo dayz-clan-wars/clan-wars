@@ -81,6 +81,28 @@ function person(v: NoticePayload[string] | undefined, site: string): string {
   return /^\d+$/u.test(s) ? `<@${s}>` : playerLink(site, s);
 }
 
+/** "dismantling 2 part(s) and stacking 3 item(s)" — the zone_warning phrasing, so both sides of one incident count it the same way. */
+function incidentActs(p: NoticePayload): string {
+  return [
+    Number(p.dismantled) > 0 ? `dismantling ${p.dismantled} part(s)` : null,
+    Number(p.built) > 0 ? `building ${p.built} part(s)` : null,
+    Number(p.stacked) > 0 ? `stacking ${p.stacked} item(s)` : null,
+  ].filter(Boolean).join(" and ");
+}
+
+/**
+ * The incident-ready line for either owner. `offenders` is newline-joined
+ * gamertags (violation-tick.ts). ⚠️ An unrepresentable `chargeableUntil`
+ * drops the deadline clause rather than printing a garbage date.
+ */
+function incidentReady(p: NoticePayload, ctx: { site: string }, who: string, path: string): string {
+  const names = String(p.offenders ?? "").split("\n").filter(Boolean).map((g) => person(g, ctx.site));
+  const acts = incidentActs(p);
+  const until = atToken(p.chargeableUntil);
+  return `🚨 The log caught ${names.length > 0 ? names.join(", ") : "someone"}${acts ? ` ${acts}` : ""} at your base. `
+    + `${who}${until ? ` until ${until}` : ""}: [open it](<${ctx.site}${path}>)`;
+}
+
 /**
  * ⚠️ `age` is a Discord `<t:…:R>` token, not a baked string. It used to be
  * `relativeAge(occurredAt, now)`, which froze "6 min ago" into a message
@@ -233,6 +255,12 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     ].filter(Boolean).join(" and ");
     return `⚠️ The log recorded you ${acts} inside ${clanLink(ctx.site, String(p.tag))}'s declared base zone. **If they asked you to help, ignore this.** If not, an officer of that clan can report it, and the penalty scales with the damage.`;
   },
+  // ⚠️ The owner's half of an incident (violation-tick.ts): the ONLY thing
+  // that tells a base's owner it can be charged. Names who and how much,
+  // never where — the evidence is on the site. The web's notice-copy.ts says
+  // the same; read both when you change either.
+  incident_ready: (p, ctx) => incidentReady(p, ctx, "The leader or an officer can press charges on the clan page", "/clan#incidents"),
+  solo_incident_ready: (p, ctx) => incidentReady(p, ctx, "You can press charges on your base page", "/base#incidents"),
   ban_applied: (p) => {
     if (!p.until) return `⛔ You are permanently banned from the server — ${p.reason}.`;
     // ⚠️ Unlike the other three sites, simply dropping the clause here would

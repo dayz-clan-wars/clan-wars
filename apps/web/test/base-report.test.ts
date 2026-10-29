@@ -12,6 +12,10 @@ const buttonText = readFileSync(BUTTON, "utf8");
 
 const PAGE = join(import.meta.dirname, "..", "app", "(site)", "base", "page.tsx");
 const pageText = readFileSync(PAGE, "utf8");
+const INCIDENTS = join(import.meta.dirname, "..", "app", "components", "witnessed-incidents.tsx");
+const incidentsText = readFileSync(INCIDENTS, "utf8");
+const CLAN_PAGE = join(import.meta.dirname, "..", "app", "(site)", "clan", "page.tsx");
+const clanPageText = readFileSync(CLAN_PAGE, "utf8");
 
 describe("a refusal reason renders as copy, never as a raw enum", () => {
   it("REPORT_COPY is total over REPORT_REASONS", () => {
@@ -103,11 +107,28 @@ describe("the /base page's incident list", () => {
     expect(incidentsIdx).toBeGreaterThan(inClanBlockEnd);
   });
 
-  it("shows the evidence — coordinates included — this is the one place that is allowed", () => {
-    expect(pageText).toContain("gridRef(a.x, a.z)");
+  it("renders the shared incident list, which shows the evidence — coordinates included — on the viewer's own base pages only", () => {
+    expect(pageText).toContain("<WitnessedIncidents");
+    expect(incidentsText).toContain("gridRef(a.x, a.z)");
   });
 
-  it("imports the report button as a prop-driven component, never @factions/roster inside it", () => {
-    expect(pageText).toContain('from "./report-button"');
+  it("imports the report button as a prop-driven component, never @factions/roster's runtime inside it", () => {
+    expect(incidentsText).toContain('from "@/app/(site)/base/report-button"');
+    // ⚠️ A type import is erased at build; a value import would pull the pooled client toward the client bundle.
+    expect(incidentsText).not.toMatch(/^import \{[^}]*\} from "@factions\/roster"/mu);
+  });
+});
+
+describe("the /clan page's incident list", () => {
+  it("renders the same shared list, only when there is at least one incident", () => {
+    expect(clanPageText).toContain("incidents.length > 0 && <WitnessedIncidents");
+  });
+
+  it("offers the button to officers and the leader only — reportIncidentDb's own gate", () => {
+    expect(clanPageText).toContain("canCharge={officer}");
+  });
+
+  it("carries the #incidents anchor the incident-ready notice links to", () => {
+    expect(incidentsText).toContain('id="incidents"');
   });
 });

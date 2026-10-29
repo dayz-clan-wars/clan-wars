@@ -146,6 +146,16 @@ describe("noticeText", () => {
     expect(noticeText({ kind: "solo_gate", target: "dm", occurredAt: now, payload: { gamertag: "Sasha" } }, site, dormantAfterMs)).toBe(`🔧 [Sasha](<${site}/players/Sasha>) (not a member) built a gate at your base — <t:1788696000:R>`);
   });
 
+  it("renders incident_ready with every offender, the acts, the deadline and the clan page link", () => {
+    const payload = { offenders: "Sasha\nMisha", dismantled: 2, built: 0, stacked: 3, chargeableUntil: "2026-09-13T12:00:00.000Z" };
+    expect(noticeText({ kind: "incident_ready", target: "channel", occurredAt: now, payload }, site, dormantAfterMs)).toBe(
+      `🚨 The log caught [Sasha](<${site}/players/Sasha>), [Misha](<${site}/players/Misha>) dismantling 2 part(s) and stacking 3 item(s) at your base. `
+      + `The leader or an officer can press charges on the clan page until <t:1789300800:F>: [open it](<${site}/clan#incidents>)`,
+    );
+    expect(noticeText({ kind: "solo_incident_ready", target: "dm", occurredAt: now, payload: { ...payload, chargeableUntil: "garbage" } }, site, dormantAfterMs))
+      .toContain(`You can press charges on your base page: [open it](<${site}/base#incidents>)`);
+  });
+
   it("renders the nine leadership and vault lines (spec §9.3, §9.4)", () => {
     expect(noticeText({ kind: "leader_removed", target: "channel", occurredAt: now, payload: { old: "Wolfie", new: "Bear1" } }, site, dormantAfterMs))
       .toBe(`👑 [Wolfie](<${site}/players/Wolfie>) is no longer in the Discord. [Bear1](<${site}/players/Bear1>) is now leader.`);
