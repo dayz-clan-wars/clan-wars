@@ -1,4 +1,4 @@
-import { DEFAULT_HIT_BURST_WINDOW_S, WEEKLY_WIPE_VEHICLES } from "@factions/domain";
+import { DEFAULT_HIT_BURST_WINDOW_S, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES } from "@factions/domain";
 import { BOARD_KINDS, type BoardKind } from "@factions/roster";
 import { DEFAULT_DORMANT_AFTER_MS, DEFAULT_DISBAND_AFTER_DORMANT_MS } from "./dormancy.js";
 import { DEFAULT_KILLSTREAK_EVERY } from "./killstreak-feed-tick.js";
@@ -603,9 +603,10 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
   // ⚠️ An event in both lists means the rotation loop overwrites the daily wipe's `0`
   // with `1` on every non-Monday slot — the rotation converges ALL five every slot
   // (see rotationActiveFor), so it always runs last and always wins. That silently
-  // defeats the daily wipe for that event, with no error and no log.
+  // defeats the daily wipe for that event, with no error and no log. The fixed weekly
+  // wipes converge every slot after it too, so they count as the rotation's here.
   if (config.truckWipe.rotation) {
-    const rotationEvents = new Set<string>(WEEKLY_WIPE_VEHICLES.map((v) => v.event));
+    const rotationEvents = new Set<string>([...WEEKLY_WIPE_VEHICLES, ...FIXED_WEEKLY_WIPES].map((v) => v.event));
     const overlap = config.truckWipe.events.filter((e) => rotationEvents.has(e));
     if (overlap.length > 0) {
       throw new Error(

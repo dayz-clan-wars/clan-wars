@@ -291,6 +291,12 @@ describe("loadConfig", () => {
         })).toThrow(/VehicleCivilianSedan/u);
       });
 
+      it("refuses a fixed weekly wipe's event too", () => {
+        expect(() => loadConfig({
+          ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1", TRUCK_WIPE_EVENTS: "VehicleMotorbike",
+        })).toThrow(/VehicleMotorbike/u);
+      });
+
       it("names every offending event", () => {
         expect(() => loadConfig({
           ...WIPE_ON, WEEKLY_VEHICLE_WIPE: "1",

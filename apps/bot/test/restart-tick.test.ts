@@ -261,7 +261,7 @@ describe("restartTick", () => {
   });
 
   // ── Weekly vehicle rotation ─────────────────────────────────────────────
-  const FULL_XML = (truck: number, olga: number, gunter: number) =>
+  const FULL_XML = (truck: number, olga: number, gunter: number, bikes = 1) =>
     `<events>` +
     `<event name="VehicleTruck01"><active>${truck}</active></event>` +
     `<event name="VehicleCivilianSedan"><active>${olga}</active></event>` +
@@ -269,6 +269,7 @@ describe("restartTick", () => {
     `<event name="VehicleOffroad02"><active>1</active></event>` +
     `<event name="VehicleOffroadHatchback"><active>1</active></event>` +
     `<event name="VehicleSedan02"><active>1</active></event>` +
+    `<event name="VehicleMotorbike"><active>${bikes}</active></event>` +
     `</events>`;
 
   function fakeFullFiles(xml: string) {
@@ -342,6 +343,41 @@ describe("restartTick", () => {
     expect(f.uploads).toHaveLength(1);
     expect(active(f.uploads[0]!.content, "VehicleCivilianSedan")).toBe(0);
     expect(active(f.uploads[0]!.content, "VehicleTruck01")).toBe(1);
+  });
+
+  // ── Fixed weekly wipes (motorbikes, Wednesday) ───────────────────────────
+  // 2026-09-16 is a Wednesday.
+  it("wipes the trucks and the motorbikes, and no rotation vehicle, on Wednesday", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1, 1));
+    await restartTick(db, () => f.target, { now: at("2026-09-16T08:00:03Z"), lastError, truckWipe: ROT });
+    expect(f.uploads).toHaveLength(1);
+    const x = f.uploads[0]!.content;
+    expect(active(x, "VehicleTruck01")).toBe(0);
+    expect(active(x, "VehicleMotorbike")).toBe(0);
+    expect(active(x, "VehicleCivilianSedan")).toBe(1);
+  });
+
+  it("leaves the motorbikes on during the Monday rotation wipe", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1, 1));
+    await restartTick(db, () => f.target, { now: at("2026-09-14T08:00:03Z"), lastError, truckWipe: ROT });
+    expect(active(f.uploads[0]!.content, "VehicleMotorbike")).toBe(1);
+  });
+
+  // ⚠️ Convergence, as for the rotation: a bot down across Wednesday 10:00 must not
+  // leave the bikes off for good.
+  it("heals motorbikes left disabled after their window", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1, 0));
+    await restartTick(db, () => f.target, { now: at("2026-09-17T12:00:03Z"), lastError, truckWipe: ROT });
+    expect(f.uploads).toHaveLength(1);
+    expect(active(f.uploads[0]!.content, "VehicleMotorbike")).toBe(1);
+  });
+
+  it("leaves the motorbikes alone when the rotation flag is off", async () => {
+    const f = fakeFullFiles(FULL_XML(1, 1, 1, 1));
+    await restartTick(db, () => f.target, {
+      now: at("2026-09-16T08:00:03Z"), lastError, truckWipe: { ...ROT, rotation: false },
+    });
+    expect(active(f.uploads[0]!.content, "VehicleMotorbike")).toBe(1);
   });
 
   // ── Raid window flip ─────────────────────────────────────────────────────

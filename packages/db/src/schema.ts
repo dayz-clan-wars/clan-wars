@@ -1830,7 +1830,7 @@ export const serverRestarts = pgTable("server_restarts", {
  * the record lie. Same reason the faction feed freezes its payload at write time.
  */
 export const vehicleWipeAnnouncements = pgTable("vehicle_wipe_announcements", {
-  /** The Monday wipe slot this announces — an even UTC hour. */
+  /** The wipe slot this announces (the Monday rotation or a fixed weekly wipe) — an even UTC hour. */
   wipeAt: timestamp("wipe_at", { withTimezone: true }).primaryKey(),
   announcedAt: timestamp("announced_at", { withTimezone: true }).notNull(),
   eventName: text("event_name").notNull(),

@@ -2,8 +2,9 @@ import type { WipeVehicle } from "@factions/domain";
 import { rel } from "@factions/copy";
 
 /**
- * The Sunday notice. Plain content, no embed — it is one short sentence of
- * fact, and the other plain-text poster (#war-log) is the house precedent.
+ * The day-ahead notice: Sunday for the rotation, the day before for a fixed
+ * weekly wipe. Plain content, no embed — it is one short sentence of fact, and
+ * the other plain-text poster (#war-log) is the house precedent.
  *
  * ⚠️ Takes no clock. It used to compute "tomorrow" vs "today, in about N
  * hours" against `now`, which was wrong whenever the bot recovered late

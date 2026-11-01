@@ -9,6 +9,9 @@ import {
   wipeMondayFor,
   announceAtFor,
   rotationActiveFor,
+  nextWeeklyWipeAt,
+  fixedWipeActiveFor,
+  FIXED_WEEKLY_WIPES,
 } from "../src/restarts";
 
 const at = (iso: string) => new Date(iso);
@@ -217,5 +220,68 @@ describe("rotationActiveFor", () => {
     it("never disables anything outside the wrap window on Monday", () => {
       expect(rotationActiveFor(new Date("2026-09-14T12:00:00Z"), 22, 2, OLGA)).toBe(1);
     });
+  });
+});
+
+describe("FIXED_WEEKLY_WIPES", () => {
+  it("wipes motorbikes on Wednesday", () => {
+    expect(FIXED_WEEKLY_WIPES).toContainEqual({ event: "VehicleMotorbike", name: "Motorbikes", utcDay: 3 });
+  });
+
+  // ⚠️ vehicle_wipe_announcements is keyed on the wipe slot alone. Two wipes on one
+  // day (or one on Monday, beside the rotation) share a row, and the second is never
+  // announced.
+  it("puts at most one wipe on each day, and none on Monday", () => {
+    const days = FIXED_WEEKLY_WIPES.map((w) => w.utcDay);
+    expect(new Set(days).size).toBe(days.length);
+    expect(days).not.toContain(1);
+  });
+});
+
+describe("nextWeeklyWipeAt", () => {
+  // 2026-09-16 is a Wednesday.
+  it("finds the coming Wednesday 08:00Z from earlier in the week", () => {
+    expect(nextWeeklyWipeAt(at("2026-09-14T09:00:00Z"), 3, 8).toISOString()).toBe("2026-09-16T08:00:00.000Z");
+  });
+
+  it("finds tomorrow from the Tuesday announcement moment", () => {
+    expect(nextWeeklyWipeAt(at("2026-09-15T08:00:00Z"), 3, 8).toISOString()).toBe("2026-09-16T08:00:00.000Z");
+  });
+
+  it("looks at next week once this week's wipe has started", () => {
+    expect(nextWeeklyWipeAt(at("2026-09-16T08:00:00Z"), 3, 8).toISOString()).toBe("2026-09-23T08:00:00.000Z");
+  });
+
+  // Sunday sits at the END of mondayMidnightUtc's week, after that week's Wednesday.
+  it("finds the following Wednesday from a Sunday", () => {
+    expect(nextWeeklyWipeAt(at("2026-09-20T12:00:00Z"), 3, 8).toISOString()).toBe("2026-09-23T08:00:00.000Z");
+  });
+
+  it("agrees with wipeMondayFor for Monday", () => {
+    for (const iso of ["2026-09-12T20:45:00Z", "2026-09-14T07:59:00Z", "2026-09-14T08:00:00Z"]) {
+      expect(nextWeeklyWipeAt(at(iso), 1, 8)).toEqual(wipeMondayFor(at(iso), 8));
+    }
+  });
+});
+
+describe("fixedWipeActiveFor", () => {
+  const BIKES = { event: "VehicleMotorbike", name: "Motorbikes", utcDay: 3 };
+
+  it("disables the event inside the window on its day", () => {
+    expect(fixedWipeActiveFor(at("2026-09-16T08:00:00Z"), 8, 10, BIKES)).toBe(0);
+  });
+
+  it("re-enables it at the on hour, and on every later slot", () => {
+    expect(fixedWipeActiveFor(at("2026-09-16T10:00:00Z"), 8, 10, BIKES)).toBe(1);
+    expect(fixedWipeActiveFor(at("2026-09-17T08:00:00Z"), 8, 10, BIKES)).toBe(1);
+  });
+
+  it("never disables it on another day", () => {
+    expect(fixedWipeActiveFor(at("2026-09-14T08:00:00Z"), 8, 10, BIKES)).toBe(1);
+  });
+
+  it("ends a wrapping window at midnight, like the rotation", () => {
+    expect(fixedWipeActiveFor(at("2026-09-16T22:00:00Z"), 22, 2, BIKES)).toBe(0);
+    expect(fixedWipeActiveFor(at("2026-09-17T00:00:00Z"), 22, 2, BIKES)).toBe(1);
   });
 });

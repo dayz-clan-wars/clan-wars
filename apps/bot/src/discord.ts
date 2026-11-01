@@ -4,7 +4,7 @@ import {
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { emoteLabel, WEEKLY_WIPE_VEHICLES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore, type ReferralRefusal } from "@factions/verification";
 import { REFERRAL_COPY } from "@factions/copy";
@@ -1844,7 +1844,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     else console.log(`truck wipe on: ${cfg.truckWipe.events.join(", ")} off at ${String(cfg.truckWipe.offHour).padStart(2, "0")}:00Z, back on at ${String(cfg.truckWipe.onHour).padStart(2, "0")}:00Z`);
 
     if (!cfg.truckWipe.rotation) console.warn("WEEKLY_VEHICLE_WIPE is off: no weekly vehicle rotation.");
-    else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}`);
+    else console.log(`weekly vehicle rotation on: ${WEEKLY_WIPE_VEHICLES.map((v) => v.name).join(" → ")}; fixed: ${FIXED_WEEKLY_WIPES.map((w) => `${w.name} (UTC day ${w.utcDay})`).join(", ")}`);
 
     if (!cfg.raidWindow.enabled) console.warn("RAID_WINDOW_TICK is off: the raid window is not being flipped automatically.");
     else console.log("raid window automation on" + (cfg.opsChannelId ? "" : " (OPS_CHANNEL_ID unset: failure alerts log at error level only)"));
