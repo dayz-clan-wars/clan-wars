@@ -105,6 +105,29 @@ describe("announceTick", () => {
     expect(Object.keys(all[0]!)).not.toContain("serverId");
   });
 
+  // ── Fixed weekly wipes (motorbikes, Wednesday 2026-09-16) ─────────────────
+  it("announces the Wednesday motorbike wipe on Tuesday", async () => {
+    const post = vi.fn(async (_content: string) => {});
+    const r = await announceTick(db, post, { now: at("2026-09-15T08:00:01Z"), offHour: 8 });
+    expect(r).toEqual({ posted: 1, missed: 0, failed: 0 });
+    expect(post.mock.calls[0]![0]).toContain("MOTORBIKES");
+    expect(await rows()).toMatchObject([
+      { wipeAt: at("2026-09-16T08:00:00Z"), eventName: "VehicleMotorbike", outcome: "posted" },
+    ]);
+  });
+
+  it("announces the Monday rotation and the Wednesday bikes separately, once each", async () => {
+    const post = vi.fn(async (_content: string) => {});
+    await announceTick(db, post, { now: at("2026-09-13T08:00:01Z"), offHour: 8 }); // Sunday
+    await announceTick(db, post, { now: at("2026-09-14T12:00:00Z"), offHour: 8 }); // Monday, after
+    await announceTick(db, post, { now: at("2026-09-15T08:00:01Z"), offHour: 8 }); // Tuesday
+    await announceTick(db, post, { now: at("2026-09-15T20:00:00Z"), offHour: 8 });
+    expect(post.mock.calls.map((c) => c[0].split("\n")[0])).toEqual([
+      "**VEHICLE WIPE: OLGA**",
+      "**VEHICLE WIPE: MOTORBIKES**",
+    ]);
+  });
+
   it("advances to the next week once this week's row exists", async () => {
     const post = vi.fn(async (_content: string) => {});
     await announceTick(db, post, { now: at("2026-09-13T08:00:01Z"), offHour: 8 });

@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- Motorbikes are now wiped every Wednesday at 08:00 UTC, the same time as the other vehicle wipes, and fresh ones spawn a couple of hours later. A notice goes up in `#server-events` the day before, so you have time to empty yours.
+
 ## [2.13.0] - 2026-10-29
 
 ### Added

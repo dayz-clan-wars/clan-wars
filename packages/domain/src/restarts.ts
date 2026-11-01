@@ -2,10 +2,11 @@ import {
   RESTART_PERIOD_MS,
   RESTART_GRACE_MS,
   WEEKLY_WIPE_VEHICLES,
+  FIXED_WEEKLY_WIPES,
   ROTATION_ANCHOR_MS,
   ANNOUNCE_LEAD_MS,
 } from "./rules";
-export { RESTART_PERIOD_MS, RESTART_GRACE_MS, WEEKLY_WIPE_VEHICLES, ROTATION_ANCHOR_MS };
+export { RESTART_PERIOD_MS, RESTART_GRACE_MS, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, ROTATION_ANCHOR_MS };
 
 export type RestartSlot = {
   /** The newest slot boundary at or before `now` — an even UTC hour. */
@@ -105,9 +106,18 @@ export function weeklyWipeVehicle(when: Date): WipeVehicle {
  * cutoff, would keep re-evaluating a wipe that is already happening.
  */
 export function wipeMondayFor(now: Date, offHour: number): Date {
-  let monday = mondayMidnightUtc(now) + offHour * 60 * 60 * 1000;
-  while (monday <= now.getTime()) monday += WEEK_MS;
-  return new Date(monday);
+  return nextWeeklyWipeAt(now, 1, offHour);
+}
+
+/**
+ * The next `utcDay` (0 = Sunday) at `offHour`:00Z STRICTLY after `now` — the same
+ * rule as `wipeMondayFor`, for any weekday.
+ */
+export function nextWeeklyWipeAt(now: Date, utcDay: number, offHour: number): Date {
+  const daysIn = (utcDay + 6) % 7; // Mon->0, Sun->6
+  let at = mondayMidnightUtc(now) + daysIn * 24 * 60 * 60 * 1000 + offHour * 60 * 60 * 1000;
+  while (at <= now.getTime()) at += WEEK_MS;
+  return new Date(at);
 }
 
 export function announceAtFor(wipeMonday: Date): Date {
@@ -136,5 +146,22 @@ export function rotationActiveFor(
 ): ActiveFlag {
   if (slotStart.getUTCDay() !== 1) return 1; // not a Monday
   if (weeklyWipeVehicle(slotStart).event !== event) return 1;
+  return inWipeWindow(slotStart.getUTCHours(), offHour, onHour) ? 0 : 1;
+}
+
+export type FixedWeeklyWipe = { event: string; name: string; utcDay: number };
+
+/**
+ * The `<active>` value a fixed weekly wipe's event should carry for the server
+ * booting into `slotStart`: 0 only on its weekday inside the wipe window.
+ *
+ * ⚠️ Same rules as `rotationActiveFor`: the caller converges every fixed wipe every
+ * slot, so a missed re-enable heals at the next restart; and the weekday guard runs
+ * before the window, so a wrapping window ends at midnight.
+ */
+export function fixedWipeActiveFor(
+  slotStart: Date, offHour: number, onHour: number, wipe: FixedWeeklyWipe,
+): ActiveFlag {
+  if (slotStart.getUTCDay() !== wipe.utcDay) return 1;
   return inWipeWindow(slotStart.getUTCHours(), offHour, onHour) ? 0 : 1;
 }

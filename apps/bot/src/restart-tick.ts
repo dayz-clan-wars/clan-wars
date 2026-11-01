@@ -1,5 +1,5 @@
 import { serverRestarts, servers, raidWindowFlips, raidWindowSkips, kothEvents, type Database } from "@factions/db";
-import { kothTownName, restartSlot, truckWipeActive, rotationActiveFor, WEEKLY_WIPE_VEHICLES, raidWindowAt, type SkippedWindow } from "@factions/domain";
+import { kothTownName, restartSlot, truckWipeActive, rotationActiveFor, fixedWipeActiveFor, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, raidWindowAt, type SkippedWindow } from "@factions/domain";
 import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { setEventActive } from "./events-xml.js";
 import { setBaseDamageDisabled, setSpawnGearPresets } from "./cfggameplay.js";
@@ -20,7 +20,7 @@ export type RestartTarget = {
 };
 
 /** Which events.xml entries the wipe owns, the UTC window they are off for, and
- *  whether the weekly vehicle rotation rides along. */
+ *  whether the weekly vehicle rotation and the fixed weekly wipes ride along. */
 export type TruckWipe = { events: string[]; offHour: number; onHour: number; rotation: boolean };
 
 /** The events.xml file name, inside the mission's `db` directory. */
@@ -57,10 +57,14 @@ export async function applyEvents(nitrado: RestartTarget, slot: Date, edits: Eve
       for (const name of wipe.events) next = setEventActive(next, name, daily).xml;
       // ⚠️ ALL five every slot, not just this week's. A bot down across a Monday 10:00
       // leaves that week's vehicle at 0, and by the time it returns the rotation has moved
-      // on — nothing else would ever put it back.
+      // on — nothing else would ever put it back. The fixed weekly wipes ride the same
+      // flag and converge every slot for the same reason.
       if (wipe.rotation) {
         for (const v of WEEKLY_WIPE_VEHICLES) {
           next = setEventActive(next, v.event, rotationActiveFor(slot, wipe.offHour, wipe.onHour, v.event)).xml;
+        }
+        for (const w of FIXED_WEEKLY_WIPES) {
+          next = setEventActive(next, w.event, fixedWipeActiveFor(slot, wipe.offHour, wipe.onHour, w)).xml;
         }
       }
       xml = next;

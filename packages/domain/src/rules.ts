@@ -220,6 +220,21 @@ export const WEEKLY_WIPE_VEHICLES = [
  */
 export const ROTATION_ANCHOR_MS = Date.UTC(2026, 8, 14);
 
+/**
+ * Vehicles wiped every week on a fixed UTC weekday (0 = Sunday), in the same
+ * off/on window as the trucks and the rotation, and announced a day ahead like it.
+ *
+ * ⚠️ Same `event` contract as WEEKLY_WIPE_VEHICLES: absent from events.xml throws
+ * the whole slot's wipe, trucks included.
+ *
+ * ⚠️ One wipe per weekday, and never Monday. `vehicle_wipe_announcements` is keyed
+ * on the wipe slot alone, so two wipes sharing a day share one row and the second is
+ * never announced. test/restarts.test.ts holds this.
+ */
+export const FIXED_WEEKLY_WIPES = [
+  { event: "VehicleMotorbike", name: "Motorbikes", utcDay: 3 },
+] as const;
+
 /** The announcement lands this far before the wipe, and is never posted later than
  *  ANNOUNCE_CUTOFF_MS before it — past that, a notice would describe a wipe that has
  *  effectively already arrived, which is worse than silence. */

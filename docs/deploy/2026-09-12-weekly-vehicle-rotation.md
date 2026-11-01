@@ -26,9 +26,22 @@ week, including ones already announced. It is an anchor, not a start date to kee
 ⚠️ A week the bot sleeps through is skipped, not owed. The vehicle is a function of the
 date.
 
+## Fixed weekly wipes (since 2026-11-01)
+
+`FIXED_WEEKLY_WIPES` in `packages/domain/src/rules.ts` lists vehicles wiped on the same
+weekday every week, in the same `TRUCK_WIPE_OFF_HOUR`–`TRUCK_WIPE_ON_HOUR` window. Today
+that is one entry: `VehicleMotorbike`, Wednesday, announced Tuesday 08:00Z. It rides the
+`WEEKLY_VEHICLE_WIPE` flag (no flag of its own) and converges every slot like the rotation.
+
+⚠️ Its event name is checked exactly like the five rotation names below: absent from the
+live `events.xml` throws every slot, trucks included.
+
+⚠️ One fixed wipe per weekday, and never Monday — `vehicle_wipe_announcements` is keyed on
+the wipe slot alone, so a second wipe on the same day would never be announced.
+
 ## Before you start
 
-1. Confirm all five event names exist in the live file. A name that is absent throws every
+1. Confirm all five event names, and `VehicleMotorbike`, exist in the live file. A name that is absent throws every
    slot — logged, restart unaffected, wipe silently does not happen.
 
        grep -oE '<event name="Vehicle[^"]*"' events.xml
