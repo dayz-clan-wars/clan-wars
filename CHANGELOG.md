@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A new award: the **Candy Cane**. One red-and-green candy cane that spawns where you mark it at every restart for 7 days. Nothing to pick. Staff can grant it, put it on a bounty or make it a King of the Hill prize like any other award.
+
 ## [2.15.0] - 2026-11-02
 
 ### Added

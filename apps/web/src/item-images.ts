@@ -92,6 +92,7 @@ export const WIKI_FILENAME: Readonly<Record<string, { file: string; wiki: string
   CombatBoots_Brown: { file: "CombatBootsBrown.png", wiki: "wiki.gg" },
   CombatBoots_Green: { file: "CombatBootsGreen.png", wiki: "wiki.gg" },
   CombatBoots_Grey: { file: "CombatBootsGrey.png", wiki: "wiki.gg" },
+  Candycane_RedGreen: { file: "Candycane_RedGreen.png", wiki: "wiki.gg" },
   CowboyHat_Brown: { file: "Cowboy Hat Brown.png", wiki: "wiki.gg" },
   CowboyHat_black: { file: "Cowboy Hat Black 2.png", wiki: "wiki.gg" },
   CowboyHat_darkBrown: { file: "CowboyHat DarkBrown.png", wiki: "wiki.gg" },

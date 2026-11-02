@@ -55,6 +55,18 @@
       }
     }
   },
+  "candy-cane": {
+    "label": "Candy Cane",
+    "durationDays": 7,
+    "slots": {
+      "candyCane": {
+        "label": "Candy Cane",
+        "items": [
+          { "className": "Candycane_RedGreen", "label": "Candy Cane", "image": "items/Candycane_RedGreen.webp" }
+        ]
+      }
+    }
+  },
   "weapon-kit": {
     "label": "Weapon Kit",
     "durationDays": 3,
