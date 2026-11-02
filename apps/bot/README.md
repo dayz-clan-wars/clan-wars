@@ -26,6 +26,7 @@ in-game verification tick confirms it.
 | `ALPHA_ROLE_ID` | yes | The Discord role id the bot uses for the @Alpha role. Right-click the role with Developer Mode enabled to copy it. |
 | `LEADERBOARDS_CHANNEL_ID` | no (unset means nothing is posted or edited) | The channel holding the ten standing leaderboard messages, one per board, edited in place. The bot posts them itself on its first pass; give it a channel players cannot post in, or a stray message will sit among them. |
 | `LEADERBOARD_TICK_INTERVAL_MS` | no (default `300000`, 5 minutes) | How often the ten board messages reconcile. Same clock as the crowns, which read the same boards. |
+| `SCOREBOARD_CHANNEL_ID` | no (unset means nothing is posted or edited) | The #scoreboard channel: one standing post of clan cards (flag, rank, points, Alpha, raids / raided / defenses), edited in place on `LEADERBOARD_TICK_INTERVAL_MS`. The bot posts it on its first pass and finds it again by the scoreboard link in its heading. Flags come from `FLAG_IMAGE_BASE_URL`. Runbook `docs/deploy/2026-11-02-scoreboard-in-discord.md`. |
 | `CROWN_RAIDERS_ROLE_ID` | no (unset means that crown is never touched) | Role held by the #1 of the raiders board in the current season. Create the role by hand — the bot only adds and removes members, so the name, colour, icon and position stay yours. |
 | `CROWN_KILLERS_ROLE_ID` | no | Same, for the kills board. |
 | `CROWN_KD_ROLE_ID` | no | Same, for the K/D board (which already requires `KD_MIN_KILLS` kills to appear on at all). |

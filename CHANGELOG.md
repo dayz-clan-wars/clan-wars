@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added
+
+- A #scoreboard channel in Discord shows the current season's standings: a card for each clan with its flag, rank, points, Alpha badge, raids, times raided and defenses, linked to the clan's page. It's one post that updates itself within 5 minutes of the scores changing, and it matches the scoreboard page on the site.
+
 ## [2.14.0] - 2026-11-01
 
 ### Added
