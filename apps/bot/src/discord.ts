@@ -59,6 +59,8 @@ import { LIVE_RECORDER_CONSUMERS, recordKills, recordHits, recordKillstreaks, re
 import { PgOnlineStore, onlineTick, type OnlineBoard, type OnlineState } from "./online-tick.js";
 import { PgLeaderboardStore, leaderboardTick, type LeaderboardChannel, type LeaderboardState } from "./leaderboard-tick.js";
 import { boardKindOfEmbedUrl } from "./leaderboard-embed.js";
+import { scoreboardTick, type ScoreboardChannel, type ScoreboardState } from "./scoreboard-tick.js";
+import { isScoreboardPost, scoreboardPost } from "./scoreboard-post.js";
 import type { BoardKind } from "@factions/roster";
 import { createGuildGateway } from "./guild.js";
 import { PgStructureStore } from "./structure-store.js";
@@ -507,6 +509,50 @@ export function createLeaderboardChannel(client: Client, channelId: string, site
 }
 
 /**
+ * The one standing post in the #scoreboard channel.
+ *
+ * ⚠️ `findMine` identifies the post by the scoreboard link in its heading,
+ * not by a stored id, and reads a bounded slice of recent history. Oldest
+ * first, so if two of ours ever exist the older one, already in place, wins.
+ *
+ * ⚠️ Mentions are suppressed: clan names and tags are player-chosen text.
+ *
+ * ⚠️ Throws on every unreachable path: `scoreboardTick` records a render as
+ * shown only when these resolve.
+ */
+export function createScoreboardChannel(client: Client, channelId: string, siteBaseUrl: string): ScoreboardChannel {
+  const fetchChannel = async () => {
+    const channel = await client.channels.fetch(channelId);
+    if (!channel?.isSendable() || !channel.isTextBased() || channel.isDMBased()) {
+      throw new Error(`scoreboard channel ${channelId} is missing or not sendable by this bot`);
+    }
+    return channel;
+  };
+  return {
+    async findMine() {
+      const channel = await fetchChannel();
+      const me = client.user?.id;
+      if (!me) throw new Error("scoreboard: the client has no user id yet");
+      const recent = await channel.messages.fetch({ limit: 50 });
+      const ours = [...recent.values()]
+        .filter((m) => m.author.id === me && isScoreboardPost(m.content, siteBaseUrl))
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+      return ours[0]?.id ?? null;
+    },
+    async post(p) {
+      const channel = await fetchChannel();
+      const sent = await channel.send({ content: p.content, embeds: p.embeds, allowedMentions: { parse: [] } });
+      return sent.id;
+    },
+    async edit(messageId, p) {
+      const channel = await fetchChannel();
+      const msg = await channel.messages.fetch(messageId);
+      await msg.edit({ content: p.content, embeds: p.embeds, allowedMentions: { parse: [] } });
+    },
+  };
+}
+
+/**
  * ⚠️ Same shape and reasoning as `createFeedPoster`: throws on every
  * unreachable path rather than returning quietly, because `warLogTick`
  * marks a row posted only when this resolves — a swallowed failure would
@@ -933,6 +979,15 @@ export async function start(cfg: BotConfig): Promise<void> {
   const leaderboardState: LeaderboardState = { messageIds: null, keys: new Map() };
   let lastLeaderboardAt = 0;
 
+  // The #scoreboard channel's one post, on the leaderboards' clock. It reads
+  // the same `scoreboard()` the site's /scoreboard page renders.
+  const scoreboardChannel = cfg.scoreboardChannelId
+    ? createScoreboardChannel(client, cfg.scoreboardChannelId, cfg.siteBaseUrl)
+    : null;
+  const scoreboardFlag = flagImageResolver(cfg.flagImageBaseUrl);
+  const scoreboardState: ScoreboardState = { messageId: null, key: null };
+  let lastScoreboardAt = 0;
+
   // The ten leaderboard crowns. Throttled the same way the reaper is, and for
   // the same reason — one interval in this process — but on its own clock,
   // because a pass is ten leaderboard queries rather than four deletes.
@@ -1185,6 +1240,23 @@ export async function start(cfg: BotConfig): Promise<void> {
         }
       } catch (err) {
         console.error("leaderboard tick failed", err);
+      }
+    }
+
+    // ⚠️ Its own try/catch and throttle, like the leaderboards beside it.
+    if (scoreboardChannel && Date.now() - lastScoreboardAt >= cfg.leaderboardTickIntervalMs) {
+      try {
+        const sb = await scoreboardTick(
+          { read: () => roster.scoreboard() }, scoreboardChannel, scoreboardState,
+          (board) => scoreboardPost(board, cfg.siteBaseUrl, scoreboardFlag, new Date()),
+          (what, err) => console.error(`scoreboard: ${what}`, err),
+        );
+        lastScoreboardAt = Date.now();
+        if (sb.posted || sb.edited || sb.errors > 0) {
+          console.log(`scoreboard: ${sb.posted ? "posted" : sb.edited ? "edited" : "unchanged"}, ${sb.errors} error(s)`);
+        }
+      } catch (err) {
+        console.error("scoreboard tick failed", err);
       }
     }
 

@@ -100,6 +100,12 @@ export type BotConfig = {
    */
   leaderboardsChannelId: string | undefined;
   /**
+   * The #scoreboard channel: one standing post of clan cards, edited in
+   * place on the leaderboards' clock (`leaderboardTickIntervalMs`).
+   * Optional — unset and nothing is posted or edited.
+   */
+  scoreboardChannelId: string | undefined;
+  /**
    * How often the ten board messages reconcile. Default 5 minutes, the same
    * clock the crowns run on: both read the same ten leaderboards, and a
    * board that moved should move its crown and its message together.
@@ -467,6 +473,7 @@ export function loadConfig(env: NodeJS.ProcessEnv): BotConfig {
     linkedRoleId: requiredSnowflake(env, "LINKED_ROLE_ID", "the @Linked role"),
     alphaRoleId: requiredSnowflake(env, "ALPHA_ROLE_ID", "the @Alpha role"),
     leaderboardsChannelId: optionalSnowflake(env, "LEADERBOARDS_CHANNEL_ID"),
+    scoreboardChannelId: optionalSnowflake(env, "SCOREBOARD_CHANNEL_ID"),
     leaderboardTickIntervalMs: positiveInt(env, "LEADERBOARD_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
     crownRoleIds: crownRoleIds(env),
     crownTickIntervalMs: positiveInt(env, "CROWN_TICK_INTERVAL_MS", 300_000, MAX_TIMER_MS),
