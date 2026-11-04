@@ -1,0 +1,1 @@
+ALTER TABLE "servers" ADD COLUMN "time_zone" text;

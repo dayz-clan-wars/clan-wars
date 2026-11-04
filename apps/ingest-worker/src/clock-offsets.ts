@@ -6,9 +6,18 @@
  * DayZ ADM logs record server-local wall-clock time, not UTC. These offsets were
  * measured against this export's own authoritative ISO timestamps (the export
  * header repeats each line's UTC instant alongside the server-local ADM text),
- * confirming three servers run on three different clocks: Chernarus UTC+4,
- * Livonia and Sakhal UTC+7. This is measured production data, not a guess —
+ * confirming three servers run on three different clocks: `UTC = local + 4h`
+ * for Chernarus, `+ 7h` for Livonia and Sakhal. This is measured production data, not a guess —
  * see scripts/backfill.md for the verification query that checks it.
+ *
+ * ⚠️ These are FIXED offsets, right only for the season they were measured in.
+ * `UTC = local + 4h` and `+ 7h` are the offsets of US Eastern and US Pacific
+ * DAYLIGHT time, and production server 1 (Pacific) was found to observe DST on
+ * 2026-11-01; the "+7h" nasdara entry is PDT, and is an hour wrong for an
+ * export recorded in winter. They stay fixed numbers because each replays one
+ * historical export already checked against its own UTC stamps — but an
+ * export that spans a DST change would be an hour off on one side of it.
+ * Live servers take an IANA zone in `servers.time_zone` instead.
  */
 export const CLOCK_OFFSET_MS_BY_MAP: Record<string, number> = {
   chernarus: 4 * 60 * 60 * 1000,

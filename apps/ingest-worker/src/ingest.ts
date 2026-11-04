@@ -2,7 +2,7 @@ import type { Database } from "@factions/db";
 import { admFiles, rawLines } from "@factions/db";
 import { appendEvent } from "@factions/event-log";
 import { poleKey } from "@factions/domain";
-import { parseLine, eventTypeFor, TimelineCursor } from "@factions/adm-parser";
+import { parseLine, eventTypeFor, TimelineCursor, type ServerClock } from "@factions/adm-parser";
 import { and, eq } from "drizzle-orm";
 
 export type IngestOptions = {
@@ -12,7 +12,8 @@ export type IngestOptions = {
   path?: string | null;
   bootAt: Date;
   lines: string[];
-  clockOffsetMs: number;
+  /** The server's clock: `clockFor(serverRow)`, or a fixed offset for the export replay. */
+  clock: ServerClock;
   /**
    * Whether this file is finished. FALSE for the newest file, which the
    * server is still writing — marking it complete would make the next tick
@@ -65,7 +66,7 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
   // Clamp: the file shrank or rotated. Never reprocess under this row's id.
   const from = opts.reparse ? 0 : Math.min(Math.max(existing.linesIngested, 0), total);
 
-  const cursor = new TimelineCursor(opts.bootAt, opts.clockOffsetMs);
+  const cursor = new TimelineCursor(opts.bootAt, opts.clock);
   let eventsAppended = 0;
   let linesCaptured = 0;
   let unparsedFlagLines = 0;
@@ -76,7 +77,9 @@ export async function ingestFile(db: Database, opts: IngestOptions): Promise<Ing
     // ⚠️ The cursor advances over EVERY line, including ones already written.
     // It is stateful — it rolls the date forward on a backwards clock jump —
     // so starting it at `from` would lose every midnight crossed before the
-    // resume point and put every later timestamp a day early, silently.
+    // resume point and put every later timestamp a day early, silently. With
+    // a zone it also remembers which pass of a repeated fall-back hour it is
+    // on; resuming mid-hour would put the second pass an hour early.
     const occurredAt = cursor.advance(raw);
 
     // Writes, and only writes, resume at the cursor.

@@ -218,9 +218,12 @@ export class NitradoClient {
     // genuinely live file is then treated by the tick as an old file, marked
     // `complete` and skipped forever, while the stale one is re-downloaded
     // every tick — the symptom is a server that silently stops ingesting after
-    // a backwards clock step. Accepted because the production servers run
-    // fixed UTC+4/+7 with no DST, and cross-checking Nitrado's mtime would
-    // introduce a worse hazard that fires on routine re-uploads.
+    // a backwards clock step. Servers DO observe DST (server 1 follows US
+    // Pacific time; this comment once said otherwise), so it can fire at a
+    // fall-back, but only for two files started inside the repeated hour, the
+    // later one at an earlier wall time — see the same hazard in the worker's
+    // tick.ts. Accepted because cross-checking Nitrado's mtime would introduce
+    // a worse hazard that fires on routine re-uploads.
     files.sort((a, b) => a.localTimestampMs - b.localTimestampMs);
     return files;
   }
