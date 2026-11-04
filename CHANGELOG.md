@@ -5,6 +5,10 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Event times no longer slip an hour when the server's clocks change for daylight saving. After the clocks went back on November 1, kills and other events were shown an hour early for three days, which could make a bounty kill look like it happened before the bounty was placed. Times from now on are right all year round. The three affected days have not been corrected yet.
+
 ## [2.16.0] - 2026-11-02
 
 ### Added

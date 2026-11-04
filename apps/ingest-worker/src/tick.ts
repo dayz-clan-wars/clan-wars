@@ -1,10 +1,12 @@
 import type { Database } from "@factions/db";
 import { admFiles, servers } from "@factions/db";
 import type { AdmFileRef } from "@factions/nitrado";
+import { zoneLocalToUtc, type ServerClock } from "@factions/adm-parser";
 import { and, eq } from "drizzle-orm";
 import { parseAdmContent } from "./parse-adm-content.js";
 import { ingestFile } from "./ingest.js";
 import { deriveClockOffsetMs } from "./derive-clock-offset.js";
+import { clockFor } from "./server-clock.js";
 
 /** Structural, so the tick is testable without HTTP. */
 export type NitradoLike = {
@@ -46,9 +48,15 @@ export type TickResult = {
   filesProcessed: number;
   linesCaptured: number;
   eventsAppended: number;
-  /** The offset in force for this tick, derived or retained. */
-  offsetMs: number;
+  /** The clock in force for this tick: the server's zone, or the offset derived or retained. */
+  clock: ServerClock;
 };
+
+/**
+ * Zone cross-check disagreements already logged, keyed `${serverId}:${residualMs}`,
+ * so a persistent one warns once per process instead of once a minute.
+ */
+const zoneWarned = new Set<string>();
 
 /** One ingestion pass for one server: backfill oldest-first under budget, then the live file. */
 export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResult> {
@@ -56,7 +64,8 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
   const [server] = await db.select().from(servers).where(eq(servers.id, serverId));
   if (!server) throw new Error(`ingestTick: no server ${serverId}`);
 
-  const out: TickResult = { filesProcessed: 0, linesCaptured: 0, eventsAppended: 0, offsetMs: server.clockOffsetMs };
+  // Throws on a bad `time_zone`, before any download: see clockFor.
+  const out: TickResult = { filesProcessed: 0, linesCaptured: 0, eventsAppended: 0, clock: clockFor(server) };
 
   const files = await client.listAdmFiles();
   if (files.length === 0) return out;
@@ -71,7 +80,35 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
     .filter((f) => Number.isFinite(f.localTimestampMs) && f.modifiedAtMs > 0)
     .map((f) => ({ localTimestampMs: f.localTimestampMs, modifiedAtMs: f.modifiedAtMs }));
 
-  const derived = deriveClockOffsetMs(candidates);
+  if (out.clock.kind === "zone") {
+    // ⚠️ The zone is the truth; derive nothing and write nothing. The ratchet
+    // below exists for servers whose zone we were never told, and it is what
+    // broke server 1 at the 2026-11-01 fall-back: it may only ever LOWER the
+    // offset, so it refused +7h -> +8h and stamped three days an hour early.
+    //
+    // Cross-check only. Re-time each listed file's name through the zone, then
+    // derive as below: if the zone is right, every candidate is just write lag
+    // and the derivation snaps to 0. Anything else means the zone, or the game
+    // server's clock, is not what we think — worth a warning, never a write.
+    // A NEGATIVE residual is certain (a file modified before it was created);
+    // a positive one can also be plain write lag on a tick that lists no
+    // short-lived file, the same blind spot the ratchet shrugs off.
+    const zone = out.clock.timeZone;
+    const residual = deriveClockOffsetMs(candidates.map((c) => ({
+      localTimestampMs: zoneLocalToUtc(zone, new Date(c.localTimestampMs)).getTime(),
+      modifiedAtMs: c.modifiedAtMs,
+    })));
+    const key = `${serverId}:${residual}`;
+    if (residual !== null && residual !== 0 && !zoneWarned.has(key)) {
+      zoneWarned.add(key);
+      console.warn(
+        `ingest: server ${serverId} file times disagree with time zone ${zone} by ${residual}ms ` +
+        "(UTC = zone time + this); ingesting with the zone regardless",
+      );
+    }
+  }
+
+  const derived = out.clock.kind === "zone" ? null : deriveClockOffsetMs(candidates);
   // ⚠️ Reject an implausible derivation BEFORE it can be retained. Retention
   // is a one-way downward ratchet, so a single poisoned value would be
   // permanent: an operator restoring an ADM file from a backup that preserves
@@ -97,8 +134,13 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
     // The stored value is never a placeholder: `clock_offset_ms` is NOT NULL
     // with no default and is populated from measured truth by
     // register-server.ts and replay-main.ts.
+    //
+    // ⚠️ Downward-only means it can follow a DST change in ONE direction: it
+    // drops at the spring-forward and never rises again at the fall-back. A
+    // server whose clock observes DST needs `servers.time_zone`, which skips
+    // this whole block.
     const retained = Math.min(derived, server.clockOffsetMs);
-    out.offsetMs = retained;
+    out.clock = { kind: "offset", offsetMs: retained };
     if (retained !== server.clockOffsetMs) {
       // An offset moving in production is worth seeing.
       console.log(`ingest: server ${serverId} clock offset ${server.clockOffsetMs} -> ${retained}`);
@@ -109,15 +151,23 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
   }
 
   // ⚠️ HAZARD, knowingly unfixed: "newest" is decided purely by the filename
-  // timestamp, which is server-LOCAL. If a server's local clock ever steps
-  // BACKWARDS (a DST transition, an operator changing the timezone), the file
-  // created after the step sorts BEFORE its predecessor. The genuinely live
-  // file is then treated as an old file, marked `complete`, and skipped
+  // timestamp, which is server-LOCAL. If a server's local clock steps
+  // BACKWARDS (a DST fall-back, an operator changing the timezone), a file
+  // created after the step can sort BEFORE its predecessor. The genuinely
+  // live file is then treated as an old file, marked `complete`, and skipped
   // forever, while the stale one is re-downloaded every tick — the symptom is
-  // a server that silently stops ingesting after a backwards clock step. We
-  // accept this: the three production servers run fixed UTC+4/+7 with no DST,
-  // and cross-checking against Nitrado's mtime would introduce a worse hazard
-  // that fires on routine re-uploads.
+  // a server that silently stops ingesting after a backwards clock step.
+  //
+  // Servers DO observe DST (server 1 follows US Pacific time; an earlier
+  // version of this comment said they "run fixed UTC+4/+7 with no DST", which
+  // was wrong), so this can fire once a year, but narrowly: the fall-back
+  // repeats one local hour, so it bites only when a file is created on the
+  // repeated hour's second pass with a wall time EARLIER than the file before
+  // it — two files started inside the same repeated hour, the later one at an
+  // earlier wall time (a crash loop around 01:00–02:00 local on the fall-back
+  // night could do it). `servers.time_zone` fixes the stamps, not this
+  // ordering. We still accept it: cross-checking against Nitrado's mtime would
+  // introduce a worse hazard that fires on routine re-uploads.
   const newestPath = files[files.length - 1]!.path;
   let budget = backfillBudget;
   let allCaughtUp = true;
@@ -199,7 +249,7 @@ export async function ingestTick(db: Database, deps: TickDeps): Promise<TickResu
       path: file.path,
       bootAt: parsed.bootAt,
       lines: parsed.lines,
-      clockOffsetMs: out.offsetMs,
+      clock: out.clock,
       markComplete: !isNewest,
     });
 

@@ -26,6 +26,23 @@ export const servers = pgTable("servers", {
    */
   clockOffsetMs: integer("clock_offset_ms").notNull(),
   /**
+   * The IANA zone the server's game clock follows (`America/Los_Angeles`),
+   * or null. When set it WINS over `clockOffsetMs`: ingest converts each line
+   * with the real zone rules, and the worker stops deriving and writing the
+   * offset. When null, ingest uses `clockOffsetMs` exactly as before.
+   *
+   * ⚠️ Set it for any server whose clock observes daylight saving. A single
+   * offset is right for half the year: server 1 follows US Pacific time, and
+   * after the 2026-11-01 fall-back the offset's downward-only ratchet could
+   * not rise from +7h to +8h, so three days of events were stamped an hour
+   * early (docs/deploy/2026-11-04-server-time-zone.md).
+   *
+   * Validated in code (`isValidTimeZone`, @factions/adm-parser), not by a
+   * CHECK: Postgres's zone list is not the one `Intl` converts with, and a
+   * bad value fails every ingest tick for that server loudly anyway.
+   */
+  timeZone: text("time_zone"),
+  /**
    * Nitrado service this server's ADM files are fetched from.
    *
    * Nullable: rows created by the historical-export replay predate Nitrado

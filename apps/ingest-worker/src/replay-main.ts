@@ -25,18 +25,20 @@ for (const [filename, group] of groups) {
 
   // Upsert rather than select-then-insert-if-missing, so a re-run without the
   // runbook's truncate step can never reuse a stale clockOffsetMs left on an
-  // existing row.
+  // existing row. `timeZone: null` for the same reason: the replay times
+  // with the fixed offset, and a stale zone on the row would make a later
+  // `reparse` re-time these files differently from how they were ingested.
   const [server] = await db.insert(servers)
-    .values({ name, map: group.map, clockOffsetMs })
+    .values({ name, map: group.map, clockOffsetMs, timeZone: null })
     .onConflictDoUpdate({
       target: [servers.name, servers.map],
-      set: { clockOffsetMs },
+      set: { clockOffsetMs, timeZone: null },
     })
     .returning();
 
   const r = await ingestFile(db, {
     serverId: server!.id, filename,
-    bootAt: group.bootAt, lines: group.lines, clockOffsetMs,
+    bootAt: group.bootAt, lines: group.lines, clock: { kind: "offset", offsetMs: clockOffsetMs },
     markComplete: true,
   });
   totalLines += group.lines.length;

@@ -59,7 +59,7 @@ describe("reparseStoredLines", () => {
 
   it("a normal ingest after the reparse still resumes at the cursor", async () => {
     await reparseStoredLines(db);
-    const r = await ingestFile(db, { serverId, filename: "a.ADM", bootAt: new Date("2026-09-06T20:09:46Z"), lines: LINES, clockOffsetMs: 0, markComplete: true });
+    const r = await ingestFile(db, { serverId, filename: "a.ADM", bootAt: new Date("2026-09-06T20:09:46Z"), lines: LINES, clock: { kind: "offset", offsetMs: 0 }, markComplete: true });
     expect(r.eventsAppended).toBe(0);
     expect(r.linesCaptured).toBe(0);
   });

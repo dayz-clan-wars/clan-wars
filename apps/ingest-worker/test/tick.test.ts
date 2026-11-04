@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { createClient, runMigrations, requireTestDatabaseUrl, servers, admFiles, rawLines, events, type Database } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
 import { ingestTick, type NitradoLike } from "../src/tick.js";
@@ -54,7 +54,7 @@ describe("ingestTick", () => {
   it("ingests every file and records the derived offset", async () => {
     const r = await ingestTick(db, { serverId, client: twoFiles(), backfillBudget: 15, failures: new Map() });
     expect(r.filesProcessed).toBe(2);
-    expect(r.offsetMs).toBe(7 * HOUR);
+    expect(r.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
     const [s] = await db.select().from(servers).where(eq(servers.id, serverId));
     expect(s?.clockOffsetMs).toBe(7 * HOUR);
   });
@@ -100,7 +100,7 @@ describe("ingestTick", () => {
       { name: "weird.ADM", path: "/w.ADM", localMs: NaN, modMs: 0, text: FILE_A },
     ]);
     const r = await ingestTick(db, { serverId, client, backfillBudget: 15, failures: new Map() });
-    expect(r.offsetMs).toBe(7 * HOUR);
+    expect(r.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
   });
 
   it("excludes a file whose mtime is missing from the derivation", async () => {
@@ -109,7 +109,7 @@ describe("ingestTick", () => {
       { name: "DayZServer_X1_x64_2026-07-23_01-00-00.ADM", path: "/b.ADM", localMs: day(23), modMs: day(23) + 7 * HOUR, text: FILE_B },
     ]);
     const r = await ingestTick(db, { serverId, client, backfillBudget: 15, failures: new Map() });
-    expect(r.offsetMs).toBe(7 * HOUR);
+    expect(r.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
   });
 
   it("continues past a file that fails to download", async () => {
@@ -142,7 +142,7 @@ describe("ingestTick", () => {
       { name: "DayZServer_X1_x64_2026-07-23_01-00-00.ADM", path: "/b.ADM", localMs: day(23), modMs: day(23) + 7 * HOUR, text: FILE_B },
     ]);
     const t1 = await ingestTick(db, { serverId, client: tight, backfillBudget: 15, failures: new Map() });
-    expect(t1.offsetMs).toBe(7 * HOUR);
+    expect(t1.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
 
     // Tick 2 sees only long write-lags: every candidate is now 9h.
     const loose = fake([
@@ -150,7 +150,7 @@ describe("ingestTick", () => {
       { name: "DayZServer_X1_x64_2026-07-23_01-00-00.ADM", path: "/b.ADM", localMs: day(23), modMs: day(23) + 9 * HOUR, text: FILE_B },
     ]);
     const t2 = await ingestTick(db, { serverId, client: loose, backfillBudget: 15, failures: new Map() });
-    expect(t2.offsetMs).toBe(7 * HOUR);
+    expect(t2.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
     const [s] = await db.select().from(servers).where(eq(servers.id, serverId));
     expect(s?.clockOffsetMs).toBe(7 * HOUR);
   });
@@ -247,7 +247,7 @@ describe("ingestTick", () => {
     ]);
     const r = await ingestTick(db, { serverId, client, backfillBudget: 15, failures: new Map() });
 
-    expect(r.offsetMs).toBe(7 * HOUR);
+    expect(r.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
     const [s] = await db.select().from(servers).where(eq(servers.id, serverId));
     expect(s?.clockOffsetMs).toBe(7 * HOUR);
   });
@@ -276,5 +276,111 @@ describe("ingestTick", () => {
       serverId, client: live(`${HEADER}\n${FULL}\n`), backfillBudget: 15, failures: new Map(),
     });
     expect(await storedLines(name)).toEqual([HEADER, FULL]);
+  });
+});
+
+describe("ingestTick across the 2026-11-01 Pacific fall-back", () => {
+  let db: Database;
+  let serverId = 0;
+
+  // 2026-11-01 in Pacific time: 01:59:59 PDT (08:59:59Z) is followed by
+  // 01:00:00 PST (09:00:00Z). The live file straddles it.
+  const OLD = body("2026-10-31 at 22:00:00", `22:00:30 | Player "A" (id=${ID}) is connected`);
+  const LIVE = body(
+    "2026-11-01 at 00:30:00",
+    `01:30:00 | Player "A" (id=${ID}) is connected`,
+    `01:59:59 | Player "A" (id=${ID}) is connected`,
+    `01:00:00 | Player "A" (id=${ID}) is connected`,
+    `01:30:00 | Player "A" (id=${ID}) is connected`,
+  );
+  const LIVE_NAME = "DayZServer_X1_x64_2026-11-01_00-30-00.ADM";
+  const files = () => fake([
+    // Created 22:00 PDT = 05:00Z and finished a minute later: the tight
+    // candidate, deriving +7h, that would ratchet a higher stored offset down.
+    { name: "DayZServer_X1_x64_2026-10-31_22-00-00.ADM", path: "/old.ADM",
+      localMs: Date.UTC(2026, 9, 31, 22, 0, 0), modMs: Date.UTC(2026, 10, 1, 5, 1, 0), text: OLD },
+    { name: LIVE_NAME, path: "/live.ADM",
+      localMs: Date.UTC(2026, 10, 1, 0, 30, 0), modMs: Date.UTC(2026, 10, 1, 9, 45, 0), text: LIVE },
+  ]);
+
+  const liveStamps = async () => {
+    const [f] = await db.select().from(admFiles).where(eq(admFiles.filename, LIVE_NAME));
+    const rows = await db.select().from(events).where(eq(events.admFileId, f!.id)).orderBy(events.lineIndex);
+    return rows.map((e) => e.occurredAt.toISOString());
+  };
+  const storedOffset = async () =>
+    (await db.select().from(servers).where(eq(servers.id, serverId)))[0]!.clockOffsetMs;
+
+  const register = async (timeZone: string | null, clockOffsetMs: number) => {
+    const [s] = await db.insert(servers).values({
+      name: "S", map: "nasdara", clockOffsetMs, timeZone, nitradoServiceId: 1234,
+    }).returning();
+    serverId = s!.id;
+  };
+
+  beforeEach(async () => {
+    db = createClient(URL);
+    await runMigrations(db);
+    await db.execute(sql`truncate table events, raw_lines, adm_files, servers restart identity cascade`);
+  });
+
+  it("stamps the repeated hour correctly with a zone, and leaves clock_offset_ms alone", async () => {
+    // Stored 9h on purpose: the files derive +7h, so the ratchet WOULD write
+    // here if it ran. With a zone nothing is derived and nothing written.
+    await register("America/Los_Angeles", 9 * HOUR);
+    const r = await ingestTick(db, { serverId, client: files(), backfillBudget: 15, failures: new Map() });
+
+    expect(r.clock).toEqual({ kind: "zone", timeZone: "America/Los_Angeles" });
+    expect(await liveStamps()).toEqual([
+      "2026-11-01T08:30:00.000Z", // 01:30 PDT
+      "2026-11-01T08:59:59.000Z", // 01:59:59 PDT
+      "2026-11-01T09:00:00.000Z", // 01:00 PST, after the step back
+      "2026-11-01T09:30:00.000Z", // 01:30 PST
+    ]);
+    expect(await storedOffset()).toBe(9 * HOUR);
+  });
+
+  it("without a zone, behaves exactly as before: fixed offset, ratchet held", async () => {
+    // This IS the bug the zone fixes, pinned as the behaviour of a server
+    // with no zone, so the change cannot move other installs.
+    await register(null, 7 * HOUR);
+    const r = await ingestTick(db, { serverId, client: files(), backfillBudget: 15, failures: new Map() });
+
+    expect(r.clock).toEqual({ kind: "offset", offsetMs: 7 * HOUR });
+    expect(await liveStamps()).toEqual([
+      "2026-11-01T08:30:00.000Z",
+      "2026-11-01T08:59:59.000Z",
+      "2026-11-01T08:00:00.000Z", // an hour early
+      "2026-11-01T08:30:00.000Z", // an hour early
+    ]);
+    expect(await storedOffset()).toBe(7 * HOUR);
+  });
+
+  it("still ratchets a null-zone server's offset down", async () => {
+    await register(null, 9 * HOUR);
+    await ingestTick(db, { serverId, client: files(), backfillBudget: 15, failures: new Map() });
+    expect(await storedOffset()).toBe(7 * HOUR);
+  });
+
+  it("warns, without writing, when the file times disagree with the zone", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    try {
+      // The files are Pacific; claiming New York leaves a 3h residual.
+      await register("America/New_York", 9 * HOUR);
+      await ingestTick(db, { serverId, client: files(), backfillBudget: 15, failures: new Map() });
+      expect(warn.mock.calls.map((c) => String(c[0])).filter((m) => m.includes("disagree with time zone")))
+        .toEqual([expect.stringContaining(`by ${3 * HOUR}ms`)]);
+      expect(await storedOffset()).toBe(9 * HOUR);
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it("refuses a time zone it cannot convert in, before downloading anything", async () => {
+    await register("America/Los_Angles", 7 * HOUR);
+    const client = files();
+    await expect(ingestTick(db, { serverId, client, backfillBudget: 15, failures: new Map() }))
+      .rejects.toThrow(/not a time zone/);
+    expect(client.downloads).toEqual([]);
   });
 });

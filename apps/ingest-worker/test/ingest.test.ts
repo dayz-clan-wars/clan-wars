@@ -30,7 +30,7 @@ describe("ingestFile", () => {
 
   const opts = () => ({
     serverId, filename: "a.ADM",
-    bootAt: new Date("2026-07-22T07:01:37Z"), lines: LINES, clockOffsetMs: 0,
+    bootAt: new Date("2026-07-22T07:01:37Z"), lines: LINES, clock: { kind: "offset" as const, offsetMs: 0 },
     markComplete: true,
   });
 
@@ -141,7 +141,7 @@ describe("ingestFile", () => {
   it("shifts occurredAt by the server's clock offset", async () => {
     // A server running 4 hours ahead of UTC (e.g. Chernarus UTC+4) records
     // 10:21:40 local time for what is actually 14:21:40Z.
-    await ingestFile(db, { ...opts(), clockOffsetMs: 4 * 60 * 60 * 1000 });
+    await ingestFile(db, { ...opts(), clock: { kind: "offset", offsetMs: 4 * 60 * 60 * 1000 } });
     const rows = await db.select().from(events).orderBy(events.lineIndex);
     expect(rows[1]?.occurredAt.toISOString()).toBe("2026-07-22T14:21:40.000Z");
   });
@@ -149,7 +149,7 @@ describe("ingestFile", () => {
   describe("resuming", () => {
     const ingest = (lines: string[], markComplete = false) => ingestFile(db, {
       serverId, filename: "resume.ADM", bootAt: new Date("2026-07-22T07:01:37Z"),
-      lines, clockOffsetMs: 0, markComplete,
+      lines, clock: { kind: "offset", offsetMs: 0 }, markComplete,
     });
 
     it("returns the line count as the new cursor", async () => {
@@ -245,11 +245,11 @@ describe("ingestFile", () => {
       ];
       await ingestFile(db, {
         serverId, filename: "midnight.ADM", bootAt: new Date("2026-07-22T07:01:37Z"),
-        lines: early, clockOffsetMs: 0, markComplete: false,
+        lines: early, clock: { kind: "offset", offsetMs: 0 }, markComplete: false,
       });
       await ingestFile(db, {
         serverId, filename: "midnight.ADM", bootAt: new Date("2026-07-22T07:01:37Z"),
-        lines: grown, clockOffsetMs: 0, markComplete: false,
+        lines: grown, clock: { kind: "offset", offsetMs: 0 }, markComplete: false,
       });
       const rows = await db.select().from(events).orderBy(events.id);
       const last = rows[rows.length - 1]!;
