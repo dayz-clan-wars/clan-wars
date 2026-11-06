@@ -4,7 +4,7 @@ import {
 } from "discord.js";
 import { createClient, servers } from "@factions/db";
 import { and, asc, eq, isNotNull } from "drizzle-orm";
-import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS, LINK_SWEEP_MAX_PER_PASS } from "@factions/domain";
+import { emoteLabel, WEEKLY_WIPE_VEHICLES, FIXED_WEEKLY_WIPES, BAN_APPLY_LOOKBACK_MS, LINK_SWEEP_MAX_PER_PASS, LINK_SWEEP_INTERVAL_MS } from "@factions/domain";
 import type { CommandDeps } from "./commands.js";
 import { PgVerificationStore, type ReferralRefusal } from "@factions/verification";
 import { REFERRAL_COPY } from "@factions/copy";
@@ -1011,6 +1011,9 @@ export async function start(cfg: BotConfig): Promise<void> {
   // tick — see the throttle beside expirePendingMembers below.
   const REAPER_INTERVAL_MS = 5 * 60_000;
   let lastReaperAt = 0;
+  // Link sweep throttle and capped-episode flag (alert once per episode).
+  let lastSweepAt = 0;
+  let sweepCapped = false;
 
   // The leaderboards channel's ten standing messages, on the same clock as
   // the crowns below — both read the same ten boards.
@@ -1206,27 +1209,34 @@ export async function start(cfg: BotConfig): Promise<void> {
     }
 
     // ⚠️ Spec §9 (reverses ruling 10): links whose Discord user left while the
-    // bot was down. `ready: membersFetched` is load-bearing — a cold member
-    // cache reads as "everyone left". Its own try/catch.
-    try {
-      const sw = await sweepMissedRemovals(db, {
-        ready: membersFetched,
-        isMember: (id) => guildGateway.isMember(id),
-        now: new Date(),
-        max: LINK_SWEEP_MAX_PER_PASS,
-      });
-      const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
-      if (sw.removed.length > 0) {
-        await ops(`Link sweep: removed ${sw.removed.length} linked user(s) who had left the Discord: ${sw.removed.map((id) => `<@${id}>`).join(", ")}`);
+    // bot was down. `membersFetched` is load-bearing — a cold member cache
+    // reads as "everyone left". Hourly (plus once right after the first full
+    // fetch, since lastSweepAt starts at 0) so a bad read cannot repeat every
+    // tick. Its own try/catch.
+    if (membersFetched && Date.now() - lastSweepAt >= LINK_SWEEP_INTERVAL_MS) {
+      try {
+        const sw = await sweepMissedRemovals(db, {
+          ready: membersFetched,
+          isMember: (id) => guildGateway.isMember(id),
+          now: new Date(),
+          max: LINK_SWEEP_MAX_PER_PASS,
+        });
+        lastSweepAt = Date.now();
+        const ops = opsChannelPoster ?? (async (content: string) => { console.error(content); });
+        if (sw.removed.length > 0) {
+          await ops(`Link sweep: removed ${sw.removed.length} linked user(s) who had left the Discord: ${sw.removed.map((r) => `${r.gamertag} (<@${r.discordId}>)`).join(", ")}`);
+        }
+        if (sw.capped && !sweepCapped) {
+          // Error level on purpose, once per episode: this many missing at
+          // once is more likely a bad member read than a real exodus.
+          const msg = `Link sweep halted: ${sw.missing} linked users look absent from the Discord, over the cap of ${LINK_SWEEP_MAX_PER_PASS}. A bad member read is the likely cause; nobody was removed.`;
+          console.error(msg);
+          await ops(msg);
+        }
+        sweepCapped = sw.capped;
+      } catch (err) {
+        console.error("link sweep failed", err);
       }
-      if (sw.capped) {
-        // Error level on purpose: more than the cap missing at once is more
-        // likely a bad member read than a real exodus.
-        console.error(`link sweep hit its cap of ${LINK_SWEEP_MAX_PER_PASS}; more linked users look absent. Check the member cache before trusting it.`);
-        await ops(`Link sweep hit its cap of ${LINK_SWEEP_MAX_PER_PASS} removals; more linked users look absent from the Discord. Check the member read.`);
-      }
-    } catch (err) {
-      console.error("link sweep failed", err);
     }
 
     // ⚠️ Its own try/catch, right after structure and on its own throttle: the

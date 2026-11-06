@@ -32,7 +32,7 @@ describe("sweepMissedRemovals", () => {
     await seed(2);
     const calls: string[] = [];
     const r = await sweepMissedRemovals(db, { ready: false, isMember: () => false, now, max: 5, remove: fakeRemove(calls) });
-    expect(r).toEqual({ removed: [], capped: false });
+    expect(r).toEqual({ removed: [], capped: false, missing: 0 });
     expect(calls).toEqual([]);
     expect(await left()).toHaveLength(2);
   });
@@ -41,7 +41,7 @@ describe("sweepMissedRemovals", () => {
     await seed(3);
     const calls: string[] = [];
     const r = await sweepMissedRemovals(db, { ready: true, isMember: () => true, now, max: 5, remove: fakeRemove(calls) });
-    expect(r).toEqual({ removed: [], capped: false });
+    expect(r).toEqual({ removed: [], capped: false, missing: 0 });
     expect(calls).toEqual([]);
   });
 
@@ -49,24 +49,49 @@ describe("sweepMissedRemovals", () => {
     await seed(3);
     const calls: string[] = [];
     const r = await sweepMissedRemovals(db, { ready: true, isMember: (id) => id === "d2", now, max: 5, remove: fakeRemove(calls) });
-    expect(r).toEqual({ removed: ["d1", "d3"], capped: false });
+    expect(r.removed.map((x) => x.discordId)).toEqual(["d1", "d3"]);
+    expect(r.removed[0]).toEqual({ discordId: "d1", gamertag: "G1" });
+    expect(r.capped).toBe(false);
     expect(await left()).toEqual(["d2"]);
   });
 
-  it("stops at the cap, oldest first", async () => {
+  it("halts over the cap: removes nobody", async () => {
     await seed(8);
     const calls: string[] = [];
     const r = await sweepMissedRemovals(db, { ready: true, isMember: () => false, now, max: 5, remove: fakeRemove(calls) });
-    expect(r.capped).toBe(true);
-    expect(r.removed).toEqual(["d1", "d2", "d3", "d4", "d5"]);
-    expect(await left()).toEqual(["d6", "d7", "d8"]);
+    expect(r).toEqual({ removed: [], capped: true, missing: 8 });
+    expect(calls).toEqual([]);
+    expect(await left()).toHaveLength(8);
+  });
+
+  it("removes everyone when exactly at the cap", async () => {
+    await seed(5);
+    const calls: string[] = [];
+    const r = await sweepMissedRemovals(db, { ready: true, isMember: () => false, now, max: 5, remove: fakeRemove(calls) });
+    expect(r.capped).toBe(false);
+    expect(r.removed.map((x) => x.discordId)).toEqual(["d1", "d2", "d3", "d4", "d5"]);
+    expect(await left()).toEqual([]);
+  });
+
+  it("does not report a user whose link was already gone", async () => {
+    await seed(2);
+    const remove: RemoveFromGuild = async (_d, a) => ({ linked: a.discordId !== "d1", roster: "none" }) as never;
+    const r = await sweepMissedRemovals(db, { ready: true, isMember: () => false, now, max: 5, remove });
+    expect(r.removed.map((x) => x.discordId)).toEqual(["d2"]);
+  });
+
+  it("uses the real store by default", async () => {
+    await seed(2);
+    const r = await sweepMissedRemovals(db, { ready: true, isMember: (id) => id === "d2", now, max: 5 });
+    expect(r.removed.map((x) => x.discordId)).toEqual(["d1"]);
+    expect(await left()).toEqual(["d2"]);
   });
 
   it("one remove throwing does not stop the rest", async () => {
     await seed(3);
     const calls: string[] = [];
     const r = await sweepMissedRemovals(db, { ready: true, isMember: () => false, now, max: 5, remove: fakeRemove(calls, "d1") });
-    expect(r.removed).toEqual(["d2", "d3"]);
+    expect(r.removed.map((x) => x.discordId)).toEqual(["d2", "d3"]);
     expect(calls).toEqual(["d1", "d2", "d3"]);
   });
 });

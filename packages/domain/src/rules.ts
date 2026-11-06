@@ -23,8 +23,15 @@ export const LINK_TO_PLAY_GRACE_MS = 60 * MIN;
 export const LINK_TO_PLAY_LIFT_MS = 60 * MIN;
 // ...at most once per this window per gamertag.
 export const LINK_TO_PLAY_LIFT_WINDOW_MS = 24 * HOUR;
-// Most gamertags the link sweep will check in one pass.
+// Most removals the link sweep will make in one pass. More linked users than
+// this looking absent at once halts the pass: that is a bad member read, not
+// "a handful" of real leavers (spec §9).
 export const LINK_SWEEP_MAX_PER_PASS = 5;
+// ⚠️ The sweep runs at most this often (plus once right after the first full
+// member fetch). On the 10 s tick a bad member read lasting a few ticks would
+// otherwise repeat; hourly bounds a bad read to one pass per hour. The live
+// guildMemberRemove event is the fast path; this is only the backstop.
+export const LINK_SWEEP_INTERVAL_MS = 60 * MIN;
 // ⚠️ Placeholder launch instant: the runbook sets the real one by release.
 // Play before this never counts toward the grace hour, and bans before it
 // never count as "hour already spent".

@@ -12,10 +12,10 @@ import { handleGuildMemberRemove, type RemoveFromGuild } from "./guild-removal.j
  * reads as "everyone left", and the removals this runs are irreversible
  * (link, roster row, ban). Never run it without that.
  *
- * ⚠️ Capped per pass, oldest link first so repeated passes converge. More
- * non-members than the cap in one read is more likely a bad cache read than a
- * real exodus; `capped` lets the caller shout about it while still bounding
- * the damage to `max` removals per pass.
+ * ⚠️ HALTS over the cap: if MORE than `max` linked users look absent, nobody
+ * is removed and `capped` is true. A handful of leavers is plausible after
+ * downtime; hundreds is a bad member read, and the removals are irreversible.
+ * At or under the cap, all of them are removed, oldest link first.
  *
  * Each removal goes through `handleGuildMemberRemove` (same-guild sentinel
  * below), so it gets the live handler's one deadlock retry and the same
@@ -30,28 +30,30 @@ export async function sweepMissedRemovals(
     max: number;
     remove?: RemoveFromGuild;
   },
-): Promise<{ removed: string[]; capped: boolean }> {
-  if (!opts.ready) return { removed: [], capped: false };
+): Promise<{ removed: { discordId: string; gamertag: string }[]; capped: boolean; missing: number }> {
+  if (!opts.ready) return { removed: [], capped: false, missing: 0 };
   const links = await db
-    .select({ discordId: identityLinks.discordId })
+    .select({ discordId: identityLinks.discordId, gamertag: identityLinks.gamertag })
     .from(identityLinks)
     .orderBy(asc(identityLinks.id));
-  const missing = links.map((l) => l.discordId).filter((id) => !opts.isMember(id));
-  const capped = missing.length > opts.max;
-  const removed: string[] = [];
-  for (const discordId of missing.slice(0, opts.max)) {
+  const missing = links.filter((l) => !opts.isMember(l.discordId));
+  if (missing.length > opts.max) return { removed: [], capped: true, missing: missing.length };
+  const removed: { discordId: string; gamertag: string }[] = [];
+  for (const { discordId, gamertag } of missing) {
     try {
       // The guild check is the live handler's concern; the sweep already
       // judged membership against the configured guild's cache.
-      await handleGuildMemberRemove(
+      const res = await handleGuildMemberRemove(
         db,
         { guildId: "sweep", expectedGuildId: "sweep", userId: discordId, now: opts.now },
         opts.remove,
       );
-      removed.push(discordId);
+      // Only a removal that actually dropped a link counts, so a user the
+      // live event already removed is not reported twice.
+      if (res !== "other-guild" && res.linked) removed.push({ discordId, gamertag });
     } catch (err) {
       console.error(`guild-sweep: removing ${discordId} failed`, err);
     }
   }
-  return { removed, capped };
+  return { removed, capped: false, missing: missing.length };
 }
