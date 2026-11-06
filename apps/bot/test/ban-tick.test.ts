@@ -493,6 +493,22 @@ describe("banTick", () => {
       expect((await allRows())[0]!.status).toBe("expired");
     });
 
+    it("overlapping bans: the last row to close removes the bot's entries", async () => {
+      const a = await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), expiresAt: at("2026-09-15T05:00:00Z"), reason: "hub_combat" });
+      const fake = fakeClient();
+      const opts = { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId };
+      await banTick(db, fake, opts);
+      const b = await insertBan({ bannedAt: at("2026-09-15T03:00:00Z"), expiresAt: null, reason: "unlinked" });
+      await banTick(db, fake, { ...opts, now: at("2026-09-15T04:00:00Z") });
+      expect((await db.select().from(bans).where(eq(bans.id, b.id)))[0]!.nitradoAdded).toEqual([DAYZ_ID, "Sasha"]);
+      await banTick(db, fake, { ...opts, now: at("2026-09-15T06:00:00Z") });
+      expect(fake.removed).toEqual([]);
+      expect((await db.select().from(bans).where(eq(bans.id, a.id)))[0]!.status).toBe("expired");
+      await db.update(bans).set({ status: "lift_pending" }).where(eq(bans.id, b.id));
+      await banTick(db, fake, { ...opts, now: at("2026-09-15T07:00:00Z") });
+      expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+    });
+
     it("a null nitrado_added still removes both", async () => {
       await insertBan({ status: "lift_pending", appliedAt: at("2026-09-14T00:00:00Z"), dryRun: false, nitradoAdded: null });
       const fake = fakeClient();

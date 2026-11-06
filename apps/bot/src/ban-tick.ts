@@ -81,6 +81,26 @@ async function stillBanned(db: Database, dayzId: string, now: Date, excludingBan
 }
 
 /**
+ * Names of the bot's OWN entries that another active row on this dayzId already holds
+ * (same predicate as `stillBanned`). ⚠️ addBans finds those names already present and
+ * reports them as not added, so without inheriting them an overlapping row would stamp
+ * [] and the last row to close would never remove the bot's entries — orphaned forever.
+ * A legacy null stamp means that row holds both identifiers.
+ */
+async function inheritedNames(db: Database, row: { id: number; dayzId: string; gamertag: string }, now: Date, serverId: number): Promise<string[]> {
+  const others = await db.select({ nitradoAdded: bans.nitradoAdded, dayzId: bans.dayzId, gamertag: bans.gamertag }).from(bans).where(and(
+    eq(bans.serverId, serverId),
+    eq(bans.dayzId, row.dayzId),
+    eq(bans.status, "applied"),
+    eq(bans.dryRun, false),
+    ne(bans.id, row.id),
+    or(isNull(bans.expiresAt), gt(bans.expiresAt, now)),
+  ));
+  const held = new Set(others.flatMap((o) => (o.nitradoAdded ?? [o.dayzId, o.gamertag]).map((n) => n.trim())));
+  return [row.dayzId, row.gamertag].map((n) => n.trim()).filter((n) => held.has(n));
+}
+
+/**
  * Reconciles ONE server's `bans` rows against ITS Nitrado ban list: applies
  * pending bans, expires bans past `expiresAt`, and lifts bans marked
  * `lift_pending`.
@@ -181,11 +201,19 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
               // Nitrado and an entry is keyed on the string, so removing a name that
               // was already there would free their ban (spec §5). A dry-run row
               // added nothing, hence [].
-              nitradoAdded: [row.dayzId, row.gamertag].filter((n) => added.includes(n)),
+              nitradoAdded: [],
             })
             .where(and(eq(bans.id, row.id), eq(bans.status, "pending")))
             .returning({ id: bans.id });
           if (!applied) return;   // another tick won the race
+          // Names we added this call (addBans returns trimmed strings, so compare
+          // trimmed) plus any our own other active rows already hold.
+          if (!opts.dryRun) {
+            const mine = [row.dayzId, row.gamertag].map((n) => n.trim());
+            const inherited = await inheritedNames(tx as unknown as Database, row, now, serverId);
+            const stamp = [...new Set([...mine.filter((n) => added.includes(n)), ...inherited])];
+            await tx.update(bans).set({ nitradoAdded: stamp }).where(eq(bans.id, row.id));
+          }
           out.applied++;
           // ⚠️ A dry-run row is still stamped `applied` locally (the audit
           // trail says what WOULD have happened) but never reached Nitrado,
