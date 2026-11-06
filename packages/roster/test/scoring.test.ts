@@ -1,11 +1,12 @@
 import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
-  servers, factions, players, seasons, seasonStandings, raids, defenses, alphaWeeks, seasonResults, events, admFiles,
+  servers, factions, players, seasons, membershipHistory, playerSessions, seasonStandings, raids, defenses, alphaWeeks, seasonResults, events, admFiles,
   type Database,
 } from "@factions/db";
 import { sql, eq } from "drizzle-orm";
-import { weekStartOf } from "@factions/domain";
+import { weekStartOf, clanValue, raidPoints } from "@factions/domain";
+import { CLANS, SEASON3 } from "../../domain/test/fixtures/season3-raids";
 import {
   scoreboardDb, alphasDb, seasonsDb, warLogDb,
 } from "../src/scoring";
@@ -111,6 +112,64 @@ describe("roster scoring reads", () => {
       const { rows } = await scoreboardDb(db);
       expect(rows.find((r) => r.tag === "XRAY")!.alpha).toBe(false);
       expect(rows.find((r) => r.tag === "YOKE")!.alpha).toBe(true);
+    });
+
+    describe("raid price", () => {
+      const NOON = new Date("2026-11-06T12:00:00Z");
+      // The production season 3 fixture, every clan active, ids mapped by tag.
+      const seedSeason3 = async () => {
+        const season = await seedSeason(db, serverId, new Date("2026-10-17T00:00:00Z"));
+        const ids = new Map<string, number>();
+        let n = 0;
+        for (const [tag, c] of Object.entries(CLANS)) {
+          const f = await seedFaction(db, { serverId, tag, texture: `Flag_${tag}`, poleKey: `${tag}:0:0`, x: 1000 * ++n, createdAt: c.activatedAt, activatedAt: c.activatedAt });
+          ids.set(tag, f.id);
+        }
+        for (const r of SEASON3) {
+          await mkRaid({ seasonId: season.id, victim: ids.get(r.victim)!, raider: ids.get(r.raider)!, points: r.points, at: r.fact.at });
+        }
+        return { season, ids };
+      };
+      const priceOf = async (tag: string) => (await scoreboardDb(db, NOON)).rows.find((r) => r.tag === tag)!.price!;
+
+      it("prices each clan's raid with the offline multiplier when nobody is on", async () => {
+        await seedSeason3();
+        const { rows } = await scoreboardDb(db, NOON);
+        const payouts = Object.fromEntries(rows.map((r) => [r.tag, r.price!.payout]));
+        expect(payouts).toEqual({ VOLK: 108, SKULL: 63, COCK: 85, Z2: 148, WOOKI: 75, MMBA: 56, OUT: 34, NDF: 57 });
+        const facts = SEASON3.map((r) => r.fact);
+        expect(payouts.Z2).toBe(raidPoints(clanValue(CLANS.Z2, facts, NOON), false));
+        expect(rows.find((r) => r.tag === "Z2")!.price).toMatchObject({ online: false, recentRaids: 9, hitsThisWeek: 1, newUntil: null });
+      });
+
+      it("pays 1.5x, and marks the clan online, while one of its full members is in session", async () => {
+        const { ids } = await seedSeason3();
+        await db.insert(membershipHistory).values({ serverId, factionId: ids.get("Z2")!, dayzId: "Z2MEMBER", joinedAt: day(60) });
+        await db.insert(playerSessions).values({ serverId, dayzId: "Z2MEMBER", connectedAt: new Date(NOON.getTime() - 3_600_000), connectEventId: await mkEvent() });
+        expect(await priceOf("Z2")).toMatchObject({ payout: 296, online: true });
+        expect((await priceOf("NDF")).online).toBe(false);
+      });
+
+      it("does not count a member who has left, or a session already closed", async () => {
+        const { ids } = await seedSeason3();
+        await db.insert(membershipHistory).values({ serverId, factionId: ids.get("Z2")!, dayzId: "GONE", joinedAt: day(60), leftAt: new Date(NOON.getTime() - 60_000) });
+        await db.insert(playerSessions).values({ serverId, dayzId: "GONE", connectedAt: new Date(NOON.getTime() - 3_600_000), connectEventId: await mkEvent() });
+        await db.insert(membershipHistory).values({ serverId, factionId: ids.get("NDF")!, dayzId: "CLOSED", joinedAt: day(60) });
+        await db.insert(playerSessions).values({ serverId, dayzId: "CLOSED", connectedAt: new Date(NOON.getTime() - 7_200_000), disconnectedAt: new Date(NOON.getTime() - 3_600_000), closeReason: "disconnect", connectEventId: await mkEvent() });
+        expect((await priceOf("Z2")).online).toBe(false);
+        expect((await priceOf("NDF")).online).toBe(false);
+      });
+
+      it("has no price for a dormant clan, and a 0 price with a 'new until' date for a clan under a week old", async () => {
+        const season = await seedSeason(db, serverId, new Date("2026-10-17T00:00:00Z"));
+        await seedFaction(db, { serverId, tag: "SLEEP", texture: "Flag_S", poleKey: "s:0:0", x: 1000, createdAt: day(90), activatedAt: day(90), status: "dormant", dormantSince: day(2) });
+        const fresh = new Date(NOON.getTime() - 2 * 86_400_000);
+        await seedFaction(db, { serverId, tag: "FRESH", texture: "Flag_F", poleKey: "f:0:0", x: 2000, createdAt: fresh, activatedAt: fresh });
+        void season;
+        const { rows } = await scoreboardDb(db, NOON);
+        expect(rows.find((r) => r.tag === "SLEEP")!.price).toBeNull();
+        expect(rows.find((r) => r.tag === "FRESH")!.price).toMatchObject({ payout: 0, newUntil: new Date(fresh.getTime() + 7 * 86_400_000) });
+      });
     });
 
     it("returns a null season and no rows before season 1 opens", async () => {

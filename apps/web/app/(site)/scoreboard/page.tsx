@@ -6,6 +6,7 @@ import { EMPTY_SCOREBOARD, ALPHA_BADGE } from "@/lib/scoring-copy";
 import { ScoringNav } from "@/app/components/scoring-nav";
 import { Page, PageHead, Body, Panel, Rank } from "@/app/components/ui";
 import { PhoneRows } from "@/app/components/score-rows";
+import { RaidPrices } from "@/app/components/raid-prices";
 import { guideLinkFor } from "@/lib/guide-links";
 
 export const metadata: Metadata = { title: "Clan Wars — scoreboard" };
@@ -27,6 +28,7 @@ export default async function ScoreboardPage() {
           <p className="text-ink-2">{EMPTY_SCOREBOARD}</p>
         ) : (
           <>
+            <RaidPrices rows={rows} />
             {/* Desktop: the table. */}
             <Panel className="hidden lg:block">
               <table className="w-full border-collapse text-[15px]">

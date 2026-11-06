@@ -7,7 +7,7 @@ import { PhoneRows } from "../app/components/score-rows";
 
 const row = (o: Partial<ScoreboardRow> = {}): ScoreboardRow => ({
   rank: 1, tag: "DR", name: "Dead Rabbits", texture: "Flag_Wolf", status: "active",
-  points: 400, raids: 2, timesRaided: 1, defenses: 1, alpha: false, ...o,
+  points: 400, raids: 2, timesRaided: 1, defenses: 1, alpha: false, price: null, ...o,
 });
 
 /**

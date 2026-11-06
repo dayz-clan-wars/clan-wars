@@ -28,7 +28,7 @@ import {
 } from "./reads";
 import {
   scoreboardDb, alphasDb, seasonsDb, warLogDb,
-  type Scoreboard, type ScoreboardRow, type AlphaWeek, type SeasonSummary, type WarLogEntry, type WarLogFilter,
+  type Scoreboard, type ScoreboardRow, type RaidPrice, type AlphaWeek, type SeasonSummary, type WarLogEntry, type WarLogFilter,
 } from "./scoring";
 import { mapStateDb, dropPinDb, deletePinDb, type MapState, type MapFix, type DropPinOutcome } from "./map";
 import { achievementsForDb, type AchievementWall, type AchievementTile, type AchievementSubject } from "./achievements";
@@ -82,7 +82,7 @@ export type {
   SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome, SuppliesOutcome,
 };
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest };
-export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
+export type { Scoreboard, ScoreboardRow, RaidPrice, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter };
 export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage, RowClan, RowClans, Encounter, FeedEntry, PlayerFeed };
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim };
 export type { VaultState, VaultLockView, VaultHistoryRow };

@@ -5,7 +5,7 @@ import { scoreboardTick, type ScoreboardChannel, type ScoreboardState } from "..
 
 const boardWith = (points: number): Scoreboard => ({
   season: { number: 3, startedAt: new Date(0), weekClosedThrough: null },
-  rows: [{ rank: 1, tag: "Z2", name: "Zone 2", texture: "Flag_Bear", status: "active", points, raids: 1, timesRaided: 0, defenses: 0, alpha: false }],
+  rows: [{ rank: 1, tag: "Z2", name: "Zone 2", texture: "Flag_Bear", status: "active", points, raids: 1, timesRaided: 0, defenses: 0, alpha: false, price: null }],
 });
 const render = (b: Scoreboard): ScoreboardPost => ({ content: "head", embeds: [{ description: String(b.rows[0]?.points) }] });
 

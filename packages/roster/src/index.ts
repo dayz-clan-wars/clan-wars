@@ -31,7 +31,7 @@ export type {
   SetRoleOutcome, TransferOutcome, RenameOutcome, CancelRebrandOutcome, RequestJoinOutcome, DecideRequestOutcome, SuppliesOutcome,
 } from "./api";
 export type { RosterRow, ClanView, DirectoryEntry, ClanPage, ClaimContext, MyInvite, MyRequest } from "./api";
-export type { Scoreboard, ScoreboardRow, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter } from "./api";
+export type { Scoreboard, ScoreboardRow, RaidPrice, AlphaWeek, SeasonSummary, WarLogEntry, WarLogFilter } from "./api";
 export type { StatScope, ResolvedScope, BoardRow, KdRow, LongestKillRow, Boards, PlayerProfile, BoardKind, BoardPage, RowClan, RowClans, Encounter, FeedEntry, PlayerFeed } from "./api";
 export type { ClaimOutcome, OpenVoteOutcome, CastOutcome, OpenVote, OpenClaim } from "./api";
 export type { VaultState, VaultLockView, VaultHistoryRow } from "./api";

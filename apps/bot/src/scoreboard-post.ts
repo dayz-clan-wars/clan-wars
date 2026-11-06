@@ -1,6 +1,6 @@
 import type { APIEmbed } from "discord.js";
 import type { Scoreboard, ScoreboardRow } from "@factions/roster";
-import { ALPHA_BADGE, EMPTY_SCOREBOARD } from "@factions/copy";
+import { ALPHA_BADGE, EMPTY_SCOREBOARD, PRICE_FOOTER, PRICE_TITLE, dormantLine, priceList, priceRow } from "@factions/copy";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { clanUrl, escapeMarkdown } from "./site-links.js";
 
@@ -8,10 +8,14 @@ const GOLD = 0xc8a044;
 const GREY = 0x4f545c;
 
 /**
- * Discord's cap on embeds in one message. Past it the post shows the top
- * cards and a "+N more" line that sends people to the site.
+ * Discord's cap on embeds in one message is 10, and the raid-price list takes
+ * one. Past this many the post shows the top cards and a "+N more" line that
+ * sends people to the site.
  */
-export const MAX_CARDS = 10;
+export const MAX_CARDS = 9;
+
+/** The price list's description holds 4096 characters; ~90 per row, so cap the rows and send the rest to the site. */
+const MAX_PRICE_ROWS = 30;
 
 /** What the bot sends and edits: the heading line and one card per clan. */
 export type ScoreboardPost = { content: string; embeds: APIEmbed[] };
@@ -36,14 +40,19 @@ export function isScoreboardPost(content: string, siteBaseUrl: string): boolean 
 }
 
 /**
- * Everything a card prints, so the post is edited exactly when it would look
+ * Everything the post prints, so it is edited exactly when it would look
  * different. The "Updated" timestamp is deliberately not in it: keying on the
  * clock would edit the post every pass.
+ *
+ * ⚠️ Prices drift with time (heat and hits fade), so each clan's rounded
+ * payout, online flag and reason counts are in the key: the post re-edits when
+ * a printed price changes. Never a clock or a relative time here.
  */
 export function scoreboardKey(board: Scoreboard): string {
   if (board.season === null) return "none";
   const rows = board.rows.map((r) =>
-    [r.rank ?? "-", r.tag, r.name, r.texture, r.status, r.points, r.raids, r.timesRaided, r.defenses, r.alpha ? 1 : 0].join(":"));
+    [r.rank ?? "-", r.tag, r.name, r.texture, r.status, r.points, r.raids, r.timesRaided, r.defenses, r.alpha ? 1 : 0,
+      r.price ? [r.price.payout, r.price.online ? 1 : 0, r.price.recentRaids, r.price.hitsThisWeek, r.price.newUntil?.getTime() ?? "-"].join(",") : "-"].join(":"));
   return `${board.season.number}|${rows.join("|")}`;
 }
 
@@ -56,7 +65,7 @@ function card(r: ScoreboardRow, siteBaseUrl: string, flagImage: FlagImageResolve
     dormant ? "Dormant" : null,
     r.rank === null ? "unranked" : null,
   ].filter((b) => b !== null);
-  const first = [`**${plural(r.points, "pt", "pts")}**`, ...badges].join(" · ");
+  const first = [`**${plural(r.points, "pt", "pts")}**`, r.price ? `💰 ${r.price.payout}` : null, ...badges].filter((b) => b !== null).join(" · ");
   const counts = `${plural(r.raids, "raid", "raids")} · raided ${plural(r.timesRaided, "time", "times")} · ${plural(r.defenses, "defense", "defenses")}`;
   const thumb = flagImage(r.texture);
   return {
@@ -67,6 +76,28 @@ function card(r: ScoreboardRow, siteBaseUrl: string, flagImage: FlagImageResolve
     description: `${first}\n${counts}`,
     color: r.rank !== null && !dormant ? GOLD : GREY,
     ...(thumb ? { thumbnail: { url: thumb } } : {}),
+  };
+}
+
+/**
+ * The first embed: what a raid pays right now, one row per active clan. The
+ * site's /scoreboard shows the same list from the same rows through the same
+ * copy (`priceRow`, `priceList`), so the two match.
+ *
+ * ⚠️ Its url is the scoreboard page, distinct from every card's clan url.
+ * Discord folds embeds that share a url into one gallery.
+ */
+function priceEmbed(board: Scoreboard, siteBaseUrl: string): APIEmbed {
+  const list = priceList(board.rows);
+  const rows = list.slice(0, MAX_PRICE_ROWS).map((r) => priceRow(escapeMarkdown(r.tag), r.price));
+  if (list.length > MAX_PRICE_ROWS) rows.push(`+${list.length - MAX_PRICE_ROWS} more on the site`);
+  const dormant = dormantLine(board.rows.filter((r) => r.price === null).map((r) => escapeMarkdown(r.tag)));
+  return {
+    title: PRICE_TITLE,
+    url: scoreboardPageUrl(siteBaseUrl),
+    description: [...rows, ...(dormant ? ["", dormant] : [])].join("\n"),
+    color: GOLD,
+    footer: { text: PRICE_FOOTER },
   };
 }
 
@@ -95,7 +126,7 @@ export function scoreboardPost(board: Scoreboard, siteBaseUrl: string, flagImage
   if (shown.length === 0) {
     return { content: lines.join("\n"), embeds: [{ description: "No clans yet.", color: GREY, ...stamp }] };
   }
-  const embeds = shown.map((r) => card(r, siteBaseUrl, flagImage));
+  const embeds = [priceEmbed(board, siteBaseUrl), ...shown.map((r) => card(r, siteBaseUrl, flagImage))];
   embeds[embeds.length - 1] = { ...embeds[embeds.length - 1], ...stamp };
   return { content: lines.join("\n"), embeds };
 }
