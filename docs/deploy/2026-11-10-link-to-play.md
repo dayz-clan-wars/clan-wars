@@ -89,7 +89,8 @@ who was in game when it applied (they get dropped, or cannot rejoin). Record wha
 in `docs/deploy/2026-09-22-hub-combat.md` §9, which has the same open question.
 
 Watch the first lift: a banned player starts a link and the row goes `lift_pending`,
-then `lifted` once `banTick` removes the ban-list entry. They have `LINK_TO_PLAY_LIFT_MS`
+then `lifted` once `banTick` removes the ban-list entry (a row that was still `pending`
+closes with nothing to remove). They have `LINK_TO_PLAY_LIFT_MS`
 (1 hour) to finish linking, then the gate bans them again. A second attempt within 24 h
 does not lift again.
 
@@ -99,8 +100,14 @@ Set `LINK_TO_PLAY=off` (or remove it) and `sudo systemctl restart clan-wars-bot`
 stops new `unlinked` rows but leaves open ones banned. Lift them by setting them
 `lift_pending`, never `lifted` directly, so `banTick` removes the ban-list entry:
 
-    update bans set status = 'lift_pending'
+    update bans set status = 'lift_pending',
+      nitrado_added = case when status = 'pending' then '{}' else nitrado_added end
     where reason = 'unlinked' and status in ('pending', 'applied');
+
+⚠️ A `pending` row has never touched Nitrado, so its `nitrado_added` is NULL, and the lift
+arm treats NULL as "remove both identifiers", which could free an entry the owner added by
+hand. Setting it to `'{}'` for pending rows makes the lift remove nothing. Do not rely on
+pending rows being dry-run and skipped.
 
 Run the count first inside `begin read only` with the same predicate. ⚠️ Only
 `reason = 'unlinked'`: never touch other reasons. `banTick` removes only what each ban
