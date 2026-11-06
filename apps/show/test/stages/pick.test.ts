@@ -18,6 +18,12 @@ describe("pickWeek", () => {
     expect((await pickWeek(db, at(7, 1)))?.toISOString()).toBe(MON.toISOString());
   });
 
+  it("the bridging week is ready at the 14:00 cutover, not at the next midnight", async () => {
+    await closeThrough(db, new Date("2026-11-02T00:00:00Z"));
+    await fx.event("player.connected", new Date("2026-11-08T14:00:05Z"));
+    expect((await pickWeek(db, new Date("2026-11-08T14:30:00Z")))?.toISOString()).toBe("2026-11-02T00:00:00.000Z");
+  });
+
   it("waits while the week is not closed", async () => {
     await closeThrough(db, PREV_MON);
     await fx.event("player.connected", at(7, 0, 5));
