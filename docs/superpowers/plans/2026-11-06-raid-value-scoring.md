@@ -309,7 +309,7 @@
   - **Roster:** for the Task 3 fixture at `2026-11-06T12:00Z` with nobody online, Z2's `price.payout` is **148** (value 197.60 × 0.75), and **296** with a Z2 member in session. Also assert it equals a direct `raidPoints(clanValue(...))` call. The other offline payouts at that instant: VOLK 108, SKULL 63, COCK 85, WOOKI 75, MMBA 56, OUT 34, NDF 57. SKULL, WOOKI and MMBA are dormant on production, so seed them active in the test if you assert theirs.
   - **Bot post:**
     - The first embed is titled "💰 What a raid pays right now".
-    - Its rows read like `Z2 · 148 · 🔥 7 recent raids · 🩹 hit 1 time this week`.
+    - Its rows read like `Z2 · 148 · 🔥 9 recent raids · 🩹 hit 1 time this week`.
     - A 🟢 row shows the ×1.5 payout.
     - A 🐣 row reads `new, counts from <date>`.
     - The dormant line is present.
