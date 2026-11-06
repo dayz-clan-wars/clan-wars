@@ -150,27 +150,31 @@ Calls I made (the owner hasn't ruled on these):
 ### Worked check (the acceptance fixture)
 
 Season 3 holds 19 raid rows (ids 18–36), of which 18 have a raider clan.
-Replaying those 18 with these rules, online multiplier included, as of
-2026-11-06 12:00 UTC gives season points **Z2 515, COCK 300, NDF 296, VOLK
-293**, everyone else 0.
+The retroactive old-flag scan (§6) adds one more: **Z2→NDF at
+2026-11-06 01:32:37**, where chaandlr (Z2) lowered NDF's `Flag_LivoniaArmy`,
+raised by an NDF member on a pole that isn't anyone's declared base. Replaying
+those 19 with these rules, online multiplier included, as of 2026-11-06 12:00
+UTC gives season points **Z2 670, NDF 333, COCK 300, VOLK 293**, everyone else
+0.
 
-- **Values at that instant:** VOLK 144, SKULL 83, COCK 113, Z2 172, WOOKI 100,
-  MMBA 74, OUT 45, NDF 143. Values don't depend on online status.
+- **Values at that instant:** VOLK 144, SKULL 83, COCK 113, Z2 198, WOOKI 100,
+  MMBA 74, OUT 45, NDF 76. Values don't depend on online status.
 - **Online raids** (a victim member was in session, checked against
-  production `player_sessions` × `membership_history`): ids 19, 22, 27, 29
-  and 34. The other 13 were offline.
+  production `player_sessions` × `membership_history`): ids 19, 22, 27, 29,
+  34, and the retro Z2→NDF (2 NDF members online). The other 13 were offline.
 - **Notable rows:**
   - VOLK→COCK, 11-04 18:44, online: value 196, paid **293**.
-  - NDF→Z2, 11-06 03:10, offline: value 338, paid **253**.
+  - Z2→NDF, 11-06 01:32, retro, online: paid **155**.
+  - NDF→Z2, 11-06 03:10, offline: paid **290**. It's larger than without the
+    retro raid, because Z2's heat rose from it.
   - Z2→OUT, 11-01 18:44, offline: value 38, paid **29**.
 - **The bridging week** (Mon 2026-11-02 00:00 to Sun 2026-11-08 14:00 UTC; the
   closed weeks before it are frozen and not re-crowned), as of the replay
-  instant: **VOLK 293** (→COCK, online), **NDF 253** (→Z2), **Z2 55** (→OUT).
-  NDF's 43 against MMBA on Sun 11-01 22:01 falls in the frozen old week, not
-  this one.
+  instant: **VOLK 293**, **NDF 290**, **Z2 210** (55 + 155). NDF's 43 against
+  MMBA on Sun 11-01 22:01 falls in the frozen old week, not this one.
 
-The replay scripts (`value2.py`, `value3.py`) were session scratch and aren't
-committed. Turn these inputs and outputs into a domain unit test, so real data
+The replay scripts (`value2.py`, `value3.py`, `value4.py`) were session scratch
+and aren't committed. Turn these inputs and outputs into a domain unit test, so real data
 pins the formula.
 
 ## 2. Raids away from the declared base (old flags)
@@ -208,6 +212,14 @@ or not.*
     A member who has since left still counts as having raised it for X.
   - Attribute to the **raiser's clan**, not to whoever owns the texture today.
     After a rebrand the texture can belong to someone else.
+  - **Call I made: the lowered flag must be X's OWN flag**, meaning X's texture
+    at the raise instant (`faction_textures` history). A white flag, or
+    another clan's flag a member of X happened to raise, isn't a raid on X. The
+    owner's examples were all "their own flag" ("if X is dumb enough to raise
+    their own flag on Y's pole"; "moves bases but does not lower their old
+    flag"). Without this, every white flag a clan member ever raised and left
+    behind would count. On season 3 data that would have added dozens of
+    lowerings of abandoned white flags as raids.
 - **Why "raised by a member" matters.** A lowered flag can be carried off. A
   raider could raise a rival's flag on their own pole and have a friendly clan
   lower it for points. Requiring a member raise blocks that farm.
@@ -242,11 +254,17 @@ Calls I made:
   replaces Monday 00:00 UTC for `raids.week_start`, `alpha_weeks`,
   `seasons.week_closed_through`, the week close, and the weekly award.
 
-Call I made: `weekStartOf` is shared with `apps/show/src/weeks.ts` and
-`packages/roster/src/scoring.ts`. Add a separate scoring-week function and leave
-the weekly show on its own Monday calendar unless the builder finds the
-show reads Alpha weeks directly. If it does, move it with scoring and say so in
-the plan.
+- **This weekend closes at the new time too** (owner decision, 2026-11-06).
+  The window open at launch closes **Sunday 2026-11-08 14:00 UTC**, not Monday
+  00:00. `raidWindowAt` is level-triggered, so the new `RAID_WINDOW` alone does
+  it at the first restart slot after Sunday 14:00. The window was announced as
+  closing Monday, so the close notice for this weekend has to be right, and the
+  player post has to say so. Check that `raid_window_announcements` doesn't
+  hold a queued or posted "closes Monday" line that would contradict it. The
+  next window opens Friday 2026-11-13 14:00 UTC.
+- `weekStartOf` is shared with `apps/show/src/weeks.ts` and
+  `packages/roster/src/scoring.ts`. The show reads `alpha_weeks`, so it moves
+  with scoring (see §6, the cutover).
 
 ## 4. The weekly raid award
 
@@ -343,9 +361,30 @@ Monday keys.
 
 Calls I made:
 
-- **Only existing raid rows are rescored.** Old-flag lowerings from before the
-  ship date aren't detected retroactively.
 - **Old `#war-log` lines aren't edited.** They're a record of what was posted.
+- **Retroactive raids post nothing:** no war-log line, no clan notice. A burst of
+  back-dated raid lines would read as live raids. The changelog and the player
+  post cover it.
+
+**Old-flag raids are detected retroactively** (owner decision, 2026-11-06). The
+recalculation replays season 3's `flag.lowered` events, not just the existing
+raid rows. It applies the §2 rules: away from any declared base, and X's flag
+lowered by Y's own member on Y's base. It inserts a `raids` row for each new
+raid found, honouring `RAID_DEDUP_MS`, before rescoring everything in order.
+
+- **Declared poles change over time** (bases move). "Is this pole someone's
+  declared base" has to be answered as of the lower. If `declarations` keeps no
+  history, reconstruct it from the rebind and declaration events in the log, or
+  treat a pole as declared if it is declared now or was the subject of an
+  existing raid row. Either way, state the approach in the plan.
+- **Expected result**, from a read-only scan of production on 2026-11-06 using
+  the own-flag rule: exactly one new raid, Z2→NDF at 2026-11-06 01:32:37. The
+  §1 fixture includes it.
+- **An anomaly to investigate, not to fix blind:** at 2026-10-30 17:47
+  XxBE4zyxX (VOLK, per `membership_history`) lowered MMBA's `Flag_Snake` at
+  MMBA's declared pole (declared 2026-10-20), and no raid row exists. Find out
+  why (membership status at that instant, MMBA's status, an absorb) before
+  the replay decides whether it should be a raid.
 
 ## What's left to the builder
 
