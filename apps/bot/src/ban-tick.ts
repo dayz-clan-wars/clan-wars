@@ -1,4 +1,4 @@
-import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or } from "drizzle-orm";
+import { and, eq, ne, gt, gte, lt, lte, isNull, isNotNull, or, inArray } from "drizzle-orm";
 import { bans, banAnnouncements, identityLinks, type Database } from "@factions/db";
 import { BAN_MAX_ATTEMPTS, BAN_REASON_TEXT } from "@factions/domain";
 import { noticeUserTx } from "@factions/roster/internal";
@@ -82,19 +82,22 @@ async function stillBanned(db: Database, dayzId: string, now: Date, excludingBan
 
 /**
  * Names of the bot's OWN entries that another active row on this dayzId already holds
- * (same predicate as `stillBanned`). ⚠️ addBans finds those names already present and
+ * (wider than `stillBanned`, see below). ⚠️ addBans finds those names already present and
  * reports them as not added, so without inheriting them an overlapping row would stamp
  * [] and the last row to close would never remove the bot's entries — orphaned forever.
  * A legacy null stamp means that row holds both identifiers.
  */
-async function inheritedNames(db: Database, row: { id: number; dayzId: string; gamertag: string }, now: Date, serverId: number): Promise<string[]> {
+async function inheritedNames(db: Database, row: { id: number; dayzId: string; gamertag: string }, serverId: number): Promise<string[]> {
   const others = await db.select({ nitradoAdded: bans.nitradoAdded, dayzId: bans.dayzId, gamertag: bans.gamertag }).from(bans).where(and(
     eq(bans.serverId, serverId),
     eq(bans.dayzId, row.dayzId),
-    eq(bans.status, "applied"),
+    // ⚠️ Deliberately WIDER than stillBanned: apply runs before the expire and lift
+    // arms, so a time-expired `applied` row or a `lift_pending` row still holds the
+    // bot's entry now but is closed (with stillBanned seeing THIS row) later in the
+    // same tick. Anything narrower orphans the entry when this row finally closes.
+    inArray(bans.status, ["applied", "lift_pending"]),
     eq(bans.dryRun, false),
     ne(bans.id, row.id),
-    or(isNull(bans.expiresAt), gt(bans.expiresAt, now)),
   ));
   const held = new Set(others.flatMap((o) => (o.nitradoAdded ?? [o.dayzId, o.gamertag]).map((n) => n.trim())));
   return [row.dayzId, row.gamertag].map((n) => n.trim()).filter((n) => held.has(n));
@@ -210,7 +213,7 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           // trimmed) plus any our own other active rows already hold.
           if (!opts.dryRun) {
             const mine = [row.dayzId, row.gamertag].map((n) => n.trim());
-            const inherited = await inheritedNames(tx as unknown as Database, row, now, serverId);
+            const inherited = await inheritedNames(tx as unknown as Database, row, serverId);
             const stamp = [...new Set([...mine.filter((n) => added.includes(n)), ...inherited])];
             await tx.update(bans).set({ nitradoAdded: stamp }).where(eq(bans.id, row.id));
           }
