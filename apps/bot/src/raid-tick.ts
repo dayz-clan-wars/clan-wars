@@ -12,8 +12,8 @@ export const RAID_CONSUMER = "raid-consumer";
 
 export type RaidTickResult = { scanned: number; raids: number; absorbed: number; skippedNoSeason: number };
 
-type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
-function readFlagPayload(payload: unknown): FlagPayload | null {
+export type FlagPayload = { dayzId: string; gamertag: string; texture: string; poleKey: string };
+export function readFlagPayload(payload: unknown): FlagPayload | null {
   if (typeof payload !== "object" || payload === null) return null;
   const p = payload as Record<string, unknown>;
   if (typeof p.dayzId !== "string" || typeof p.gamertag !== "string" || typeof p.texture !== "string" || typeof p.poleKey !== "string") return null;
