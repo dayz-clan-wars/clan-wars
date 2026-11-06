@@ -1,6 +1,6 @@
 import type { APIEmbed } from "discord.js";
 import type { Scoreboard, ScoreboardRow } from "@factions/roster";
-import { ALPHA_BADGE, EMPTY_SCOREBOARD, PRICE_FOOTER, PRICE_TITLE, dormantLine, priceList, priceRow } from "@factions/copy";
+import { ALPHA_BADGE, EMPTY_SCOREBOARD, PRICE_FOOTER, PRICE_TITLE, dormantLine, priceBlock, priceList } from "@factions/copy";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { clanUrl, escapeMarkdown } from "./site-links.js";
 
@@ -80,22 +80,23 @@ function card(r: ScoreboardRow, siteBaseUrl: string, flagImage: FlagImageResolve
 }
 
 /**
- * The first embed: what a raid pays right now, one row per active clan. The
- * site's /scoreboard shows the same list from the same rows through the same
- * copy (`priceRow`, `priceList`), so the two match.
+ * The first embed: what a raid pays right now, one row per active clan, in a
+ * monospaced code block so tags and prices line up (`priceBlock`). The site's
+ * /scoreboard shows the same rows in the same order (`priceList`) with the
+ * reasons spelled out, so the two agree on every price.
  *
  * ⚠️ Its url is the scoreboard page, distinct from every card's clan url.
  * Discord folds embeds that share a url into one gallery.
  */
 function priceEmbed(board: Scoreboard, siteBaseUrl: string): APIEmbed {
   const list = priceList(board.rows);
-  const rows = list.slice(0, MAX_PRICE_ROWS).map((r) => priceRow(escapeMarkdown(r.tag), r.price));
-  if (list.length > MAX_PRICE_ROWS) rows.push(`+${list.length - MAX_PRICE_ROWS} more on the site`);
+  const lines = [priceBlock(list.slice(0, MAX_PRICE_ROWS))];
+  if (list.length > MAX_PRICE_ROWS) lines.push(`+${list.length - MAX_PRICE_ROWS} more on the site`);
   const dormant = dormantLine(board.rows.filter((r) => r.price === null).map((r) => escapeMarkdown(r.tag)));
   return {
     title: PRICE_TITLE,
     url: scoreboardPageUrl(siteBaseUrl),
-    description: [...rows, ...(dormant ? ["", dormant] : [])].join("\n"),
+    description: [...lines, ...(dormant ? [dormant] : [])].join("\n"),
     color: GOLD,
     footer: { text: PRICE_FOOTER },
   };

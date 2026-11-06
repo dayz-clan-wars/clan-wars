@@ -105,11 +105,21 @@ describe("the raid-price list", () => {
     expect(p.embeds).toHaveLength(5);
   });
 
-  it("lists active clans by payout, with counts as the reasons", () => {
+  it("lists active clans by payout in a code block, tags and prices in aligned columns, counts as the reasons", () => {
     const lines = list.description!.split("\n");
-    expect(lines[0]).toBe("NDF · 296 🟢");
-    expect(lines[1]).toBe("Z2 · 148 · 🔥 9 recent raids · 🩹 hit 1 time this week");
-    expect(lines[2]).toBe("FRESH · 0 · 🐣 new, counts from 8 Nov");
+    expect(lines.slice(0, 5)).toEqual([
+      "```",
+      "NDF    296 🟢",
+      "Z2     148     🔥9 🩹1",
+      "FRESH    0     🐣 8 Nov",
+      "```",
+    ]);
+  });
+
+  it("swaps a backtick in a tag so it cannot close the code block early", () => {
+    const desc = scoreboardPost(board([row({ tag: "A`B", price: price() })]), SITE, flags, NOW).embeds[0]!.description!;
+    expect(desc.split("\n")[1]).toBe("A'B  148     🔥9 🩹1");
+    expect(desc.match(/```/g)).toHaveLength(2);
   });
 
   it("names dormant clans on one line", () => {
@@ -120,6 +130,7 @@ describe("the raid-price list", () => {
     expect(list.footer!.text).toContain("🔥 raids in the last 14 days push it up; 🩹 hits in the last 7 days pull it down");
     expect(list.footer!.text).toContain("🟢");
     expect(list.footer!.text).toContain("×1.5");
+    expect(list.footer!.text).toContain("🐣");
   });
 
   it("gives the list its own url, and no card shares it", () => {

@@ -155,6 +155,21 @@ describe("awardTick", () => {
     expect(objects(client.uploaded[0]!).map((o) => o.customString)).toEqual(["Ann", "Ann", "Ann", "Ron", "Ron", "Ron"]);
   });
 
+  it("spawns two of the same award held by one player, each whole at its own spot", async () => {
+    // A leader can win the weekly raid kit while still holding a weapon kit from a bounty or the
+    // referral board. Each grant is its own row and its own spawn, so neither swallows the other.
+    await seed({ awardKey: "weapon-kit", durationDays: 3, picks: { weapon: "AKM" } });
+    await seed({ awardKey: "weapon-kit", durationDays: 7, picks: { weapon: "AKM" }, posX: "300.00", posZ: "400.00" });
+    const client = fakeUploader();
+    await tick(client);
+    const objs = objects(client.uploaded[0]!);
+    const at = (x: number) => objs.filter((o) => o.pos[0] === x);
+    expect(at(100).length).toBeGreaterThan(0);
+    expect(at(300).map((o) => o.name)).toEqual(at(100).map((o) => o.name));
+    expect(at(100).length + at(300).length).toBe(objs.length);
+    expect(objs.every((o) => o.customString === "Ron")).toBe(true);
+  });
+
   it("spawns a weapon kit as the gun, then each extra in order, repeats included", async () => {
     await seed({ awardKey: "weapon-kit", durationDays: 3, picks: { weapon: "AKM" } });
     const client = fakeUploader();

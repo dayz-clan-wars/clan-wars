@@ -19,4 +19,4 @@ export {
   type ClanFeedPayload, clanFeedCard, flagLabel, warLogLine, banLine, achievementLine, onlineLine,
   ONLINE_TITLE, ONLINE_EMPTY, flagDownDuration,
 } from "./live-feed";
-export { PRICE_TITLE, PRICE_FOOTER, priceRow, priceReasons, dormantLine, priceList, type PriceView } from "./scoreboard";
+export { PRICE_TITLE, PRICE_FOOTER, priceRow, priceReasons, priceBlock, dormantLine, priceList, type PriceView } from "./scoreboard";
