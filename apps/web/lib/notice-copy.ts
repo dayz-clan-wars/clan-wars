@@ -224,7 +224,10 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   flag_down: { group: "Raid", render: (p) => ({
     kicker: "Raid", title: "Your flag is down",
     body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within ${HOURS(FLAG_DOWN_MS)} or you go dormant. Your supply crate is paused until you do. A spare flag keeps spawning at your pole, so you always have one to raise.` }) },
-  flag_lowered_away: { group: "Raid", render: () => ({ kicker: "Raid", title: "Flag lowered away", body: "A flag was lowered away from base." }) }, // Task 5 writes the copy
+  // Twin of apps/bot/src/notice-text.ts's flag_lowered_away; no place named, ever.
+  flag_lowered_away: { group: "Raid", render: (p) => ({
+    kicker: "Raid", title: "Your flag away from base is down",
+    body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. It counts as a raid on your clan. It doesn't affect your base: no flag-down clock starts and your supply crate is unchanged.` }) },
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
     body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },

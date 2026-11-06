@@ -6,6 +6,7 @@ import {
 } from "@factions/db";
 import { CLAIMABLE_FLAGS } from "@factions/domain";
 import { clockQuery } from "../src/dormancy-store.js";
+import { raiseLookupQuery } from "../src/raid-detect.js";
 import { seedFaction } from "./seed.js";
 
 // ⚠️ The derived factions_test_bot, never the raw base URL: this suite migrates
@@ -48,6 +49,7 @@ const OTHER_EVENTS = 176_000;
  */
 describe("the dormancy clock's raise lookup is index-backed", () => {
   let db: Database;
+  let serverId = 0;
   beforeAll(async () => {
     db = createClient(URL);
     await runMigrations(db);
@@ -56,7 +58,7 @@ describe("the dormancy clock's raise lookup is index-backed", () => {
     );
 
     const [s] = await db.insert(servers).values({ name: "S", map: "livonia", clockOffsetMs: 0 }).returning();
-    const serverId = s!.id;
+    serverId = s!.id;
     const createdAt = new Date("2026-01-01T00:00:00Z");
     const start = createdAt.toISOString(); // raw sql binds strings, not Dates
     for (let c = 0; c < CLANS; c++) {
@@ -121,6 +123,28 @@ describe("the dormancy clock's raise lookup is index-backed", () => {
     // has narrowed to one pole and one texture. poleKey and texture are not.
     const payloadFilters = lines.filter((l) => /Filter:.*payload/.test(l));
     for (const l of payloadFilters) {
+      expect(l, planText).not.toContain("'poleKey'");
+      expect(l, planText).not.toContain("'texture'");
+    }
+  });
+
+  // The raid consumer's raise lookup (raid-detect.ts) is a third statement of
+  // the same fact. It runs once per lowered flag that is not a plain base
+  // raid; filtered instead of index-walked, it would scan every raise on the
+  // server each time and quietly slow the whole raid tick.
+  it("raid-detect's raise lookup resolves both payload keys through the index, not a filter", async () => {
+    const { sql: text, params } = raiseLookupQuery(db, serverId, "1000.00:100.00:5000.00", CLAIMABLE_FLAGS[0]!, new Date("2026-02-15T00:00:00Z")).toSQL();
+    const client = (db as unknown as {
+      $client: { unsafe: (q: string, p: unknown[]) => Promise<Record<string, string>[]> };
+    }).$client;
+    const plan = await client.unsafe(`explain ${text}`, params as unknown[]);
+    const lines = plan.map((r) => r["QUERY PLAN"] as string);
+    const planText = lines.join("\n");
+    expect(planText).toContain("events_raise_lookup_idx");
+    const indexConds = lines.filter((l) => l.includes("Index Cond:")).join("\n");
+    expect(indexConds, planText).toContain("payload ->> 'poleKey'");
+    expect(indexConds, planText).toContain("payload ->> 'texture'");
+    for (const l of lines.filter((x) => /Filter:.*payload/.test(x))) {
       expect(l, planText).not.toContain("'poleKey'");
       expect(l, planText).not.toContain("'texture'");
     }
