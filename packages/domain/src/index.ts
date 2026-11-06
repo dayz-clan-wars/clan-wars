@@ -9,6 +9,7 @@ export * from "./rules";
 export * from "./leadership";
 export * from "./spacing";
 export * from "./hub";
+export * from "./raid-value";
 export * from "./scoring";
 export * from "./scoring-week";
 export * from "./travel";
