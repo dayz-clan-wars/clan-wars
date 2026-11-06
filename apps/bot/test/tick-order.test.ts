@@ -47,6 +47,10 @@ describe("enforcement tick wiring (task 10)", () => {
     expect(src).toMatch(/if \(cfg\.enforcementTick\) \{[\s\S]{0,600}?await banTick\(db, nitradoFor\(s\.serviceId!\), \{[\s\S]{0,200}?serverId: s\.id/u);
   });
 
+  it("runs the link gate per server before banTick, inside the enforcement block", () => {
+    expect(src).toMatch(/for \(const s of banServers\) \{[\s\S]{0,400}?await runLinkGate\(s\.id, banNow\);[\s\S]{0,200}?await banTick\(/u);
+  });
+
   it("bounds banTick's since by BAN_APPLY_LOOKBACK_MS from now, not process start time", () => {
     expect(src).toMatch(/BAN_APPLY_LOOKBACK_MS/u);
     expect(src).toMatch(/since = new Date\(banNow\.getTime\(\) - BAN_APPLY_LOOKBACK_MS\)/u);
