@@ -54,9 +54,6 @@ describe("rules", () => {
     expect(R.TRAVEL_POINTS).toBe(2189);
     expect(R.HUB_DESTINATIONS).toBe(31);
     expect(R.WATCHTOWER_MAX_HEIGHT).toEqual({ grounded: 2, onStructure: 1 });
-    expect(R.POINTS_TOP).toBe(200);
-    expect(R.POINTS_BOTTOM).toBe(100);
-    expect(R.POINTS_UNRANKED).toBe(100);
     expect(R.VOTE_THRESHOLD).toEqual({ num: 2, den: 3 });
     expect(R.HUB_POSITION).toEqual({ x: 100, z: 93 });
     expect(R.RAID_WINDOW).toEqual({ openDow: 5, openHour: 14, closeDow: 0, closeHour: 14 });

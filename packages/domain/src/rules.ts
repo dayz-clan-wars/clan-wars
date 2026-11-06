@@ -103,9 +103,6 @@ export const DISBAND_AFTER_DORMANT_MS = 14 * DAY;
 export const DISBAND_WARNING_LEAD_MS = 4 * DAY;
 
 // The scoreboard
-export const POINTS_TOP = 200;
-export const POINTS_BOTTOM = 100;
-export const POINTS_UNRANKED = 100;
 // Raid value: a raid pays the victim clan's live value (docs/superpowers/specs/2026-11-06-raid-value-scoring-design.md §1)
 /** What a quiet, established clan is worth to raid. */
 export const RAID_VALUE_BASE = 100;
