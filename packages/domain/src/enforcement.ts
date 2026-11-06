@@ -99,7 +99,7 @@ export const BAN_MAX_ATTEMPTS = 3;
  * and deliberately says nothing specific: naming the offence can point at
  * whoever it was aimed at.
  */
-export const BAN_REASONS = ["zone", "unlinked_pc", "hub_combat", "conduct"] as const;
+export const BAN_REASONS = ["zone", "unlinked", "unlinked_pc", "hub_combat", "conduct"] as const;
 export type BanReason = (typeof BAN_REASONS)[number];
 /**
  * What a ban is FOR, in words a player reads — the ban DM and #bans both use
@@ -107,6 +107,7 @@ export type BanReason = (typeof BAN_REASONS)[number];
  */
 export const BAN_REASON_TEXT: Record<BanReason, string> = {
   zone: "base-zone enforcement",
+  unlinked: "playing without a linked account",
   unlinked_pc: "playing on PC without a linked account",
   hub_combat: "combat at the Fast Travel Hub",
   conduct: "conduct toward other players",
