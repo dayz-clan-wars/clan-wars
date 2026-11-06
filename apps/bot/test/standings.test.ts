@@ -186,7 +186,7 @@ describe("standings", () => {
     expect(top.map((t) => t.points)).toEqual([300, 200, 200]);
   });
 
-  it("raid-tick prices by value, not rank: a ladder of standings does not move the price, and no rank is stored", async () => {
+  it("raid-tick prices by value, not rank: a ladder of standings does not move the price, though the rank is still recorded", async () => {
     const points = [1000, 900, 800, 600, 500, 400, 300, 200, 100];
     for (let i = 0; i < points.length; i++) {
       const c = await seedFaction(db, { serverId, tag: `C${i}`, texture: `Flag_C${i}`, poleKey: `c${i}:0:0`, createdAt: now, activatedAt: now });
@@ -197,6 +197,7 @@ describe("standings", () => {
     await lower(W1, "Wolfie", "Flag_Bear", P1, now);
     await raidTick(db);
     const [raid] = await db.select().from(raids).where(eq(raids.victimFactionId, BEAR));
-    expect(raid).toMatchObject({ points: BASE_OFFLINE, victimRankAtLower: null, rankedCountAtLower: null });
+    expect(raid).toMatchObject({ points: BASE_OFFLINE, victimRankAtLower: 4, rankedCountAtLower: 10 });
+    // ⚠️ Recorded for giant_killer only; the price above is the same at any rank.
   });
 });
