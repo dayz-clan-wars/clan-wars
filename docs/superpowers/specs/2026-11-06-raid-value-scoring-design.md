@@ -181,12 +181,19 @@ or not.*
 
 - Every `flag.lowered` payload carries `texture` (144 of 144 on production
   checked 2026-11-06) and `poleKey`.
-- **Declared base:** unchanged, and it is the ONLY rule at a declared pole
-  (owner decision, 2026-11-06). Any `flag.lowered` at an active clan's declared
-  pole by a non-full-member is a raid on THAT clan, exactly as `raid-tick.ts`
-  does today, whatever flag was on it. A member lowering anything on their own
-  base is upkeep. Taking your base back from a raider's flag is not a raid on
-  the raider, and one lowering never yields two raid rows.
+- **Declared base, lowered by a non-member:** unchanged. Any `flag.lowered` at
+  an active clan Y's declared pole by someone who is not a full member of Y
+  is a raid on Y, exactly as `raid-tick.ts` does today, whatever flag was on it.
+- **Declared base, lowered by its own member (new; owner decision,
+  2026-11-06):** if the lowered flag was raised by a full member of another
+  active clan X (the same raise lookup as below), it's a raid **on X, by Y.**
+  The owner's words: *"if X is dumb enough to raise their own flag on Y's pole,
+  it should count as a raid when Y lowers it."* Y lowering its own flag, a
+  white flag, or a flag no clan member raised is upkeep, as today.
+- **Call I made: one lowering is never two raids.** If a third clan Z lowers
+  X's flag on Y's base, the base rule applies: a raid on Y, by Z, and nothing
+  on X. At a declared pole the base rule always wins for a non-member of Y.
+  The new rule only fires when the lowerer is Y's own member.
 - **A pole that is no one's declared base (new):** find the most recent `flag.raised` on that
   `server_id` + `poleKey` before the lower, with the **same texture** as the
   lowered flag. If its raiser was a **full member of clan X at the raise
@@ -204,17 +211,15 @@ or not.*
 - **Why "raised by a member" matters.** A lowered flag can be carried off. A
   raider could raise a rival's flag on their own pole and have a friendly clan
   lower it for points. Requiring a member raise blocks that farm.
-- **The collusion guard (owner decision, 2026-11-06).** An away-from-base raid
-  scores at most **once per scoring week for the same (raider clan, victim
-  clan) pair.** Two friendly clans lowering each other's flags on throwaway
-  poles would otherwise trade full value daily, with uncapped heat and nothing
-  at stake. A further away-raid by the same pair in the same week is
-  recorded like an absorbed repeat: no points, no heat, no hit. Base raids
-  are not limited by this.
+- **No collusion guard (owner decision, 2026-11-06).** Two friendly clans could
+  raise their own flags on throwaway poles and take turns lowering them: full
+  value once per 24 h per pair, uncapped heat, nothing at stake. The owner
+  accepted this risk explicitly. Don't add a guard. Away-from-base raids
+  follow the ordinary `RAID_DEDUP_MS` rule and nothing more.
 
 Calls I made:
 
-- **A base-away raid doesn't set `flag_down_since`** and doesn't cost the crate.
+- **A raid on X that isn't at X's own declared base (an away pole, or X's flag on Y's base) doesn't set X's `flag_down_since`** and doesn't cost X the crate.
   It isn't the clan's base, so it mustn't drive dormancy. It does go
   to `#war-log` like any raid (no coordinates, as always). It queues a clan
   notice saying a flag of theirs away from base was lowered. Builder: add a
