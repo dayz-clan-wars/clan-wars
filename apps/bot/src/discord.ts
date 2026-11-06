@@ -48,6 +48,7 @@ import { raidTick } from "./raid-tick.js";
 import { raiseTick } from "./raise-tick.js";
 import { flagHoldTick } from "./flag-hold-tick.js";
 import { weekTick } from "./week-tick.js";
+import { payRaidAwards } from "./raid-award.js";
 import { noticeTick, type NoticeSender } from "./notice-tick.js";
 import { warLogTick, type WarLogPoster } from "./war-log-tick.js";
 import { releaseTick, pgReleaseStore } from "./release-tick.js";
@@ -732,6 +733,10 @@ export async function start(cfg: BotConfig): Promise<void> {
   const referralPoster = cfg.referralAward.enabled && cfg.serverEventsChannelId
     ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
     : null;
+  // ⚠️ Mentions off: the post names a clan, and clan names are player-controlled.
+  const raidAwardPoster = cfg.raidAward.enabled && cfg.serverEventsChannelId
+    ? createChannelPoster(client, cfg.serverEventsChannelId, { allowedMentions: { parse: [] } })
+    : null;
   let lastReferralAt = 0;
   const ctxNow = (): Ctx => ({
     roster, now: new Date(), siteBaseUrl: cfg.siteBaseUrl,
@@ -1308,6 +1313,18 @@ export async function start(cfg: BotConfig): Promise<void> {
       if (wk.closed > 0) console.log(`weeks closed ${wk.closed}`);
     } catch (err) {
       console.error("week tick failed", err);
+    }
+
+    // The weekly weapon kit for the top raiding clan: right after the week close, so a
+    // week's award goes out on the tick it closes. Its own try/catch; a refused grant
+    // rolls back and retries next tick.
+    if (raidAwardPoster && client.user) {
+      try {
+        const r = await payRaidAwards(db, { now: new Date(), siteBaseUrl: cfg.siteBaseUrl, grantedByDiscordId: client.user.id, post: raidAwardPoster });
+        if (r.paid > 0) console.log(`raid awards paid ${r.paid}`);
+      } catch (err) {
+        console.error("raid award tick failed", err);
+      }
     }
 
     // Achievements (spec 2026-09-11 §6.2): after kills, sessions, raids, raises and weeks have
@@ -1927,6 +1944,7 @@ export async function start(cfg: BotConfig): Promise<void> {
     if (cfg.koth.vote.enabled) console.log("king of the hill voting on");
 
     if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
+    if (!cfg.raidAward.enabled) console.warn("RAID_AWARD_TICK is off: weeks still close, but the top raiding clan gets no weapon kit.");
     if (!cfg.referralAward.enabled) console.warn("REFERRAL_AWARD_TICK is off: referrals still qualify, but no weekly plate carrier is granted or announced.");
     else console.log("referral award on: the weekly plate carrier is granted and announced");
 

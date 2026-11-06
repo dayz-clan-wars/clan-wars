@@ -400,6 +400,16 @@ describe("loadConfig", () => {
     });
   });
 
+  describe("RAID_AWARD_TICK", () => {
+    it("refuses RAID_AWARD_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
+      expect(() => loadConfig({ ...OK, RAID_AWARD_TICK: "1" })).toThrow(/RAID_AWARD_TICK/u);
+    });
+    it("defaults the raid award off, and loads on with a channel", () => {
+      expect(loadConfig(OK).raidAward).toEqual({ enabled: false });
+      expect(loadConfig({ ...OK, RAID_AWARD_TICK: "1", SERVER_EVENTS_CHANNEL_ID: "12345678901234567" }).raidAward.enabled).toBe(true);
+    });
+  });
+
   describe("REFERRAL_AWARD_TICK", () => {
     it("refuses REFERRAL_AWARD_TICK without SERVER_EVENTS_CHANNEL_ID", () => {
       expect(() => loadConfig({ ...OK, REFERRAL_AWARD_TICK: "1" })).toThrow(/REFERRAL_AWARD_TICK/u);

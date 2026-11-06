@@ -473,6 +473,18 @@ export const REFERRAL_AWARD_KEY = "weapon-kit";
 /** How long the prize runs. Set here, not from the catalogue: the weapon kit's own `durationDays` is shorter, and the post promises a week. */
 export const REFERRAL_AWARD_DAYS = 7;
 
+// ─── Weekly raid award (spec 2026-11-06-raid-value-scoring §4) ───────────────
+/** The prize for the week's top raiding clan. A key in `assets/awards.json`. */
+export const RAID_AWARD_KEY = "weapon-kit";
+/** How long the prize runs. Set here, not from the catalogue, for the same reason as `REFERRAL_AWARD_DAYS`. */
+export const RAID_AWARD_DAYS = 7;
+/**
+ * The first scoring week that pays (the bridging week, closing 2026-11-08T14:00Z).
+ * ⚠️ Earlier `alpha_weeks` rows exist and must never pay: the payout was not on
+ * when they closed, and switching it on would otherwise pay every old rank 1.
+ */
+export const RAID_AWARD_FIRST_WEEK = new Date("2026-11-02T00:00:00Z");
+
 // ─── Achievements (spec 2026-10-20-achievements-150) ─────────────────────────
 
 /** Bad Dog: a dog bite counts as survived once this long passes with no death. Earned at the bite plus this, never earlier. */
