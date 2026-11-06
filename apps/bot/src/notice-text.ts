@@ -132,6 +132,7 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
     const of = p.raiderClan ? ` of ${p.raiderClan}` : "";
     return `🚨 Your flag is down — lowered by ${person(p.gamertag, ctx.site)}${of}. Re-raise within ${hours(RAID_DEDUP_MS)}h or go dormant. Crate paused, spare flag still at your pole.`;
   },
+  flag_lowered_away: () => "A flag was lowered away from base.", // Task 5 writes the copy
   defended: (p, ctx) => `🛡️ ${person(p.gamertag, ctx.site)} raised the flag. Defended — ${duration(Number(p.durationSeconds))} under siege. Supplies resume at next restart.`,
   // ⚠️ RAID_DEDUP_MS, not a typed "24 hours" — see the task-9 report for why
   // this one (unlike dormant_inactive) IS the right domain constant: the
@@ -223,7 +224,6 @@ export const RENDERERS: Record<ClanNoticeKind, Renderer> = {
   // (roster-store.ts `setSupplies`). The web's notice-copy.ts says the same;
   // read both when you change either. A payload without it names no direction
   // rather than guessing one.
-  flag_lowered_away: () => "A flag was lowered away from base.", // Task 5 writes the copy
   supplies_toggled: (p, ctx) => {
     const who = person(p.gamertag, ctx.site);
     if (p.enabled === false) return `📦 ${who} turned build supplies off. From the next restart, only your clan flags spawn at your pole.`;

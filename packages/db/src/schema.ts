@@ -914,7 +914,14 @@ export const raids = pgTable("raids", {
 
 /**
  * One row per closed (season, week): the weekly raid award's ledger.
- * ⚠️ Lock order: a transaction writing this takes it immediately before `award_grants`.
+ * Written ONLY by the weekly raid-award payout, `payRaidAwards` in
+ * `apps/bot/src/raid-award.ts` (Task 7).
+ * ⚠️ Lock order: that transaction takes `raid_award_weeks` → `award_grants` →
+ * `clan_notices`, i.e. this table immediately before `award_grants`.
+ * ⚠️ The (season_id, week_start) PK insert is the idempotency guard: deleting a
+ * row makes the payout pay that week again.
+ * A null `award_grant_id` means the week was closed but nothing was granted
+ * (e.g. the clan was disbanded; the reason is recorded in `detail.failure`).
  */
 export const raidAwardWeeks = pgTable("raid_award_weeks", {
   seasonId: bigint("season_id", { mode: "number" }).notNull().references(() => seasons.id),

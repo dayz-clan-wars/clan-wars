@@ -527,7 +527,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   `faction_members` → `faction_invites` → `faction_join_requests` → `faction_votes` → `faction_vote_ballots`
   → `succession_claims` → `season_standings` → `raids` → `defenses` → `vault_locks` →
   `clan_pins` → `guest_passes` → `achievement_unlocks` → `achievement_progress` →
-  `achievement_counters` → `koth_votes` → `koth_vote_voters` → `koth_events` → `bounties` → `well_awards` → `award_grants` → `award_transfers` → `faction_events` → `war_log_events` → `clan_notices` →
+  `achievement_counters` → `koth_votes` → `koth_vote_voters` → `koth_events` → `bounties` → `well_awards` → `raid_award_weeks` → `award_grants` → `award_transfers` → `faction_events` → `war_log_events` → `clan_notices` →
   `zone_incidents` → `zone_incident_participants` → `bans`.**
   `flag_holds`/`faction_textures` are written by `packages/roster/src/internal/flag-holds.ts` alone (rename, cancel, raise-tick's completion, the flag-hold sweep), always under the clan's `factions` row lock.
   `koth_events` is written by the restart tick, `/koth` and `koth-tick`; the award transaction
@@ -540,6 +540,7 @@ legal, and tsx and vitest resolve it the same way. Today that is `roster`, `db`,
   then `clan_notices`, and, for a prize, the tick's payout `bounties` → `award_grants` →
   `clan_notices` (moved ahead of `award_grants` on 2026-09-30 for this; no writer touches
   `bounties` with `faction_events` or `war_log_events`, so the move reorders nothing real).
+  `raid_award_weeks` is written by the weekly raid-award payout (`payRaidAwards`, `apps/bot/src/raid-award.ts`) alone, in the order `raid_award_weeks` → `award_grants` → `clan_notices`.
   `well_awards` is written by `well-award-tick.ts` alone: the recorder inserts into it (plus
   its `consumer_cursors` row) and touches nothing else, and the payout takes `well_awards`
   FOR UPDATE → `award_grants` → `clan_notices`, the same shape as the bounty payout (its

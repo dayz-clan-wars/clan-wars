@@ -224,6 +224,7 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
   flag_down: { group: "Raid", render: (p) => ({
     kicker: "Raid", title: "Your flag is down",
     body: `Lowered by ${who(p.gamertag)}${p.raiderClan ? ` of ${clanOf(p.raiderClan)}` : ""}. Raise it again within ${HOURS(FLAG_DOWN_MS)} or you go dormant. Your supply crate is paused until you do. A spare flag keeps spawning at your pole, so you always have one to raise.` }) },
+  flag_lowered_away: { group: "Raid", render: () => ({ kicker: "Raid", title: "Flag lowered away", body: "A flag was lowered away from base." }) }, // Task 5 writes the copy
   defended: { group: "Raid", render: (p) => ({
     kicker: "Defense", title: "Your base held",
     body: `${who(p.gamertag)} got the flag back up after ${forSeconds(p.durationSeconds)} under siege. Supplies resume at the next restart.` }) },
@@ -268,7 +269,6 @@ export const NOTICE_COPY: Record<ClanNoticeKind, { group: NoticeGroup; render: R
 
   // `enabled` is frozen at write time (roster-store.ts `setSupplies`); the
   // bot's notice-text.ts says the same, so read both when you change either.
-  flag_lowered_away: { group: "Raid", render: () => ({ kicker: "Raid", title: "Flag lowered away", body: "A flag was lowered away from base." }) }, // Task 5 writes the copy
   supplies_toggled: { group: "Base", render: (p) => p.enabled === false
     ? { kicker: "Supplies", title: "Build supplies off",
         body: `${who(p.gamertag)} turned build supplies off. From the next restart, only your clan flags spawn at your pole.` }
