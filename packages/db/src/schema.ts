@@ -1902,7 +1902,7 @@ export const releaseAnnouncements = pgTable("release_announcements", {
  */
 export const raidWindowFlips = pgTable("raid_window_flips", {
   serverId: integer("server_id").notNull().references(() => servers.id),
-  /** The Friday-open or Monday-close instant this flip realises. */
+  /** The window-open or window-close instant (`RAID_WINDOW`) this flip realises. */
   boundaryAt: timestamp("boundary_at", { withTimezone: true }).notNull(),
   /** What GeneralData.disableBaseDamage was set to — the FILE's value. */
   wantedDisabled: boolean("wanted_disabled").notNull(),
