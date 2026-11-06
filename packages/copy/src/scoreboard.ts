@@ -33,6 +33,41 @@ export function priceRow(tag: string, p: PriceView): string {
   return [tag, p.online ? `${p.payout} 🟢` : `${p.payout}`, ...priceReasons(p)].join(" · ");
 }
 
+/** The compact reasons for the monospaced block: `🔥9`, `🩹1`, `🐣 8 Nov`. The footer spells them out. */
+function shortReasons(p: PriceView): string[] {
+  return [
+    p.recentRaids > 0 ? `🔥${p.recentRaids}` : null,
+    p.hitsThisWeek > 0 ? `🩹${p.hitsThisWeek}` : null,
+    p.newUntil ? `🐣 ${day(p.newUntil)}` : null,
+  ].filter((r) => r !== null);
+}
+
+/**
+ * The price list as a Discord code block, so tags and prices line up in columns:
+ *
+ *     Z2     148     🔥9 🩹1
+ *     NDF    296 🟢
+ *
+ * Tag and price come first because they are plain text and align exactly. The emojis go last:
+ * phones draw them a little wider than a letter, so anything after them can drift.
+ *
+ * ⚠️ A backtick in a tag would close the code block early and spill the rest of the list as
+ * markdown, so it is swapped for a plain quote. Inside the block nothing else needs escaping.
+ */
+export function priceBlock(rows: { tag: string; price: PriceView }[]): string {
+  const tags = rows.map((r) => r.tag.replaceAll("`", "'"));
+  const tagWidth = Math.max(0, ...tags.map((t) => t.length));
+  const payWidth = Math.max(0, ...rows.map((r) => String(r.price.payout).length));
+  const lines = rows.map((r, i) => {
+    // The online marker is an emoji about two columns wide, so an offline row pads with three
+    // spaces (its separator plus two) to keep the reasons in one column.
+    const online = r.price.online ? " 🟢" : "   ";
+    const line = `${tags[i]!.padEnd(tagWidth)}  ${String(r.price.payout).padStart(payWidth)}${online}  ${shortReasons(r.price).join(" ")}`;
+    return line.trimEnd();
+  });
+  return ["```", ...lines, "```"].join("\n");
+}
+
 /** Clans that cannot be raided, on one line; null when there are none. */
 export function dormantLine(tags: string[]): string | null {
   return tags.length === 0 ? null : `Can't be raided: ${tags.join(", ")}`;
@@ -43,6 +78,7 @@ export const PRICE_FOOTER = [
   "A raid pays the price at the moment the flag comes down.",
   `🔥 raids in the last ${days(RAID_HEAT_FADE_MS)} push it up; 🩹 hits in the last ${days(RAID_HIT_FADE_MS)} pull it down.`,
   `🟢 someone from that clan is online, so a raid pays ×${RAID_ONLINE_MULT} (×${RAID_OFFLINE_MULT} when nobody is).`,
+  "🐣 a new clan, worth nothing until the date shown.",
 ].join(" ");
 
 /** The same ordering everywhere: highest payout first, then tag. Dormant (no price) clans are left out. */
