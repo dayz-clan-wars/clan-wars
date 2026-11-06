@@ -1,6 +1,6 @@
 import type { APIEmbed } from "discord.js";
 import type { Scoreboard, ScoreboardRow } from "@factions/roster";
-import { ALPHA_BADGE, EMPTY_SCOREBOARD, PRICE_FOOTER, PRICE_TITLE, dormantLine, priceBlock, priceList } from "@factions/copy";
+import { ALPHA_BADGE, EMPTY_SCOREBOARD, PRICE_FOOTER, PRICE_TITLE, dormantLine, priceBlock, priceList, priceReasonLines } from "@factions/copy";
 import type { FlagImageResolver } from "./feed-embed.js";
 import { clanUrl, escapeMarkdown } from "./site-links.js";
 
@@ -81,17 +81,22 @@ function card(r: ScoreboardRow, siteBaseUrl: string, flagImage: FlagImageResolve
 
 /**
  * The first embed: what a raid pays right now, one row per active clan, in a
- * monospaced code block so tags and prices line up (`priceBlock`). The site's
- * /scoreboard shows the same rows in the same order (`priceList`) with the
- * reasons spelled out, so the two agree on every price.
+ * monospaced code block so tags and prices line up (`priceBlock`), then the
+ * reasons as plain lines naming the clans (`priceReasonLines`), which wrap
+ * cleanly on a phone where a long code line would not. The site's /scoreboard
+ * shows the same rows in the same order (`priceList`), so the two agree on
+ * every price.
  *
  * ⚠️ Its url is the scoreboard page, distinct from every card's clan url.
  * Discord folds embeds that share a url into one gallery.
  */
 function priceEmbed(board: Scoreboard, siteBaseUrl: string): APIEmbed {
   const list = priceList(board.rows);
-  const lines = [priceBlock(list.slice(0, MAX_PRICE_ROWS))];
+  const shown = list.slice(0, MAX_PRICE_ROWS);
+  const lines = [priceBlock(shown)];
   if (list.length > MAX_PRICE_ROWS) lines.push(`+${list.length - MAX_PRICE_ROWS} more on the site`);
+  // ⚠️ Outside the code block these tags are markdown, so they are escaped here.
+  lines.push(...priceReasonLines(shown.map((r) => ({ tag: escapeMarkdown(r.tag), price: r.price }))));
   const dormant = dormantLine(board.rows.filter((r) => r.price === null).map((r) => escapeMarkdown(r.tag)));
   return {
     title: PRICE_TITLE,

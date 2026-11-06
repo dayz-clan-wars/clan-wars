@@ -19,7 +19,7 @@ describe("/scoreboard's raid-price list", () => {
 
   it("shows the same title, rows and order as the #scoreboard post", () => {
     expect(html).toContain("What a raid pays right now");
-    expect(html.indexOf("NDF · 296")).toBeLessThan(html.indexOf("Z2 · 148 · 🔥 9 recent raids · 🩹 hit 1 time this week"));
+    expect(html.indexOf("NDF · 296")).toBeLessThan(html.indexOf("Z2 · 148 · 🔥 9 recent raids · 🩹 raided 1 time this week"));
     expect(html.indexOf("Z2 · 148")).toBeLessThan(html.indexOf("LOW · 50"));
   });
   it("names dormant clans and explains the symbols", () => {

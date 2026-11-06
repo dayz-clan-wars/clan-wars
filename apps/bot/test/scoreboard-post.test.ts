@@ -105,20 +105,47 @@ describe("the raid-price list", () => {
     expect(p.embeds).toHaveLength(5);
   });
 
-  it("lists active clans by payout in a code block, tags and prices in aligned columns, counts as the reasons", () => {
+  it("lists active clans by payout in a code block of tag, price and a trailing 🟢 only, so no line can wrap or drift on a phone", () => {
     const lines = list.description!.split("\n");
     expect(lines.slice(0, 5)).toEqual([
       "```",
       "NDF    296 🟢",
-      "Z2     148     🔥9 🩹1",
-      "FRESH    0     🐣 8 Nov",
+      "Z2     148",
+      "FRESH    0",
       "```",
     ]);
   });
 
+  it("spells the reasons out under the block, one plain line per reason, naming the clans", () => {
+    const lines = list.description!.split("\n");
+    expect(lines.slice(5, 8)).toEqual([
+      "🩹 **Raided this week:** Z2 1 time",
+      "🔥 **Raiding lately:** Z2 9",
+      "🐣 **New:** FRESH counts from 8 Nov",
+    ]);
+  });
+
+  it("orders each reason line by count, spells the unit once, and leaves out a reason no clan has", () => {
+    const desc = scoreboardPost(board([
+      row({ tag: "Z2", price: price({ payout: 148, recentRaids: 9, hitsThisWeek: 1 }) }),
+      row({ tag: "OUT", price: price({ payout: 34, recentRaids: 0, hitsThisWeek: 3 }) }),
+      row({ tag: "COCK", price: price({ payout: 85, recentRaids: 4, hitsThisWeek: 2 }) }),
+      row({ tag: "NDF", price: price({ payout: 114, recentRaids: 3, hitsThisWeek: 1 }) }),
+    ]), SITE, flags, NOW).embeds[0]!.description!;
+    expect(desc).toContain("🩹 **Raided this week:** OUT 3 times, COCK 2, NDF 1, Z2 1");
+    expect(desc).toContain("🔥 **Raiding lately:** Z2 9, COCK 4, NDF 3");
+    expect(desc).not.toContain("🐣");
+  });
+
+  it("escapes markdown in a tag outside the code block, and not inside it", () => {
+    const desc = scoreboardPost(board([row({ tag: "A_B", price: price() })]), SITE, flags, NOW).embeds[0]!.description!;
+    expect(desc).toContain("```\nA_B  148\n```");
+    expect(desc).toContain("**Raided this week:** A\\_B 1 time");
+  });
+
   it("swaps a backtick in a tag so it cannot close the code block early", () => {
     const desc = scoreboardPost(board([row({ tag: "A`B", price: price() })]), SITE, flags, NOW).embeds[0]!.description!;
-    expect(desc.split("\n")[1]).toBe("A'B  148     🔥9 🩹1");
+    expect(desc.split("\n")[1]).toBe("A'B  148");
     expect(desc.match(/```/g)).toHaveLength(2);
   });
 
@@ -127,7 +154,7 @@ describe("the raid-price list", () => {
   });
 
   it("explains the symbols with numbers from rules.ts", () => {
-    expect(list.footer!.text).toContain("🔥 raids in the last 14 days push it up; 🩹 hits in the last 7 days pull it down");
+    expect(list.footer!.text).toContain("🔥 raids in the last 14 days push it up; 🩹 being raided in the last 7 days pulls it down");
     expect(list.footer!.text).toContain("🟢");
     expect(list.footer!.text).toContain("×1.5");
     expect(list.footer!.text).toContain("🐣");
