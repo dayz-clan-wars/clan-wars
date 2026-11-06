@@ -5,6 +5,8 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [2.17.2] - 2026-11-06
+
 ### Changed
 
 - The **#scoreboard** raid-price list spells its reasons out again. The block now holds only each clan's tag and price, so it stays tidy on a phone, and plain lines underneath say who was raided this week (e.g. "OUT 3 times"), who has been raiding lately, and which clans are new. The site and the footer say "raided" instead of "hit".
