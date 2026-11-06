@@ -4,11 +4,10 @@ import {
 } from "@factions/db";
 import { alias } from "drizzle-orm/pg-core";
 import { and, asc, desc, eq, inArray, isNull, isNotNull, sql, or } from "drizzle-orm";
-import { weekStartOf } from "@factions/domain";
+import { scoringWeekEnd, scoringWeekStartOf } from "@factions/domain";
 import { activeServerId } from "./server";
 
 const DAY_MS = 86_400_000;
-const WEEK_MS = 7 * DAY_MS;
 
 export type ScoreboardRow = {
   rank: number | null; tag: string; name: string; texture: string; status: string;
@@ -101,7 +100,7 @@ export async function alphasDb(db: Database): Promise<{ season: { number: number
   if (!season.weekClosedThrough) return { season: { number: season.number }, weeks: [] };
 
   const weekStarts: Date[] = [];
-  for (let w = weekStartOf(season.startedAt); w.getTime() <= season.weekClosedThrough.getTime(); w = new Date(w.getTime() + WEEK_MS)) {
+  for (let w = scoringWeekStartOf(season.startedAt); w.getTime() <= season.weekClosedThrough.getTime(); w = scoringWeekEnd(w)) {
     weekStarts.push(w);
   }
 

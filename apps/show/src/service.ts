@@ -17,7 +17,7 @@ import { forceWeek } from "./stages/store.js";
 import { pickWeek } from "./stages/pick.js";
 import { runStages, type StageDeps } from "./stages/run.js";
 import { PgPronunciationStore } from "./stores/pronunciations.js";
-import { WEEK_MS } from "./weeks.js";
+import { weekWindow } from "./weeks.js";
 
 type On = Extract<ServiceConfig, { enabled: true }>;
 export type ServiceArgs = { week?: Date; force: boolean; repost: boolean };
@@ -94,7 +94,7 @@ export async function serviceMain(args: ServiceArgs, env: NodeJS.ProcessEnv = pr
   if (args.repost && !args.force) { io.log("--repost only goes with --force"); return 2; }
   // ⚠️ `--week` skips the picker's readiness check, so without this the current, unfinished week
   // could be scripted and published from half a week of events.
-  if (args.week && args.week.getTime() + WEEK_MS > io.now().getTime()) {
+  if (args.week && weekWindow(args.week).to.getTime() > io.now().getTime()) {
     io.log(`the week of ${args.week.toISOString().slice(0, 10)} has not ended yet; run it once it has`);
     return 2;
   }

@@ -6,7 +6,7 @@ import {
   type Database,
 } from "@factions/db";
 import { sql, eq, asc } from "drizzle-orm";
-import { POST_WIPE_BIND_MS, weekStartOf } from "@factions/domain";
+import { POST_WIPE_BIND_MS, scoringWeekStartOf } from "@factions/domain";
 import { wipe, wipeTx } from "../src/wipe.js";
 import { openSeason } from "../src/season.js";
 import { seedFaction, seedSeason } from "./seed.js";
@@ -39,7 +39,7 @@ describe("wipe", () => {
       seasonId, serverId, victimFactionId: a.victim, raiderDayzId: "X", raiderFactionId: a.raider,
       firstLowerEventId: ev!.id, firstLowerAt: a.at, lastLowerAt: a.at, lastLowerEventId: ev!.id,
       lowerCount: 1, points: a.points, victimRankAtLower: null, rankedCountAtLower: 0,
-      weekStart: weekStartOf(a.at),
+      weekStart: scoringWeekStartOf(a.at),
     });
   };
 

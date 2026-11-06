@@ -4,9 +4,9 @@ import {
   servers, events, admFiles, raids, seasons, alphaWeeks, warLogEvents, seasonStandings,
   type Database,
 } from "@factions/db";
-import { weekStartOf } from "@factions/domain";
+import { scoringWeekStartOf } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
-import { weekTick, nextWeek } from "../src/week-tick.js";
+import { weekTick } from "../src/week-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
 
 const URL = requireTestDatabaseUrl();
@@ -22,7 +22,7 @@ describe("weekTick", () => {
   let LYNX = 0;
   let OWL = 0;
 
-  // Season started Wed 2026-09-02 12:00 UTC — weekStartOf(startedAt) is
+  // Season started Wed 2026-09-02 12:00 UTC — scoringWeekStartOf(startedAt) is
   // Monday 2026-08-31.
   const seasonStart = new Date("2026-09-02T12:00:00Z");
   const wed = new Date("2026-09-02T18:00:00Z"); // week of 08-31
@@ -74,7 +74,7 @@ describe("weekTick", () => {
       seasonId, serverId, victimFactionId: a.victim, raiderDayzId: "X",
       raiderFactionId: a.raider, firstLowerEventId: evId, firstLowerAt: a.at, lastLowerAt: a.at,
       lastLowerEventId: evId, lowerCount: 1, points: a.points, victimRankAtLower: null,
-      rankedCountAtLower: 0, weekStart: weekStartOf(a.at),
+      rankedCountAtLower: 0, weekStart: scoringWeekStartOf(a.at),
     });
   };
 
@@ -128,6 +128,23 @@ describe("weekTick", () => {
     const [w] = await db.select().from(warLogEvents);
     expect(w).toMatchObject({ payload: { first: null, second: null, third: null, p1: null, p2: null, p3: null } });
     expect((await db.select({ w: seasons.weekClosedThrough }).from(seasons))[0]!.w).toEqual(new Date("2026-08-31T00:00:00Z"));
+  });
+
+  it("closes the bridging week at the 2026-11-08 14:00 cutover, then Sunday-to-Sunday weeks", async () => {
+    const start = new Date("2026-10-17T23:08:54Z");
+    await db.update(seasons).set({ startedAt: start, weekClosedThrough: new Date("2026-10-26T00:00:00Z") }).where(eq(seasons.id, seasonId));
+    await seedRaid({ raider: WOLF, victim: BEAR, points: 200, at: new Date("2026-11-06T20:00:00Z") });  // week of 11-02
+    await seedRaid({ raider: LYNX, victim: BEAR, points: 100, at: new Date("2026-11-09T10:00:00Z") });  // week of 11-08 14:00
+
+    expect(await weekTick(db, { now: new Date("2026-11-08T13:59:00Z") })).toEqual({ closed: 0, errors: 0 });
+    expect(await weekTick(db, { now: new Date("2026-11-08T14:00:00Z") })).toEqual({ closed: 1, errors: 0 });
+    expect(await weekTick(db, { now: new Date("2026-11-08T14:00:00Z") })).toEqual({ closed: 0, errors: 0 });
+    expect(await db.select().from(alphaWeeks)).toMatchObject([{ weekStart: new Date("2026-11-02T00:00:00Z"), factionId: WOLF }]);
+    expect((await db.select().from(warLogEvents))[0]!.occurredAt).toEqual(new Date("2026-11-08T14:00:00Z"));
+
+    expect(await weekTick(db, { now: new Date("2026-11-15T14:00:00Z") })).toEqual({ closed: 1, errors: 0 });
+    expect((await db.select().from(alphaWeeks).orderBy(alphaWeeks.id)).map((r) => r.weekStart.toISOString())).toEqual(["2026-11-02T00:00:00.000Z", "2026-11-08T14:00:00.000Z"]);
+    expect((await db.select({ w: seasons.weekClosedThrough }).from(seasons))[0]!.w).toEqual(new Date("2026-11-08T14:00:00Z"));
   });
 
   it("a closed season is left alone", async () => {

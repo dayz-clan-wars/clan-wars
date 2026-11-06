@@ -468,3 +468,11 @@ export const BAD_DOG_SURVIVE_MS = 10 * MIN;
 
 /** Water Works / Community Service: steps within this of each other belong to one well. ⚠️ The observed wells keep all three steps within ~3 m; a bigger radius merges neighbouring wells into one, so one player's work would credit another's well. */
 export const WELL_RADIUS_M = 5;
+
+// ─── Scoring week (spec 2026-11-06-raid-value-scoring §3, §6) ────────────────
+
+/**
+ * End of the bridging week: the last Monday-aligned scoring week (2026-11-02 → here) runs short, and every week after starts Sunday 14:00 UTC, the close of the raid window.
+ * ⚠️ Fixed, not derived from a season or a clock: an owner decision on 2026-11-06. Moving it re-keys `raids.week_start` and `alpha_weeks.week_start` for weeks already stored.
+ */
+export const SCORING_WEEK_CUTOVER = new Date("2026-11-08T14:00:00Z");

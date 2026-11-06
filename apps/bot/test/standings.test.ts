@@ -5,7 +5,7 @@ import {
   raids, seasonStandings,
   type Database,
 } from "@factions/db";
-import { pointsFor, weekStartOf } from "@factions/domain";
+import { pointsFor, scoringWeekStartOf } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raidTick } from "../src/raid-tick.js";
 import { raiseTick } from "../src/raise-tick.js";
@@ -154,7 +154,7 @@ describe("standings", () => {
   });
 
   it("weekTopThree sums stored points per raider clan for the week, ties by §8.1, at most three, only positive", async () => {
-    const w = weekStartOf(now);
+    const w = scoringWeekStartOf(now);
     const w2 = new Date(w.getTime() + 7 * 86_400_000);
     const mk = async (tag: string) => seedFaction(db, { serverId, tag, texture: `Flag_${tag}`, poleKey: `${tag}z:0:0`, createdAt: now, activatedAt: now });
     const A = await mk("ALFA");

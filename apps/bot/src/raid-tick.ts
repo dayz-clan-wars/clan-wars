@@ -1,7 +1,7 @@
 import type { Database } from "@factions/db";
 import { declarations, factionMembers, factions, raids, seasonStandings } from "@factions/db";
 import { readCursor, writeCursor, readEventBatch } from "@factions/event-log";
-import { RAID_DEDUP_MS, pointsFor, weekStartOf } from "@factions/domain";
+import { RAID_DEDUP_MS, pointsFor, scoringWeekStartOf } from "@factions/domain";
 import { appendWarLogTx, noticeClanTx, noticeFullMembersTx } from "@factions/roster/internal";
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { openSeason } from "./season.js";
@@ -113,7 +113,7 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         await tx.insert(raids).values({
           seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
           firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
-          points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: weekStartOf(ev.occurredAt),
+          points, victimRankAtLower: rank, rankedCountAtLower: ranked.length, weekStart: scoringWeekStartOf(ev.occurredAt),
         });
         // The clock starts on the FIRST lower of an episode; a second raid during flag-down does not restart it.
         //

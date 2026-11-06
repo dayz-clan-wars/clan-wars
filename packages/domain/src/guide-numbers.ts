@@ -121,7 +121,7 @@ const COMPOSITE: Record<string, string> = {
   CLAN_TAG_LENGTH: `${R.CLAN_TAG_LENGTH.min}–${R.CLAN_TAG_LENGTH.max}`,
   RAID_WINDOW: "Fri 14:00 → Sun 14:00 UTC",
   POINTS: `${R.POINTS_TOP} / ${R.POINTS_BOTTOM} / ${R.POINTS_UNRANKED}`,
-  ALPHA_WEEK: "Mon 00:00 → Mon 00:00 UTC",
+  ALPHA_WEEK: "Sun 14:00 → Sun 14:00 UTC",
   SEASON: "wipe to wipe",
   VOTE_THRESHOLD: `${R.VOTE_THRESHOLD.num === 2 && R.VOTE_THRESHOLD.den === 3 ? "⅔" : `${R.VOTE_THRESHOLD.num}/${R.VOTE_THRESHOLD.den}`} of all full members`,
   NAME_HOLD: "until season end",

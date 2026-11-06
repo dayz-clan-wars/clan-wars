@@ -1,18 +1,11 @@
 import type { Database } from "@factions/db";
 import { alphaWeeks, seasons } from "@factions/db";
-import { weekStartOf } from "@factions/domain";
+import { scoringWeekEnd, scoringWeekStartOf } from "@factions/domain";
 import { appendWarLogTx } from "@factions/roster/internal";
 import { eq, isNull } from "drizzle-orm";
 import { weekTopThree } from "./standings.js";
 
 type Tx = Parameters<Parameters<Database["transaction"]>[0]>[0];
-
-const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
-
-/** The Monday after `weekStart`. */
-export function nextWeek(weekStart: Date): Date {
-  return new Date(weekStart.getTime() + WEEK_MS);
-}
 
 export type WeekTickResult = { closed: number; errors: number };
 
@@ -36,7 +29,7 @@ export type OpenSeasonRow = {
 };
 
 /**
- * Close every week of one season whose end (`nextWeek(w)`) is `<= now`, in
+ * Close every week of one season whose end (`scoringWeekEnd(w)`) is `<= now`, in
  * order, inside the caller's transaction. Returns the number closed.
  *
  * Locks the season row FOR UPDATE and re-reads `week_closed_through` from
@@ -57,8 +50,8 @@ export async function closeWeeksTx(tx: Tx, season: OpenSeasonRow, now: Date): Pr
   if (!locked) return 0;
 
   let closed = 0;
-  let w = locked.weekClosedThrough === null ? weekStartOf(season.startedAt) : nextWeek(locked.weekClosedThrough);
-  while (nextWeek(w) <= now) {
+  let w = locked.weekClosedThrough === null ? scoringWeekStartOf(season.startedAt) : scoringWeekEnd(locked.weekClosedThrough);
+  while (scoringWeekEnd(w) <= now) {
     const thisWeek = w;
     try {
       const top = await weekTopThree(tx, season.id, thisWeek);
@@ -68,7 +61,7 @@ export async function closeWeeksTx(tx: Tx, season: OpenSeasonRow, now: Date): Pr
         }))).onConflictDoNothing({ target: [alphaWeeks.seasonId, alphaWeeks.weekStart, alphaWeeks.rank] });
       }
       await appendWarLogTx(tx, {
-        serverId: season.serverId, kind: "week_closed", occurredAt: nextWeek(thisWeek),
+        serverId: season.serverId, kind: "week_closed", occurredAt: scoringWeekEnd(thisWeek),
         payload: {
           weekStart: thisWeek.toISOString(),
           first: top[0]?.name ?? null, second: top[1]?.name ?? null, third: top[2]?.name ?? null,
@@ -84,7 +77,7 @@ export async function closeWeeksTx(tx: Tx, season: OpenSeasonRow, now: Date): Pr
       throw new WeekCloseError(thisWeek, err);
     }
     closed++;
-    w = nextWeek(thisWeek);
+    w = scoringWeekEnd(thisWeek);
   }
   return closed;
 }
@@ -112,7 +105,7 @@ export async function weekTick(db: Database, opts: { now: Date; onError?: (seaso
     } catch (err) {
       out.errors++;
       if (err instanceof WeekCloseError) opts.onError?.(season.id, err.weekStart, err.reason);
-      else opts.onError?.(season.id, weekStartOf(opts.now), err);
+      else opts.onError?.(season.id, scoringWeekStartOf(opts.now), err);
     }
   }
   return out;

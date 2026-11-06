@@ -5,7 +5,7 @@ import {
   raids, seasonStandings, warLogEvents, clanNotices,
   type Database,
 } from "@factions/db";
-import { POINTS_UNRANKED, weekStartOf } from "@factions/domain";
+import { POINTS_UNRANKED, scoringWeekStartOf } from "@factions/domain";
 import { sql, eq } from "drizzle-orm";
 import { raidTick } from "../src/raid-tick.js";
 import { seedFaction, seedSeason } from "./seed.js";
@@ -77,7 +77,7 @@ describe("raidTick", () => {
       victimFactionId: BEAR, raiderFactionId: WOLF, raiderDayzId: W1,
       lowerCount: 1, points: POINTS_UNRANKED, victimRankAtLower: null, rankedCountAtLower: 0,
     });
-    expect(raid!.weekStart.toISOString()).toBe(weekStartOf(now).toISOString());
+    expect(raid!.weekStart.toISOString()).toBe(scoringWeekStartOf(now).toISOString());
     const [bear] = await db.select({ f: factions.flagDownSince, by: factions.flagDownByDayzId }).from(factions).where(eq(factions.id, BEAR));
     expect(bear).toEqual({ f: now, by: W1 });
     const standings = await db.select().from(seasonStandings).orderBy(seasonStandings.factionId);
