@@ -53,6 +53,12 @@ describe("NitradoClient.addBans", () => {
     expect(posts[0]!.value).toBe("ABC123\r\nRonald");
   });
 
+  it("returns only the names it added, not ones already on the list", async () => {
+    const { fetchFn } = fakeSettings("ABC123");
+    const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);
+    await expect(client.addBans(["ABC123", "Ronald"])).resolves.toEqual(["Ronald"]);
+  });
+
   it("issues NO post when every entry is already present", async () => {
     const { fetchFn, posts } = fakeSettings("ABC123\r\nRonald");
     const client = new NitradoClient("t", 1, fetchFn as unknown as typeof fetch);

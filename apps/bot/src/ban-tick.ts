@@ -36,7 +36,7 @@ async function announceTx(tx: Tx, row: typeof bans.$inferSelect, kind: "applied"
  * tests substitute a fake that records `addBans`/`removeBans` calls.
  */
 export type BanTarget = {
-  addBans(names: string[]): Promise<void>;
+  addBans(names: string[]): Promise<string[]>;
   removeBans(names: string[]): Promise<void>;
 };
 
@@ -153,6 +153,8 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
   ));
   if (pending.length > 0) {
     let failure: unknown;
+    // Names the batched addBans actually put on the list; a dry-run adds none.
+    let added: string[] = [];
     // A dry-run tick never reaches Nitrado, but every row IS still stamped
     // and closed, so the audit trail shows exactly what would have
     // happened. Both the dayzId and the gamertag are sent for every row —
@@ -164,7 +166,7 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
     if (!opts.dryRun) {
       const names = pending.flatMap((row) => [row.dayzId, row.gamertag]);
       try {
-        await client.addBans(names);
+        added = await client.addBans(names);
       } catch (err) {
         failure = err;
       }
@@ -173,7 +175,14 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
       if (failure === undefined) {
         await db.transaction(async (tx) => {
           const [applied] = await tx.update(bans)
-            .set({ status: "applied", appliedAt: now, dryRun: opts.dryRun, lastError: null })
+            .set({
+              status: "applied", appliedAt: now, dryRun: opts.dryRun, lastError: null,
+              // ⚠️ Only what WE added may ever be removed: the owner bans by hand on
+              // Nitrado and an entry is keyed on the string, so removing a name that
+              // was already there would free their ban (spec §5). A dry-run row
+              // added nothing, hence [].
+              nitradoAdded: [row.dayzId, row.gamertag].filter((n) => added.includes(n)),
+            })
             .where(and(eq(bans.id, row.id), eq(bans.status, "pending")))
             .returning({ id: bans.id });
           if (!applied) return;   // another tick won the race
@@ -251,7 +260,9 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
           // silently underfoot.
           if (!opts.dryRun && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
             try {
-              await client.removeBans([row.dayzId, row.gamertag]);
+              // ⚠️ A failed row was never stamped with nitradoAdded, so the fallback
+              // removes both identifiers: a lost-response write may have added either.
+              await client.removeBans(row.nitradoAdded ?? [row.dayzId, row.gamertag]);
             } catch (err) {
               console.error(`ban-tick: cleanup removeBans failed for failed ban ${row.id} (dayzId ${row.dayzId}) — its Nitrado entry may be orphaned`, err);
             }
@@ -285,7 +296,8 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
     const removing = new Set<number>();
     for (const row of due) {
       if (!row.dryRun && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
-        toRemove.push(row.dayzId, row.gamertag);
+        // ⚠️ Only entries we added (null = legacy row, applied before the column: both).
+        toRemove.push(...(row.nitradoAdded ?? [row.dayzId, row.gamertag]));
         removing.add(row.id);
       }
     }
@@ -366,7 +378,8 @@ export async function banTick(db: Database, client: BanTarget, opts: { now?: Dat
     const removing = new Set<number>();
     for (const row of liftDue) {
       if (!row.dryRun && !(await stillBanned(db, row.dayzId, now, row.id, serverId))) {
-        toRemove.push(row.dayzId, row.gamertag);
+        // ⚠️ Only entries we added (null = legacy row, applied before the column: both).
+        toRemove.push(...(row.nitradoAdded ?? [row.dayzId, row.gamertag]));
         removing.add(row.id);
       }
     }

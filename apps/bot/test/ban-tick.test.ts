@@ -7,7 +7,9 @@ const URL = requireTestDatabaseUrl();
 const at = (iso: string) => new Date(iso);
 const DAYZ_ID = "76561198000000001";
 
-function fakeClient(impl?: { addBans?: (n: string[]) => Promise<void>; removeBans?: (n: string[]) => Promise<void> }): BanTarget & { added: string[][]; removed: string[][] } {
+function fakeClient(impl?: { addBans?: (n: string[]) => Promise<void>; removeBans?: (n: string[]) => Promise<void>; list?: string[] }): BanTarget & { added: string[][]; removed: string[][] } {
+  // Simulated Nitrado list: addBans returns only names not already on it.
+  const list = [...(impl?.list ?? [])];
   const added: string[][] = [];
   const removed: string[][] = [];
   return {
@@ -16,6 +18,9 @@ function fakeClient(impl?: { addBans?: (n: string[]) => Promise<void>; removeBan
     addBans: vi.fn(async (names: string[]) => {
       if (impl?.addBans) { await impl.addBans(names); }
       added.push(names);
+      const fresh = [...new Set(names)].filter((n) => !list.includes(n));
+      list.push(...fresh);
+      return fresh;
     }),
     removeBans: vi.fn(async (names: string[]) => {
       if (impl?.removeBans) { await impl.removeBans(names); }
@@ -462,6 +467,43 @@ describe("banTick", () => {
       const server2Row = (await allRows()).find((row) => row.serverId === server2Id)!;
       expect(server1Row.status).toBe("expired");
       expect(server2Row.status).toBe("applied"); // untouched
+    });
+  });
+
+  describe("never removes an entry the bot did not add", () => {
+    it("a pre-existing entry survives a lift", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
+      const fake = fakeClient({ list: ["Sasha"] });
+      const opts = { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId };
+      await banTick(db, fake, opts);
+      expect((await allRows())[0]!.nitradoAdded).toEqual([DAYZ_ID]);
+      await db.update(bans).set({ status: "lift_pending" });
+      await banTick(db, fake, { ...opts, now: at("2026-09-15T03:00:00Z") });
+      expect(fake.removed).toEqual([[DAYZ_ID]]);
+      expect((await allRows())[0]!.status).toBe("lifted");
+    });
+
+    it("a pre-existing entry survives an expiry", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z"), expiresAt: at("2026-09-15T03:00:00Z") });
+      const fake = fakeClient({ list: ["Sasha"] });
+      const opts = { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId };
+      await banTick(db, fake, opts);
+      await banTick(db, fake, { ...opts, now: at("2026-09-15T04:00:00Z") });
+      expect(fake.removed).toEqual([[DAYZ_ID]]);
+      expect((await allRows())[0]!.status).toBe("expired");
+    });
+
+    it("a null nitrado_added still removes both", async () => {
+      await insertBan({ status: "lift_pending", appliedAt: at("2026-09-14T00:00:00Z"), dryRun: false, nitradoAdded: null });
+      const fake = fakeClient();
+      await banTick(db, fake, { now: at("2026-09-15T02:00:00Z"), dryRun: false, since: at("2026-09-15T00:00:00Z"), serverId });
+      expect(fake.removed).toEqual([[DAYZ_ID, "Sasha"]]);
+    });
+
+    it("a dry-run apply stamps an empty nitradoAdded", async () => {
+      await insertBan({ bannedAt: at("2026-09-15T01:00:00Z") });
+      await banTick(db, fakeClient(), { now: at("2026-09-15T02:00:00Z"), dryRun: true, since: at("2026-09-15T00:00:00Z"), serverId });
+      expect((await allRows())[0]!.nitradoAdded).toEqual([]);
     });
   });
 });

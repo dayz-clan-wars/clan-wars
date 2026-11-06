@@ -378,9 +378,13 @@ export class NitradoClient {
   // helper: that is N round trips with a lost-update window between each, and a concurrent
   // writer silently drops entries. Both methods below do exactly one read and, when
   // something actually changed, exactly one write.
-  async addBans(names: string[]): Promise<void> {
+  //
+  // ⚠️ Returns the names THIS call added, never the ones already on the list: the owner bans
+  // by hand on Nitrado and an entry is keyed on the string alone, so the caller must remember
+  // only what it added and later remove only that (spec §5).
+  async addBans(names: string[]): Promise<string[]> {
     const trimmed = names.map((n) => n.trim()).filter((n) => n !== "");
-    if (trimmed.length === 0) return;
+    if (trimmed.length === 0) return [];
     // Deduplicate within input, preserving first-occurrence order
     const seen = new Set<string>();
     const wanted: string[] = [];
@@ -392,8 +396,9 @@ export class NitradoClient {
     }
     const bans = await this.getBans();
     const missing = wanted.filter((n) => !bans.includes(n));
-    if (missing.length === 0) return; // nothing to do — do not rewrite the field
+    if (missing.length === 0) return []; // nothing to do — do not rewrite the field
     await this.setBans([...bans, ...missing]);
+    return missing;
   }
 
   async removeBans(names: string[]): Promise<void> {
