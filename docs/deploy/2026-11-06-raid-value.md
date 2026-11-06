@@ -20,6 +20,17 @@ migration **0073** (`raids.victim_online`/`away`, nullable rank columns,
 `raid_award_weeks`) automatically. Wait for it to finish and confirm the new tag is
 checked out before going on.
 
+### 1b. Re-record any future raid-window skip
+
+The window now opens Friday **14:00**, not 00:00. A skip recorded against the old
+Friday 00:00 open no longer matches, so the weekend would open anyway. Before
+applying anything:
+
+    sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select * from raid_window_skips where opens_at > now();"
+
+Any row keyed at Friday 00:00 must be re-recorded with `pnpm raid:skip` at the Friday
+14:00 instant (see `docs/deploy/raid-window.md`). Zero rows needs nothing.
+
 ## 2. Stop the bot
 
     sudo systemctl stop clan-wars-bot
@@ -47,6 +58,24 @@ it prints is exactly what `--apply` would commit. It prints four sections:
   Nothing is changed for these. They are printed for a human.
 
 ## 4. Check the dry run before applying
+
+First, the achievements side of the one retro row. The achievements tick watches
+`raids.id`, so the inserted Z2→NDF row (raider chaandlr) will be read as a new raid
+and could post a back-dated unlock. The team thresholds in
+`packages/domain/src/achievements.ts` are `first_raid` (the clan's first scored raid),
+`warpath` (25 raids) and `wide_net` (5 different clans); `flag_thief` is the raider's
+own first scored raid lowering. Get Z2's and chaandlr's current counts:
+
+    sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select f.tag, count(*) as raids, count(distinct r.victim_faction_id) as distinct_victims from raids r join factions f on f.id = r.raider_faction_id where f.tag = 'Z2' group by f.tag"
+    sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select r.raider_dayz_id, count(*) as raids from raids r where r.raider_dayz_id in (select distinct payload->>'dayzId' from events where type = 'flag.lowered' and payload->>'gamertag' = 'chaandlr') group by r.raider_dayz_id"
+
+Adding one raid crosses a threshold if Z2 has 0 raids (`first_raid`), 24 raids
+(`warpath`), 4 distinct victims with NDF new (`wide_net`), or chaandlr has 0 scored
+raids (`flag_thief`). If any applies, decide before applying whether that back-dated
+unlock may post (or hold the achievements tick off, `ACHIEVEMENTS_TICK`, until
+reviewed). No crossing needs nothing.
+
+Then the dry-run output itself.
 
 Don't apply unless all three of these hold:
 
@@ -90,10 +119,24 @@ totals afterwards must equal the totals from step 5. Compare before and after wi
 
     sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select f.tag, s.points, s.raids, s.times_raided, s.defenses from season_standings s join factions f on f.id = s.faction_id where s.season_id = 3 order by s.points desc"
 
-## 7. Start the bot
+## 7. Switch the weekly award on, then start the bot
+
+Do this **before** the bot starts, or the first week closes unpaid. `SERVER_EVENTS_CHANNEL_ID`
+must already be set in `.env` (config refuses `RAID_AWARD_TICK` without it).
+
+    cd /opt/clan-wars && cp -p .env .env.bak-$(date -u +%Y%m%dT%H%M%SZ)-raid-award
+    grep -n '^SERVER_EVENTS_CHANNEL_ID=' .env      # must print a line
+    echo 'RAID_AWARD_TICK=1' >> .env                # or edit an existing RAID_AWARD_TICK line to 1
+
+Then start:
 
     sudo systemctl start clan-wars-bot
     journalctl -u clan-wars-bot -f
+
+⚠️ Confirm the raid award is on: the startup output must contain
+`raid award on: the top raiding clan's weekly weapon kit is granted and announced`, and
+must **not** contain `RAID_AWARD_TICK is off`. If the off line is there, stop the bot,
+fix `.env`, and start again. (The first paid week later logs `raid awards paid N`.)
 
 ## 8. Check the raid window
 
@@ -111,10 +154,41 @@ new boundary is Friday 14:00, so the bot treats it as a fresh opening.
 
 ## 9. Post the player announcement
 
-Post the owner's announcement draft from the design conversation. It must say:
+Post the owner-approved text below (from the design conversation). It says the
+weekend window closes **Sunday 14:00 UTC**, not Monday, and that standings were
+recalculated. The changelog's release post covers the rules themselves.
 
-- this weekend's window closes **Sunday 14:00 UTC**, not Monday
-- season 3 was rescored under the new rules
-- one old-flag raid was added retroactively
+**⚔️ Raiding is changing**
 
-The changelog's release post covers the rules themselves.
+Every clan now has a **price**. A raid pays the price of the clan you hit.
+
+- Every clan starts at **100**.
+- 🔥 Each raid you land adds **+50** to your price, fading over 14 days.
+- 🩹 Each time you're raided, your price **halves**, recovering over 7 days.
+- 🐣 Clans under a week old are worth **0**. Raiding one still raises *your* price.
+- 🟢 Hit a clan while someone from it is online: **×1.5**. Nobody home: **×0.75**.
+
+Points are yours to keep. Getting raided never takes points away.
+
+**Forgotten flags count.** If your clan raised its flag, anyone outside your clan who lowers it scores a raid on you, base or not.
+
+**🏆 Weekly weapon kit** goes to the top-scoring clan's leader every week.
+
+**New raid window:** Friday 14:00 → Sunday 14:00 UTC. This weekend's window closes Sunday 14:00 UTC, not Monday.
+
+**#scoreboard** shows what every clan is worth right now. This season's standings have been recalculated under the new rules.
+
+## 10. After the week closes (after 2026-11-08 14:00 UTC)
+
+The bridging week (2026-11-02 Monday 00:00 → Sunday 14:00) closes at
+`2026-11-08T14:00Z`. Once the bot's next interval has passed:
+
+    sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select r.season_id, r.week_start, f.tag, r.leader_discord_id, r.award_grant_id from raid_award_weeks r join factions f on f.id = r.faction_id where r.week_start = '2026-11-02T00:00:00Z'"
+
+Exactly **one** row. Then confirm that row's `award_grant_id` is a single `weapon-kit` grant to that
+leader's `leader_discord_id`:
+
+    sudo docker compose exec -T postgres psql -U factions -d factions_live -X -c "select g.id, g.award_key, g.discord_id, g.granted_at from award_grants g join raid_award_weeks r on r.award_grant_id = g.id where r.week_start = '2026-11-02T00:00:00Z'"
+
+Zero rows or no grant: check `journalctl -u clan-wars-bot` for `raid award:` lines. Two
+rows is impossible (the insert is the idempotency guard); if seen, stop and investigate.

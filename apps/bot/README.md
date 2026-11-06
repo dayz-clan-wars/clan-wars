@@ -229,5 +229,6 @@ failing target is no longer blocking it.
 
 The raid window (base damage on, Friday 14:00 UTC → Sunday 14:00 UTC) is not the bot's:
 the game server's `cfggameplay.json` decides it and a human flips it twice a week —
-`docs/deploy/raid-window.md`. The Monday 00:00 restart is the normal case for the week close;
+`docs/deploy/raid-window.md`. The week close (Sunday 14:00 UTC; the bridging week closes 2026-11-08T14:00Z, and weeks
+before that closed Monday 00:00) is the normal case, not a hazard;
 nothing in the bot needs to be timed against it.

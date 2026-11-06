@@ -1945,6 +1945,7 @@ export async function start(cfg: BotConfig): Promise<void> {
 
     if (!cfg.wellAwards.enabled) console.warn("WELL_AWARD_TICK is off: wells still earn achievements, but no plate carrier is recorded or granted.");
     if (!cfg.raidAward.enabled) console.warn("RAID_AWARD_TICK is off: weeks still close, but the top raiding clan gets no weapon kit.");
+    else console.log("raid award on: the top raiding clan's weekly weapon kit is granted and announced");
     if (!cfg.referralAward.enabled) console.warn("REFERRAL_AWARD_TICK is off: referrals still qualify, but no weekly plate carrier is granted or announced.");
     else console.log("referral award on: the weekly plate carrier is granted and announced");
 

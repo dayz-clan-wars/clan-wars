@@ -21,7 +21,7 @@
 <li>A solo declaration lapses after {{SOLO_LAPSE_MS|days}} without a raise by the declarant.</li>
 </ul>
 <h2>Raiding</h2><ul>
-<li>A raid is a non-member lowering a clan's flag at its declared base, or lowering a clan's own flag that one of its members raised anywhere else. Lowering a clan's flag on your own base is a raid on that clan.</li>
+<li>A raid is a non-member lowering a clan's flag at its declared base, or lowering a clan's own flag that one of its members raised anywhere else. Lowering another clan's own flag on your base is a raid on that clan, but only if one of that clan's members raised it. A white flag, your own flag, or a flag no member of that clan raised is upkeep.</li>
 <li>A raid pays the price of the clan you hit: {{RAID_VALUE_BASE|n}} to start, +{{RAID_HEAT|n}} for each raid they land (fading over {{RAID_HEAT_FADE_MS|days}}), halved by each hit they take (recovering over {{RAID_HIT_FADE_MS|days}}), 0 for their first {{NEW_CLAN_WORTHLESS_MS|days}}.</li>
 <li>{{RAID_ONLINE_MULT}} if anyone from the victim clan is online, {{RAID_OFFLINE_MULT}} if nobody is.</li>
 <li>A clan scores at most once against the same victim in any {{RAID_DEDUP_MS|hours}}.</li>

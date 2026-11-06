@@ -100,8 +100,9 @@ not open a window on a different day to compensate. Everything else keeps its no
 clock: flag lowering scores all week, and the week tick closes week one at Monday
 2026-09-14 00:00 UTC from whatever non-destructive raids landed.
 
-⚠️ The Monday restart is **the normal case** for the week close, not a hazard (spec §14):
-the bot's week tick closes the week that ended at Monday 00:00 UTC on its next interval
+⚠️ The week close is **the normal case**, not a hazard (spec §14): the week now closes
+Sunday 14:00 UTC (after 2026-11-08; the bridging week closes 2026-11-08T14:00Z, and weeks
+before it closed Monday 00:00 UTC), and the bot's week tick closes it on its next interval
 after the boundary, from `raids` and `defenses` already committed, and a restart of the
 game server does not touch the bot. Nothing here needs to be timed against the bot.
 

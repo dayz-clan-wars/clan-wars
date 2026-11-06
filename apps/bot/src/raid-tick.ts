@@ -6,6 +6,7 @@ import { appendWarLogTx, noticeClanTx, noticeFullMembersTx } from "@factions/ros
 import { and, desc, eq, gt, isNull, sql } from "drizzle-orm";
 import { classifyLower, clanOnlineAt, seasonRaidFacts } from "./raid-detect.js";
 import { openSeason } from "./season.js";
+import { rankedStandings } from "./standings.js";
 
 /** ⚠️ Distinct from every other consumer name; two consumers sharing a cursor skip each other's events. */
 export const RAID_CONSUMER = "raid-consumer";
@@ -144,6 +145,12 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
         const value = clanValue(valued, await seasonRaidFacts(tx, season.id), ev.occurredAt, Number.MAX_SAFE_INTEGER);
         // Solo raids stay real, announced raids that score nothing (spec non-goal).
         const points = raiderFactionId === null ? 0 : raidPoints(value, online);
+        // ⚠️ Rank no longer affects points, but the giant_killer achievement
+        // reads `victimRankAtLower` (victimRank === 1); null here and it can
+        // never unlock. Read BEFORE the standings upsert so the rank is the
+        // one the victim held when the flag came down. A plain select: no
+        // lock, so the documented lock order is unchanged.
+        const { ranked, rankOf } = await rankedStandings(tx, season.id);
         // Standings before raids, per §4.12's documented lock order.
         //
         // ⚠️ The two rows are upserted in `faction_id` order, not
@@ -164,8 +171,7 @@ export async function raidTick(db: Database, opts: { batchSize?: number; onNoSea
           seasonId: season.id, serverId: ev.serverId, victimFactionId: victim.id, raiderDayzId: p.dayzId, raiderFactionId,
           firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
           points, victimOnline: online, away,
-          // The rank ladder is retired; new rows carry no rank (value spec §1).
-          victimRankAtLower: null, rankedCountAtLower: null,
+          victimRankAtLower: rankOf(victim.id), rankedCountAtLower: ranked.length,
           weekStart: scoringWeekStartOf(ev.occurredAt),
         });
         // ⚠️ The war-log line is the same for base and away raids, on

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from "vitest";
 import {
   createClient, runMigrations, requireTestDatabaseUrl,
   servers, factions, factionMembers, declarations, events, admFiles,
-  raids, seasonStandings, warLogEvents, clanNotices, membershipHistory, playerSessions,
+  raids, seasons, seasonStandings, warLogEvents, clanNotices, membershipHistory, playerSessions,
   type Database,
 } from "@factions/db";
 import { RAID_DEDUP_MS, clanValue, raidPoints, scoringWeekStartOf, type RaidFact } from "@factions/domain";
@@ -84,7 +84,7 @@ describe("raidTick", () => {
     const [raid] = await db.select().from(raids);
     expect(raid).toMatchObject({
       victimFactionId: BEAR, raiderFactionId: WOLF, raiderDayzId: W1,
-      lowerCount: 1, points: BASE_OFFLINE, victimRankAtLower: null, rankedCountAtLower: null,
+      lowerCount: 1, points: BASE_OFFLINE, victimRankAtLower: null, rankedCountAtLower: 0,
       victimOnline: false, away: false,
     });
     expect(raid!.weekStart.toISOString()).toBe(scoringWeekStartOf(now).toISOString());
@@ -139,7 +139,18 @@ describe("raidTick", () => {
     expect(rows[0]!.points).toBe(BASE_OFFLINE);
     expect(rows[1]!.points).toBeLessThan(BASE_OFFLINE);
     expect(rows[2]!.points).toBeGreaterThan(BASE_OFFLINE);
-    expect(rows.every((r) => r.victimRankAtLower === null && r.rankedCountAtLower === null)).toBe(true);
+  });
+
+  it("⚠️ a raid on the #1-ranked clan records victimRankAtLower = 1 (giant_killer reads it), and the rank does not change points", async () => {
+    const [season] = await db.select({ id: seasons.id }).from(seasons);
+    await db.insert(seasonStandings).values([
+      { seasonId: season!.id, factionId: BEAR, points: 500, raids: 5 },
+      { seasonId: season!.id, factionId: WOLF, points: 100, raids: 1 },
+    ]);
+    await lower(W1, "Wolfie", "Flag_Bear", P1, now);
+    await raidTick(db);
+    const [raid] = await db.select().from(raids);
+    expect(raid).toMatchObject({ victimFactionId: BEAR, victimRankAtLower: 1, rankedCountAtLower: 2, points: BASE_OFFLINE });
   });
 
   const session = async (dayzId: string, from: Date) => {

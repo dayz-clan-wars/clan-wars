@@ -160,6 +160,8 @@ async function rescoreTx(tx: Tx, seasonId: number): Promise<RescoreReport> {
     const [row] = await tx.insert(raids).values({
       seasonId, serverId: ev.serverId, victimFactionId: victim, raiderDayzId: p.dayzId, raiderFactionId: raiderFid,
       firstLowerEventId: ev.id, firstLowerAt: ev.occurredAt, lastLowerAt: ev.occurredAt, lastLowerEventId: ev.id, lowerCount: 1,
+      // Retro rows keep null ranks on purpose: the standings at the original
+      // instant are not reconstructible, and giant_killer only needs live rows.
       points: 0, victimOnline: false, away: true, victimRankAtLower: null, rankedCountAtLower: null,
       weekStart: scoringWeekStartOf(ev.occurredAt),
     }).returning({ id: raids.id });
